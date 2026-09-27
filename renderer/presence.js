@@ -10,7 +10,7 @@ const presenceHue = (p) => Number(BigInt(p.userHash || 0) % 360n); // one colour
 
 // After every render: follow the page (open its room, close the last one's), then draw the carets.
 function syncPresence() {
-  if (!tana.presenceOpen) return;
+  if (!tana.presenceOpen || LINKS) return; // the Links pane shows the followed page's links: you are there once, in that page
   const page = zoom && isRealId(zoom.docId) ? zoom.docId : null; // a draft or a page of the app's own has no room in Tana
   if (page !== presenceDoc) {
     if (presenceDoc) { tana.presenceSet(presenceDoc, null); if (presenceOpen) tana.presenceClose(presenceDoc); }

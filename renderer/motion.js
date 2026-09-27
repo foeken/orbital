@@ -223,17 +223,6 @@ function dismissRow(el, kind, done) {
 // The last row a view let go of has gone: draw the view again, so it says it is empty (and Inbox zero gets its moment
 // in motionAfter) instead of standing blank until something else renders.
 function settleEmpty(root) { if (!root.querySelector('.node')) renderSoon(); }
-// The sidebar slides out past the window's edge and back in (Reveal): off the right edge, by its margin, so its rows
-// never reflow on the way. Hiding waits for the slide; showing slides the drawn sidebar in.
-function slideRail(opening, update) {
-  const rail = document.getElementById('rail');
-  const frames = () => [{ marginRight: -rail.getBoundingClientRect().width + 'px', opacity: 0 }, { marginRight: '0px', opacity: 1 }];
-  if (opening) { update(); if (rail && !rail.hidden) play(rail, frames(), { duration: MOTION.base, easing: MOTION.move }); return; }
-  if (!motionOK() || !rail || rail.hidden) return update();
-  const a = rail.animate(frames().reverse(), { duration: MOTION.quick, easing: MOTION.move, fill: 'forwards' });
-  a.finished.catch(() => {}).then(() => { update(); a.cancel(); });
-}
-
 // ---- Glide, and the outline's other moves around a render ----
 // An action that moves rows (a move, an indent, a drop, a sort, a group, a status, Clean up) arms the glide; the
 // renders in the next moment measure every row before and after and slide each from where it was. A row inside

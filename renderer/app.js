@@ -51,7 +51,7 @@ window.addEventListener('blur', loginKeys);
 // text edit does not throw the row's metadata away); null is a global change: the refresh wrote every open view's
 // fresh rows into the cache before saying so, so roots already carry them and no second query is needed.
 // Clicking a notification opens the node it was about; main has already raised and focused the window.
-if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) goTo(docId); });
+if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) openLink(docId); }); // in the Links pane: in the page it follows (renderer/rail.js)
 // This page is going away: the shell is about to remove its half (it says so first, shell.js flush), its window
 // closed, or a Reload. What is still on the 400 ms edit timer is sent now, its presence room and heartbeat are let
 // go, and a window it covered is given back. Once: the shell's word, beforeunload and pagehide can all arrive.
@@ -77,8 +77,10 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'palette') togglePalette('cmd'); // the window header's ⌘K and ? (shell.js), for the page in front
   else if (e.data?.orbital === 'help') openHelp();
   else if (e.data?.orbital === 'sensitive') toggleSensitiveVisibility();
-  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); navSent = ''; tellNav(); }
+  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages, links: e.data.links === true }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); navSent = ''; tellNav(); retell(); }
   else if (e.data?.orbital === 'navclick') navRow.querySelector('#' + CSS.escape(String(e.data.id)))?.click(); // a press on its copy in the tab bar
+  else if (e.data?.orbital === 'follow' && LINKS) follow(e.data.docId, e.data.doc); // the Links pane: the focused pane's document (renderer/rail.js)
+  else if (e.data?.orbital === 'goto' && typeof e.data.id === 'string') goTo(e.data.id); // a row opened in the Links pane, opened here
   else if (e.data?.orbital === 'rename' && titleEl.dataset.key) { // Rename on the tab (shell.js): the heading back, its words selected (a key only while it can be typed in; isContentEditable reads false while it is hidden)
     document.documentElement.classList.add('renaming');
     titleEl.focus();
@@ -94,7 +96,7 @@ const navRow = $('navbtns');
 let navSent = '';
 function tellNav() {
   const on = document.documentElement.classList.contains('pointer-in'), html = navRow.hidden ? '' : navRow.innerHTML; // hidden: the login screen
-  if (window.parent === window || navSent === on + html) return;
+  if (LINKS || window.parent === window || navSent === on + html) return; // the Links pane has no outline: its tab gets none of its buttons
   navSent = on + html;
   window.parent.postMessage({ orbital: 'navbtns', html, on }, '*');
 }
@@ -238,7 +240,7 @@ function applySettings(next) {
   for (const id of [...filters.keys()]) if (isTypeId(id)) filters.delete(id);
   if (openType && JSON.stringify(typeFilter(openType).fields || null) !== wasFields) reload(openType).then(() => renderSoon(true), showError);
   collapsedGroups.clear(); for (const key of pref('collapsedGroups', [])) collapsedGroups.add(key);
-  railHidden = pref('railHidden', false) === true; railClosed.clear(); for (const key of pref('railClosed', [])) railClosed.add(key); // the sidebar's, copied at load (renderer/rail.js)
+  railClosed.clear(); for (const key of pref('railClosed', [])) railClosed.add(key); // the Links pane's, copied at load (renderer/rail.js)
   const nextTheme = ['dark', 'system', 'light'].includes(pref('theme')) ? pref('theme') : 'light';
   if (nextTheme !== themePref) showTheme(nextTheme);
   sensitiveLoading = null; loadSensitive().then(refreshSensitive); // the sensitive marks and the MCP switch are settings too, kept outside the preferences

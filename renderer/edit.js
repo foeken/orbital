@@ -276,7 +276,7 @@ function openDoc(docId, from) {
   const s = from ? null : sectionOf(docId);
   if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view' + SIDE, view); }
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
-  if (doc) recordRecent(doc);
+  if (doc && !LINKS) recordRecent(doc); // the Links pane follows other pages there: not a place you went
   turnPage('in', () => { zoom = { docId, nodeId: null, from }; render(true); });
   followSummary(docId);
 }

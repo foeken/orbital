@@ -5,7 +5,7 @@ const { contextBridge, ipcRenderer, webFrame } = require('electron');
 if (window.top === window && location.pathname.endsWith('/shell.html')) {
   contextBridge.exposeInMainWorld('shell', {
     state: () => ipcRenderer.sendSync('shell:state'), // { doc: Trellis document | null, theme, signedOut } at its start
-    // 'open' { id, where: 'right' | 'tab' | 'float', from: the asking page's id, focus } | 'close' id | 'focus' id
+    // 'open' { id, where: 'right' | 'tab' | 'float' | 'links', from: the asking page's id, focus } | 'close' id | 'focus' id
     // | 'theme' 'light' | 'dark' | 'auth' { signedOut }
     onCommand: (cb) => ipcRenderer.on('shell:command', (_e, cmd, arg) => cb(cmd, arg)),
     layout: (layout) => ipcRenderer.send('shell:layout', layout), // { doc, pages: [ids in doc] }: every committed change

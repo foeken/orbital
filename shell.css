@@ -49,7 +49,6 @@ body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag
 .trellis [data-trellis-part="accessory"] button:hover:not(:disabled) { background: #ddd; opacity: 1; }
 .trellis [data-trellis-part="accessory"] button:disabled { opacity: .15; cursor: default; }
 .trellis [data-trellis-part="tabbar"]:not(:hover) [data-trellis-part="accessory"]:not([data-pointer]) button { opacity: 0; }
-.trellis [data-trellis-part="accessory"] [data-for="railToggle"] { margin-left: 6px; }
 .trellis [data-trellis-part="accessory"] svg { display: block; width: 18px; height: 18px; }
 [data-theme="dark"] .trellis [data-trellis-part="accessory"] button { color: #aaa; }
 [data-theme="dark"] .trellis [data-trellis-part="accessory"] button:hover:not(:disabled) { background: #3a3f42; }

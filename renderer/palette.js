@@ -335,7 +335,7 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'goHome', group: 'Navigate', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
   // Home is the window as it is now, its panes and what each shows: kept as the saved view "Home" (renderer/nodes.js)
   if (tana.windowLayout) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeId() === HOME_VIEW ? 'Updates Home to this window' : 'This window as it is', run: () => run(async () => { await saveView('Home', HOME_VIEW); setHome(HOME_VIEW); }) });
-  if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
+  if (windowPanes.links) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus links', run: () => (LINKS ? focusRail() : toShell({ orbital: 'focusLinks' })) });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
   // A new page starts where you are: main hands it this view and place with its id, before it reads them (main.js starts)
@@ -346,8 +346,8 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', run: () => openPage('float') }); // "Float" in a pane's menu floats that pane
   // With more than one page, the workspace's own moves (shell.js run): Trellis does them, this page only asks
   if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, ...(id === 'closePane' ? { kbd: '⌘W' } : {}), run: () => shellRun(command) }); // ⌘W: the File menu's Close
-  // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
-  if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
+  // The window's Links pane (issue #462, renderer/rail.js): opened beside this page on this place, or closed by the shell
+  rows.push({ id: 'railToggle', group: 'Window', icon: windowPanes.links ? 'railHide' : 'railShow', label: windowPanes.links ? 'Hide links' : 'Show links', run: () => (windowPanes.links ? toShell({ orbital: 'links' }) : run(() => tana.splitWindow('links', { view, place: placeJSON() }))) });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', hint: 'Every pane', run: () => (window.frameElement ? window.parent.postMessage({ orbital: 'reload' }, '*') : location.reload()) }); // the shell reloads, and every page with it (shell.js)
   if (tana.windowLayout) {
     rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view\u2026', keepOpen: true, run: openSaveViewPalette });

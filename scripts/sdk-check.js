@@ -1099,6 +1099,8 @@ async function main() {
     const fourth = frame('fourth', '4');
     assert.deepEqual(ask('window:getSide', fourth), { side: '4', start: { view: null, place: null } }, 'a page opened with no start keeps nothing of a closed page with its id');
     assert.equal(backend.S.pane && backend.S.pane.frame, fourth, 'the page \u2325\u2318N opened is the one \u2318W and a notification click aim at');
+    assert.equal(ask('window:split', leftPage, 'links', { view: 'library', place: '{}' }), '5');
+    assert.deepEqual(toShell.splice(0), [['open', { id: '5', where: 'links', from: '', focus: false }]], 'Show links: the Links pane opens beside the page that asked, which keeps the keys (issue #462)');
     const layoutDoc = { schema: 1, root: { kind: 'panel', views: ['page', 'page2', 'page3'] }, views: {} };
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '3', '2'] });
     assert.deepEqual([shown.panes.map((p) => p.side).sort(), shown.doc], [['', '2', '3'], layoutDoc], 'a page not in the report is forgotten, and the layout saved');

@@ -25,7 +25,7 @@ const tokens = () => theme === 'dark'
 // Content keeps its layout down to 280 x 200 and scales below that, which is what zooming out shows.
 const types = (tabs) => ({ page: { title: 'Orbital', tabbar: tabs ? 'always' : 'never', minSize: { width: 280, height: 200 },
   menu: (view) => (renamable.has(view.id) ? [{ id: 'rename', label: 'Rename', run: () => rename(view.id) }, 'separator'] : []),
-  iframe: (view) => ({ src: 'index.html?side=' + encodeURIComponent(view.params.side), title: 'Orbital' }) } });
+  iframe: (view) => ({ src: 'index.html?side=' + encodeURIComponent(view.params.side) + (view.params.links ? '&links=1' : ''), title: 'Orbital' }) } });
 
 const ws = createWorkspace(document.getElementById('workspace'), {
   types: types(false),
@@ -46,7 +46,17 @@ const frames = () => [...ws.element.querySelectorAll('iframe')];
 const loaded = new WeakSet();
 const windowOf = (frame) => (frame && loaded.has(frame) ? frame.contentWindow : null);
 const sourceOf = (win) => pages().find((v) => windowOf(frameOf(v.id)) === win)?.id;
-const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length }, '*');
+const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length, links: !!linksView() }, '*');
+// The Links pane (issue #462, renderer/rail.js): one page per window opened with links=1, showing the links of the
+// document the page it follows is on. It follows the page that last took the keys, never itself; each page says which
+// document it is on (its row too, so the Links pane opens it without asking main), and a row opened there opens in it.
+const linksView = () => pages().find((v) => v.params.links)?.id;
+const docs = new Map(); // page view id -> { docId, doc } it last told
+let followed = null;
+function follow() {
+  const told = docs.get(followed) || { docId: null, doc: null };
+  windowOf(frameOf(linksView()))?.postMessage({ orbital: 'follow', docId: told.docId, doc: told.doc }, '*');
+}
 
 // The tab bars along the top drag the window as the header does (-webkit-app-region does not work inside an iframe). A
 // floating panel's bar moves the panel. The bars along the left edge keep their first tab off the window's edge.
@@ -90,7 +100,7 @@ function guard() {
     ws.view(id).guardClose(async () => { if (pages().length < 2) return false; await flush(frameOf(id)); return true; });
   }
 }
-ws.on('close', (view) => { guarded.delete(view.id); renamable.delete(view.id); });
+ws.on('close', (view) => { guarded.delete(view.id); renamable.delete(view.id); docs.delete(view.id); if (followed === view.id) { followed = null; follow(); } });
 
 // Every committed change goes to main once; while signed out the layout aside is the one kept.
 function sync() {
@@ -125,6 +135,7 @@ ws.element.addEventListener('load', (e) => {
   if (frame.tagName !== 'IFRAME') return;
   loaded.add(frame);
   tell(frame.contentWindow);
+  if (frame === frameOf(linksView())) follow();
   // Trellis selects a new window's first pane without focusing it, so the page in front takes the keys once it is in
   if (frame === frameOf(ws.getSnapshot().focusedView) && document.activeElement?.tagName !== 'IFRAME') frame.contentWindow.focus();
   frame.contentWindow.addEventListener('wheel', (w) => {
@@ -185,9 +196,14 @@ async function reloadAll() {
 // document exists: focused while still loading, its window never hears it.
 function open({ id, where, from, focus }) {
   if (typeof id !== 'string' || viewOf(id)) return focusPage(viewOf(id));
+  const links = where === 'links';
+  if (links && linksView()) return focusPage(linksView()); // one per window
+  if (links && viewOf(from)) followed = viewOf(from);
   const beside = ws.view(viewOf(from) || '')?.panelId || ws.getSnapshot().focusedPanel;
-  const placement = where === 'float' ? 'float' : !beside ? 'side' : where === 'tab' ? { into: beside } : { beside, edge: where === 'left' ? 'left' : 'right' };
-  const { id: viewId } = ws.open('page', { id: 'page' + id, params: { side: id }, placement, focus: false });
+  // the Links pane takes about 320px of the pane it opens beside: under Trellis's 280px minimum its content would be scaled down
+  const share = links ? Math.min(0.5, 320 / (frameOf(viewOf(from))?.getBoundingClientRect().width || innerWidth)) : undefined;
+  const placement = where === 'float' ? 'float' : !beside ? 'side' : where === 'tab' ? { into: beside } : { beside, edge: where === 'left' ? 'left' : 'right', ...(links ? { share } : {}) };
+  const { id: viewId } = ws.open('page', { id: 'page' + id, params: links ? { side: id, links: true } : { side: id }, placement, focus: false });
   if (focus) frameOf(viewId)?.addEventListener('load', () => focusPage(viewId), { once: true });
 }
 // A Trellis command a page's key or palette row asked for (maximize, overview, back, forward, next pane or tab), run
@@ -247,6 +263,11 @@ addEventListener('message', (e) => {
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
   else if (what === 'reload') reloadAll(); // Cmd+K Reload: the window, every page in it
   else if (what === 'navbtns') drawNav(sourceOf(e.source), String(e.data.html || ''), e.data.on === true);
+  else if (what === 'doc') { const id = sourceOf(e.source); if (!id) return; docs.set(id, { docId: typeof e.data.docId === 'string' ? e.data.docId : null, doc: e.data.doc || null }); if (id === followed) follow(); }
+  else if (what === 'focus') { const id = sourceOf(e.source); if (id && id !== linksView() && id !== followed) { followed = id; follow(); } }
+  else if (what === 'open') { const win = windowOf(frameOf(followed)); if (!win) return; focusPage(followed); if (typeof e.data.id === 'string') win.postMessage({ orbital: 'goto', id: e.data.id }, '*'); } // from the Links pane
+  else if (what === 'links') { const id = linksView(); if (id) ws.close(id); } // Cmd+K Hide links
+  else if (what === 'focusLinks') focusPage(linksView());
 });
 
 // ---- a page's header buttons in its tab bar ----

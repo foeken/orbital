@@ -284,7 +284,8 @@ ipcMain.handle('window:split', (e, where, start) => {
   if (!page || signedOut()) return null;
   const id = freeId();
   setStart(id, { view: null, place: null, ...(start && typeof start === 'object' ? start : {}) }); // an id used before keeps nothing of that page
-  return openPage(page.win, { id, where: ['right', 'tab', 'float'].includes(where) ? where : 'right', from: page.side });
+  // 'links': the window's Links pane (issue #462), beside the page and leaving it the keys; the shell keeps one per window
+  return openPage(page.win, { id, where: ['right', 'tab', 'float', 'links'].includes(where) ? where : 'right', from: page.side, focus: where !== 'links' });
 });
 // asked by preload.js on every load, a Reload included: this page's id ('' the first page, then '2', '3', ...).
 // This is where a page registers (addPage); an overlay asking is no page and gets the defaults.

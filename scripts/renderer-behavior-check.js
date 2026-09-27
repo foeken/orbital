@@ -173,12 +173,12 @@ const withShims = (src) => {
   if (/\b(atHome|homeId|homeName|repairHome|setHome|goHome)\b/.test(src) && !/const homeId =/.test(src)) src = "globalThis.atHome ??= () => true; globalThis.homeId ??= () => 'library'; globalThis.homeName ??= () => 'Library'; globalThis.repairHome ??= () => {}; globalThis.setHome ??= () => {}; globalThis.goHome ??= () => {};\n" + src;
   // Motion (renderer/motion.js) is what no harness looks at: a slice that calls it gets moves that change nothing, and
   // the state change a move wraps runs at once, exactly as it does under reduced motion.
-  if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|slideRail|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
+  if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
   return /\b(renderSoon|patchMeta|iconNode|addIcon|hotkeyFor|hotkeyIds|comboOf|keyTitle|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
 };
 const MOTION_SHIM = 'globalThis.turnPage ??= (dir, update) => update(); globalThis.foldRow ??= (key, opening, done) => done(); globalThis.foldSection ??= (head, toggle) => toggle(); '
   + "globalThis.showHide ??= (el, show) => { el.hidden = !show; }; globalThis.rowsQuiet ??= false; "
-  + 'globalThis.dismissRow ??= (el, kind, done) => done(); globalThis.settleEmpty ??= () => {}; globalThis.slideRail ??= (opening, update) => update(); globalThis.crossfade ??= (update) => update(); globalThis.motionBefore ??= () => null; globalThis.motionAfter ??= () => {}; '
+  + 'globalThis.dismissRow ??= (el, kind, done) => done(); globalThis.settleEmpty ??= () => {}; globalThis.crossfade ??= (update) => update(); globalThis.motionBefore ??= () => null; globalThis.motionAfter ??= () => {}; '
   + 'globalThis.armGlide ??= () => {}; globalThis.flash ??= () => {}; globalThis.flashAt ??= () => {}; globalThis.playOnce ??= () => {}; globalThis.rowFor ??= () => null; globalThis.badgeMoved ??= () => {}; '
   + 'globalThis.popRead ??= () => {}; globalThis.popMention ??= () => {}; globalThis.swapPanel ??= () => {}; globalThis.menuMotion ??= () => {}; globalThis.growFrom ??= async () => {}; globalThis.play ??= async () => {}; '
   + 'globalThis.settling ??= () => 0; globalThis.MOTION ??= {}; globalThis.motionOK ??= () => false; globalThis.stillPreferred ??= () => true;\n';
@@ -1507,7 +1507,6 @@ function runAuthPaletteCheck() {
     const pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
     const localDate = () => '2026-09-13';
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
-    const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     const setTheme = () => {};
     const startDrop = () => {};
     const docRow = () => ({});
@@ -1556,7 +1555,6 @@ async function runSyncShortcutCheck() {
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light', pinInfo = null, palDoc = null;
     const localDate = () => '2026-09-13', setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     const showError = () => {}, palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {};
     const setZoom = () => {}, navigate = () => {}, history = () => {}, togglePalette = () => {}, focusRail = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
@@ -1566,7 +1564,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Smaller text', 'Reset text size', 'Hide sidebar', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show links', 'Smaller text', 'Reset text size', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1614,11 +1612,11 @@ async function runSyncShortcutCheck() {
     const accessById = new Map([[palDoc.id, { sharing: true, move: true, ownerUri: 'tana:space:01j0space00000000000000000' }]]), loadAccess = () => {}, isRealId = () => true;
     const localDate = (offset = 0) => (offset ? '2026-09-14' : '2026-09-13'), setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
     const palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {}, showError = () => {};
-    const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false; // sidebar visible here, so both the focus row and the toggle row are built
     const went = []; // Go to Home runs the real goHome, so where it sends you is observable here
     const pinCalls = []; // what a date-pin row asks of api.pin/api.unpin: the op, the target and the day
     const posted = [], window = { frameElement: {}, parent: { postMessage: (m) => posted.push(m) } }; // the shell this page asks (shellRun)
+    const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
+    const LINKS = false, toShell = (m) => posted.push(m); // a page of its own, asking the shell about the Links pane (renderer/rail.js)
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, toggleDatePin = (doc, date) => pinCalls.push([doc.id, date]), copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = (id) => went.push(id), setView = (id) => went.push('view:' + id), openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${sourceBetween('const PANE_ROWS', 'const shellRun')}${sourceLine('const shellRun')}
@@ -1639,8 +1637,8 @@ async function runSyncShortcutCheck() {
     'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
-    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Focus the sidebar',
-    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Hide sidebar', 'Window: Reload',
+    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home',
+    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Show links', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
     'Help: Help',
   ], 'the palette lists its rows in one fixed, meaningful order');
@@ -1651,6 +1649,11 @@ async function runSyncShortcutCheck() {
     'Window: Maximize or restore pane', 'Window: Show all panes', 'Window: Zoom back', 'Window: Zoom forward', 'Window: Close pane'], 'more pages: the pane rows');
   order.row('maximizePane').run(); order.row('otherPane').run(); order.row('overview').run();
   assert.deepEqual(plain(order.posted()), [{ orbital: 'run', command: 'frame.toggle' }, { orbital: 'run', command: 'panel.next' }, { orbital: 'run', command: 'navigation.overview' }], 'each asks the shell to run its command');
+  // The window's Links pane (issue #462): once there is one, a row focuses it and the toggle hides it, both asked of the shell
+  order.panes({ pages: 2, links: true });
+  assert.deepEqual(plain(order.labels('').filter((l) => /links/.test(l))), ['Navigate: Focus links', 'Window: Hide links'], 'with a Links pane: focus it, or hide it');
+  order.row('railToggle').run(); order.row('rail').run();
+  assert.deepEqual(plain(order.posted()), [{ orbital: 'links' }, { orbital: 'focusLinks' }], 'both ask the shell, which keeps the one pane');
   order.panes({ pages: 1 });
   // The two date pins differ only in the day they name, and each label follows whether that day is already pinned;
   // the press toggles that day (toggleDatePin, which reads the pins again: runClosedPaletteKeysCheck).
@@ -1773,7 +1776,6 @@ async function runSyncShortcutCheck() {
     const localDate = () => '2026-09-13', setTheme = () => {};
     const docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
-    const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     ${paletteRows}
     paletteRows('');
   `);
@@ -3355,7 +3357,6 @@ async function runPinToMeetingCheck() {
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0;
     const palInput = { placeholder: '', value: '', focus() {} };
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false;
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
@@ -3516,7 +3517,6 @@ async function runClosedPaletteKeysCheck() {
     let palMode = 'cmd', palRows = [], palIndex = 0;
     const palInput = { placeholder: '', value: '', focus() {} };
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false;
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, copyText = () => {};
@@ -4373,7 +4373,6 @@ function runSearchesGroupCheck() {
     const localDate = () => '2026-09-13', setTheme = () => {};
     const docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
-    const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     ${paletteRows}
     const rows = paletteRows('').filter((r) => r.group === 'Searches');
     const types = paletteRows('').filter((r) => r.group === 'Types');
@@ -4427,47 +4426,34 @@ function runNavButtonsCheck() {
   assert.deepEqual(both.map((b) => b.icons), [1, 1], 'and a redraw does not stack a second glyph in the button');
 }
 
-// The sidebar can be put away by hand, and that preference outlives any document: hiding wins over
-// content, so a sidebar you closed does not reopen because the next node happens to have pins.
+// The Links pane (issue #462) goes where the page it follows is: that page's document, opened from the row the page
+// sent so main is not asked, or nothing for a page on no document; the same document again moves nothing.
 function runRailToggleCheck() {
   const api = vm.runInNewContext(`
-    const store = new Map();
-    const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
-    const prefs = {}; const pref = (k, fb) => (k in prefs ? prefs[k] : fb); const setPref = (k, v) => { prefs[k] = v; store.set(k, JSON.stringify(v)); };
-    let renders = 0;
-    let forced = null;
-    const render = (force) => { renders++; forced = force === true; };
-    let railHidden = pref('railHidden', false) === true;
-    const railNarrow = () => false; // a pane wide enough for it (renderer/rail.js)
-    ${functionSource('railOff')}
-    ${functionSource('toggleRail')}
-    ({
-      state: () => ({ hidden: railHidden, stored: store.has('railHidden') ? store.get('railHidden') : null, renders, forced }),
-      off: (empty) => railOff(empty),
-      toggle: () => { toggleRail(); },
-    });
+    let zoom = null, view = 'library';
+    const extra = new Map(), opened = [], asked = [], views = [];
+    const isRealId = (id) => /^tana:[a-z-]+:/.test(String(id || ''));
+    const docOf = (id) => extra.get(id);
+    const openDoc = (id) => { opened.push(id); zoom = { docId: id, nodeId: null }; };
+    const goTo = (id) => { asked.push(id); zoom = { docId: id, nodeId: null }; };
+    const setView = (id) => { views.push(id); zoom = null; };
+    ${functionSource('follow')}
+    ({ follow, state: () => ({ zoom: zoom && zoom.docId, opened: [...opened], asked: [...asked], views: [...views] }) });
   `);
-  assert.equal(api.off(false), false, 'a sidebar with something in it is shown by default');
-  assert.equal(api.off(true), true, 'an empty sidebar stays hidden whatever the preference says');
-  assert.deepEqual(plain(api.state()), { hidden: false, stored: null, renders: 0, forced: null }, 'and nothing is persisted until the user asks for it');
-  api.toggle();
-  // Cmd+K runs the row after closePalette has put the caret back in the edited row, so a deferrable render would
-  // only land when the caret next left: the repaint has to be the forced one.
-  assert.deepEqual(plain(api.state()), { hidden: true, stored: 'true', renders: 1, forced: true }, 'hiding it persists the preference and repaints once, forced past the caret');
-  assert.equal(api.off(false), true, 'hiding wins over content: a document with pins does not reopen it');
-  api.toggle();
-  assert.deepEqual(plain(api.state()), { hidden: false, stored: 'false', renders: 2, forced: true }, 'showing it again persists that too');
-  assert.equal(api.off(false), false, 'and the sidebar is back');
-  // The harness above proves railOff composes correctly, but it never touches renderRail — so nothing in it
-  // would notice the call site being reverted to the bare content test, leaving the preference wired to nothing.
-  // (Verified: reverting that one line left the whole suite green.) Faking the rail DOM for one boolean is a poor
-  // trade, so the wiring gets a source anchor instead, specific enough to fail on deletion rather than movement —
-  // the same instrument runSearchesGroupCheck uses for the boot statement it cannot reach.
-  assert.match(source, /railEl\.hidden = railGrip\.hidden = railOff\(empty\);/,
-    'renderRail actually asks railOff, so the preference reaches the sidebar rather than sitting in a helper nobody calls');
-  // A saved search is a list: the same anchor keeps it without a sidebar, and so without the button that shows one.
+  api.follow('tana:text:a', { id: 'tana:text:a', text: 'A' });
+  assert.deepEqual(plain(api.state()), { zoom: 'tana:text:a', opened: ['tana:text:a'], asked: [], views: [] }, 'a followed document opens from the row its page sent, without a read from main');
+  api.follow('tana:text:a', { id: 'tana:text:a', text: 'A' });
+  assert.deepEqual(plain(api.state()).opened, ['tana:text:a'], 'the same document again (a focus that changed nothing) moves nothing');
+  api.follow('tana:text:b', null);
+  assert.deepEqual(plain(api.state()).asked, ['tana:text:b'], 'a document with no row sent is read the usual way (goTo)');
+  api.follow(null);
+  api.follow('orbital:timeline');
+  assert.deepEqual(plain(api.state()), { zoom: null, opened: ['tana:text:a'], asked: ['tana:text:b'], views: ['library'] }, 'a page on no document (a view, an app page) leaves it on none, once');
+  // Only the Links pane draws the rail; every other page hides it and tells the shell its document instead.
+  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Links pane draws no rail and names its document');
+  // A saved search is a list: no links, and nothing for the Links pane to follow.
   assert.match(source, /!String\(parent\.docId\)\.startsWith\(SEARCH_ID\) \? parent\.docId : null;/,
-    'renderRail gives a saved search no sidebar and no sidebar button');
+    'renderRail gives a saved search no links');
 }
 
 // A saved search is a query you can edit, so the pills serve it too, keyed by the document rather than the view.
@@ -4843,7 +4829,6 @@ function runNotifyToggleCheck() {
     const localDate = () => '2026-09-13', setTheme = () => {};
     const docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
-    const railToggle = { hidden: false }, railHidden = false;
     ${functionSource('setNodeNotify')}
     ${functionSource('paletteRows')}
     const row = paletteRows('').find((r) => r.rank === 'notify');
@@ -4990,7 +4975,6 @@ function runCodexAssignCheck() {
     const localDate = () => '2026-09-18', setTheme = () => {};
     const docRow = () => ({});
     const railEl = { hidden: true }, navBack = [], navForward = [];
-    const railToggle = { hidden: false }, railHidden = false;
     const onSearchPage = () => false; // zoomed into an ordinary document, not a saved search
     // holdRow is renderer/views.js: the row keeps its place, which is what lets the Clean up pill offer the redraw
     const held = [], holdRow = (n) => held.push(n.id);
@@ -6896,7 +6880,7 @@ async function runSettingsElsewhereCheck() {
     const onTypePage = () => false, isTypeId = () => false, typeFilter = () => ({}), reload = async () => {}, mergePrefs = () => {}, pref = (k, d) => d;
     const renderSoon = () => {}, showError = (e) => { throw e; }, showTheme = () => {}, loadSensitive = async () => {}, refreshSensitive = () => {};
     const widenFilter = (id, f) => f, loadView = () => { listed++; };
-    let railHidden = false; const railClosed = new Set(); // the sidebar's, which applySettings reads again too
+    const railClosed = new Set(); // the sidebar's, which applySettings reads again too
     const loadCodex = () => { codexReads++; codexIds = new Set(marks); return (codexLoading = Promise.resolve()); };
     const loadAgentStates = () => { stateReads++; agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts)) agentTaskHosts.set(id, host); };
     ${functionSource('loadFilters')}
@@ -7233,7 +7217,6 @@ async function runSetTypeCheck() {
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0;
     const palInput = { placeholder: '', value: '', focus() {} };
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false;
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
@@ -7475,7 +7458,6 @@ async function runDiscussWithCheck() {
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
     const palInput = { placeholder: '', value: '', focus() {} };
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false;
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
@@ -7608,7 +7590,6 @@ async function runClassifyTypeCheck() {
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
     const palInput = { placeholder: '', value: '', focus() {} };
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false;
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
@@ -7718,7 +7699,6 @@ async function runSetIconCheck() {
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
     const palInput = { placeholder: '', value: '', focus() {} };
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false;
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
@@ -7857,7 +7837,6 @@ async function runSetHueCheck() {
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
     const palInput = { placeholder: '', value: '', focus() {} };
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false;
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
@@ -7969,6 +7948,7 @@ async function runDeletedNodeCheck() {
     const showError = (e) => errors.push(String((e && e.message) || e));
     const render = () => { renders++; }, renderSoon = () => { renders++; }, patchMeta = () => {}, renderPalette = () => {};
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {}, recordRecent = () => {};
+    const LINKS = false; // a page of its own, not the Links pane (renderer/state.js)
     const sectionOf = () => null, allDocs = () => [], docOf = () => null, followSummary = (id) => opened.push(id);
     const atHome = () => false, goHome = () => { view = 'home'; };
     const setTimeout = () => 0;
@@ -8058,7 +8038,6 @@ async function runRecentlyDeletedCheck() {
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
     const palInput = { placeholder: '', value: '', focus() {} };
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const railToggle = { hidden: false }, railHidden = false;
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
@@ -8788,8 +8767,8 @@ async function runLateSettingsCheck() {
   assert.deepEqual(plain(await run({ theme: 'light' }, { theme: 'light', home: 'library' }, { theme: 'dark' }).applied()), [{ theme: 'dark', home: 'library' }],
     'a choice made while the answer was on its way is newer, so it keeps its value, and the rest of the answer still applies');
   assert.match(source, /if \(tana\.onSettings\) tana\.onSettings\(applySettings\);\nif \(tana\.prefsNow\) catchUpSettings\(\);/, 'it asks after it starts listening, so no change can fall between the two');
-  assert.match(functionSource('applySettings'), /railHidden = pref\('railHidden', false\) === true; railClosed\.clear\(\); for \(const key of pref\('railClosed', \[\]\)\) railClosed\.add\(key\);/,
-    'and what it applies reaches the sidebar too, whose shown state and folded sections were copied at load');
+  assert.match(functionSource('applySettings'), /railClosed\.clear\(\); for \(const key of pref\('railClosed', \[\]\)\) railClosed\.add\(key\);/,
+    'and what it applies reaches the Links pane too, whose folded sections were copied at load');
   console.log('ok  settings: a change sent before the page listened is still applied');
 }
 checks.push(runLateSettingsCheck);

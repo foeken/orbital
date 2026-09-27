@@ -261,9 +261,11 @@ function render(force = false) {
 // The page's title on its tab in the shell (shell.js): what the header shows, so masked in demo mode, and 'Hidden'
 // while the document's sensitive mark blurs it, and whether it can be typed in, which offers Rename on the tab (issue
 // #441). Told once per change; outside the shell (the mock) there is no tab.
-let toldTitle = null;
+let toldTitle = null, titleTold = null; // titleTold: the last title and renamable, told again when the shell asks (retell)
 const retellTitle = () => { if (toldTitle) tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, toldTitle.endsWith('\ntrue')); };
 function tellTitle(title, renamable) {
+  if (LINKS) { title = 'Links'; renamable = false; } // its tab names what it is; the document is the followed page's
+  titleTold = [title, renamable];
   const told = title + '\n' + renamable;
   if (told === toldTitle || !window.frameElement) return;
   toldTitle = told;
