@@ -21,6 +21,9 @@ body.many .drag, body.covered .drag { display: none; }
 .trellis [data-trellis-part="tabbar"][data-top] :is([data-trellis-part="tab"], button) { -webkit-app-region: no-drag; }
 body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag; }
 body.pressing .trellis [data-trellis-part="content"] { pointer-events: none; } /* a tab pressed: the pages let the pointer pass (shell.js) */
+/* A tab's or pane's menu open: a press beside it lands in the shell, where Trellis closes the menu, instead of in a page
+   (an iframe the shell never hears), which left the menu up until an option was picked. */
+body:has([data-trellis-part="menu"]) .trellis [data-trellis-part="content"] { pointer-events: none; }
 .trellis [data-trellis-part="tabbar"][data-lights] [data-trellis-part="tabs"] { padding-left: 88px; } /* the traffic lights end near 68px and a selected tab's flared corner reaches 7px left of it: a clear gap after both */
 /* The page the palette covers the window from (renderer/palette.js coverWindow): everything from its iframe up to the
    workspace is lifted over the rest and lets the iframe reach past it; shell.js sizes the iframe to the workspace. */
