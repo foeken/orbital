@@ -555,13 +555,15 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
    round blue button sends. --chat-send is that blue, --chat-mine and --chat-mine-text your bubble (dark twins below). */
 :root { --chat-mine: #e6eefb; --chat-mine-text: #1b2b41; --chat-send: #3b82f6; }
 /* a short conversation sits on the composer at the bottom of the window */
-.scroll.chatting { display: flex; flex-direction: column; padding-bottom: 8px; }
+/* the conversation fades out under the header and into the composer, as in Codex: a mask, so it works on any theme */
+.scroll.chatting { display: flex; flex-direction: column; padding-top: 28px; padding-bottom: 24px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 36px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 36px, #000 calc(100% - 28px), transparent 100%); }
 .scroll.chatting > .outline { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: flex-end; }
-.chat-msg { display: flex; flex-direction: column; margin: 0 0 22px; font-size: 16px; line-height: 1.55; }
+.chat-msg { display: flex; flex-direction: column; margin: 0 0 24px; font-size: 16px; line-height: 1.6; }
 .chat-msg.mine { align-items: flex-end; }
 .chat-msg.theirs { align-items: stretch; }
 .chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
-.chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 10px 18px; border-radius: 22px; background: var(--chat-mine); color: var(--chat-mine-text); }
+.chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 26px; background: var(--chat-mine); color: var(--chat-mine-text); }
 .bubble > * + * { margin-top: 8px; }
 .chat-name { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 4px; }
 .chat-note { font-size: 14px; color: var(--muted); margin: 0 0 6px; }
@@ -585,15 +587,16 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .chat-dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .35; }
 @media (prefers-reduced-motion: no-preference) { .chat-dots i { animation: chat-dot var(--dur-loop) infinite; } .chat-dots i:nth-child(2) { animation-delay: .2s; } .chat-dots i:nth-child(3) { animation-delay: .4s; } }
 @keyframes chat-dot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: .8; transform: translateY(-2px); } }
-/* the window's last row under a chat, outside the scroll, so it never moves: a card holding the text, the send button
-   under it at the right */
-.composer { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin: 4px 32px 16px 16px; padding: 14px 12px 10px 18px;
-  border: 1px solid #e3e3e3; border-radius: 24px; background: var(--surface); box-shadow: 0 2px 10px rgba(0, 0, 0, .05); }
+/* the window's last row under a chat, outside the scroll, so it never moves: Codex's soft card, the text on top and the
+   round send button under it at the right */
+.composer { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin: 0 32px 18px 16px; padding: 18px 14px 14px 22px;
+  border: 1px solid rgba(0, 0, 0, .06); border-radius: 28px; background: var(--surface); box-shadow: 0 6px 28px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); }
 .composer[hidden] { display: none; } /* its flex would otherwise win over [hidden] */
-.composer:focus-within { border-color: #cfcfcf; }
-.composer textarea { flex: 1 0 100%; field-sizing: content; min-height: 1.5em; max-height: 40vh; resize: none; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 16px; line-height: 1.5; outline: none; }
-.composer-send { flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--chat-send); color: #fff; font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer; }
-.composer:has(textarea:placeholder-shown) .composer-send { opacity: .35; cursor: default; }
+.composer:focus-within { box-shadow: 0 8px 32px rgba(0, 0, 0, .09), 0 1px 3px rgba(0, 0, 0, .05); }
+.composer textarea { flex: 1 0 100%; field-sizing: content; min-height: 3em; max-height: 40vh; resize: none; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 16px; line-height: 1.5; outline: none; }
+.composer textarea::placeholder { color: #9a9a9a; }
+.composer-send { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--chat-send); color: #fff; font-size: 20px; font-weight: 600; line-height: 1; cursor: pointer; }
+.composer:has(textarea:placeholder-shown) .composer-send { opacity: .4; cursor: default; }
 
 /* ==== Row content: checkbox, text, facts, chips, images, references, marks, blocks ==== */
 .check {
@@ -1035,9 +1038,10 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); max-width: mi
 /* Dark theme contract: renderer sets document.documentElement.dataset.theme = "dark". */
 [data-theme="dark"] { color-scheme: dark; }
 [data-theme="dark"] body { color: #c9c9c9; background: #1b1d1e; }
-[data-theme="dark"] { --chat-mine: #26344a; --chat-mine-text: #e3ecfa; }
-[data-theme="dark"] .composer { border-color: #3a3d40; box-shadow: none; }
-[data-theme="dark"] .composer:focus-within { border-color: #4a4e52; }
+[data-theme="dark"] { --chat-mine: #1e3d7b; --chat-mine-text: #e8eeff; --chat-send: #3d72e0; } /* Codex's dark: a deep saturated blue */
+[data-theme="dark"] .composer { border-color: rgba(255, 255, 255, .07); background: #2a2c2e; box-shadow: 0 4px 20px rgba(0, 0, 0, .25); } /* a lighter card on the page, as Codex draws it */
+[data-theme="dark"] .composer:focus-within { border-color: rgba(255, 255, 255, .11); box-shadow: 0 6px 24px rgba(0, 0, 0, .3); }
+[data-theme="dark"] .composer textarea::placeholder { color: #7d8185; }
 [data-theme="dark"] .chat-code { background: rgba(255, 255, 255, .07); }
 [data-theme="dark"] .chat-quote { border-left-color: #44484b; }
 [data-theme="dark"] .chat-divider { border-top-color: #3a3d40; }

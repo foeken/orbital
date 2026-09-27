@@ -837,7 +837,8 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
 
 An open `tana:chat:` is a conversation in the Codex app's style, drawn by renderer/chat.js from the rows sdk/chat.js
 `chatRows` makes (docs/CHATS.md §8), in list order with the newest at the bottom: yours (`row.chat.mine`) in a light
-blue bubble on the right, Tana's and anyone else's as plain text across the page. With more than one other author,
+blue bubble on the right (a deep blue in dark mode), Tana's and anyone else's as plain text across the page. The
+conversation fades out at the top, under the header, and into the composer at the bottom (a mask on the scroll area). With more than one other author,
 their name heads each of their runs. The markdown blocks keep their kind (headings, bullets, numbered items, quotes,
 code), mentions and attachments are links that open their node, the thinking line or an error sits in grey above the
 answer, and hovering a message shows when it was sent. The page opens at its end and follows new messages while you
