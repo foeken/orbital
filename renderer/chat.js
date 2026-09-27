@@ -336,7 +336,11 @@ function submitQuestions(skip) {
     try { sent = await tana.answerChat(docId, messageId, answers); }
     catch (e) { if (qs && qs.messageId === messageId) { qs.busy = false; drawQuestion(); } throw e; }
     qDrafts.delete(messageId); // answered: nothing left to come back to
-    if (sent.responding) chatWaiting.set(docId, wait);
+    if (sent.responding) {
+      chatWaiting.set(docId, wait);
+      // the dots give up after two minutes even when nothing else redraws the page, as a sent message's do
+      setTimeout(() => { if (chatWaiting.get(docId) === wait) { chatWaiting.delete(docId); renderSoon(true); } }, CHAT_WAIT);
+    }
     await reload(docId);
     if (zoom && zoom.docId === docId) renderSoon(true);
     if (sent.replyError) throw new Error('Answered, but Tana was not asked to go on: ' + sent.replyError);
