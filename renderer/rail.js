@@ -259,7 +259,8 @@ function railPinAction(pinHub, docId) {
 // A saved search is a list, like the views: no links (issue #234).
 function renderRail(parent) {
   const docId = parent && parent.node.kind === 'document' && !parent.node.draft && !String(parent.docId).startsWith(SEARCH_ID) ? parent.docId : null;
-  if (!LINKS) { railEl.hidden = true; return tellDoc(docId); }
+  // a page is no Graph pane, but its fields under the title come with the same read (api.related): still asked for here
+  if (!LINKS) { railEl.hidden = true; if (docId) loadRelated(docId); return tellDoc(docId); }
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
   railEl.hidden = false;

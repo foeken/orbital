@@ -4486,7 +4486,9 @@ function runRailToggleCheck() {
   await api.follow('orbital:timeline');
   assert.deepEqual(plain(api.state()).views, ['library'], 'a page on no document (a view, an app page) leaves it on none, once');
   // Only the Graph pane draws the rail; every other page hides it and tells the shell its document instead.
-  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail and names its document');
+  // It still reads the document's related data: the fields under its title come with that read, and without it a page
+  // opened with no Graph pane beside it showed no fields at all.
+  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; if \(docId\) loadRelated\(docId\); return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail, still reads what its fields need, and names its document');
   // and no outline key of the page (⇧⌘⌫ above all) reaches the hidden page in the Graph pane: its branch comes before them (#463 review)
   assert.match(source, /else if \(!palette\.hidden\) return;\n(?:\s*\/\/[^\n]*\n)*\s*else if \(LINKS\) \{ if \(hotkey && runAction\(hotkey\)\) e\.preventDefault\(\); \}\n[^]*?removeZoomedBlock\(\)/, 'in the Graph pane only its forwarded keys run, never the outline\'s');
   // Anywhere else the Graph pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
