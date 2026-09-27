@@ -108,13 +108,13 @@ function visibilityFieldEl(parent) {
   const values = document.createElement('div'); values.className = 'fvalues';
   const el = document.createElement('div'); el.className = 'fvalue fchoice'; el.tabIndex = 0; el.title = summary.audience.label;
   const count = summary.peopleCount || summary.people.length;
-  if (count === 1 && summary.people.length === 1) { loadMembers(); const name = document.createElement('span'); name.textContent = memberName(summary.people[0]); el.append(name); } // one person: their name, not a lone bubble
+  if (count === 1 && summary.people.length === 1) { loadMembers(); const who = document.createElement('span'); renderSegs(who, [{ mention: { uri: summary.people[0], label: memberName(summary.people[0]), icon: 'member' } }]); el.append(who); } // one person: a mention of them, as Assigned to draws one, not a lone bubble
   else if (summary.people.length) el.append(...facesEls(summary.people, count));
   else { const words = document.createElement('span'); words.className = 'fhint'; words.textContent = summary.audience.label; el.append(words); }
   if (summary.linkShared) { const link = document.createElement('span'); link.className = 'fhint'; link.textContent = 'Anyone with the link'; el.append(link); } // Tana's own switch, read-only here
   if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'fhint fwarn'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
   const open = tana.accessOptions ? () => openVisibility(access, summary.scope) : null;
-  el.onclick = () => { if (open) open(); };
+  el.onclick = (e) => { if (open && !e.target.closest('.mention')) open(); }; // a person's mention is a link to them, as anywhere else
   el.onkeydown = (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘K and the rest are the document's
     const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
