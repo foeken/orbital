@@ -571,11 +571,9 @@ async function followSummary(id, title, wait = () => pause(SUMMARY_EVERY_MS)) {
 // The same pair, kept across restarts: id -> [title, stateType] as it was when the app last saw the node.
 // notifySigs lives only as long as the process and a bootstrap takes its baseline in silence, so a task completed
 // while the app was closed used to be lost outright — which is how a completion at 09:01 goes unmentioned by an app
-// started at 09:27. Pruned to what is still subscribed on every write, so it cannot grow into a history of
-// everything ever opened.
-// ponytail: one small write per node at launch and per move after that: 54 at a launch, 3-4 ms in all under WAL
-// (db.js, measured 2026-09-27). Bootstraps arrive one per tick, so batching per tick saved nothing; batch on a timer
-// if the map grows.
+// started at 09:27. Pruned by the refresh (pruneSeen), so it cannot grow into a history of everything ever opened.
+// ponytail: one small write per node whose pair moved, 3-4 ms for 54 under WAL (db.js, measured 2026-09-27); a warm
+// start writes one, the settings document that nothing follows. Batch on a timer if the map grows.
 let seenPairs = null;
 let caughtUp = 0; // catch-up banners spent this launch
 const CATCH_UP_MAX = 3; // coming back to a busy week is not a reason to bury the screen
@@ -585,8 +583,19 @@ function rememberSeen(id, sig) {
   const pair = [sig[0], sig[1]];
   if (String(seenPairs[id]) === String(pair)) return;
   seenPairs[id] = pair;
-  const next = {};
-  for (const [key, value] of Object.entries(seenPairs)) if (key === id || subscribed.has(key)) next[key] = value; // the rest is history
+  db.setSetting('notifySeen', seenPairs);
+}
+// Down to what is still followed: subscribed, or found by this refresh (`followed`: the watch rule's set and the rows
+// the views keep live), or watched by hand or handed to the agent (start subscribes those outside `subscribed`).
+// `followed` counts on its own because a subscribe that fails drops its id from `subscribed` (subscribe above) while
+// the rule still follows it; the retry's bootstrap needs the stored pair to announce what moved meanwhile.
+// Only the refresh calls it, once those are subscribed: pruning on every write ran at launch before anything was,
+// and the settings document's first write cut 42 stored pairs to 1 (#427).
+function pruneSeen(followed = new Set()) {
+  seenPairs ||= storedPairs();
+  const held = new Set([...followed, ...notifyWatchedIds(), ...codexIds()]);
+  const next = Object.fromEntries(Object.entries(seenPairs).filter(([id]) => subscribed.has(id) || held.has(id)));
+  if (Object.keys(next).length === Object.keys(seenPairs).length) return;
   seenPairs = next;
   db.setSetting('notifySeen', next);
 }
@@ -1028,4 +1037,4 @@ const ipc = {
   },
 };
 
-module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

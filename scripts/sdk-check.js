@@ -2748,6 +2748,75 @@ async function main() {
     mine2.onChange(byMe.id, { origin: 'remote' });
     await settle();
     assert.deepEqual(afterMine, [], 'a task you completed yourself before quitting is not announced back to you');
+    // Issue #427: at launch the first document to bootstrap — the app's own settings document, before the views have
+    // subscribed anything — pruned the stored pairs down to itself, so the watched tasks behind it had nothing to be
+    // compared with and their catch-up banners never fired.
+    const task = (title, state) => {
+      const d = new Document('tana:text:' + ulid());
+      d.transact((l) => initDocument(l, title, ME, { kind: 'task' }));
+      setAssignees(d, [COLLEAGUE], ME);
+      docs.set(d.id, d); creators.set(d.id, ME);
+      cache.setSetting('notifySeen', { ...cache.setting('notifySeen'), [d.id]: [title, 'open'] });
+      if (state) setState(d, state, COLLEAGUE);
+      return d;
+    };
+    const finished = task('Review the budget', 'closed'), idle = task('Still open');
+    const byHand = 'tana:text:' + ulid(), forgotten = 'tana:text:' + ulid(); // watched by hand, listed nowhere; followed by nothing
+    cache.setSetting('notifySeen', { ...cache.setting('notifySeen'), [byHand]: ['Mine to watch', 'open'], [forgotten]: ['Long gone', 'open'] });
+    cache.setSetting('notify', { ...cache.setting('notify'), [byHand]: true });
+    const appDoc = new Document('tana:text:' + ulid());
+    appDoc.transact((l) => initDocument(l, 'Orbital', ME, { kind: 'doc' }));
+    docs.set(appDoc.id, appDoc);
+    const graphBefore = runtime.client.graph.listNodes;
+    runtime.client.graph.listNodes = async (p) => (p.createdBy
+      ? { nodes: [{ id: finished.id, assignedTo: [COLLEAGUE], state: { type: 'closed' } }, { id: idle.id, assignedTo: [COLLEAGUE], state: { type: 'open' } }] }
+      : graphBefore(p));
+    const warm = mainHelpers(); warm.testRuntime(runtime);
+    const warmBanners = []; warm.S.notify = (id, title, body) => warmBanners.push([id, body]);
+    const kept = (...ids) => ids.filter((id) => id in cache.setting('notifySeen'));
+    warm.onChange(appDoc.id, { origin: 'remote' }); // arrives before the first refresh has subscribed anything
+    await settle();
+    assert.deepEqual(kept(finished.id, idle.id, byHand, forgotten), [finished.id, idle.id, byHand, forgotten],
+      'the first document to arrive at launch prunes none of the stored pairs');
+    await warm.refresh();
+    warm.onChange(finished.id, { origin: 'remote' });
+    warm.onChange(idle.id, { origin: 'remote' });
+    await settle();
+    assert.deepEqual(warmBanners, [[finished.id, 'Now Completed by Sam Rivera']],
+      'the watched task completed while the app was closed is announced once, the unchanged one not at all');
+    assert.deepEqual(kept(finished.id, idle.id, byHand, forgotten), [finished.id, idle.id, byHand],
+      'the refresh prunes only what nothing follows any more: a node watched by hand keeps its pair');
+    warm.onChange(finished.id, { origin: 'remote' });
+    await warm.refresh(); // announced and closed, the rule lets it go now, and the prune with it
+    await settle();
+    assert.equal(warmBanners.length, 1, 'and not again');
+    // A watched task whose subscribe fails keeps its stored pair: the watch rule still follows it and retries, and a
+    // prune by `subscribed` alone left that retry nothing to compare with, so the completion went unannounced.
+    // Its own instance: warm holds the pairs in memory from before this task existed, and has spent a catch-up banner.
+    const flaky = task('Send the invoice', 'closed');
+    const graphWarm = runtime.client.graph.listNodes, subscribeBefore = runtime.client.sync.subscribe;
+    runtime.client.graph.listNodes = async (p) => (p.createdBy
+      ? { nodes: [...(await graphWarm(p)).nodes, { id: flaky.id, assignedTo: [COLLEAGUE], state: { type: 'closed' } }] }
+      : graphWarm(p));
+    let flakyTries = 0;
+    runtime.client.sync.subscribe = async (id) => {
+      if (id === flaky.id && ++flakyTries === 1) throw new Error('connection reset'); // the first try only
+      return subscribeBefore(id);
+    };
+    const retry = mainHelpers(); retry.testRuntime(runtime);
+    const retryBanners = []; retry.S.notify = (id, title, body) => retryBanners.push([id, body]);
+    await retry.refresh();
+    await settle();
+    assert.equal(flakyTries, 1, 'the watch rule tried to subscribe it, and that failed');
+    assert.deepEqual(kept(flaky.id), [flaky.id], 'a task the watch rule follows keeps its stored pair when its subscribe fails');
+    await retry.refresh();
+    retry.onChange(flaky.id, { origin: 'remote' }); // the retry's bootstrap
+    await settle();
+    assert.equal(flakyTries, 2, 'the next refresh subscribes it again');
+    assert.deepEqual(retryBanners, [[flaky.id, 'Now Completed by Sam Rivera']],
+      'and the completion made while the app was closed is announced once that subscribe works');
+    runtime.client.sync.subscribe = subscribeBefore;
+    runtime.client.graph.listNodes = graphBefore;
     // Another tab from the same user has a different nonce but the same user hash in its peer id.
     const ownPeer = '65536', otherOwnPeer = '65537', colleaguePeer = '131072';
     const remoteTask = new Document('tana:text:' + ulid(), { peerId: ownPeer });

@@ -8,7 +8,7 @@ const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completed
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, creatorOf, document, historyIds, mut, op, notifySilencedIds, notifyWatchedIds, onChange, releaseOnDemand, subscribe } = require('./documents');
+const { codexIds, createDocument, creatorOf, document, historyIds, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, subscribe } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
 const settings = require('./settings');
@@ -397,8 +397,12 @@ async function doRefresh() {
   setStatus({ syncing: true, error: null });
   try {
     // before the view, so the sweep in viewRows sees the set this refresh found rather than the last one's
-    try { await refreshWatched(); } catch { /* the watch set keeps what it had, like the badge keeps its number */ }
+    let watching = true;
+    try { await refreshWatched(); } catch { watching = false; /* the watch set keeps what it had, like the badge keeps its number */ }
     for (const v of openViews()) await viewRows(v.id, v.filter); // each window's view, once, each settling its live query
+    // now that the watch rule and the views have subscribed what they follow (#427), counting what they found
+    // rather than only what subscribed: a failed subscribe is retried, and its pair is what the retry compares with
+    if (watching) pruneSeen(new Set([...ruleWatched, ...openViews().flatMap((v) => [...(liveIds.get(v.id) || [])])]));
     send('outline:changed', null);
     setStatus({ syncing: false, lastSync: now() });
     // The badge rides the same refresh the views do, in its own try and deliberately silent: a number on the app icon
