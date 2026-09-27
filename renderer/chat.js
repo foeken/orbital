@@ -15,11 +15,11 @@ const chatDrafts = new Map(); // docId -> what was typed there and not sent
 const chatWaiting = new Map();
 const isChatPage = (parent) => !!parent && !parent.nodeId && String(parent.docId).startsWith('tana:chat:');
 // @Codex and any other agent on this device (main/chatagents.js, docs/CHATS.md §12): the agents "@" offers, and the
-// questions asked in a chat with their answers, which live on this device only. chatId -> [{ messageId, agent, label,
-// state: working|done|failed, text }], read when the chat opens and while one runs.
+// questions asked in a chat with their answers, which live on this device only and never reach Tana. chatId -> [{ id,
+// question, agent, label, at, state: working|done|failed, text }], read when the chat opens and while one runs.
 let chatAgents = []; // [{ id, label, icon }] this device can run, from main once at load
 if (tana.chatAgents) tana.chatAgents().then((list) => { chatAgents = list; }, () => {});
-const agentAnswers = new Map(), agentPolls = new Set();
+const agentAnswers = new Map(), agentPolls = new Map(); // agentPolls: docId -> read again once the read out now is back
 const AGENT_URI = 'orbital:agent:'; // an "@" chip for an agent, written into the message as plain "@Label"
 const AGENT_NOTE = 'Only visible for you, on this device. Never saved to Tana.';
 const askedAgent = (text) => chatAgents.find((a) => new RegExp('(^|\\s)@' + a.label + '\\b', 'i').test(text));
@@ -123,21 +123,20 @@ function chatEls(list, docId) {
   const rows = list.filter((n) => n.chat), msgs = rows.filter((n) => !n.chat.status), out = [];
   const lefts = new Set(msgs.filter((n) => !n.chat.mine).map((n) => n.chat.author)); // more than one: names over their runs
   let prev = null;
+  // the questions asked of an agent on this device, and their answers, where they were asked among the messages
+  const asks = [...(agentAnswers.get(docId) || [])].sort((a, b) => a.at - b.at);
+  const asksUntil = (t) => { while (asks.length && !(asks[0].at > t)) { out.push(...agentAskEls(asks.shift(), docId)); prev = null; } };
   for (const n of rows) {
+    if (n.chat.sentAt) asksUntil(n.chat.sentAt - 1);
     // a status line ("Sam was added to the chat.") stands on its own between the messages, as Tana shows it
     if (n.chat.status) { const line = document.createElement('div'); line.className = 'chat-status'; line.textContent = demoText(n.text, n.chat.author || docId); out.push(line); prev = null; continue; }
     if (!n.chat.mine && lefts.size > 1 && (!prev || prev.chat.author !== n.chat.author)) {
       const name = document.createElement('div'); name.className = 'chat-name'; name.textContent = demoText(n.text, n.chat.author); out.push(name);
     }
-    // an answer shared to the chat: the agent's words, drawn on its side
-    const relayed = n.chat.mine && (agentAnswers.get(docId) || []).find((a) => a.shared === n.chat.id);
-    if (relayed) { out.push(sharedAnswerEl(n, relayed, docId)); prev = null; continue; }
     out.push(chatMessageEl(n, docId));
     prev = n;
-    // an agent's answer to this question, drawn under it on your side: yours alone, never in Tana, until it is shared
-    const asked = n.chat.mine && (agentAnswers.get(docId) || []).find((a) => a.messageId === n.chat.id && !a.shared);
-    if (asked) { out.push(agentAnswerEl(asked, docId)); prev = null; }
   }
+  asksUntil(Infinity);
   chatPendingQ = ([...msgs].reverse().find((n) => n.chat.questions) || { chat: {} }).chat.questions || null;
   // Asked, and no answer has begun: dots where it will be, until one does or it has been two minutes
   // Only Tana's message after the one it was asked about ends the wait: not another person's (a group chat), and not
@@ -184,58 +183,58 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
   sc.addEventListener('scroll', () => { if (chatShown) chatAtBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80; }, { passive: true });
   const seen = new ResizeObserver(keep); seen.observe(outline); seen.observe(sc);
 }
-// ---- the agents' answers ----
-// A grey bubble on your side, under a line that says it is yours alone: the dots while the task works, then its answer.
-// The arrow beside it posts the answer to the chat as your message, the one way it reaches Tana.
-function agentAnswerEl(a, docId) {
+// ---- the agents' questions and answers ----
+// Two grey bubbles on your side, neither of them in Tana: the question, then under a line that says they are yours
+// alone the dots while the task works and then its answer. The paperclip beside an answer puts it in the message box,
+// to send as your own words.
+function agentAskEls(a, docId) {
+  const q = document.createElement('div'), qb = document.createElement('div');
+  q.className = 'chat-msg mine agent-local'; qb.className = 'bubble'; qb.title = AGENT_NOTE;
+  const words = document.createElement('div'); words.className = 'chat-paragraph'; words.textContent = demoText(a.question, docId);
+  qb.append(words); q.append(qb);
   const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
-  el.className = 'chat-msg mine agent-answer'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
-  agentHead(head, a, docId, a.label + ' · only visible for you, on this device');
-  head.prepend(...[iconNode('lock')].filter(Boolean));
+  el.className = 'chat-msg mine agent-local answer'; head.className = 'agent-head'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
+  // the line over it opens the agent's task that answered, for the work behind the answer
+  if (tana.openAgentAsk) { head.classList.add('opens'); head.title = 'Open the ' + a.label + ' task'; head.onclick = () => openAgentAsk(docId, a.id); }
+  head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode(a.label + ' · only visible for you, on this device'));
   if (a.state === 'working') bubble.append(chatDotsEl());
   else { const text = document.createElement('div'); text.className = 'chat-paragraph'; text.textContent = a.state === 'done' ? demoText(a.text, docId) : a.label + ' stopped without an answer'; bubble.append(text); }
   if (a.state === 'done') {
-    const share = document.createElement('button');
-    share.type = 'button'; share.className = 'agent-share'; share.tabIndex = -1; share.title = 'Share to chat, as your message'; share.setAttribute('aria-label', 'Share to chat');
-    share.append(...[iconNode('forward')].filter(Boolean));
-    share.onclick = () => shareAnswer(docId, a.messageId);
-    row.append(share);
+    const clip = document.createElement('button');
+    clip.type = 'button'; clip.className = 'agent-clip'; clip.tabIndex = -1; clip.title = 'Add to your message'; clip.setAttribute('aria-label', 'Add to your message');
+    clip.append(...[iconNode('paperclip')].filter(Boolean));
+    clip.onclick = () => answerToComposer(docId, a.text);
+    row.append(clip);
   }
   row.append(bubble); el.append(head, row);
-  return el;
+  return [q, el];
 }
-// The line over an answer; it opens the agent's task that answered, for the work behind the answer
-function agentHead(head, a, docId, words) {
-  head.className = 'agent-head'; head.textContent = words;
-  if (tana.openAgentAsk) { head.classList.add('opens'); head.title = 'Open the ' + a.label + ' task'; head.onclick = () => openAgentAsk(docId, a.messageId); }
+// The one way an answer reaches Tana: added after whatever is in the message box, to be sent as your message (the
+// paperclip, or Cmd+K Add …’s answer to message)
+function answerToComposer(docId, text) {
+  if (composer.dataset.doc !== docId || chatReadOnly.has(docId)) return;
+  const had = composer.classList.contains('empty') ? [] : composerSegs();
+  setComposer({ segs: [...had, ...(had.length ? [{ text: '\n' }] : []), { text }], skill: chatSkill });
+  composerText.focus();
+  const end = document.createRange(); end.selectNodeContents(composerText); end.collapse(false);
+  getSelection().removeAllRanges(); getSelection().addRange(end);
 }
-// A shared answer: your message in Tana (it has no other author for it), drawn here on the agent's side under its name
-function sharedAnswerEl(n, a, docId) {
-  const el = chatMessageEl({ ...n, chat: { ...n.chat, mine: false } }, docId), head = document.createElement('div');
-  agentHead(head, a, docId, a.label + ' · shared by you');
-  el.prepend(head);
-  return el;
-}
-// The one way an answer reaches Tana: posted to the chat as your message (the arrow, or Cmd+K Share …’s answer to chat)
-function shareAnswer(docId, messageId) {
-  run(async () => {
-    const { messageId: shared } = await tana.shareAgentAnswer(docId, messageId), a = (agentAnswers.get(docId) || []).find((x) => x.messageId === messageId);
-    if (a) a.shared = shared;
-    await reload(docId); renderSoon(true);
-  });
-}
-const latestAgentAnswer = (docId) => (agentAnswers.get(docId) || []).filter((a) => a.state === 'done' && !a.shared).at(-1);
+const latestAgentAnswer = (docId) => (agentAnswers.get(docId) || []).filter((a) => a.state === 'done').at(-1);
 const latestAgentAsk = (docId) => (agentAnswers.get(docId) || []).at(-1);
-function openAgentAsk(docId, messageId) { run(async () => { if (!(await tana.openAgentAsk(docId, messageId))) throw new Error('That task is not on this device'); }); }
-// Read the chat's answers, and again every few seconds while one is still being worked on
+function openAgentAsk(docId, id) { run(async () => { if (!(await tana.openAgentAsk(docId, id))) throw new Error('That task is not on this device'); }); }
+// Read the chat's answers, and again every few seconds while one is still being worked on. Asked while a read is out
+// (a question just asked), it reads once more when that one is back, which did not know the question yet.
 function agentLoad(docId) {
-  if (!tana.agentReplies || agentPolls.has(docId)) return;
-  agentPolls.add(docId);
+  if (!tana.agentReplies) return;
+  if (agentPolls.has(docId)) { agentPolls.set(docId, true); return; }
+  agentPolls.set(docId, false);
   tana.agentReplies(docId).then((list) => {
+    const again = agentPolls.get(docId);
     agentPolls.delete(docId);
     agentAnswers.set(docId, list);
     if (zoom && zoom.docId === docId) renderSoon(true);
-    if (list.some((a) => a.state === 'working')) setTimeout(() => { if (chatShown === docId) agentLoad(docId); }, 4000);
+    if (again) agentLoad(docId);
+    else if (list.some((a) => a.state === 'working')) setTimeout(() => { if (chatShown === docId) agentLoad(docId); }, 4000);
   }, () => agentPolls.delete(docId));
 }
 
@@ -349,15 +348,13 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
-  // @Codex and the like: the question goes to the chat for the people in it, and to that agent on this device for its answer
+  // @Codex and the like: the question goes to that agent on this device, and stays here with its answer; not to Tana
   const agent = !skill && tana.askAgent && askedAgent(text);
   if (agent) {
     run(async () => {
-      let sent;
-      try { sent = await tana.askAgent(docId, agent.id, text); } catch (e) { restoreDraft(docId, draft); throw e; }
-      await reload(docId); agentLoad(docId);
+      try { await tana.askAgent(docId, agent.id, text); } catch (e) { restoreDraft(docId, draft); throw e; }
+      agentLoad(docId);
       if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); }
-      if (sent.error) throw new Error('Sent, but ' + agent.label + ' could not start: ' + sent.error);
     });
     return;
   }

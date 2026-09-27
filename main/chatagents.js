@@ -1,22 +1,22 @@
 'use strict';
 // Asking a local agent from a Tana chat (issue #468, docs/CHATS.md §12): "@Codex …" today, any other agent that joins
-// AGENTS below later. The question is written to the chat like any message, for the people in it (Tana is not asked);
-// a task of that agent on this Mac gets it with the whole chat. The answer is the agent's own, read back from its task
-// and shown only in Orbital: nothing it says is written to Tana unless you share it, which posts it as your message.
-// The link from a question to its task is the setting chatAsks, which is not in main/settings.js SYNCED, so it stays
-// in this device's database and never reaches Tana either.
+// AGENTS below later. Neither the question nor the answer is written to Tana: Tana has no author for them but you
+// (a message is a person's or Tana's own AI), so both stay in Orbital, on this device. A task of that agent on this Mac
+// gets the question with the whole chat, and its answer is read back from it. What was asked, and the task that
+// answers it, is the setting chatAsks, which is not in main/settings.js SYNCED, so it stays in this device's database.
+const crypto = require('node:crypto');
 const agent = require('./agent');
 const settings = require('./settings');
 const { members } = require('./rows');
-const { op, sendChat } = require('./documents');
-const { S, errText } = require('./state');
+const { op } = require('./documents');
+const { S } = require('./state');
 
-const KEY = 'chatAsks'; // chatId -> [{ messageId, agent, taskId, at, state?, text?, shared? }], a finished answer kept so it is read once
+const KEY = 'chatAsks'; // chatId -> [{ id, question, agent, taskId, at, state?, text? }], a finished answer kept so it is read once
 const GIVE_UP = 15 * 60 * 1000; // a task quiet for longer is not coming back (main/agent.js createTask's own cap)
 // What every agent's task keeps to for its whole life: the chat may flow in, only the asker sees what comes out.
 const RULES = [
   'You were asked from a Tana chat through Orbital. Everything in that chat is yours to use.',
-  'Your answer is shown only to the person who asked, on their device. It is never saved to Tana and nobody else in the chat sees it.',
+  'The question and your answer are shown only to the person who asked, on their device. Neither is saved to Tana and nobody else in the chat sees them.',
   'Answer what they asked and nothing more: do not repeat anything else you saw or know, such as files, mail, other documents or other chats, unless the answer needs it.',
   'Never write to Tana. Do not use any Tana tool that creates, updates, deletes, shares, pins or moves anything.',
 ].join('\n');
@@ -74,26 +74,24 @@ const asksIn = (chatId) => (settings.get(KEY) || {})[chatId] || [];
 function remember(chatId, asks) { settings.set(KEY, { ...(settings.get(KEY) || {}), [chatId]: asks }); }
 const list = () => Object.entries(AGENTS).filter(([, a]) => a.available()).map(([id, a]) => ({ id, label: a.label, icon: a.icon }));
 
-// Write the question, then hand it to a new task of that agent. A task that cannot start does not unsend the question:
-// the message is in the chat, so the error comes back beside it, as a failed Tana reply does (documents.js askReply).
+// Hand the question to a new task of that agent, with the chat as it stands, and keep it here. Nothing is written to
+// the chat: a task that cannot start leaves nothing behind, and the words go back to the composer.
 async function ask(chatId, agentId, text) {
   const a = Object.hasOwn(AGENTS, agentId) ? AGENTS[agentId] : null;
   if (!a) throw new Error('No such agent');
   if (typeof text !== 'string' || !mentionOf(a.label).test(text)) throw new Error('Mention @' + a.label + ' to ask it');
-  const { messageId } = await sendChat(chatId, text, [], { ai: false }); // checks the chat and your write access
-  try {
-    const messages = await op(chatId, async (doc) => { const all = doc.data.get('messages'); return all ? all.toJSON() : []; });
-    const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
-    const taskId = await a.start({ key: chatId, prompt: askPrompt(messages, text, (uri) => names.get(uri), a.label), rules: RULES });
-    remember(chatId, [...asksIn(chatId), { messageId, agent: agentId, taskId, at: Date.now() }]);
-  } catch (e) { return { messageId, error: errText(e) }; }
-  return { messageId };
+  const messages = await op(chatId, async (doc) => { const all = doc.data.get('messages'); return all ? all.toJSON() : []; });
+  const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
+  const taskId = await a.start({ key: chatId, prompt: askPrompt(messages, text, (uri) => names.get(uri), a.label), rules: RULES });
+  const id = crypto.randomUUID();
+  remember(chatId, [...asksIn(chatId), { id, question: text, agent: agentId, taskId, at: Date.now() }]);
+  return { id };
 }
 // Every question asked in this chat with its answer so far. Finished ones are kept, so only the ones still running
 // cost a read, one read per agent.
 async function replies(chatId) {
-  const asks = asksIn(chatId);
-  const out = () => asks.map(({ messageId, agent: id, state, text, shared }) => ({ messageId, agent: id, label: (AGENTS[id] || {}).label || id, state: state || 'working', text: text || '', ...(shared ? { shared } : {}) }));
+  const asks = asksIn(chatId).filter((x) => x.id && x.question); // an ask from before questions stayed here has nothing to show
+  const out = () => asks.map(({ id, question, agent: a, at, state, text }) => ({ id, question, agent: a, label: (AGENTS[a] || {}).label || a, at, state: state || 'working', text: text || '' }));
   const running = asks.filter((x) => !x.state && AGENTS[x.agent]);
   if (!running.length) return out();
   for (const id of new Set(running.map((x) => x.agent))) {
@@ -107,21 +105,10 @@ async function replies(chatId) {
   remember(chatId, asks);
   return out();
 }
-// Share an answer: posted to the chat as your message, the only author Tana has for it (a message is human or Tana's own
-// AI, docs/CHATS.md §2), and the message it became kept beside the answer, so Orbital draws it on the agent's side.
-async function share(chatId, messageId) {
-  const asks = asksIn(chatId), x = asks.find((y) => y.messageId === messageId);
-  if (!x || x.state !== 'done' || !x.text) throw new Error('No answer to share');
-  if (x.shared) return { messageId: x.shared };
-  const sent = await sendChat(chatId, x.text, [], { ai: false });
-  x.shared = sent.messageId;
-  remember(chatId, asks);
-  return { messageId: sent.messageId };
-}
 // The task behind a question, opened in its agent's app by id, as the agent badge opens a node's task (main.js
 // codex:open). The page names the question, never a url, so there is nothing here to point somewhere else.
-async function open(chatId, messageId) {
-  const x = asksIn(chatId).find((y) => y.messageId === messageId), a = x && AGENTS[x.agent];
+async function open(chatId, id) {
+  const x = asksIn(chatId).find((y) => y.id === id), a = x && AGENTS[x.agent];
   if (!a || typeof x.taskId !== 'string' || !x.taskId) return false;
   await require('electron').shell.openExternal(a.url(x.taskId));
   return true;
@@ -132,7 +119,6 @@ const ipc = {
   'chatAgent:list': () => list(),
   'chatAgent:ask': (_e, chatId, agentId, text) => { if (!isChat(chatId)) throw new Error('Not a chat'); return ask(chatId, agentId, text); },
   'chatAgent:replies': (_e, chatId) => (isChat(chatId) ? replies(chatId) : []),
-  'chatAgent:share': (_e, chatId, messageId) => { if (!isChat(chatId) || typeof messageId !== 'string') throw new Error('Not a chat'); return share(chatId, messageId); },
-  'chatAgent:open': (_e, chatId, messageId) => (isChat(chatId) && typeof messageId === 'string' ? open(chatId, messageId) : false),
+  'chatAgent:open': (_e, chatId, id) => (isChat(chatId) && typeof id === 'string' ? open(chatId, id) : false),
 };
-module.exports = { AGENTS, list, ask, replies, share, open, askPrompt, codexAnswer, RULES, KEY, ipc };
+module.exports = { AGENTS, list, ask, replies, open, askPrompt, codexAnswer, RULES, KEY, ipc };

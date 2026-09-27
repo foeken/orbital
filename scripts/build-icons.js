@@ -72,6 +72,7 @@ WANT.tlNew = path.join(__dirname, '..', 'build', 'icons', 'circle-dotted.svg'); 
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['graph', 'connected-dots'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'magnifier'], ['filter', 'filter-2'], ['discuss', 'msg'], ['meetingPin', 'calendar-pin'], ['splitPanes', 'split-view'], ['otherPane', 'layout-move-to-right'], ['swapPanes', 'arrows-opposite-direction-x'], ['closePane', 'xmark']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 WANT.outline = path.join(__dirname, '..', 'build', 'icons', 'unordered-list.svg'); // the header's Outliner/Table switch while a list is a table
 WANT.command = path.join(__dirname, '..', 'build', 'icons', 'command.svg'); // the header button that opens Cmd+K
+WANT.paperclip = path.join(__dirname, '..', 'build', 'icons', 'paperclip.svg'); // beside an @Codex answer: put it in the message box (renderer/chat.js)
 WANT.help = path.join(__dirname, '..', 'build', 'icons', 'circle-question.svg'); // the header button beside it that opens Help (renderer/overlays.js)
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
