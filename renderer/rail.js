@@ -9,6 +9,13 @@ const toShell = (msg) => { if (window.frameElement) window.parent.postMessage(ms
 if (LINKS) {
   document.documentElement.classList.add('links'); // styles.css: the outline column goes, the rail fills the page
   addEventListener('focus', () => { if (!railEl.contains(document.activeElement)) focusRail(); }); // the keys arrive in its rows (Focus links, a click on its tab)
+  // With no row to hold the keys (nothing linked, every section folded, rows still coming) Escape gives them back all the
+  // same, before the page's own Escape (renderer/events.js) steps the workspace out instead; a row answers it itself (railMove)
+  document.addEventListener('keydown', (e) => {
+    const at = document.activeElement;
+    if (e.key !== 'Escape' || !(at === document.body || (railEl.contains(at) && !at.classList.contains('rrow')))) return;
+    e.preventDefault(); e.stopImmediatePropagation(); toShell({ orbital: 'open' });
+  }, true);
 }
 // A page tells the shell which document it is on, once per change, with the row it has for it, so the Links pane can
 // open it without asking main. A view, a saved search, an app page or a draft is none. Focus says which page to follow.
