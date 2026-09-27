@@ -663,6 +663,7 @@ function mockApi() {
     redo: () => history(redoStack, undoStack),
     refresh: async () => { for (const n of unlisted.splice(0)) (n.icon === 'task' ? docs : meetings).push(n); emit(null); },
     login: async () => { status = { ...status, authenticated: true, connected: true, lastSync: new Date().toISOString() }; statusCbs.forEach((cb) => cb(status)); },
+    logout: async () => { status = { ...status, authenticated: false, connected: false }; statusCbs.forEach((cb) => cb(status)); },
     status: async () => status,
     onRemoved: (cb) => removed.push(cb),
     onChanged: (cb) => changed.push(cb),

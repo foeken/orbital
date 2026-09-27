@@ -18,20 +18,26 @@ body.covered .trellis { overflow: visible; contain: none; }
 /* The hairline between the pages is Trellis's divider (8px wide, on the seam), drawn 1px in the line's colour; hovered
    or dragged, the same 1px turns the app's blue (the accent, shell.js tokens). */
 .trellis [data-trellis-part="divider"]::before { content: ''; position: absolute; background: var(--trellis-border); }
-.trellis [data-trellis-part="divider"][data-axis="x"]::before { top: 0; bottom: 0; left: calc(50% - 0.5px); width: 1px; }
+.trellis [data-trellis-part="divider"][data-axis="x"]::before { top: 0; bottom: 0; left: calc(50% - 1.5px); width: 1px; }
 body.many .trellis [data-trellis-part="divider"][data-axis="x"]::before, body.many .trellis [data-trellis-part="divider"][data-axis="x"]::after { top: var(--trellis-tabbar-height); } /* the line starts under the tab bars: the header and the bars read as one band */
 .trellis [data-trellis-part="panel"]:not([data-floating]) { box-shadow: none; } /* Trellis's ring round a panel ran up the tab bars too; the divider draws the line between docked panes */
 .trellis [data-trellis-part="divider"][data-axis="y"]::before { left: 0; right: 0; top: calc(50% - 0.5px); height: 1px; }
-.trellis [data-trellis-part="divider"][data-axis="x"]::after { left: calc(50% - 0.5px); width: 1px; border-radius: 0; }
+.trellis [data-trellis-part="divider"][data-axis="x"]::after { left: calc(50% - 1.5px); width: 1px; border-radius: 0; }
 .trellis [data-trellis-part="divider"][data-axis="y"]::after { top: calc(50% - 0.5px); height: 1px; border-radius: 0; }
 /* The empty part of the tab bars along the top drags the window too (shell.js mark), except while a page covers the
    window, so a click on the palette's scrim reaches the page. */
 .trellis [data-trellis-part="tabbar"][data-top] { -webkit-app-region: drag; }
+.trellis [data-trellis-part="tabbar"] { box-shadow: none; } /* no line between the tab bar and the page under it */
 .trellis [data-trellis-part="tabbar"][data-top] :is([data-trellis-part="tab"], button) { -webkit-app-region: no-drag; }
 body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag; }
-/* the focused pane's tab: a finer line than Trellis's 2px, in a brighter blue (shell.js tokens) */
-.trellis :is([data-trellis-part="panel"], [data-trellis-part="tabbar"])[data-focused] [data-trellis-part="tab"][data-selected] {
-  background: linear-gradient(var(--trellis-accent), var(--trellis-accent)) center top / 100% 1.5px no-repeat, var(--trellis-tab-active); }
+/* The focused pane's tab: its title in bold and the full text colour, instead of Trellis's accent line along the top.
+   Every other tab, selected in its own pane or not, has the muted grey. */
+.trellis [data-trellis-part="tab"][data-selected] { color: var(--trellis-text-muted); }
+.trellis :is([data-trellis-part="panel"], [data-trellis-part="tabbar"])[data-focused] [data-trellis-part="tab"][data-selected] { background: var(--trellis-tab-active); color: var(--trellis-text); font-weight: 650; }
+.trellis [data-trellis-part="tab"][data-selected]::before, .trellis [data-trellis-part="tab"][data-selected]::after { display: none; } /* rounded on top only: no flared corners where the tab meets the page */
+.trellis [data-trellis-part="tabs"] { padding-left: 0; gap: 6px; } /* the first tab starts at the pane's edge, against the divider line, now no flare covers Trellis's 4px inset; tabs 6px apart (Trellis's 2px) */
+.trellis [data-trellis-part="tabbar"][data-left] [data-trellis-part="tabs"] { padding-left: 8px; } /* no divider on the window's edge: the first tab stands off it (shell.js mark) */
+.trellis [data-trellis-part="panel-menu"] { margin-right: 10px; } /* the pane's ⋯ as far in from the edge as the header's buttons (.head's 12px) */
 body.pressing .trellis [data-trellis-part="content"] { pointer-events: none; } /* a tab pressed: the pages let the pointer pass (shell.js) */
 /* A tab's or pane's menu open: a press beside it lands in the shell, where Trellis closes the menu, instead of in a page
    (an iframe the shell never hears), which left the menu up until an option was picked. */
