@@ -1111,7 +1111,7 @@ async function main() {
     assert.equal(ask('window:setLayout', leftPage, { schema: 1, views: {} }), false, 'a layout with no page is refused');
     assert.deepEqual([reloads, shown.doc], [0, layoutDoc]);
     assert.equal(ask('window:setLayout', leftPage, 'workView'), true);
-    assert.deepEqual([reloads, own(shown.pages), Object.keys(shown.doc.views)], [1, ['', '2'], ['page', 'page2']], 'the Work View: saved and reloaded into');
+    assert.deepEqual([reloads, own(shown.pages), Object.keys(shown.doc.views), own(shown.doc.root.weights)], [1, ['', '2'], ['page', 'page2'], [0.6, 0.4]], 'the Work View: 60/40, saved and reloaded into');
     delete shellWc.reload; delete shown.saveBounds;
     ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
     shown.close = () => { shown.closed = true; };
@@ -1120,7 +1120,7 @@ async function main() {
     delete shown.close; delete shown.closed;
     // The saved layout: a first launch opens the Work View, and a v1 split (before the workspace) becomes '' beside '2'.
     const { savedDoc } = backend, row = (d) => d && [d.root.kind, d.root.weights, Object.keys(d.views)];
-    assert.deepEqual(row(own(savedDoc(null))), ['split', [0.5, 0.5], ['page', 'page2']], 'first launch: the Work View');
+    assert.deepEqual(row(own(savedDoc(null))), ['split', [0.6, 0.4], ['page', 'page2']], 'first launch: the Work View, 60/40');
     assert.deepEqual(row(own(savedDoc({ width: 900, split: true, splitAt: 0.3 }))), ['split', [0.3, 0.7], ['page', 'page2']], 'a saved split keeps its divider');
     assert.equal(savedDoc({ width: 900, split: false }), null, 'a window saved alone opens alone');
     assert.equal(savedDoc({ width: 900, doc: layoutDoc }), layoutDoc, 'a saved layout comes back as it was');

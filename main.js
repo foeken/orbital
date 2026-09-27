@@ -74,7 +74,8 @@ const signedOut = () => S.status.authChecking === false && S.status.authenticate
 const pair = (at) => ({ schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: [at, 1 - at],
   children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
 floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2' } } } });
-const savedDoc = (saved) => (!saved ? pair(0.5) : saved.doc && typeof saved.doc === 'object' ? saved.doc
+const WORK_SPLIT = 0.6; // the Work View's Timeline takes 60% of the width, My Tasks 40%
+const savedDoc = (saved) => (!saved ? pair(WORK_SPLIT) : saved.doc && typeof saved.doc === 'object' ? saved.doc
   : saved.split === true ? pair(saved.splitAt > 0 && saved.splitAt < 1 ? saved.splitAt : 0.5) : null);
 // the page ids a layout holds (view 'page' + id), in its order; a window without one shows page ''
 const docPages = (doc) => { const ids = Object.entries((doc && doc.views) || {}).filter(([k, v]) => v && v.type === 'page' && k.startsWith('page')).map(([k]) => k.slice(4)); return ids.length ? ids : ['']; };
@@ -273,7 +274,7 @@ ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].fin
 ipcMain.handle('window:layout', (e) => pageOf(e)?.win?.doc || null);
 ipcMain.handle('window:setLayout', (e, doc) => {
   const win = pageOf(e)?.win;
-  if (doc === 'workView') doc = pair(0.5);
+  if (doc === 'workView') doc = pair(WORK_SPLIT);
   if (!win || signedOut() || (doc !== null && !(doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page')))) return false;
   win.doc = doc; win.pages = docPages(doc); win.saveBounds();
   win.shell.webContents.reload();
