@@ -169,7 +169,7 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   glyph and a bubble of initials for each of the first four people, then the rest as a "+n" bubble up to nine people or as "and n others" past nine, with no count after them (the line's tooltip says how many; `peopleEl`; `doc:taskMeta`
   sends those four and `peopleCount`, and reads the owners on demand, so they are let go like any read). Each bubble is
   an image named after its person; a guest, whose profile Tana does not let us read, is "Guest". The glyph then leaves
-  the facts after the title. A table row keeps it there, because its subtext is its cells. It shows with the Assigned fact.
+  the facts after the title. A table row keeps it there, because its subtext is its cells. It shows with the Assigned fact, and never on the Timeline, which shows neither the glyph nor the faces (`audienceShown`).
 - **Block rows: a marker belongs to a list row.** The dot is drawn for `.t-bullet` and the counter for
   `.t-numbered`; text, headings, quotes and code have none, on hover too. A collapsed row keeps its dot, on its halo,
   because that says it has children. A row with no marker is not indented for one: its text starts where the title

@@ -131,6 +131,8 @@ const withShims = (src) => {
   // a row's facts share their icon and click helpers with who can see it (renderer/tasks.js peopleEl), which the
   // subtext leads with; a harness with no member list sees nobody's bubbles
   if (/\b(clickable|iconEl|audienceIcon|peopleEl)\(/.test(src) && !/function clickable\(/.test(src)) src = sourceBetween('function clickable(', '// node: the row') + '\nglobalThis.loadMembers ??= () => {}; globalThis.memberName ??= (id) => id; globalThis.members ??= null; globalThis.sensitiveHidden ??= () => false;\n' + src;
+  // the Timeline hides who can see a row (renderer/tasks.js audienceShown): a harness that is not about it is not on it
+  if (/\baudienceShown\(/.test(src)) src = (/let zoom\b/.test(src) ? '' : 'globalThis.zoom ??= null;\n') + (/const TIMELINE_PAGE =/.test(src) ? '' : "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n") + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
   if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
@@ -3920,6 +3922,7 @@ function runRowAudienceCheck() {
       },
       onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
       display: (keys) => { displayNow = keys; },
+      timeline: (on) => { globalThis.zoom = on ? { docId: TIMELINE_PAGE, nodeId: null } : null; },
     });
   `, { structuredClone });
   const doc = { id: 'tana:text:doc1', kind: 'document', text: 'Charter', icon: 'doc', hasChildren: true, editable: true };
@@ -3938,6 +3941,10 @@ function runRowAudienceCheck() {
   // glyph leaves the end of the line; one that names nobody (here: no member list for everyone) keeps it there
   const shared = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
   assert.deepEqual(shared.people, ['Visible to selected people', '?', 'S', null], 'the subtext leads with the audience and a bubble per person, and no count after them');
+  api.timeline(true);
+  const onTimeline = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
+  assert.deepEqual([onTimeline.people, onTimeline.icons, row(doc, spaceMeta).icons], [null, [], []], 'the Timeline shows nothing of who can see a row: no faces, no audience icon');
+  api.timeline(false);
   const five = ['me', 'sam', 'ana', 'bo', 'cy'].map((k) => 'tana:user-profile:' + k);
   assert.deepEqual(row(doc, { assignees: [], audience: 'people', people: five.slice(0, 4), peopleCount: 9 }).people.slice(-2), ['+5', null], 'up to nine people the rest is a +n bubble');
   assert.deepEqual(row(doc, { assignees: [], audience: 'people', people: five.slice(0, 4), peopleCount: 12 }).people.slice(-2), ['?', 'and 8 others'], 'past nine it is words after four bubbles, and no bubble for the rest');
