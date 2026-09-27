@@ -5214,9 +5214,11 @@ async function main() {
     assert.deepEqual(raw.reference, {uri:targetUri});
     assert.throws(() => outline.setText(host, blockId, 'overwrite'), /Reference blocks/);
     assert.deepEqual(host.toJSON(), before, 'reads and rejected text writes preserve the native embed');
-    const requests = [];
-    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
+    const requests = [], live = [], sync = {subscribe:async (id) => { live.push(id); return null; }};
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
     const resolved = await backend.outlineWithReferences(host);
+    // the row draws a copy of its target's title: only a subscribed target tells main it was renamed (#413)
+    assert.deepEqual(live, [targetUri], 'a resolved reference keeps its target live, so a rename reaches the row');
     assert.equal(resolved[0].id, blockId); assert.equal(resolved[0].reference.node.id, targetUri);
     assert.equal(resolved[0].reference.node.icon, 'task'); assert.equal(resolved[0].reference.node.done, 0);
     assert.equal(resolved[0].reference.node.hue, 0); assert.equal(resolved[1].id, headingId);
@@ -5229,7 +5231,7 @@ async function main() {
     // while staying an ordinary editable block, and only for as long as nothing else is on the line.
     const mentionUri = 'tana:text:01examplem0000000000000000';
     const mention = {mention:{uri:mentionUri,label:'Stale label'}};
-    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async()=>({nodes:[{id:mentionUri,title:'Mentioned task',state:{type:'open'}}]})}}});
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async()=>({nodes:[{id:mentionUri,title:'Mentioned task',state:{type:'open'}}]})}}});
     outline.setText(host, headingId, [mention]);
     const full = (await backend.outlineWithReferences(host))[1];
     assert.equal(full.id, headingId); assert.equal(full.type, undefined, 'the block keeps its own identity rather than becoming a native embed');
@@ -5366,7 +5368,7 @@ async function main() {
         toolCalls: [{ id: 'call_1', name: 'extractOutcome', subagentChatUri: subUri, status: 'completed' }] });
     });
     const graphed = [];
-    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => {
+    backend.testRuntime({ me: { userUri: ME }, client: { sync: { subscribe: async () => null }, graph: { listNodes: async (q) => {
       graphed.push(q);
       if (q.nodeTypes && q.nodeTypes[0] === 'user-profile') return { nodes: [{ id: ME, title: 'Robin Vega' }] };
       return { nodes: Array.from(q.nodeIds || []).map((id) => ({ id, title: 'Target ' + id.split(':')[1] })) };

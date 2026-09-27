@@ -4719,14 +4719,16 @@ async function runSearchPageRowUpdateCheck() {
     const SEARCH = '${SEARCH}', TASK = '${TASK}';
     let views = [{ id: 'library', nodes: [] }], palRows = [], palDoc = null, pinInfo = null, view = 'library';
     let zoom = { docId: SEARCH, nodeId: null };
-    const kids = new Map([[SEARCH, [{ id: TASK, kind: 'document', icon: 'task', text: 'old title', done: 0, stateType: 'proposed' }]]]);
+    const NOTE = 'tana:text:01j0note000000000000000000';
+    const kids = new Map([[SEARCH, [{ id: TASK, kind: 'document', icon: 'task', text: 'old title', done: 0, stateType: 'proposed' }]],
+      ['tana:text:01j0host000000000000000000', [{ id: 'b1', kind: 'block', reference: { uri: NOTE, node: { id: NOTE, kind: 'document', icon: 'doc', text: 'old name', title: 'old name' } } }]]]);
     const extra = new Map(), fresh = new Map(), taskMetaById = new Map(), relatedBy = new Map();
     const railGroups = () => [], localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
     const isTask = (node) => node.kind === 'document' && node.icon === 'task';
     const asDoc = (node) => ({ ...node, text: node.text ?? node.title ?? '', kind: 'document' });
     let rootsLoads = 0;
     const loadRoots = async () => { rootsLoads++; };
-    const tana = { node: async () => ({ id: TASK, title: 'new title', kind: 'document', icon: 'task', done: 1, stateType: 'closed' }) };
+    const tana = { node: async (id) => (id === NOTE ? { id: NOTE, title: 'new name', kind: 'document', icon: 'doc' } : { id: TASK, title: 'new title', kind: 'document', icon: 'task', done: 1, stateType: 'closed' }) };
     // what shownDocs reads besides the rows: which page is in front of you, and the (empty) ⌘F box
     const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith('tana:search:');
     const viewOf = () => views.find((section) => section.id === view);
@@ -4738,6 +4740,8 @@ async function runSearchPageRowUpdateCheck() {
     Object.assign(globalThis, {
       patch: () => patchDoc(TASK),
       patchUnlisted: () => patchDoc('tana:text:01j0unlisted00000000000000'),
+      patchNote: () => patchDoc(NOTE),
+      noteRef: () => kids.get('tana:text:01j0host000000000000000000')[0].reference.node.text,
       drop: () => invalidateNode(TASK),
       rows: () => (kids.get(SEARCH) || []).map((node) => [node.id, node.text, node.stateType]),
       shown: () => shownDocs().map((node) => node.id),
@@ -4750,6 +4754,8 @@ async function runSearchPageRowUpdateCheck() {
   assert.equal(context.loads(), 0, 'and the row was found there, so nothing falls back to reloading every view');
   await context.patchUnlisted();
   assert.equal(context.loads(), 0, 'a document no list shows reloads nothing either: a list it joins is reloaded by the global refresh its live query brings');
+  await context.patchNote();
+  assert.equal(context.noteRef(), 'new name', 'a rename of a plain document reaches a reference row that draws its title, not only a task (#413)');
   assert.deepEqual(plain(context.shown()), [TASK], 'Clean up asks what is on screen: on a search page that is the rows its query returned');
   context.drop();
   assert.deepEqual(plain(context.rows()), [], 'a deleted document leaves the saved search that listed it');
@@ -7312,7 +7318,7 @@ async function runLiveUpdateBurstCheck() {
     const loadRoots = async () => 'rows'; // a resolved value, which is what .then(renderSoon) hands the queue
     const showError = (error) => { throw error; };
     const tana = { onChanged: (fn) => { listener = fn; } };
-    ${sourceBetween('tana.onChanged((docId, info) => {', '// A task is also drawn from copies')}
+    ${sourceBetween('tana.onChanged((docId, info) => {', '// A document is also drawn from copies')}
     ({
       change: (id, info) => listener(id, info),
       flush: () => { for (const fn of frames.splice(0)) fn(); },
