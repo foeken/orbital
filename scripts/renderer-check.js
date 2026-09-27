@@ -184,7 +184,7 @@ assert.match(source, /palMode === 'assignees'/);
 assert.match(source, /e\.key === 'Backspace' && \(!mod \|\| e\.shiftKey\)/);
 assert.match(source, /tana\.removeMany\(its\[0\]\.docId, its\.map\(\(it\) => it\.node\.id\)\)/);
 assert.match(source, /tana\.moveMany\(its\[0\]\.docId, its\.map\(\(it\) => it\.node\.id\), dir\)/);
-assert.match(source, /if \(palBusy && \(palMode === 'spaces' \|\| palMode === 'search' \|\| palMode === 'pinToday' \|\| palMode === 'setIcon'\)\) \{ palEnter = create \? 'create' : 'pick'; return; \}/, 'an Enter during a running search is kept, not dropped');
+assert.match(source, /if \(palBusy && \(palMode === 'spaces' \|\| palMode === 'search' \|\| palMode === 'pinToday' \|\| palMode === 'setIcon'\)\) \{ palEnter = \{ create, where \}; return; \}/, 'an Enter during a running search is kept, not dropped, with its ⌘ / ⌥');
 assert.match(source, /if \(palMode === 'pinToday'\) \{ palSeq\+\+; palBusy = true; clearTimeout\(palTimer\); palTimer = setTimeout\(todayPickerSearchNow, 150\); return; \}/, 'typing invalidates an older today-pin search immediately');
 assert.match(source, /else if \(e\.key === 'Enter'\) \{[^\n]*\n\s*e\.preventDefault\(\); e\.stopPropagation\(\);/, 'Enter in the palette is its own, whatever row it opens');
 assert.match(source, /function openCreationPalette\(\)/);

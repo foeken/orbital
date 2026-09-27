@@ -4,19 +4,21 @@
 // ---- palette: Cmd+K commands (Views, Actions; documents are Cmd+S live search, api.search) ----
 const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList');
 let palMode = 'cmd', palPage = {}, palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
-let palEnter = null; // an Enter pressed while a search was still running: 'pick' or 'create', applied when the rows land
+let palEnter = null; // an Enter pressed while a search was still running: { create, where }, applied when the rows land
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
 let meetingList = null, pinMeetingDoc = null; // the meeting picker: loadList's answer, and the node being pinned
 let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
-function chooseRow(create) {
+// where: ⌘↩ / ⌥↩ open a row that opens a place in a pane beside or a tab (`opens` an id, or a function finding one).
+function chooseRow(create, where) {
   // the four pages whose rows main finds (the input listener below): an Enter there waits for the answer to what was typed
-  if (palBusy && (palMode === 'spaces' || palMode === 'search' || palMode === 'pinToday' || palMode === 'setIcon')) { palEnter = create ? 'create' : 'pick'; return; }
+  if (palBusy && (palMode === 'spaces' || palMode === 'search' || palMode === 'pinToday' || palMode === 'setIcon')) { palEnter = { create, where }; return; }
   const r = create && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex];
-  if (r) runRow(r);
+  if (r && where && !linkCtx && r.opens && !r.disabled) { closePalette(); run(async () => openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens)); }
+  else if (r) runRow(r);
 }
-function settleEnter() { if (palEnter) { const create = palEnter === 'create'; palEnter = null; chooseRow(create); } }
+function settleEnter() { if (palEnter) { const { create, where } = palEnter; palEnter = null; chooseRow(create, where); } }
 // hint defaults to the node's own meta, so a meeting keeps its date and time in every palette list
 const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
 // The order of the rows about the node you are on: where it goes (open it, unfold it), its task state, who has it,
@@ -314,8 +316,8 @@ function paletteRows(q, typed = q) {
   // (Inbox, Notifications, Proposals), and the Library and Types last. Today's node (titled with the date, pinned to
   // today) and the week's ("Week 38 (2026)") are documents created on demand, but places to go all the same.
   const viewRows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
-  if (tana.todayNode) viewRows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', run: () => run(async () => goTo(await tana.todayNode())) });
-  if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', run: () => run(async () => goTo(await tana.weekNode())) });
+  if (tana.todayNode) viewRows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', opens: () => tana.todayNode(), run: () => run(async () => goTo(await tana.todayNode())) });
+  if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', opens: () => tana.weekNode(), run: () => run(async () => goTo(await tana.weekNode())) });
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
   if (tana.proposalAnswer) viewRows.push(proposalsViewRow()); // what Tana's AI proposed and is waiting on you to accept
   if (tana.children) viewRows.push(timelineViewRow()); // what happened to what you watch, and what landed in your Inbox
@@ -1181,8 +1183,7 @@ palInput.addEventListener('keydown', (e) => {
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); }
   else if (e.key === 'Enter') { // ⌘↩ / ⌥↩ on a row that opens a place: in a pane beside, or a tab in this one (while linking, ⌘↩ creates)
     e.preventDefault(); e.stopPropagation();
-    const r = palRows[palIndex], where = !linkCtx && r && r.opens && !r.disabled && elsewhere(e);
-    if (where) { closePalette(); run(() => openElsewhere(where, r.opens)); } else chooseRow(mod);
+    chooseRow(mod, !linkCtx && elsewhere(e));
   }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }
 });
