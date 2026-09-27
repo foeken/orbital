@@ -1057,20 +1057,23 @@ async function saveView(name, id) { // id: kept under that id (Set as Home), els
   for (const id of ids) for (const key of ['view', 'place']) keys[key + (id ? ':' + id : '')] = localStorage.getItem(key + (id ? ':' + id : ''));
   const old = savedViews().find((v) => (id ? v.id === id : v.name === name)), keep = id || (old && old.id);
   setPref('savedViews', [...savedViews().filter((v) => v !== old), { ...(keep ? { id: keep } : {}), name, doc, keys }]);
-  showNote('Saved view \u201c' + name + '\u201d');
+  showNote((old ? 'Updated' : 'Saved') + ' view \u201c' + name + '\u201d');
 }
 // plain async, for run() to queue: a queued step that queues another waits on itself
 async function openSavedView(v) {
   for (const [key, value] of Object.entries(v.keys)) if (PAGE_KEY.test(key)) { if (typeof value === 'string') localStorage.setItem(key, value); else localStorage.removeItem(key); }
   if (!(await tana.setWindowLayout(v.doc || null))) showNote('This view could not be opened', true);
 }
+// A new name saves a new view; each saved view below, narrowed by what is typed, is updated to this window (its name
+// and id kept, so Home, the Work View and a key recorded for it still find it).
 function saveViewRows(q, typed) {
-  const name = typed.trim(), group = 'Save view \u00b7 the panes in this window and what each shows';
-  if (!name) return [{ group, icon: 'splitPanes', label: 'Type a name for this view', disabled: true }];
-  const taken = savedViews().some((v) => v.name === name);
-  return [{ group, icon: 'splitPanes', label: (taken ? 'Replace view \u201c' : 'Save view \u201c') + name + '\u201d', run: () => run(() => saveView(name)) }];
+  const name = typed.trim(), views = savedViews(), group = 'Save view \u00b7 the panes in this window and what each shows';
+  const rows = views.filter((v) => v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Update a saved view', icon: 'splitPanes', label: v.name, hint: 'To this window', run: () => run(() => saveView(v.name, v.id)) }));
+  if (name && !views.some((v) => v.name === name)) rows.unshift({ group, icon: 'createNew', label: 'Save view \u201c' + name + '\u201d', run: () => run(() => saveView(name)) });
+  else if (!name && !rows.length) rows.push({ group, icon: 'splitPanes', label: 'Type a name for this view', disabled: true });
+  return rows;
 }
-function openSaveViewPalette() { openPage('saveView', 'Name this view\u2026', { rows: saveViewRows, back: BACK_TO_COMMANDS, typed: true }); }
+function openSaveViewPalette() { openPage('saveView', 'Name a new view, or pick one to update\u2026', { rows: saveViewRows, back: BACK_TO_COMMANDS, typed: true }); }
 function removeViewRows(q) {
   return savedViews().filter((v) => v.id !== WORK_VIEW.id && v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Remove saved view', icon: 'trash', label: v.name,
     run: () => { setPref('savedViews', savedViews().filter((w) => w.name !== v.name)); showNote('Removed view \u201c' + v.name + '\u201d'); } }));
