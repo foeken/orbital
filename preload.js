@@ -1,9 +1,36 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
-const pane = ipcRenderer.sendSync('window:getSide'); // { side, split }: this page's place in its window (main.js)
+
+// The shell (shell.html): the window's own page, which lays the outliner pages out with Trellis (main.js). It gets only
+// what that takes; each outliner page is an iframe of it (nodeIntegrationInSubFrames) and gets window.api below.
+if (window.top === window && location.pathname.endsWith('/shell.html')) {
+  contextBridge.exposeInMainWorld('shell', {
+    state: () => ipcRenderer.sendSync('shell:state'), // { doc: Trellis document | null, theme, signedOut } at its start
+    // 'open' { id, where: 'right' | 'tab' | 'float', from: the asking page's id, focus } | 'close' id | 'focus' id
+    // | 'theme' 'light' | 'dark' | 'auth' { signedOut }
+    onCommand: (cb) => ipcRenderer.on('shell:command', (_e, cmd, arg) => cb(cmd, arg)),
+    layout: (layout) => ipcRenderer.send('shell:layout', layout), // { doc, pages: [ids in doc] }: every committed change
+  });
+  return;
+}
+// An outliner page in the shell: main keys it by its frame (main/state.js pageOf), so it says when it takes the keys
+// and when it goes (its panel closed, a reload). The Help tour and Create task are windows' own pages and say neither.
+if (window.top !== window) {
+  window.addEventListener('focus', () => ipcRenderer.send('page:focus'));
+  window.addEventListener('pagehide', () => ipcRenderer.send('page:gone'));
+}
+const pane = ipcRenderer.sendSync('window:getSide'); // { side, start? }: this page's id in its window (main.js)
+// what the page that opened this one, or the saved view it is part of, has it start on: stored before the page reads it
+try {
+  for (const [key, value] of Object.entries(pane.start || {})) {
+    if (key !== 'view' && key !== 'place') continue;
+    const name = key + (pane.side ? ':' + pane.side : '');
+    if (value === null) localStorage.removeItem(name); else localStorage.setItem(name, value);
+  }
+} catch { /* no storage: the page opens where it last was, and still gets window.api below */ }
 
 contextBridge.exposeInMainWorld('api', {
-  side: pane.side, // '' the left or only page, '2' the right half of a split (renderer/state.js SIDE)
-  paneSplit: pane.split === true, // this page is one half of a split
+  side: pane.side, // this page's id, fixed for its life: '' the first page, then '2', '3', ... (renderer/state.js SIDE)
+  savedAs: pane.start && pane.start.as, // the id it has in the saved view it opened in, when another window had that one (renderer/nodes.js)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
@@ -23,22 +50,13 @@ contextBridge.exposeInMainWorld('api', {
   todayNode: (offset, findOnly) => ipcRenderer.invoke('doc:todayNode', offset, findOnly === true), // the date-titled node pinned to that day (0 today, 1 tomorrow, or 'YYYY-MM-DD'), created if missing unless findOnly (demo mode)
   setDemoMode: (on) => ipcRenderer.send('app:demoMode', on === true), // demo mode is on in the outliner: main posts no notification banners
   weekNode: (findOnly) => ipcRenderer.invoke('doc:weekNode', findOnly === true), // the "Week 38 (2026)" document (ISO week), created if missing unless findOnly; not linked to the day nodes
-  newWindow: () => ipcRenderer.invoke('window:new'), // another outliner window (File › New Window)
-  splitWindow: () => ipcRenderer.invoke('window:split'), // a second page beside this one in the same window, or back to this one alone
-  otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
-  swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // the two halves of a split change sides
-  closePane: () => ipcRenderer.invoke('window:closePane'), // this half of a split closes (the X on the right half)
-  coverWindow: (on) => ipcRenderer.sendSync('window:cover', on === true), // the palette over the whole window: this half's { x, width } while it covers it, null when there is nothing to cover
-  onCover: (cb) => ipcRenderer.on('window:cover', (_e, half) => cb(half)), // the window or the split changed while covered: this half's { x, width } now
-  watchPointer: () => ipcRenderer.send('window:watchPointer'), // the pointer left the page: main watches the cursor over the drag region
-  onPointerOut: (cb) => ipcRenderer.on('window:pointerOut', () => cb()), // and says when it has left this half
-  workView: () => ipcRenderer.invoke('window:workView'), // Cmd+K Work View: the right half opened, or the other half sent to its stored place
-  onToPlace: (cb) => ipcRenderer.on('window:toPlace', () => cb()), // go to the place stored for this side (the Work View has just stored it)
-  splitDrag: (phase) => ipcRenderer.send('window:splitDrag', phase), // the split grip: 'start', 'move' (main reads the cursor) or 'even'
-  onSide: (cb) => ipcRenderer.on('window:side', (_e, side, split) => cb(side, split === true)), // this page's side or split changed: '' the left or only page, '2' the right half
-  splitHover: (on) => ipcRenderer.send('window:splitHover', on === true), // the pointer is over this half's split grip
-  onSplitHover: (cb) => ipcRenderer.on('window:splitHover', (_e, on) => cb(on === true)), // or over the other half's
-  windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
+  newWindow: (start) => ipcRenderer.invoke('window:new', start), // another outliner window (File › New Window), starting on { view, place }
+  // a new page in this window, taking the keys: 'right' of this one (⌘N, the default), a 'tab' beside it, or 'float'.
+  // Answers its id (null signed out), for storing its view and place under before it loads.
+  splitWindow: (where, start) => ipcRenderer.invoke('window:split', where, start),
+  windowLayout: () => ipcRenderer.invoke('window:layout'), // this window's layout (Trellis's document), null for one page never rearranged
+  setWindowLayout: (doc, keys) => ipcRenderer.invoke('window:setLayout', doc, keys), // true: the window reloads into it, each page on its keys
+  windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the shell's Trellis theme and the window behind it follow the page
   openOverlay: (page, theme) => ipcRenderer.invoke('overlay:open', page, theme), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme
   closeOverlay: (result) => ipcRenderer.invoke('overlay:close', result), // help.html and task.html: done; { palette?: true, note?: string } for the page that asked
   onOverlayClosed: (cb) => ipcRenderer.on('overlay:closed', (_e, result) => cb(result || {})), // the page that asked hears what the overlay had to say

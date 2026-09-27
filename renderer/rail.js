@@ -13,7 +13,13 @@ const railToggle = $('railToggle');
 // Hiding wins over content: a sidebar the user closed must not reappear because the next document has pins.
 // Only the "nothing to show" case composes with it — a node with no sidebar at all stays hidden regardless.
 let railHidden = pref('railHidden', false) === true;
-function railOff(empty) { return railHidden || empty; }
+// A pane narrower than this leaves the sidebar out, and its button with it: beside 272px of sidebar the outline would be
+// cramped (issue #444). Crossing it as the pane is resized draws the page again.
+const RAIL_ROOM = 720;
+const railNarrow = () => typeof innerWidth === 'number' && innerWidth < RAIL_ROOM;
+let railWasNarrow = railNarrow();
+if (typeof addEventListener === 'function') addEventListener('resize', () => { if (railNarrow() !== railWasNarrow) { railWasNarrow = !railWasNarrow; renderSoon(); } });
+function railOff(empty) { return railHidden || empty || railNarrow(); }
 function toggleRail() {
   railHidden = !railHidden;
   setPref('railHidden', railHidden);
@@ -283,7 +289,7 @@ function renderRail(parent) {
   const changes = (data && data.changes) || [];
   const empty = !groups.length && !meta.length && !changes.length;
   railEl.hidden = railGrip.hidden = railOff(empty);
-  renderRailToggle(!empty); // there is a sidebar to toggle even while it is hidden, so the button stays reachable
+  renderRailToggle(!empty && !railNarrow()); // there is a sidebar to toggle even while it is hidden, so the button stays reachable (not in a narrow pane, which has no room for it)
   const sectionHead = (label) => { // every sidebar section collapses the same way, Details included
     const head = document.createElement('button');
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');

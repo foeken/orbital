@@ -29,8 +29,8 @@ stored), [MEETINGS.md](MEETINGS.md) (meeting structure, the write-up, editing a 
   session's alone: it shows when Tana needs a new login, with the relogin button (renderer/app.js `showStatus`). The
   Create task card (task.html) keeps a failed create on the card, so the press can be repeated.
 - **Signed out.** The login button shows only after a completed session check says signed-out; an unresolved or
-  failed check is not signed-out. Signed out, the outline area is a centred "Log in to Tana" button, and a split window
-  shows its left page alone until login (issue #244).
+  failed check is not signed-out. Signed out, the outline area is a centred "Log in to Tana" button, and a window of
+  several panes shows its first page alone until login (issue #244).
 
 ## 2. Content model and outline operations
 
@@ -86,17 +86,19 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
 
 ## 4. The page
 
-- **Header row** (issue #200): over the page title, **Home**, **⌘K** and **?**, in that order (`renderCrumbs`), all
-  `.navbtn`s like the buttons at the top right — 24px, an 18px glyph at .4 opacity. Home is the `home` glyph
-  (`homeCrumb`, labelled "Go to Home: <name>"), ⌘K opens the command palette (`togglePalette('cmd')`), ? opens the Help
-  tour (§16). The row is never hidden and there are no breadcrumbs: the title says where you are and Back walks the
-  history. The first glyph lines
-  up with the title's left edge, and both sit level with the buttons at the top right. The row is part of the title
+- **Window header** (shell.html): a 38px band over the panes, with no line under it: the traffic lights, and on the
+  right the app's own switches, **sensitive items** (the eye), **⌘K** and **?**. It drags the window, and each button
+  acts in the page in front, which takes the keys first (shell.js posts `sensitive`, `palette` or `help`;
+  renderer/app.js runs `toggleSensitiveVisibility`, `togglePalette('cmd')` or `openHelp`). The eye is drawn from the
+  pages' `sensitiveVisible` storage and follows a switch from any page. The panes sit below it, so every tab bar has the
+  full width. Home has no button: it is a window, so it is Cmd+K Go to Home (⇧⌘H), which the Help tour teaches (issue
+  #444). There are no breadcrumbs: the title says where you are and Back walks the history.
+- **Header row**: over the page title, the empty line the buttons at the top right sit on. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
   takes a click there as a window drag and the backdrop never hears the click that closes it).
 - **Buttons at the top right** (`.navbtns`, one flex row anchored to the right edge of `.titlebar`, so they stay put as
   the rows under the title come and go): Back and Forward, the sensitive toggle, the pills toggle, the Outliner/Table
-  switch, Clean up, Refresh, the sidebar toggle and, on the right half of a split, the X that closes it. A button that
+  switch, Clean up, Refresh and the sidebar toggle (a page among others closes from its tab, Panes below). A button that
   does not apply is gone rather than empty, and the others move up to the edge. Back and Forward run `navigate(-1)` and
   `navigate(1)`, the history ⌘[ and ⌘] walk; `renderNav()` runs after `noteNavigation()` on every render, disables
   them when the move does nothing and puts the current combo in the tooltip. Every header button with a Cmd+K row
@@ -311,6 +313,12 @@ affected document is reloaded and the caret placed in the affected row when it s
 recorded in the same history and undone by repeating the native action. Sharing and move never enter it: their
 audience disclosure and preview token are the gate (§14).
 
+**Opening elsewhere** (issue #443): ⌘ opens a place in a new pane beside this one, ⌥ as a new tab in this pane
+(renderer/palette.js `openElsewhere`, which stores the place under the id main gives the new page, as ⌘N does). In Cmd+K
+and Cmd+S that is ⌘↩ / ⌥↩ on a row that opens a place (search results, saved searches, types: rows with `opens`);
+while an @ link is being made ⌘↩ still creates. On the outline it is ⌘-click / ⌥-click on a bullet, and ⌥-click on a
+row that opens on a click (⌘-click there keeps selecting the row).
+
 ### Selection
 
 ⌘-click toggles a row in the selection; ⇧-click and ⇧↑/⇧↓ extend one anchored range over siblings (blocks within one
@@ -330,12 +338,14 @@ Cmd+K leads with a Selection group for it (§8).
   owns whose title is the event's tagline (`api.summaryUri`, `writeUpOf` in sdk/events.js), from every route; the write-up is
   never repeated in the sidebar ([MEETINGS.md](MEETINGS.md)).
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
-  to lands on Home.
-- **Home** is the **Work View** by default (§16), the Library, or any saved search: Cmd+K "Set as Home" (`setHome`) on
-  the Library or a saved search, "Set Work View as Home" (`setHomeWorkView`) anywhere, stored as the target's id
-  (`workView`, `library` or a `tana:search:` uri) in the synced `home` preference, so renaming the search keeps the
-  choice. Every route Home goes through `goHome`; Cmd+K "Go to Home" names it, and like Set as Home stays listed,
-  disabled with "Current", where you already are. A Home whose saved search is gone from `api.searches()` falls back
+  to does nothing: Home is the whole window, which one pane's Back does not replace (issue #444).
+- **Home** is the **Work View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
+  (`setHome`): its panes and what each shows, kept as the saved view "Home" (`HOME_VIEW`, listed under Saved views, where
+  it is removed or, saved again under that name, replaced) and stored as `homeView` in the synced `home` preference. A
+  page is at Home on the place that view keeps for it; removed, Home is the Work View again. A Library or saved search
+  chosen as Home before still works, stored as its id (`library` or a `tana:search:` uri), and opens as a window of one
+  pane on it, like every Home. Every route Home goes through
+  `goHome`; Cmd+K "Go to Home" names it, and stays listed, disabled with "Current", where you already are. A Home whose saved search is gone from `api.searches()` falls back
   to the Library and the preference is repaired (`repairHome`), but only from a list that could have named it:
   `searchesLoaded` is set only by an answer that lands while connected.
 - **Reopening where you left off.** `rememberPlace` stores `{ docId, nodeId, from, title, icon }` under `place` (per
@@ -356,14 +366,14 @@ keeps its state behind it. A row that cannot run is greyed and skipped by ↑/�
 commands, never documents: a query that matches no command gives one row, "Search Tana for “…”", which opens Cmd+S
 with the query running.
 
-**In a split window** (issue #409) the card and its scrim cover the whole window, centred over both halves, and
-everything the palette does stays with the half that opened it: its rows, the node it acts on, its keys and where the
+**In a window of several panes** (issue #409) the card and its scrim cover the whole window, centred over every pane,
+and everything the palette does stays with the pane that opened it: its rows, the node it acts on, its keys and where the
 caret goes back to. That holds for every page opened through `showPage` (⌘K and its pages, ⌘S, the key recorder); the
-@ link search and the "/" menu belong to their spot in the half and stay in it. How it is drawn: Split view below.
+@ link search and the "/" menu belong to their spot in the pane and stay in it. How it is drawn: Panes below.
 
 **Groups**, in order: Selection (with a multi-selection; the page's own rows follow as Current page) or Current node,
-Table, Views (`VIEW_ORDER`: Work View, Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types),
-Searches, Types, View options, Actions, Navigate, Window, Settings, Help.
+Table, Views (`VIEW_ORDER`: Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types),
+Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings, Help.
 
 - **Current node** is the zoomed node or the row under the caret (with a selection, the Selection group counts what
   each row acts on and says "N skipped" for rows it cannot). Its rows follow `NODE_ROW_ORDER` (renderer/palette.js)
@@ -377,9 +387,16 @@ Searches, Types, View options, Actions, Navigate, Window, Settings, Help.
 - **View options**: the pills by what they do — Filter by type, Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Filter rows by text, Switch to table/outliner and Column widths ….
 - **Actions**: Log in (signed out), Create new …, Create task, Search Tana, Undo, Redo, Mark all as read, Sync.
-- **Navigate**: Go back, Go forward, Go to Home, Set as Home, Set Work View as Home, Focus the sidebar, Recently
+- **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus the sidebar, Recently
   deleted, Archived types.
-- **Window**: New window, Toggle split panes, Go to the other half, Swap panes, Show/Hide sidebar, Reload.
+- **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
+  tab, Maximize or restore pane, Show all panes, Zoom back / forward and Close pane (its chip ⌘W, the File menu's Close;
+  panes change places by dragging a tab); Show/Hide sidebar, Reload (the window: every pane), Save view…, Remove saved view (its choices also found from the command page).
+- **Saved views** (issue #442): one row per view, the Work View first. A view is the window's layout (Trellis's
+  document, `window:layout`, without its zoom: a view opens with every pane shown) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
+  in the synced `savedViews` preference. Save view… names the current one, or updates a saved view listed under
+  it (narrowed by what is typed; its name and id kept, so Home and a recorded key still find it); choosing a row writes the places back and hands main the layout (`window:setLayout`), which saves it and reloads
+  the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode, Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
   key. **Help**: Help.
@@ -422,10 +439,21 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Expand / Collapse | ⌘↓ / ⌘↑ |
 | Complete / Reopen | ⌘↩ |
 | Today | ⌃⇧D |
-| Reload | ⌘R |
-| New window | ⌘N |
-| Toggle split panes | ⌥⌘N |
-| Go to the other half | ⌘\\ |
+| Reload (the window, every pane) | ⌘R |
+| Go to Home | ⇧⌘H |
+| New window | ⌥⌘N |
+| New pane (to the right) | ⌘N |
+| Next / Previous pane | ⌘/ / ⇧⌘/ |
+| Next / Previous tab | ⇧⌘] / ⇧⌘[ |
+| Maximize or restore pane | ⌥⌘↓ |
+| Show all panes | ⌥⌘↑ |
+| Zoom back / forward | ⌥⌘[ / ⌥⌘] |
+| Close pane | ⌘W (the File menu) |
+
+The pane keys are Orbital's own, kept off what a row types (Trellis's defaults, ⌥⌘←/→ and ⇧⌘↩, move the caret or
+break the line there). While a window has more than one page they are taken before a row's own keydown (a capture
+listener in renderer/palette.js), so a recorded one wins too; a page alone leaves them to the row. A function key (F6)
+is a valid combo on its own.
 
 The document keydown handler finds the row by combo (`hotkeyFor`/`hotkeyIds`) and runs it through `runAction`; with
 the palette closed the current node is whatever is focused, and a row that opens a folded level asks for its choices
@@ -433,6 +461,9 @@ at the press. A key the focused row already answered (⌘↑, ⌘↩) arrives de
 absent right now leaves its key alone, and a disabled one answers it by doing nothing. A read-only row passes every ⌘
 combo to the document handler. A command that reveals a field and focuses it (Filter rows by text) shows the field
 itself, since a render is deferred while the caret is in a row.
+The pane keys are Trellis's commands, run by the shell (Panes below); their defaults stay off what a row's own
+keydown answers to (⌥⌘←/→ move the caret at a line's edge, ⇧⌘↩ breaks the line), and a bracket or \\ is read by the
+key pressed (`comboOf`'s `KEYCODES`), since ⌥ and ⇧ change the character it types.
 
 ⇧⌘K on the highlighted row opens the recorder: "Recording keyboard shortcut for: <row>", the pressed keys as symbols
 with a red dot, Reset / Cancel / Save. Combos are stored in the synced `hotkeys` preference (row id → combo) and shown
@@ -691,7 +722,7 @@ A row is picked up by its marker and dropped where a line says it will land (ren
 - **A task dropped on a group changes what it is** (#169). In a view grouped by Responsibility, and on the Timeline's
   Today's Tasks, a drop between rows is a drop on the section under the pointer (its heading outlined, `groupAt`) or
   the Today block. The writes are read off the task as it stands (`groupDropWrites`, in the order `responsibilityOf`
-  reads them), and a task dragged from the other half of a split, whose dataTransfer carries
+  reads them), and a task dragged from another pane, whose dataTransfer carries
   `application/x-orbital-task`, lands the same way:
 
   | Drop into | Writes | Refused |
@@ -748,7 +779,7 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   assignees, restriction, participants, type and field values), and re-reads the sidebar only then (or for a type).
   **`own: true`** is the echo of text this page typed (`sendChanged` sends it to the writing page only, #265): the
   words are on screen, so only the row copies are patched and nothing is re-read or force-rendered; every other page,
-  the other half of a split included, hears a plain change. A document no view lists reloads the roots.
+  another pane of the window included, hears a plain change. A document no view lists reloads the roots.
 - **`onChanged(null)`** is a global change: the refresh wrote every open view's rows into the cache before sending it,
   so the renderer reloads the roots (which carry each view's `truncated` flag) and the pins, and runs no second query.
 - **`onRemoved(id)`** is an explicit deletion: the node is marked gone and leaves pins, recent results, Cmd+K searches
@@ -842,10 +873,10 @@ conversation fades out at the top, under the header, and into the composer at th
 their name heads each of their runs. The markdown blocks keep their kind (headings, bullets, numbered items, quotes,
 code), mentions and attachments are links that open their node, the thinking line or an error sits in grey above the
 answer, and hovering a message shows when it was sent. The page opens at its end and follows new messages while you
-are within 80 px of it; a short conversation sits at the bottom of the window.
+are within 80 px of it; a short conversation sits at the bottom of the pane.
 
 Under it is the composer (`#composer`, a rounded card whose textarea grows with its text and whose round blue button
-sends), the window's last row outside the scroll, so it stays at the bottom whatever the conversation's length or
+sends), the pane's last row outside the scroll, so it stays at the bottom whatever the conversation's length or
 scroll: Enter sends (`chat:send`, main/documents.js `sendChat`), Shift+Enter is a new line, and Escape leaves it.
 **@** opens the link search as a dropdown at the caret and puts the node picked (or created) in as a chip, with
 **Tana** offered first while what is typed fits it: mentioned, Tana answers in a chat with other people in it, where a
@@ -861,54 +892,82 @@ at most); the answer streams in as live changes to the chat, and a message Tana 
 shows the dots in its place. A failed send puts the words back. **New chat** (Cmd+K, Actions) makes a chat with
 Tana that is yours alone (`chat:new`) and opens it.
 
-### Work View, windows and split view
+### Work View, windows and panes
 
 - **Work View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the
   right (`api.myTasks`: the search the synced `myTasks` setting names, so a rename in Tana keeps it; else your own
   saved search called My Tasks, the oldest if two machines each made one, hidden title or not; else one made from the My
-  Tasks preset with the Library's arrangement, and remembered. Only a deletion in Tana makes a fresh one). Cmd+K Work View stores both halves' places and main opens the right half or sends the other half to
-  its place (`window:workView`). A first launch opens it split.
-  On a new account both halves are empty, so an empty page says what would fill it (`emptyText`, renderer/render.js):
+  Tasks preset with the Library's arrangement, and remembered. Only a deletion in Tana makes a fresh one). It is the
+  saved view installed first (`WORK_VIEW`, Cmd+K Saved views): main's two-pane layout (`window:setLayout` 'workView')
+  with the Timeline in page '' and `{ myTasks: true }` in page '2', found or made at load. Going Home opens it, the one
+  saved under its id if you replaced it, this one if you removed it. A first launch opens it as two panes.
+  On a new account both panes are empty, so an empty page says what would fill it (`emptyText`, renderer/render.js):
   the Timeline what shows up there, Notifications and Proposals that there are none, a saved search or a type's page
   "Nothing matches.", with the Create task key after it when the search lists tasks, so an empty My Tasks is where the
   first task starts. Only a document says "No content".
-- **Windows** (issue #137). File › New Window, ⌘N or Cmd+K New window opens another outliner window 24px down and right
-  of the front one. Each window has its own view and page; a new one starts where you last were. What main pushes
+- **Windows** (issue #137). File › New Window, ⌥⌘N or Cmd+K New window opens another outliner window 24px down and right
+  of the front one, with one page on the place the page that asked was on (`window:new` answers its id). A page's id is
+  unique across windows, since its view and place are stored under it. Only the main window (`win.primary`, the first;
+  the one left when it closes) saves its bounds and layout, so another window never leaves the next launch its single
+  page, and a saved view or Home chosen in another window is laid out in the main window, which comes forward (issue #444). What main pushes
   (`send`) reaches every page of every window; each window's view is refreshed and kept live while any window shows it
   (`openViews`), and each page keeps its own sidebar watch (`watchRelated(id, key)`). A command for one page goes to the
   page used last (`S.pane`): a notification click opens its node there. Closing the last window keeps the app in the
   Dock (issue #246): ⌘Q quits, the Dock icon opens a window when none is open, and a notification click opens one.
-- **Split view** (issue #159). **Toggle split panes** (⌥⌘N) puts a second page beside yours in the same window, or goes
-  back to one. An outliner window is a `BaseWindow` with one `WebContentsView` per page (main.js `addPane`/
-  `removePane`), and main keys a page by its webContents id, so a half is to main what another window is: each half
-  has its own view, page, history, filter and sidebar. The new half opens on the view and place of the one that asked
-  and takes the keyboard. **Go to the other half** (⌘\\) moves the keyboard. **Swap panes** (Cmd+K, or a click on the pill
-  on the line) trades sides; each half takes the other's side marker (`window:side`) and stores its view and place
-  under its side's keys (`view:2`, `place:2`; renderer/state.js `SIDE`), so a restart or Reload keeps them. ⌘W closes the
-  half you are in, or the window when there is one; the right half's header ends with an X that closes it
-  (`window:closePane`). The halves share the width evenly with a hairline between them (`.splitgrip`, drawn by the
-  right half); a 5px grip on each inner edge drags the line (`splitGrip`, `window:splitDrag`: main reads the cursor
-  from the screen, keeps each half at least 320px and saves `splitAt` with the window), a double click evens it out,
-  and over either grip both halves draw their half of the swap pill (`window:splitHover`). A restart brings the split
-  back, each half on its own view and place; a half with nothing stored opens the Work View.
-- **The palette over both halves** (issue #409). The palette is the opener's own page: while it is open, main lays that
-  page over the whole window, above the other half (main.js `coverWindow`, `window:cover`, synchronous so the first
-  frame knows the half), and tells it its half, `{ x, width }`, again on every layout (a resize) until it lets go.
-  The page keeps drawing itself in its half (styles.css `html.cover`: the body offset and sized to the half, the split
-  line and the toast at the half's edges) and is see-through beside it (panes have a transparent background), so the
-  other half shows under the scrim and keeps drawing live updates. The class follows the page's own width, on once it
-  is wider than its half and off once it is back, so no frame shows the page out of place while main resizes it. A
-  click on the scrim over the other half is a click on the opener's scrim and closes the palette; the page lets go
-  once the scrim has faded (`MOTION.quick`). A page alone in its window is answered null and nothing changes. A Help
-  tour or Create task stays above it.
+- **Panes** (issues #159, #435). An outliner window is a `BaseWindow` with one view, shell.html, holding a Trellis
+  workspace (`@danfessler/trellis`, shell.js) of any number of pages, each an iframe of `index.html?side=<id>`: '' the first,
+  then '2', '3', ..., an id that never changes while the page lives. Main keys a page by its frame, so a page is to
+  main what another window is: each has its own view, place, history, filter and sidebar, stored under its id
+  (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **New pane** (⌘N) opens a
+  page to the right of yours, **New tab** one in your panel and **Float pane** a floating one: main gives the id
+  (`api.splitWindow(where)` answers it) and tells the shell (`shell:command` 'open'), the page that asked stores its
+  view and place under that id, and the new page opens there and takes the keyboard. Panes are docked, tabbed or
+  floating and dragged between those by their tabs; the tab's title is the page's (renderer/render.js `tellTitle`
+  posts `{ orbital: 'title', renamable }`: masked in demo mode, "Hidden" for a blurred sensitive document). Under a tab
+  bar a view, a saved search or an app page drops its heading, which the tab already names (`html.listing`, issue
+  #441); a document keeps its own. A right click on a tab opens the panel menu, led by **Rename** when the page's title
+  can be typed in: the shell posts `{ orbital: 'rename' }` and the page shows its heading (`html.renaming`) with its
+  words selected until it loses the focus. ⌘W, a tab's X and the
+  panel menu's Close close a page; the shell's close guard first asks the page to flush (renderer/app.js
+  `leavePage`, also run on pagehide): the pending edit is sent and its presence room left. The last page never closes
+  from inside: ⌘W closes the window then. The panel menu has no Hide, since a hidden page would have no way back.
+  **Navigation**: with more than one page the workspace zooms (Trellis `navigation: 'free'`): Maximize or restore
+  pane, Show all panes, Zoom back / forward and a pinch, which the shell takes from inside a page (ctrl+wheel) while
+  a plain wheel stays the page's scroll. The pane keys are pressed in a page, which the shell never hears, so each is
+  a Cmd+K row that posts `{ orbital: 'run', command }` to the shell (renderer/palette.js `PANE_ROWS`, `shellRun`);
+  every Trellis key in the shell itself is off. After every change the shell tells each page how many pages the window
+  holds (`{ orbital: 'layout' }`, renderer/state.js `windowPanes`), which decides those rows and puts the page under a
+  tab bar (`html.tabbed`: a view, search or app page drops its heading).
+  The window's header (§4) holds the traffic lights and drags the window (`-webkit-app-region` does nothing inside an
+  iframe); the panes sit below it. **One page** has no tab bar and no navigation. With more, the tab bars along the
+  top drag the window too, the tabs and buttons excepted (shell.js `mark`), and start at the window's left edge. A
+  tab pressed makes the pages let the pointer pass until it is let go; a release the shell never hears ends on the
+  next move with no button down, which cancels a Trellis drag still going too. The line between panes is Trellis's divider,
+  drawn 1px; the panels have no gap and no rounding. The shell reports every committed change (`shell:layout`
+  { doc, pages }), which main saves with the window, and starts from it (`shell:state`); signed out it shows page ''
+  alone and keeps the layout aside until the login ('auth').
+- **The palette over every pane** (issue #409). The palette is the opener's own page: while it is open the shell lays
+  that page's iframe over the whole window, above every other pane, docked or floating (renderer/palette.js `coverWindow` posts
+  `{ orbital: 'cover', on }` to the shell, shell.js `cover` lifts everything from the iframe up to the workspace and
+  sizes the iframe to the workspace, divided by the pane's scale when zoomed, again on every resize). The page keeps
+  drawing itself in its pane (styles.css `html.cover`: the body offset and sized to the pane, the toast at its
+  bottom centre), read from the box Trellis gives its iframe, which stays put while the iframe reaches past it. It is
+  see-through around it, so the other panes show under the scrim and keep drawing live updates. The class follows the
+  page's own size, on once it is larger than its pane and off once it is back, so no frame shows the page out of
+  place while the shell resizes it. A click on the scrim over another pane is a click on
+  the opener's scrim and closes the palette; the page lets go once the scrim has faded (`MOTION.quick`), or at once when
+  it goes away. A page alone asks too, which only takes the drag strip away so the scrim gets its clicks. A Help tour
+  or Create task stays above it.
 
 ### Overlays
 
-main lays two pages over the whole window, both halves of a split included, as a transparent view (main.js
+main lays two pages over the whole window, above every pane, as a transparent view (main.js
 `openOverlay`), asked for by renderer/overlays.js; each is its own scope outside the outliner. The page that asked
 keeps its caret and gets the keys back when the overlay closes, with what it had to say (`onOverlayClosed`).
 
-- **Help** (help.html): six pages of the basics, each with a CSS loop of the keys at work. Opened by Cmd+K Help, the ?
+- **Help** (help.html): seven short pages of the basics, each with a CSS loop of the keys at work; the rest is found in
+  Cmd+K as you go. The last page offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
+  and starts the sign-in (`onOverlayClosed` `chatgpt`); signed in already, it says so instead. Opened by Cmd+K Help, the ?
   in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference): after login, once
   the connection is up and the page the launch came back to is drawn. Main opens it (`api.claimHelp`, main.js
   `help:claim`): only after this session read the settings document (a failed read declines), over the first page asking
@@ -986,7 +1045,9 @@ A zoomed document shows its relationships in a full-height sidebar beside it (`#
 `api.related(docId)`: its own scroll, a border, a drag handle on its left edge (200-620px, width in localStorage
 `railWidth`), and a toggle at the top right (Cmd+K Show/Hide sidebar). Its rows are edges, not nodes: they open on
 Enter or a click, a task row toggles on Space, and nothing there takes a caret. An empty section is omitted and an
-empty sidebar hidden; a collapsed section is remembered (`railClosed`), and every head carries `aria-expanded`.
+empty sidebar hidden; a collapsed section is remembered (`railClosed`), and every head carries `aria-expanded`. A page
+narrower than 720px (`RAIL_ROOM`, a narrow pane) leaves the sidebar and its toggle out, and draws them again once it is
+wide enough (issue #444).
 
 - Tags on sidebar rows collapse to their `#` and hue and show their label on hover or focus, without changing the
   row's height.

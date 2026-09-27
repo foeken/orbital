@@ -194,22 +194,7 @@ function toggleSensitiveVisibility() {
   sensitiveVisible = !sensitiveVisible;
   localStorage.setItem('sensitiveVisible', sensitiveVisible ? '1' : '0'); // remembered for the next launch, on this machine
   refreshSensitive();
-  renderSensitiveBtn();
 }
-// The same switch in the header, left of the search options, on every page: sensitive rows are blurred wherever
-// they are listed, so the button that shows them belongs to the app rather than to a page. Icon only, and the
-// glyph is the state — an open eye while they are shown, the crossed one while hidden — at the same weight as the
-// buttons beside it: a full-black glyph among faded ones read as a different kind of button, not as a switch on.
-const sensitiveBtn = $('navSensitive');
-function renderSensitiveBtn() {
-  const label = sensitiveVisible ? 'Hide sensitive items' : 'Show sensitive items';
-  keyTitle(sensitiveBtn, label, 'sensitiveVisibility');
-  sensitiveBtn.setAttribute('aria-label', label);
-  sensitiveBtn.setAttribute('aria-pressed', String(sensitiveVisible));
-  sensitiveBtn.replaceChildren();
-  addIcon(sensitiveBtn, sensitiveVisible ? 'visible' : 'hidden');
-}
-sensitiveBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
-sensitiveBtn.onclick = toggleSensitiveVisibility; // the same action the Cmd+K row runs
-renderSensitiveBtn();
+// Its button is the app's, in the window's header (shell.js), which asks the page in front and draws the state from
+// the same storage; every other page follows here.
 window.addEventListener('storage', (e) => { if (e.key === 'sensitiveVisible' && (e.newValue === '1') !== sensitiveVisible) toggleSensitiveVisibility(); }); // switched in another page

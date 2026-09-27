@@ -9,17 +9,15 @@
 <body class="building"><!-- the loader is up until the first page lands (renderer/render.js) -->
 <div class="app">
 <header class="titlebar">
-  <nav id="crumbs" class="crumbs"><button id="navPalette" class="navbtn" tabindex="-1" title="Command palette ⌘K" aria-label="Command palette"></button><button id="navHelp" class="navbtn" tabindex="-1" title="Help" aria-label="Help"></button></nav>
+  <nav id="crumbs" class="crumbs"></nav>
   <div class="navbtns">
     <button id="navBack" class="navbtn" tabindex="-1"></button>
     <button id="navFwd" class="navbtn" tabindex="-1"></button>
-    <button id="navSensitive" class="navbtn" tabindex="-1"></button>
     <button id="pillsToggle" class="navbtn" tabindex="-1" hidden></button>
     <button id="navTable" class="navbtn" tabindex="-1" hidden></button>
     <button id="navCleanup" class="navbtn" tabindex="-1" hidden></button>
     <button id="navRefresh" class="navbtn" tabindex="-1" hidden></button>
     <button id="railToggle" class="navbtn" tabindex="-1" hidden></button>
-    <button id="navClosePane" class="navbtn" tabindex="-1" hidden></button>
   </div>
   <div id="pagehead" class="pagehead"><input id="titleCheck" type="checkbox" class="check" tabindex="-1" hidden><h1 id="title">Tana</h1></div>
   <div id="taskInfo" class="meta" hidden></div>
@@ -40,7 +38,6 @@
 <div id="skeleton" class="skeleton" aria-hidden="true"><canvas></canvas></div>
 </div>
 <div id="railGrip" class="railgrip" title="Drag to resize" hidden></div>
-<div id="splitGrip" class="splitgrip" title="Drag to resize, double-click to even out" hidden><span class="splitpill"></span></div>
 <aside id="rail" class="rail" hidden></aside>
 <div id="toolbar" class="toolbar" role="toolbar" aria-label="Formatting" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>

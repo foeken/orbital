@@ -60,15 +60,31 @@ const isSearch = (id) => id.startsWith('tana:search:'); // a saved search: its "
 const idKind = (id) => id.split(':')[1];
 const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
 const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
-// every outliner page (issues #137, #159): what is pushed is shared state; a command for one page is sent to it directly
+// every outliner page (issues #137, #159): what is pushed is shared state; a command for one page is sent to it directly.
+// A page is a handle over an iframe of a window's shell (main.js addPage): { id, frame, win, key, side, send, isDestroyed,
+// focus }, kept left to right in win.panes. A window without panes is a check's stand-in with a webContents of its own.
 function pages() {
   const wins = S.windows && S.windows.size ? S.windows : S.win ? [S.win] : [];
-  return [...wins].filter((w) => !w.isDestroyed()).flatMap((w) => (w.panes || [w]).map((p) => p.webContents));
+  return [...wins].filter((w) => !w.isDestroyed()).flatMap((w) => w.panes || [w.webContents]);
 }
-function send(channel, ...payload) { for (const wc of pages()) wc.send(channel, ...payload); }
+// The page an IPC event came from: its frame, not its webContents, since both halves share the shell's. Only looks up:
+// a page registers once, when its preload asks window:getSide (main.js addPage), so a page on its way out asking
+// something in its pagehide is not registered again.
+function pageOf(e) {
+  const frame = e && e.senderFrame;
+  if (!frame) return null;
+  // the same wrapper, or failing that the same process and frame token (main.js addPage's id): Electron keeps one
+  // WebFrameMain per frame today, and the token does not depend on it
+  let id = null;
+  try { id = frame.processId + ':' + frame.frameToken; } catch { /* a frame already gone: only the wrapper can match */ }
+  for (const w of S.windows || []) for (const p of w.panes || []) if (p.frame === frame || p.id === id) return p;
+  return null;
+}
+const pageKey = (e) => (pageOf(e) || { id: 'main' }).id; // what a per-page watch is keyed by; 'main' for the checks and overlays
+function send(channel, ...payload) { for (const p of pages()) p.send(channel, ...payload); }
 // One document changed. The page that typed the change already shows it, so it hears it as its own and skips
 // re-reading the page (renderer/app.js); every other page, the other half of a split included, hears it as before (#265).
-function sendChanged(docId, info) { for (const wc of pages()) wc.send('outline:changed', docId, wc === S.writer ? { ...info, own: true } : info); }
+function sendChanged(docId, info) { for (const p of pages()) p.send('outline:changed', docId, p === S.writer ? { ...info, own: true } : info); }
 // local YYYY-MM-DD, optionally N days from now (1 = tomorrow)
 const today = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toLocaleDateString('sv-SE'); };
 function setStatus(patch) {
@@ -89,4 +105,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, pageOf, pageKey, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };

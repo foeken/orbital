@@ -12,7 +12,7 @@ const updater = require('./updater');
 const { readNode } = require('./sdk/node');
 const agent = require('./main/agent');
 const ai = require('./main/ai');
-const { S, VIEWS, errText, idKind, isSearch, isSpace, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
+const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
@@ -24,12 +24,13 @@ const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
 const meetings = require('./main/meetings');
+const presence = require('./main/presence');
 
 // A main/ module that answers the renderer keeps its channels beside the code they call, as a table it exports:
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
 // sent to the other pages; plus outline:children, which routes between several modules.
-for (const m of [require('./main/documents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings]) {
+for (const m of [require('./main/documents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -50,95 +51,129 @@ function restoredBounds(saved, workAreas) {
   return onScreen ? { x, y, width, height } : DEFAULT_WINDOW;
 }
 
-// Outliner windows (issue #137): Cmd+N opens another, a little down and right of the one in front. A window holds one
-// page, or two side by side (issue #159): a BaseWindow with a WebContentsView per page, each a whole outliner with its
-// own view, place and history. Main already keys a page by its webContents id (the view it shows, its sidebar watch),
-// so a page beside another is to them what a page in another window is. What main pushes is shared state and goes to
-// every page (main/state.js send); S.win is the window used last and S.pane its page, which a notification click opens
-// in. The first window takes the saved bounds; the one closed last saves them.
+// Outliner windows (issue #137): ⌥⌘N opens another, a little down and right of the one in front. A window is a
+// BaseWindow with one WebContentsView, its shell (shell.html), which lays out its pages with Trellis: any number, docked,
+// tabbed or floating (issue #159), each an iframe of index.html and a whole outliner with its own view, place and
+// history. Main keys a page by its frame (main/state.js pageOf), so a page beside another is to it what a page in
+// another window is. The shell owns the layout; main keeps which pages there are (each by its id, '' the first, then
+// '2', '3', ...), the layout the window saves, and says what to open or close. What main pushes is shared state and goes to every page
+// (main/state.js send); S.win is the window used last and S.pane its page, which a notification click opens in. The
+// first window takes the saved bounds and layout, and it alone saves them (win.primary): another window is for the
+// moment, and one closed last used to leave the next launch its single page (issue #444). A page's id is unique across
+// windows, since its view and place are stored under it.
 S.windows = new Set();
-S.windowViews = new Map(); // webContents id -> { id, filter }: the view that page shows
-const MIN_PANE = 320; // neither half is dragged narrower than this (renderer/app.js splitGrip)
+S.windowViews = new Map(); // page id -> { id, filter }: the view that page shows
 const FOCUS_FRESH_MS = 30000; // a window gaining focus within this long of the last completed refresh does not start another
-const SPLIT_LINE = { light: '#ececec', dark: '#2b2f31' }; // the window behind the pages, in the page's theme; the line itself is the right half's (styles.css .splitgrip)
-const paneWindow = (wc) => [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
-// Signed out, every page is the same login button, so the window shows its left page alone and the right one waits
-// hidden; the split stays saved and comes back after login (relayout).
+const BACKGROUND = { light: '#ececec', dark: '#2b2f31' }; // the window behind the shell, in the pages' theme
+const PRELOAD = path.join(__dirname, 'preload.js');
+const shellWindow = (wc) => [...S.windows].find((w) => w.shell && w.shell.webContents === wc);
+const tellShell = (win, cmd, arg) => { const wc = win.shell && win.shell.webContents; if (wc && !wc.isDestroyed()) wc.send('shell:command', cmd, arg); };
+// Signed out, every page is the same login button, so the shell shows page '' alone and keeps the layout aside for
+// after the login (relayout tells it, 'auth'); main keeps saving the layout it had.
 const signedOut = () => S.status.authChecking === false && S.status.authenticated === false;
-const isSplit = (win) => win.panes.length > 1 && !signedOut();
-// each page's side ('' left or alone, '2' right) and whether it is half of a split: the grip on its inner edge (renderer/app.js)
-const tellSides = (win) => win.panes.forEach((p, i) => { p.side = i ? '2' : ''; if (!p.webContents.isDestroyed()) p.webContents.send('window:side', p.side, isSplit(win)); });
-// win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default).
-// Answers each shown page's half, { x, width }. win.cover is the page whose palette is open over the whole window
-// (issue #409, coverWindow): it is laid over all of it, and told its half, which it keeps drawing itself in.
-function layout(win) {
+// The Work View's layout (renderer/timeline.js): '' beside '2', in Trellis's document format. A first launch opens it,
+// and a window saved split before the workspace (v1: { split: true, splitAt }) comes back as it.
+const pair = (at) => ({ schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: [at, 1 - at],
+  children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
+floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2' } } } });
+const WORK_SPLIT = 0.6; // the Work View's Timeline takes 60% of the width, My Tasks 40%
+const savedDoc = (saved) => (!saved ? pair(WORK_SPLIT) : saved.doc && typeof saved.doc === 'object' ? saved.doc
+  : saved.split === true ? pair(saved.splitAt > 0 && saved.splitAt < 1 ? saved.splitAt : 0.5) : null);
+// the page ids a layout holds (view 'page' + id), in its order; a window without one shows page ''
+const docPages = (doc) => { const ids = Object.entries((doc && doc.views) || {}).filter(([k, v]) => v && v.type === 'page' && k.startsWith('page')).map(([k]) => k.slice(4)); return ids.length ? ids : ['']; };
+// a new page's id: the smallest from 2 up that no page has, loaded, loading or just asked for
+const freeId = () => { let n = 2; while ([...S.windows].some((w) => w.pages.includes(String(n)) || w.panes.some((p) => p.side === String(n)))) n++; return String(n); };
+// another window's layout: one page, under an id no window has
+const onePage = (id) => ({ schema: 1, root: { kind: 'panel', id: 'panel-' + id, views: ['page' + id], selected: 'page' + id }, floating: [], hidden: [], views: { ['page' + id]: { type: 'page', params: { side: id } } } });
+// What a page starts on: its view and place, from the page that opened it or the saved view it is part of, keyed by its
+// id and handed over with that id (window:getSide), so its preload stores them before the page reads them. Written by
+// the page that asked, they raced the new page's load. A key set to null is cleared; one left out keeps what is stored.
+const starts = new Map();
+function setStart(id, keys, suffix = '') {
+  const start = {};
+  for (const key of ['view', 'place']) { const v = keys && typeof keys === 'object' ? keys[key + suffix] : undefined; if (v === null || (typeof v === 'string' && v.length < 20000)) start[key] = v; }
+  if (Object.keys(start).length) starts.set(id, start); else starts.delete(id);
+}
+// A saved view names page ids, and another window may have one of them open: that page takes a free id instead, with
+// its keys, so no two live pages store their place under one key. '' is only ever the main window's.
+function adoptLayout(win, doc, keys) {
+  const others = new Set([...S.windows].filter((w) => w !== win).flatMap((w) => [...w.pages, ...w.panes.map((p) => p.side)]));
+  const ids = docPages(doc), used = new Set([...others, ...ids]), map = new Map();
+  for (const id of ids) if (id && others.has(id)) { let n = 2; while (used.has(String(n))) n++; used.add(String(n)); map.set(id, String(n)); }
+  for (const id of ids) setStart(map.get(id) ?? id, keys, id ? ':' + id : '');
+  for (const [id, to] of map) starts.set(to, { ...starts.get(to), as: id }); // the id it has in the view, for its Home check (renderer/nodes.js)
+  if (!map.size) return doc;
+  const swap = (s) => (typeof s === 'string' && s.startsWith('page') && map.has(s.slice(4)) ? 'page' + map.get(s.slice(4)) : s);
+  const walk = (v) => (Array.isArray(v) ? v.map(walk) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [swap(k), walk(x)])) : swap(v));
+  const out = walk(doc);
+  for (const [k, v] of Object.entries(out.views)) if (v && v.type === 'page') v.params = { ...v.params, side: k.slice(4) };
+  return out;
+}
+// the page after this one in the layout's order, round to the first (⌘/, where the keys go when one closes)
+function nextPane(page) {
+  const win = page.win, order = win.pages.filter((id) => win.panes.some((p) => p.side === id));
+  const next = order[(order.indexOf(page.side) + 1) % order.length];
+  return win.panes.find((p) => p.side === next && p !== page) || null;
+}
+// A page registers when its preload asks window:getSide. Only an iframe of a window's shell is a page: the shell itself
+// and the Help tour or Create task are main frames. Its id is its url's and never changes while it lives; one already
+// taken (which should not happen) gets a free one.
+function addPage(e) {
+  const frame = e.senderFrame, win = frame && shellWindow(e.sender);
+  if (!win || !frame.parent) return null;
+  let side = '';
+  try { side = new URL(frame.url).searchParams.get('side') || ''; } catch { /* no url: the first page */ }
+  if (!/^([2-9]|[1-9]\d+)$/.test(side)) side = '';
+  if (win.panes.some((p) => p.side === side)) side = freeId();
+  const page = { id: frame.processId + ':' + frame.frameToken, frame, win, side,
+    isDestroyed: () => frame.isDestroyed() || frame.detached,
+    send: (channel, ...args) => { if (!page.isDestroyed()) frame.send(channel, ...args); },
+    // the window's keys to the shell, and the shell's to this page's panel and iframe
+    focus: () => { const wc = win.shell.webContents; if (!wc.isDestroyed()) wc.focus(); tellShell(win, 'focus', page.side); } };
+  win.panes.push(page);
+  // ⌘N gives the new page the keys: it is the page ⌘W and a notification click aim at from now, even before its
+  // document has taken the focus (the shell focuses its iframe once it has loaded).
+  if (win.focusNext === side) { win.focusNext = null; S.win = win; S.pane = page; }
+  return page;
+}
+// A page gone (its panel closed, a reload, its window closed): what main kept for it goes with it.
+function dropPage(page) {
+  const win = page.win;
+  win.panes = win.panes.filter((p) => p !== page);
+  S.windowViews.delete(page.id); unwatchRelated(page.id); dropSearchHeads(page.id);
+  // its viewing heartbeat too: the page's own null may come after this (a window closing), keyed 'main' by then
+  presence.view(null, page.id);
+  if (S.pane === page) S.pane = win.panes[0] || null;
+}
+// The shell fills the window; the Help tour or Create task, when open, covers it (openOverlay).
+function fit(win) {
   const { width, height } = win.getContentBounds();
-  if (win.overlay) win.overlay.setBounds({ x: 0, y: 0, width, height }); // the Help tour or Create task covers both halves (openOverlay)
-  win.panes.forEach((p, i) => p.setVisible(i === 0 || isSplit(win))); // every time: a hidden right half can become the left one
-  const min = Math.min(MIN_PANE, Math.floor(width / 2));
-  const w = Math.max(min, Math.min(width - min, Math.round(width * (win.splitAt ?? 0.5))));
-  const halves = !isSplit(win) ? [{ x: 0, width }].slice(0, win.panes.length) : [{ x: 0, width: w }, { x: w, width: width - w }];
-  halves.forEach((half, i) => {
-    const p = win.panes[i], cover = p === win.cover;
-    p.setBounds(cover ? { x: 0, y: 0, width, height } : { ...half, y: 0, height });
-    if (cover && !p.webContents.isDestroyed()) p.webContents.send('window:cover', half);
-  });
-  return halves;
+  for (const v of [win.shell, win.overlay]) if (v) v.setBounds({ x: 0, y: 0, width, height });
 }
-// ⌘K, ⌘S and the other palette pages over both halves of a split (issue #409): the page that opens one asks to cover
-// the window, and is laid over all of it, above the other half, see-through beside its own half (renderer/palette.js
-// coverWindow). Everything the palette does stays in that page. Answers its half, or null when there is nothing to
-// cover (a page alone fills its window already). A Help tour or Create task open meanwhile stays above it.
-function coverWindow(wc, on) {
-  const win = paneWindow(wc), pane = win && win.panes.find((p) => p.webContents === wc);
-  if (!pane || (on ? !isSplit(win) : win.cover !== pane)) return null;
-  win.cover = on ? pane : null;
-  if (on) { win.contentView.addChildView(pane); if (win.overlay) win.contentView.addChildView(win.overlay); } // added again: on top
-  const halves = layout(win);
-  return on ? halves[win.panes.indexOf(pane)] : null;
+// A new page (⌘N to the right, a tab, a floating pane; the Work View's '2'), beside the page that asked (from). Its id
+// is main's to give, so the page asking can store its place under it first; the layout report that follows saves it.
+function openPage(win, { id = freeId(), where = 'right', from, focus = true }) {
+  win.pages.push(id);
+  if (focus) win.focusNext = id;
+  tellShell(win, 'open', { id, where, from, focus });
+  return id;
 }
-const relayout = () => { for (const w of S.windows) if (!w.isDestroyed()) { layout(w); tellSides(w); } };
-function addPane(win, side) {
-  const pane = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
-  pane.setBackgroundColor('#00000000'); // see-through where the page draws nothing: beside its half while it covers the window (coverWindow)
-  pane.side = side; // '2': the right half, which keeps its own view and place (renderer/state.js SIDE)
-  pane.webContents.on('focus', () => { S.win = win; S.pane = pane.webContents; });
-  // a Reload (⌘K runs it as the palette closes) or a crash: the page comes back with no palette, so it covers nothing
-  for (const name of ['did-start-loading', 'render-process-gone']) pane.webContents.on(name, () => coverWindow(pane.webContents, false));
-  win.panes.push(pane); win.contentView.addChildView(pane); layout(win);
-  tellSides(win);
-  pane.webContents.loadFile(path.join(__dirname, 'index.html'));
-  if (win.saveBounds) win.saveBounds();
-  return pane;
-}
-// A WebContentsView's page outlives its window unless it is closed by hand.
-function removePane(win, pane) {
-  const wc = pane.webContents, key = wc.id;
-  win.panes = win.panes.filter((p) => p !== pane);
-  if (win.cover === pane) win.cover = null;
-  if (!win.isDestroyed()) { win.contentView.removeChildView(pane); layout(win); }
-  tellSides(win); // the half left alone is the window's page
-  if (win.saveBounds && !win.isDestroyed()) win.saveBounds();
-  S.windowViews.delete(key); unwatchRelated(key); dropSearchHeads(key);
-  if (S.pane === wc) S.pane = win.panes[0]?.webContents || null;
-  // waitForBeforeUnload: the page gets its beforeunload (renderer/app.js), which sends the characters still waiting on
-  // the 400 ms edit timer and lets go of its presence room and heartbeat before it is gone
-  if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: true });
-}
+// Signed in or out: the saved layout comes back, or waits while every page is the login button.
+const relayout = () => { for (const w of S.windows) if (!w.isDestroyed() && w.signedOut !== signedOut()) { w.signedOut = signedOut(); tellShell(w, 'auth', { signedOut: w.signedOut }); } };
 // The Help tour (help.html, issue #230) and Create task (task.html, issue #237): a transparent page of its own laid
 // over the whole window, so it sits above both halves of a split rather than inside the one that asked. Added last, it
 // is on top, and there is one at a time. Closing it hands the keys back to the page that asked, whose caret is where it
 // was, with what it has to say: open the palette (⌘K closed the tour), or a note for its toast (the task it made).
 const OVERLAYS = { help: 'help.html', task: 'task.html' };
-function openOverlay(wc, page, theme) {
-  const win = paneWindow(wc);
-  if (!win || win.overlay || !Object.hasOwn(OVERLAYS, page)) return false;
-  const view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+function openOverlay(page, which, theme) { // page: the handle that asked (main/state.js pageOf)
+  const win = page && page.win;
+  if (!win || win.overlay || !Object.hasOwn(OVERLAYS, which)) return false;
+  const view = new WebContentsView({ webPreferences: { preload: PRELOAD } });
   view.setBackgroundColor('#00000000');
-  view.opener = wc;
-  win.overlay = view; win.contentView.addChildView(view); layout(win);
+  view.opener = page;
+  win.overlay = view; win.contentView.addChildView(view); fit(win);
   view.webContents.once('did-finish-load', () => view.webContents.focus());
-  view.webContents.loadFile(path.join(__dirname, OVERLAYS[page]), { query: { theme: theme === 'dark' ? 'dark' : 'light' } });
+  view.webContents.loadFile(path.join(__dirname, OVERLAYS[which]), { query: { theme: theme === 'dark' ? 'dark' : 'light' } });
   return true;
 }
 function closeOverlay(win, result = {}) {
@@ -152,62 +187,72 @@ function closeOverlay(win, result = {}) {
   // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Create task). First, so
   // a ⌘K that closed Create task does not leave the palette open under the tour.
   const pending = win.helpPending; win.helpPending = null;
-  const help = !!pending && !win.isDestroyed() && !!win.panes[0] && firstHelp(win.panes[0].webContents, pending.theme);
+  const main = win.panes.find((p) => !p.side) || win.panes[0]; // page '' when it is open: the tour's own
+  const help = !!pending && !win.isDestroyed() && !!main && firstHelp(main, pending.theme);
   const note = typeof result.note === 'string' ? result.note.slice(0, 200) : undefined;
   if (opener && !opener.isDestroyed()) {
     if (!help) opener.focus(); // the tour has the keys now
-    opener.send('overlay:closed', { palette: result.palette === true && !help, note: help ? undefined : note });
+    opener.send('overlay:closed', { palette: result.palette === true && !help, chatgpt: result.chatgpt === true && !help, note: help ? undefined : note });
   }
   if (help && note) win.overlay.later = { opener, note }; // the task's toast waits for the tour: under it, it would be gone first
   const later = view.later; // this was that tour: the toast it held back is due now
   if (later && later.opener && !later.opener.isDestroyed()) later.opener.send('overlay:closed', { palette: false, note: later.note });
 }
-const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
+const frontPane = () => (S.win && !S.win.isDestroyed() ? (S.win.panes.includes(S.pane) ? S.pane : S.win.panes[0]) || null : null);
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
-  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: SPLIT_LINE.light });
-  win.panes = [];
+  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: BACKGROUND.light });
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
-  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), split: win.panes.length > 1, splitAt: win.splitAt }); };
+  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed() && win.primary) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), doc: win.doc }); };
   const saveSoon = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); };
-  if (!front && saved && Number.isFinite(saved.splitAt)) win.splitAt = saved.splitAt;
-  S.windows.add(win); S.win = win; S.pane = addPane(win, '').webContents;
-  // the split comes back with the frame it was saved with, and a first launch (nothing saved) opens split: the Work View,
-  // the Timeline beside My Tasks (renderer/edit.js reads which half it is)
-  if (!front && (!saved || saved.split)) addPane(win, '2');
-  win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a split opened, closed or dragged is saved too
+  win.panes = []; win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a layout the shell reports is saved too
+  // the layout comes back with the frame it was saved with, and a first launch (nothing saved) opens the Work View, the
+  // Timeline beside My Tasks (renderer/edit.js reads which page it is). Another window opens with one page, under an id
+  // that may have been a closed page's: it keeps nothing of that page, and starts where the page that asked is (window:new).
+  win.primary = !front;
+  win.doc = front ? onePage(freeId()) : savedDoc(saved);
+  win.pages = docPages(win.doc);
+  if (front) setStart(win.pages[0], { view: null, place: null });
+  // nodeIntegrationInSubFrames: preload.js runs in each page's iframe as well, which is what gives a page window.api
+  win.shell = new WebContentsView({ webPreferences: { preload: PRELOAD, nodeIntegrationInSubFrames: true } });
+  win.contentView.addChildView(win.shell); fit(win);
+  // a crash takes the pages with it; the reload that brings them back registers them again
+  win.shell.webContents.on('render-process-gone', () => { for (const p of [...win.panes]) dropPage(p); });
+  win.shell.webContents.loadFile(path.join(__dirname, 'shell.html'));
+  S.windows.add(win); S.win = win;
   if (!front && saved && saved.maximized) win.maximize();
   for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, saveSoon);
-  win.on('resize', () => layout(win));
+  win.on('resize', () => fit(win));
   win.on('close', saveBounds);
   // Coming back to a window re-reads the lists, unless they were read moments ago: the live queries keep them
   // current, and every Cmd+Tab re-reading all of them (and every page reloading after it) was chatter (issue #268).
   win.on('focus', () => { S.win = win; if (!(Date.now() - Date.parse(S.status.lastSync) < FOCUS_FRESH_MS)) refresh(); });
   win.on('closed', () => {
     closeOverlay(win);
-    // right half first: the left one closing first would leave the right one alone for a moment, and removePane would
-    // hand it the left half's keys, so it saved its page over the left one's and a restart opened both on it
-    for (const p of [...win.panes].reverse()) removePane(win, p);
+    for (const p of [...win.panes]) dropPage(p);
     S.windows.delete(win);
     if (S.win === win) { S.win = [...S.windows].at(-1) || null; S.pane = frontPane(); }
+    if (win.primary && S.win) { S.win.primary = true; S.win.saveBounds(); } // the window left saves from now on
+    // A WebContentsView's page outlives its window unless it is closed by hand. waitForBeforeUnload: each page gets its
+    // beforeunload (renderer/app.js), which sends the characters still waiting on the 400 ms edit timer and lets go of
+    // its presence room and heartbeat before it is gone.
+    const wc = win.shell.webContents;
+    if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: true });
   });
+  return win;
 }
-// ⌥⌘N (issue #159): a second page beside the one that asked, opening where it was (the renderer stores its place
-// first), or back to one page, the one that asked.
-function toggleSplit(wc) {
-  const win = paneWindow(wc);
+// Cmd+W closes the page you are in while there are more, and the window when it is the last (signed out, one shows).
+// The shell flushes the page and closes it, and its layout report drops it here; the next page takes the keys.
+function closeFront(win, page = S.pane) {
   if (!win) return;
-  if (win.panes.length > 1) { for (const p of win.panes) if (p.webContents !== wc) removePane(win, p); return; }
-  const pane = addPane(win, '2');
-  pane.webContents.once('did-finish-load', () => pane.webContents.focus()); // keyboard first: the new page takes the keys
-}
-// Cmd+W closes the page you are in when there are two on screen, and the window otherwise (signed out, one shows).
-function closeFront(win, wc = S.pane) {
-  if (!win) return;
-  const pane = win.panes && isSplit(win) && win.panes.find((p) => p.webContents === wc);
-  if (pane) removePane(win, pane); else win.close();
+  const target = win.panes && (win.panes.includes(page) ? page : win.panes[0]);
+  if (!target || signedOut() || win.pages.length < 2) return win.close();
+  const next = nextPane(target);
+  win.pages = win.pages.filter((id) => id !== target.side); // a second ⌘W before the report counts it gone
+  tellShell(win, 'close', target.side);
+  if (next) next.focus();
 }
 
 function createMenu() {
@@ -219,83 +264,87 @@ function createMenu() {
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
     ] },
-    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => closeFront(BaseWindow.getFocusedWindow()) }] },
+    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'Alt+CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => closeFront(BaseWindow.getFocusedWindow()) }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
 }
 
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (!e.sender.isDestroyed()) e.sender.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id, e && e.sender ? e.sender.id : 'main') : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
+ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (page) page.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id, page ? page.id : 'main') : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))); });
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
-// the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
-ipcMain.handle('window:new', () => { createWindow(); });
-ipcMain.handle('window:split', (e) => { toggleSplit(e.sender); });
-// ⌘\: the keys go to the other half of a split (nothing to do in a window with one page)
-ipcMain.handle('window:otherPane', (e) => { const other = paneWindow(e.sender)?.panes.find((p) => p.webContents !== e.sender); if (other) other.webContents.focus(); });
-// asked by preload.js on every load, a Reload included: which side this page is ('' left or alone, '2' the right half).
-// A restart adds both halves before either loads, so a restored right half knows it is one.
+// the menu shows ⌥⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
+ipcMain.handle('window:new', (e, start) => { const id = createWindow().pages[0]; setStart(id, { view: null, place: null, ...(start && typeof start === 'object' ? start : {}) }); return id; });
+// ⌘N (issue #159) and Cmd+K New tab / New floating pane: a new page beside the one that asked, taking the keys. Answers the
+// new page's id, so the page asking can store its view and place under it for the new one to open on.
+ipcMain.handle('window:split', (e, where, start) => {
+  const page = pageOf(e);
+  if (!page || signedOut()) return null;
+  const id = freeId();
+  setStart(id, { view: null, place: null, ...(start && typeof start === 'object' ? start : {}) }); // an id used before keeps nothing of that page
+  return openPage(page.win, { id, where: ['right', 'tab', 'float'].includes(where) ? where : 'right', from: page.side });
+});
+// asked by preload.js on every load, a Reload included: this page's id ('' the first page, then '2', '3', ...).
+// This is where a page registers (addPage); an overlay asking is no page and gets the defaults.
 ipcMain.on('window:getSide', (e) => {
-  const win = paneWindow(e.sender);
-  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '', split: Boolean(win && isSplit(win)) };
+  const page = pageOf(e) || addPage(e);
+  const side = page ? page.side : '', start = page && starts.get(side);
+  if (start) starts.delete(side);
+  e.returnValue = start ? { side, start } : { side };
 });
-// Cmd+K Work View (renderer/timeline.js): the page asking has stored both halves' places. A new right half reads its
-// own at load; a half already open is told to go to its own.
-ipcMain.handle('window:workView', (e) => {
-  const win = paneWindow(e.sender);
-  if (!win) return;
-  if (win.panes.length < 2) addPane(win, '2');
-  else for (const p of win.panes) if (p.webContents !== e.sender) p.webContents.send('window:toPlace');
+// A page taking the keys (preload.js, its window's focus): the window and page a notification click opens in, and ⌘W closes
+ipcMain.on('page:focus', (e) => { const page = pageOf(e); if (page) { S.win = page.win; S.pane = page; } });
+// A page leaving (pagehide: its panel closed, a reload). Its frame may be gone by the time this arrives, so whatever the
+// window holds that is gone goes too.
+ipcMain.on('page:gone', (e) => {
+  const page = pageOf(e), win = page ? page.win : shellWindow(e.sender);
+  if (page) dropPage(page);
+  if (win) for (const p of [...win.panes]) if (p.isDestroyed()) dropPage(p);
 });
-// The X at the end of the right half's header (renderer/app.js): that half closes, as Cmd+W closes it. Only in a
-// split: a page alone never closes its window from here.
-ipcMain.handle('window:closePane', (e) => { const win = paneWindow(e.sender); if (win && win.panes.length > 1) closeFront(win, e.sender); });
-// synchronous, so the palette's first frame already knows where its page's half is (renderer/palette.js coverWindow)
-ipcMain.on('window:cover', (e, on) => { e.returnValue = coverWindow(e.sender, on === true); });
-ipcMain.handle('overlay:open', (e, page, theme) => { openOverlay(e.sender, page, theme); });
+ipcMain.handle('overlay:open', (e, which, theme) => { openOverlay(pageOf(e), which, theme); });
 ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].find((w) => w.overlay && w.overlay.webContents === e.sender), result && typeof result === 'object' ? result : {}); });
-// A page's header is a window drag region, where the page hears nothing of the mouse, so a page the pointer has left
-// asks for the cursor to be watched here: every 100 ms until it is outside that half, and then it is told
-// (renderer/app.js pointer-in, which shows the top row).
-ipcMain.on('window:watchPointer', (e) => {
-  const wc = e.sender, win = paneWindow(wc), pane = win && win.panes.find((p) => p.webContents === wc);
-  if (!pane) return;
-  clearInterval(pane.pointerTimer);
-  pane.pointerTimer = setInterval(() => {
-    if (win.isDestroyed() || wc.isDestroyed()) return clearInterval(pane.pointerTimer);
-    const { x, y } = screen.getCursorScreenPoint(), c = win.getContentBounds(), b = pane.getBounds();
-    if (x >= c.x + b.x && x < c.x + b.x + b.width && y >= c.y + b.y && y < c.y + b.y + b.height) return;
-    clearInterval(pane.pointerTimer);
-    wc.send('window:pointerOut');
-  }, 100);
+// Cmd+K Save view and Saved views (issue #442): the layout this window has (null: page '' alone, never rearranged), and
+// one to put it back to; 'workView' is the Work View's, the one a first launch opens (pair). The pages' places are
+// theirs, written by the page that asked (renderer/palette.js); the shell reloads, starts from this layout
+// (shell:state) and every page opens where the view was saved.
+ipcMain.handle('window:layout', (e) => pageOf(e)?.win?.doc || null);
+// A saved view is the main window's (win.primary): chosen in another window it is laid out there, which comes forward.
+ipcMain.handle('window:setLayout', (e, doc, keys) => {
+  const asked = pageOf(e)?.win, win = [...S.windows].find((w) => w.primary && !w.isDestroyed()) || asked;
+  if (doc === 'workView') doc = pair(WORK_SPLIT);
+  if (!win || signedOut() || (doc !== null && !(doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page')))) return false;
+  doc = adoptLayout(win, doc, keys);
+  win.primary = true; win.doc = doc; win.pages = docPages(doc); win.saveBounds();
+  win.reloading = true; tellShell(win, 'reload'); // the shell has every page send what it was typing first; what it reports meanwhile is the old layout
+  if (win !== asked) win.focus();
+  return true;
 });
-// Cmd+K Swap panes: the halves change sides, and each takes the other's side marker, so a restart keeps them there
-ipcMain.handle('window:swapPanes', (e) => {
-  const win = paneWindow(e.sender);
-  if (!win || win.panes.length < 2) return;
-  win.panes.reverse();
-  // the pages change sides and the line stays where it is: the left half is as wide as it was, with the other page in it
-  tellSides(win);
-  layout(win);
-  win.saveSoon();
+// The shell (preload.js window.shell), synchronous at its start: the layout to start from (null: page '' alone), the
+// theme, and whether it is signed out (page '' alone, the layout kept aside until 'auth' says otherwise).
+ipcMain.on('shell:state', (e) => {
+  const win = shellWindow(e.sender);
+  if (!win) { e.returnValue = { doc: null, theme: systemTheme(), signedOut: signedOut() }; return; }
+  win.signedOut = signedOut(); win.reloading = false;
+  win.pages = win.signedOut ? [''] : docPages(win.doc);
+  e.returnValue = { doc: win.doc || null, theme: win.theme || systemTheme(), signedOut: win.signedOut };
 });
-// The grip on the right half's left edge (renderer/app.js splitGrip): 'start', 'move' or 'even'. The cursor is read
-// here, from the screen, rather than from the page: the page moves under the pointer as it is dragged, so its own
-// coordinates run ahead of the drag. The share kept is the one on screen, clamped, so a restart draws the same line.
-ipcMain.on('window:splitDrag', (e, phase) => {
-  const win = paneWindow(e.sender);
-  if (!win || win.panes.length < 2) return;
-  const b = win.getContentBounds(), room = b.width, x = screen.getCursorScreenPoint().x - b.x;
-  if (phase === 'start') { win.dragOffset = x - win.panes[0].getBounds().width; return; }
-  if (phase === 'even') win.splitAt = undefined;
-  else { const min = Math.min(MIN_PANE, Math.floor(room / 2)); win.splitAt = Math.max(min, Math.min(room - min, x - (win.dragOffset || 0))) / room; }
-  layout(win); win.saveSoon();
+// The shell's layout after every committed change: doc is Trellis's document, pages the ids in it in its order. A page
+// not in it is closing. Saved with the window, except while signed out, when the shell shows the login alone.
+ipcMain.on('shell:layout', (e, layout) => {
+  const win = shellWindow(e.sender);
+  if (!win || win.reloading || !layout || !Array.isArray(layout.pages)) return;
+  win.pages = layout.pages.filter((id) => typeof id === 'string');
+  for (const p of [...win.panes]) if (!win.pages.includes(p.side)) dropPage(p);
+  if (signedOut() || !layout.doc || typeof layout.doc !== 'object') return;
+  win.doc = layout.doc; win.saveSoon();
 });
-// The pointer is over one half's grip: the other half draws its half of the swap pill too, so the two meet on the line
-ipcMain.on('window:splitHover', (e, on) => { for (const p of paneWindow(e.sender)?.panes || []) if (p.webContents !== e.sender) p.webContents.send('window:splitHover', on); });
-// a page says which theme it drew itself in (renderer/theme.js), and the line between split pages follows it
-ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if (win) win.setBackgroundColor(SPLIT_LINE[theme] || SPLIT_LINE.light); });
+// a page says which theme it drew itself in (renderer/theme.js): the shell's Trellis theme and the window behind it follow
+ipcMain.on('window:theme', (e, theme) => {
+  const win = pageOf(e)?.win;
+  if (!win || !Object.hasOwn(BACKGROUND, theme)) return;
+  win.theme = theme; win.setBackgroundColor(BACKGROUND[theme]); tellShell(win, 'theme', theme);
+});
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
@@ -306,17 +355,17 @@ ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 // one step, so two windows, Create task or a page closing on the way can neither show it twice nor spend it unseen.
 // A window Create task covers keeps the ask (helpPending) and closeOverlay opens it once that closes: the close is told
 // only to the half that opened Create task, which is not always the one that asked.
-function firstHelp(wc, theme) {
-  if (!settings.settingsDocId() || settings.prefs().helpSeen || !wc || wc.isDestroyed()) return false;
-  const win = paneWindow(wc);
+function firstHelp(page, theme) {
+  if (!settings.settingsDocId() || settings.prefs().helpSeen || !page || page.isDestroyed()) return false;
+  const win = page.win;
   if (win && win.overlay) { win.helpPending = { theme }; return false; } // the window's, not the page's: closeOverlay aims it
-  if (!openOverlay(wc, 'help', theme)) return false;
+  if (!openOverlay(page, 'help', theme)) return false;
   settings.setPref('helpSeen', true);
   return true;
 }
-ipcMain.handle('help:claim', async (e, theme) => { await settingsReady(); return firstHelp(e && e.sender, theme); });
+ipcMain.handle('help:claim', async (e, theme) => { const page = pageOf(e); await settingsReady(); return firstHelp(page, theme); });
 const { tellOthers } = settings; // a setting one page writes reaches the others (main/settings.js)
-ipcMain.handle('prefs:set', (e, key, value) => { const stored = settings.setPref(key, value); tellOthers(e?.sender); return stored; });
+ipcMain.handle('prefs:set', (e, key, value) => { const stored = settings.setPref(key, value); tellOthers(pageOf(e)); return stored; });
 ipcMain.handle('openai:setKey', (_e, key) => {
   if (typeof key !== 'string' || !key.trim()) throw new Error('OpenAI API key cannot be empty');
   settings.set('openaiApiKey', key.trim());
@@ -434,7 +483,7 @@ ipcMain.handle('codex:set', async (e, id, on, prompt, model, host) => {
       throw error;
     }
   }
-  tellOthers(e?.sender, id); // the node too: a relink keeps the mark and the host, and only its task moved
+  tellOthers(pageOf(e), id); // the node too: a relink keeps the mark and the host, and only its task moved
   return result;
 });
 // Linking a node to a Codex task that already exists (#143): the link Codex copies, codex://threads/<id>, or the bare
@@ -446,7 +495,7 @@ ipcMain.handle('codex:link', async (e, id, link) => {
   if (!agent.THREAD_ID.test(threadId)) throw new Error('Paste a Codex task link: codex://threads/…');
   const result = await setCodex(id, true);
   agent.setCodexTask(id, threadId, 'local');
-  tellOthers(e?.sender, id);
+  tellOthers(pageOf(e), id);
   return result;
 });
 // The current request, delivered to the task this node already has. Best effort on purpose: the task is open in
@@ -460,7 +509,7 @@ function queueToTask(threadId, message) {
 // one), and a split window used to start two at once for the same answer (issue #267).
 let agentStatusRead = null;
 ipcMain.handle('codex:status', () => (agentStatusRead ||= agent.readAgentStatuses(agent.codexTasks()).finally(() => { agentStatusRead = null; })));
-ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(e?.sender); return stored; });
+ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(pageOf(e)); return stored; });
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
@@ -475,7 +524,7 @@ ipcMain.handle('shell:open', (_e, url) => {
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());
 if (nativeTheme) nativeTheme.on('updated', () => send('theme:system', systemTheme()));
-ipcMain.handle('mcp:setHidden', async (e, on) => { const stored = await setMcpHidden(on); tellOthers(e?.sender); return stored; });
+ipcMain.handle('mcp:setHidden', async (e, on) => { const stored = await setMcpHidden(on); tellOthers(pageOf(e)); return stored; });
 ipcMain.handle('sync:status', () => S.status);
 ipcMain.handle('sync:login', async () => {
   try {
@@ -489,9 +538,9 @@ ipcMain.handle('sync:login', async () => {
 
 if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, reliveRefs: require('./main/documents').reliveRefs, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, weekTitle, weekNode,
-    statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
+    statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, savedDoc, closeFront, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
-    nodePin, layout, dropSearchHeads,
+    nodePin, dropSearchHeads,
     assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
     accessContext, inboxCount, S,
     testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'inbox'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };
@@ -521,9 +570,12 @@ if (process.env.TANA_MAIN_TEST) {
       const note = new Notification({ id, title, subtitle, body, silent: kind === 'summary' });
       note.on('click', () => { // the page used last, not all of them; a new window when the last one was closed
         if (id) clickedEdits.add(id);
-        let wc = frontPane();
-        if (!wc) { createWindow(); wc = frontPane(); return wc.once('did-finish-load', () => wc.send('notify:open', docId)); }
-        S.win.show(); S.win.focus(); wc.focus(); wc.send('notify:open', docId);
+        const page = frontPane();
+        if (page) { S.win.show(); S.win.focus(); page.focus(); return page.send('notify:open', docId); }
+        // a new window: told once its first page has loaded, and so listens
+        createWindow();
+        const wc = S.win.shell.webContents, loaded = (_e, isMainFrame) => { const first = !isMainFrame && frontPane(); if (first) { wc.off('did-frame-finish-load', loaded); first.send('notify:open', docId); } };
+        wc.on('did-frame-finish-load', loaded);
       });
       note.show();
     };

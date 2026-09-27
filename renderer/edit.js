@@ -311,11 +311,12 @@ const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([
 // So is a view with nothing zoomed (the Library, Types, a view's own list): it is stored as {} rather than removed,
 // because "nothing stored" is what makes a launch open Home, and a reload on the Library used to land there.
 const isPlaceId = (id) => isRealId(id) || String(id || '').startsWith('orbital:');
-function rememberPlace(key = 'place' + SIDE) {
+function placeJSON() { // what rememberPlace stores, and what a pane or window opened from here starts on
   const doc = zoom ? docOf(zoom.docId) : null; // a row the app does not have simply stores no title: the next launch opens on the view, as before
-  if (zoom && isPlaceId(zoom.docId)) localStorage.setItem(key, JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined }));
-  else localStorage.setItem(key, '{}'); // the view itself (view + SIDE holds which one)
+  if (zoom && isPlaceId(zoom.docId)) return JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined });
+  return '{}'; // the view itself (view + SIDE holds which one)
 }
+function rememberPlace() { localStorage.setItem('place' + SIDE, placeJSON()); }
 function noteNavigation() {
   const here = navPlace();
   if (navHere && navHere.key === here.key) return;
@@ -341,11 +342,11 @@ function navigate(dir) {
   const from = dir < 0 ? navBack : navForward, to = dir < 0 ? navForward : navBack;
   const place = from.pop();
   // A page that has been deleted since you were on it is skipped rather than reopened: keep walking the stack, which
-  // also empties one that is nothing but deleted pages (it lands on Home, as an empty stack does).
+  // also empties one that is nothing but deleted pages (and then stays put, as an empty stack does).
   if (place && place.zoom && isGone(place.zoom.docId)) return navigate(dir);
-  // Nothing to go back to: Back lands on Home rather than on whichever view happens to be behind the page. That is
-  // the whole point of choosing one — a note opened from a search or a link used to leave you in the Library.
-  if (!place) return dir < 0 && !atHome() ? goHome() : undefined;
+  // Nothing to go back to: nothing happens. Home is a whole window now (Go to Home, ⇧⌘H), which one pane's Back must
+  // not replace (issue #444).
+  if (!place) return;
   to.push(navHere);
   const left = dir < 0 && navHere && navHere.zoom ? navHere.zoom.docId : null; // Back lands on the page that listed it: that row lights up
   navigating = true;
@@ -366,9 +367,8 @@ const backBtn = $('navBack'), fwdBtn = $('navFwd');
 backBtn.addEventListener('click', () => navigate(-1));
 fwdBtn.addEventListener('click', () => navigate(1));
 function renderNav() {
-  // Back with an empty stack is still a move while you are away from Home, which is where it lands (navigate above),
-  // so it reads as live there -- the same rule the Cmd+K row uses.
-  for (const [el, id, label, live] of [[backBtn, 'back', 'Go back', navBack.length || !atHome()], [fwdBtn, 'forward', 'Go forward', navForward.length]]) {
+  // live while there is somewhere to go (navigate above), the same rule the Cmd+K rows use
+  for (const [el, id, label, live] of [[backBtn, 'back', 'Go back', navBack.length], [fwdBtn, 'forward', 'Go forward', navForward.length]]) {
     el.disabled = !live;
     keyTitle(el, label, id);
     el.setAttribute('aria-label', label);
@@ -390,7 +390,7 @@ function readStoredPlace() {
 // zoom, which clears the stored place. Reading it here means the first render can no longer erase what we reopen.
 let savedPlace = readStoredPlace();
 // Nothing stored for this half: a first launch, which opens on the Work View (renderer/timeline.js) — the Timeline
-// here, and My Tasks in the right half main opens beside it. Every later render stores a place, so from then on a
+// here, and My Tasks in the pane main opens beside it. Every later render stores a place, so from then on a
 // launch reopens the last one. My Tasks has no id until main has found or made it, so that half asks once connected
 // (restorePlace). The Timeline's id is written out: renderer/timeline.js, which declares it, loads after this file.
 if (!savedPlace) savedPlace = SIDE ? { myTasks: true } : { docId: 'orbital:timeline', nodeId: null, title: 'Timeline', icon: 'timeline' };
@@ -405,7 +405,7 @@ if (savedPlace && isPlaceId(savedPlace.docId) && savedPlace.title != null) {
 }
 async function restorePlace() {
   let saved = savedPlace;
-  if (saved && saved.myTasks) { // a first launch's right half: My Tasks, found or made once there is a connection to ask
+  if (saved && saved.myTasks) { // a first launch's second pane: My Tasks, found or made once there is a connection to ask
     if (!connected && !zoom) return;
     savedPlace = null;
     if (zoom) return; // somewhere else already
