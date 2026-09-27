@@ -305,10 +305,10 @@ function agentLoad(docId) {
 // palette's link search (renderer/toolbar.js linkTo), and "/" as the first thing typed picks a skill for the message to
 // run, shown as a pill in front. Sent, the chips become Tana's [label](tana:…) links and the skill rides along as the
 // message's attachment, as Tana's own runSkill sends one (docs/CHATS.md §10).
-const composerSkill = $('composerSkill'), composerMode = $('composerMode');
+const composerSkill = $('composerSkill');
 // The mode the next message is sent in, per chat: true To Tana (it is asked to answer), false To the chat (a message for
 // the people in it). It starts at what the chat does by itself (chat:answers: alone, Tana answers) and Tab in an empty
-// message, or a click on the label, switches it. Remembered while the window is open.
+// message switches it; the empty message's placeholder says which it is. Remembered while the window is open.
 const chatAi = new Map();
 const chatReadOnly = new Set(); // chats you can read and not write in (chat:answers): their composer takes no typing
 const chatAsking = new Set(); // chats whose chat:answers is out now (chatAfterRender)
@@ -325,9 +325,6 @@ function showMode() {
   const docId = composer.dataset.doc, ai = chatAi.get(docId), readOnly = chatReadOnly.has(docId);
   composer.classList.toggle('readonly', readOnly);
   composerText.contentEditable = readOnly ? 'false' : 'plaintext-only';
-  composerMode.hidden = ai === undefined || readOnly;
-  composerMode.classList.toggle('ai', !!ai);
-  composerMode.replaceChildren(...[iconNode(ai ? 'chat' : 'member')].filter(Boolean), document.createTextNode(ai ? 'To Tana' : 'To the chat'));
   composerText.dataset.placeholder = readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
 }
 // A skill is for Tana to run, so while one is attached the message goes To Tana and the mode stays put
@@ -466,8 +463,6 @@ composerText.addEventListener('paste', (e) => {
 });
 composerText.addEventListener('focus', () => { chatSel = null; });
 composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
-composerMode.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
-composerMode.onclick = () => switchMode(composer.dataset.doc);
 composerSend.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
 composerSend.onclick = chatSend;
 // After the page is drawn: the composer shows under a chat and nowhere else, keeping what was written in each.
