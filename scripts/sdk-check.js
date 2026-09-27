@@ -1034,26 +1034,26 @@ async function main() {
     assert.equal((await backend.handlers.get('sensitive:list')(null)).join(), '', 'and unmarking takes it out again');
     // A setting one page writes reaches the other page of a split and every other window at once, since the write
     // coming back from Tana is nothing new to main; the page that wrote it hears nothing (issue #228).
-    const heard = [], pane = (name) => ({ webContents: { isDestroyed: () => false, send: (channel, synced) => heard.push([name, channel, typeof synced === 'string' ? synced : synced && synced.theme]) } });
+    const heard = [], pane = (name) => ({ frame: {}, isDestroyed: () => false, send: (channel, synced) => heard.push([name, channel, typeof synced === 'string' ? synced : synced && synced.theme]) });
     const left = pane('left'), right = pane('right'), other = pane('other');
     backend.S.windows.add({ isDestroyed: () => false, panes: [left, right] }).add({ isDestroyed: () => false, panes: [other] });
-    await backend.handlers.get('prefs:set')({ sender: left.webContents }, 'theme', 'dark');
+    await backend.handlers.get('prefs:set')({ senderFrame: left.frame }, 'theme', 'dark');
     assert.deepEqual(heard, [['right', 'settings:changed', 'dark'], ['other', 'settings:changed', 'dark']]);
     heard.length = 0;
-    await backend.handlers.get('sensitive:set')({ sender: right.webContents }, marked, false);
+    await backend.handlers.get('sensitive:set')({ senderFrame: right.frame }, marked, false);
     assert.deepEqual(heard.map(([name]) => name), ['left', 'other'], 'a sensitive mark tells the other pages too');
     // So does every other setting a page keeps a copy of: a view's filter (a page left with the old one drew stale
     // pills and wrote it back with its next one), a watch choice, whose document the others read again for its bell,
     // and an agent mark, which draws the badge and the Agent section.
     const others = () => heard.splice(0).filter(([, channel]) => channel !== 'sync:status'); // the failed state read reports its status
     others(); // what the sensitive mark sent
-    await backend.handlers.get('view:setFilter')({ sender: left.webContents }, 'library', { states: ['closed'] });
+    await backend.handlers.get('view:setFilter')({ senderFrame: left.frame }, 'library', { states: ['closed'] });
     assert.deepEqual(others().map(([name, channel]) => name + ' ' + channel), ['right settings:changed', 'other settings:changed'], 'a view filter tells the other pages');
     const watchedDoc = 'tana:text:' + ulid();
-    await backend.handlers.get('notify:set')({ sender: right.webContents }, watchedDoc, true).catch(() => {}); // the state read after the write needs a document this runtime lacks
+    await backend.handlers.get('notify:set')({ senderFrame: right.frame }, watchedDoc, true).catch(() => {}); // the state read after the write needs a document this runtime lacks
     assert.deepEqual(others().map(([name, channel, value]) => [name, channel === 'outline:changed' ? value : channel]), [['left', 'settings:changed'], ['left', watchedDoc], ['other', 'settings:changed'], ['other', watchedDoc]],
       'a watch choice tells the other pages, and has them read that document’s metadata again');
-    await backend.handlers.get('codex:link')({ sender: left.webContents }, watchedDoc, '00000000-0000-4000-8000-000000000000');
+    await backend.handlers.get('codex:link')({ senderFrame: left.frame }, watchedDoc, '00000000-0000-4000-8000-000000000000');
     assert.deepEqual(others().map(([name, channel]) => name + ' ' + channel), ['right settings:changed', 'right outline:changed', 'other settings:changed', 'other outline:changed'],
       'an agent mark tells the other pages too, with the node, since a relink moves only its task');
     // A watch choice another machine made reaches every page as that document's metadata change, as a local one does.
@@ -1070,42 +1070,41 @@ async function main() {
       'an agent task relinked on another machine has every page read that node again');
     for (const key of ['viewFilter:library', 'notify', 'codex', 'codexPrompt', 'codexTask']) settings.set(key, undefined);
     backend.S.windows.clear(); settings.setPref('theme', undefined); await settings.flush();
-    // Signed out, both halves of a split are the same login button: the left one fills the window, the right one hides.
-    const box = () => ({ setBounds(b) { this.bounds = b; }, setVisible(v) { this.visible = v; } }), split = { getContentBounds: () => ({ width: 1000, height: 600 }), panes: [box(), box()] };
-    const auth = { ...backend.S.status };
-    Object.assign(backend.S.status, { authChecking: false, authenticated: false }); backend.layout(split);
-    assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [1000, false], 'signed out: the login fills the window');
-    const [hidden] = split.panes.slice(1); split.panes = [hidden]; backend.layout(split); // the left half closed: the hidden right one is all there is
-    assert.deepEqual([hidden.bounds.width, hidden.visible], [1000, true], 'the page left alone is shown again, not a blank window');
-    split.panes = [box(), hidden];
-    Object.assign(backend.S.status, { authenticated: true }); backend.layout(split);
-    assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [500, true], 'signed in: the split comes back');
-    // ⌘K over both halves (issue #409): the page that asks is laid over the whole window, above the other half, and
-    // keeps being told where its own half is; the other half stays where it was. The asking page is the one covered.
-    const said = [], raised = [];
+    // A window is one shell (shell.html) laying its pages out with Trellis; a page is an iframe of it, registered by its
+    // frame when its preload asks window:getSide, on the side its url names. The shell reports its layout (order: the
+    // sides the pages had, left to right now); main gives each page its new side and saves the split. Commands go to the shell.
     const own = (v) => JSON.parse(JSON.stringify(v ?? null)); // main runs in its own vm context: its objects, compared as data
-    const view = (name) => ({ name, setBounds(b) { this.bounds = own(b); }, setVisible() {}, webContents: { isDestroyed: () => false, send: (channel, half) => said.push([name, channel, own(half)]) } });
-    const covering = { isDestroyed: () => false, getContentBounds: () => ({ width: 1000, height: 600 }), panes: [view('left'), view('right')], contentView: { addChildView: (v) => raised.push(v.name) } };
-    const alone = { isDestroyed: () => false, getContentBounds: () => ({ width: 800, height: 600 }), panes: [view('alone')], contentView: { addChildView: (v) => raised.push(v.name) } };
-    backend.S.windows.add(covering).add(alone);
-    const cover = (pane, on) => { const e = { sender: pane.webContents }; backend.handlers.get('window:cover')(e, on); return own(e.returnValue); };
-    const [leftHalf, rightHalf] = covering.panes, full = { x: 0, y: 0, width: 1000, height: 600 };
-    assert.deepEqual(cover(rightHalf, true), { x: 500, width: 500 }, 'the right half asks: main answers where its half is, at once');
-    assert.deepEqual([rightHalf.bounds, leftHalf.bounds], [full, { x: 0, y: 0, width: 500, height: 600 }], 'it covers the whole window; the left half stays where it is');
-    assert.deepEqual(raised, ['right'], 'above the other half');
-    said.length = 0; covering.getContentBounds = () => ({ width: 1200, height: 700 }); backend.layout(covering);
-    assert.deepEqual([said, rightHalf.bounds.width, leftHalf.bounds.width], [[['right', 'window:cover', { x: 600, width: 600 }]], 1200, 600], 'a resize while covered: still the whole window, and told its half again');
-    assert.equal(cover(leftHalf, false), null, 'the half that does not cover letting go changes nothing');
-    assert.equal(rightHalf.bounds.width, 1200);
-    said.length = 0; cover(rightHalf, false);
-    assert.deepEqual([rightHalf.bounds, said], [{ x: 600, y: 0, width: 600, height: 700 }, []], 'closed: back to its half, told nothing more');
-    covering.overlay = { name: 'overlay', setBounds() {} }; raised.length = 0;
-    assert.deepEqual(cover(leftHalf, true), { x: 0, width: 600 }, 'the left half asks: its own half');
-    assert.deepEqual([raised, rightHalf.bounds.x], [['left', 'overlay'], 600], 'a Help tour or Create task open meanwhile stays on top, and the right half stays put');
-    cover(leftHalf, false); raised.length = 0;
-    assert.equal(cover(alone.panes[0], true), null, 'a page alone in its window: nothing to cover');
-    assert.deepEqual([alone.panes[0].bounds, raised.length], [undefined, 0], 'and nothing moved');
-    backend.S.windows.delete(covering); backend.S.windows.delete(alone);
+    const toShell = [], told = [];
+    const shellWc = { isDestroyed: () => false, focus() {}, send: (channel, cmd, arg) => toShell.push([cmd, own(arg)]) };
+    const shown = { isDestroyed: () => false, shell: { webContents: shellWc }, panes: [], split: true, shown: true, saveSoon() {} };
+    backend.S.windows.add(shown);
+    const frame = (name, side) => ({ processId: 1, frameToken: name, url: 'file:///orbital/index.html?side=' + side, parent: {}, detached: false, isDestroyed: () => false, send: (channel, ...args) => told.push([name, channel, ...own(args)]) });
+    const ask = (channel, f, ...args) => { const e = { sender: shellWc, senderFrame: f }; backend.handlers.get(channel)(e, ...args); return own(e.returnValue); };
+    const leftPage = frame('left', ''), rightPage = frame('right', '2');
+    assert.deepEqual(ask('window:getSide', rightPage), { side: '2', split: true }, 'a restored right half that loads first knows it is one');
+    assert.deepEqual(ask('window:getSide', leftPage), { side: '', split: true });
+    assert.deepEqual(shown.panes.map((p) => p.frame.frameToken), ['left', 'right'], 'kept left to right');
+    assert.deepEqual(ask('window:getSide', { ...leftPage, parent: null }), { side: '', split: false }, 'a main frame (the shell, an overlay) is no page');
+    assert.equal(shown.panes.length, 2);
+    ask('window:swapPanes', leftPage);
+    assert.deepEqual(toShell.splice(0), [['swap', null]], 'a swap is the shell\u2019s to do');
+    ask('shell:layout', null, { split: true, splitAt: 0.3, order: ['2', ''] });
+    assert.deepEqual(shown.panes.map((p) => [p.frame.frameToken, p.side]), [['right', ''], ['left', '2']], 'its report gives each page the other\u2019s side');
+    assert.deepEqual(told.splice(0), [['right', 'window:side', '', true], ['left', 'window:side', '2', true]], 'and each page is told');
+    assert.equal(shown.splitAt, 0.3, 'the divider is saved with the window');
+    ask('window:closePane', leftPage);
+    assert.deepEqual(toShell.splice(0), [['close', '2'], ['focus', '']], 'the X closes that half in the shell, and the half left takes the keys');
+    ask('shell:layout', null, { split: false, splitAt: 0.3, order: [''] });
+    assert.deepEqual([shown.panes.map((p) => p.frame.frameToken), shown.split], [['right'], false], 'the closed page is forgotten, and the window saves one page');
+    ask('window:split', rightPage);
+    assert.deepEqual(toShell.splice(0), [['split', { on: true, focus: '2' }]], '\u2325\u2318N: a page beside it, taking the keys');
+    // Signed out, every page is the same login button: the shell shows one, and the saved split waits for the login.
+    const auth = { ...backend.S.status };
+    Object.assign(backend.S.status, { authChecking: false, authenticated: false });
+    assert.equal(ask('shell:state', null).split, false, 'signed out: the shell starts with the login alone');
+    ask('shell:layout', null, { split: false, order: [''] });
+    assert.equal(shown.split, true, 'and the split stays saved for after the login');
+    backend.S.windows.delete(shown);
     Object.assign(backend.S.status, auth);
     // A node's link opens it in Tana on the route Tana itself picks for its kind (issue #88).
     backend.testRuntime({ me: { orgDocUri: 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0' } });
@@ -1185,10 +1184,10 @@ async function main() {
     const settings = backend.settings; settings.reset();
     const claim = backend.handlers.get('help:claim');
     const pageOf = (overlay = null) => {
-      const wc = { destroyed: false, isDestroyed() { return this.destroyed; } };
-      const win = { panes: [{ webContents: wc, setVisible() {}, setBounds() {} }], overlay, isDestroyed: () => false, getContentBounds: () => ({ width: 800, height: 600 }), contentView: { addChildView() {}, removeChildView() {} } };
+      const wc = { destroyed: false, frame: {}, isDestroyed() { return this.destroyed; }, focus() {}, send() {} }; // a page handle (main.js addPage)
+      const win = wc.win = { panes: [wc], overlay, isDestroyed: () => false, getContentBounds: () => ({ width: 800, height: 600 }), contentView: { addChildView() {}, removeChildView() {} } };
       backend.S.windows.add(win);
-      return { wc, win, ask: () => claim({ sender: wc }, 'light') };
+      return { wc, win, ask: () => claim({ senderFrame: wc.frame }, 'light') };
     };
     const early = pageOf();
     assert.equal(await early.ask(), false, 'no settings document read this session (signed out, or the read failed): no tour');
@@ -1216,8 +1215,8 @@ async function main() {
     const covered = pageOf(task);
     assert.equal(await covered.ask(), false, 'a window with Create task open cannot show it yet');
     assert.equal(settings.prefs().helpSeen, undefined, 'so nothing is marked');
-    const survivor = { isDestroyed: () => false, focus() {}, send() {} };
-    covered.win.panes = [{ webContents: survivor, setVisible() {}, setBounds() {} }]; // the half that asked closed under Create task (⌘W): the other is the main half now
+    const survivor = { isDestroyed: () => false, focus() {}, send() {}, win: covered.win };
+    covered.win.panes = [survivor]; // the half that asked closed under Create task (⌘W): the other is the main half now
     const heard = [];
     right.send = (channel, result) => { told.push(channel); heard.push(result); };
     await backend.handlers.get('overlay:close')({ sender: task.webContents }, { palette: true, note: 'Task created' }); // made a task, closed with ⌘K
@@ -1837,7 +1836,8 @@ async function main() {
     assert.equal(subscribes.includes(kept[0].id), true, 'a newer read that failed leaves an older answered read to keep its head live');
     // One search open in two windows: each keeps the head its own newest read answered, whichever window asked last
     const inA = [{ id: 'tana:text:' + ulid(), title: 'A' }], inB = [{ id: 'tana:text:' + ulid(), title: 'B' }];
-    const readA = backend.handlers.get('outline:children')({ sender: { id: 101 } }, searchId), readB = backend.handlers.get('outline:children')({ sender: { id: 102 } }, searchId);
+    const reader = (id) => { const page = { id, frame: {}, isDestroyed: () => false, send() {} }; backend.S.windows.add({ isDestroyed: () => false, panes: [page] }); return { senderFrame: page.frame }; }; // a page handle per window (main.js addPage)
+    const readA = backend.handlers.get('outline:children')(reader(101), searchId), readB = backend.handlers.get('outline:children')(reader(102), searchId);
     while (answers.length < 6) await new Promise(setImmediate);
     answers[5]({ nodes: inB }); await readB; answers[4]({ nodes: inA }); await readA;
     await new Promise(setImmediate);
@@ -1864,12 +1864,13 @@ async function main() {
     assert.equal(subscribes.includes(beforeWindow[0].id), false, 'nor does a read from before a Save that changed only the completed window');
     // A page that closes with a read still out: the read's answer recreates no head for it
     const closing = [{ id: 'tana:text:' + ulid(), title: 'Closed pane' }];
-    const lateRead = backend.handlers.get('outline:children')({ sender: { id: 301 } }, searchId);
+    const lateRead = backend.handlers.get('outline:children')(reader(301), searchId);
     while (answers.length < 11) await new Promise(setImmediate);
-    backend.dropSearchHeads(301); // main.js removePane
+    backend.dropSearchHeads(301); // main.js dropPage
     answers[10]({ nodes: closing }); await lateRead;
     await new Promise(setImmediate);
     assert.equal(subscribes.includes(closing[0].id), false, 'a read answering after its page closed keeps no head');
+    backend.S.windows.clear();
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all
@@ -3669,17 +3670,17 @@ async function main() {
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
       sync: { subscribe: async () => doc, getDocument: () => doc }, graph: { listNodes: async () => ({ nodes: [] }), getOwnerChain: async () => ({ entries: [] }) },
     } });
-    const heard = [], pane = (name) => ({ webContents: { send: (channel, docId, info) => { if (channel === 'outline:changed' && docId === id) heard.push([name, info && info.own === true]); } } });
+    const heard = [], pane = (name) => ({ frame: {}, isDestroyed: () => false, send: (channel, docId, info) => { if (channel === 'outline:changed' && docId === id) heard.push([name, info && info.own === true]); } });
     const left = pane('left'), right = pane('right');
     backend.S.windows.add({ isDestroyed: () => false, panes: [left, right] });
     const setTitle = backend.handlers.get('doc:setTitle');
-    await setTitle({ sender: left.webContents }, id, 'Typed on the left', true);
+    await setTitle({ senderFrame: left.frame }, id, 'Typed on the left', true);
     assert.deepEqual(heard, [['left', true], ['right', false]], 'the page that typed it hears its own echo; the other half is told as before');
     heard.length = 0;
-    await setTitle({ sender: left.webContents }, id, 'From Cmd+K');
+    await setTitle({ senderFrame: left.frame }, id, 'From Cmd+K');
     assert.deepEqual(heard, [['left', false], ['right', false]], 'a write not marked as typed is nobody\'s own');
     heard.length = 0;
-    await assert.rejects(backend.handlers.get('block:setText')({ sender: right.webContents }, id, 'no-such-row', 'x', true));
+    await assert.rejects(backend.handlers.get('block:setText')({ senderFrame: right.frame }, id, 'no-such-row', 'x', true));
     assert.equal(backend.S.writer, null, 'a write that fails leaves no writer behind');
     doc.transact((l) => l.getMap('data').set('title', 'Edited elsewhere'));
     assert.deepEqual(heard, [['left', false], ['right', false]], 'so the next change, from anywhere, is nobody\'s own either');

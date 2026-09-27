@@ -5,7 +5,7 @@ const content = require('../sdk/content');
 const chat = require('../sdk/chat');
 const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES, setTitle, setState, taskMeta, audienceMetadata, setAssignees } = require('../sdk/node');
 const fields = require('../sdk/fields');
-const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
+const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pageOf, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
 
@@ -965,7 +965,7 @@ async function moveTarget(spaceId) {
 // makes reaches that page marked as its own (main/documents.js onChange, sendChanged), so the page is not read again
 // and rebuilt under the caret on every save (#265). The write and its announcement are one synchronous call
 // (transact → change → onChange), so nothing else can run in between.
-const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = e.sender; try { return fn(); } finally { S.writer = null; } };
+const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = pageOf(e); try { return fn(); } finally { S.writer = null; } };
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/<route>/<encoded node uri>. The route is Tana's
 // per kind (its link resolver beside JP.type.url, shared bundle of 2026-09-23): a type, a person, a meeting and a space
 // have pages of their own, and /l/ — every other document — shows a type as raw JSON (issue #88).
@@ -1017,7 +1017,7 @@ const ipc = {
   // Watching a node for changes: on by default where you were given access to the document itself and are not its
   // assignee. null clears the choice and falls back to that rule, so "default" stays a live answer rather than a copy.
   'notify:state': (_e, id) => notifyState(id),
-  'notify:set': (e, id, on) => { const state = setNotify(id, on); settings.tellOthers(e?.sender, id); return state; }, // the choice is stored before setNotify's first await
+  'notify:set': (e, id, on) => { const state = setNotify(id, on); settings.tellOthers(pageOf(e), id); return state; }, // the choice is stored before setNotify's first await
   // Assigned to the local Codex agent: an app-local mark, not a Tana assignee (see main/documents.js).
   'codex:list': () => codexIds(),
   'doc:accessOptions': (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())),

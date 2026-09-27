@@ -8825,34 +8825,38 @@ async function runHelpOnceCheck() {
   assert.deepEqual(plain(await pane(quiet, '', false).go()), { opened: 0, seen: false }, 'signed out or not yet connected: no tour, over the login');
   assert.equal(quiet.asked(), 0, 'and no claim, which main could only answer from this machine\u2019s own copy');
   assert.doesNotMatch(source, /tana\.onOverlayClosed\(\(result\) => \{[^\n]*helpOnce\(\)/, 'a first start that found Create task open is main\u2019s to finish (closeOverlay), not the half that hears the close');
-  assert.match(source, /tana\.onSide\(\(side, split\) => \{[^\n]*if \(!SIDE\) helpOnce\(\); \}\);/, 'a page that becomes the main half asks, in case the half that asked closed on the way');
+  assert.match(source, /tana\.onSide\(\(side\) => \{[^\n]*if \(!SIDE\) helpOnce\(\); \}\);/, 'a page that becomes the main half asks, in case the half that asked closed on the way');
   assert.doesNotMatch(source, /then\(restorePlace\)\.then\(helpOnce\)/, 'boot no longer opens it before there is a connection, over the login');
   assert.match(source, /restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); helpOnce\(\); \}\)/, 'it opens once connected, over the page the launch came back to');
   console.log('ok  Help tour first start: after login, once across windows, and not again on a machine that has not read your settings yet');
 }
 checks.push(runHelpOnceCheck);
-// The palette over both halves of a split (issue #409): opening a centred page asks main to lay this page over the
-// window, once; the page moves itself into its half only once it is wider than that half, so no frame is drawn out of
-// place; the @ and / menus stay in the half; closing lets go once the scrim has faded, unless it opens again first.
+// The palette over both halves of a split (issue #409): opening a centred page asks the shell to lay this page's iframe
+// over the window, once; the page moves itself into its half only once it is wider than that half, so no frame is
+// drawn out of place; the @ and / menus stay in the half; closing lets go once the scrim has faded, unless it opens
+// again first. The half is the box Trellis gives the iframe (its parent), in the shell's pixels.
 function runCoverCheck() {
-  const pane = (answer, zoom = 1) => vm.runInNewContext(`
+  const pane = (half, framed = true) => vm.runInNewContext(`
     const asked = [], timers = [], classes = new Set(), vars = {};
-    let innerWidth = answer ? answer.width / ${zoom} : 1000, zoomFactor = ${zoom};
+    let box = { ...half }, innerWidth = half.width;
     const MOTION = { quick: 160 }, setTimeout = (fn) => { timers.push(fn); return timers.length; }, clearTimeout = (id) => { if (id) timers[id - 1] = null; };
     const document = { documentElement: { classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) }, style: { setProperty: (k, v) => { vars[k] = v; } } } };
     const anchored = new Set(), palette = { classList: { contains: (c) => anchored.has(c) } };
-    const tana = { coverWindow: (on) => { asked.push(on); return on ? answer : null; } };
+    const frameElement = { parentElement: { getBoundingClientRect: () => half }, getBoundingClientRect: () => box };
+    const window = { frameElement: framed ? frameElement : null, parent: { postMessage: (m) => asked.push(m.orbital === 'cover' && m.on) } };
     ${functionSource('placeCover')}
-    ${sourceLine('let coverHalf = null')}
+    ${sourceLine('let covering = false')}
+    ${sourceLine('const tellCover = ')}
     ${functionSource('coverWindow')}
     ({ coverWindow, placeCover, asked, vars, anchored, covered: () => classes.has('cover'),
-       resize: (w) => { innerWidth = w; placeCover(); }, fade: () => { const due = timers.splice(0).filter(Boolean); due.forEach((fn) => fn()); return due.length; } });
-  `, { answer });
-  const right = pane({ x: 600, width: 400 });
+       shell: (next, w) => { box = next; innerWidth = w; placeCover(); }, fade: () => { const due = timers.splice(0).filter(Boolean); due.forEach((fn) => fn()); return due.length; } });
+  `, { half, framed });
+  const whole = { left: 0, width: 1000 };
+  const right = pane({ left: 600, width: 400 });
   right.coverWindow('cmd');
-  assert.deepEqual([...right.asked], [true], '⌘K in the right half asks main to cover the window');
+  assert.deepEqual([...right.asked], [true], '⌘K in the right half asks the shell to cover the window');
   assert.equal(right.covered(), false, 'and draws nothing differently until the page really is the whole window');
-  right.resize(1000);
+  right.shell(whole, 1000);
   assert.deepEqual([right.covered(), right.vars['--pane-x'], right.vars['--pane-w']], [true, '600px', '400px'], 'then it draws itself in its own half');
   right.coverWindow('search');
   assert.deepEqual([...right.asked], [true], 'another page of the same palette asks nothing more');
@@ -8861,19 +8865,23 @@ function runCoverCheck() {
   right.coverWindow('cmd');
   assert.equal(right.fade(), 0, 'opened again before that: nothing lets go');
   right.coverWindow(null); right.fade();
-  assert.deepEqual([...right.asked, right.covered()], [true, false, true], 'faded: it lets go, and stays drawn in its half until main has made it that again');
-  right.resize(400);
+  assert.deepEqual([...right.asked, right.covered()], [true, false, true], 'faded: it lets go, and stays drawn in its half until the shell has made it that again');
+  right.shell({ left: 600, width: 400 }, 400);
   assert.equal(right.covered(), false, 'back to its half: drawn as a page again');
   right.anchored.add('anchored'); right.coverWindow('search'); right.anchored.clear(); right.coverWindow('slash');
   assert.equal(right.asked.length, 2, 'the @ link search and the / menu stay in the half they belong to');
-  const alone = pane(null);
-  alone.coverWindow('cmd'); alone.resize(1000); alone.coverWindow(null);
-  assert.deepEqual([[...alone.asked], alone.covered(), alone.fade()], [[true], false, 0], 'a page alone in its window: main says there is nothing to cover, and nothing changes');
-  const zoomed = pane({ x: 500, width: 500 }, 1.25);
-  zoomed.coverWindow('cmd'); zoomed.resize(800);
-  assert.deepEqual([zoomed.covered(), zoomed.vars['--pane-x'], zoomed.vars['--pane-w']], [true, '400px', '400px'], 'a larger text size: the half in the page\u2019s own pixels');
+  const alone = pane(whole);
+  alone.coverWindow('cmd'); alone.shell(whole, 1000); alone.coverWindow(null); alone.fade();
+  assert.deepEqual([[...alone.asked], alone.covered()], [[true, false], false], 'a page alone in its window: asked and let go (the shell drops its drag strip under the scrim), drawn as it was');
+  const zoomed = pane({ left: 500, width: 500 });
+  zoomed.coverWindow('cmd'); zoomed.shell(whole, 800);
+  assert.deepEqual([zoomed.covered(), zoomed.vars['--pane-x'], zoomed.vars['--pane-w']], [true, '400px', '400px'], 'a page zoomed apart from the shell: the half in the page\u2019s own pixels');
+  const mock = pane(whole, false);
+  mock.coverWindow('cmd');
+  assert.deepEqual([...mock.asked], [], 'outside the shell (the mock) there is nothing to ask');
   assert.match(source, /function showPage\([^]*?coverWindow\(mode\);\n\}/, 'every page of the palette decides it: showPage');
   assert.match(source, /function closePalette\(\) \{[^}]*coverWindow\(null\);/, 'and every close lets go');
+  assert.match(source, /function leavePage\(\) \{[^}]*if \(covering\) \{ covering = false; tellCover\(false\); \}/, 'a page going away gives the window back at once');
   console.log('ok  palette over both halves: asked once, drawn in its half only at the whole window\u2019s size, let go after the fade; @ and / stay in the half');
 }
 checks.push(runCoverCheck);

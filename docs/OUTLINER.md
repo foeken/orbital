@@ -851,28 +851,34 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   page used last (`S.pane`): a notification click opens its node there. Closing the last window keeps the app in the
   Dock (issue #246): ⌘Q quits, the Dock icon opens a window when none is open, and a notification click opens one.
 - **Split view** (issue #159). **Toggle split panes** (⌥⌘N) puts a second page beside yours in the same window, or goes
-  back to one. An outliner window is a `BaseWindow` with one `WebContentsView` per page (main.js `addPane`/
-  `removePane`), and main keys a page by its webContents id, so a half is to main what another window is: each half
-  has its own view, page, history, filter and sidebar. The new half opens on the view and place of the one that asked
-  and takes the keyboard. **Go to the other half** (⌘\\) moves the keyboard. **Swap panes** (Cmd+K, or a click on the pill
-  on the line) trades sides; each half takes the other's side marker (`window:side`) and stores its view and place
-  under its side's keys (`view:2`, `place:2`; renderer/state.js `SIDE`), so a restart or Reload keeps them. ⌘W closes the
-  half you are in, or the window when there is one; the right half's header ends with an X that closes it
-  (`window:closePane`). The halves share the width evenly with a hairline between them (`.splitgrip`, drawn by the
-  right half); a 5px grip on each inner edge drags the line (`splitGrip`, `window:splitDrag`: main reads the cursor
-  from the screen, keeps each half at least 320px and saves `splitAt` with the window), a double click evens it out,
-  and over either grip both halves draw their half of the swap pill (`window:splitHover`). A restart brings the split
-  back, each half on its own view and place; a half with nothing stored opens the Work View.
-- **The palette over both halves** (issue #409). The palette is the opener's own page: while it is open, main lays that
-  page over the whole window, above the other half (main.js `coverWindow`, `window:cover`, synchronous so the first
-  frame knows the half), and tells it its half, `{ x, width }`, again on every layout (a resize) until it lets go.
-  The page keeps drawing itself in its half (styles.css `html.cover`: the body offset and sized to the half, the split
-  line and the toast at the half's edges) and is see-through beside it (panes have a transparent background), so the
-  other half shows under the scrim and keeps drawing live updates. The class follows the page's own width, on once it
-  is wider than its half and off once it is back, so no frame shows the page out of place while main resizes it. A
-  click on the scrim over the other half is a click on the opener's scrim and closes the palette; the page lets go
-  once the scrim has faded (`MOTION.quick`). A page alone in its window is answered null and nothing changes. A Help
-  tour or Create task stays above it.
+  back to one. An outliner window is a `BaseWindow` with one view, shell.html, holding a Trellis workspace
+  (`@danfessler/trellis`, shell.js); each page is an iframe of index.html in a Trellis panel, and main keys a page by
+  its frame, so a half is to main what another window is: each half has its own view, page, history, filter and
+  sidebar. The new half opens on the view and place of the one that asked and takes the keyboard. **Go to the other
+  half** (⌘\\) moves the keyboard. **Swap panes** (Cmd+K) trades sides; each half takes the other's side marker
+  (`window:side`, and its own URL's `?side=` for a Reload) and stores its view and place under its side's keys
+  (`view:2`, `place:2`; renderer/state.js `SIDE`), so a restart or Reload keeps them. ⌘W closes the half you are in,
+  or the window when there is one; the right half's header ends with an X that closes it (`window:closePane`).
+  Main decides and sends the shell a command (`shell:command`: split, close, swap, focus, theme); the shell reports
+  what the layout became (`shell:layout`: split, `splitAt`, the old sides left to right), which main saves with the
+  window. Before it removes a half's iframe the shell asks the page to flush (renderer/app.js `leavePage`, also run on
+  pagehide): the pending edit is sent and its presence room left. The panels have no tab bar, no gap and no rounding,
+  so a page alone looks as it always did; the hairline between the halves is Trellis's divider, which drags the line
+  (its 8px seam, or the arrow keys once focused) and evens it out on a double click. Every Trellis key is off: the keys
+  are the outliner's. The window drags from a 40px strip the shell lays over the pages' empty top band, clear of the
+  traffic lights (`-webkit-app-region` does nothing inside an iframe). A restart brings the split back, each half on
+  its own view and place; a half with nothing stored opens the Work View.
+- **The palette over both halves** (issue #409). The palette is the opener's own page: while it is open the shell lays
+  that page's iframe over the whole window, above the other half (renderer/palette.js `coverWindow` posts
+  `{ orbital: 'cover', on }` to the shell, shell.js `cover` lifts its surface and sizes the iframe to the workspace, again
+  on every resize). The page keeps drawing itself in its half (styles.css `html.cover`: the body offset and sized to
+  the half, the toast at the half's centre), read from the box Trellis gives its iframe, which stays put while the
+  iframe reaches past it. It is see-through beside it, so the other half shows under the scrim and keeps drawing live
+  updates. The class follows the page's own width, on once it is wider than its half and off once it is back, so no
+  frame shows the page out of place while the shell resizes it. A click on the scrim over the other half is a click on
+  the opener's scrim and closes the palette; the page lets go once the scrim has faded (`MOTION.quick`), or at once when
+  it goes away. A page alone asks too, which only takes the drag strip away so the scrim gets its clicks. A Help tour
+  or Create task stays above it.
 
 ### Overlays
 

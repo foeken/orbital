@@ -118,10 +118,10 @@ palette. Nothing else moves focus back by hand.
 
 In a split window each half is its own page, so anything `position: fixed` covers only that half. A centred, modal
 popover that should cover the window while acting on its half (the palette and the key recorder over it) calls
-`coverWindow(mode)` as it opens and `coverWindow(null)` as it closes: main lays the page over the whole window and
-the page keeps drawing itself in its half (`html.cover`), see-through beside it. `showPage` and `closePalette` already
+`coverWindow(mode)` as it opens and `coverWindow(null)` as it closes: the shell (shell.js) lays the page's iframe over
+the whole window and the page keeps drawing itself in its half (`html.cover`), see-through beside it. `showPage` and `closePalette` already
 do this, so a palette page needs nothing. A new element fixed to an edge of the window gets an `html.cover` rule in
-styles.css that puts it at the half's edge (`--pane-x`, `--pane-w`), as the split line and the toast have; one placed
+styles.css that puts it at the half's edge (`--pane-x`, `--pane-w`), as the toast has; one placed
 from an element's rect is right already. A popover that belongs to a spot in the half (a pill menu, the toolbar, the
 @ and / menus) stays in the half and never covers. A page of its own over the window (Help, Create task) is an
 overlay instead (main.js `openOverlay`).
@@ -203,7 +203,7 @@ them needs no dark twin. Motion and layers are one value for both themes, and `-
 | `--shadow-card` | | a dialog's card (⌘K, the recorder, Help) |
 | `--focus` | `#b5d0ee` / `#58768a` | every keyboard focus ring: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. Two exceptions, on purpose: the green save pills ring green, and the agent badge rings a stronger `#4f8ad9` on its coloured tag |
 | `--muted` | `#666` / `#a0a5a8` | secondary words: facts, hints, headings, placeholders, done rows. It meets WCAG AA on the page, on menus and on grey pills. Icons keep their lighter greys, and disabled rows too |
-| `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Below them, page chrome uses small numbers: 5 for the pill row (so its menus hang over the rows) and the split grip, and 1 to 3 to order siblings inside a component. A new overlay takes a token, and new page chrome stays under 9 |
+| `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Below them, page chrome uses small numbers: 5 for the pill row (so its menus hang over the rows), and 1 to 3 to order siblings inside a component. A new overlay takes a token, and new page chrome stays under 9 |
 | `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*`, `--loader-wait` (300ms before the loader shows) | | every transition and animation of a new component. Some keep clocks of their own on purpose, for example a caret's `blink` (1s) and the Help tour's choreography (`--hv-loop` 6s, the moon's 7s). Reduced motion sets the finite ones (`--dur-quick` to `--dur-flash`, `--stagger`, `--loader-wait`) to 0, so a move built on them needs no guard. `--dur-loop` is not zeroed: an endless loop always goes behind `@media (prefers-reduced-motion: no-preference)` |
 | `--hue` | set per element by the renderer | one hue for one element: a type's colour, or a person's in presence. Always used as `oklch(L C var(--hue))`, and each component picks its own L and C per theme (a glyph goes 0.7 → 0.8 in dark, a chip's background 0.95 → 0.33). A new hued element copies the L and C of the component it resembles |
 | `--flash-in` / `--flash-out` / `--flash-here` | | the tint of a row arriving, leaving or found again (`flash()`) |
@@ -306,4 +306,3 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   with the reason as its hint, not hidden.
 - **Read-only is visible.** A row with `editable === false` never gets an editor. It takes focus with a ring, and main
   refuses the write as well.
-

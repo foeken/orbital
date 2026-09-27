@@ -6,7 +6,7 @@ const { createTanaClient } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
-const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { codexIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
@@ -495,7 +495,8 @@ const ipc = {
     preset(id); // validate before changing which view the refresh loop owns
     S.activeView = id;
     S.activeFilter = filter;
-    if (e && e.sender && S.windows.size) S.windowViews.set(e.sender.id, { id, filter }); // this window's view (the checks call with no event)
+    const page = pageOf(e);
+    if (page) S.windowViews.set(page.id, { id, filter }); // this page's view (the checks call with no event)
     await S.refreshing;
     return viewRows(id, filter);
   },
@@ -504,7 +505,7 @@ const ipc = {
     const stored = setViewFilter(id, filter);
     if (id === S.activeView) S.activeFilter = stored;
     for (const v of S.windowViews.values()) if (v.id === id) v.filter = stored; // every window showing it
-    settings.tellOthers(e?.sender); // and every other page's copy: one left with the old filter wrote it back with its next pill
+    settings.tellOthers(pageOf(e)); // and every other page's copy: one left with the old filter wrote it back with its next pill
     return stored;
   },
   'search': (_e, query, scope) => search(query, scope),

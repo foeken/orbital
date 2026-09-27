@@ -1006,28 +1006,32 @@ function closePalette() {
   if (field && !focused()) focusField(field); // a field that holds choices is no row: returnFocus cannot find it
 }
 // ---- over both halves of a split (issue #409) ----
-// The palette's scrim and card cover the whole window, not only this half: while it is open main lays this page over
-// the window, above the other half (main.js coverWindow), and answers with this half's place, { x, width } in window
-// pixels. The page goes on drawing itself there (styles.css html.cover) and is see-through beside it, so the other
-// half shows under the scrim, live. The rows, the node acted on, the keys and the focus stay this page's: nothing of
-// the palette moves. The class follows the page's own size — on once the page is wider than its half, off once it is
-// back — so no frame is drawn with the page out of place while main resizes it. It lets go once the scrim has faded.
-let coverHalf = null, coverTimer = null;
+// The palette's scrim and card cover the whole window, not only this half: while it is open the shell lays this
+// page's iframe over the window, above the other half (shell.js cover). The page goes on drawing itself in its half
+// (styles.css html.cover) and is see-through beside it, so the other half shows under the scrim, live. The rows, the
+// node acted on, the keys and the focus stay this page's: nothing of the palette moves. The half is the box Trellis
+// gives the iframe, which stays put while the iframe reaches past it, read in the shell's pixels and scaled to the
+// page's (k, which is 1 unless the two zoom apart). The class follows the page's own size — on once the page is wider
+// than its half, off once it is back — so no frame is drawn out of place while the shell resizes it; any resize
+// places it again. It lets go once the scrim has faded. A page alone is covered too, which changes nothing but the
+// shell's drag strip, gone so the scrim takes its clicks. Outside the shell (the mock) there is no frame and no cover.
+let covering = false, coverTimer = null;
+const tellCover = (on) => { if (window.frameElement) window.parent.postMessage({ orbital: 'cover', on }, '*'); };
 function placeCover() {
-  const root = document.documentElement, z = zoomFactor || 1; // main counts window pixels, the page CSS pixels (text size)
-  const on = !!coverHalf && innerWidth > coverHalf.width / z + 1;
+  const root = document.documentElement, frame = window.frameElement;
+  const half = covering && frame ? frame.parentElement.getBoundingClientRect() : null, box = half && frame.getBoundingClientRect(), k = box ? innerWidth / box.width : 1;
+  const on = !!half && innerWidth > half.width * k + 1;
   root.classList.toggle('cover', on);
-  if (on) { root.style.setProperty('--pane-x', coverHalf.x / z + 'px'); root.style.setProperty('--pane-w', coverHalf.width / z + 'px'); }
+  if (on) { root.style.setProperty('--pane-x', (half.left - box.left) * k + 'px'); root.style.setProperty('--pane-w', half.width * k + 'px'); }
 }
 function coverWindow(mode) { // the page shown, or null once the palette has closed
   const on = !!mode && mode !== 'slash' && !palette.classList.contains('anchored'); // the @ and / menus belong to their spot in this half
   clearTimeout(coverTimer); coverTimer = null;
-  if (!tana.coverWindow || on === !!coverHalf) return;
-  if (on) { coverHalf = tana.coverWindow(true); placeCover(); } // null alone in the window: nothing to cover
-  else coverTimer = setTimeout(() => { coverHalf = null; tana.coverWindow(false); }, MOTION.quick);
+  if (!window.frameElement || on === covering) return;
+  if (on) { covering = true; tellCover(true); placeCover(); }
+  else coverTimer = setTimeout(() => { covering = false; tellCover(false); }, MOTION.quick);
 }
 addEventListener('resize', placeCover);
-if (tana.onCover) tana.onCover((half) => { if (coverHalf) { coverHalf = half; placeCover(); } });
 // back to the node that had the caret when the palette opened (the @ link path places its own caret); with nothing to
 // return to (a row selection, the sidebar) the hidden input must not keep the keys, so it lets go of the focus
 // Where the focus goes back to when the palette closes: the caret's row, or the sidebar row the palette was opened from

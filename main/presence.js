@@ -5,7 +5,7 @@
 // other tabs and devices are, marked as you, which is also how presence can be tried alone: open the node in Tana.
 const { openPresence, userHashOf, HEARTBEAT_MS } = require('../sdk/presence');
 const { cursorAt, cursorOffset, charOffset, blockOffset } = require('../sdk/content');
-const { S, send, report } = require('./state');
+const { S, pageKey, send, report } = require('./state');
 
 const rooms = new Map(); // docId -> { count, client, handle: Promise<handle>, sent }
 const myName = () => { const u = (S.me && S.me.user) || {}; return [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || 'Orbital'; };
@@ -63,7 +63,7 @@ function close(docId, all = false) {
 }
 // The page on screen gets Tana's viewing heartbeat, and only that one.
 // ponytail: it runs while the page is open, not only while the window is visible and you are active (Tana's rule)
-// by: the page asking (its webContents id). A page's null ends only a heartbeat it started, so a split half or another
+// by: the page asking (its page id, main/state.js pageKey). A page's null ends only a heartbeat it started, so a split half or another
 // window closing leaves the one on screen beating. When a page does end it, every page is asked to say again what it
 // views ('presence:ask', renderer/presence.js): the one still on screen and in use takes the heartbeat back.
 let viewed = null, beat = null, viewer = null;
@@ -102,7 +102,7 @@ const ipc = {
   // the renderer opens a room per document on screen, names the one being viewed, and says where its caret is
   'presence:open': (_e, id) => open(id),
   'presence:close': (_e, id) => close(id),
-  'presence:view': (e, id) => view(id, e.sender.id), // per page: one half going away cannot end the other's heartbeat
+  'presence:view': (e, id) => view(id, pageKey(e)), // per page: one half going away cannot end the other's heartbeat
   'presence:set': (_e, id, at) => set(id, at && typeof at.blockId === 'string' ? { blockId: at.blockId, anchor: Number(at.anchor) || 0, focus: Number(at.focus) || 0 } : null),
 };
 

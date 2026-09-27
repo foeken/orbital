@@ -1,0 +1,20 @@
+/* The window's shell (shell.html, shell.js): the pages fill it edge to edge with a hairline between them, as one
+   page did before Trellis; its own tokens are set from shell.js because they follow the page's theme. */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
+[data-theme="dark"] { color-scheme: dark; } /* as the page's own (styles.css): an iframe whose color-scheme differs is drawn opaque, and a covering page must be see-through */
+[data-theme="dark"] body { background: #1b1d1e; }
+#workspace { position: fixed; inset: 0; }
+/* The hairline between the pages is Trellis's divider (8px wide, on the seam), drawn 1px in the line's colour; hovered
+   or dragged, the same 1px turns the darker grey the old grip did (the accent, shell.js tokens). */
+.trellis [data-trellis-part="divider"][data-axis="x"]::before { content: ''; position: absolute; top: 0; bottom: 0; left: calc(50% - 0.5px); width: 1px; background: var(--trellis-border); }
+.trellis [data-trellis-part="divider"][data-axis="x"]::after { left: calc(50% - 0.5px); width: 1px; border-radius: 0; }
+/* The window drags from the page's empty top band: the crumbs start 48px down (styles.css .titlebar) and
+   -webkit-app-region does not work inside an iframe. Clear of the traffic lights, and gone while a page covers the
+   window, so a click on the palette's scrim reaches the page. */
+.drag { position: fixed; top: 0; left: 80px; right: 0; height: 40px; z-index: 1; -webkit-app-region: drag; }
+body.covered .drag { display: none; }
+/* The page the palette covers the window from (renderer/palette.js coverWindow): its surface is lifted over the
+   other one and lets its iframe reach past it; shell.js sizes the iframe to the workspace. */
+.trellis [data-trellis-part="surface"][data-covering] { z-index: 1000 !important; overflow: visible !important; clip-path: none !important; background: transparent !important; }
+.trellis [data-covering] [data-trellis-part="content"] { overflow: visible !important; }
+.trellis [data-covering] iframe { position: absolute; }

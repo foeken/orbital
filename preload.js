@@ -1,9 +1,25 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// The shell (shell.html): the window's own page, which lays the outliner pages out with Trellis (main.js). It gets only
+// what that takes; each outliner page is an iframe of it (nodeIntegrationInSubFrames) and gets window.api below.
+if (window.top === window && location.pathname.endsWith('/shell.html')) {
+  contextBridge.exposeInMainWorld('shell', {
+    state: () => ipcRenderer.sendSync('shell:state'), // { split, splitAt, theme } at its start
+    onCommand: (cb) => ipcRenderer.on('shell:command', (_e, cmd, arg) => cb(cmd, arg)), // 'split' | 'close' | 'swap' | 'focus' | 'theme'
+    layout: (layout) => ipcRenderer.send('shell:layout', layout), // { split, splitAt, order }: the user dragged, closed or swapped
+  });
+  return;
+}
+// An outliner page in the shell: main keys it by its frame (main/state.js pageOf), so it says when it takes the keys
+// and when it goes (its panel closed, a reload). The Help tour and Create task are windows' own pages and say neither.
+if (window.top !== window) {
+  window.addEventListener('focus', () => ipcRenderer.send('page:focus'));
+  window.addEventListener('pagehide', () => ipcRenderer.send('page:gone'));
+}
 const pane = ipcRenderer.sendSync('window:getSide'); // { side, split }: this page's place in its window (main.js)
 
 contextBridge.exposeInMainWorld('api', {
   side: pane.side, // '' the left or only page, '2' the right half of a split (renderer/state.js SIDE)
-  paneSplit: pane.split === true, // this page is one half of a split
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
@@ -28,17 +44,13 @@ contextBridge.exposeInMainWorld('api', {
   otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
   swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // the two halves of a split change sides
   closePane: () => ipcRenderer.invoke('window:closePane'), // this half of a split closes (the X on the right half)
-  coverWindow: (on) => ipcRenderer.sendSync('window:cover', on === true), // the palette over the whole window: this half's { x, width } while it covers it, null when there is nothing to cover
-  onCover: (cb) => ipcRenderer.on('window:cover', (_e, half) => cb(half)), // the window or the split changed while covered: this half's { x, width } now
-  watchPointer: () => ipcRenderer.send('window:watchPointer'), // the pointer left the page: main watches the cursor over the drag region
-  onPointerOut: (cb) => ipcRenderer.on('window:pointerOut', () => cb()), // and says when it has left this half
   workView: () => ipcRenderer.invoke('window:workView'), // Cmd+K Work View: the right half opened, or the other half sent to its stored place
   onToPlace: (cb) => ipcRenderer.on('window:toPlace', () => cb()), // go to the place stored for this side (the Work View has just stored it)
-  splitDrag: (phase) => ipcRenderer.send('window:splitDrag', phase), // the split grip: 'start', 'move' (main reads the cursor) or 'even'
-  onSide: (cb) => ipcRenderer.on('window:side', (_e, side, split) => cb(side, split === true)), // this page's side or split changed: '' the left or only page, '2' the right half
-  splitHover: (on) => ipcRenderer.send('window:splitHover', on === true), // the pointer is over this half's split grip
-  onSplitHover: (cb) => ipcRenderer.on('window:splitHover', (_e, on) => cb(on === true)), // or over the other half's
-  windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
+  // this page's side or split changed: '' the left or only page, '2' the right half. The iframe's URL follows, so a Reload
+  // registers on the side it is on now. Here, not in the page: renderer/edit.js has a global function history, which
+  // hides window.history there.
+  onSide: (cb) => ipcRenderer.on('window:side', (_e, side, split) => { history.replaceState(history.state, '', '?side=' + side); cb(side, split === true); }),
+  windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the shell's Trellis theme and the window behind it follow the page
   openOverlay: (page, theme) => ipcRenderer.invoke('overlay:open', page, theme), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme
   closeOverlay: (result) => ipcRenderer.invoke('overlay:close', result), // help.html and task.html: done; { palette?: true, note?: string } for the page that asked
   onOverlayClosed: (cb) => ipcRenderer.on('overlay:closed', (_e, result) => cb(result || {})), // the page that asked hears what the overlay had to say

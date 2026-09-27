@@ -39,63 +39,49 @@ $('errorLogin').onclick = () => tana.login().catch(showError);
 // fresh rows into the cache before saying so, so roots already carry them and no second query is needed.
 // Clicking a notification opens the node it was about; main has already raised and focused the window.
 if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) goTo(docId); });
-// This page is going away: a split half or its window closed (main.js closes it with waitForBeforeUnload), or a
-// Reload. What is still on the 400 ms edit timer is sent now, and its presence room and heartbeat are let go.
-window.addEventListener('beforeunload', () => {
+// This page is going away: the shell is about to remove its half (it says so first, shell.js flush), its window
+// closed, or a Reload. What is still on the 400 ms edit timer is sent now, its presence room and heartbeat are let
+// go, and a window it covered is given back. Once: the shell's word, beforeunload and pagehide can all arrive.
+let leftPage = false;
+function leavePage() {
+  if (leftPage) return;
+  leftPage = true;
+  if (covering) { covering = false; tellCover(false); }
   flushAll();
   if (!tana.presenceOpen) return;
   if (presenceDoc) { tana.presenceSet(presenceDoc, null); if (presenceOpen) tana.presenceClose(presenceDoc); }
   tana.presenceView(null);
+}
+window.addEventListener('beforeunload', leavePage);
+window.addEventListener('pagehide', leavePage);
+// The shell (shell.js), the only frame this page listens to: flush before the iframe goes.
+window.addEventListener('message', (e) => {
+  if (e.source !== window.parent || e.source === window || e.data?.orbital !== 'flush') return;
+  leavePage(); e.source.postMessage({ orbital: 'flushed' }, '*');
 });
 // This page changed sides (swapped, or the right half left alone): it saves its view and place under its new side's
-// keys from now on. A Reload asks main again (api.side), so it reads the same ones.
+// keys from now on. Its URL says the new side too, since a Reload is a new page to main, asked by the URL's side.
 // A page that becomes the main half (the other one closed) asks for the first-start tour: the one that asked may be gone.
-if (tana.onSide) tana.onSide((side, split) => { SIDE = side ? ':' + side : ''; closePaneBtn.hidden = SIDE !== ':2'; showSplitGrip(split); localStorage.setItem('view' + SIDE, view); rememberPlace(); if (!SIDE) helpOnce(); });
+if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; closePaneBtn.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); if (!SIDE) helpOnce(); });
 // The Work View, asked for in the other half: it stored this half's place, and this half goes there (renderer/timeline.js)
 if (tana.onToPlace) tana.onToPlace(() => {
   const place = readStoredPlace();
   if (!place || !isPlaceId(place.docId)) return;
   goTo(place.docId).then(() => { if (String(place.docId).startsWith(SEARCH_ID)) addSearch({ text: place.title, ...extra.get(place.docId), id: place.docId }); }); // listed in Cmd+K at once, as restorePlace does
 });
-// The line between the halves is dragged from a grip on each half's inner edge; main reads the cursor and moves the
-// line (main.js window:splitDrag), and a double click evens the halves out again. Over either grip both halves draw
-// their half of the swap pill (main.js window:splitHover), so it sits whole on the line; a click on either half of
-// it swaps the panes, as Cmd+K "Swap panes" does, and is neither a drag nor a double click on the line.
-const splitGrip = $('splitGrip');
-const splitPill = splitGrip.firstElementChild;
-addIcon(splitPill, 'swapPanes');
-keyTitle(splitPill, 'Swap panes', 'swapPanes');
-splitPill.addEventListener('pointerdown', (e) => e.stopPropagation()); // not the start of a drag
-splitPill.onmousedown = (e) => e.preventDefault(); // the caret stays in its row
-splitPill.onclick = (e) => { if (e.detail < 2) tana.swapPanes(); }; // a double click swaps once, not back again
-splitPill.ondblclick = (e) => e.stopPropagation(); // and does not even the halves out
-function showSplitGrip(split) { splitGrip.hidden = !split; splitGrip.classList.toggle('left', SIDE !== ':2'); splitGrip.classList.remove('on'); }
-showSplitGrip(tana.paneSplit === true);
-splitGrip.addEventListener('pointerenter', () => tana.splitHover?.(true));
-splitGrip.addEventListener('pointerleave', () => tana.splitHover?.(false));
-if (tana.onSplitHover) tana.onSplitHover((on) => splitGrip.classList.toggle('on', on));
-splitGrip.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  splitGrip.classList.add('dragging'); splitGrip.setPointerCapture(e.pointerId); tana.splitDrag('start');
-  const move = () => tana.splitDrag('move');
-  const up = () => { splitGrip.classList.remove('dragging'); splitGrip.removeEventListener('pointermove', move); splitGrip.removeEventListener('pointerup', up); };
-  splitGrip.addEventListener('pointermove', move); splitGrip.addEventListener('pointerup', up);
-});
-splitGrip.addEventListener('dblclick', () => tana.splitDrag('even'));
-// Whether the pointer is over this page, for the top row (styles.css html.pointer-in). The header is a window drag
-// region, and over it the page hears nothing of the mouse, so a pointer leaving the page may only have gone up into
-// the header: main watches the cursor from there and says when it has really left this half.
+// Whether the pointer is over this page, for the top row (styles.css html.pointer-in). The page is an iframe now, so
+// it hears the pointer leave for anything laid over it too — the other half, the line, the shell's drag strip above
+// the crumbs — and the row fades there.
 const pointerIn = (on) => document.documentElement.classList.toggle('pointer-in', on);
 document.addEventListener('pointerover', () => pointerIn(true));
-document.documentElement.addEventListener('pointerleave', () => (tana.watchPointer ? tana.watchPointer() : pointerIn(false)));
-if (tana.onPointerOut) tana.onPointerOut(() => pointerIn(false));
+document.documentElement.addEventListener('pointerleave', () => pointerIn(false));
 // The right half closes from an X at the far right of its header, after every other button (index.html).
 const closePaneBtn = $('navClosePane');
 closePaneBtn.hidden = SIDE !== ':2';
 closePaneBtn.title = 'Close this pane ⌘W';
 closePaneBtn.setAttribute('aria-label', 'Close this pane'); // icon only, so the name has to come from here
 addIcon(closePaneBtn, 'closePane');
-closePaneBtn.onmousedown = (e) => e.preventDefault(); // the caret stays where it is: beforeunload flushes what it was typing
+closePaneBtn.onmousedown = (e) => e.preventDefault(); // the caret stays where it is: the shell's flush (leavePage) sends what it was typing
 closePaneBtn.onclick = () => tana.closePane();
 tana.onChanged((docId, info) => {
   // The Timeline's meetings moved (main/timeline.js): the page is read again where it is on screen, and on arrival elsewhere
