@@ -1071,7 +1071,7 @@ function saveViewRows(q, typed) {
 function openSaveViewPalette() { openPage('saveView', 'Name a new view, or pick one to update\u2026', { rows: saveViewRows, back: BACK_TO_COMMANDS, typed: true }); }
 function removeViewRows(q) {
   return savedViews().filter((v) => v.id !== WORK_VIEW.id && v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Remove saved view', icon: 'trash', label: v.name,
-    run: () => { setPref('savedViews', savedViews().filter((w) => w.name !== v.name)); showNote('Removed view \u201c' + v.name + '\u201d'); } }));
+    run: () => { setPref('savedViews', savedViews().filter((w) => w.name !== v.name || (w.id || null) !== (v.id || null))); showNote('Removed view \u201c' + v.name + '\u201d'); } }));
 }
 function openRemoveViewPalette() { openPage('removeView', 'Remove saved view\u2026', { rows: removeViewRows, back: BACK_TO_COMMANDS }); }
 function placeCover() {

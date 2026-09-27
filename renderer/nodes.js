@@ -269,9 +269,10 @@ const homeId = () => (home === HOME_VIEW && !homeView() ? 'workView' : homeIsSea
 // What Go to Home names: the search's current title, so a rename in Tana shows through. null while a Home search
 // is still unknown — the anchor waits for its name rather than borrowing the Library's.
 const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : { library: 'Library', workView: 'Work View', [HOME_VIEW]: 'Home' }[homeId()] || null; };
-// In the Work View a half is Home on its own page: the Timeline on the left, My Tasks (the search of that name) on the right
-// (by the page's own title: a search just made in the other half is not in this one's list yet)
-const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).startsWith(SEARCH_ID) && /^my tasks$/i.test(String((docOf(zoom.docId) || {}).text || '').trim()) : zoom.docId === TIMELINE_PAGE);
+// In the Work View a half is Home on its own page: the Timeline on the left, My Tasks on the right: the search the
+// synced setting names (renderer/app.js asks once connected), so a rename keeps it; until then the search of that title
+let myTasksId = null;
+const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).startsWith(SEARCH_ID) && (myTasksId ? zoom.docId === myTasksId : /^my tasks$/i.test(String((docOf(zoom.docId) || {}).text || '').trim())) : zoom.docId === TIMELINE_PAGE);
 // In a saved view a page is Home on the place that view keeps for it ('place', 'place:2', …; {} is its view)
 function atSavedView(v) {
   let p = null;
