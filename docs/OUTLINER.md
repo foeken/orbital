@@ -362,8 +362,8 @@ caret goes back to. That holds for every page opened through `showPage` (⌘K an
 @ link search and the "/" menu belong to their spot in the pane and stay in it. How it is drawn: Panes below.
 
 **Groups**, in order: Selection (with a multi-selection; the page's own rows follow as Current page) or Current node,
-Table, Views (`VIEW_ORDER`: Work View, Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types),
-Searches, Types, View options, Actions, Navigate, Window, Settings, Help.
+Table, Views (`VIEW_ORDER`: Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types),
+Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings, Help.
 
 - **Current node** is the zoomed node or the row under the caret (with a selection, the Selection group counts what
   each row acts on and says "N skipped" for rows it cannot). Its rows follow `NODE_ROW_ORDER` (renderer/palette.js)
@@ -381,7 +381,12 @@ Searches, Types, View options, Actions, Navigate, Window, Settings, Help.
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, Float pane; with more than one page Next / Previous pane, Next / Previous
   tab, Maximize or restore pane, Show all panes, Zoom back / forward, and Swap panes while two stand side by side;
-  Show/Hide sidebar, Reload.
+  Show/Hide sidebar, Reload, Save view…, Remove saved view (its choices also found from the command page).
+- **Saved views** (issue #442): one row per view, the Work View first. A view is the window's layout (Trellis's
+  document, `window:layout`) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
+  in the synced `savedViews` preference. Save view… names the current one (a name taken replaces it and keeps its
+  id); choosing a row writes the places back and hands main the layout (`window:setLayout`), which saves it and reloads
+  the window, so every page opens where it was saved. Remove saved view takes one off the list, the Work View too.
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode, Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
   key. **Help**: Help.
@@ -847,9 +852,10 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
 - **Work View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the
   right (`api.myTasks`: the search the synced `myTasks` setting names, so a rename in Tana keeps it; else your own
   saved search called My Tasks, the oldest if two machines each made one, hidden title or not; else one made from the My
-  Tasks preset with the Library's arrangement, and remembered. Only a deletion in Tana makes a fresh one). Cmd+K Work
-  View stores the places of pages '' and '2' and main opens page '2' to the right or sends those pages to their places
-  (`window:workView`). A first launch opens it as two panes.
+  Tasks preset with the Library's arrangement, and remembered. Only a deletion in Tana makes a fresh one). It is the
+  saved view installed first (`WORK_VIEW`, Cmd+K Saved views): main's two-pane layout (`window:setLayout` 'workView')
+  with the Timeline in page '' and `{ myTasks: true }` in page '2', found or made at load. Going Home opens it, the one
+  saved under its id if you replaced it, this one if you removed it. A first launch opens it as two panes.
   On a new account both halves are empty, so an empty page says what would fill it (`emptyText`, renderer/render.js):
   the Timeline what shows up there, Notifications and Proposals that there are none, a saved search or a type's page
   "Nothing matches.", with the Create task key after it when the search lists tasks, so an empty My Tasks is where the

@@ -16,20 +16,13 @@ function openTimeline(node) {
 function timelineViewRow() {
   return { id: 'timeline', group: 'Views', icon: 'timeline', label: 'Timeline', run: () => goTo(TIMELINE_PAGE) };
 }
-// The Work View (Cmd+K, and where a first launch opens, renderer/edit.js): the Timeline in page '' and My Tasks in
-// page '2' of one window. Both places are stored first; main then opens page '2', which reads its own at load, or
-// sends a page already open to its own (onToPlace, renderer/app.js). This page goes to its own, if it is one of them.
-async function openWorkView() {
-  const tasks = await tana.myTasks(); // yours, or made the first time (main/views.js myTasks)
-  addSearch(tasks);
-  const places = { '': { docId: TIMELINE_PAGE, nodeId: null, title: 'Timeline', icon: 'timeline' }, ':2': { docId: tasks.id, nodeId: null, title: tasks.text || tasks.title, icon: tasks.icon } };
-  for (const [side, place] of Object.entries(places)) localStorage.setItem('place' + side, JSON.stringify(place));
-  await tana.workView();
-  if (places[SIDE]) await goTo(places[SIDE].docId);
-}
-function workViewRow() {
-  return { id: 'workView', group: 'Views', icon: 'splitPanes', label: 'Work View', hint: 'Timeline and My Tasks', run: () => run(openWorkView) };
-}
+// The Work View: the Timeline in page '' beside My Tasks in page '2', the saved view installed first (renderer/palette.js
+// savedViews) and the one a first launch opens (renderer/edit.js). Its layout is main's own ('workView': main.js pair),
+// and My Tasks is a place found or made at load (edit.js restorePlace), since its id is yours. Home opens it, the one
+// saved under its id if you replaced it, and this one if you removed it.
+const WORK_VIEW = { id: 'workView', name: 'Work View', doc: 'workView', keys: {
+  place: JSON.stringify({ docId: TIMELINE_PAGE, nodeId: null, title: 'Timeline', icon: 'timeline' }), 'place:2': JSON.stringify({ myTasks: true }) } };
+const openWorkView = () => openSavedView(savedViews().find((v) => v.id === WORK_VIEW.id) || WORK_VIEW);
 // Sections by local day: Today, Yesterday, then the date. Folded for as long as the window is open, like a group.
 const timelineFolded = new Set();
 const dayKey = (iso) => new Date(iso).toLocaleDateString('sv-SE');

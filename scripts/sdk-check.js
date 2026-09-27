@@ -1106,16 +1106,15 @@ async function main() {
     assert.deepEqual([toShell.splice(0), shown.pages], [[['close', '3'], ['focus', '2']], ['', '2']], '\u2318W: a page closes in the shell and the next in the layout\u2019s order takes the keys');
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '2'] });
     told.splice(0);
-    // Cmd+K Work View: '' and '2' open go to their stored places; a '2' closed opens again beside the page that asked
-    ask('window:workView', leftPage);
-    assert.deepEqual([toShell.splice(0), told.splice(0).map(([name, channel]) => [name, channel])], [[], [['right', 'window:toPlace']]]);
-    ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
-    ask('window:workView', leftPage);
-    assert.deepEqual(toShell.splice(0), [['open', { id: '2', where: 'right', from: '', focus: false }]], 'the Work View opens \u20182\u2019 and keeps the keys');
-    ask('window:getSide', rightPage); ask('shell:layout', null, { doc: layoutDoc, pages: ['2'] }); // '' closed, '2' left: the Timeline comes back on its left
-    toShell.splice(0);
-    ask('window:workView', rightPage);
-    assert.deepEqual(toShell.splice(0), [['open', { id: '', where: 'left', from: '2', focus: false }]], 'and opens \u2018\u2019 again when that is the one missing');
+    // Cmd+K Saved views: the layout this window has, and one to put it back to, saved and reloaded into. 'workView' is
+    // the Work View's own, '' beside '2'; a layout without a page is refused and changes nothing.
+    let reloads = 0; shellWc.reload = () => { reloads++; }; shown.saveBounds = () => {};
+    assert.deepEqual(ask('window:layout', leftPage), layoutDoc);
+    assert.equal(ask('window:setLayout', leftPage, { schema: 1, views: {} }), false, 'a layout with no page is refused');
+    assert.deepEqual([reloads, shown.doc], [0, layoutDoc]);
+    assert.equal(ask('window:setLayout', leftPage, 'workView'), true);
+    assert.deepEqual([reloads, own(shown.pages), Object.keys(shown.doc.views)], [1, ['', '2'], ['page', 'page2']], 'the Work View: saved and reloaded into');
+    delete shellWc.reload; delete shown.saveBounds;
     ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
     shown.close = () => { shown.closed = true; };
     backend.closeFront(shown, pageFor(leftPage));

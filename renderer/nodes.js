@@ -252,7 +252,7 @@ function noteGone(uri, e) {
   return true;
 }
 // ---- Home ----
-// Home is the Work View (the default: renderer/timeline.js openWorkView), the Library, or a saved search.
+// Home is the Work View (the default, a saved view: renderer/timeline.js openWorkView), the Library, or a saved search.
 // The saved search Home points at, while the list knows it. The list is the only proof we have that a search is still
 // there and still readable: main answers it from the graph, and app.js drops a deleted one from it as the deletion
 // arrives, so a Home that has gone away shows up here as a search nobody lists.

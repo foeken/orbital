@@ -264,21 +264,25 @@ ipcMain.on('page:gone', (e) => {
   if (page) dropPage(page);
   if (win) for (const p of [...win.panes]) if (p.isDestroyed()) dropPage(p);
 });
-// Cmd+K Work View (renderer/timeline.js): the page asking has stored the places of pages '' and '2'. Whichever is not
-// open opens beside the one asking — '' on its left, '2' on its right, the Timeline beside My Tasks — and reads its
-// own place at load; a page already open is told to go to its own.
-ipcMain.handle('window:workView', (e) => {
-  const page = pageOf(e), win = page && page.win;
-  if (!win) return;
-  for (const id of ['', '2']) if (!win.pages.includes(id)) openPage(win, { id, where: id ? 'right' : 'left', from: page.side, focus: false });
-  for (const p of win.panes) if (p !== page && (p.side === '' || p.side === '2')) p.send('window:toPlace');
-});
 ipcMain.handle('overlay:open', (e, which, theme) => { openOverlay(pageOf(e), which, theme); });
 ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].find((w) => w.overlay && w.overlay.webContents === e.sender), result && typeof result === 'object' ? result : {}); });
 // Cmd+K Swap panes: two panes side by side change places (the shell decides whether they are), each keeping its id.
 ipcMain.handle('window:swapPanes', (e) => {
   const win = pageOf(e)?.win;
   if (win && win.pages.length > 1) tellShell(win, 'swap');
+});
+// Cmd+K Save view and Saved views (issue #442): the layout this window has (null: page '' alone, never rearranged), and
+// one to put it back to; 'workView' is the Work View's, the one a first launch opens (pair). The pages' places are
+// theirs, written by the page that asked (renderer/palette.js); the shell reloads, starts from this layout
+// (shell:state) and every page opens where the view was saved.
+ipcMain.handle('window:layout', (e) => pageOf(e)?.win?.doc || null);
+ipcMain.handle('window:setLayout', (e, doc) => {
+  const win = pageOf(e)?.win;
+  if (doc === 'workView') doc = pair(0.5);
+  if (!win || signedOut() || (doc !== null && !(doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page')))) return false;
+  win.doc = doc; win.pages = docPages(doc); win.saveBounds();
+  win.shell.webContents.reload();
+  return true;
 });
 // The shell (preload.js window.shell), synchronous at its start: the layout to start from (null: page '' alone), the
 // theme, and whether it is signed out (page '' alone, the layout kept aside until 'auth' says otherwise).

@@ -37,7 +37,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
-const VIEW_ORDER = ['workView', 'timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types'];
+const VIEW_ORDER = ['timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
 // favours the first letters of words). Best first:
 //   0  the label starts with the query      "in"    → **In**box
@@ -300,7 +300,6 @@ function paletteRows(q, typed = q) {
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
   if (tana.proposalAnswer) viewRows.push(proposalsViewRow()); // what Tana's AI proposed and is waiting on you to accept
   if (tana.children) viewRows.push(timelineViewRow()); // what happened to what you watch, and what landed in your Inbox
-  if (tana.workView) viewRows.push(workViewRow()); // the Timeline beside My Tasks
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
@@ -352,6 +351,11 @@ function paletteRows(q, typed = q) {
   // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
   if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });
+  if (tana.windowLayout) {
+    rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view\u2026', keepOpen: true, run: openSaveViewPalette });
+    if (savedViews().length) rows.push({ id: 'removeSavedView', group: 'Window', icon: 'trash', label: 'Remove saved view', keepOpen: true, run: openRemoveViewPalette, sub: async () => removeViewRows('') });
+    for (const v of savedViews()) rows.push({ id: v.id || 'savedView:' + v.name, group: 'Saved views', icon: 'splitPanes', label: v.name, run: () => run(() => openSavedView(v)) });
+  }
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
   rows.push({ id: 'textLarger', group: 'Settings', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
   rows.push({ id: 'textSmaller', group: 'Settings', icon: 'textSmaller', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
@@ -1029,6 +1033,40 @@ const PANE_ROWS = [['otherPane', 'Next pane', 'panel.next', 'otherPane'], ['prev
   ['maximizePane', 'Maximize or restore pane', 'frame.toggle', 'zoomIn'], ['overview', 'Show all panes', 'navigation.overview', 'splitPanes'],
   ['zoomBack', 'Zoom back', 'navigation.back', 'back'], ['zoomForward', 'Zoom forward', 'navigation.forward', 'forward']];
 const shellRun = (command) => { if (window.frameElement) window.parent.postMessage({ orbital: 'run', command }, '*'); };
+// ---- Saved views: the window's panes, and what each shows, under a name (issue #442) ----
+// A view is the layout main keeps for the window (Trellis's document) and each page's view and place, under the keys
+// the pages read at load: 'view' and 'place' for page '', 'view:2' and 'place:2' for page '2'. Opening one writes those
+// back and hands main the layout, which reloads the window, so every page comes back where it was when saved. The list
+// follows you (pref savedViews): a view names places, like a saved search does. It starts with the Work View
+// (renderer/timeline.js), which is removed and replaced like any other; replaced by name, a view keeps its id, so Home
+// and a key recorded for it still find it.
+const savedViews = () => pref('savedViews', [WORK_VIEW]).filter((v) => v && typeof v.name === 'string' && v.keys && typeof v.keys === 'object');
+const PAGE_KEY = /^(view|place)(:[1-9]\d*)?$/;
+async function saveView(name) {
+  const doc = await tana.windowLayout(), keys = {};
+  const ids = doc ? Object.values(doc.views || {}).filter((v) => v && v.type === 'page').map((v) => String((v.params && v.params.side) || '')) : [''];
+  for (const id of ids) for (const key of ['view', 'place']) keys[key + (id ? ':' + id : '')] = localStorage.getItem(key + (id ? ':' + id : ''));
+  const old = savedViews().find((v) => v.name === name);
+  setPref('savedViews', [...savedViews().filter((v) => v !== old), { ...(old && old.id ? { id: old.id } : {}), name, doc, keys }]);
+  showNote('Saved view \u201c' + name + '\u201d');
+}
+// plain async, for run() to queue: a queued step that queues another waits on itself
+async function openSavedView(v) {
+  for (const [key, value] of Object.entries(v.keys)) if (PAGE_KEY.test(key)) { if (typeof value === 'string') localStorage.setItem(key, value); else localStorage.removeItem(key); }
+  if (!(await tana.setWindowLayout(v.doc || null))) showNote('This view could not be opened', true);
+}
+function saveViewRows(q, typed) {
+  const name = typed.trim(), group = 'Save view \u00b7 the panes in this window and what each shows';
+  if (!name) return [{ group, icon: 'splitPanes', label: 'Type a name for this view', disabled: true }];
+  const taken = savedViews().some((v) => v.name === name);
+  return [{ group, icon: 'splitPanes', label: (taken ? 'Replace view \u201c' : 'Save view \u201c') + name + '\u201d', run: () => run(() => saveView(name)) }];
+}
+function openSaveViewPalette() { openPage('saveView', 'Name this view\u2026', { rows: saveViewRows, back: BACK_TO_COMMANDS, typed: true }); }
+function removeViewRows(q) {
+  return savedViews().filter((v) => v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Remove saved view', icon: 'trash', label: v.name,
+    run: () => { setPref('savedViews', savedViews().filter((w) => w.name !== v.name)); showNote('Removed view \u201c' + v.name + '\u201d'); } }));
+}
+function openRemoveViewPalette() { openPage('removeView', 'Remove saved view\u2026', { rows: removeViewRows, back: BACK_TO_COMMANDS }); }
 function placeCover() {
   const root = document.documentElement, frame = window.frameElement;
   const half = covering && frame ? frame.parentElement.getBoundingClientRect() : null, box = half && frame.getBoundingClientRect(), k = box ? innerWidth / box.width : 1;

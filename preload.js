@@ -46,8 +46,8 @@ contextBridge.exposeInMainWorld('api', {
   // Answers its id (null signed out), for storing its view and place under before it loads.
   splitWindow: (where) => ipcRenderer.invoke('window:split', where),
   swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // two pages side by side change places
-  workView: () => ipcRenderer.invoke('window:workView'), // Cmd+K Work View: page '2' opened, or pages '' and '2' sent to their stored places
-  onToPlace: (cb) => ipcRenderer.on('window:toPlace', () => cb()), // go to the place stored for this page (the Work View has just stored it)
+  windowLayout: () => ipcRenderer.invoke('window:layout'), // this window's layout (Trellis's document), null for one page never rearranged
+  setWindowLayout: (doc) => ipcRenderer.invoke('window:setLayout', doc), // true: the window reloads into it
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the shell's Trellis theme and the window behind it follow the page
   openOverlay: (page, theme) => ipcRenderer.invoke('overlay:open', page, theme), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme
   closeOverlay: (result) => ipcRenderer.invoke('overlay:close', result), // help.html and task.html: done; { palette?: true, note?: string } for the page that asked

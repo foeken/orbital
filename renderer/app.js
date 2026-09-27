@@ -68,12 +68,6 @@ window.addEventListener('message', (e) => {
   }
 });
 titleEl.addEventListener('blur', () => document.documentElement.classList.remove('renaming'));
-// The Work View, asked for in another page: it stored this page's place, and this page goes there (renderer/timeline.js)
-if (tana.onToPlace) tana.onToPlace(() => {
-  const place = readStoredPlace();
-  if (!place || !isPlaceId(place.docId)) return;
-  goTo(place.docId).then(() => { if (String(place.docId).startsWith(SEARCH_ID)) addSearch({ text: place.title, ...extra.get(place.docId), id: place.docId }); }); // listed in Cmd+K at once, as restorePlace does
-});
 // Whether the pointer is over this page, for the top row (styles.css html.pointer-in). The page is an iframe now, so
 // it hears the pointer leave for anything laid over it too — another page, the line, the shell's drag strip above
 // the crumbs — and the row fades there.
