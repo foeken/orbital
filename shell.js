@@ -205,7 +205,8 @@ async function reloadAll() {
 function open({ id, where, from, focus }) {
   if (typeof id !== 'string' || viewOf(id)) return focusPage(viewOf(id));
   const links = where === 'links';
-  if (links && linksView()) return focusPage(linksView()); // one per window
+  // one per window: a second one asked for is not opened, and main, which gave it an id, hears the pages as they are
+  if (links && linksView()) { focusPage(linksView()); return bridge.layout({ doc: ws.getDocument(), pages: pages().map((v) => v.params.side) }); }
   if (links && viewOf(from)) followed = viewOf(from);
   const beside = ws.view(viewOf(from) || '')?.panelId || ws.getSnapshot().focusedPanel;
   // the Links pane takes about 320px of the pane it opens beside: under Trellis's 280px minimum its content would be scaled down
