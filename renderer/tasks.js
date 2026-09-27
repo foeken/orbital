@@ -156,8 +156,8 @@ function peopleEl(summary, node) {
     const name = known ? found : isGuest(uri) ? 'Guest' : 'Unknown person';
     f.className = 'face'; f.textContent = known || isGuest(uri) ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() : '?';
     f.setAttribute('role', 'img'); f.setAttribute('aria-label', name); f.title = name;
-    let hue = 0; for (const c of uri) hue = (hue * 31 + c.charCodeAt(0)) % 360; // one colour per person, the same on every row
-    f.style.setProperty('--hue', hue);
+    let tone = 0; for (const c of uri) tone = (tone * 31 + c.charCodeAt(0)) % 6; // one of six light greys per person, the same on every row
+    f.style.setProperty('--tone', tone);
     return f;
   };
   const faces = document.createElement('span'); faces.className = 'faces';
