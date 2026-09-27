@@ -20,7 +20,7 @@ body.many .drag, body.covered .drag { display: none; }
 .trellis [data-trellis-part="tabbar"][data-top] { -webkit-app-region: drag; }
 .trellis [data-trellis-part="tabbar"][data-top] :is([data-trellis-part="tab"], button) { -webkit-app-region: no-drag; }
 body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag; }
-.trellis [data-trellis-part="tabbar"][data-lights] [data-trellis-part="tabs"] { padding-left: 76px; }
+.trellis [data-trellis-part="tabbar"][data-lights] [data-trellis-part="tabs"] { padding-left: 88px; } /* the traffic lights end near 68px and a selected tab's flared corner reaches 7px left of it: a clear gap after both */
 /* The page the palette covers the window from (renderer/palette.js coverWindow): everything from its iframe up to the
    workspace is lifted over the rest and lets the iframe reach past it; shell.js sizes the iframe to the workspace. */
 .trellis [data-covering] { z-index: 1000 !important; overflow: visible !important; clip-path: none !important; contain: none !important; }
