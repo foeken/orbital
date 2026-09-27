@@ -1103,7 +1103,7 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
 - **No Details section.** What it listed lives with the page: who it is for and who can see it are the first fields
   under the title, and Open in Tana, Join call and Edit pins are Cmd+K rows under Current node. **Assigned to** (a task) is a chip per
   person or "Unassigned" and opens the assignee picker; **Visible to** (any document with a known audience) is the
-  audience's glyph with a bubble per person as a list row's subtext has them (or the audience's words where it names
+  audience's glyph with a bubble per person as a list row's subtext has them, one person's name alone (or the audience's words where it names
   nobody), "Anyone with the link" when Tana's link sharing is on, "Not visible to …" in red for an assignee it shuts out, and opens the visibility picker, on a meeting's
   write-up the event's; a sensitive page has none. Both open on a click, Enter or Space (renderer/fields.js
   `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a

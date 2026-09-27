@@ -106,7 +106,9 @@ function visibilityFieldEl(parent) {
   const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Visible to';
   const values = document.createElement('div'); values.className = 'fvalues';
   const el = document.createElement('div'); el.className = 'fvalue fchoice'; el.tabIndex = 0; el.title = summary.audience.label;
-  if (summary.people.length) el.append(...facesEls(summary.people, summary.peopleCount || summary.people.length));
+  const count = summary.peopleCount || summary.people.length;
+  if (count === 1 && summary.people.length === 1) { loadMembers(); const name = document.createElement('span'); name.textContent = memberName(summary.people[0]); el.append(name); } // one person: their name, not a lone bubble
+  else if (summary.people.length) el.append(...facesEls(summary.people, count));
   else { const words = document.createElement('span'); words.className = 'fhint'; words.textContent = summary.audience.label; el.append(words); }
   if (summary.linkShared) { const link = document.createElement('span'); link.className = 'fhint'; link.textContent = 'Anyone with the link'; el.append(link); } // Tana's own switch, read-only here
   if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'fhint fwarn'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
