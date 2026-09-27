@@ -67,6 +67,32 @@ function choiceKey(e) {
   else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openChooser(ctx); }
   else if (e.key.length === 1) { e.preventDefault(); openChooser(ctx, undefined, e.key); } // typing is the start of what to look for
 }
+// A task's assignees, drawn as its first field under the title (renderer/render.js renderFields), in the same row and
+// chips a member field has: a chip per person, "Unassigned" when there is nobody. Not a Tana field, Tana keeps them as
+// the task's assignedToUris, so it opens the assignee picker the row's facts and Cmd+K use (openAssigneePalette).
+function assigneeFieldEl(parent) {
+  const node = parent.node, meta = taskMetaById.get(node.id);
+  if (!meta) { loadTaskMeta(node.id); return null; } // the answer redraws the page (patchMeta)
+  if (meta.assignees.length) loadMembers(); // the chips' names; the list redraws the page when it lands
+  const row = document.createElement('div'); row.className = 'field';
+  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'member');
+  const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Assigned to';
+  const values = document.createElement('div'); values.className = 'fvalues';
+  const el = document.createElement('div'); el.className = 'fvalue fchoice'; el.tabIndex = 0;
+  for (const uri of meta.assignees) { const chip = document.createElement('span'); chip.className = 'fchip'; renderSegs(chip, [{ mention: { uri, label: memberName(uri), icon: 'member' } }]); el.append(chip); }
+  if (!meta.assignees.length) { const hint = document.createElement('span'); hint.className = 'fhint'; hint.textContent = 'Unassigned'; el.append(hint); }
+  const open = canEditNode(node) && tana.setAssignees ? () => openAssigneePalette(node) : null;
+  el.onclick = (e) => { if (open && !e.target.closest('.mention')) open(); }; // a chip is a link to the person, as anywhere else
+  el.onkeydown = (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘K and the rest are the document's
+    const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+    if (back || e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); moveTo(el, back ? -1 : 1, 0); }
+    else if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
+    else if (open && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); }
+  };
+  values.append(el); row.append(icon, label, values);
+  return row;
+}
 // Written the way the field holds it: an options value as its labels (only those still offered, since Tana refuses
 // the rest), a link value as one reference per line.
 function writeChoice(ctx, values) {

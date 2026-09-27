@@ -1098,8 +1098,10 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
 
 - Tags on sidebar rows collapse to their `#` and hue and show their label on hover or focus, without changing the
   row's height.
-- **Details** first: Show in Tana, the meeting's call link, the assignee, the visibility (which opens the people picker
-  directly when set to selected people), Pinned when it is (§9).
+- **Details** first: Show in Tana, the meeting's call link, the visibility (which opens the people picker
+  directly when set to selected people), Pinned when it is (§9). A task's assignees are not here: they are the first of
+  its fields under the title, **Assigned to**, a chip per person or "Unassigned", which opens the assignee picker on a
+  click, Enter or Space (renderer/fields.js `assigneeFieldEl`).
 - **Sections**: Pinned (a meeting's or space's `EDGE_TYPE_HAS_PIN` items, read from the hub's own `pinnedItems` too,
   since a pin just written is there before its edge), Outcomes (documents it owns that carry a task state), Proposals
   (on a meeting's write-up: the proposed documents from chats the meeting owns, #106), References (documents it owns

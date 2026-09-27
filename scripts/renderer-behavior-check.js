@@ -2221,7 +2221,7 @@ function runInlineFieldsCheck() {
     const relatedBy = new Map([['doc', { fields: [{ key: 'tana:type:test?attribute=who', label: 'Discuss with', segments: [{ text: 'Rob Schuurman' }] }] }]]);
     const kids = new Map(), loaded = [], built = [];
     let fieldsDeferred = false;
-    const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false;
+    const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false; // not a task: no assignee field
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
     const ensureLoaded = (host) => loaded.push(host.docId);
     const renderSegs = (el, segments) => { el.textContent = segments.map(s => s.text).join(''); };
@@ -2650,23 +2650,22 @@ async function runSidebarRowsCheck() {
     [['showInTana', 'tana', 'Show in Tana']], 'the Tana link keeps Details present without task metadata');
   const rows = api.rows({ id: 'doc' }, { assignees: 'Sam Okafor', audience: { icon: 'lock', label: 'Visible only to you' } });
   assert.deepEqual(plain(rows.map((row) => [row.id, row.icon, row.label, typeof row.run])), [
-    ['assignees', 'member', 'Assigned to Sam Okafor', 'function'],
     ['visibility', 'lock', 'Visible only to you', 'function'],
     ['showInTana', 'tana', 'Show in Tana', 'function'],
-  ], 'assignees and visibility read as plain rows and both can be opened');
-  rows[0].run(); rows[1].run();
-  assert.deepEqual(plain(api.calls()), [['assignees', 'doc'], ['visibility', 'doc']], 'the rows open the pickers the palette already uses');
+  ], 'visibility reads as a plain row that opens its picker; a task\'s assignees are a field under its title, not a rail row');
+  rows[0].run();
+  assert.deepEqual(plain(api.calls()), [['visibility', 'doc']], 'the row opens the picker the palette already uses');
   api.rows({ id: 'writeup' }, { audience: { icon: 'userLock', label: 'Visible to selected people' }, scope: 'people' }, { id: 'event' })[0].run();
   assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'event'], 'a followed meeting write-up checks visibility on its event hub');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Unassigned', audience: null, unknownAudience: true }).map((row) => row.label)),
-    ['Unassigned', 'Show in Tana'], 'an audience that cannot be verified is left out instead of rendering an empty row');
+    ['Show in Tana'], 'an audience that cannot be verified is left out instead of rendering an empty row');
   assert.deepEqual(plain(api.rows({ id: 'doc', editable: false }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).map((row) => row.run === null)),
-    [true, false, false], 'read-only body editing does not disable sharing or the Tana link');
+    [false, false], 'read-only body editing does not disable sharing or the Tana link');
   // link sharing is its own fact: a public document says so, even when it is not a task and has no assignee
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
-    [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', hiddenFrom: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).slice(0, 3).map((row) => [row.id, row.icon, row.label])),
-    [['assignees', 'member', 'Assigned to Sam'], ['hiddenFrom', 'userAlert', 'Not visible to Sam'], ['visibility', 'lock', 'Visible only to you']], 'an assignee who cannot see the node is warned about under the assignees');
+    [['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', hiddenFrom: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).slice(0, 2).map((row) => [row.id, row.icon, row.label])),
+    [['hiddenFrom', 'userAlert', 'Not visible to Sam'], ['visibility', 'lock', 'Visible only to you']], 'an assignee who cannot see the node is warned about above its visibility');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
     [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
   // A pinned node says so in Details too, and that row opens the page its pins are taken off from

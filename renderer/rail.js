@@ -173,18 +173,13 @@ function railCallRow(data) {
   if (!call || !call.url || !tana.openExternal) return null; // no call, no row
   return { id: 'call', icon: 'video', label: demoText(call.label || call.url, 'call'), run: () => run(() => tana.openExternal(call.url)) }; // a call link names the meeting: masked in demo mode
 }
-// The zoomed task's own metadata, at the top of the sidebar: who it is assigned to and who can see it. Both open the
-// pickers the palette already uses (api.setAssignees / api.setSharing). Nothing known, nothing shown.
+// The zoomed document's own metadata, at the top of the sidebar: who can see it, opening the picker the palette already
+// uses (api.setSharing). Nothing known, nothing shown. A task's assignees are a field under its title instead
+// (renderer/fields.js assigneeFieldEl).
 function railMetaRows(node, accessNode = node) {
   // The sidebar describes any document, not only tasks: a doc can be link-shared or live in a space too.
   const summary = taskSummary(node) || documentSummary(node);
-  const writable = canEditNode(node);
-  const rows = summary?.assignees ? [{
-    id: 'assignees',
-    icon: summary.assignees === 'Unassigned' ? 'unassigned' : 'member',
-    label: summary.assignees === 'Unassigned' ? 'Unassigned' : 'Assigned to ' + summary.assignees,
-    run: writable && tana.taskMeta && tana.setAssignees ? () => openAssigneePalette(node) : null,
-  }] : [];
+  const rows = [];
   if (summary?.hiddenFrom) rows.push({ // the same warning a list row carries, opening the same picker
     id: 'hiddenFrom', icon: 'userAlert', label: 'Not visible to ' + summary.hiddenFrom,
     run: tana.accessOptions ? () => openVisibility(accessNode, summary.scope) : null,
