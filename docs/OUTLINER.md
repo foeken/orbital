@@ -629,7 +629,7 @@ week, Last month and Older.
   and hands the node to a new Codex task through Codex's deep link; the task registers itself back with
   scripts/agent-link.js, so the node is pending until it does. The node then carries the agent badge, which says what
   the task is doing, read every 30 s while anything is assigned. **Unassign from Agent** takes it back at once. **Go to
-  Agent task** opens it (or says which machine it is on, from the synced `codexTask` record), **Link Agent task…**
+  Agent task** opens it (or says which machine it is on, from the synced `codexTask` record), **Link Agent Task ...**
   links a task that already exists, **Send to agent** opens a new Codex task with the node's link, and **Manage Codex
   hosts** lists the machines a task can run on. Assign to Agent and Send to agent need a real Codex install.
 
