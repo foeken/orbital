@@ -26,12 +26,16 @@ async function outlineWithReferences(doc) {
 // and turned the next page's references away for good.
 // ponytail: LIVE_ROWS / 2 targets across every outline on screen; the newest pages win. Hold per page if that matters.
 const liveRefs = new Map();
-const passingReads = new Set(); // documents a change read back subscribed, let go when their last read is done (document())
+// Documents to let go of once the last read waiting on them is done (document()): subscribed by a change read back, or
+// found with nothing else holding them while a read still waited (so a let-go is never lost to a read in flight)
+const passingReads = new Set();
 let liveRefsClient = null; // the sync client they are live on: a new login starts a new stream, subscribed to none of them
 // Let go of a target nothing holds any more: not a live reference, a view (subscribed), a read, a wait, or a watch
 // start() subscribes outside those (watched by hand, handed to the agent): letting that go would end its notifications
 function dropRef(uri) {
-  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || reading.has(uri) || notifyWatchedIds().has(uri) || codexIds().includes(uri)) return;
+  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || notifyWatchedIds().has(uri) || codexIds().includes(uri)) return;
+  if (reading.has(uri)) { passingReads.add(uri); return; } // tried again when that read is done
+  passingReads.delete(uri);
   docStates.delete(uri);
   S.client?.sync?.unsubscribe?.(uri)?.catch(() => {}); // it may settle after a logout, or under the checks' partial clients
 }

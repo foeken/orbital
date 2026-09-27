@@ -5351,6 +5351,19 @@ async function main() {
     settleBoth(); await Promise.all([first, second]);
     assert.deepEqual(gone, [patchedUri], 'two reads back of the same change let go once, when the last is done');
     delete sync.getDocument;
+    // A read back that starts while its target is still a live reference, which is pushed out before the read is done:
+    // the let-go the read held up is tried again when it finishes
+    sync.subscribe = async (id) => (id === patchedUri ? patchedDoc : {});
+    await backend.outlineWithReferences(patched); await new Promise((r) => setImmediate(r)); // live, and the oldest
+    let settleRead; const reread = new Promise((r) => { settleRead = () => r(patchedDoc); });
+    sync.getDocument = (id) => (id === patchedUri ? patchedDoc : undefined);
+    sync.subscribe = (id) => (id === patchedUri ? reread : Promise.resolve({}));
+    const inFlight = backend.handlers.get('doc:info')(null, patchedUri, true);
+    gone.length = 0; await backend.outlineWithReferences(many); await new Promise((r) => setImmediate(r)); // pushed out meanwhile
+    const whileRead = gone.includes(patchedUri);
+    settleRead(); await inFlight;
+    assert.deepEqual([whileRead, gone.includes(patchedUri)], [false, true], 'a target pushed out while its change was read back is let go once the read is done');
+    delete sync.getDocument;
     sync.unsubscribe = async () => {};
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};
