@@ -153,6 +153,13 @@ function peopleEl(summary, node) {
   const uris = audienceUris(summary);
   // a sensitive node says nothing about who can see it: no glyph, faces or count (back with Toggle sensitive visibility)
   if (!uris.length || (node && sensitiveHidden(node.id))) return null;
+  const el = document.createElement('span'); el.className = 'people';
+  el.append(audienceIcon(summary, node), ...facesEls(uris, summary.peopleCount || uris.length));
+  return el;
+}
+// A bubble each for the first four people, then the rest: "+n" up to nine people, "and n others" past that. The list
+// row's subtext (peopleEl) and the page's Visible to field (renderer/fields.js) both draw them.
+function facesEls(uris, count) {
   loadMembers(); // the bubbles' names
   const face = (uri) => {
     const f = document.createElement('span'), found = memberName(uri), known = !found.startsWith('tana:');
@@ -163,14 +170,11 @@ function peopleEl(summary, node) {
     f.style.setProperty('--tone', tone);
     return f;
   };
-  const faces = document.createElement('span'); faces.className = 'faces';
-  const count = summary.peopleCount || uris.length; // main sends the first four and how many (main/documents.js doc:taskMeta)
-  faces.append(...uris.slice(0, 4).map(face)); // four bubbles, then the rest: "+n" up to nine people, "and n others" past that
+  const faces = document.createElement('span'); faces.className = 'faces'; faces.title = count === 1 ? '1 person' : count + ' people'; // main sends the first four and how many (main/documents.js doc:taskMeta)
+  faces.append(...uris.slice(0, 4).map(face));
   const rest = count - 4;
   if (rest > 0 && count <= 9) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + rest; more.setAttribute('role', 'img'); more.setAttribute('aria-label', rest + ' more'); faces.append(more); }
-  const el = document.createElement('span'); el.className = 'people'; el.title = count === 1 ? '1 person' : count + ' people';
-  el.append(audienceIcon(summary, node), faces, ...(count > 9 ? ['and ' + rest + ' others'] : []));
-  return el;
+  return [faces, ...(count > 9 ? ['and ' + rest + ' others'] : [])];
 }
 // node: the row's document, so its facts open the Cmd+K pickers they describe (Edit assignees, Edit visibility)
 function taskMetaEl(summary, docId, node) {

@@ -173,21 +173,13 @@ function railCallRow(data) {
   if (!call || !call.url || !tana.openExternal) return null; // no call, no row
   return { id: 'call', icon: 'video', label: demoText(call.label || call.url, 'call'), run: () => run(() => tana.openExternal(call.url)) }; // a call link names the meeting: masked in demo mode
 }
-// The zoomed document's own metadata, at the top of the sidebar: who can see it, opening the picker the palette already
-// uses (api.setSharing). Nothing known, nothing shown. A task's assignees are a field under its title instead
-// (renderer/fields.js assigneeFieldEl).
-function railMetaRows(node, accessNode = node) {
+// The zoomed document's own metadata, at the top of the sidebar: whether anyone with the link can read it, and its pins.
+// Nothing known, nothing shown. A task's assignees and who can see a page are fields under its title instead
+// (renderer/fields.js assigneeFieldEl, visibilityFieldEl).
+function railMetaRows(node) {
   // The sidebar describes any document, not only tasks: a doc can be link-shared or live in a space too.
   const summary = taskSummary(node) || documentSummary(node);
   const rows = [];
-  if (summary?.hiddenFrom) rows.push({ // the same warning a list row carries, opening the same picker
-    id: 'hiddenFrom', icon: 'userAlert', label: 'Not visible to ' + summary.hiddenFrom,
-    run: tana.accessOptions ? () => openVisibility(accessNode, summary.scope) : null,
-  });
-  if (summary?.audience) rows.push({ // an unverifiable audience is not a row: there is nothing to show or change
-    id: 'visibility', icon: summary.audience.icon, label: summary.audience.label,
-    run: tana.accessOptions ? () => openVisibility(accessNode, summary.scope) : null,
-  });
   // link sharing is a separate fact from the Tana audience, and read-only here: Tana owns that switch
   if (summary?.linkShared) rows.push({ id: 'linkShared', icon: 'globe', label: 'Anyone with the link', run: null });
   // Pinned to the sidebar or to a date, like the mark on a list row: the row opens the page that lists those pins
@@ -276,9 +268,7 @@ function renderRail(parent) {
   if (!docId) return note('Open a document to see its graph.');
   loadRelated(docId);
   const data = relatedBy.get(docId);
-  // Event views immediately follow their write-up document. Sharing still belongs to the event itself.
-  const accessNode = data?.pinHub?.startsWith('tana:event:') ? { id: data.pinHub } : parent.node;
-  const meta = railMetaRows(parent.node, accessNode);
+  const meta = railMetaRows(parent.node);
   if (sensitiveIds?.has(docId)) meta.unshift({ id: 'sensitive', icon: 'hidden', label: 'Sensitive', run: null });
   const call = railCallRow(data);
   if (call) meta.unshift(call);

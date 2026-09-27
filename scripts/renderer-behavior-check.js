@@ -2221,7 +2221,7 @@ function runInlineFieldsCheck() {
     const relatedBy = new Map([['doc', { fields: [{ key: 'tana:type:test?attribute=who', label: 'Discuss with', segments: [{ text: 'Rob Schuurman' }] }] }]]);
     const kids = new Map(), loaded = [], built = [];
     let fieldsDeferred = false;
-    const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false; // not a task: no assignee field
+    const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false, tana = {}; // not a task, no metadata: neither Assigned to nor Visible to
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
     const ensureLoaded = (host) => loaded.push(host.docId);
     const renderSegs = (el, segments) => { el.textContent = segments.map(s => s.text).join(''); };
@@ -2640,7 +2640,8 @@ async function runSidebarRowsCheck() {
     ${functionSource('openVisibility')}
     ${functionSource('banSvg')}
     ${functionSource('visibilityRows')}
-    ({ rows: (node, value, accessNode) => { summary = value; return railMetaRows(node, accessNode); }, call: (data) => railCallRow(data), calls: () => calls,
+    ({ rows: (node, value) => { summary = value; return railMetaRows(node); }, call: (data) => railCallRow(data), calls: () => calls,
+       open: (node, scope) => openVisibility(node, scope), // what the Visible to field under the title runs (renderer/fields.js)
        pin: (id) => { pinnedHere.add(id); },
        known: (id, meta, access) => { if (meta) taskMetaById.set(id, meta); else taskMetaById.delete(id); if (access) accessById.set(id, access); else accessById.delete(id); },
        permission: (access, loading) => { palDoc = { id: 'doc' }; accessById.delete('doc'); accessLoading.delete('doc'); if (access) accessById.set('doc', access); if (loading) accessLoading.add('doc'); return visibilityRows(''); },
@@ -2650,30 +2651,23 @@ async function runSidebarRowsCheck() {
     [['showInTana', 'tana', 'Show in Tana']], 'the Tana link keeps Details present without task metadata');
   const rows = api.rows({ id: 'doc' }, { assignees: 'Sam Okafor', audience: { icon: 'lock', label: 'Visible only to you' } });
   assert.deepEqual(plain(rows.map((row) => [row.id, row.icon, row.label, typeof row.run])), [
-    ['visibility', 'lock', 'Visible only to you', 'function'],
     ['showInTana', 'tana', 'Show in Tana', 'function'],
-  ], 'visibility reads as a plain row that opens its picker; a task\'s assignees are a field under its title, not a rail row');
-  rows[0].run();
-  assert.deepEqual(plain(api.calls()), [['visibility', 'doc']], 'the row opens the picker the palette already uses');
-  api.rows({ id: 'writeup' }, { audience: { icon: 'userLock', label: 'Visible to selected people' }, scope: 'people' }, { id: 'event' })[0].run();
-  assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'event'], 'a followed meeting write-up checks visibility on its event hub');
+  ], 'Details leaves who it is for and who can see it to the fields under the title (renderer/fields.js)');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Unassigned', audience: null, unknownAudience: true }).map((row) => row.label)),
     ['Show in Tana'], 'an audience that cannot be verified is left out instead of rendering an empty row');
   assert.deepEqual(plain(api.rows({ id: 'doc', editable: false }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).map((row) => row.run === null)),
-    [false, false], 'read-only body editing does not disable sharing or the Tana link');
+    [false], 'read-only body editing does not disable the Tana link');
   // link sharing is its own fact: a public document says so, even when it is not a task and has no assignee
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
-    [['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', hiddenFrom: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).slice(0, 2).map((row) => [row.id, row.icon, row.label])),
-    [['hiddenFrom', 'userAlert', 'Not visible to Sam'], ['visibility', 'lock', 'Visible only to you']], 'an assignee who cannot see the node is warned about above its visibility');
+    [['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
     [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
   // A pinned node says so in Details too, and that row opens the page its pins are taken off from
   api.pin('pinnedDoc');
   const pinnedRows = api.rows({ id: 'pinnedDoc' }, { assignees: '', audience: { icon: 'lock', label: 'Visible only to you' } });
   assert.deepEqual(plain(pinnedRows.map((row) => [row.id, row.icon, row.label])),
-    [['visibility', 'lock', 'Visible only to you'], ['pinned', 'pinned', 'Pinned'], ['showInTana', 'tana', 'Show in Tana']], 'a pinned node carries the tack beside its audience');
-  pinnedRows[1].run();
+    [['pinned', 'pinned', 'Pinned'], ['showInTana', 'tana', 'Show in Tana']], 'a pinned node carries the tack');
+  pinnedRows[0].run();
   assert.deepEqual(plain(api.calls().at(-1)), ['pins', 'pinnedDoc'], 'and that row opens Edit pins for it');
   assert.ok(!api.rows({ id: 'doc' }, { assignees: '', audience: { icon: 'lock', label: 'Visible only to you' } }).some((row) => row.id === 'pinned'), 'an unpinned node has no such row');
   await api.rows({ id: 'doc' }, null)[0].run();
@@ -2695,7 +2689,7 @@ async function runSidebarRowsCheck() {
 
   // "Visible to selected people" opens the people list only after permission is known; attendees must see the reason.
   const people = { assignees: 'Sam', scope: 'people', audience: { icon: 'userLock', label: 'Visible to selected people' } };
-  const visibility = (node, value) => api.rows(node, value).find((row) => row.id === 'visibility');
+  const visibility = (node, value) => ({ run: () => api.open(node, value.scope) }); // the Visible to field's click
   api.known('doc', { participants: [] });
   visibility({ id: 'doc' }, people).run();
   assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'permission still loading starts at the explanatory visibility level');

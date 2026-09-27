@@ -1098,10 +1098,14 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
 
 - Tags on sidebar rows collapse to their `#` and hue and show their label on hover or focus, without changing the
   row's height.
-- **Details** first: Show in Tana, the meeting's call link, the visibility (which opens the people picker
-  directly when set to selected people), Pinned when it is (§9). A task's assignees are not here: they are the first of
-  its fields under the title, **Assigned to**, a chip per person or "Unassigned", which opens the assignee picker on a
-  click, Enter or Space (renderer/fields.js `assigneeFieldEl`).
+- **Details** first: Show in Tana, the meeting's call link, Anyone with the link, Pinned when it is (§9). Who it is for
+  and who can see it are not here: they are the first fields under the title. **Assigned to** (a task) is a chip per
+  person or "Unassigned" and opens the assignee picker; **Visible to** (any document with a known audience) is the
+  audience's glyph with a bubble per person as a list row's subtext has them (or the audience's words where it names
+  nobody), "Not visible to …" in red for an assignee it shuts out, and opens the visibility picker, on a meeting's
+  write-up the event's; a sensitive page has none. Both open on a click, Enter or Space (renderer/fields.js
+  `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a
+  Graph pane beside it.
 - **Sections**: Pinned (a meeting's or space's `EDGE_TYPE_HAS_PIN` items, read from the hub's own `pinnedItems` too,
   since a pin just written is there before its edge), Outcomes (documents it owns that carry a task state), Proposals
   (on a meeting's write-up: the proposed documents from chats the meeting owns, #106), References (documents it owns

@@ -469,7 +469,7 @@ function renderOutline() {
   if (demoMode) { titleCheck.disabled = true; titleCheck.onclick = null; } // read-only while demo mode is on
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
   codexHeader(); // a rebuilt header loses the badge with everything else, so it is put back with the title
-  // visibility lives at the top of the sidebar (railMetaRows) and a task's assignees are its first field (renderFields);
+  // a task's assignees and who can see a page are its first fields (renderFields), no longer in the sidebar;
   // under the title only the chips remain.
   // Any zoomed document shows its type, not only a task: what is dropped is the kind chip, whose label is the row's
   // own icon name (task, doc, meeting, space, chat…), so an Organization or any other type stays.
@@ -585,10 +585,12 @@ function renderFields(parent, force = false, el = $('fields')) {
   const defs = (data && editingType === parent.docId && data.definitions) || [];
   // a task's assignees lead its fields (renderer/fields.js assigneeFieldEl); the rail no longer lists them
   const assigned = parent && parent.node.kind === 'document' && isTask(parent.node) && tana.taskMeta ? assigneeFieldEl(parent) : null;
-  el.hidden = !fields.length && !defs.length && !assigned;
+  const visible = parent && parent.node.kind === 'document' && tana.taskMeta ? visibilityFieldEl(parent) : null; // and who can see it, any document
+  el.hidden = !fields.length && !defs.length && !assigned && !visible;
   el.replaceChildren();
   for (const def of defs) el.append(definitionEl(parent, def));
   if (assigned) el.append(assigned);
+  if (visible) el.append(visible);
   for (const field of fields) {
     const row = document.createElement('div'); row.className = 'field';
     const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'field');

@@ -93,6 +93,33 @@ function assigneeFieldEl(parent) {
   values.append(el); row.append(icon, label, values);
   return row;
 }
+// Who can see the page, drawn under its title as a field after Assigned to (renderer/render.js renderFields): the
+// audience's glyph, a bubble per person as a list row's subtext has them (facesEls), or the audience's words where it
+// names nobody, and who is assigned but shut out. It opens the visibility picker, on a meeting's write-up the event's.
+function visibilityFieldEl(parent) {
+  const node = parent.node, summary = taskSummary(node) || documentSummary(node); // either asks for the metadata
+  if (!summary || !summary.audience || sensitiveHidden(node.id)) return null; // a sensitive page says nothing about who
+  const data = relatedBy.get(parent.docId), access = data && typeof data.pinHub === 'string' && data.pinHub.startsWith('tana:event:') ? { id: data.pinHub } : node;
+  const row = document.createElement('div'); row.className = 'field';
+  const icon = document.createElement('span'); icon.className = 'ricon' + (summary.hiddenFrom ? ' hiddenfrom' : ''); addIcon(icon, summary.audience.icon);
+  const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Visible to';
+  const values = document.createElement('div'); values.className = 'fvalues';
+  const el = document.createElement('div'); el.className = 'fvalue fchoice'; el.tabIndex = 0; el.title = summary.audience.label;
+  if (summary.people.length) el.append(...facesEls(summary.people, summary.peopleCount || summary.people.length));
+  else { const words = document.createElement('span'); words.className = 'fhint'; words.textContent = summary.audience.label; el.append(words); }
+  if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'fhint fwarn'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
+  const open = tana.accessOptions ? () => openVisibility(access, summary.scope) : null;
+  el.onclick = () => { if (open) open(); };
+  el.onkeydown = (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘K and the rest are the document's
+    const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+    if (back || e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); moveTo(el, back ? -1 : 1, 0); }
+    else if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
+    else if (open && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); }
+  };
+  values.append(el); row.append(icon, label, values);
+  return row;
+}
 // Written the way the field holds it: an options value as its labels (only those still offered, since Tana refuses
 // the rest), a link value as one reference per line.
 function writeChoice(ctx, values) {
