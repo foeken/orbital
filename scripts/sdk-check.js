@@ -5883,21 +5883,30 @@ async function main() {
     console.log("ok  chat:send asks the chat's own agent and keeps a sent message sent when the reply cannot be asked for");
   }
 
-  // @Codex in a chat (main/codexchat.js, #468): the question is a message to the chat that asks nobody, the Codex task
-  // gets it with the whole chat and the rules, the link stays on this Mac, and the answer is read back and kept.
+  // Asking an agent from a chat (main/chatagents.js, #468), with Codex, the only agent: the question is a message to the chat
+  // that asks nobody, the task gets it with the whole chat and the rules, the link stays on this device, and the answer is
+  // read back and kept.
   {
     const backend = mainHelpers();
     const chatDoc = new Document('tana:chat:' + ulid());
     chatDoc.transact((l) => initDocument(l, 'Team chat', ME, { kind: 'chat' }));
     const sync = { subscribe: async (id) => { if (id !== chatDoc.id) throw new Error('document not found: ' + id); return chatDoc; } };
-    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => ({ nodes: (q.nodeTypes || []).includes('user-profile') ? [{ id: ME, title: 'Robin Vega' }] : [] }) }, sync }, userData: '/tmp/orbital-codexchat-check', session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: 'org', role: 'member' })).toString('base64url') + '.y' } });
+    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => ({ nodes: (q.nodeTypes || []).includes('user-profile') ? [{ id: ME, title: 'Robin Vega' }] : [] }) }, sync }, userData: '/tmp/orbital-chatagents-check', session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: 'org', role: 'member' })).toString('base64url') + '.y' } });
     const realFetch = globalThis.fetch, created = [];
     let fetched = 0;
     globalThis.fetch = async () => { fetched++; return { status: 200, ok: true, json: async () => ({ success: true }) }; };
     const realCreate = backend.agent.createTask, realRpc = backend.agent.appServerRpc;
     backend.agent.createTask = async (opts) => { created.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca10'; };
     try {
-      const ask = backend.handlers.get('codex:ask'), replies = backend.handlers.get('codex:replies');
+      const askAgent = backend.handlers.get('chatAgent:ask'), ask = (e, id, text) => askAgent(e, id, 'codex', text), replies = backend.handlers.get('chatAgent:replies');
+      // offered only where it can run
+      const realBin = backend.agent.codexBin;
+      backend.agent.codexBin = () => null;
+      assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)], [], 'no Codex on this device, no agent to offer');
+      backend.agent.codexBin = () => '/usr/local/bin/codex';
+      assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)].map((a) => ({ ...a })), [{ id: 'codex', label: 'Codex', icon: 'robot' }]);
+      backend.agent.codexBin = realBin;
+      await assert.rejects(askAgent(null, chatDoc.id, 'claude', '@Claude hi'), /No such agent/, 'only the agents in the table');
       await backend.handlers.get('chat:send')(null, chatDoc.id, 'The actions are in', [], { ai: false });
       await assert.rejects(ask(null, chatDoc.id, 'no mention here'), /Mention @Codex/);
       const { messageId } = await ask(null, chatDoc.id, '@Codex turn these into issues');
@@ -5906,7 +5915,7 @@ async function main() {
       assert.deepEqual([created.length, created[0].nodeUri, created[0].host], [1, chatDoc.id, 'local'], 'one Codex task on this Mac');
       assert.match(created[0].prompt, /^turn these into issues\n[\s\S]*Robin Vega: The actions are in\nRobin Vega: @Codex turn these into issues$/, 'the task gets the question and the whole chat, oldest first');
       assert.match(created[0].instructions, /never saved to Tana/, 'and the rules for the whole thread');
-      assert.equal(backend.settings.isSynced('codexAsks'), false, 'the link from a question to its task stays on this Mac');
+      assert.equal(backend.settings.isSynced('chatAsks'), false, 'the link from a question to its task stays on this Mac');
       // the answer: the latest turn's final answer, read once and then kept
       let spawned = 0, turn = { status: 'interrupted', items: [{ type: 'agentMessage', phase: 'commentary', text: 'Looking' }] };
       backend.agent.appServerRpc = () => { spawned++; return { ready: Promise.resolve(), call: async (m) => { assert.equal(m, 'thread/turns/list'); return { data: [turn] }; }, stop() {} }; };
@@ -5916,15 +5925,15 @@ async function main() {
       assert.deepEqual([(await replies(null, chatDoc.id))[0].text, spawned], ['Made three issues', 2], 'a finished answer is not read again');
       assert.deepEqual([...await replies(null, 'not a chat')], []);
       // the task behind a question opens in Codex by its id; anything unknown opens nothing
-      assert.equal(await backend.handlers.get('codex:openAsk')(null, chatDoc.id, messageId), true);
+      assert.equal(await backend.handlers.get('chatAgent:open')(null, chatDoc.id, messageId), true);
       assert.equal(backend.opened.at(-1), 'codex://threads/01a0b3a3-c000-70b0-896e-08e86986ca10', 'the task this question started');
-      assert.equal(await backend.handlers.get('codex:openAsk')(null, chatDoc.id, 'nosuchid'), false);
+      assert.equal(await backend.handlers.get('chatAgent:open')(null, chatDoc.id, 'nosuchid'), false);
       // a task that cannot start leaves the question sent and says why beside it
       backend.agent.createTask = async () => { throw new Error('Codex is not installed on this Mac'); };
       const failed = await ask(null, chatDoc.id, 'again @codex');
-      assert.deepEqual([chatDoc.data.get('messages').toJSON().at(-1).id, /not installed/.test(failed.codexError)], [failed.messageId, true]);
+      assert.deepEqual([chatDoc.data.get('messages').toJSON().at(-1).id, /not installed/.test(failed.error)], [failed.messageId, true]);
     } finally { globalThis.fetch = realFetch; backend.agent.createTask = realCreate; backend.agent.appServerRpc = realRpc; }
-    console.log('ok  codex:ask writes the question for the chat only, hands the whole chat to a local Codex task, and reads its answer back once');
+    console.log('ok  chatAgent:ask writes the question for the chat only, hands the whole chat to a local Codex task, and reads its answer back once');
   }
 
 

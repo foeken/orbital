@@ -14,11 +14,15 @@ const chatDrafts = new Map(); // docId -> what was typed there and not sent
 // send has its own, so the dots follow the newest one and only its own answer, one after that message, ends them.
 const chatWaiting = new Map();
 const isChatPage = (parent) => !!parent && !parent.nodeId && String(parent.docId).startsWith('tana:chat:');
-// @Codex (main/codexchat.js, docs/CHATS.md §12): the questions asked in a chat with Codex's answers, which live on this
-// Mac only. chatId -> [{ messageId, state: working|done|failed, text }], read when the chat opens and while one runs.
-const codexAnswers = new Map(), codexPolls = new Set();
-const CODEX_ASK = /(^|\s)@codex\b/i, CODEX_URI = 'orbital:codex'; // the "@" chip, written into the message as plain "@Codex"
-const CODEX_NOTE = 'Only visible for you, on this device. Never saved to Tana.';
+// @Codex and any other agent on this device (main/chatagents.js, docs/CHATS.md §12): the agents "@" offers, and the
+// questions asked in a chat with their answers, which live on this device only. chatId -> [{ messageId, agent, label,
+// state: working|done|failed, text }], read when the chat opens and while one runs.
+let chatAgents = []; // [{ id, label, icon }] this device can run, from main once at load
+if (tana.chatAgents) tana.chatAgents().then((list) => { chatAgents = list; }, () => {});
+const agentAnswers = new Map(), agentPolls = new Set();
+const AGENT_URI = 'orbital:agent:'; // an "@" chip for an agent, written into the message as plain "@Label"
+const AGENT_NOTE = 'Only visible for you, on this device. Never saved to Tana.';
+const askedAgent = (text) => chatAgents.find((a) => new RegExp('(^|\\s)@' + a.label + '\\b', 'i').test(text));
 
 function chatDotsEl() {
   const el = document.createElement('span'); el.className = 'chat-dots'; el.setAttribute('aria-label', 'Tana is writing');
@@ -127,9 +131,9 @@ function chatEls(list, docId) {
     }
     out.push(chatMessageEl(n, docId));
     prev = n;
-    // Codex's answer to this question, drawn under it on your side: yours alone, never in Tana
-    const asked = n.chat.mine && (codexAnswers.get(docId) || []).find((a) => a.messageId === n.chat.id);
-    if (asked) { out.push(codexEl(asked, docId)); prev = null; }
+    // an agent's answer to this question, drawn under it on your side: yours alone, never in Tana
+    const asked = n.chat.mine && (agentAnswers.get(docId) || []).find((a) => a.messageId === n.chat.id);
+    if (asked) { out.push(agentAnswerEl(asked, docId)); prev = null; }
   }
   chatPendingQ = ([...msgs].reverse().find((n) => n.chat.questions) || { chat: {} }).chat.questions || null;
   // Asked, and no answer has begun: dots where it will be, until one does or it has been two minutes
@@ -177,42 +181,42 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
   sc.addEventListener('scroll', () => { if (chatShown) chatAtBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80; }, { passive: true });
   const seen = new ResizeObserver(keep); seen.observe(outline); seen.observe(sc);
 }
-// ---- @Codex's answers ----
+// ---- the agents' answers ----
 // A grey bubble on your side, under a line that says it is yours alone: the dots while the task works, then its answer.
 // The arrow beside it posts the answer to the chat as your message, the one way it reaches Tana.
-function codexEl(a, docId) {
+function agentAnswerEl(a, docId) {
   const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
-  el.className = 'chat-msg mine codex'; head.className = 'codex-head'; row.className = 'codex-row'; bubble.className = 'bubble'; bubble.title = CODEX_NOTE;
-  // the line over it opens the Codex task that answered, for the work behind the answer
-  if (tana.openCodexAsk) { head.classList.add('opens'); head.title = 'Open the Codex task'; head.onclick = () => openCodexAsk(docId, a.messageId); }
-  head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode('Codex · only visible for you, on this device'));
+  el.className = 'chat-msg mine agent-answer'; head.className = 'agent-head'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
+  // the line over it opens the agent's task that answered, for the work behind the answer
+  if (tana.openAgentAsk) { head.classList.add('opens'); head.title = 'Open the ' + a.label + ' task'; head.onclick = () => openAgentAsk(docId, a.messageId); }
+  head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode(a.label + ' · only visible for you, on this device'));
   if (a.state === 'working') bubble.append(chatDotsEl());
-  else { const text = document.createElement('div'); text.className = 'chat-paragraph'; text.textContent = a.state === 'done' ? demoText(a.text, docId) : 'Codex stopped without an answer'; bubble.append(text); }
+  else { const text = document.createElement('div'); text.className = 'chat-paragraph'; text.textContent = a.state === 'done' ? demoText(a.text, docId) : a.label + ' stopped without an answer'; bubble.append(text); }
   if (a.state === 'done') {
     const share = document.createElement('button');
-    share.type = 'button'; share.className = 'codex-share'; share.tabIndex = -1; share.title = 'Share to chat, as your message'; share.setAttribute('aria-label', 'Share to chat');
+    share.type = 'button'; share.className = 'agent-share'; share.tabIndex = -1; share.title = 'Share to chat, as your message'; share.setAttribute('aria-label', 'Share to chat');
     share.append(...[iconNode('forward')].filter(Boolean));
-    share.onclick = () => shareCodex(docId, a.text);
+    share.onclick = () => shareAnswer(docId, a.text);
     row.append(share);
   }
   row.append(bubble); el.append(head, row);
   return el;
 }
-// The one way an answer reaches Tana: posted to the chat as your message (the arrow, or Cmd+K Share Codex’s answer to chat)
-function shareCodex(docId, text) { run(async () => { await tana.sendChat(docId, text, [], { ai: false }); await reload(docId); renderSoon(true); }); }
-const latestCodexAnswer = (docId) => (codexAnswers.get(docId) || []).filter((a) => a.state === 'done').at(-1);
-const latestCodexAsk = (docId) => (codexAnswers.get(docId) || []).at(-1);
-function openCodexAsk(docId, messageId) { run(async () => { if (!(await tana.openCodexAsk(docId, messageId))) throw new Error('That Codex task is not on this Mac'); }); }
+// The one way an answer reaches Tana: posted to the chat as your message (the arrow, or Cmd+K Share …’s answer to chat)
+function shareAnswer(docId, text) { run(async () => { await tana.sendChat(docId, text, [], { ai: false }); await reload(docId); renderSoon(true); }); }
+const latestAgentAnswer = (docId) => (agentAnswers.get(docId) || []).filter((a) => a.state === 'done').at(-1);
+const latestAgentAsk = (docId) => (agentAnswers.get(docId) || []).at(-1);
+function openAgentAsk(docId, messageId) { run(async () => { if (!(await tana.openAgentAsk(docId, messageId))) throw new Error('That task is not on this device'); }); }
 // Read the chat's answers, and again every few seconds while one is still being worked on
-function codexLoad(docId) {
-  if (!tana.codexReplies || codexPolls.has(docId)) return;
-  codexPolls.add(docId);
-  tana.codexReplies(docId).then((list) => {
-    codexPolls.delete(docId);
-    codexAnswers.set(docId, list);
+function agentLoad(docId) {
+  if (!tana.agentReplies || agentPolls.has(docId)) return;
+  agentPolls.add(docId);
+  tana.agentReplies(docId).then((list) => {
+    agentPolls.delete(docId);
+    agentAnswers.set(docId, list);
     if (zoom && zoom.docId === docId) renderSoon(true);
-    if (list.some((a) => a.state === 'working')) setTimeout(() => { if (chatShown === docId) codexLoad(docId); }, 4000);
-  }, () => codexPolls.delete(docId));
+    if (list.some((a) => a.state === 'working')) setTimeout(() => { if (chatShown === docId) agentLoad(docId); }, 4000);
+  }, () => agentPolls.delete(docId));
 }
 
 // ---- the composer ----
@@ -258,7 +262,7 @@ function setComposer(draft) {
   showSkill();
 }
 // The message as Tana stores it: markdown, a mention as [label](uri), which is also how sdk/chat.js reads one back
-const chatMarkdown = (segs) => segs.map((s) => ('mention' in s ? (s.mention.uri === CODEX_URI ? '@Codex' : '[' + String(s.mention.label).replace(/[[\]\n]/g, ' ') + '](' + s.mention.uri + ')') : s.text)).join('').replace(/\u00a0/g, ' ').trim();
+const chatMarkdown = (segs) => segs.map((s) => ('mention' in s ? (String(s.mention.uri).startsWith(AGENT_URI) ? '@' + s.mention.label : '[' + String(s.mention.label).replace(/[[\]\n]/g, ' ') + '](' + s.mention.uri + ')') : s.text)).join('').replace(/\u00a0/g, ' ').trim();
 // the text before the caret, to tell "/" typed first from one typed later
 function beforeCaret() {
   const sel = getSelection();
@@ -292,8 +296,8 @@ function chatMention(mention) {
 // message is otherwise only for them. Offered first in the composer's "@" search while what is typed fits its name.
 const TANA_AGENT_URI = 'tana:agent:2zc7qjfkkengdhfdd846b4qvk2';
 const tanaMentionRows = (q, ctx) => (fuzzyMatch('Tana', q.toLowerCase()) ? [{ icon: 'chat', label: 'Tana', hint: 'Ask Tana to answer', run: () => linkTo(ctx, { label: 'Tana', uri: TANA_AGENT_URI }) }] : []);
-// and Codex, on this Mac: its answer is shown to you alone and never written to Tana (main/codexchat.js)
-const codexMentionRows = (q, ctx) => (tana.askCodex && fuzzyMatch('Codex', q.toLowerCase()) ? [{ icon: 'robot', label: 'Codex', hint: 'Ask Codex · the answer stays on this Mac', run: () => linkTo(ctx, { label: 'Codex', uri: CODEX_URI, icon: 'robot' }) }] : []);
+// and the agents on this device: their answer is shown to you alone and never written to Tana (main/chatagents.js)
+const agentMentionRows = (q, ctx) => chatAgents.filter((a) => fuzzyMatch(a.label, q.toLowerCase())).map((a) => ({ icon: a.icon, label: a.label, hint: 'Ask ' + a.label + ' · the answer stays on this device', run: () => linkTo(ctx, { label: a.label, uri: AGENT_URI + a.id, icon: a.icon }) }));
 // "/" first: the workspace's skills, in ⌘K's card; Escape goes back to the message with nothing picked
 function openSkillPicker() {
   palReturn = { composer: true }; // Escape, or a pick, hands the caret back to the message (palette.js returnFocus)
@@ -325,14 +329,15 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
-  // @Codex: the question goes to the chat for the people in it, and to a Codex task on this Mac for its answer
-  if (!skill && tana.askCodex && CODEX_ASK.test(text)) {
+  // @Codex and the like: the question goes to the chat for the people in it, and to that agent on this device for its answer
+  const agent = !skill && tana.askAgent && askedAgent(text);
+  if (agent) {
     run(async () => {
       let sent;
-      try { sent = await tana.askCodex(docId, text); } catch (e) { restoreDraft(docId, draft); throw e; }
-      await reload(docId); codexLoad(docId);
+      try { sent = await tana.askAgent(docId, agent.id, text); } catch (e) { restoreDraft(docId, draft); throw e; }
+      await reload(docId); agentLoad(docId);
       if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); }
-      if (sent.codexError) throw new Error('Sent, but Codex could not start: ' + sent.codexError);
+      if (sent.error) throw new Error('Sent, but ' + agent.label + ' could not start: ' + sent.error);
     });
     return;
   }
@@ -390,7 +395,7 @@ function chatAfterRender(parent, stick) {
       .finally(() => chatAsking.delete(docId));
   }
   const asking = chat && showQuestions(docId, chatPendingQ); // Tana's questions take the composer's place
-  if (opened) codexLoad(docId);
+  if (opened) agentLoad(docId);
   if (!chat) showQuestions(null, null);
   composer.hidden = !chat || !!asking;
   sc.classList.toggle('chatting', chat);

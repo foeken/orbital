@@ -319,8 +319,8 @@ function paletteRows(q, typed = q) {
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
-  if (tana.askCodex && zoom && isChatPage(zoom)) { const answer = latestCodexAnswer(zoom.docId); if (answer) rows.push({ id: 'shareCodex', group: 'Actions', icon: 'forward', label: 'Share Codex’s answer to chat', hint: 'Posts it as your message', run: () => shareCodex(zoom.docId, answer.text) }); } // renderer/chat.js
-  if (tana.openCodexAsk && zoom && isChatPage(zoom)) { const ask = latestCodexAsk(zoom.docId), chatId = zoom.docId; if (ask) rows.push({ id: 'openCodexAsk', group: 'Actions', icon: 'robot', label: 'Open Codex task', hint: 'The one behind the last @Codex answer', run: () => openCodexAsk(chatId, ask.messageId) }); } // renderer/chat.js
+  if (tana.askAgent && zoom && isChatPage(zoom)) { const answer = latestAgentAnswer(zoom.docId), chatId = zoom.docId; if (answer) rows.push({ id: 'shareAgentAnswer', group: 'Actions', icon: 'forward', label: 'Share ' + answer.label + '’s answer to chat', hint: 'Posts it as your message', run: () => shareAnswer(chatId, answer.text) }); } // renderer/chat.js
+  if (tana.openAgentAsk && zoom && isChatPage(zoom)) { const ask = latestAgentAsk(zoom.docId), chatId = zoom.docId; if (ask) rows.push({ id: 'openAgentAsk', group: 'Actions', icon: 'robot', label: 'Open ' + ask.label + ' task', hint: 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(chatId, ask.messageId) }); } // renderer/chat.js
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
@@ -589,7 +589,7 @@ function resultRows(nodes, group) {
   // a link field that holds something can be emptied here too, as an options field can; last, so Enter never clears
   if (field && group === undefined && choiceValues(field).length && fuzzyMatch('Clear value', palInput.value.trim())) rows.push({ group: field.field.label || 'Value', icon: 'none', label: 'Clear value', run: () => writeChoice(field, []) });
   if (!ctx) return rows;
-  if (ctx.composer) rows.unshift(...tanaMentionRows(palInput.value.trim(), ctx), ...codexMentionRows(palInput.value.trim(), ctx)); // a chat's "@" can ask Tana itself, or Codex (renderer/chat.js)
+  if (ctx.composer) rows.unshift(...tanaMentionRows(palInput.value.trim(), ctx), ...agentMentionRows(palInput.value.trim(), ctx)); // a chat's "@" can ask Tana itself, or an agent on this device (renderer/chat.js)
   const title = ctx.text || palInput.value.trim(); // "@" at a caret has no selection: what is typed becomes the new document's title
   if (!title) return rows;
   // words that read as a day ("friday", "12 oct", "tomorrow": parseDay) also offer that date, first, as Tana's "@" does

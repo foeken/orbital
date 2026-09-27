@@ -314,8 +314,8 @@ status updates included; the app draws one other than "accepted N changes" as a 
 
 ## 12. @Codex: a question in the chat, the answer on this Mac
 
-main/codexchat.js, renderer/chat.js (issue #468). "@" in the composer offers **Codex** after Tana; a message that mentions
-it (the chip is written as plain "@Codex") goes through `codex:ask` instead of `chat:send`:
+main/chatagents.js, renderer/chat.js (issue #468). "@" in the composer offers **Codex** after Tana; a message that mentions
+it (the chip is written as plain "@Codex") goes through `chatAgent:ask` instead of `chat:send`:
 
 1. **The question is a message to the chat** (`sendChat` with `ai: false`, so `skipAutoResponse` and nobody is asked;
    Tana still answers when the words mention it). Everyone in the chat sees what was asked.
@@ -324,21 +324,27 @@ it (the chip is written as plain "@Codex") goes through `codex:ask` instead of `
    `Name: text` per message, mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
    (`thread/start` `developerInstructions`, `RULES`) say the answer is shown to the asker alone and never saved to Tana,
    to answer only what was asked, and never to write to Tana.
-3. **The link stays local**: `codexAsks` (chat → `[{ messageId, threadId, at, state, text }]`) is not in
+3. **The link stays local**: `chatAsks` (chat → `[{ messageId, agent, taskId, at, state, text }]`) is not in
    main/settings.js `SYNCED`, so it lives in this Mac's SQLite only. Another machine sees the question and nothing else.
-4. **The answer is read, never written.** `codex:replies` reads the latest turn of each running task
+4. **The answer is read, never written.** `chatAgent:replies` asks each agent for its running tasks; Codex reads the latest turn of each
    (`thread/turns/list`, `limit: 1`, `itemsView: 'full'`): its `agentMessage` with `phase: 'final_answer'`, or once the
    turn has completed the last one. Read from a second app-server, a turn still running on the one that started it shows
    as `interrupted` with no answer (verified live 2026-09-27: `interrupted` at 3 s, `completed` with the answer at 6 s),
    so only an answer, a completed or failed turn, or `createTask`'s 15-minute cap ends the wait. A finished answer is kept
-   in `codexAsks` and not read again.
+   in `chatAsks` and not read again.
 5. **Drawn on your side**: under the question, a grey bubble headed "Codex · only visible for you, on this device", the
    chat's dots while the task works (read every 4 s while any is running), then the answer. The arrow beside a finished
    answer, or Cmd+K Share Codex’s answer to chat for the latest one, posts it to the chat as your message (`chat:send`, `ai: false`): the only way it reaches Tana.
 
 The task is kept, not only its answer: clicking the "Codex · …" line over an answer, or Cmd+K Open Codex task for the
-latest question, opens it in Codex (`codex:openAsk`: the page names the question, main opens `codex://threads/<id>` from
-`codexAsks`, as the agent badge's `codex:open` does for a node).
+latest question, opens it in Codex (`chatAgent:open`: the page names the question, main opens the agent's `url`, for Codex
+`codex://threads/<id>`, from `chatAsks`, as the agent badge's `codex:open` does for a node).
 
-A task that cannot start leaves the question sent and says so beside it (`codexError`), as a failed Tana reply does.
+A task that cannot start leaves the question sent and says so beside it (`error`), as a failed Tana reply does.
+
+**Another agent** is one entry in `AGENTS` (main/chatagents.js), beside `codex`: its `label` and `icon`, `available()`
+(can this device run it; "@" offers only those), `start({ key, prompt, rules })` answering a task id, `read(taskIds)`
+answering `taskId → { state, text }` for the ones still running, and `url(taskId)` to open one in its own app. The
+question, the prompt, the rules, the local record, the grey bubble, Share and Open are shared, and the page draws every
+label from `chatAgent:list`. Codex is the only entry today.
 

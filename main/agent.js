@@ -304,7 +304,7 @@ const stopOwnedTasks = () => { for (const e of [...owned.values()]) e.stop(); ow
 // while the work runs so it is not cut off half way; the user watches it in Codex meanwhile, because both read the
 // same store.
 // instructions: developer instructions for the whole thread (thread/start developerInstructions), for a task that has
-// rules to keep beyond its first message (main/codexchat.js).
+// rules to keep beyond its first message (main/chatagents.js).
 async function createTask({ nodeUri, prompt, model, instructions, userData, host, timeoutMs = 30000, runMs = 15 * 60 * 1000 }) {
   let id = null, cap = null, gone = false;
   // Let go the moment the turn ends, not on a timer: the fixed cap left a finished task locked behind this writer

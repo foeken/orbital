@@ -618,17 +618,17 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .bubble .mention svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
 .theirs .bubble .mention.hue { color: oklch(0.55 0.12 var(--hue)); }
 .bubble .mention.gone { color: inherit; text-decoration: line-through; cursor: default; }
-/* @Codex's answer (renderer/chat.js codexEl): yours alone, so on your side, grey where your own bubble is blue, under a
+/* an agent's answer, @Codex's (renderer/chat.js agentAnswerEl): yours alone, so on your side, grey where your own bubble is blue, under a
    line that says it stays on this Mac; the arrow shares it to the chat, pointing out toward the others */
-.codex-head { display: flex; align-items: center; gap: 5px; margin: 0 6px 4px 0; font-size: 13px; color: var(--muted); }
-.codex-head svg { width: 12px; height: 12px; }
-.codex-head.opens { cursor: pointer; }
-.codex-head.opens:hover { color: inherit; }
-.codex-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; max-width: min(80%, 660px); }
-.chat-msg.mine.codex .bubble { max-width: 100%; background: rgba(127, 127, 127, .13); color: inherit; }
-.codex-share { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(127, 127, 127, .3); border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
-.codex-share:hover { color: inherit; }
-.codex-share svg { width: 15px; height: 15px; transform: scaleX(-1); }
+.agent-head { display: flex; align-items: center; gap: 5px; margin: 0 6px 4px 0; font-size: 13px; color: var(--muted); }
+.agent-head svg { width: 12px; height: 12px; }
+.agent-head.opens { cursor: pointer; }
+.agent-head.opens:hover { color: inherit; }
+.agent-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; max-width: min(80%, 660px); }
+.chat-msg.mine.agent-answer .bubble { max-width: 100%; background: rgba(127, 127, 127, .13); color: inherit; }
+.agent-share { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(127, 127, 127, .3); border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.agent-share:hover { color: inherit; }
+.agent-share svg { width: 15px; height: 15px; transform: scaleX(-1); }
 .chat-dots { display: inline-flex; gap: 4px; padding: 8px 0; color: var(--muted); }
 .chat-dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .35; }
 @media (prefers-reduced-motion: no-preference) { .chat-dots i { animation: chat-dot var(--dur-loop) infinite; } .chat-dots i:nth-child(2) { animation-delay: .2s; } .chat-dots i:nth-child(3) { animation-delay: .4s; } }

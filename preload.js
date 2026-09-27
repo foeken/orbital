@@ -142,9 +142,10 @@ contextBridge.exposeInMainWorld('api', {
   chatAnswers: (id) => ipcRenderer.invoke('chat:answers', id), // { ai, canWrite }: whether Tana answers there by itself, and whether you may write in it
   newChat: () => ipcRenderer.invoke('chat:new'),
   answerChat: (id, messageId, answers) => ipcRenderer.invoke('chat:answer', id, messageId, answers), // answers { questionId: { selected, custom } }, or null to skip; then Tana goes on: { messageId, responding, replyError? }
-  askCodex: (id, text) => ipcRenderer.invoke('codex:ask', id, text), // writes the @Codex question to the chat and starts a Codex task on this Mac: { messageId, codexError? }
-  openCodexAsk: (id, messageId) => ipcRenderer.invoke('codex:openAsk', id, messageId), // open the Codex task that answered this @Codex question: true, or false when it is not on this Mac
-  codexReplies: (id) => ipcRenderer.invoke('codex:replies', id), // the @Codex questions in this chat with their answers, local only: [{ messageId, state: working|done|failed, text }]
+  chatAgents: () => ipcRenderer.invoke('chatAgent:list'), // the agents this device can ask from a chat (@Codex): [{ id, label, icon }]
+  askAgent: (id, agent, text) => ipcRenderer.invoke('chatAgent:ask', id, agent, text), // writes the question to the chat and starts that agent's task on this device: { messageId, error? }
+  agentReplies: (id) => ipcRenderer.invoke('chatAgent:replies', id), // the questions asked in this chat with their answers, local only: [{ messageId, agent, label, state: working|done|failed, text }]
+  openAgentAsk: (id, messageId) => ipcRenderer.invoke('chatAgent:open', id, messageId), // open the task that answered this question in its agent's app: true, or false when it is not on this device
   inviteToChat: (id, userUri) => ipcRenderer.invoke('chat:invite', id, userUri), // a workspace member joins the chat as an editor: { name } // a new chat with Tana, yours alone: Node to zoom
   taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Create task offers (task.html)
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
