@@ -892,6 +892,15 @@ at most); the answer streams in as live changes to the chat, and a message Tana 
 shows the dots in its place. A failed send puts the words back. **New chat** (Cmd+K, Actions) makes a chat with
 Tana that is yours alone (`chat:new`) and opens it.
 
+When Tana's AI asks questions (`row.chat.questions`, docs/CHATS.md §11), the composer gives way to a question card
+like Codex's (`#chatQuestion`): one question at a time with "‹ 2 of 3 ›", its options numbered with the highlighted one on
+a grey band, "Select all that apply" and ticks for a multiple choice, the last row a free answer ("No, and tell Tana what to
+do differently"), then Dismiss (esc) and Continue (↩), Submit on the last. ↑↓ move, 1–9 pick, Space ticks, ↩ continues
+(taking the highlighted option when nothing is picked), ←→ step between questions, Esc dismisses (Tana goes on with
+defaults). Submitting writes the answers (`chat:answer`) and Tana goes on. **Invite to chat…** (Cmd+K on a chat) lists
+the workspace's members; the one picked joins the chat as an editor (`chat:invite`), and "<name> was added to the
+chat." shows as a centred status line, as other status lines do.
+
 ### Work View, windows and panes
 
 - **Work View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the

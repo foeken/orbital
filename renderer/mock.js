@@ -204,6 +204,13 @@ function mockApi() {
     chatMsg(true, ['Perfect, thanks!'], 6),
     chatMsg(false, [[{ text: 'Happy to help. Shall I pin it to ' }, { mention: { label: 'Leadership sync', uri: 'mockmeeting2' } }, { text: '?' }]], 5),
   ];
+  // a chat where Tana waits on two questions (sdk/chat.js pendingQuestions): the card takes the composer's place
+  const asking = chatMsg(false, ['Before I rewrite the clause, two quick questions.'], 3, ['Waiting for your input']);
+  asking.chat.questions = { messageId: asking.chat.id, items: [
+    { id: 'q1', question: 'Which version of the agreement should I start from?', multiSelect: false, options: [{ label: 'The signed 2025 version (Recommended)' }, { label: 'The draft Sam shared last week' }, { label: 'Start fresh' }] },
+    { id: 'q2', question: 'What should the new clause cover?', multiSelect: true, options: [{ label: 'Data retention', description: 'how long we keep it' }, { label: 'Sub-processors' }, { label: 'Breach notification' }] },
+  ] };
+  content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
@@ -476,6 +483,22 @@ function mockApi() {
     // a message goes in at once; Tana's answer follows a moment later, the way live updates bring it
     // mentions come back as chips and a skill as its attachment, the way sdk/chat.js reads what main stored
     chatAnswers: async () => ({ ai: true, canWrite: true }), // every mock chat is yours alone
+    // answered or skipped: the questions stop waiting, and Tana goes on
+    answerChat: async (docId, messageId, answers) => {
+      const m = (content[docId] || []).find((r) => r.chat && r.chat.id === messageId);
+      if (!m || !m.chat.questions) throw new Error('These questions are no longer waiting for an answer');
+      delete m.chat.questions; emit(docId);
+      const said = answers ? Object.values(answers).map((a) => [...a.selected, a.custom].filter(Boolean).join(', ')).join('; ') : 'sensible defaults';
+      setTimeout(() => { content[docId].push(chatMsg(false, ['Thanks. Going with: ' + said + '.'], 0, ['Thought for 3 seconds'])); emit(docId); }, 1200);
+      return { messageId: 'relay', responding: true };
+    },
+    inviteToChat: async (docId, uri) => {
+      const name = (members.find((m) => m.id === uri) || {}).text || 'Someone';
+      const line = (text) => ({ id: 'st' + (++seq), text, kind: 'block', editable: false, segments: [{ text }], hasChildren: false, children: [], chat: { id: 'st' + seq, status: true, author: uri } });
+      (content[docId] ||= []).push(line(name + ' was added to the chat.'), line('This chat now has multiple participants. Mention @Tana to trigger AI.'));
+      emit(docId);
+      return { name };
+    },
     sendChat: async (docId, text, attachments = [], opts = {}) => {
       const segs = (p) => p.split(/(\[[^\]\n]*\]\([^)\s]+\))/).filter(Boolean).map((t) => { const m = /^\[(.*)\]\((.+)\)$/.exec(t); return m ? { mention: { label: m[1], uri: m[2] } } : { text: t }; });
       const sent = chatMsg(true, [...text.split(/\n{2,}/).map(segs), ...attachments.map((uri) => ({ reference: { uri, label: (all.find((d) => d.id === uri) || {}).text } }))], 0);

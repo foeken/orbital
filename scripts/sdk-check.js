@@ -5698,6 +5698,23 @@ async function main() {
       answer = { status: 200, body: { success: true, messageId: 'ai000010' } };
       assert.deepEqual([(await send(null, chatDoc.id, 'Over to you', [], { ai: true })).responding, bodies.length], [true, asked + 1], 'To Tana asks');
       await assert.rejects(send(null, chatDoc.id, 'x', ['not a uri']), /Attachments are Tana documents/);
+      // inviting: the member joins as an editor through the sharing rules, and the chat says so, as Tana's does
+      const SAM = 'tana:user-profile:01examplesam00000000000000';
+      assert.deepEqual({ ...await backend.handlers.get('chat:invite')(null, chatDoc.id, SAM) }, { name: 'A participant' });
+      const joined = chatDoc.data.get('participants').toJSON()[SAM], lines = chatDoc.data.get('messages').toJSON().slice(-2);
+      assert.deepEqual([joined.role, joined.type, joined.changedBy, chatDoc.data.get('participants').toJSON()[ME].role], ['editor', 'user', ME, 'admin']);
+      assert.deepEqual(lines.map((m) => [m.content.text, m.isStatusUpdate, m.fromUserType]), [['A participant was added to the chat.', true, 'ai'], ['This chat now has multiple participants. Mention @Tana to trigger AI.', true, 'ai']]);
+      await assert.rejects(backend.handlers.get('chat:invite')(null, chatDoc.id, SAM), /already in this chat/);
+      // answering Tana's questions asks it to go on from the relay
+      chatDoc.transact((l) => {
+        const m = l.getMap('data').get('messages').insertContainer(l.getMap('data').get('messages').length, new LoroMap());
+        m.set('id', 'askmain1'); m.set('type', 'message'); m.set('fromUserType', 'ai');
+        m.setContainer('toolCalls', new LoroList()).insertContainer(0, new LoroMap()).set('name', 'askUserQuestion'); m.get('toolCalls').get(0).set('status', 'awaiting_user_input');
+        const q = m.setContainer('questionsData', new LoroMap()).setContainer('questions', new LoroList()).insertContainer(0, new LoroMap());
+        q.set('id', 'q1'); q.set('question', 'Go?'); q.set('multiSelect', false); q.setContainer('options', new LoroList()).insertContainer(0, new LoroMap()).set('label', 'Yes');
+      });
+      const answered = await backend.handlers.get('chat:answer')(null, chatDoc.id, 'askmain1', { q1: { selected: ['Yes'] } });
+      assert.deepEqual([answered.responding, bodies.at(-1).triggerMessageId], [true, answered.messageId], 'Tana goes on from the relay');
       // a chat you can only read takes nothing: refused before a message is written that would never reach Tana
       chatDoc.transact((l) => l.getMap('data').get('participants').get(ME).set('role', 'viewer'));
       const count = chatDoc.data.get('messages').length;
@@ -5718,24 +5735,24 @@ async function main() {
       { type: 'message', fromUserType: 'ai', content: { text: '1. one\n#### deep *it* ~~gone~~' }, sentAt: 0, completedAt: 125000 },
       { type: 'message', fromUserType: 'ai', content: { text: 'x' }, sentAt: 0, completedAt: 120000, toolCalls: [{ id: 'c', name: 'readItems', status: 'completed' }] },
     ]);
-    assert.deepEqual(rows.map((r) => r.id), ['m2', 'm3', 'm4'], 'status updates other than "accepted" and interview relays are hidden');
-    assert.ok(rows[0].meta.endsWith(' (edited)'));
-    assert.deepEqual(rows[1].children.map((n) => n.block), ['numbered', 'heading3'], 'no thinking line without tool calls; deep headings read as the third level');
-    assert.deepEqual(rows[1].children[1].segments, [{ text: 'deep ' }, { text: 'it', marks: { italic: true } }, { text: ' ' }, { text: 'gone', marks: { strike: true } }]);
-    assert.equal(rows[2].children[0].text, 'Thought for 2 minutes');
+    assert.deepEqual(rows.map((r) => r.id), ['m0', 'm2', 'm3', 'm4'], 'interview relays are hidden, as Tana\'s chat panel hides them');
+    assert.deepEqual([rows[0].text, rows[0].chat.status], ['renamed the chat', true], 'any other status update is a line of its own');
+    assert.ok(rows[1].meta.endsWith(' (edited)'));
+    assert.deepEqual(rows[2].children.map((n) => n.block), ['numbered', 'heading3'], 'no thinking line without tool calls; deep headings read as the third level');
+    assert.deepEqual(rows[2].children[1].segments, [{ text: 'deep ' }, { text: 'it', marks: { italic: true } }, { text: ' ' }, { text: 'gone', marks: { strike: true } }]);
+    assert.equal(rows[3].children[0].text, 'Thought for 2 minutes');
     const states = chat.chatRows([
       { fromUserType: 'ai', status: 'cancelled' },
       { fromUserType: 'ai', status: 'error', errorMessage: 'Provider failed' },
       { fromUserType: 'ai', status: 'limit_exceeded' },
-      { fromUserType: 'ai', toolCalls: [{ name: 'askUserQuestion', status: 'awaiting_user_input' }], questionsData: {
-        answered: false, skipped: false, questions: [{ question: 'Choose a plan', multiSelect: true, options: [{ label: 'Basic', description: 'For a small team' }, { label: 'Pro' }] }],
+      { id: 'ask00001', fromUserType: 'ai', toolCalls: [{ name: 'askUserQuestion', status: 'awaiting_user_input' }], questionsData: {
+        answered: false, skipped: false, questions: [{ id: 'q1', question: 'Choose a plan', multiSelect: true, options: [{ label: 'Basic', description: 'For a small team' }, { label: 'Pro' }] }],
       } },
     ]);
     assert.deepEqual(states.slice(0, 3).map((r) => r.children[0].text), ['Cancelled', 'Error: Provider failed', 'Limit exceeded']);
-    const waiting = states[3], question = waiting.children[1];
-    assert.equal(waiting.children[0].text, 'Waiting for your input');
-    assert.equal(question.text, 'Choose a plan · Select all that apply');
-    assert.deepEqual(question.children.map((r) => r.text), ['Basic · For a small team', 'Pro']);
+    const waiting = states[3];
+    assert.deepEqual(waiting.children.map((r) => r.text), ['Waiting for your input'], 'the questions are no outline rows');
+    assert.deepEqual(JSON.parse(JSON.stringify(waiting.chat.questions)), { messageId: 'ask00001', items: [{ id: 'q1', question: 'Choose a plan', multiSelect: true, options: [{ label: 'Basic', description: 'For a small team' }, { label: 'Pro' }] }] }, 'they go to the question card');
     const readOnly = (nodes) => nodes.every((n) => n.editable === false && readOnly(n.children || []));
     assert.ok(readOnly(states), 'status and pending-question rows are read-only');
     console.log('ok  chat visibility and the thinking line follow the web client');
@@ -5757,6 +5774,33 @@ async function main() {
     assert.deepEqual([messages[1].id, messages[2].id], [first, second]);
     assert.deepEqual(doc.loro.getMap('participantTimeContext').toJSON(), { [ME]: { timezone: 'Europe/Amsterdam', lastLocalDate: '2026-09-27' } });
     assert.throws(() => doc.transact((l) => chat.addMessage(l, { text: '  ', byUri: ME })), /Nothing to send/);
+    // Tana's questions answered as its question panel answers them (docs/CHATS.md §11)
+    const ask = (id) => doc.transact((l) => {
+      const m = l.getMap('data').get('messages').insertContainer(l.getMap('data').get('messages').length, new LoroMap());
+      m.set('id', id); m.set('type', 'message'); m.set('fromUserType', 'ai'); m.set('sentAt', at); m.set('completedAt', at + 1);
+      m.setContainer('toolCalls', new LoroList()).insertContainer(0, new LoroMap()).set('name', 'askUserQuestion');
+      m.get('toolCalls').get(0).set('id', 'call_1'); m.get('toolCalls').get(0).set('status', 'awaiting_user_input');
+      const qs = m.setContainer('questionsData', new LoroMap()).setContainer('questions', new LoroList());
+      for (const [qid, question, multi] of [['q1', 'Which plan?', false], ['q2', 'Which extras?\nPick any', true]]) {
+        const q = qs.insertContainer(qs.length, new LoroMap()); q.set('id', qid); q.set('question', question); q.set('multiSelect', multi);
+        const os = q.setContainer('options', new LoroList());
+        for (const label of multi ? ['Support', 'Backups'] : ['Basic', 'Pro']) os.insertContainer(os.length, new LoroMap()).set('label', label);
+        q.setContainer('selectedOptions', new LoroList()); q.setContainer('customAnswer', new LoroText());
+      }
+    });
+    ask('ask00002');
+    let relay;
+    doc.transact((l) => { relay = chat.answerQuestions(l, { messageId: 'ask00002', answers: { q1: { selected: ['Pro', 'Basic'], custom: '' }, q2: { selected: ['Backups', 'Nope'], custom: 'weekly' } }, byUri: ME, now: at + 5 }); });
+    const after = doc.data.get('messages').toJSON(), asked = after.find((m) => m.id === 'ask00002'), sent = after.at(-1);
+    const summary = '[User answered AI questions]\n- Which plan?: Pro\n- Which extras? […]: Backups; Custom: weekly';
+    assert.deepEqual(asked.questionsData.questions.map((q) => [q.selectedOptions, q.customAnswer]), [[['Pro'], ''], [['Backups', '__custom__'], 'weekly']], 'one choice for a single answer, only offered labels, the free answer marked the way Tana marks it');
+    assert.deepEqual([asked.questionsData.answered, asked.questionsData.skipped, asked.questionsData.answeredByUri, asked.toolCalls[0].status, asked.toolCalls[0].output], [true, false, ME, 'completed', summary]);
+    assert.deepEqual([sent.id, sent.isAIInterviewRelay, sent.excludeFromAIContext, sent.content.text], [relay, true, true, summary], 'the relay carries what Tana is told');
+    assert.equal(chat.chatRows(after).some((r) => r.chat.questions || r.chat.id === relay), false, 'answered, the card goes and the relay stays hidden');
+    assert.throws(() => doc.transact((l) => chat.answerQuestions(l, { messageId: 'ask00002', answers: {}, byUri: ME })), /no longer waiting/);
+    ask('ask00003');
+    doc.transact((l) => chat.answerQuestions(l, { messageId: 'ask00003', answers: null, byUri: ME }));
+    assert.equal(doc.data.get('messages').toJSON().at(-1).content.text, '[User skipped AI questions]\nPlease continue with sensible defaults and note assumptions briefly.', 'Dismiss tells Tana to go on with defaults');
     // a skill run from "/" rides along as the message's attachment, as Tana's runSkill sends it
     doc.transact((l) => chat.addMessage(l, { text: 'Run [Diagram](tana:skill:01examples0000000000000000)', byUri: ME, senderName: 'Robin Vega', attachments: ['tana:skill:01examplet0000000000000000'], timezone: 'Europe/Amsterdam', now: at + 12e4 }));
     assert.deepEqual(doc.data.get('messages').toJSON().at(-1).attachmentUris, ['tana:skill:01examplet0000000000000000']);
