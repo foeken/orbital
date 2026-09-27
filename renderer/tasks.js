@@ -23,7 +23,7 @@ function memberName(uri) {
 const AUDIENCES = {
   'only-me': { icon: 'lock', label: 'Visible only to you', word: 'Private' }, // word: said instead of the faces (peopleEl, visibilityFieldEl)
   people: { icon: 'userLock', label: 'Visible to selected people' },
-  space: { icon: 'houseLock', label: 'Visible to space members' },
+  space: { icon: 'houseLock', label: 'Visible to space members', word: 'Space members' }, // audienceInfo names the space
   everyone: { icon: 'users', label: 'Visible to everyone', word: 'Everyone' },
 };
 function audienceInfo(audience, audienceSpace) {
@@ -33,7 +33,7 @@ function audienceInfo(audience, audienceSpace) {
   const title = audience?.title || audienceSpace?.title;
   const named = title && demoText(title, audienceSpace?.uri || 'space'); // a space's name is Tana's: masked in demo mode
   // a space audience names the space, so a row can read "Robin Vega · Platform Guild"
-  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + named, space: named } : info;
+  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + named, space: named, word: named } : info;
 }
 function loadTaskMeta(docId) {
   // Metadata is supplemental. Calling it before the sync client connects retries on every render.
