@@ -33,16 +33,26 @@ function dropRef(uri) {
   docStates.delete(uri);
   S.client?.sync?.unsubscribe?.(uri)?.catch(() => {}); // it may settle after a logout, or under the checks' partial clients
 }
+// Held while it bootstraps (main/state.js reading), as document() holds its read: a sweep must not unsubscribe it; let
+// go once it settles if it was pushed out meanwhile; and a bootstrap that failed (deleted, access gone) is no live
+// reference, so the next read tries again.
+function subscribeRef(uri) {
+  reading.set(uri, (reading.get(uri) || 0) + 1);
+  subscribe(uri).then((doc) => { if (!doc) liveRefs.delete(uri); }).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else { reading.delete(uri); dropRef(uri); } });
+}
+// A new login's client (main/views.js start): its stream has none of them, and an outline already on screen is not
+// read again to ask, so they are all subscribed on it now.
+function reliveRefs() {
+  liveRefsClient = S.client;
+  if (!S.client || !S.client.sync) return liveRefs.clear(); // no stream (logged out, or a check's partial client): nothing is live
+  for (const uri of liveRefs.keys()) subscribeRef(uri);
+}
 function keepLive(uris) {
-  if (liveRefsClient !== S.client) { liveRefs.clear(); liveRefsClient = S.client; }
+  if (liveRefsClient !== S.client) reliveRefs();
   for (const uri of uris.slice(0, LIVE_ROWS / 2)) {
     if (liveRefs.delete(uri)) { liveRefs.set(uri, true); continue; } // already live: now the newest
     liveRefs.set(uri, true);
-    // held while it bootstraps (main/state.js reading), as document() holds its read: a sweep must not unsubscribe it
-    reading.set(uri, (reading.get(uri) || 0) + 1);
-    // ...and let go once it settles if it was pushed out meanwhile, which skipped it while it was still loading
-    // a bootstrap that failed (deleted, access gone) is no live reference: the next read tries again
-    subscribe(uri).then((doc) => { if (!doc) liveRefs.delete(uri); }).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else { reading.delete(uri); dropRef(uri); } });
+    subscribeRef(uri);
   }
   for (const uri of [...liveRefs.keys()].slice(0, Math.max(0, liveRefs.size - LIVE_ROWS / 2))) { liveRefs.delete(uri); dropRef(uri); }
 }
@@ -1069,4 +1079,4 @@ const ipc = {
   },
 };
 
-module.exports = { isLiveRef, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

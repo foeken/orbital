@@ -8,7 +8,7 @@ const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completed
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, subscribe } = require('./documents');
+const { codexIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
 const settings = require('./settings');
@@ -249,6 +249,7 @@ async function start() {
   S.client.sync.on('connected', () => setStatus({ connected: true, error: null }));
   S.client.sync.on('disconnected', () => setStatus({ connected: false }));
   S.client.sync.on('error', (e) => setStatus({ error: errText(e) }));
+  reliveRefs(); // the references on screen, live on the old login's stream, subscribed on this one (#413)
   S.client.sync.on('change', onChange);
   // Tana refused an edit but still lets us read it: say so, and redraw the row, which doc:info now reports read-only.
   S.client.sync.on('write-denied', (id) => { setStatus({ error: 'Tana refused your edits to this node; it is read-only now' }); send('outline:changed', id, { meta: true }); });

@@ -5223,7 +5223,7 @@ async function main() {
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:[{id:chatUri,title:'A sub-agent chat'}]})}}});
     const embedTo = (uri) => host.transact(l => l.getMap('content').get('children').get(0).get('attributes').set('tanaUri', uri));
     embedTo(chatUri); await backend.outlineWithReferences(host); embedTo(targetUri);
-    assert.deepEqual(live, [], 'but not a chat: it bootstraps to megabytes of messages, too much for a title');
+    assert.ok(!live.includes(chatUri), 'but not a chat: it bootstraps to megabytes of messages, too much for a title');
     const many = new Document('tana:text:' + ulid()), manyUris = [];
     many.transact(l => initDocument(l, 'many references', ME));
     let last = outline.readOutline(many)[0].id;
@@ -5232,7 +5232,7 @@ async function main() {
     const refClient = {sync,graph:{listNodes:async (q) => ({nodes:(q.nodeIds || []).map((id) => ({id, title:id}))})}}; // one client: a new one starts afresh
     backend.testRuntime({me:{userUri:ME},client:refClient});
     await backend.outlineWithReferences(many);
-    assert.deepEqual([manyUris.length, live.length], [60, 50], 'a page of 60 references keeps its first 50 live');
+    assert.deepEqual([manyUris.length, live.filter((uri) => manyUris.includes(uri)).length], [60, 50], 'a page of 60 references keeps its first 50 live');
     // Read again, a page subscribes nothing twice; the next page's references are kept live and push the oldest out
     const gone = []; sync.unsubscribe = async (id) => { gone.push(id); };
     live.length = 0; await backend.outlineWithReferences(many);
@@ -5263,8 +5263,9 @@ async function main() {
     await backend.outlineWithReferences(many); live.length = 0; await backend.outlineWithReferences(many); // all 50 live on this client
     const liveBefore = live.length;
     backend.testRuntime({me:{userUri:ME},client:{...refClient}});
-    live.length = 0; await backend.outlineWithReferences(many);
-    assert.deepEqual([liveBefore, live.length], [0, 50], 'after a new login the targets live on the old client are subscribed on the new one');
+    live.length = 0; backend.reliveRefs(); // what start() does once the new client exists, before any outline is read again
+    const onNew = live.length; live.length = 0; await backend.outlineWithReferences(many);
+    assert.deepEqual([liveBefore, onNew, live.length], [0, 50, 0], 'a new login subscribes the targets live on the old client on the new one, with no outline read again');
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
