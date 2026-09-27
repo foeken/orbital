@@ -331,7 +331,10 @@ function rowSig(n) {
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
-    n.proposal ? n.proposal.note : null, n.subtext, n.join, tableView()]); // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    n.proposal ? n.proposal.note : null, n.subtext, n.join, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    tableView() ? typeDefs() : null, // a table cell's picker is made from the page's field definitions (views.js cellPicker)
+    demoMode, // demo mode masks the words and makes every row read-only: a row drawn before the switch shows real titles
+    outline.dataset.key]); // and the page it was built for: a row's editability follows its parent, so a view's row is not a type page's
 }
 function renderOutline() {
   const saved = focused();
@@ -344,13 +347,25 @@ function renderOutline() {
   const parent = trail && trail.at(-1);
   outline.dataset.key = parent ? parent.key : ''; // whose rows these are, for a drop (renderer/drag.js); a view owns none
   let list, hidden = 0;
+  // An unchanged, collapsed row is reused; anything expanded or different is rebuilt. Views and result pages (a saved
+  // search, a type) list documents keyed by their id, so both go through this; an outline's blocks do not.
+  const reuse = !parent || isSearchDoc(parent.node) || isTypeDoc(parent.node); // an outline, Proposals and the Timeline rebuild
+  const before = new Map(reuse ? [...outline.children].filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]) : []);
+  const rowEl = (n) => {
+    // and whether the page lets its rows be edited (canEditItem reads the nearest document above): a row drawn before
+    // access changed must not keep its old contenteditable, box and drag handle
+    const old = before.get(n.id), sig = rowSig(n) + (parent ? canEditNode(parent.node) : '');
+    if (old && old.dataset.sig === sig && !old.classList.contains('leaving') && !old.querySelector(':scope > .children')) { mkItem(n.id, n, parent); return old; }
+    const el = parent ? childEl(n, parent) : nodeEl(n, n.id, null); el.dataset.sig = sig; return el; // childEl: a block row keeps its page's document
+  };
   if (parent) {
     if (!parent.node.draft) ensureLoaded(parent);
     list = parent.node.draft ? [] : childrenOf(parent) || [];
     // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page
     // filters: an outline's rows are content you are editing, not a result set you are searching through.
-    let groups = null;
+    let groups = null, row = (n) => childEl(n, parent);
     if (isSearchDoc(parent.node) || isTypeDoc(parent.node)) {
+      row = rowEl;
       if (isSearchDoc(parent.node)) {
         loadSearchFilter(parent.docId); // its stored query, as the filter the pills above it show
         previewRows(parent.docId);      // and the rows that filter finds, so editing a pill moves the list
@@ -368,8 +383,8 @@ function renderOutline() {
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [childEl(n, parent), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
-      : list.map((n) => childEl(n, parent))));
+      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [row(n), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
+      : list.map(row)));
     if (parent.docId === TIMELINE_PAGE && tana.timelinePages && kids.get(TIMELINE_PAGE) && !timelinePartial && timelinePages < TIMELINE_MAX_PAGES) outline.append(timelineOlderEl()); // three days a page: more as the end comes into view, once the first page is whole
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
@@ -382,12 +397,6 @@ function renderOutline() {
     const shown = pageRows(docs, filterEl.value.trim().toLowerCase()); // Default leaves the view's own order alone
     list = shown.list; hidden = shown.hidden;
     const groups = shown.groups; // null when the view is not grouped: one flat list, as before
-    const before = new Map([...outline.children].filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]));
-    const rowEl = (n) => { // an unchanged, collapsed row is reused; anything expanded or different is rebuilt
-      const old = before.get(n.id), sig = rowSig(n);
-      if (old && old.dataset.sig === sig && !old.classList.contains('leaving') && !old.querySelector(':scope > .children')) { mkItem(n.id, n, null); return old; }
-      const el = nodeEl(n, n.id, null); el.dataset.sig = sig; return el;
-    };
     outline.replaceChildren(...(groups
       ? groups.flatMap((g) => [groupHeadEl(g), ...(g.collapsed ? [] : g.nodes.map(rowEl)), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map(rowEl)));
