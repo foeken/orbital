@@ -762,7 +762,12 @@ function nodeEl(node, docId, parent) {
   // the drag from exactly this default and preventDefault would quietly stop it from ever beginning. Ending an
   // edit is what reaching for another row means anyway, and the row being left flushes as it blurs.
   bullet.onmousedown = (e) => { if (!bullet.draggable) e.preventDefault(); };
-  if (!node.draft && opens) bullet.onclick = () => (reference || fullref ? openReference(node) : zoomTo(item));
+  // ⌘-click opens it in a pane beside this one, ⌥-click as a tab in this pane (renderer/palette.js openElsewhere)
+  if (!node.draft && opens) bullet.onclick = (e) => {
+    const where = e && elsewhere(e), ref = reference || fullref;
+    if (where && (!ref || node.reference?.uri)) return run(() => (ref ? openElsewhere(where, node.reference.uri) : openElsewhere(where, item.docId, item.node.kind === 'document' ? null : item.node.id)));
+    if (ref) openReference(node); else zoomTo(item);
+  };
   // A notification's bullet is its read state, and the row action that flips it (renderer/inbox.js)
   if (node.notification) { bullet.title = node.unread ? 'Mark as read' : 'Mark as unread'; bullet.onclick = () => setNotificationRead(node, !!node.unread); }
   line.append(chev, bullet);
@@ -848,7 +853,7 @@ function nodeEl(node, docId, parent) {
   // as does a task listed under one, as itself: goTo reads the real node, where zoomTo would open the read-only copy the
   // Timeline lists, filed under the Timeline in the crumb — a page that looked like the task and could not be edited
   else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .check, .bullet')) goTo(node.id); };
-  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .bullet, .check')) zoomTo(item); }; // .check: a task's box in a table row ticks it and stays
+  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .bullet, .check')) { if (e.altKey) run(() => openElsewhere('tab', item.docId, item.node.kind === 'document' ? null : item.node.id)); else zoomTo(item); } }; // .check: a task's box in a table row ticks it and stays; ⌥: as a tab in this pane (⌘-click selects the row)
   if (clickOpens) el.classList.add('opens');
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click

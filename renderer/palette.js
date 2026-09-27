@@ -303,9 +303,9 @@ function paletteRows(q, typed = q) {
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
-  rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: 'search', label: s.text || s.title || 'Untitled search', run: () => goTo(s.id) })));
+  rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: 'search', label: s.text || s.title || 'Untitled search', opens: s.id, run: () => goTo(s.id) })));
   // So is every workspace type: its page lists its documents. Drawn in its own glyph, without its hue.
-  rows.push(...(typeListCache || []).map((t) => ({ id: 'type:' + t.uri, group: 'Types', icon: typeGlyph(t.uri), label: t.title || 'Untitled type', run: () => goTo(t.uri) })));
+  rows.push(...(typeListCache || []).map((t) => ({ id: 'type:' + t.uri, group: 'Types', icon: typeGlyph(t.uri), label: t.title || 'Untitled type', opens: t.uri, run: () => goTo(t.uri) })));
   rows.push(...pillCommandRows());
   // ⌘F arrives as runAction('filter'), which only fires if this row exists right now — so a saved search page has to
   // offer it, or the key falls through to the browser exactly as it did before.
@@ -567,7 +567,7 @@ function openResult(n, from) {
 function resultRows(nodes, group) {
   nodes = nodes.map(asDoc);
   const ctx = linkCtx, pin = pinCtx, field = fieldLinkCtx; // field: a link field picking its value (renderer/fields.js)
-  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (field ? pickLink(field, n) : ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id, ...(n.icon ? { icon: n.icon } : {}), ...(n.hue != null ? { hue: n.hue } : {}) }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), group }));
+  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (field ? pickLink(field, n) : ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id, ...(n.icon ? { icon: n.icon } : {}), ...(n.hue != null ? { hue: n.hue } : {}) }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), ...(field || ctx || pin ? {} : { opens: n.id }), group }));
   // a link field that holds something can be emptied here too, as an options field can; last, so Enter never clears
   if (field && group === undefined && choiceValues(field).length && fuzzyMatch('Clear value', palInput.value.trim())) rows.push({ group: field.field.label || 'Value', icon: 'none', label: 'Clear value', run: () => writeChoice(field, []) });
   if (!ctx) return rows;
@@ -1029,6 +1029,15 @@ const PANE_ROWS = [['otherPane', 'Next pane', 'panel.next', 'otherPane'], ['prev
   ['zoomBack', 'Zoom back', 'navigation.back', 'back'], ['zoomForward', 'Zoom forward', 'navigation.forward', 'forward'],
   ['closePane', 'Close pane', 'view.close', 'closePane']];
 const shellRun = (command) => { if (window.frameElement) window.parent.postMessage({ orbital: 'run', command }, '*'); };
+// Opening a place somewhere other than this page (issue #443): ⌘ a pane beside this one (as ⌘N opens one), ⌥ a tab in
+// this pane. Main gives the new page its id, and it opens on the place stored under that id (shell.js open, edit.js).
+const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'right' : e.altKey ? 'tab' : null);
+async function openElsewhere(where, docId, nodeId = null) {
+  const id = await tana.splitWindow(where), d = docOf(docId) || {};
+  if (!id) return;
+  localStorage.setItem('view:' + id, view);
+  localStorage.setItem('place:' + id, JSON.stringify({ docId, nodeId, title: d.text ?? d.title, icon: d.icon }));
+}
 // ---- Saved views: the window's panes, and what each shows, under a name (issue #442) ----
 // A view is the layout main keeps for the window (Trellis's document) and each page's view and place, under the keys
 // the pages read at load: 'view' and 'place' for page '', 'view:2' and 'place:2' for page '2'. Opening one writes those
@@ -1131,7 +1140,11 @@ palInput.addEventListener('keydown', (e) => {
   if (palPage.keys && palPage.keys(e)) { e.preventDefault(); e.stopPropagation(); } // a page's own keys (Edit choices: ⌘⌫, ⇧⌘↑/↓)
   else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); }
-  else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); chooseRow(mod); }
+  else if (e.key === 'Enter') { // ⌘↩ / ⌥↩ on a row that opens a place: in a pane beside, or a tab in this one (while linking, ⌘↩ creates)
+    e.preventDefault(); e.stopPropagation();
+    const r = palRows[palIndex], where = !linkCtx && r && r.opens && !r.disabled && elsewhere(e);
+    if (where) { closePalette(); run(() => openElsewhere(where, r.opens)); } else chooseRow(mod);
+  }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }
 });
 palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });

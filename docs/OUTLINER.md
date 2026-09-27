@@ -311,6 +311,12 @@ affected document is reloaded and the caret placed in the affected row when it s
 recorded in the same history and undone by repeating the native action. Sharing and move never enter it: their
 audience disclosure and preview token are the gate (§14).
 
+**Opening elsewhere** (issue #443): ⌘ opens a place in a new pane beside this one, ⌥ as a new tab in this pane
+(renderer/palette.js `openElsewhere`, which stores the place under the id main gives the new page, as ⌘N does). In Cmd+K
+and Cmd+S that is ⌘↩ / ⌥↩ on a row that opens a place (search results, saved searches, types: rows with `opens`);
+while an @ link is being made ⌘↩ still creates. On the outline it is ⌘-click / ⌥-click on a bullet, and ⌥-click on a
+row that opens on a click (⌘-click there keeps selecting the row).
+
 ### Selection
 
 ⌘-click toggles a row in the selection; ⇧-click and ⇧↑/⇧↓ extend one anchored range over siblings (blocks within one
