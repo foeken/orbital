@@ -3246,7 +3246,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.match(source, /label: `Set status for \$\{count\} \$\{noun\}`[^\n]*subAlways: true/, 'and so does Set status for a selection');
   // A reused row keeps whatever its checkbox shows: accepting an Inbox task changes only its state, so that must rebuild it
   const rowSig = vm.runInNewContext(`
-    const taskMetaById = new Map(), taskMetaLoading = new Set(), open = new Map(), pending = new Map(), members = null;
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), open = new Map(), pending = new Map(), members = null, outline = { dataset: { key: '' } };
     const sensitiveHidden = () => false;
     const isPinned = () => false;
     const pinnedOn = () => '';
@@ -3262,6 +3262,28 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const beforeDisplay = rowSig.sig(inboxRow);
   rowSig.display(['status', 'assigned', 'updated', 'created']);
   assert.notEqual(rowSig.sig(inboxRow), beforeDisplay, 'changing what rows display rebuilds them, rather than leaving the old facts on screen');
+  // A type or saved-search page reuses its unchanged rows the way a view does (#415): it rebuilt all 1,000 on every
+  // render. The real row-drawing block of renderOutline, over a page of three rows drawn twice.
+  const page = vm.runInNewContext(`
+    let built = 0, kept = [];
+    const outline = { dataset: {}, parentElement: {}, get children() { return kept; }, replaceChildren(...els) { kept = els; } };
+    const kids = new Map(), filterEl = { value: '' }, tana = {}, PROPOSALS_PAGE = 'proposals', TIMELINE_PAGE = 'timeline';
+    let animView = null, caretOnOpen = false;
+    const ensureLoaded = () => {}, loadSearchFilter = () => {}, previewRows = () => {}, withDraftTail = (list) => list, mkItem = () => {};
+    const isSearchDoc = () => false, isTypeDoc = (n) => n.id.startsWith('tana:type:');
+    const childrenOf = (item) => kids.get(item.docId), pageRows = (list) => ({ list, groups: null, hidden: 0 });
+    const rowSig = (n) => n.text + '|' + outline.dataset.key;
+    const nodeEl = (n, docId) => { built++; return { dataset: { key: docId }, classList: { contains: (c) => c === 'node' }, querySelector: () => null }; };
+    ${sourceLine('const childEl')}
+    function draw(parent) { outline.dataset.key = parent.key; ${sourceBetween('  let list, hidden = 0;', "  outline.classList.toggle('table-view'")} }
+    const page = (id, list) => { kids.set(id, list); return { key: id, docId: id, node: { id, kind: 'document' } }; };
+    ({ draw: (id, list) => { draw(page(id, list)); return { built, els: [...kept] }; } });
+  `);
+  const three = ['a', 'b', 'c'].map((id) => ({ id: 'tana:text:' + id, text: id, kind: 'document' }));
+  const first = page.draw('tana:type:t', three), again = page.draw('tana:type:t', three);
+  assert.equal(again.built - first.built, 0, 'a type page redrawn with nothing changed rebuilds none of its rows');
+  assert.ok(again.els.every((el, i) => el === first.els[i]), 'it puts the same row elements back');
+  assert.equal(page.draw('tana:type:t', [{ ...three[0], text: 'renamed' }, ...three.slice(1)]).built - again.built, 1, 'a changed row is the only one rebuilt');
   // The pills go with it: whether a row still belongs where it sits is decided while they render (needsCleanup), so a
   // render held back by the caret or a frozen selection would otherwise never be able to offer Clean up.
   assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); if \(pillsDrawn\) renderPills\(true\); return;/,
