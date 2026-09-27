@@ -259,12 +259,14 @@ function render(force = false) {
   fitRowMeta();
 }
 // The page's title on its tab in the shell (shell.js): what the header shows, so masked in demo mode, and 'Hidden'
-// while the document's sensitive mark blurs it. Told once per change; outside the shell (the mock) there is no tab.
+// while the document's sensitive mark blurs it, and whether it can be typed in, which offers Rename on the tab (issue
+// #441). Told once per change; outside the shell (the mock) there is no tab.
 let toldTitle = null;
-function tellTitle(title) {
-  if (title === toldTitle || !window.frameElement) return;
-  toldTitle = title;
-  window.parent.postMessage({ orbital: 'title', title }, '*');
+function tellTitle(title, renamable) {
+  const told = title + '\n' + renamable;
+  if (told === toldTitle || !window.frameElement) return;
+  toldTitle = told;
+  window.parent.postMessage({ orbital: 'title', title, renamable }, '*');
 }
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
 // title fills the line the browser wraps them onto a line of their own, where they read as a second title rather
@@ -437,7 +439,9 @@ function renderOutline() {
   titleEl.dataset.key = editable ? parent.key : '';
   titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? demoText(parent.node.text, parent.node.id) : viewOf() ? viewOf().title : 'Tana';
   blurSensitive(titleEl, parent && parent.docId);
-  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent);
+  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable);
+  // a view, a saved search or an app page is named by its tab under a tab bar, so its heading goes (styles.css html.listing)
+  document.documentElement.classList.toggle('listing', !parent || appOwned(parent.docId));
   // zoomed task: its checkbox before the title (toggleDone, like row checkboxes; Cmd+Enter in the title too)
   const zoomedTask = parent && isTask(parent.node);
   titleCheck.hidden = !zoomedTask; titleCheck.checked = zoomedTask && !!parent.node.done;

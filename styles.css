@@ -84,6 +84,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 
 .titlebar { padding: 48px 32px 6px; user-select: none; position: relative; } /* the 4px the scroll area took, so the outline sits where it did */
 html.tabbed .titlebar { padding-top: 16px; } /* under a tab bar (shell.js, renderer/app.js) there are no traffic lights to keep clear of */
+html.tabbed.listing:not(.renaming) #pagehead { display: none; } /* a view, saved search or app page is named by its tab (renderer/render.js); Rename on the tab brings it back */
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; color: #1c2024; } /* the page title is a heading: the same near-black */
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
 .titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }

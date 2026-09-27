@@ -8,6 +8,7 @@ import { createWorkspace, createDocument, layout as L, DEFAULT_KEYMAP } from './
 const bridge = window.shell || { state: () => ({ doc: null }), onCommand() {}, layout() {} }; // shell.html opened on its own
 const start = bridge.state();
 let theme = start.theme === 'dark' ? 'dark' : 'light', covering = null, last = '', many = null;
+const renamable = new Set(); // the pages whose title can be typed in (renderer/render.js tellTitle): Rename on their tab
 // Signed out every page is the same login, so page '' shows alone and the layout waits here for the login ('auth').
 const single = () => createDocument(L.view('page', { id: 'page', params: { side: '' } }));
 const usable = (doc) => !!doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page');
@@ -17,9 +18,11 @@ let aside = start.signedOut && usable(start.doc) ? start.doc : null;
 const tokens = () => theme === 'dark'
   ? { '--trellis-bg': '#2b2f31', '--trellis-border': '#2b2f31', '--trellis-panel': '#1b1d1e', '--trellis-tabbar': '#232627', '--trellis-accent': '#4a5053', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' }
   : { '--trellis-bg': '#ececec', '--trellis-border': '#ececec', '--trellis-panel': '#fff', '--trellis-tabbar': '#f6f6f6', '--trellis-accent': '#c8c8c8', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' };
-// One page alone is the window as it was: no tab bar and no navigation. With more, each has its tab, titled by the page.
+// One page alone is the window as it was: no tab bar and no navigation. With more, each has its tab, titled by the page;
+// a right click on it opens the panel menu, led by Rename where the page's title can be typed in (issue #441).
 // Content keeps its layout down to 280 x 200 and scales below that, which is what zooming out shows.
 const types = (tabs) => ({ page: { title: 'Orbital', tabbar: tabs ? 'always' : 'never', minSize: { width: 280, height: 200 },
+  menu: (view) => (renamable.has(view.id) ? [{ id: 'rename', label: 'Rename', run: () => rename(view.id) }, 'separator'] : []),
   iframe: (view) => ({ src: 'index.html?side=' + encodeURIComponent(view.params.side), title: 'Orbital' }) } });
 
 const ws = createWorkspace(document.getElementById('workspace'), {
@@ -64,7 +67,7 @@ function guard() {
     ws.view(id).guardClose(async () => { if (pages().length < 2) return false; await flush(frameOf(id)); return true; });
   }
 }
-ws.on('close', (view) => guarded.delete(view.id));
+ws.on('close', (view) => { guarded.delete(view.id); renamable.delete(view.id); });
 
 // Every committed change goes to main once; while signed out the layout aside is the one kept.
 function sync() {
@@ -112,6 +115,11 @@ function focusPage(viewId) {
   if (!viewId) return;
   ws.focus(viewId);
   windowOf(frameOf(viewId))?.focus();
+}
+function rename(viewId) {
+  const win = windowOf(frameOf(viewId));
+  win?.focus();
+  win?.postMessage({ orbital: 'rename' }, '*');
 }
 // A page is told to send what it is typing and leave its presence room before its iframe goes (what beforeunload did
 // when each page was a view main closed); it answers, or half a second passes.
@@ -179,6 +187,11 @@ addEventListener('message', (e) => {
   const frame = frames().find((f) => windowOf(f) === e.source), what = e.data?.orbital;
   if (!frame) return;
   if (what === 'cover') cover(frame, e.data.on === true);
-  else if (what === 'title') { const id = sourceOf(e.source); if (id) ws.setTitle(id, String(e.data.title || '').trim() || 'Orbital'); }
+  else if (what === 'title') {
+    const id = sourceOf(e.source);
+    if (!id) return;
+    ws.setTitle(id, String(e.data.title || '').trim() || 'Orbital');
+    if (e.data.renamable === true) renamable.add(id); else renamable.delete(id);
+  }
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
 });

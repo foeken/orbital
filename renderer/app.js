@@ -61,7 +61,13 @@ window.addEventListener('message', (e) => {
   if (e.source !== window.parent || e.source === window) return;
   if (e.data?.orbital === 'flush') { leavePage(); e.source.postMessage({ orbital: 'flushed' }, '*'); }
   else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages, swap: e.data.swap === true }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); }
+  else if (e.data?.orbital === 'rename' && titleEl.dataset.key) { // Rename on the tab (shell.js): the heading back, its words selected (a key only while it can be typed in; isContentEditable reads false while it is hidden)
+    document.documentElement.classList.add('renaming');
+    titleEl.focus();
+    getSelection().selectAllChildren(titleEl);
+  }
 });
+titleEl.addEventListener('blur', () => document.documentElement.classList.remove('renaming'));
 // The Work View, asked for in another page: it stored this page's place, and this page goes there (renderer/timeline.js)
 if (tana.onToPlace) tana.onToPlace(() => {
   const place = readStoredPlace();
