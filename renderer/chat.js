@@ -233,6 +233,12 @@ function chatAfterRender(parent, stick) {
   if (stick) sc.scrollTop = sc.scrollHeight;
   if (opened) requestAnimationFrame(() => { if (palette.hidden && composer.dataset.doc === docId) composerText.focus({ preventScroll: true }); });
 }
+// Access can change while a chat is open (someone shares it with you, or takes it away): a change to its audience or
+// participants (main's meta flag) asks again whether you may write, and leaves the mode you chose alone.
+if (tana.onChanged && tana.chatAnswers) tana.onChanged((chatId, info) => {
+  if (!chatId || !String(chatId).startsWith('tana:chat:') || !info || !info.meta || !chatAi.has(chatId)) return;
+  tana.chatAnswers(chatId).then((r) => { if (r.canWrite === false) chatReadOnly.add(chatId); else chatReadOnly.delete(chatId); if (composer.dataset.doc === chatId) showMode(); }, () => {});
+});
 // ⌘K New chat: a chat with Tana, opened with the caret in its composer
 function startNewChat() {
   return run(async () => { openResult(await tana.newChat()); });
