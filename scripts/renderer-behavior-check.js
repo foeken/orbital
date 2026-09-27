@@ -6194,7 +6194,8 @@ async function runHomeCheck() {
     let navBack = [], navForward = [], navHere = null, navigating = false, caretOnOpen = false, savedPlace = null;
     const SEARCH_ID = 'tana:search:';
     const TIMELINE_PAGE = 'orbital:timeline', run = (fn) => fn(), openWorkView = () => { went.push('workView'); }; // renderer/timeline.js
-    let savedList = [], opened = null; const savedViews = () => savedList, openSavedView = (v) => { opened = v; went.push('view ' + v.name); }; // renderer/palette.js
+    const WORK_VIEW = { id: 'workView', name: 'Work View', doc: 'workView', keys: {} }; // renderer/timeline.js
+    let savedList = [], opened = null; const savedViews = () => (savedList.some((v) => v.id === WORK_VIEW.id) ? savedList : [WORK_VIEW, ...savedList]), openSavedView = (v) => { opened = v; went.push('view ' + v.name); }; // renderer/palette.js
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith(SEARCH_ID);
     const render = () => { renders++; }, renderSoon = render, flushAll = () => {}, dropDrafts = () => {};
@@ -6241,6 +6242,12 @@ async function runHomeCheck() {
   assert.equal(api.at(), true, 'and the left half is Home on the Timeline');
   api.go({ docId: OTHER, nodeId: null });
   assert.equal(api.at(), false, 'and not anywhere else');
+  // The Work View updated from Save view is judged by the place it now keeps for this page
+  api.views([{ id: 'workView', name: 'Work View', doc: { schema: 1 }, keys: { place: JSON.stringify({ docId: OTHER, nodeId: null }) } }]);
+  assert.equal(api.at(), true, 'an updated Work View is Home on the place it keeps');
+  api.go({ docId: 'orbital:timeline', nodeId: null });
+  assert.equal(api.at(), false, 'and no longer on the Timeline it replaced');
+  api.views([]);
   api.view('library');
   await api.list([{ id: SEARCH, text: 'My Tasks' }]);
   api.set(SEARCH);

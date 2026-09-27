@@ -1096,7 +1096,8 @@ async function main() {
     assert.deepEqual(ask('window:getSide', thirdPage), { side: '3', start: { view: 'library', place: '{}' } }, 'a new page gets its start with its id');
     assert.deepEqual(ask('window:getSide', thirdPage), { side: '3' }, 'once');
     assert.notEqual(backend.S.pane && backend.S.pane.frame, thirdPage, 'only the page asked for last takes the keys');
-    const fourth = frame('fourth', '4'); ask('window:getSide', fourth);
+    const fourth = frame('fourth', '4');
+    assert.deepEqual(ask('window:getSide', fourth), { side: '4', start: { view: null, place: null } }, 'a page opened with no start keeps nothing of a closed page with its id');
     assert.equal(backend.S.pane && backend.S.pane.frame, fourth, 'the page \u2325\u2318N opened is the one \u2318W and a notification click aim at');
     const layoutDoc = { schema: 1, root: { kind: 'panel', views: ['page', 'page2', 'page3'] }, views: {} };
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '3', '2'] });

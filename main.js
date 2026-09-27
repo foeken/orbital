@@ -208,11 +208,12 @@ function createWindow() {
   const saveSoon = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); };
   win.panes = []; win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a layout the shell reports is saved too
   // the layout comes back with the frame it was saved with, and a first launch (nothing saved) opens the Work View, the
-  // Timeline beside My Tasks (renderer/edit.js reads which page it is). Another window opens with one page, on the place
-  // the page that asked stores under its id (window:new).
+  // Timeline beside My Tasks (renderer/edit.js reads which page it is). Another window opens with one page, under an id
+  // that may have been a closed page's: it keeps nothing of that page, and starts where the page that asked is (window:new).
   win.primary = !front;
   win.doc = front ? onePage(freeId()) : savedDoc(saved);
   win.pages = docPages(win.doc);
+  if (front) setStart(win.pages[0], { view: null, place: null });
   // nodeIntegrationInSubFrames: preload.js runs in each page's iframe as well, which is what gives a page window.api
   win.shell = new WebContentsView({ webPreferences: { preload: PRELOAD, nodeIntegrationInSubFrames: true } });
   win.contentView.addChildView(win.shell); fit(win);
@@ -273,14 +274,14 @@ ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
 // the menu shows ⌥⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
-ipcMain.handle('window:new', (e, start) => { const id = createWindow().pages[0]; setStart(id, start); return id; }); // its one page starts where the asking page is
+ipcMain.handle('window:new', (e, start) => { const id = createWindow().pages[0]; setStart(id, { view: null, place: null, ...(start && typeof start === 'object' ? start : {}) }); return id; });
 // ⌘N (issue #159) and Cmd+K New tab / New floating pane: a new page beside the one that asked, taking the keys. Answers the
 // new page's id, so the page asking can store its view and place under it for the new one to open on.
 ipcMain.handle('window:split', (e, where, start) => {
   const page = pageOf(e);
   if (!page || signedOut()) return null;
   const id = freeId();
-  setStart(id, start);
+  setStart(id, { view: null, place: null, ...(start && typeof start === 'object' ? start : {}) }); // an id used before keeps nothing of that page
   return openPage(page.win, { id, where: ['right', 'tab', 'float'].includes(where) ? where : 'right', from: page.side });
 });
 // asked by preload.js on every load, a Reload included: this page's id ('' the first page, then '2', '3', ...).

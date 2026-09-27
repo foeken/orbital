@@ -272,13 +272,15 @@ const homeName = () => { const s = homeSearch(); return s ? s.text || s.title ||
 // In the Work View a half is Home on its own page: the Timeline on the left, My Tasks (the search of that name) on the right
 // (by the page's own title: a search just made in the other half is not in this one's list yet)
 const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).startsWith(SEARCH_ID) && /^my tasks$/i.test(String((docOf(zoom.docId) || {}).text || '').trim()) : zoom.docId === TIMELINE_PAGE);
-// In a Home window a page is Home on the place that window keeps for it ('place', 'place:2', …; {} is its view)
-function atHomeView() {
+// In a saved view a page is Home on the place that view keeps for it ('place', 'place:2', …; {} is its view)
+function atSavedView(v) {
   let p = null;
-  try { p = JSON.parse(homeView().keys['place' + SIDE] || 'null'); } catch { /* not a place */ }
-  return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === homeView().keys['view' + SIDE]);
+  try { p = JSON.parse(v.keys['place' + SIDE] || 'null'); } catch { /* not a place */ }
+  return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === v.keys['view' + SIDE]);
 }
-const atHome = () => (homeId() === 'workView' ? atWorkView() : homeId() === HOME_VIEW ? atHomeView() : zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() === view);
+// the Work View as installed ('workView' its layout) or as updated from Save view, which is judged by its own keys
+const workViewNow = () => savedViews().find((v) => v.id === WORK_VIEW.id);
+const atHome = () => (homeId() === 'workView' ? (workViewNow().doc === 'workView' ? atWorkView() : atSavedView(workViewNow())) : homeId() === HOME_VIEW ? atSavedView(homeView()) : zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() === view);
 function setHome(id) { home = id; setPref('home', id); render(true); }
 // Going Home opens a window, as a saved view is opened, a saved search is a document you open, the Library is a view you switch to.
 // A Library or saved-search Home, chosen before Home was a window, is a window of one pane on it (issue #444).

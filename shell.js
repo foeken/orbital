@@ -139,7 +139,7 @@ const flush = (frame) => new Promise((done) => {
   if (!win) return done();
   const end = () => { clearTimeout(timer); removeEventListener('message', heard); done(); };
   const heard = (e) => { if (e.source === win && e.data?.orbital === 'flushed') end(); };
-  const timer = setTimeout(end, 500);
+  const timer = setTimeout(end, 3000); // a page that never answers still closes
   addEventListener('message', heard);
   win.postMessage({ orbital: 'flush' }, '*');
 });
