@@ -29,9 +29,9 @@ stored), [MEETINGS.md](MEETINGS.md) (meeting structure, the write-up, editing a 
   session's alone: it shows when Tana needs a new login, with the relogin button (renderer/app.js `showStatus`). The
   Create task card (task.html) keeps a failed create on the card, so the press can be repeated.
 - **Signed out.** The login button shows only after a completed session check says signed-out; an unresolved or
-  failed check is not signed-out. Signed out, the outline area is a welcome that teaches ⌘K: a small orbit, two big ⌘
-  and K keycaps that go down under the keys held (renderer/app.js `loginKeys`), and the hint to press ↩, because the
-  palette lists "Log in to Tana" first while signed out. A "Log in to Tana" button for the mouse fades in after 15 s
+  failed check is not signed-out. Signed out, the outline area is a welcome that teaches ⌘K: two big ⌘ and K keycaps
+  as a planet, with Tasks, Meetings, Notes, People and Inbox orbiting them as chips; the keycaps go down under the keys
+  held (renderer/app.js `loginKeys`), and two steps say ⌘K, then ↩, because the palette lists "Log in to Tana" first while signed out. A "Log in to Tana" button for the mouse fades in after 15 s
   (styles.css Login). A window of several panes shows its first page alone until login (issue #244).
 
 ## 2. Content model and outline operations

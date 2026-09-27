@@ -30,12 +30,19 @@
 </div>
 <main class="scroll">
   <div id="loginBox" class="login" hidden>
-    <div class="lorbit" aria-hidden="true"><span class="lring r1"><i></i></span><span class="lring r2"><i></i></span><span class="lring r3"><i></i></span><span class="lplanet"></span></div>
+    <div class="lstage" aria-hidden="true">
+      <span class="lring r1"></span><span class="lring r2"></span>
+      <span class="lsat o1 s1"><i class="task"></i>Tasks</span>
+      <span class="lsat o1 s2"><i class="meet"></i>Meetings</span>
+      <span class="lsat o2 s3"><i class="note"></i>Notes</span>
+      <span class="lsat o2 s4"><i class="person"></i>People</span>
+      <span class="lsat o2 s5"><i class="inbox"></i>Inbox</span>
+      <div class="lkeys"><kbd id="loginCmd">⌘</kbd><kbd id="loginK">K</kbd></div>
+    </div>
     <h2>Welcome to Orbital</h2>
-    <p>Your Tana as one fast outline, driven from the keyboard. Everything starts with one key.</p>
-    <div class="lkeys" role="img" aria-label="Command K"><kbd id="loginCmd">⌘</kbd><span>+</span><kbd id="loginK">K</kbd></div>
-    <p class="lstep">Try it now, then press <kbd>↩</kbd> to <b>Log in to Tana</b>.</p>
-    <p class="llater">Rather use the mouse? <button id="login">Log in to Tana</button></p>
+    <p>Your Tana as one fast outline, driven from the keyboard. Everything here orbits one key.</p>
+    <ol class="lsteps"><li><span>1</span>Press <kbd>⌘K</kbd></li><li><span>2</span><kbd>↩</kbd> on <b>Log in to Tana</b></li></ol>
+    <p class="llater">Prefer the mouse? <button id="login">Log in to Tana</button></p>
   </div>
   <div id="fields" class="fields" hidden></div><!-- in the scroll area: a page's fields scroll with its outline, under the header -->
   <div id="outline" class="outline"></div>
