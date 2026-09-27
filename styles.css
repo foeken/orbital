@@ -725,13 +725,14 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .subtext .tmeta { margin-left: 0; }
 /* who can see a row, at the start of its subtext (renderer/tasks.js peopleEl): the audience glyph, a bubble per person, how many */
 .subtext .people { display: inline-flex; align-items: center; gap: 6px; vertical-align: top; }
+.subtext:has(> .people) { padding: 3px 0 4px; } /* a row whose subtext has faces: a little air above and below them */
 .subtext .faces { display: inline-flex; }
 .subtext .face { width: 18px; height: 18px; margin-left: -2px; border-radius: 50%; display: grid; place-items: center; font-size: 8px; font-weight: 650;
-  color: #555; background: oklch(calc(0.83 + var(--tone, 0) * 0.02) 0 0); box-shadow: 0 0 0 1.5px #fff; } /* light greys, a step apart per person: no colour */
+  color: #666; background: oklch(calc(0.89 + var(--tone, 0) * 0.012) 0 0); box-shadow: 0 0 0 1.5px #fff; } /* light greys, a small step apart per person: no colour */
 .subtext .face:first-child { margin-left: 0; }
-.subtext .face.more { background: #e8e8e8; color: #555; }
-[data-theme="dark"] .subtext .face { color: #ccc; background: oklch(calc(0.31 + var(--tone, 0) * 0.02) 0 0); box-shadow: 0 0 0 1.5px #1b1d1e; }
-[data-theme="dark"] .subtext .face.more { background: #3a3f42; color: #ccc; }
+.subtext .face.more { background: #eee; color: #666; }
+[data-theme="dark"] .subtext .face { color: #bbb; background: oklch(calc(0.28 + var(--tone, 0) * 0.015) 0 0); box-shadow: 0 0 0 1.5px #1b1d1e; }
+[data-theme="dark"] .subtext .face.more { background: #33383b; color: #bbb; }
 /* one of a row's facts (renderer/tasks.js taskMetaEl): a 14px glyph, 6px from whatever stands before it. The first
    needs no gap of its own: the 8px the .meta span carries is already there, and 14px reads as a hole. */
 .ticon { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; }
