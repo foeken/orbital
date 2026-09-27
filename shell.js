@@ -111,6 +111,8 @@ ws.element.addEventListener('load', (e) => {
   if (frame.tagName !== 'IFRAME') return;
   loaded.add(frame);
   tell(frame.contentWindow);
+  // Trellis selects a new window's first pane without focusing it, so the page in front takes the keys once it is in
+  if (frame === frameOf(ws.getSnapshot().focusedView) && document.activeElement?.tagName !== 'IFRAME') frame.contentWindow.focus();
   frame.contentWindow.addEventListener('wheel', (w) => {
     if (!w.ctrlKey || !many) return;
     w.preventDefault();
