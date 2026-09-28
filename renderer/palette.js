@@ -397,6 +397,7 @@ function paletteRows(q, typed = q) {
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
+  if (tana.openExternal) rows.push({ id: 'about', group: 'Help', icon: 'help', label: 'About Orbital', keepOpen: true, run: openAboutPalette });
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
@@ -495,6 +496,16 @@ function confirmLogout() {
     { group: 'Log out of Tana?', label: 'Cancel', keepOpen: true, run: BACK_TO_COMMANDS },
   ];
   openPage('logout', 'Log out of Tana?', { back: BACK_TO_COMMANDS, rows: (q) => (q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows) });
+}
+// About Orbital: what it is (the field's placeholder), its links first so the first row is one you can run, then the
+// licence in three lines. The same words as the README's License section and LICENSE, public in the releases repo.
+function openAboutPalette() {
+  const link = (icon, label, hint, url) => ({ group: 'Links', icon, label, hint, run: () => run(() => tana.openExternal(url)) });
+  const notes = ['Change it and run your own version, yourself or across your company',
+    'Don\'t pass it on: no public forks, downloads, hosting or selling it',
+    'Rolling it out for clients as a business needs a licence: get in touch'].map((label) => ({ group: 'How you can use it', label, disabled: true, note: true }));
+  const links = [link('globe', 'Website', 'orbital.md', 'https://orbital.md'), link('doc', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE')];
+  openPage('about', 'Orbital: a keyboard-first outliner over your Tana', { back: BACK_TO_COMMANDS, rows: (q) => [...(q ? links.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : links), ...notes] });
 }
 function openPillPalette(id) {
   pillCtx = id; openPage('pill', 'Choose ' + id, { rows: pillRows, back: BACK_TO_COMMANDS });
