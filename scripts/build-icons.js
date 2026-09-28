@@ -77,6 +77,8 @@ WANT.toMessage = path.join(__dirname, '..', 'build', 'icons', 'arrow-turn-down.s
 WANT.help = path.join(__dirname, '..', 'build', 'icons', 'circle-question.svg'); // the header button beside it that opens Help (renderer/overlays.js)
 WANT.cloudSlash = path.join(__dirname, '..', 'build', 'icons', 'cloud-slash.svg'); // the badge beside an @Codex question and answer: never saved to Tana, kept on this device (renderer/chat.js)
 WANT.textPlus = path.join(__dirname, '..', 'build', 'icons', 'text-plus.svg'); // the Create new button in the window's corner (shell.html #create), Nucleo UI 12px outline
+WANT.info = path.join(__dirname, '..', 'build', 'icons', 'circle-info.svg'); // Cmd+K About Orbital, beside Help's question mark (renderer/palette.js)
+WANT.license = path.join(__dirname, '..', 'build', 'icons', 'license.svg'); // the License link on the About Orbital page
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   if (!SRC && !path.isAbsolute(file)) { if (!current[name]) throw new Error(name + ' needs the icon set: node scripts/build-icons.js <dir>'); out[name] = current[name]; continue; }
