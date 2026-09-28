@@ -307,6 +307,14 @@ addEventListener('message', (e) => {
   else if (what === 'palette') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'palette', mode: e.data.mode }, '*'); } // Cmd+K or Cmd+S pressed in the Graph pane
   else if (what === 'action') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'action', id: String(e.data.id) }, '*'); } // any other key pressed there
   else if (what === 'focusLinks') focusPage(linksView());
+  // ⌘K Add to chat (renderer/chat.js): the pane that shows the chat is brought into view and gets the references; with
+  // none, the page that asked opens the chat itself
+  else if (what === 'addToChat') {
+    const id = others().find((v) => docs.get(v)?.docId === e.data.docId) || sourceOf(e.source);
+    focusPage(id);
+    // a frame on: Trellis moves the focus into the pane on its next frame, which would take the caret out of the message
+    requestAnimationFrame(() => windowOf(frameOf(id))?.postMessage({ orbital: 'compose', docId: e.data.docId, segs: e.data.segs, doc: e.data.doc }, '*'));
+  }
 });
 
 // ---- a page's header buttons in its tab bar, or with one page in the window's header ----
