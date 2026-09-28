@@ -3040,7 +3040,7 @@ async function main() {
     const old = { id: id(), title: 'Last month', createdBy: COLLEAGUE, createTime: ago(40 * 24 * H) };
     const person = (displayName, extra = {}) => ({ displayName, email: displayName.split(' ')[0].toLowerCase() + '@example.com', role: 'required', ...extra });
     const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync', calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H), roster: [
-      person('Me Myself', { identityUri: ME }), person('Board Room', { role: 'resource' }), person('Ann Bakker'), person('Bo Smit'), person('Cas de Vries'), person('Dee Jansen'), person('Eva Mol')] } };
+      person('Me Myself', { identityUri: ME }), person('Board Room', { role: 'resource' }), person('Groenlo Room', { cutype: 'room' }), person('Ann Bakker'), person('Bo Smit'), person('Cas de Vries'), person('Dee Jansen'), person('Eva Mol')] } };
     const allDay = { id: 'tana:event:' + ulid(), title: 'Offsite', calendarEvent: { startTime: ago(6 * H), endTime: ago(-18 * H), allDay: true } };
     const going = { id: 'tana:event:' + ulid(), title: 'Board prep', calendarEvent: { startTime: ago(3.5 * H), endTime: ago(-1 * H), actionUrl: 'https://teams.example/join/1' } }; // still going: as it is
     const summed = { id: 'tana:event:' + ulid(), title: 'Weekly', calendarEvent: { startTime: ago(4.5 * H), endTime: ago(4 * H), summary: 'The roadmap was agreed.' } }; // Tana's summary on the event, wherever its write-up now lives
@@ -3093,13 +3093,16 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
-      ['Leadership sync', '30 min · Ann Bakker, Bo Smit, Cas de Vries, Dee Jansen, …', 'meeting', 'faint', false, []],
+      ['Leadership sync', '30 min', 'meeting', 'faint', false, []],
       ['Board prep', '4 h 30 min', 'meeting', 'meeting', false, []],
       ['Rob Jansen accepted Contract renewal', null, 'tlAccepted', 'accepted', false, []],
       ['Weekly', '30 min', 'meeting', 'meeting', false, []],
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, quiet once it is over with no summary, all-day ones left out; yours alone, by hand, or weeks old stay out');
+    const sync = (await backend.timelinePage.rows()).find((r) => r.timeline.uri === meeting.id);
+    assert.deepEqual(JSON.parse(JSON.stringify(sync.people)), ['Ann Bakker', 'Bo Smit', 'Cas de Vries', 'Dee Jansen', 'Eva Mol'].map((name) => ({ uri: name.split(' ')[0].toLowerCase() + '@example.com', name })),
+      'a meeting\'s people ride beside its time for the faces, without you, its resources or its rooms');
     assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) === (() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 2); return d.getTime(); })()])), [[ME], true, true],
       'the meetings asked for are yours, from the start of the day before yesterday to the end of today');
     // Join: a meeting under way carries its call link, one that is over does not
@@ -3159,8 +3162,9 @@ async function main() {
     assert.equal(pageSends(), sendsBefore + 1, 'and when it goes off the Timeline is read again, which moves the meeting out of Upcoming meetings');
     const hm = (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
     assert.deepEqual(JSON.parse(JSON.stringify([withSoon[1].text, withSoon[1].timeline.time, withSoon[1].timeline.upcoming, withSoon[1].children.map((c) => [c.id, c.text, c.icon, c.subtext])])),
-      ['Upcoming meetings', '', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime)) + ' · Ann Bakker']]],
+      ['Upcoming meetings', '', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime))]]],
       'a meeting later today sits under Upcoming meetings, after Today\'s Tasks, saying when and who');
+    assert.deepEqual(JSON.parse(JSON.stringify(withSoon[1].children[0].people)), [{ uri: 'ann@example.com', name: 'Ann Bakker' }], 'and who, as faces');
     assert.equal(withSoon[1].children[0].join, soon.id, 'and is joined from Tana too');
     assert.ok(!withSoon.slice(2).some((r) => r.timeline.uri === soon.id), 'and not among what happened');
     soonToo = false;

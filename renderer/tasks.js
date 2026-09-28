@@ -159,11 +159,13 @@ function peopleEl(summary, node) {
   return el;
 }
 // A bubble each for the first four people, then the rest: "+n" up to nine people, "and n others" past that. The list
-// row's subtext (peopleEl) and the page's Visible to field (renderer/fields.js) both draw them.
+// row's subtext (peopleEl), the page's Visible to field (renderer/fields.js) and a meeting's people (views.js) draw them.
+// A person is a uri, or { uri, name } when the name comes with it (a meeting's attendee, who need not be a member).
 function facesEls(uris, count) {
   loadMembers(); // the bubbles' names
-  const face = (uri) => {
-    const f = document.createElement('span'), found = memberName(uri), known = !found.startsWith('tana:');
+  const face = (person) => {
+    const { uri, name: given } = typeof person === 'string' ? { uri: person } : person;
+    const f = document.createElement('span'), found = given && !demoMode ? given : memberName(uri), known = !found.startsWith('tana:');
     const name = known ? found : isGuest(uri) ? 'Guest' : 'Unknown person';
     f.className = 'face'; f.textContent = known || isGuest(uri) ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() : '?';
     f.setAttribute('role', 'img'); f.setAttribute('aria-label', name); f.title = name;

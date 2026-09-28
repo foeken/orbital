@@ -305,13 +305,20 @@ const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => n
 // asTable: a row of the page's own list while it is a table (tableRow); what an expanded row shows under it stays an outline
 function subtextEl(node, taskInfo, sub = document.createElement('div'), asTable = false) {
   if (asTable) return tableCells(node, taskInfo, sub);
-  const words = subtextOf(node, taskInfo), values = shownFieldValues(node), people = peopleEl(taskInfo, node);
-  if (!words && !values.length && !people) return null;
+  const words = subtextOf(node, taskInfo), values = shownFieldValues(node), people = peopleEl(taskInfo, node), met = meetingPeopleEl(node);
+  if (!words && !values.length && !people && !met) return null;
   sub.className = 'subtext';
   const text = [...values.map((v) => demoText(v, node.id)), ...(words ? [words] : [])].join(' · ');
   if (people) sub.replaceChildren(people, text ? ' · ' + text : ''); // who can see it leads the line (#461)
+  else if (met) sub.replaceChildren(text ? text + ' · ' : '', met); // a meeting's people follow its time (main/timeline.js meetingPeople)
   else sub.textContent = text;
   return sub;
+}
+function meetingPeopleEl(node) {
+  if (!node.people || !node.people.length) return null;
+  const el = document.createElement('span'); el.className = 'people';
+  el.append(...facesEls(node.people, node.people.length));
+  return el;
 }
 // ---- a list page as a table (the header's Outliner/Table switch, or ⌘K): a column per fact Display shows ----
 // The rows stay the outline's own rows: the grey line becomes one cell per column and CSS lays the row out as a grid
