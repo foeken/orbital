@@ -193,9 +193,11 @@ product (open source or commercial) and no hosting it for others. Built somethin
 too? Send it as a pull request. The actual terms are in
 [LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
 
-Making a business out of it, say as a consultant rolling out tailored versions of Orbital for
-clients? That needs a licence, which usually takes the form of a paid GitHub sponsorship. Get in touch
-first through [orbital.md](https://orbital.md) or [@foeken](https://github.com/foeken).
+Two more things. Don't make money from Orbital itself, whether by selling it or by selling services
+around it, such as a consultant rolling out tailored versions for clients. And don't pass it off as
+your own: keep the credit and the licence in every copy. Using it for your own work is fine, of course.
+Want to do something the licence doesn't allow? Just ask through [orbital.md](https://orbital.md) or
+[@foeken](https://github.com/foeken). A business licence usually takes the form of a paid GitHub sponsorship.
 
 Does Orbital save you or your team time? You can chip in through
 [GitHub Sponsors](https://github.com/sponsors/foeken). It is entirely optional and keeps the work going.

@@ -22,18 +22,27 @@ Copyright (c) 2026 Andre Foeken. All rights reserved, except as granted below.
    example as a pull request or a patch. By doing so you allow the copyright
    holder to use, change and distribute those changes under any licence.
 
-4. Doing it for others as a business. Setting up, customising or supporting
-   this software for other organisations as a paid service, for example as a
-   consultant rolling out tailored versions to clients, is not covered by
-   section 1 and needs a commercial licence from the copyright holder. Get in
-   touch through https://orbital.md or GitHub (@foeken).
+4. No money from it. You may not make money from this software itself: by
+   selling it or a modified version of it, by charging for access to it, or by
+   selling services built on it, such as setting up, customising or supporting
+   it for other organisations (a consultant rolling out tailored versions to
+   clients, for example). Using it for your own work, or for your
+   organisation's, is not making money from it.
 
-5. Other people's code. Third-party components included with or installed by
+5. Credit. Keep the copyright notice and this licence in every copy. Do not
+   remove or change who made this software, and do not present it, a modified
+   version of it or a substantial part of either as your own work or product.
+
+6. Asking. Anything these terms do not allow may still be possible with the
+   copyright holder's written permission, paid or not. Get in touch through
+   https://orbital.md or GitHub (@foeken).
+
+7. Other people's code. Third-party components included with or installed by
    this software (for example under node_modules) keep their own licences.
 
-6. Ending. If you break these terms, your permission under them ends.
+8. Ending. If you break these terms, your permission under them ends.
 
-7. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+9. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
    EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
