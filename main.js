@@ -224,9 +224,11 @@ function createWindow() {
   win.shell.webContents.on('render-process-gone', () => { for (const p of [...win.panes]) dropPage(p); });
   win.shell.webContents.loadFile(path.join(__dirname, 'shell.html'));
   S.windows.add(win); S.win = win;
-  if (!front && saved && saved.maximized) win.maximize();
   for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, saveSoon);
-  win.on('resize', () => fit(win));
+  // every way the frame changes size: a window saved maximized is made at its normal bounds and maximized after, which
+  // macOS reports as maximize and no resize, so the shell kept the normal size in the corner of the screen (#550)
+  for (const name of ['resize', 'maximize', 'unmaximize', 'restore', 'enter-full-screen', 'leave-full-screen']) win.on(name, () => fit(win));
+  if (!front && saved && saved.maximized) win.maximize(); // after the listeners: maximizing here reports at once, and a shell not told stays at the normal size
   win.on('close', saveBounds);
   // Coming back to a window re-reads the lists, unless they were read moments ago: the live queries keep them
   // current, and every Cmd+Tab re-reading all of them (and every page reloading after it) was chatter (issue #268).
@@ -519,6 +521,7 @@ let agentStatusRead = null;
 ipcMain.handle('codex:status', () => (agentStatusRead ||= agent.readAgentStatuses(agent.codexTasks()).finally(() => { agentStatusRead = null; })));
 ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(pageOf(e)); return stored; });
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
+ipcMain.handle('ai:translate', (_e, texts, to) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'))); // a note shown in English, never saved (renderer/translate.js)
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));

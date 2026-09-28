@@ -243,9 +243,12 @@ function paletteRows(q, typed = q) {
   // And what a type looks like. The glyph belongs to the type, so every document of that type is drawn with it: its
   // bullet, its row in the sidebar, a breadcrumb, and the chip an inline mention of it draws. A saved search takes one
   // the same way, for itself: its row, its page and its line under Searches (#521).
-  if (palDoc && tana.searchIcons && tana.setTypeIcon && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc))) {
-    const doc = palDoc;
-    rows.push({ id: 'setIcon', group: docGroup, icon: typeGlyph(doc.id), label: 'Set icon',
+  // On a saved search's page it is the search's, wherever the caret is: its rows are other documents (a goal, a task),
+  // which have no icon of their own to set, and the search is what the page is (#551).
+  const iconDoc = !tana.searchIcons || !tana.setTypeIcon ? null : palDoc && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc)) ? palDoc : onSearchPage() ? docOf(zoom.docId) || extra.get(zoom.docId) || { id: zoom.docId, text: titleEl.textContent } : null;
+  if (iconDoc) {
+    const doc = iconDoc;
+    rows.push({ id: 'setIcon', group: doc === palDoc ? docGroup : 'Current page', icon: typeGlyph(doc.id), label: 'Set icon',
       hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
   }
   // And what colour it is here: our own hue or grey for the type, kept with the glyph in the settings document, so
@@ -393,6 +396,7 @@ function paletteRows(q, typed = q) {
   if (tana.setMcpHidden) rows.push({ id: 'mcpChats', group: 'Settings', icon: 'hiddenItems', label: 'Toggle MCP chats', hint: mcpHidden ? 'Hidden' : 'Shown',
     run: () => run(async () => { mcpHidden = await tana.setMcpHidden(!mcpHidden); }) });
   // names and Tana's words swapped for made-up ones on screen, for showing the app to someone (renderer/segments.js)
+  if (tana.translate) rows.push({ id: 'autoTranslate', group: 'Settings', icon: 'sparkle', label: 'Auto-translate …', hint: translateTo() ? 'Into ' + translateTo() : 'Off', run: openTranslatePage }); // renderer/translate.js
   rows.push({ id: 'demoMode', group: 'Settings', icon: 'hidden', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
   if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Settings', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',

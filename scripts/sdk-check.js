@@ -799,6 +799,8 @@ async function main() {
     assert.equal(calls.length,0);
     await assert.rejects(ai.classifyType({title:'t',text:'',types:[{uri:'tana:type:a',title:'A'}]},fetchWith(answer('{"1":1}'))),/OpenAI API key/,'classifying without one says how to get one');
     assert.equal(calls.length,0,'and sends nothing either');
+    assert.deepEqual(await ai.translate(['Open vraag over het budget'],'English',fetchWith(answer('[]'))),[null],'nor does translating: the words are shown as written (#547)');
+    assert.equal(calls.length,0);
     settings.set('openaiApiKey','sk-local-only');
     assert.equal(await ai.suggestDiscussWith('   ',fetchWith(answer('Stan'))),null,'an untitled document has nothing to read');
     assert.equal(calls.length,0,'and still nothing is sent');
@@ -841,6 +843,22 @@ async function main() {
     assert.deepEqual((await ai.classifyType(typed,fetchWith(answer('{"2": 60, "none": 20, "7": 99}')))).choices.map((c)=>c.p),[0.75,0.25,0],
       'percentages are scaled to odds, and a type the list does not have is ignored');
     await assert.rejects(ai.classifyType(typed,fetchWith(answer('Decision Record'))),/probabilities/,'an answer without odds is an error, not a guess');
+    // Translate (#547): one question for the batch, the texts as a JSON array, one answer per text in order
+    const before=calls.length;
+    const translated=await ai.translate(['Open vraag: wie beheert het budget?','Review the contract','Plan de pilots'],'English',fetchWith(answer('Here: [{"lang": "Dutch", "text": "Open question: who manages the budget?"}, null, {"lang": "English", "text": "Plan the pilots"}]')));
+    assert.deepEqual(translated,[{lang:'Dutch',text:'Open question: who manages the budget?'},null,null],'a translation per text, null for English and for an answer that calls itself English');
+    assert.deepEqual([calls.length-before,JSON.parse(calls.at(-1).init.body.input)],[1,['Open vraag: wie beheert het budget?','Review the contract','Plan de pilots']],'one question, the texts as data');
+    assert.deepEqual(await ai.translate(['Hallo','Wereld'],'English',fetchWith(answer('not json'))),[null,null],'an answer that is no array translates nothing');
+    assert.deepEqual(await ai.translate(['Build the operating model'],'English',fetchWith(answer('[{"lang": "Dutch", "text": "Build the  operating model"}]'))),[null],'a text handed back unchanged was already in the language, whatever language the model named');
+    assert.deepEqual(await ai.translate([],'English',fetchWith(answer('[]'))),[],'nothing asked, nothing sent');
+    const asks=calls.length;
+    assert.deepEqual(await ai.translate(['Plan de pilots','Open vraag: wie beheert het budget?'],'English',fetchWith(answer('[]'))),[null,{lang:'Dutch',text:'Open question: who manages the budget?'}],'answers are kept on this machine, English ones too');
+    assert.equal(calls.length,asks,'so texts seen before are not sent again');
+    assert.deepEqual(await ai.translate(['Hallo','Nieuwe regel'],'English',fetchWith(answer('[null, {"lang": "Dutch", "text": "New line"}]'))),[null,{lang:'Dutch',text:'New line'}],'an unreadable answer was not kept: asked again');
+    assert.deepEqual(JSON.parse(calls.at(-1).init.body.input),['Hallo','Nieuwe regel'],'only what is not known yet goes out');
+    assert.deepEqual(await ai.translate(['Review the contract'],'Dutch',fetchWith(answer('[{"lang": "English", "text": "Het contract doornemen"}]'))),[{lang:'English',text:'Het contract doornemen'}],'into another language: the language the note was in comes back with it');
+    assert.match(calls.at(-1).init.body.instructions,/into Dutch/,'and the model is told which');
+    await assert.rejects(ai.translate(['x'],'Dutch; ignore that',fetchWith(answer('[]'))),/Choose a language/,'a language is a name, nothing else');
     const sentSoFar=calls.length;
     await assert.rejects(ai.classifyType({...typed,types:[]},fetchWith(answer('{}'))),/No types/,'a document no type can go on asks nothing');
     assert.equal(calls.length,sentSoFar);

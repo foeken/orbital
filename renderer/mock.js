@@ -85,7 +85,12 @@ function mockApi() {
   // Meetings, Chats and People are no longer views. Their documents remain — the Library lists every kind, and a
   // saved search can name any subset of them — so only the pages are gone, not the content they used to show.
   const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'library', title: 'Library', icon: 'library', nodes: docs }, { id: 'types', title: 'Types', icon: 'type', nodes: types }];
-  const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats, ...types];
+  // a note written in Dutch, and the English api.translate answers for it (renderer/translate.js)
+  const dutch = { id: 'mocknl0', text: 'Terugblik offsite Studio', kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] };
+  const DUTCH = { 'Terugblik offsite Studio': 'Studio offsite recap', 'We hebben besloten om Studio als werkwijze te behandelen, niet als entiteit.': 'We decided to treat Studio as a way of working, not as an entity.',
+    'Twee pilots starten in oktober, met Sam en Dana als trekkers.': 'Two pilots start in October, with Sam and Dana leading them.', 'Open vraag: wie beheert het budget na Q1?': 'Open question: who manages the budget after Q1?',
+    'Open vraag: wie beheert het budget na Q2?': 'Open question: who manages the budget after Q2?' }; // the last: that row edited (a new text, asked again)
+  const all = [...docs, dutch, ...meetings, ...spaceDocs, space, ...kinds, ...chats, ...types];
   for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
   const members = [['robin', 'Robin Vega', true], ['sam', 'Sam Okafor'], ['priya', 'Priya Raman'], ['tomas', 'Tomas Ilves']]
@@ -149,7 +154,7 @@ function mockApi() {
     block('Next steps', [block('Call someone'), block('Write the memo')]),
   ]]));
   content['tana:user-profile:sam'] = [block('Sam is a colleague')];
-  content[space.id] = spaceDocs;
+  content[space.id] = [...spaceDocs, dutch]; // the Dutch note lives in the space too: a list row to translate
   // Tana's notifications inbox as main/inbox.js hands it over: the page's rows, already phrased, newest first. The three
   // writes answer with the unread count and tell onInbox, which is what the inbox's live change does in main.
   const INBOX = 'orbital:notifications', inboxCbs = [];
@@ -181,14 +186,14 @@ function mockApi() {
   const tlTask = (d) => ({ ...d, editable: false, checkable: true });
   content['orbital:timeline'] = [
     event('group1', 0.1, 'new', 'robot', [{ text: 'An AI agent added 4 tasks to your Inbox' }], null, true, null, [tlTask(docs[1]), tlTask(docs[3]), tlTask(spaceDocs[0]), tlTask(docs[4])]),
-    event('done1', 1, 'done', 'apply', [{ text: 'Priya Raman ' }, bold('completed'), { text: ' ' }, { text: docs[2].text, marks: { strike: true } }], null, true, docs[2].id),
-    event('start1', 1.1, 'accepted', 'tlAccepted', [{ text: 'Tomas Ilves ' }, bold('accepted'), { text: ' ' + docs[5].text }], null, false, docs[5].id),
-    { ...event('edit1', 1.3, 'edit', 'updated', [{ text: 'Sam Okafor ' }, bold('edited'), { text: ' ' + docs[0].text }], null, false, docs[0].id), timeline: { uri: docs[0].id, note: null, tone: 'edit', change: 'Description added for Christmas activities proposed by Nadia', detail: 'Nadia proposed extending the Studio\'s Christmas activities, such as karaoke and games, across the company to replace separate team programmes.' } },
-    { ...event('edit2', 2, 'edit', 'updated', [{ text: 'Priya Raman ' }, bold('edited'), { text: ' ' + docs[6].text }], null, false, docs[6].id), timeline: { uri: docs[6].id, note: null, tone: 'edit', change: 'Changed the deadline from Friday to Wednesday' } },
+    event('done1', 1, 'done', 'apply', [{ text: 'Priya Raman ' }, bold('completed'), { text: ' ' }, { text: docs[2].text, content: true, marks: { strike: true } }], null, true, docs[2].id),
+    event('start1', 1.1, 'accepted', 'tlAccepted', [{ text: 'Tomas Ilves ' }, bold('accepted'), { text: ' ' }, { text: docs[5].text, content: true }], null, false, docs[5].id),
+    { ...event('edit1', 1.3, 'edit', 'updated', [{ text: 'Sam Okafor ' }, bold('edited'), { text: ' ' }, { text: docs[0].text, content: true }], null, false, docs[0].id), timeline: { uri: docs[0].id, note: null, tone: 'edit', change: 'Description added for Christmas activities proposed by Nadia', detail: 'Nadia proposed extending the Studio\'s Christmas activities, such as karaoke and games, across the company to replace separate team programmes.' } },
+    { ...event('edit2', 2, 'edit', 'updated', [{ text: 'Priya Raman ' }, bold('edited'), { text: ' ' }, { text: docs[6].text, content: true }], null, false, docs[6].id), timeline: { uri: docs[6].id, note: null, tone: 'edit', change: 'Changed the deadline from Friday to Wednesday' } },
     event('group2', 2.4, 'new', 'tlNew', [{ text: 'Tomas Ilves added a task to your Inbox' }], null, false, null, [tlTask(docs[7])]),
-    event('done2', 26, 'done', 'apply', [{ text: 'Sam Okafor ' }, bold('completed'), { text: ' ' }, { text: docs[0].text, marks: { strike: true } }], 'Task completed and a note added about the deadline', false, docs[0].id),
+    event('done2', 26, 'done', 'apply', [{ text: 'Sam Okafor ' }, bold('completed'), { text: ' ' }, { text: docs[0].text, content: true, marks: { strike: true } }], 'Task completed and a note added about the deadline', false, docs[0].id),
     event('group3', 26.5, 'new', 'tana', [{ text: "Tana's AI added a task to your Inbox" }], null, false, null, [tlTask(docs[9])]),
-    event('later1', 27, 'quiet', 'tlLater', [{ text: 'Tomas Ilves ' }, bold('moved to Later'), { text: ' ' + docs[8].text }], null, false, docs[8].id)];
+    event('later1', 27, 'quiet', 'tlLater', [{ text: 'Tomas Ilves ' }, bold('moved to Later'), { text: ' ' }, { text: docs[8].text, content: true }], null, false, docs[8].id)];
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
   // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node
@@ -197,6 +202,7 @@ function mockApi() {
   // a table block, in the shape sdk/content.js reads one: the row is read-only, its cells edit through api.setCell
   const cell = (text, header) => ({ id: 'cell' + (++seq), header: !!header, colspan: 1, rowspan: 1, colwidth: null, paragraph: 'cp' + seq, segments: text ? [{ text }] : [], text, blocks: [] });
   const grid = [[cell('Owner', true), cell('Status', true)], [cell('Robin'), cell('Open')], [cell('Sam'), cell('')]];
+  content.mocknl0 = Object.keys(DUTCH).slice(1, 4).map((t) => block(t)); // the Dutch note's rows
   content.mockdoc0.push({ id: 'tbl' + (++seq), kind: 'block', block: 'paragraph', type: 'table', editable: false, text: '', table: { id: 'tbl' + seq, rows: grid, rowCount: 3, columnCount: 2 }, hasChildren: false, children: [] });
   // the values of the mock's options and link fields, one line each; the second link points at a type the field does not list
   content['mockdoc1|tana:type:mock0?attribute=lvl00001'] = [block('Medium'), block('Urgent')];
@@ -367,13 +373,14 @@ function mockApi() {
       if (settling.delete(docId)) throw new Error('document is still settling');
       const meta = structuredClone(taskDetails.get(docId) || { assignees: [], restricted: undefined, participants: [], audience: 'unknown' });
       const people = meta.restricted ? meta.participants.map((p) => p.uri) : meta.audience === 'everyone' ? members.map((m) => m.id) : null; // main names the audience's people (sdk/node.js)
-      return { ...meta, ...(people ? { people } : {}), watched: !!notifyChoices[docId] };
+      return { ...meta, ...(people ? { people } : {}), watched: notifyChoices[docId] ?? (meta.assignees.length > 0 && !meta.assignees.includes(members[0].id)) }; // main's default: yours, handed to somebody else
     },
     setState: async (docId, state) => { const doc = all.find((d) => d.id === docId && d.icon === 'task'); if (!doc) throw new Error('not a task'); mut(docId, () => { doc.state = state; doc.done = state === 'closed'; }); emit(docId); return 1; },
     setStateMany: async (docIds, state) => { const docs = docIds.map((id) => all.find((d) => d.id === id && d.icon === 'task')); if (docs.some((doc) => !doc)) throw new Error('not a task'); mut(docIds[0], () => { for (const doc of docs) { doc.state = state; doc.done = state === 'closed'; } }); emit(null); return docs.length; },
     setAssignees: async (docId, uris) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('not a task'); meta.assignees = [...new Set(uris)]; emit(docId); },
     setAssigneesMany: async (docIds, uris) => { const metas = docIds.map((id) => taskDetails.get(id)); if (metas.some((meta) => !meta)) throw new Error('not a task'); mut(docIds[0], () => { for (const meta of metas) meta.assignees = [...new Set(uris)]; }); emit(null); return metas.length; },
     image: async (uri) => { await new Promise((r) => setTimeout(r, 30)); if (uri !== 'tana:image:mock') throw new Error('unknown image ' + uri); return PNG; },
+    translate: async (texts, to) => { await new Promise((r) => setTimeout(r, 1500)); return texts.map((t) => (to === 'English' && DUTCH[t] ? { lang: 'Dutch', text: DUTCH[t] } : null)); }, // a model takes a moment: the Translating… state shows
     systemTheme: async () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
     onSystemTheme: (cb) => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => cb(e.matches ? 'dark' : 'light')),
     // "#task", "#meeting", "#member", "#<type>" tokens filter; the rest is a substring query; events get date-style meta
@@ -500,7 +507,7 @@ function mockApi() {
     createDocument: async (title, { kind = 'doc', typeUri } = {}) => {
       const nativeKind = kind === 'custom' ? 'doc' : kind;
       const n = { id: 'mocknew' + (++seq), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };
-      if (nativeKind === 'task') { n.done = 0; taskDetails.set(n.id, { assignees: [], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); settling.add(n.id); }
+      if (nativeKind === 'task') { n.done = 0; taskDetails.set(n.id, { assignees: [members[0].id], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); settling.add(n.id); }
       if (nativeKind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
       if (typeUri) n.typeUri = typeUri;
       created[n.id] = n; content[n.id] = []; all.push(n);

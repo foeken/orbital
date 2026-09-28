@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('api', {
   suggestDiscussWith: (title) => ipcRenderer.invoke('ai:discussWith', title),
   classifyType: (id) => ipcRenderer.invoke('ai:classifyType', id), // {current, choices:[{uri|null,title,hue?,p}]}, most likely first
   activateWindow: () => ipcRenderer.send('window:activate'), // bring this page's window forward with the keys, as a left click would (a right-click does not)
+  translate: (texts, to) => ipcRenderer.invoke('ai:translate', texts, to), // [text], a language -> [{ lang, text } | null]: shown translated, never saved
   processImage: (source) => ipcRenderer.invoke('ai:processImage', source), // { bytes, filename, mimeType } | { clipboard: true } | { uri: tana:image: }: the model makes it a task or a note, the image inside; returns the Node to open
   clipboardHasImage: () => ipcRenderer.invoke('clipboard:hasImage'), // Cmd+K offers Process image from clipboard
   // Presence (main/presence.js): open and close the room of a document on screen (the page, and the rows listed on it),
