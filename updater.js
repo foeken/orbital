@@ -6,7 +6,7 @@
 const { app, dialog } = require('electron');
 const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
-const { createWriteStream } = require('node:fs');
+const { createWriteStream, constants } = require('node:fs');
 const fs = require('node:fs/promises');
 const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
@@ -48,13 +48,19 @@ async function check({ manual = false } = {}) {
       detail: `You have ${app.getVersion()}. The app restarts to finish updating.`,
       buttons: ['Update and Restart', 'Later'], defaultId: 0, cancelId: 1,
     });
-    if (response === 0) await install(release);
+    // Past this point the user asked for the update, so a failure is theirs to see even on the silent launch check.
+    if (response === 0) await install(release).catch((e) => dialog.showErrorBox('Could not update Orbital', String((e && e.message) || e)));
   } catch (e) {
     if (manual) dialog.showErrorBox('Could not check for updates', String((e && e.message) || e));
   }
 }
 
 async function install(release) {
+  const target = path.resolve(app.getPath('exe'), '../../..'); // …/Orbital.app/Contents/MacOS/<exe>
+  if (!target.endsWith('.app')) throw new Error('Cannot locate the running app bundle');
+  // A copy opened straight from Downloads runs from macOS's read-only App Translocation mount, and one in a folder
+  // this user cannot write is no better: the swap below runs after quit, its rm fails, and the app never comes back.
+  if (!(await canReplace(target))) throw new Error('Orbital cannot replace itself where it is running from. Move Orbital to your Applications folder in Finder, open it from there and check for updates again.');
   const asset = (release.assets || []).find((a) => a.name.endsWith('.zip'));
   if (!asset) throw new Error(`Release ${release.tag_name} has no .zip asset`);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbital-update-'));
@@ -65,8 +71,6 @@ async function install(release) {
   await run('/usr/bin/ditto', ['-xk', zip, dir]);
   const fresh = path.join(dir, 'Orbital.app');
   await fs.access(path.join(fresh, 'Contents', 'Info.plist')); // a half-downloaded zip must not reach the rm below
-  const target = path.resolve(app.getPath('exe'), '../../..'); // …/Orbital.app/Contents/MacOS/<exe>
-  if (!target.endsWith('.app')) throw new Error('Cannot locate the running app bundle');
   // The zip came over https from GitHub; before anything is replaced, codesign confirms the bundle inside it is
   // intact and carries a Developer ID signature, chained to Apple, of the team that signed the running copy. A
   // tampered, truncated, ad-hoc or self-signed build fails here, while the running app is still in place.
@@ -80,6 +84,15 @@ async function install(release) {
   const swap = `while /bin/kill -0 ${process.pid} 2>/dev/null; do /bin/sleep 0.5; done; /bin/rm -rf ${q(target)} && /usr/bin/ditto ${q(fresh)} ${q(target)} && /usr/bin/open ${q(target)}; /bin/rm -rf ${q(dir)}`;
   spawn('/bin/sh', ['-c', swap], { detached: true, stdio: 'ignore' }).unref();
   app.quit();
+}
+
+// The swap removes the bundle and writes a new one beside it, so both the bundle and its folder must be writable.
+async function canReplace(bundle) {
+  try {
+    await fs.access(bundle, constants.W_OK);
+    await fs.access(path.dirname(bundle), constants.W_OK);
+    return true;
+  } catch { return false; }
 }
 
 // The team behind a Developer ID signature, from codesign -dv output; null for an ad-hoc signature ("not set").
@@ -96,4 +109,4 @@ const signedBy = (team) => {
   return `=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "${team}"`;
 };
 
-module.exports = { check, isNewer, teamOf, signedBy };
+module.exports = { check, isNewer, teamOf, signedBy, canReplace };
