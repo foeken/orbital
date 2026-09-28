@@ -521,14 +521,14 @@ html.links .app { display: none; }
 .node:is(.tl-today, .tl-upcoming) > .line .text { color: inherit; } /* Today's Tasks and Upcoming meetings read as titles, their markers still quiet */
 .node.tl-done > .line .text s, .node.tl-done > .line .text del { color: var(--muted); }
 .node.tl > .line > .body > .subtext { margin-top: 2px; }
-/* a group's rows hang under its words (block + t-bullet: the list rule it overrides): a task by its box, which makes its
-   type glyph redundant, anything else by its type's glyph */
+/* a group's rows hang under its words (block + t-bullet: the list rule it overrides): a task by its type's glyph and its
+   box, anything else by its type's glyph */
 .node.block.t-bullet.tl > .children { margin-left: 132px; padding-bottom: 8px; border-left: 0; }
 .node.tl > .children .node > .line { padding: 1px 0; }
 .node.tl > .children .node > .line > .chev { width: 0; }
 .node.tl .line > .chev, .node.tl .line:hover > .chev { visibility: hidden; pointer-events: none; } /* a record, not an outline: nothing here expands */
-.node.tl > .children .node > .line:has(> .check) > .bullet { display: none; }
-.node.tl > .children .node > .line:not(:has(> .check)) > .bullet { margin: 0 2px 0 3px; } /* a glyph is narrower than a box: centred where a box would be, titles still in line */
+.node.tl > .children .node > .line:not(:has(> .check)) > .bullet { margin: 0 2px 0 3px; } /* a glyph alone: centred where a box would be */
+.node.tl > .children:has(.check) .node > .line:not(:has(> .check)) > .bullet { margin: 0 23px 0 0; } /* beside tasks: the box's room kept, so the titles stay in line */
 .node.tl > .children .text { font-size: 15px; } /* in the page's own colour: a completed one greys itself (.document.done) */
 /* The Timeline's glyphs are one grey, the markers' own: a row under an entry keeps its glyph and drops its colour — a
    meeting's gold, a type's hue — so the page stays monochrome */
