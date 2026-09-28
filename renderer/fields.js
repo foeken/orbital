@@ -108,7 +108,9 @@ function visibilityFieldEl(parent) {
   const values = document.createElement('div'); values.className = 'fvalues';
   const el = document.createElement('div'); el.className = 'fvalue fchoice'; el.tabIndex = 0; el.title = summary.audience.label;
   const count = summary.peopleCount || summary.people.length, word = summary.audience.word; // Everyone, Private: the word, no faces
-  if (word) { const words = document.createElement('span'); words.textContent = word; el.append(words); }
+  const mine = summary.scope === 'only-me' && (loadMembers(), me()); // Private: you, the one person who can read it, as a mention
+  if (mine) { const who = document.createElement('span'); renderSegs(who, [{ mention: { uri: mine.id, label: memberName(mine.id), icon: 'member' } }]); el.append(who); }
+  else if (word) { const words = document.createElement('span'); words.textContent = word; el.append(words); }
   else if (count === 1 && summary.people.length === 1) { loadMembers(); const who = document.createElement('span'); renderSegs(who, [{ mention: { uri: summary.people[0], label: memberName(summary.people[0]), icon: 'member' } }]); el.append(who); } // one person: a mention of them, as Assigned to draws one, not a lone bubble
   else if (summary.people.length) el.append(...facesEls(summary.people, count));
   else { const words = document.createElement('span'); words.className = 'fhint'; words.textContent = summary.audience.label; el.append(words); }
@@ -124,6 +126,39 @@ function visibilityFieldEl(parent) {
     else if (open && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); }
   };
   values.append(el); row.append(icon, label, values);
+  return row;
+}
+// A meeting's attendees, drawn under Visible to (renderer/render.js renderFields), on the event and on its write-up:
+// one per line, a member as a mention the way Assigned to draws one, anyone else by the calendar's name or address,
+// rooms left out. Past five lines "And n more" shows the rest (attendeesOpen, for as long as the page is open).
+const ATTENDEES_SHOWN = 5;
+const attendeesOpen = new Set(); // meetings whose whole list is shown
+function attendeesFieldEl(parent) {
+  const meeting = meetingOf(parent.node), info = meeting && meetingInfoOf(meeting.id);
+  const people = ((info && info.attendees) || []).filter((a) => a.role !== 'resource' && !['room', 'resource'].includes(a.cutype));
+  if (!people.length || sensitiveHidden(parent.node.id)) return null;
+  loadMembers(); // the mentions' names; the list redraws the page when it lands
+  const row = document.createElement('div'); row.className = 'field';
+  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'member');
+  const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Attendees';
+  const values = document.createElement('div'); values.className = 'fvalues';
+  const all = attendeesOpen.has(meeting.id) || people.length <= ATTENDEES_SHOWN;
+  for (const a of all ? people : people.slice(0, ATTENDEES_SHOWN)) {
+    const line = document.createElement('div'); line.className = 'fvalue';
+    const uri = a.identityUri || '', known = uri.startsWith('tana:user-profile:') && !memberName(uri).startsWith('tana:');
+    if (known) renderSegs(line, [{ mention: { uri, label: memberName(uri), icon: 'member' } }]);
+    else line.textContent = demoText(a.name || a.email || (isGuest(uri) ? 'Guest' : 'Unknown person'), a.key);
+    values.append(line);
+  }
+  if (!all) {
+    const more = document.createElement('div'); more.className = 'fvalue fhint fmore'; more.tabIndex = 0; more.setAttribute('role', 'button');
+    more.textContent = 'And ' + (people.length - ATTENDEES_SHOWN) + ' more';
+    const open = () => { attendeesOpen.add(meeting.id); render(true); };
+    more.onclick = open;
+    more.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+    values.append(more);
+  }
+  row.append(icon, label, values);
   return row;
 }
 // Written the way the field holds it: an options value as its labels (only those still offered, since Tana refuses

@@ -116,6 +116,7 @@ tana.onChanged((docId, info) => {
     }
     // the watch state goes with it: its default follows the assignees, and another page's watch choice arrives this way
     if (!info || info.meta !== false) { taskMetaById.delete(docId); notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
+    if (meetingInfos.has(docId)) meetingInfoOf(docId, true); // a meeting's attendees, read again for its page's field
     // and a node linked to an agent task asks what its task is doing: another page may have relinked it to another task
     if (info && info.meta && (agentStates.has(docId) || agentTaskHosts.has(docId))) loadAgentStates();
     // The sidebar is read once per page and left alone while the page is edited: its sections are relations, and

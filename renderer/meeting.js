@@ -5,6 +5,15 @@
 // and the one row under it shows exactly what Enter writes.
 let meetingCtx = null; // { docId, info } for the meeting Cmd+K was opened on; info is null while main is asked
 let attendeePool = null; // the suggestions the Add attendee page lists, null while they are fetched
+// A meeting's info for its page's Attendees field (renderer/fields.js attendeesFieldEl), per event: asked once, and
+// again when the event changes (renderer/app.js onChanged) with the last answer kept on screen meanwhile.
+const meetingInfos = new Map(); // event id -> main's meeting:info answer, null while the first one is on its way
+function meetingInfoOf(id, fresh) {
+  if ((meetingInfos.has(id) && !fresh) || !connected) return meetingInfos.get(id) || null;
+  if (!meetingInfos.has(id)) meetingInfos.set(id, null);
+  tana.meetingInfo(id).then((info) => { meetingInfos.set(id, info); renderSoon(); }, () => { if (!meetingInfos.get(id)) meetingInfos.delete(id); }); // refused: the next render asks again
+  return meetingInfos.get(id);
+}
 function loadMeetingCtx(doc) {
   if (meetingCtx && meetingCtx.docId === doc.id) return meetingCtx.loaded;
   const mine = meetingCtx = { docId: doc.id, info: null };

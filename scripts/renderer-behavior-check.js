@@ -1136,6 +1136,7 @@ async function runStalePaletteInvalidationCheck() {
     const agentStates = new Map(), agentTaskHosts = new Map(), loadAgentStates = () => {};
     const listPage = () => false; // a document is zoomed here, never a list page
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), fresh = new Map();
+    const meetingInfos = new Map(); // no meeting page open here
     const loadRoots = async () => {};
     const reload = async () => {};
     const loadPins = async () => { pinInfo = null; };
@@ -7505,6 +7506,7 @@ async function runLiveUpdateBurstCheck() {
     ${sourceLine('const onTypePage =')}
     ${sourceLine('const listPage =')}
     const taskMetaById = new Map(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
+    const meetingInfos = new Map(); // no meeting page open here
     const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
     const patchDoc = async (id) => { patched.push(id); }, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
     const agentStates = new Map([['tana:text:01j0agent000000000000000000', 'working']]), agentTaskHosts = new Map(), statusReads = [], loadAgentStates = () => statusReads.push(1);
@@ -8756,6 +8758,44 @@ function runProposalsCheck() {
   })();
 }
 checks.push(runProposalsCheck);
+
+// A zoomed page's people fields (renderer/fields.js): Private names you as a mention, and a meeting's attendees are one
+// per line without rooms, five and "And n more" until that is clicked.
+async function runPeopleFieldsCheck() {
+  const api = vm.runInNewContext(`
+    ${FAKE_DOM}
+    const ME = 'tana:user-profile:me', members = [{ id: ME, title: 'Robin Vega', me: true }, { id: 'tana:user-profile:sam', title: 'Sam' }];
+    const me = () => members.find((m) => m.me), memberName = (uri) => (members.find((m) => m.id === uri) || {}).title || uri, loadMembers = () => {};
+    const renderSegs = (el, segs) => el.append(...segs.map((s) => (s.mention ? '@' + s.mention.label : s.text)));
+    const addIcon = () => {}, facesEls = () => [], sensitiveHidden = () => false, isGuest = (uri) => uri.startsWith('tana:guest-profile:'), demoText = (v) => v;
+    const relatedBy = new Map(), tana = { accessOptions: null }, openVisibility = () => {}, moveTo = () => {};
+    let renders = 0; const render = () => { renders++; };
+    let summary = null; const taskSummary = () => summary, documentSummary = () => null;
+    let info = null; const meetingOf = (node) => (node.icon === 'meeting' ? { id: node.id } : null), meetingInfoOf = () => info;
+    ${functionSource('visibilityFieldEl')}
+    ${sourceLine('const ATTENDEES_SHOWN')}
+    ${sourceLine('const attendeesOpen')}
+    ${functionSource('attendeesFieldEl')}
+    const page = { node: { id: 'tana:event:m', icon: 'meeting' } };
+    const lines = (row) => row && row.childNodes[2].childNodes.map((l) => l.textContent);
+    ({
+      visible: (scope, word) => { summary = { scope, audience: { icon: 'lock', label: 'x', word }, people: [], peopleCount: 0 }; return visibilityFieldEl({ node: { id: 'tana:text:a' }, docId: 'tana:text:a' }).childNodes[2].textContent; },
+      attendees: (list) => { info = list && { attendees: list }; return lines(attendeesFieldEl(page)); },
+      more: () => { attendeesFieldEl(page).childNodes[2].childNodes.at(-1).onclick(); return [renders, lines(attendeesFieldEl(page)).length]; },
+      notMeeting: () => attendeesFieldEl({ node: { id: 'tana:text:a' } }),
+    });
+  `, {});
+  assert.equal(api.visible('only-me', 'Private'), '@Robin Vega', 'Private names you, as a mention');
+  assert.equal(api.visible('everyone', 'Everyone'), 'Everyone', 'the other audiences keep their word');
+  assert.equal(api.notMeeting(), null, 'no Attendees on a page that is no meeting');
+  assert.equal(api.attendees(null), null, 'nor while its info is on its way');
+  const people = [{ identityUri: 'tana:user-profile:sam' }, { name: 'Room 4', cutype: 'room' }, { name: 'Board', role: 'resource' }, ...['A', 'B', 'C', 'D', 'E', 'F'].map((name) => ({ name, email: name + '@x.nl' }))];
+  assert.deepEqual(plain(api.attendees(people.slice(0, 7))), ['@Sam', 'A', 'B', 'C', 'D'], 'five people, rooms left out, all of them when that is everyone');
+  assert.deepEqual(plain(api.attendees(people)), ['@Sam', 'A', 'B', 'C', 'D', 'And 2 more'], 'past five, the rest are counted');
+  assert.deepEqual(plain(api.more()), [1, 7], 'a click shows them all');
+  console.log('ok  people fields: Private names you, Attendees shows five and And n more until clicked, without rooms');
+}
+checks.push(runPeopleFieldsCheck);
 
 // Change time / Change location / Add attendee (renderer/meeting.js): offered on a meeting only once main says it
 // may be changed, and each page's one row is what Enter writes through api.editMeeting.

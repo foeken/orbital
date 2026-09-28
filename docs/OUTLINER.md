@@ -1128,11 +1128,16 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
 - **No Details section.** What it listed lives with the page: who it is for and who can see it are the first fields
   under the title, and Open in Tana, Join call and Edit pins are Cmd+K rows under Current node. **Assigned to** (a task) is a mention per
   person, drawn as a person in any other field is (no chip), or "Unassigned", and opens the assignee picker; **Visible to** (any document with a known audience) is the
-  audience's glyph with a bubble per person as a list row's subtext has them, "Everyone", "Private" or the space's name for those audiences, one person as a mention drawn as Assigned to draws one (or the audience's words where it names
+  audience's glyph with a bubble per person as a list row's subtext has them, "Everyone" or the space's name for those audiences, you as a mention for a private page, one person as a mention drawn as Assigned to draws one (or the audience's words where it names
   nobody), "Anyone with the link" when Tana's link sharing is on, "Not visible to …" in red for an assignee it shuts out, and opens the visibility picker, on a meeting's
   write-up the event's; a sensitive page, a chat and a saved search have none. Both open on a click, Enter or Space (renderer/fields.js
   `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a
   Graph pane beside it.
+- **Attendees** (a meeting, on the event and on its write-up) follows Visible to: the roster main's `meeting:info` reads,
+  one person per line, a member as a mention and anyone else by the calendar's name or address, rooms and resources left
+  out. Past five lines "And n more" shows the rest on a click, Enter or Space, for as long as the page is open. The
+  answer is kept per meeting and read again when the event changes (renderer/meeting.js `meetingInfoOf`,
+  renderer/fields.js `attendeesFieldEl`).
 - **Sections**: Pinned (a meeting's or space's `EDGE_TYPE_HAS_PIN` items, read from the hub's own `pinnedItems` too,
   since a pin just written is there before its edge), Outcomes (documents it owns that carry a task state), Proposals
   (on a meeting's write-up: the proposed documents from chats the meeting owns, #106), References (documents it owns
