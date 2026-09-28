@@ -181,6 +181,9 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .fields .fchip.gone { color: var(--muted); text-decoration: line-through; }
 .fields .fchip.wrong::after { content: ' ⚠'; color: #c8841c; }
 .fields .fhint, .fields .fkind { color: var(--muted); line-height: 22px; }
+.fields .fmore { cursor: pointer; align-self: flex-start; border-radius: 4px; } /* a meeting's "And n more" attendees */
+.fields .fmore:hover { color: #1a1a1a; }
+.fields .fmore:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 .fields .fkind { color: var(--muted); padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
 /* a row's field values on its grey line (renderer/views.js subtextEl): the same chip, a step quieter */
 [data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }

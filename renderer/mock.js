@@ -69,7 +69,11 @@ function mockApi() {
     const time = h == null ? ', all day' : ' ' + h + ':00–' + (h + 1) + ':00';
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
     const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h ?? 0).getTime();
-    meetingEdits['mockmeeting' + i] = { start, end: start + (h == null ? 864e5 : 36e5), allDay: h == null, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: [] };
+    // Leadership sync has more people than its page's Attendees field shows at first, and a room it leaves out
+    const crowd = i !== 2 ? [] : [...['robin', 'sam', 'priya', 'tomas'].map((p) => ({ key: 'tana:mock' + p, identityUri: 'tana:user-profile:' + p })),
+      ...['Noor Haddad', 'Jonas Berg', 'Mei Lin', 'Alex Moreau'].map((name) => ({ key: 'email:' + name.split(' ')[0].toLowerCase() + '@example.com', name, email: name.split(' ')[0].toLowerCase() + '@example.com' })),
+      { key: 'email:room412@example.com', name: 'Room 4.12', email: 'room412@example.com', cutype: 'room' }];
+    meetingEdits['mockmeeting' + i] = { start, end: start + (h == null ? 864e5 : 36e5), allDay: h == null, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: crowd };
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting], start: new Date(start).toISOString(), end: new Date(meetingEdits['mockmeeting' + i].end).toISOString() };
   });
   // the When pill's window (sdk/query.js timeRange), on meetings alone
@@ -92,6 +96,7 @@ function mockApi() {
     participants: i % 2 === 0 ? [{ uri: members[0].id, type: 'user', role: 'admin' }] : [{ uri: members[0].id, type: 'user', role: 'admin' }, { uri: members[1].id, type: 'user', role: 'editor' }],
     audience: i % 2 === 0 ? 'only-me' : 'everyone',
   }]));
+  taskDetails.set('mockmeeting2', { assignees: [], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); // a private meeting: Visible to names you
   const filters = {
     inbox: { types: null, states: ['proposed'], assignee: 'anyone', text: '' },
     tasks: { types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me', text: '' },

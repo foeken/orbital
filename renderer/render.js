@@ -586,11 +586,13 @@ function renderFields(parent, force = false, el = $('fields')) {
   // a task's assignees lead its fields (renderer/fields.js assigneeFieldEl); the rail no longer lists them
   const assigned = parent && parent.node.kind === 'document' && isTask(parent.node) && tana.taskMeta ? assigneeFieldEl(parent) : null;
   const visible = parent && parent.node.kind === 'document' && tana.taskMeta && !isChatPage(parent) && !isSearchDoc(parent.node) ? visibilityFieldEl(parent) : null; // and who can see it, any document but a chat or a saved search (a conversation and a list, not a page)
-  el.hidden = !fields.length && !defs.length && !assigned && !visible;
+  const attendees = parent && parent.node.kind === 'document' && tana.meetingInfo ? attendeesFieldEl(parent) : null; // a meeting's people, after who can see it
+  el.hidden = !fields.length && !defs.length && !assigned && !visible && !attendees;
   el.replaceChildren();
   for (const def of defs) el.append(definitionEl(parent, def));
   if (assigned) el.append(assigned);
   if (visible) el.append(visible);
+  if (attendees) el.append(attendees);
   for (const field of fields) {
     const row = document.createElement('div'); row.className = 'field';
     const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'field');

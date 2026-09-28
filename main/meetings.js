@@ -15,7 +15,7 @@ const canEdit = async (doc) => access.canEditEvent(doc, S.me.userUri, await acce
 const snapshot = async (doc) => {
   const n = readNode(doc);
   return { id: doc.id, editable: await canEdit(doc), start: n.startTime, end: n.endTime, allDay: n.allDay === true, location: n.location || '',
-    participants: Object.keys(n.participants || {}), attendees: events.attendees(doc).map(({ key, name, email, identityUri }) => ({ key, name, email, identityUri })),
+    participants: Object.keys(n.participants || {}), attendees: events.attendees(doc).map(({ key, name, email, identityUri, role, cutype }) => ({ key, name, email, identityUri, role, cutype })),
     syncStatus: n.syncStatus, syncError: n.syncError };
 };
 function check(id) {
