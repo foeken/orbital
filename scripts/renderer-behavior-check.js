@@ -139,6 +139,10 @@ const withShims = (src) => {
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
   if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
+  if (/\bonRowBlank\(/.test(src) && !/const onRowBlank =/.test(src)) src = sourceBetween('const onRowBlank =', '// `texts()`') + '\n' + src;
+  // a type's or a saved search's own glyph (renderer/nodes.js iconOf): a harness that draws neither only needs the names
+  if (/\btypeGlyph\(/.test(src) && !/const typeGlyph =/.test(src)) src = "globalThis.typeGlyph ??= (uri) => (typeof typeGlyphs !== 'undefined' && typeGlyphs.get(uri)) || (String(uri).startsWith(SEARCH_ID) ? 'search' : 'type');\n" + src;
+  if (/\bisSearchDoc\(/.test(src) && !/const isSearchDoc =/.test(src)) src = "globalThis.isSearchDoc ??= (node) => !!node && String(node.id || '').startsWith(SEARCH_ID);\n" + src;
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
@@ -313,6 +317,11 @@ function runSensitiveBlurCheck() {
     const line = (name) => { const m = source.match(new RegExp('^const ' + name + ' = .*$', 'm')); assert.ok(m, 'renderer const ' + name + ' is present'); return m[0]; };
     const iconOf = vm.runInNewContext(`
       const typeGlyphs = new Map([['tana:type:t1', 'rocket']]);
+      ${line('SEARCH_ID')}
+      ${line('isSearchDoc')}
+      ${line('isTypeId')}
+      ${line('isTypeDoc')}
+      ${line('typeGlyph')}
       ${line('isTask')}
       ${line('iconOf')}
       iconOf;
@@ -323,6 +332,8 @@ function runSensitiveBlurCheck() {
     assert.equal(iconOf(task({ tags: [{ label: 'task' }, { label: 'Project', uri: 'tana:type:none' }] })), 'task', 'a type without a glyph changes nothing');
     assert.equal(iconOf(task({ stateType: 'not_now' })), 'later', 'Later wins over the type glyph');
     assert.equal(iconOf({ kind: 'document', icon: 'doc', tags: [{ label: 'x', uri: 'tana:type:t1' }] }), 'doc', 'only tasks are decided here; a document already carries the glyph from main');
+    assert.equal(iconOf({ id: 'tana:type:t1', kind: 'document', icon: 'type' }), 'rocket', 'a type page wears the glyph chosen now, not the one its opened copy carries (#523)');
+    assert.equal(iconOf({ id: 'tana:search:s1', kind: 'document', icon: 'nc-old' }), 'search', 'and a saved search whose icon was taken off goes back to the magnifier');
   }
   const api = vm.runInNewContext(`
     let sensitiveIds = null, sensitiveVisible = false;
@@ -425,17 +436,22 @@ async function runSelectionChecks() {
     const outline = { addEventListener: (name, fn) => { handlers[name] = fn; } };
     const goTo = (uri) => calls.push(['goTo', uri]), toggleSel = (key) => calls.push(['toggle', key]), rangeSelTo = (key) => calls.push(['range', key]);
     const run = (fn) => fn(), tana = { openExternal: () => calls.push(['open']), search: async () => [] };
-    const focused = () => null; let sel = null;
+    const focused = () => null; let sel = null, selected = [];
+    const selKeys = () => selected, items = new Map([['row', {}]]), textEl = () => 'text', caretAt = () => 3;
+    const setCaret = (_el, at) => calls.push(['caret', at]), togglePalette = (mode) => calls.push(['palette', mode]);
     ${sourceBetween("onRows('click'", "filterEl.addEventListener('input'")}
     ${sourceBetween("onRows('mousedown'", "onRows('focusin'")}
     const chip = { className: 'mention', dataset: { uri: 'tana:text:ref' } };
     const line = { parentElement: { dataset: { key: 'row' } } };
     chip.closest = (q) => (q.includes('.mention') ? chip : q === '.line' ? line : q.split(', ').includes('a') ? chip : null);
-    ({ click: (mods) => { calls.length = 0; const e = { target: chip, ...mods, preventDefault() {} }; handlers.mousedown(e); handlers.click(e); return calls; } });
+    ({ click: (mods) => { calls.length = 0; const e = { target: chip, ...mods, preventDefault() {} }; handlers.mousedown(e); handlers.click(e); return calls; },
+      rightClick: (keys) => { calls.length = 0; selected = keys; let kept = false; const e = { target: { closest: (q) => (q === '.line' ? line : null) }, button: 2, preventDefault() { kept = true; } }; handlers.mousedown(e); const down = kept; handlers.contextmenu(e); return { calls, down }; } });
   `);
   assert.deepEqual(plain(mouse.click({ metaKey: false, shiftKey: false })), [['goTo', 'tana:text:ref']], 'a plain click on a chip opens the reference');
   assert.deepEqual(plain(mouse.click({ metaKey: true, shiftKey: false })), [['toggle', 'row']], 'Cmd+click on a chip selects its row instead');
   assert.deepEqual(plain(mouse.click({ metaKey: false, shiftKey: true })), [['range', 'row']], 'and Shift+click extends the selection to it');
+  assert.deepEqual(plain(mouse.rightClick([])), { calls: [['caret', 3], ['palette', 'cmd']], down: false }, 'a right-click puts the caret on the row where it was clicked and opens ⌘K on it');
+  assert.deepEqual(plain(mouse.rightClick(['row', 'other'])), { calls: [['palette', 'cmd']], down: true }, 'on a selected row it keeps the selection and opens ⌘K on all of it');
 
   const selection = sourceBetween('function rangeKeys(', '// ---- filter pills');
   const canEditStructure = sourceBetween('const canEditStructure =', 'const chatIcon =');
@@ -678,7 +694,7 @@ async function runSelectionChecks() {
 }
 
 async function runMultiTaskPaletteCheck() {
-  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows'), functionSource('selectionRows'), functionSource('removeSelection'), functionSource('archiveType'), functionSource('addToDateNode')].join('\n');
+  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows'), functionSource('openNodeRow'), functionSource('selectionRows'), functionSource('removeSelection'), functionSource('archiveType'), functionSource('addToDateNode')].join('\n');
   const context = vm.runInNewContext(`
     const task = (id, editable = true) => ({ id, kind: 'document', icon: 'task', editable, stateType: 'open' });
     const rows = [
@@ -714,8 +730,12 @@ async function runMultiTaskPaletteCheck() {
     const run = (fn) => fn(), loadRoots = async () => {}, render = () => {}, invalidateNode = () => {}, showNote = (note) => { calls.push(['note', note]); };
     const canEditItem = (item) => item.node.editable !== false;
     const canEditStructure = (item) => canEditItem(item);
-    let sel = null, zoom = null;
+    let sel = null, zoom = null, palReturn = null, openedNode = null;
     const openDoc = () => {};
+    // a row's bullet (render.js): the zoomed node has no row, only the title; a block row opens like any other
+    // doc/b2 opens on a click (.opens, as a Timeline row does): Open node runs that click instead of the bullet
+    const nodeElOf = (key) => (items.has(key) && !(zoom && zoom.docId === key) ? { classList: { contains: (c) => c === 'opens' && key === 'doc/b2' },
+      querySelector: () => ({ onclick: () => { openedNode = 'click ' + key; }, querySelector: (q) => (q.includes('bullet') ? { onclick: () => { openedNode = 'bullet ' + key; }, classList: { contains: () => false } } : {}) }) } : null);
     const open = new Map(), CHEV = '<svg/>';
     const canExpand = (item) => item.node.kind === 'document', hasKids = () => true, isOpen = (item) => open.get(item.key) === true;
     let opened = null; const setOpen = (item, value) => { opened = [item.key, value]; open.set(item.key, value); };
@@ -741,6 +761,7 @@ async function runMultiTaskPaletteCheck() {
       toggleOpen: (id) => { selected = []; palDoc = items.get(id).node; const before = selectionRows().find((row) => row.id === 'expand' || row.id === 'collapse'); before.run(); const after = selectionRows().find((row) => row.id === 'expand' || row.id === 'collapse'); return [before.label, before.kbd, opened, after.label, after.kbd]; },
       toggleTask: (id) => { selected = []; palDoc = items.get(id).node; const before = selectionRows().find((row) => row.id === 'toggleDone'); before.run(); return [before.label, ticked, selectionRows().find((row) => row.id === 'toggleDone').label]; },
       kbdSelected: (keys, rowId) => { selected = keys; return selectionRows().find((row) => row.id === rowId).kbd; },
+      openBlock: (key) => { selected = []; palDoc = items.get('t1').node; zoom = { docId: 't1' }; palReturn = { key }; try { const row = selectionRows()[0]; row.run(); return [row.group, row.label, openedNode]; } finally { zoom = null; palReturn = null; } },
       zoomedCurrent: (id) => { selected = []; palDoc = items.get(id).node; zoom = { docId: id }; try { return selectionRows().map((row) => [row.group, row.label]); } finally { zoom = null; } },
       archive: async (id) => { calls.length = 0; selected = []; palDoc = items.get(id).node; await selectionRows().find((row) => row.id === 'archive').run(); return calls; },
     });
@@ -761,7 +782,7 @@ async function runMultiTaskPaletteCheck() {
     ['Selection', 'Mark 4 items as sensitive'],
     ['Selection', 'Delete 3 items'],
   ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
-  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Assign to …'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to Tomorrow'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
+  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Open node'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Assign to …'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to Tomorrow'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
     'one selected row is still a selection, and a marked one offers to unmark');
   // Delete reports what it can remove before it is run, the way the task actions do.
   assert.deepEqual(plain(context.del(['t1', 'meeting', 'locked', 't2'])), ['Delete 3 items', '1 skipped', false], 'a read-only row is counted as skipped, not deleted');
@@ -775,7 +796,7 @@ async function runMultiTaskPaletteCheck() {
   assert.deepEqual(plain(context.selection([])), [], 'with nothing selected the palette is about the app again');
   // With nothing selected the same rows act on the current node, without counts and under their own heading.
   assert.deepEqual(plain(context.current('t1')), [
-    ['Current node', 'Zoom in', '', false],
+    ['Current node', 'Open node', 'Zoom in', false],
     ['Current node', 'Expand', '', false],
     ['Current node', 'Complete', '', false],
     ['Current node', 'Set status', 'In Progress', false],
@@ -787,7 +808,10 @@ async function runMultiTaskPaletteCheck() {
     ['Current node', 'Mark as sensitive', '', false],
     ['Current node', 'Delete', '', false],
   ], 'the current node gets every selection action');
-  assert.deepEqual(plain(context.zoomedCurrent('t1')).slice(0, 2).map((row) => row[1]), ['Complete', 'Set status'], 'the zoomed document itself offers no Zoom in but keeps its checkbox');
+  assert.deepEqual(plain(context.zoomedCurrent('t1')).slice(0, 2).map((row) => row[1]), ['Complete', 'Set status'], 'the zoomed document itself offers no Open node but keeps its checkbox');
+  assert.deepEqual(plain(context.openBlock('doc/b1')), ['Current node', 'Open node', 'bullet doc/b1'], 'inside a zoomed page, Open node opens the row under the caret, a block too, through its bullet');
+  assert.deepEqual(plain(context.openBlock('doc/b2')), ['Current node', 'Open node', 'click doc/b2'], 'and a row that opens on a click (a Timeline entry, a notification) opens as that click does');
+  assert.equal(plain(context.selection(['t1', 't2'])).some((row) => row[1] === 'Open node'), false, 'two selected rows have no one node to open');
   assert.deepEqual(plain(context.current('locked')).filter((row) => row[1] === 'Delete'), [['Current node', 'Delete', 'Read-only', true]], 'and a read-only current node cannot be deleted');
   assert.equal(context.kbd('t1', 'delete'), '⇧⌘⌫', 'the Delete row names the shortcut that does the same thing');
   assert.deepEqual(plain(context.toggleOpen('t1')), ['Expand', null, ['t1', true], 'Collapse', null], 'Expand opens the row and becomes Collapse (their keys come from DEFAULT_HOTKEYS in paletteRows)');
@@ -1252,6 +1276,7 @@ function runReferenceEmbedRenderCheck() {
         checked: check ? !!check.checked : null, disabled: check ? !!check.disabled : null, toggles: check && check.onclick ? (check.onclick(), toggled) : null,
         selectsOnClick: typeof line.onmousedown === 'function', bullet: (line.children[1].onclick(), opened), loadedFrom: loaded,
         lineClick: (opened = null, line.onclick({ target: { closest: () => null } }), opened),
+        blankClick: (opened = null, line.onclick({ target: { closest: () => null, matches: (q) => q.split(', ').includes('.body') } }), opened),
         opensClass: el.classes.has('opens'),
         bulletIcon: [...line.children[1].classes].find((name) => name !== 'icon' && name !== 'hue') || null,
         kidKeys: wrap ? wrap.children.filter((kid) => kid.dataset?.key).map((kid) => kid.dataset.key) : null };
@@ -1327,6 +1352,7 @@ function runReferenceEmbedRenderCheck() {
   const typeRow = plain(api.built({ id: 'tana:type:01j0goal000000000000000000', kind: 'document', icon: 'type', text: 'Goal', editable: true }));
   assert.deepEqual([typeRow.editable, typeRow.lineClick, typeRow.opensClass], [false, 'zoomed the block', true],
     'a type row is not a caret: a click on its title zooms into the type');
+  assert.equal(typeRow.blankClick, null, 'and a click on the empty width beside its title opens nothing (#518)');
 
   // A row with an outline of its own is never a full reference, because expanding one opens the outline of the node
   // it points at, which would leave the block's own with nowhere to go.
@@ -7856,6 +7882,8 @@ async function runSetIconCheck() {
     const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
     let palDoc = { id: '${TYPE}', tags: [] };
     const pinInfo = null, isRealId = () => true;
+    ${sourceLine('const SEARCH_ID =')}
+    ${sourceLine('const isSearchDoc =')}
     const accessById = new Map(), loadAccess = () => {}, localDate = () => '2026-09-18', setTheme = () => {};
     const sectionOf = () => null, visibleTags = () => [];
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
@@ -7918,6 +7946,12 @@ async function runSetIconCheck() {
     api.node({ id, tags: [] });
     assert.equal(api.row(), undefined, (id.split(':')[1] || 'a block') + ' has no icon to set: the glyph belongs to a type');
   }
+  const SEARCH = 'tana:search:01j0search0000000000000000';
+  api.node({ id: SEARCH, tags: [] });
+  assert.deepEqual(plain([api.row().label, api.row().icon]), ['Set icon', 'search'], 'a saved search offers the row too, under the magnifier it is drawn with (#521)');
+  api.wearing(SEARCH, 'nc-flask');
+  assert.equal(api.row().icon, 'nc-flask', 'and once it has one, wears it');
+  api.wearing(SEARCH, null);
   api.node({ id: TYPE, tags: [] });
 
   // 2. The page asks main and draws the answer, registering the glyphs so the rows can show them.
@@ -8472,6 +8506,24 @@ function runDropPlanCheck() {
   console.log('ok  drag and drop: one gap reads as several places, x chooses the level and the line marks it, documents land as references, blocks move, and nothing lands read-only, empty, in another document, in a view or inside itself');
 }
 
+// Nodes dropped on a meeting (renderer/drag.js dropOnMeeting, #520): each node a pin, once; words and the meeting itself are not.
+async function runMeetingDropCheck() {
+  const api = vm.runInNewContext(`
+    const pins = [], notes = [], errors = [];
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    const run = (fn) => fn(), pinDocToMeeting = async (meetingId, id) => { pins.push([meetingId, id]); };
+    const showNote = (note) => notes.push(note), showError = (e) => errors.push(e.message);
+    ${sourceBetween('// the nodes in a drag', '// ---- a task dropped on a group')}
+    ({ drop: async (segs) => { pins.length = notes.length = errors.length = 0; await dropOnMeeting({ id: 'tana:event:m', title: 'Standup' }, segs); return { pins, notes, errors }; } });
+  `);
+  const chip = (uri) => [{ mention: { uri, label: uri } }];
+  assert.deepEqual(plain(await api.drop([chip('tana:text:a'), [{ text: 'just words' }], chip('tana:text:a'), chip('tana:event:m'), chip('tana:text:b')])),
+    { pins: [['tana:event:m', 'tana:text:a'], ['tana:event:m', 'tana:text:b']], notes: ['Pinned to Standup'], errors: [] },
+    'every node dropped on a meeting is pinned to it once; words and the meeting itself are left out');
+  assert.deepEqual(plain(await api.drop([[{ text: 'just words' }]])), { pins: [], notes: [], errors: ['Only a node can be pinned to a meeting'] }, 'a drop of words alone pins nothing and says why');
+  console.log('ok  a node dropped on a meeting is pinned to it');
+}
+
 // A task dropped on a group (renderer/drag.js groupDropWrites, #169): the writes that put it there, read off the task.
 function runGroupDropCheck() {
   const writes = vm.runInNewContext(`${sourceLine('const GROUP_STATES =')}\n${functionSource('groupDropWrites')}\ngroupDropWrites`);
@@ -8614,6 +8666,7 @@ async function runTableCheck() {
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 checks.push(runDropPlanCheck);
 checks.push(runGroupDropCheck);
+checks.push(runMeetingDropCheck);
 // Notifications (issue #18; renderer/inbox.js). A row is Tana's own: a click opens what it is about and marks it read,
 // the way Tana's list does; its bullet and Cmd+K flip read and unread for the rows you are on; Mark all as read
 // clears the page. Every change is drawn before main answers, and the count follows it. A source with no page here
@@ -9120,6 +9173,16 @@ function runLandingFlashCheck() {
   console.log('ok  landing: one changed row flashes, a whole list changed at once does not');
 }
 checks.push(runLandingFlashCheck);
+
+// Demo mode masks words, never numbers: a meeting's "14:00–15:00" and a date stay as they are, a word with a digit in it is still masked.
+checks.push(function runDemoNumbersCheck() {
+  const demoWords = vm.runInNewContext(sourceBetween('const DEMO_SHORT', 'const DEMO_FIRST') + sourceBetween('function demoHash(', 'const demoWordCount') + functionSource('demoWords') + '\ndemoWords');
+  const masked = demoWords('14:00–15:00 · with Sam, Q3 plan on 28 Sep 2026', 'tana:event:x');
+  assert.ok(masked.startsWith('14:00–15:00 · '), 'a meeting time stays a time: ' + masked);
+  assert.match(masked, / 28 [A-Z][a-z]* 2026$/, 'and a date keeps its numbers');
+  assert.doesNotMatch(masked, /Sam|Q3|plan/, 'the words around them are still masked');
+  console.log('ok  demo mode keeps numbers: times and dates read as themselves');
+});
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

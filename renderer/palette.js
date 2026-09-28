@@ -241,8 +241,9 @@ function paletteRows(q, typed = q) {
       keepOpen: true, run: () => openDiscussPalette(doc) });
   }
   // And what a type looks like. The glyph belongs to the type, so every document of that type is drawn with it: its
-  // bullet, its row in the sidebar, a breadcrumb, and the chip an inline mention of it draws.
-  if (palDoc && tana.searchIcons && tana.setTypeIcon && TYPE_NODE.test(palDoc.id)) {
+  // bullet, its row in the sidebar, a breadcrumb, and the chip an inline mention of it draws. A saved search takes one
+  // the same way, for itself: its row, its page and its line under Searches (#521).
+  if (palDoc && tana.searchIcons && tana.setTypeIcon && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc))) {
     const doc = palDoc;
     rows.push({ id: 'setIcon', group: docGroup, icon: typeGlyph(doc.id), label: 'Set icon',
       hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
@@ -325,7 +326,7 @@ function paletteRows(q, typed = q) {
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
-  rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: 'search', label: s.text || s.title || 'Untitled search', opens: s.id, run: () => goTo(s.id) })));
+  rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: typeGlyph(s.id), label: s.text || s.title || 'Untitled search', opens: s.id, run: () => goTo(s.id) })));
   // So is every workspace type: its page lists its documents. Drawn in its own glyph, without its hue.
   rows.push(...(typeListCache || []).map((t) => ({ id: 'type:' + t.uri, group: 'Types', icon: typeGlyph(t.uri), label: t.title || 'Untitled type', opens: t.uri, run: () => goTo(t.uri) })));
   rows.push(...pillCommandRows());

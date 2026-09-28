@@ -163,6 +163,24 @@ function endDrag() {
   setTaskDragging(false);
 }
 
+// ---- a node dropped on a meeting: pinned to it (#520) ----
+// A meeting row (a meeting on the Timeline, one of Upcoming meetings, a meeting listed in a view) takes the nodes
+// dropped on it as pins: the write ⌘K Pin to meeting … makes (renderer/document.js pinDocToMeeting). They are read off
+// NODES_DRAG_TYPE, so a task dragged from the other pane lands too; a row of plain words has no node to pin. Only where
+// no outline place is under the pointer: in an outline, a meeting's row is a place to land beside.
+const meetingUri = (el) => { const n = el && items.get(el.dataset.key)?.node, uri = n && (n.timeline?.uri || n.id); return typeof uri === 'string' && uri.startsWith('tana:event:') ? uri : null; };
+function meetingAt(x, y) {
+  const hit = document.elementFromPoint(x, y), row = hit && hit.closest ? hit.closest('.node') : null, id = meetingUri(row);
+  return id && !row.classList.contains('dragging') ? { id, el: dragLine(row), title: items.get(row.dataset.key).node.text || 'the meeting' } : null;
+}
+// the nodes in a drag's rows: a row that is one chip (a document, or a reference to one), each once, never the meeting itself
+const pinIds = (segs, meetingId) => [...new Set(segs.filter((s) => s.length === 1 && s[0].mention && isRealId(s[0].mention.uri)).map((s) => s[0].mention.uri))].filter((id) => id !== meetingId);
+function dropOnMeeting(meeting, segs) {
+  const ids = pinIds(segs, meeting.id);
+  if (!ids.length) return showError(new Error('Only a node can be pinned to a meeting'));
+  return run(async () => { for (const id of ids) await pinDocToMeeting(meeting.id, id); showNote('Pinned to ' + meeting.title); });
+}
+
 // ---- a task dropped on a group (#169) ----
 // In My Tasks grouped by Responsibility, and on the Timeline's Today's Tasks, a drop between rows is not a place in
 // an outline: it is a group, and landing in one means changing what the task is. The writes are read off the task
@@ -267,16 +285,19 @@ document.addEventListener('dragover', (e) => {
     return;
   }
   const task = e.dataTransfer.types.includes(TASK_DRAG_TYPE); // a task, maybe from the other pane, where dragKey is not set
-  if (!dragKey && !task) return; // somebody else's drag — text out of a row, a file onto the window — is left alone
+  const nodes = e.dataTransfer.types.includes(NODES_DRAG_TYPE); // rows from either pane, for a meeting to pin
+  if (!dragKey && !task && !nodes) return; // somebody else's drag — text out of a row, a file onto the window — is left alone
   if (task) setTaskDragging(true);
   // ponytail: every dragover measures every row on screen; a page of a few hundred rows is one cheap layout read.
   // If a very long page ever drags heavily, take the rects at dragstart and add the scroll delta.
-  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null, group = !plan && task ? groupAt(e.clientX, e.clientY) : null;
+  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null;
+  const meeting = !plan && (dragKey ? pinIds(dragSegs(items.get(dragKey))).length > 0 : nodes) ? meetingAt(e.clientX, e.clientY) : null;
+  const group = !plan && !meeting && task ? groupAt(e.clientX, e.clientY) : null;
   showDrop(plan);
-  showGroupDrop(group);
-  if (!plan && !group) return;
+  showGroupDrop(meeting || group);
+  if (!plan && !meeting && !group) return;
   e.preventDefault(); // only a place that can take the row accepts the drop
-  e.dataTransfer.dropEffect = plan && !plan.ref ? 'move' : 'link';
+  e.dataTransfer.dropEffect = plan && !plan.ref ? 'move' : e.dataTransfer.effectAllowed === 'move' ? 'move' : 'link'; // a block that references a node is picked up to move
 });
 document.addEventListener('drop', (e) => {
   if (!dragKey && e.dataTransfer.types.includes('Files')) {
@@ -287,12 +308,14 @@ document.addEventListener('drop', (e) => {
     if (files.length) uploadImages(plan.docId, plan.afterId, files).catch(showError);
     return;
   }
-  const raw = e.dataTransfer.getData(TASK_DRAG_TYPE);
-  if (!dragKey && !raw) return;
+  const raw = e.dataTransfer.getData(TASK_DRAG_TYPE), rows = e.dataTransfer.getData(NODES_DRAG_TYPE);
+  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null, meeting = !plan && rows ? meetingAt(e.clientX, e.clientY) : null;
+  const group = !plan && !meeting && raw ? groupAt(e.clientX, e.clientY) : null, key = dragKey;
+  if (!dragKey && !raw && !meeting) return endDrag(); // rows from the other pane dropped on no meeting: a chat's composer takes them itself
   e.preventDefault();
-  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null, group = !plan && raw ? groupAt(e.clientX, e.clientY) : null, key = dragKey;
   endDrag();
   if (plan) applyDrop(key, plan);
+  else if (meeting) dropOnMeeting(meeting, JSON.parse(rows));
   else if (group) dropOnGroup(JSON.parse(raw), group.id);
 });
 document.addEventListener('dragend', endDrag);

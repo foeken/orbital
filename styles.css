@@ -542,9 +542,10 @@ html.links .app { display: none; }
 .tl-join:hover { background: #ececec; color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
 .node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
-.node.tl .line, .node.tl .line .text { cursor: pointer; } /* every row here opens something: a click is not a place for a caret */
-.node.opens > .line, .node.opens > .line .text { cursor: pointer; } /* a type row: a click opens its page */
-.node.tl-new > .line, .node.tl-new > .line .text { cursor: default; } /* except an "added to your Inbox" line: its rows open, it does not */
+/* a row that opens on a click shows the pointer over what it draws, and only there: the empty width beside it is no
+   target (renderer/nodes.js onRowBlank). An "added to your Inbox" line opens nothing itself, so it has no .opens; its rows do. */
+.node.tl .line { cursor: default; } /* no caret on the Timeline: a click there never edits */
+.node.opens > .line > .body > * { cursor: pointer; }
 .node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 24px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .tl-divider::before { border-top-color: #34373a; }
@@ -728,7 +729,7 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .check + .body { padding-left: 0; }
 .document.done > .line .text { color: var(--muted); text-decoration: line-through; }
 .meta { margin-left: 8px; color: var(--muted); font-size: 14px; white-space: nowrap; user-select: none; }
-.subtext { color: var(--muted); font-size: 14px; line-height: 18px; user-select: none; } /* the space a node is shared with */
+.subtext { width: fit-content; color: var(--muted); font-size: 14px; line-height: 18px; user-select: none; } /* the space a node is shared with */
 /* the row's facts, moved down by fitRowMeta when the title left them no room: already grey and 14px, so they only
    need the 8px that separated them from the title taken back off */
 .subtext .tmeta { margin-left: 0; }
@@ -928,7 +929,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
    clicking it (or Enter/Space on it) folds its own section away, and the triangle follows aria-expanded */
 /* 3px left and a 9px gap put the 12px chevron's centre on x=9, where a row's own chevron sits (its 14px circle is at
    left: 2px in a 24px gutter), and still start the heading's word at x=24, where a row's icon does */
-.ghead { display: flex; align-items: center; gap: 9px; width: 100%; margin-top: 18px; padding: 10px 6px 10px 3px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: left; cursor: pointer; user-select: none; }
+.ghead { display: flex; align-items: center; gap: 9px; width: fit-content; /* its chevron and words are the target, not the pane beside them (#518) */ margin-top: 18px; padding: 10px 6px 10px 3px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: left; cursor: pointer; user-select: none; }
 /* pointing right while the section is folded, a quarter turn down while it is open */
 .ghead svg { flex: none; width: 12px; height: 12px; transition: transform var(--dur-quick) var(--ease-out); }
 .ghead[aria-expanded="true"] svg { transform: rotate(90deg); }

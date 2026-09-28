@@ -407,6 +407,9 @@ keeps its state behind it. A row that cannot run is greyed and skipped by ↑/�
 commands, never documents: a query that matches no command gives one row, "Search Tana for “…”", which opens Cmd+S
 with the query running.
 
+**Right-click** (or ⌃-click) on a row opens Cmd+K on that row: the caret goes where it was clicked and the row is the
+Current node; on a row of a multi-selection the selection stays and Cmd+K acts on it (renderer/events.js `contextmenu`).
+
 **In a window of several panes** (issue #409) the card and its scrim cover the whole window, centred over every pane,
 and everything the palette does stays with the pane that opened it: its rows, the node it acts on, its keys and where the
 caret goes back to. That holds for every page opened through `showPage` (⌘K and its pages, ⌘S, the key recorder); the
@@ -418,7 +421,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 
 - **Current node** is the zoomed node or the row under the caret (with a selection, the Selection group counts what
   each row acts on and says "N skipped" for rows it cannot). Its rows follow `NODE_ROW_ORDER` (renderer/palette.js)
-  whichever file builds them: the focused field's rows; Zoom in, Expand, Collapse; the task state (Complete/Reopen,
+  whichever file builds them: the focused field's rows; Open node (the row under the caret, or the one selected row, opened as the mouse opens it: zoomed into, a reference's target, what a Timeline row or notification opens; absent on the page you are in and for a selection of several), Expand, Collapse; the task state (Complete/Reopen,
   Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Discuss with …,
   Add to chat …);
   a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
@@ -615,7 +618,8 @@ week, Last month and Older.
   says "Classified as Decision Record (91%)" ("Already …" and no write when it has it). Otherwise the page lists every
   option with its odds. No type is never applied on its own. `node scripts/platform-cli.js classify <id...>` prints the
   odds and writes nothing; a type's description and AI instructions in Tana are how its answers improve.
-- **Set icon** (`setIcon`, on a type) gives the type a glyph that every document of that type is then drawn with —
+- **Set icon** (`setIcon`, on a type or a saved search, #521) gives a saved search a glyph of its own (its row, its page,
+  its line under Searches in Cmd+K; No icon puts the magnifier back), and gives the type a glyph that every document of that type is then drawn with —
   its bullet, its sidebar row, the chip a mention of it draws — because all of them read the row's `icon`, which main
   fills with the type's icon name (main/rows.js). A task and a meeting keep their own. The page searches the Nucleo UI
   set in the app (`build/nucleo-ui.json.gz`, 3503 glyphs with tags), which stays in main (main/icons.js): the renderer
@@ -764,6 +768,10 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   point at, is pasted as its words (marks dropped, its mentions kept as chips). Grabbing a row that is part of a
   selection brings the whole selection, in outline order. The rows ride in their own dataTransfer flavour
   (`application/x-orbital-nodes`, drag.js `dragSegs`), so the composer of another pane takes them too.
+- **A drop on a meeting pins to it** (issue #520): a meeting's row (on the Timeline, under Upcoming meetings, in a view)
+  takes the dragged nodes as pins, the write ⌘K Pin to meeting … makes, and says "Pinned to …". The row is ringed while a
+  drop there would pin. Only rows that are a node (a document, or a reference to one) are pinned, from either pane, and
+  only where no outline place is under the pointer, so a meeting's row inside a page stays a place to land beside.
 - **A dragged document leaves a reference.** A row in a view or a saved search is a document, which cannot move into an
   outline, so it lands as one block whose whole content is a mention of it (`insertMention` → `block:insertMention` →
   `referenceIn`), drawn as the node itself (§5). The rows of a view cannot be reordered (their order is the query's),

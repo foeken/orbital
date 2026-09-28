@@ -954,6 +954,13 @@ async function main() {
       assert.equal(await icons.fillTypeIcons([{ uri: OTHER, title: 'B' }], async () => { throw new Error('asked again'); }), 0, 'a picked type is never asked about again');
       icons.setTypeIcon(OTHER, null);
     }
+    { // a saved search takes one too, for itself (#521)
+      const SEARCH = 'tana:search:' + ulid();
+      assert.equal(icons.setTypeIcon(SEARCH, 'nc-rocket').name, 'nc-rocket', 'a saved search takes an icon');
+      assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'nc-rocket', 'and its row is drawn with it');
+      icons.setTypeIcon(SEARCH, null);
+      assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'search', 'No icon puts the search glyph back');
+    }
     console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
     // The colour the same way: a hue of our own, or grey, kept beside the glyph in the settings; Tana's own hue on
     // the type shows through when there is no entry, and is never written.

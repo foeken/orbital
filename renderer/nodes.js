@@ -131,6 +131,9 @@ const inField = (docId) => typeof docId === 'string' && docId.includes('|tana:ty
 // A type row opens on a click or Enter anywhere on it: its page is where it is renamed (renderer/render.js, events.js)
 // a table's row too: its title is a column to click into, not text to type in (renderer/views.js tableView)
 const opensOnClick = (item) => (isTypeDoc(item.node) && !inField(item.docId)) || (tableRow(item.parent) && !item.node.draft && zoomable(item.node));
+// A row that opens on a click opens from what it draws (words, time, chips, faces), never from the empty width beside
+// them: those land on the row's own boxes, which span the pane (#518). styles.css draws the pointer the same way.
+const onRowBlank = (e) => !!e.target.matches?.('.line, .body');
 // `texts()` is the outline's own rows: what "the first node" means, and the list every structural step works in —
 // removing a row, merging into the one above, selecting a range. A field's rows are their own list for the same
 // reason: they are a different outline, and Backspace at the start of the page's first row must not reach into
@@ -173,7 +176,7 @@ const LIB_ICONS = {
 // that name them are drawn (loadRoots below), so a bullet never renders empty and waits for a second render.
 const customIcons = new Map(); // 'nc-<label>' -> svg markup
 const typeGlyphs = new Map(); // type uri -> the icon name it is drawn with, so the picker knows what it has now
-const typeGlyph = (uri) => typeGlyphs.get(uri) || 'type'; // how a type is drawn wherever it is listed: its own icon, else the generic one
+const typeGlyph = (uri) => typeGlyphs.get(uri) || (String(uri).startsWith(SEARCH_ID) ? 'search' : 'type'); // how a type or a saved search is drawn wherever it is listed: its own icon, else the generic one
 function registerIcons(list) {
   for (const icon of Array.isArray(list) ? list : []) {
     if (!icon || typeof icon.name !== 'string' || typeof icon.svg !== 'string') continue;
@@ -201,14 +204,16 @@ function iconNode(icon) {
 // swaps its glyph is b.replaceChildren() and then addIcon(b, name).
 function addIcon(el, icon) { const svg = icon ? iconNode(icon) : null; if (svg) el.append(svg); return el; }
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
-// A member is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Zoom in). A type opens as
+// A member is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Open node). A type opens as
 // the list of its instances (renderer/render.js).
 const zoomable = (node) => !!node && !/^tana:user-profile:/.test(node.id || '');
 // A task put off is drawn with the zzz glyph instead of the task one: the row still is a task (its box, its
 // status, its metadata are unchanged), it only says at a glance that it is asleep.
 // A task keeps 'task' as its icon (that is what isTask reads), so its type's glyph — the one a typed document wears
 // (main/rows.js) — is chosen here at draw time; Later's own glyph still wins, it says what the task is doing.
-const iconOf = (node) => (isTask(node) && node.stateType === 'not_now' ? 'later' : (isTask(node) && typeGlyphs.get((node.tags || []).map((t) => t && t.uri).find(Boolean))) || node.icon);
+// A type or a saved search wears the glyph chosen for it now (typeGlyphs), not the one on the copy a page opened with:
+// Set icon changes it under the open page, its title and its tab (#523).
+const iconOf = (node) => (isTypeDoc(node) || isSearchDoc(node) ? typeGlyph(node.id) : isTask(node) && node.stateType === 'not_now' ? 'later' : (isTask(node) && typeGlyphs.get((node.tags || []).map((t) => t && t.uri).find(Boolean))) || node.icon);
 // an unchecked Inbox task: its (dashed) box accepts it, In Progress, before a second click completes it
 const acceptsFirst = (node) => isTask(node) && !node.done && node.stateType === 'proposed';
 const isCheckboxBlock = (node) => node?.kind === 'block' && node.done != null;
