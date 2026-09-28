@@ -336,7 +336,8 @@ function paletteRows(q, typed = q) {
   if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; showHide(filterRow, true); render(); filterEl.focus(); } });
   // The app's own rows, in four groups: Actions (making and finding things, undoing, syncing), Navigate
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
-  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
+  // with an image on the clipboard it wears Process image's glyph, and its page offers that first (openCreationPalette)
+  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: tana.processImage && clipImage ? 'imageSparkle' : 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
@@ -568,7 +569,11 @@ function creationRows(q) {
   return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
 }
 function openCreationPalette() {
-  openPage('create', 'Choose what to create', { rows: creationRows, back: BACK_TO_COMMANDS });
+  // The clipboard's image leads the page, and only the page: a folded row under Create new … could get a key.
+  // The corner button opens this page with ⌘K closed, so the clipboard is asked here too.
+  if (palette.hidden) loadClipImage();
+  const clip = (q) => (clipImage && fuzzyMatch('process image from clipboard', q) ? [clipImageRow()] : []);
+  openPage('create', 'Choose what to create', { rows: (q) => [...clip(q), ...creationRows(q)], back: BACK_TO_COMMANDS });
   loadCreationChoices();
 }
 // the create choices feed both the Cmd+K "Create new …" list and the "/" menu
@@ -620,17 +625,19 @@ function resultRows(nodes, group) {
 // The active meeting behind the Pin to meeting row. Asked once per palette open (togglePalette clears it), because a
 // lookup is a round trip and the row is rebuilt on every keystroke; a failure is kept as the reason the row shows.
 // Process image (issue #507) from Cmd+K only, so neither row has an id a key could be recorded on: the image row the
-// selection or the caret is on, and the clipboard's image when it holds one (clipImage, asked each time ⌘K opens).
+// selection or the caret is on, and the clipboard's image when it holds one (clipImage, asked each time ⌘K or the
+// Create new … page opens).
 let clipImage = false;
+const clipImageRow = () => ({ group: 'Image', icon: 'imageSparkle', label: 'Process image from clipboard', hint: 'Make it a task or a note', run: () => processImage({ clipboard: true }) });
 function processImageRows() {
   const node = [...selKeys(), palReturn && palReturn.key].map((k) => k && items.get(k)?.node).find((n) => n && isImage(n)), rows = [];
   if (node) { const uri = node.image.uri; rows.push({ group: 'Image', icon: 'imageSparkle', label: 'Process image', hint: 'Make it a task or a note', run: () => processImage({ uri }) }); }
-  if (clipImage) rows.push({ group: 'Image', icon: 'imageSparkle', label: 'Process image from clipboard', hint: 'Make it a task or a note', run: () => processImage({ clipboard: true }) });
+  if (clipImage) rows.push(clipImageRow());
   return rows;
 }
 function loadClipImage() {
   clipImage = false;
-  tana.clipboardHasImage?.().then((has) => { clipImage = has === true; if (clipImage && palMode === 'cmd' && !palette.hidden) renderPalette(); }, () => {});
+  tana.clipboardHasImage?.().then((has) => { clipImage = has === true; if (clipImage && (palMode === 'cmd' || palMode === 'create') && !palette.hidden) renderPalette(); }, () => {});
 }
 function loadMeeting() {
   if (!tana.currentMeeting || meetingNow !== undefined) return;

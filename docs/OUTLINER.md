@@ -110,6 +110,9 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   **Process image** while the caret or the selection is on an image row (main reads that image, main/images.js
   `image`), and **Process image from clipboard** while the clipboard holds an image (`clipboard:hasImage`, asked
   each time ⌘K opens; main reads it with Electron's clipboard as PNG). Pasting an image still inserts it as before.
+  With an image on the clipboard, Cmd+K's **Create new …** row wears the image-sparkle glyph, and its page (from Cmd+K
+  or the corner button's click) leads with Process image from clipboard, above the choices. That row is on the page
+  only, never among the folded Create new rows, so no key can be recorded on it either.
 - **Header row**: over the page title, the empty line the buttons at the top right sit on, while the page is alone in
   its window. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
