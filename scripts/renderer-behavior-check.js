@@ -8363,6 +8363,10 @@ function runDropPlanCheck() {
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const isGone = () => false;
     const tana = { moveTo: async () => {}, insertMention: async () => {} };
+    let sel = null;
+    const selKeys = () => [...sel.keys];
+    const referenceLabel = (node) => referenceTarget(node).text;
+    ${sourceLine('const segsOf =')}
     ${sourceLine('const DRAG_STEP =')}
     ${sourceLine('const DRAG_STEP_LIST =')}
     ${sourceLine('const DRAG_GUTTER =')}
@@ -8373,6 +8377,7 @@ function runDropPlanCheck() {
     ${sourceLine('const dragListable =')}
     ${sourceLine('const dragEmpty =')}
     ${sourceBetween('const canDragItem =', 'const dragLine =')}
+    ${functionSource('composerDropSegs')}
     ${sourceLine('const dragLine =')}
     ${sourceLine('const rowDepth =')}
     ${functionSource('dropHost')}
@@ -8380,6 +8385,7 @@ function runDropPlanCheck() {
     ${functionSource('dropPlan')}
     ({ plan: (key, x, y) => { dragKey = key; const plan = dropPlan(x, y); return plan && { docId: plan.docId, parentId: plan.parentId, afterId: plan.afterId, ref: plan.ref || null, left: plan.left, top: plan.top }; },
        canDrag: (key) => canDragItem(items.get(key)),
+       composer: (key, keys) => { sel = keys ? { keys: new Set(keys) } : null; return composerDropSegs(dragSegs(items.get(key))); },
        inView: () => { outline.dataset.key = ''; } });
   `);
 
@@ -8438,6 +8444,14 @@ function runDropPlanCheck() {
   // 9. What was picked up decides the write, and nothing else does: a block moves even when it is a row that
   //    points at a document, because the row is the thing being dragged.
   assert.equal(plain(api.plan('link', 30, 80)).ref, null, 'a row that points at a document still moves: it is a block like any other');
+
+  // 10. Dropped on a chat's composer (renderer/chat.js), a node or a reference to one is a chip and a block is its
+  //     words; a selection travels whole when the row picked up is in it, and only then.
+  const DOC = { mention: { uri: 'tana:text:01docrow00000000000000000', label: 'row-doc' } }, TARGET = { mention: { uri: 'tana:text:01target000000000000000000', label: 'Target' } };
+  assert.deepEqual(plain(api.composer('row-doc')), [DOC, { text: ' ' }], 'a document drops as a chip with a space to type on');
+  assert.deepEqual(plain(api.composer('a', ['row-doc'])), [{ text: 'a' }], 'a block is pasted, and a selection it is not in stays behind');
+  assert.deepEqual(plain(api.composer('a', ['a', 'row-doc', 'link'])), [{ text: 'a' }, { text: '\n' }, DOC, { text: ' ' }, TARGET, { text: ' ' }],
+    'a selection drops whole: words on their own line, chips side by side');
   assert.equal(plain(api.plan('link', 30, 80)).afterId, 'c');
   console.log('ok  drag and drop: one gap reads as several places, x chooses the level and the line marks it, documents land as references, blocks move, and nothing lands read-only, empty, in another document, in a view or inside itself');
 }

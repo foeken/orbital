@@ -737,7 +737,13 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   where nothing can land: the top level of a view, a read-only row, another document, anywhere inside the row being
   dragged, or behind a draft row (a drop aimed there lands behind the last real row).
 - After the write both outlines are re-read, the row it landed in is opened, and a parent left with no children
-  closes. A drop back where the row was writes nothing. A multi-row selection is not dragged (⇧⌘↑/↓ and Tab move it).
+  closes. A drop back where the row was writes nothing. A multi-row selection is not moved by a drag (⇧⌘↑/↓ and Tab
+  move it); it travels whole only to a chat's composer (below).
+- **A drop on a chat's composer** (renderer/chat.js) writes nothing: it puts the dragged rows into the message where
+  they are dropped. A document, or a row that references one, becomes a chip; any other row, which has no uri to
+  point at, is pasted as its words (marks dropped, its mentions kept as chips). Grabbing a row that is part of a
+  selection brings the whole selection, in outline order. The rows ride in their own dataTransfer flavour
+  (`application/x-orbital-nodes`, drag.js `dragSegs`), so the composer of another pane takes them too.
 - **A dragged document leaves a reference.** A row in a view or a saved search is a document, which cannot move into an
   outline, so it lands as one block whose whole content is a mention of it (`insertMention` → `block:insertMention` →
   `referenceIn`), drawn as the node itself (§5). The rows of a view cannot be reordered (their order is the query's),

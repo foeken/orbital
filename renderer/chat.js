@@ -384,15 +384,28 @@ function composerLink() {
 // The node picked in the "@" search, as a chip where the caret was, with a space after it to type on from
 function chatMention(mention) {
   const at = composerAt; composerAt = null;
-  const tmp = document.createElement('span'); renderSegs(tmp, [{ mention }], composer.dataset.doc);
-  const chip = tmp.querySelector('.mention'), space = document.createTextNode(' ');
+  composerInsert([{ mention }, { text: ' ' }], at);
+}
+// Segments into the message at a range (the end when there is none), the caret after them
+function composerInsert(segs, at) {
+  const tmp = document.createElement('span'); renderSegs(tmp, segs, composer.dataset.doc);
+  const frag = document.createDocumentFragment(); frag.append(...[...tmp.childNodes].filter((n) => n.nodeValue !== CARET_ANCHOR)); // the anchors a field's edge needs, not a message's middle
+  const last = frag.lastChild;
   composerText.focus();
   const range = at && composerText.contains(at.startContainer) ? at : document.createRange();
   if (range !== at) { range.selectNodeContents(composerText); range.collapse(false); }
-  range.deleteContents(); range.insertNode(space); range.insertNode(chip);
-  range.setStartAfter(space); range.collapse(true);
+  range.deleteContents(); range.insertNode(frag);
+  if (last) range.setStartAfter(last);
+  range.collapse(true);
   getSelection().removeAllRanges(); getSelection().addRange(range);
   composerChanged();
+}
+// Rows dragged onto the message (renderer/drag.js dragSegs), one list of segments each: chips side by side with a
+// space between them, a row's words on a line of their own, and a space after a closing chip to type on from.
+function composerDropSegs(rows) {
+  const chip = (segs) => segs.length === 1 && 'mention' in segs[0];
+  return rows.flatMap((segs, i) => [...segs, { text: i === rows.length - 1 ? (chip(segs) ? ' ' : '') : chip(segs) && chip(rows[i + 1]) ? ' ' : '\n' }])
+    .filter((s) => !('text' in s) || s.text);
 }
 // Tana's own assistant (sdk/chat.js TANA_AGENT): mentioned, it answers in a chat with other people in it, where a
 // message is otherwise only for them. Offered first in the composer's "@" search while what is typed fits its name.
@@ -486,6 +499,16 @@ composerText.addEventListener('paste', (e) => {
   tana.node(uri).then((n) => { composerAt = at; chatMention({ label: n.title || uri, uri }); }, showError);
 });
 composerText.addEventListener('focus', () => selectMsg(null));
+// A row dragged here, from this pane or another, goes in where it is dropped (composerDropSegs); never inside a chip
+const composerTakes = (e) => e.dataTransfer.types.includes(NODES_DRAG_TYPE) && !chatReadOnly.has(composer.dataset.doc);
+composerText.addEventListener('dragover', (e) => { if (composerTakes(e)) e.preventDefault(); });
+composerText.addEventListener('drop', (e) => {
+  if (!composerTakes(e)) return;
+  e.preventDefault();
+  const at = document.caretRangeFromPoint(e.clientX, e.clientY), chip = at && at.startContainer.parentElement?.closest('.mention');
+  if (chip) { at.setStartAfter(chip); at.collapse(true); }
+  composerInsert(composerDropSegs(JSON.parse(e.dataTransfer.getData(NODES_DRAG_TYPE))), at);
+});
 composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
 composerSend.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
 composerSend.onclick = chatSend;
