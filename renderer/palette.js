@@ -336,8 +336,8 @@ function paletteRows(q, typed = q) {
   if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; showHide(filterRow, true); render(); filterEl.focus(); } });
   // The app's own rows, in four groups: Actions (making and finding things, undoing, syncing), Navigate
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
-  // with an image on the clipboard it wears Process image's glyph, and its page offers that first (openCreationPalette)
-  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: tana.processImage && clipImage ? 'imageSparkle' : 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
+  // the corner button's glyph (shell.html #create); with an image on the clipboard its page offers that first (openCreationPalette)
+  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'textPlus', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
