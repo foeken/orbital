@@ -106,6 +106,10 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   (`ai:processImage`): the fast AI (main/ai.js `readImage`, PNG, JPEG, WebP or GIF) answers with a task or a note,
   its title and the lines worth keeping, and main makes it with those lines and the image under them. The page opens
   it; the button says "Processing image …" until then, and a failure is the red toast.
+  Cmd+K offers the same under **Image**, and only there (the rows have no id, so no key can be recorded on them):
+  **Process image** while the caret or the selection is on an image row (main reads that image, main/images.js
+  `image`), and **Process image from clipboard** while the clipboard holds an image (`clipboard:hasImage`, asked
+  each time ⌘K opens; main reads it with Electron's clipboard as PNG). Pasting an image still inserts it as before.
 - **Header row**: over the page title, the empty line the buttons at the top right sit on, while the page is alone in
   its window. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron

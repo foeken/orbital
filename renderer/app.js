@@ -83,7 +83,7 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'goto') { if (typeof e.data.view === 'string') setView(e.data.view); else if (typeof e.data.id === 'string') goTo(e.data.id); } // what the Graph pane opened, opened here
   else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id); // a key pressed in the Graph pane
   else if (e.data?.orbital === 'rename') renameTitle(); // Rename on the tab (shell.js)
-  else if (e.data?.orbital === 'processImage') { const shell = e.source; processImage(e.data.file).then(() => shell.postMessage({ orbital: 'processed' }, '*')); } // an image dropped on Create new (shell.js)
+  else if (e.data?.orbital === 'processImage') processImage(e.data.file); // an image dropped on Create new (shell.js)
 });
 titleEl.addEventListener('blur', () => document.documentElement.classList.remove('renaming'));
 // Under a tab bar (html.tabbed) the header buttons are drawn in this page's tab bar, beside its ⋯ (shell.js navbtns),

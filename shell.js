@@ -330,7 +330,8 @@ addEventListener('message', (e) => {
   else if (what === 'palette') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'palette', mode: e.data.mode }, '*'); } // Cmd+K or Cmd+S pressed in the Graph pane
   else if (what === 'action') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'action', id: String(e.data.id) }, '*'); } // any other key pressed there
   else if (what === 'focusLinks') focusPage(linksView());
-  else if (what === 'processed') createAs(''); // the dropped image is a task or a note now, or it failed and the page said why
+  else if (what === 'processing') createAs('busy'); // Process image from Cmd+K (renderer/upload.js processImage)
+  else if (what === 'processed') createAs(''); // the image is a task or a note now, or it failed and the page said why
 });
 
 // ---- a page's header buttons in its tab bar, or with one page in the window's header ----

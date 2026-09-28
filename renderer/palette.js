@@ -312,6 +312,7 @@ function paletteRows(q, typed = q) {
   }
   // only node rows so far: the selection's rows first, then (with a multi-selection) the document's own, each in NODE_ROW_ORDER
   rows.sort((a, b) => (a.group === 'Selection' ? 0 : 1) - (b.group === 'Selection' ? 0 : 1) || nodeRank(a) - nodeRank(b));
+  if (tana.processImage) rows.push(...processImageRows());
   // Views, most used first: the Timeline (today's tasks and what happened), Today and This week, then what came in
   // (Inbox, Notifications, Proposals), and the Library and Types last. Today's node (titled with the date, pinned to
   // today) and the week's ("Week 38 (2026)") are documents created on demand, but places to go all the same.
@@ -618,6 +619,19 @@ function resultRows(nodes, group) {
 }
 // The active meeting behind the Pin to meeting row. Asked once per palette open (togglePalette clears it), because a
 // lookup is a round trip and the row is rebuilt on every keystroke; a failure is kept as the reason the row shows.
+// Process image (issue #507) from Cmd+K only, so neither row has an id a key could be recorded on: the image row the
+// selection or the caret is on, and the clipboard's image when it holds one (clipImage, asked each time ⌘K opens).
+let clipImage = false;
+function processImageRows() {
+  const node = [...selKeys(), palReturn && palReturn.key].map((k) => k && items.get(k)?.node).find((n) => n && isImage(n)), rows = [];
+  if (node) { const uri = node.image.uri; rows.push({ group: 'Image', icon: 'imageSparkle', label: 'Process image', hint: 'Make it a task or a note', run: () => processImage({ uri }) }); }
+  if (clipImage) rows.push({ group: 'Image', icon: 'imageSparkle', label: 'Process image from clipboard', hint: 'Make it a task or a note', run: () => processImage({ clipboard: true }) });
+  return rows;
+}
+function loadClipImage() {
+  clipImage = false;
+  tana.clipboardHasImage?.().then((has) => { clipImage = has === true; if (clipImage && palMode === 'cmd' && !palette.hidden) renderPalette(); }, () => {});
+}
 function loadMeeting() {
   if (!tana.currentMeeting || meetingNow !== undefined) return;
   meetingNow = { meeting: null, pending: true }; // asked: the row says Checking… until this is replaced
@@ -1018,7 +1032,7 @@ function togglePalette(mode, link, pin) {
     { cmd: { rows: paletteRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
-  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
+  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); loadClipImage(); }
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }

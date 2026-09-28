@@ -3,7 +3,7 @@
 // views, pins, images, and each one's ipc table); this file owns the window, the menu, the boot sequence and the
 // registering of those tables, plus the test hook that scripts/sdk-check.js and the CLI use to drive the same
 // modules without a window.
-const { app, BaseWindow, Menu, Notification, WebContentsView, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BaseWindow, Menu, Notification, WebContentsView, clipboard, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -517,9 +517,22 @@ ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id,
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
-// Process image (issue #507): an image dropped on Create new (shell.js), read by the model into a task or a note, made
-// with what it read as its lines and the image under them. Returns the Node for the page to open.
-ipcMain.handle('ai:processImage', async (_e, file) => {
+// Process image (issue #507): an image read by the model into a task or a note, made with what it read as its lines
+// and the image under them. Returns the Node for the page to open. The image is a file dropped on Create new
+// (shell.js) { bytes, filename, mimeType }, or from Cmd+K the clipboard's { clipboard: true } or an image row's { uri }.
+async function imageToProcess(file) {
+  if (file?.clipboard) {
+    const png = clipboard.readImage();
+    if (png.isEmpty()) throw new Error('The clipboard holds no image');
+    return { bytes: png.toPNG(), filename: 'Clipboard image.png', mimeType: 'image/png' };
+  }
+  if (typeof file?.uri !== 'string') return file;
+  const [, mimeType, base64] = /^data:([^;,]+);base64,(.*)$/s.exec(await require('./main/images').image(file.uri)) || [];
+  return { bytes: Buffer.from(base64 || '', 'base64'), filename: 'image', mimeType };
+}
+ipcMain.handle('clipboard:hasImage', () => clipboard.availableFormats().some((f) => f.startsWith('image/'))); // Cmd+K's Process image from clipboard
+ipcMain.handle('ai:processImage', async (_e, source) => {
+  const file = await imageToProcess(source);
   const read = await ai.readImage(file, globalThis.fetch, app.getPath('userData'));
   const node = await createDocument(read.title, { kind: read.kind });
   const content = require('./sdk/content');

@@ -436,7 +436,9 @@ function mockApi() {
         { uri: null, title: 'No type', p: named ? 0.05 : 0.4 }];
       return { current: (doc.tags || []).map((t) => t.uri).find(Boolean) || null, choices: choices.sort((a, b) => b.p - a.p) };
     },
-    // Process image: the model's wait, then a task named after the file (the mock reads no image)
+    // Process image: the model's wait, then a task named after the file (the mock reads no image); the mock's
+    // clipboard always holds one, so Cmd+K shows Process image from clipboard
+    clipboardHasImage: async () => true,
     async processImage({ filename }) {
       await new Promise((done) => setTimeout(done, 1500));
       return this.createDocument('Follow up on ' + String(filename || 'image').replace(/\.[a-z]+$/i, ''), { kind: 'task' });
