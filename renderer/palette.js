@@ -338,7 +338,7 @@ function paletteRows(q, typed = q) {
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
   // the corner button's glyph (shell.html #create); with an image on the clipboard its page offers that first (openCreationPalette)
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'textPlus', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
-  if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
+  if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Quick Add Task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
@@ -1247,7 +1247,7 @@ function showCombo() {
   $('recSave').disabled = !validCombo(rec.combo) || !!warn;
 }
 function closeRecorder() { rec = null; recorder.hidden = true; renderPalette(); palInput.focus(); }
-const saveHotkeys = () => { setPref('hotkeys', hotkeys); renderSoon(); }; // the page may name a key: an empty My Tasks names Create task's (emptyText)
+const saveHotkeys = () => { setPref('hotkeys', hotkeys); renderSoon(); }; // the page may name a key: an empty My Tasks names Quick Add Task's (emptyText)
 $('recReset').onclick = () => { delete hotkeys[rec.row.id]; saveHotkeys(); closeRecorder(); };
 $('recCancel').onclick = closeRecorder;
 $('recSave').onclick = () => { if (validCombo(rec.combo) && !comboTaken(rec.combo, rec.row.id)) { hotkeys[rec.row.id] = rec.combo; saveHotkeys(); closeRecorder(); } };

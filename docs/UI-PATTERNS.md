@@ -123,7 +123,7 @@ the whole window and the page keeps drawing itself in its pane (`html.cover`), s
 do this, so a palette page needs nothing. A new element fixed to an edge of the window gets an `html.cover` rule in
 styles.css that puts it at the pane's edge (`--pane-x`, `--pane-y`, `--pane-w`, `--pane-h`), as the toast has; one placed
 from an element's rect is right already. A popover that belongs to a spot in the pane (a pill menu, the toolbar, the
-@ and / menus) stays in the pane and never covers. A page of its own over the window (Help, Create task) is an
+@ and / menus) stays in the pane and never covers. A page of its own over the window (Help, Quick Add Task) is an
 overlay instead (main.js `openOverlay`).
 
 Anything else a page asks of the window it lives in goes to the shell the same way, with no main in between: its tab's
@@ -295,7 +295,7 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
 - **Where errors go.** An action runs through `run()`, and a failure becomes the red toast (`showError`). A palette page
   built on `loadList` shows a failed read as a disabled note row in place of its rows; other pages that read (Set icon
-  and the Pin to today picker, for example) send it to the toast instead. The Create task card, a page of its own, keeps
+  and the Pin to today picker, for example) send it to the toast instead. The Quick Add Task card, a page of its own, keeps
   a failed create on the card (`.terror`) so the press can be repeated. The red line under the title (`#error`) belongs
   to the session alone: it asks for a new login. A notice never goes to `#error`.
 - **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A menu
@@ -303,7 +303,7 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   toolbar's style menu puts the text selection back instead (`applyBlockType`), so typing goes on. A new row takes the
   caret. With nothing to go back to, focus goes back to the page itself, where ↑/↓ pick up the first or last row.
 - **Empty and loading.** A page with no rows says so in its own words (`.empty-note`; `emptyText` in
-  renderer/render.js): "No notifications yet.", "Nothing matches." with the Create task key, or "Nothing here yet" with
+  renderer/render.js): "No notifications yet.", "Nothing matches." with the Quick Add Task key, or "Nothing here yet" with
   Clear filters when a filter hides rows. A new page adds its line to `emptyText`. A palette page with no match says "No
   results". Only a launch or a Reload shows the loading animation (after 300 ms). Later loads wait blank, and a row
   still coming says "Loading…" (`.children.loading`, a `disabled` palette row). A row that cannot run is shown greyed

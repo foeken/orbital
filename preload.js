@@ -13,7 +13,7 @@ if (window.top === window && location.pathname.endsWith('/shell.html')) {
   return;
 }
 // An outliner page in the shell: main keys it by its frame (main/state.js pageOf), so it says when it takes the keys
-// and when it goes (its panel closed, a reload). The Help tour and Create task are windows' own pages and say neither.
+// and when it goes (its panel closed, a reload). The Help tour and Quick Add Task are windows' own pages and say neither.
 if (window.top !== window) {
   window.addEventListener('focus', () => ipcRenderer.send('page:focus'));
   window.addEventListener('pagehide', () => ipcRenderer.send('page:gone'));
@@ -151,7 +151,7 @@ contextBridge.exposeInMainWorld('api', {
   deleteAgentAsk: (id, askId) => ipcRenderer.invoke('chatAgent:delete', id, askId), // forget a question and its answer on this device (they were never in Tana)
   deleteChatMessage: (id, messageId) => ipcRenderer.invoke('chat:delete', id, messageId), // delete one of your own messages from the chat, for everyone, as Tana's Delete message does
   inviteToChat: (id, userUri) => ipcRenderer.invoke('chat:invite', id, userUri), // a workspace member joins the chat as an editor: { name } // a new chat with Tana, yours alone: Node to zoom
-  taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Create task offers (task.html)
+  taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Quick Add Task offers (task.html)
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
   createSearch: (viewId, title) => ipcRenderer.invoke('search:create', viewId, title), // saves that view's current filter as a saved search; returns the Node to zoom

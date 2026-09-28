@@ -117,7 +117,7 @@ function nextPane(page) {
   return win.panes.find((p) => p.side === next && p !== page) || null;
 }
 // A page registers when its preload asks window:getSide. Only an iframe of a window's shell is a page: the shell itself
-// and the Help tour or Create task are main frames. Its id is its url's and never changes while it lives; one already
+// and the Help tour or Quick Add Task are main frames. Its id is its url's and never changes while it lives; one already
 // taken (which should not happen) gets a free one.
 function addPage(e) {
   const frame = e.senderFrame, win = frame && shellWindow(e.sender);
@@ -146,7 +146,7 @@ function dropPage(page) {
   presence.view(null, page.id);
   if (S.pane === page) S.pane = win.panes[0] || null;
 }
-// The shell fills the window; the Help tour or Create task, when open, covers it (openOverlay).
+// The shell fills the window; the Help tour or Quick Add Task, when open, covers it (openOverlay).
 function fit(win) {
   const { width, height } = win.getContentBounds();
   for (const v of [win.shell, win.overlay]) if (v) v.setBounds({ x: 0, y: 0, width, height });
@@ -161,7 +161,7 @@ function openPage(win, { id = freeId(), where = 'right', from, focus = true }) {
 }
 // Signed in or out: the saved layout comes back, or waits while every page is the login button.
 const relayout = () => { for (const w of S.windows) if (!w.isDestroyed() && w.signedOut !== signedOut()) { w.signedOut = signedOut(); tellShell(w, 'auth', { signedOut: w.signedOut }); } };
-// The Help tour (help.html, issue #230) and Create task (task.html, issue #237): a transparent page of its own laid
+// The Help tour (help.html, issue #230) and Quick Add Task (task.html, issue #237): a transparent page of its own laid
 // over the whole window, so it sits above both halves of a split rather than inside the one that asked. Added last, it
 // is on top, and there is one at a time. Closing it hands the keys back to the page that asked, whose caret is where it
 // was, with what it has to say: open the palette (⌘K closed the tour), or a note for its toast (the task it made).
@@ -185,8 +185,8 @@ function closeOverlay(win, result = {}) {
   if (!view.webContents.isDestroyed()) view.webContents.close();
   const opener = view.opener;
   // a first start this overlay was covering (firstHelp): now there is room for it, whichever half opened this one, over
-  // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Create task). First, so
-  // a ⌘K that closed Create task does not leave the palette open under the tour.
+  // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Quick Add Task). First, so
+  // a ⌘K that closed Quick Add Task does not leave the palette open under the tour.
   const pending = win.helpPending; win.helpPending = null;
   const main = win.panes.find((p) => !p.side) || win.panes[0]; // page '' when it is open: the tour's own
   const help = !!pending && !win.isDestroyed() && !!main && firstHelp(main, pending.theme);
@@ -354,10 +354,10 @@ ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 // The Help tour's first start (renderer/overlays.js helpOnce), opened here, by main, once. Only after this session has
 // read the settings document — the snapshot above is this machine's last copy, which on a new machine knows nothing yet,
 // so a read that failed declines rather than trusting it — and only over a page still open in a window nothing covers
-// (Create task open: main opens it when that closes, firstHelp). helpSeen is marked only once the tour is really opening:
-// one step, so two windows, Create task or a page closing on the way can neither show it twice nor spend it unseen.
-// A window Create task covers keeps the ask (helpPending) and closeOverlay opens it once that closes: the close is told
-// only to the half that opened Create task, which is not always the one that asked.
+// (Quick Add Task open: main opens it when that closes, firstHelp). helpSeen is marked only once the tour is really opening:
+// one step, so two windows, Quick Add Task or a page closing on the way can neither show it twice nor spend it unseen.
+// A window Quick Add Task covers keeps the ask (helpPending) and closeOverlay opens it once that closes: the close is told
+// only to the half that opened Quick Add Task, which is not always the one that asked.
 function firstHelp(page, theme) {
   if (!settings.settingsDocId() || settings.prefs().helpSeen || !page || page.isDestroyed()) return false;
   const win = page.win;
