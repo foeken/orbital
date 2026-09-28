@@ -283,11 +283,12 @@ async function readAgentStatuses(links) {
 // the "no rollout found" the earlier attempt hit. Start the turn and it becomes a first-class thread: it lists, the
 // app reads it, and `codex://threads/<id>` opens it with no browser hop. That is why creation happens here rather
 // than through the public https route, and it is what makes the workspace and the model ours to choose.
-// A blank workspace per node, not the last project and not this repo: its own directory under the app's data, made
-// on demand. The node's own id keeps it stable across reassignment.
-function agentWorkspace(userData, nodeUri) {
+// One workspace for every task the app starts, under the app's data and made on demand: never the last project and
+// never this repo. Codex lists a thread under the folder it ran in, so a folder per node made each task a project of
+// its own, named after its node id (issue #553). One folder puts them all under a single "Tana" project.
+function agentWorkspace(userData) {
   const path = require('node:path'), fs = require('node:fs');
-  const dir = path.join(userData, 'agent-workspaces', String(nodeUri).replace(/[^a-z0-9]+/gi, '-'));
+  const dir = path.join(userData, 'agent-workspaces', 'Tana');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -325,7 +326,7 @@ async function createTask({ nodeUri, prompt, model, instructions, userData, host
   const entry = { release, stop: rpc.stop };
   try {
     await rpc.ready;
-    const params = { cwd: agentWorkspace(userData, nodeUri), ephemeral: false };
+    const params = { cwd: agentWorkspace(userData), ephemeral: false };
     if (model) params.model = model; // absent means Codex's own default
     if (instructions) params.developerInstructions = instructions;
     const started = await rpc.call('thread/start', params);

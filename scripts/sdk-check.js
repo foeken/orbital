@@ -3279,11 +3279,18 @@ async function main() {
     assert.equal((cache.setting('codex') || []).join(','), task.id, 'in the settings table, so it survives a restart');
     // The acceptance case: confirming an assignment hands the work over. Before this, assigning marked the node and
     // opened nothing, so the badge claimed a delegation that did not exist anywhere.
-    // Created here and opened directly: a blank workspace of its own, the chosen model, and an id up front — so the
+    // Created here and opened directly: the app's own workspace, the chosen model, and an id up front — so the
     // task is linked the moment it exists and Codex opens it without a trip through the browser.
     assert.equal(created.length, 1, 'assigning creates the task through the app-server');
     assert.equal(created[0].nodeUri, task.id, 'for this node');
-    assert.notEqual(created[0].userData, undefined, 'in a workspace of its own, not the last project and not this repo');
+    assert.notEqual(created[0].userData, undefined, 'in the app\'s own workspace, not the last project and not this repo');
+    // Reported from a screenshot (#553): a folder per node made every task a project of its own in Codex.
+    const dataDir = fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'orbital-ws-'));
+    const ws = backend.agent.agentWorkspace(dataDir);
+    assert.equal(ws, require('node:path').join(dataDir, 'agent-workspaces', 'Tana'), 'the workspace is one folder, named for Codex to list as Tana');
+    assert.equal(fs.statSync(ws).isDirectory(), true, 'made on demand');
+    assert.equal(backend.agent.agentWorkspace(dataDir, 'tana:chat:other'), ws, 'and every task shares it, whichever node it came from');
+    fs.rmSync(dataDir, { recursive: true, force: true });
     // Reported from a screenshot: every task was called after this prompt's opening sentence, so the list read as a
     // column of identical names. The first line is the node's own title now, and Codex titles a task from it.
     assert.equal(String(created[0].prompt).split('\n')[0], 'Tana: Draft the release notes',

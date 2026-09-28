@@ -321,7 +321,7 @@ Tana draws as the chat's own agent (§2), so an `ai` message would read as Tana'
 `human` one as yours. Both the question and the answer stay in Orbital:
 
 1. **A Codex task on this Mac** is started with main/agent.js `createTask` (the Assign to Agent path, keyed by the chat, so
-   its workspace is `agent-workspaces/tana-chat-…`). Its prompt is the question and the whole conversation, oldest first,
+   its workspace is `agent-workspaces/Tana`, shared by every task). Its prompt is the question and the whole conversation, oldest first,
    `Name: text` per message, mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
    (`thread/start` `developerInstructions`, `RULES`) say the question and answer are shown to the asker alone and never
    saved to Tana, to answer only what was asked, and never to write to Tana. A task that cannot start keeps nothing, and
