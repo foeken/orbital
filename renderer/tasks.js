@@ -377,9 +377,27 @@ async function membersLoaded() { if (!(members && members.length) && tana.member
 // caret — under their own heading and without a count in the label.
 // Every row carries a stable id even though its label counts the selection, because Cmd+Shift+K records a hotkey per
 // id and a hotkey only fires with the palette closed — which is exactly when a selection is live.
+// Open node: the row under the caret, opened exactly as the mouse opens it (render.js). A row whose click opens something
+// (.opens: a Timeline entry and the tasks under it, a notification, a type) does what that click does; any other does
+// what its bullet does: a reference opens what it points at, anything else with a page is zoomed into, a block too.
+// Nothing is offered for a row that opens nothing (a still bullet, a Timeline line about nothing, whose bullet would
+// zoom into the Timeline's own copy) or for the page you are in, which has no row, only its title. The id stays
+// zoomIn, the row's name before, so a key recorded on it still works. One selected row is opened the same way (Space
+// does that too); a selection of more has no one node to open.
+function openNodeRow(selected) {
+  if (selected.length > 1) return null;
+  const key = selected.length ? selected[0] : palReturn && palReturn.key ? palReturn.key : palDoc && palDoc.id, item = key && items.get(key);
+  const el = item && nodeElOf(key), line = el && el.querySelector(':scope > .line');
+  if (!line) return null;
+  const bullet = line.querySelector(':scope > .bullet'), text = line.querySelector('.text');
+  const open = el.classList.contains('opens') ? () => line.onclick({ target: text })
+    : !item.node.timeline && bullet && bullet.onclick && !bullet.classList.contains('still') ? () => bullet.onclick() : null;
+  return open && { id: 'zoomIn', group: selected.length ? 'Selection' : 'Current node', icon: 'zoomIn', label: 'Open node', hint: 'Zoom in', run: open };
+}
 function selectionRows() {
   const selected = selKeys(), keys = selected.length ? selected : palDoc && !palDoc.appPage && items.has(palDoc.id) ? [palDoc.id] : [];
-  if (!keys.length) return [];
+  const openRow = openNodeRow(selected);
+  if (!keys.length) return openRow ? [openRow] : [];
   const group = selected.length ? 'Selection' : 'Current node';
   const count = (n, noun) => (selected.length ? ` ${n} ${n === 1 ? noun : noun + 's'}` : '');
   const seen = new Set(), nodes = [];
@@ -387,12 +405,10 @@ function selectionRows() {
     const node = items.get(key)?.node;
     if (node && !node.draft && isRealId(node.id) && !seen.has(node.id)) { seen.add(node.id); nodes.push(node); }
   }
-  const ids = nodes.map((node) => node.id), rows = [];
-  // A row you are on but not in: Zoom in opens it, the same as clicking its bullet. The zoomed document itself
-  // has nowhere further to go, so the row is absent there.
+  const ids = nodes.map((node) => node.id), rows = openRow ? [openRow] : [];
+  // A document row you are on but not in: its own chevron. The zoomed document itself is open already.
   if (!selected.length && !zoom && nodes.length === 1 && nodes[0].kind === 'document' && zoomable(nodes[0])) {
     const doc = nodes[0];
-    rows.push({ id: 'zoomIn', group, icon: 'zoomIn', label: 'Zoom in', run: () => openDoc(doc.id) });
     // the row's own chevron, with the keys the outline already answers to (⌘↓ opens, ⌘↑ closes)
     const item = items.get(doc.id);
     if (item && canExpand(item)) {

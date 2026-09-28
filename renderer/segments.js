@@ -48,6 +48,7 @@ function demoPersonName(identity, count = 2) {
 function demoWords(value, identity) {
   let index = 0;
   return String(value || '').replace(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu, (word) => {
+    if (/^\p{N}+$/u.test(word)) return word; // a number says nothing about whose it is, and a time or date masked into words ("and:for–on:in") reads as broken
     const list = word.length <= 3 ? DEMO_SHORT : DEMO_WORDS;
     const replacement = list[demoHash(identity + ':' + index++) % list.length]; // each word drawn on its own: neighbours no longer walk the list in order
     return /\p{Lu}/u.test(word[0]) ? replacement[0].toUpperCase() + replacement.slice(1) : replacement; // a capital stays a capital, never all caps

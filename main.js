@@ -298,6 +298,9 @@ ipcMain.on('window:getSide', (e) => {
 });
 // A page taking the keys (preload.js, its window's focus): the window and page a notification click opens in, and ⌘W closes
 ipcMain.on('page:focus', (e) => { const page = pageOf(e); if (page) { S.win = page.win; S.pane = page; } });
+// On macOS a right-click leaves a window in the background, where a left click brings it forward: ⌘K opened by one
+// (renderer/events.js contextmenu) asks for its window, so the palette's field has the keys and shows its caret.
+ipcMain.on('window:activate', (e) => { const page = pageOf(e); if (!page || page.win.isFocused()) return; app.focus({ steal: true }); page.win.focus(); page.focus(); });
 // A page leaving (pagehide: its panel closed, a reload). Its frame may be gone by the time this arrives, so whatever the
 // window holds that is gone goes too.
 ipcMain.on('page:gone', (e) => {
@@ -522,15 +525,16 @@ ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCa
 // (shell.js) { bytes, filename, mimeType }, or from Cmd+K the clipboard's { clipboard: true } or an image row's { uri }.
 async function imageToProcess(file) {
   if (file?.clipboard) {
-    const png = clipboard.readImage();
-    if (png.isEmpty()) throw new Error('The clipboard holds no image');
-    return { bytes: png.toPNG(), filename: 'Clipboard image.png', mimeType: 'image/png' };
+    // Electron 45's clipboard is the async W3C one: Chromium offers any image on it as image/png.
+    const item = (await clipboard.read()).find((i) => i.types.includes('image/png'));
+    if (!item) throw new Error('The clipboard holds no image');
+    return { bytes: Buffer.from(await (await item.getType('image/png')).arrayBuffer()), filename: 'Clipboard image.png', mimeType: 'image/png' };
   }
   if (typeof file?.uri !== 'string') return file;
   const [, mimeType, base64] = /^data:([^;,]+);base64,(.*)$/s.exec(await require('./main/images').image(file.uri)) || [];
   return { bytes: Buffer.from(base64 || '', 'base64'), filename: 'image', mimeType };
 }
-ipcMain.handle('clipboard:hasImage', () => clipboard.availableFormats().some((f) => f.startsWith('image/'))); // Cmd+K's Process image from clipboard
+ipcMain.handle('clipboard:hasImage', () => clipboard.has('image/png')); // Cmd+K's Process image from clipboard
 ipcMain.handle('ai:processImage', async (_e, source) => {
   const file = await imageToProcess(source);
   const read = await ai.readImage(file, globalThis.fetch, app.getPath('userData'));

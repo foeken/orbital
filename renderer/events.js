@@ -218,6 +218,7 @@ onRows('mousedown', (e) => {
   // a row that is nothing but a chip or a link can only be clicked on that chip, so with a modifier held it still selects
   if (!line || e.target.closest(e.metaKey || e.shiftKey ? '.check, .bullet, .chev' : '.check, .bullet, .chev, a')) return;
   const key = line.parentElement.dataset.key;
+  if ((e.button === 2 || e.ctrlKey) && selKeys().includes(key)) return e.preventDefault(); // a right-click on the selection keeps it for ⌘K (contextmenu below)
   if (e.metaKey && line.closest?.('.tl')) return; // a Timeline row, and a task under one, opens on a click and ⌘ opens it beside (render.js), so ⌘ does not select there
   if (e.metaKey) { // Cmd+click: add or remove this row, and make it the keyboard range anchor
     e.preventDefault(); toggleSel(key);
@@ -226,6 +227,16 @@ onRows('mousedown', (e) => {
     const f = focused(), anchor = sel ? sel.anchor : f ? f.key : key;
     rangeSelTo(key, anchor);
   }
+});
+// Right-click (or ⌃-click) on a row is ⌘K on that row: the caret goes where it was clicked, as a click would put it, and
+// ⌘K takes that row as its Current node. On a row of the multi-selection it is ⌘K on the selection.
+onRows('contextmenu', (e) => {
+  const line = e.target.closest && e.target.closest('.line'), key = line && line.parentElement.dataset.key, text = key && items.has(key) && textEl(key);
+  if (!text) return;
+  e.preventDefault();
+  if (!selKeys().includes(key) && !e.target.closest('.cell')) setCaret(text, caretAt(text, e.clientX, e.clientY)); // a table cell already has the caret
+  togglePalette('cmd');
+  tana.activateWindow?.(); // a right-click leaves a background window where it is: forward, so the field has the keys
 });
 onRows('focusin', () => { // the caret is back in a node
   if (!sel) return;

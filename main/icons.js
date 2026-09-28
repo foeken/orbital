@@ -1,5 +1,5 @@
 'use strict';
-// The icon a type is drawn with. Tana has nowhere to keep an icon — `appearance` holds an image uri and a hue and
+// The icon a type or a saved search is drawn with (a search's since #521). Tana has nowhere to keep an icon — `appearance` holds an image uri and a hue and
 // nothing else (docs/sdk/05-gotchas.md) — and an SVG does not belong in somebody else's CRDT, so the choice is kept
 // here, app-local, the way sensitive marks and agent assignments are: one setting, type uri -> Nucleo label.
 // What is stored is a name, never markup: the glyph itself comes from the set built into the app.
@@ -63,7 +63,7 @@ const typeIcons = () => Object.entries(stored())
 // document of that type follows it. The generic glyph is kept as a null entry rather than no entry: it is a choice
 // too, and fillTypeIcons only picks for types nobody has chosen for.
 function setTypeIcon(typeUri, name) {
-  if (typeof typeUri !== 'string' || !/^tana:type:[0-9a-z]{26}$/.test(typeUri)) throw new Error('Icons are set on a type');
+  if (typeof typeUri !== 'string' || !/^tana:(type|search):[0-9a-z]{26}$/.test(typeUri)) throw new Error('Icons are set on a type or a saved search');
   const next = { ...stored() };
   if (name == null) next[typeUri] = null;
   else {
