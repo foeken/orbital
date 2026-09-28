@@ -1,7 +1,7 @@
 // The two branches in the updater: which release counts as newer than the running build, and whose signature a
 // downloaded bundle carries (an ad-hoc signature is nobody's, so it can never replace a signed app).
 const assert = require('node:assert');
-const { isNewer, teamOf, signedBy } = require('../updater');
+const { isNewer, teamOf, signedBy, canReplace } = require('../updater');
 
 assert.equal(isNewer('v0.2.1', '0.2.0'), true);
 assert.equal(isNewer('v0.2.0', '0.2.0'), false);
@@ -13,6 +13,17 @@ assert.equal(teamOf('Executable=/x\nIdentifier=com.dreetje.orbital\nTeamIdentifi
 assert.equal(teamOf('Identifier=com.dreetje.orbital\nSignature=adhoc\nTeamIdentifier=not set'), null, 'an ad-hoc build belongs to no team');
 assert.equal(teamOf('Identifier=com.dreetje.orbital'), null, 'and no line at all is no team either');
 assert.throws(() => signedBy('ABC" or true'), /team identifier/, 'a team is ten letters or digits, never requirement syntax');
+// A bundle in a folder this user cannot write (or on the read-only App Translocation mount) is refused before quit.
+(async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbital-rw-')), app = path.join(dir, 'Orbital.app');
+  try {
+    fs.mkdirSync(app);
+    assert.equal(await canReplace(app), true, 'a bundle in a writable folder can be swapped');
+    fs.chmodSync(dir, 0o555);
+    if (process.getuid && process.getuid() !== 0) assert.equal(await canReplace(app), false, 'one in a read-only folder cannot');
+  } finally { fs.chmodSync(dir, 0o755); fs.rmSync(dir, { recursive: true, force: true }); }
+})().catch((e) => { console.error(e); process.exit(1); });
 // The hole this closes (#260): an ad-hoc signature passes `codesign --verify --strict`, so that alone proves nothing
 // about who signed a download. Only on a Mac: codesign is Apple's, and CI runs on Linux.
 if (process.platform === 'darwin') {
