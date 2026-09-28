@@ -93,12 +93,12 @@ body.pressing .trellis [data-trellis-part="content"] { pointer-events: none; } /
   box-shadow: 0 6px 24px rgba(0, 0, 0, .1), 0 1px 3px rgba(0, 0, 0, .06), 0 0 0 1px rgba(0, 0, 0, .06); }
 .create svg { display: block; flex: none; width: 16px; height: 16px; }
 .create span { width: 0; overflow: hidden; white-space: nowrap; opacity: 0; color: #333; }
-.create:hover span { width: auto; margin-left: 8px; opacity: 1; }
+.create:is(:hover, [data-state]) span { width: auto; margin-left: 8px; opacity: 1; } /* data-state: an image over it, or on its way to a task (shell.js createAs) */
 .create:active { transform: scale(.96); }
 @media (prefers-reduced-motion: no-preference) {
   .create { transition: transform 160ms cubic-bezier(.2, .8, .2, 1); }
   .create span { transition: width 420ms cubic-bezier(.3, 0, .2, 1), margin 420ms cubic-bezier(.3, 0, .2, 1), opacity 200ms cubic-bezier(.3, 0, .2, 1); }
-  .create:hover span { transition-duration: 420ms, 420ms, 300ms; transition-delay: 0s, 0s, 120ms; } /* the words fade in once there is room for them */
+  .create:is(:hover, [data-state]) span { transition-duration: 420ms, 420ms, 300ms; transition-delay: 0s, 0s, 120ms; } /* the words fade in once there is room for them */
 }
 [data-theme="dark"] .create { background: #242729; color: #a6a6a6; box-shadow: 0 6px 24px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .create span { color: #ddd; }

@@ -101,6 +101,11 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   text-plus glyph; on hover the words "Create new" slide out beside it. A click runs Cmd+K Create new … in the page in
   front (shell.js posts `action` `create`, renderer/palette.js `runAction`). It sits under a covering palette's scrim
   and is gone while signed out.
+  **Process image** (issue #507): a file dragged over it swaps the glyph for image-sparkle and the words for "Process
+  image". Dropped, the file goes to the page in front (`processImage`, renderer/upload.js), which sends it to main
+  (`ai:processImage`): the fast AI (main/ai.js `readImage`, PNG, JPEG, WebP or GIF) answers with a task or a note,
+  its title and the lines worth keeping, and main makes it with those lines and the image under them. The page opens
+  it; the button says "Processing image …" until then, and a failure is the red toast.
 - **Header row**: over the page title, the empty line the buttons at the top right sit on, while the page is alone in
   its window. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron

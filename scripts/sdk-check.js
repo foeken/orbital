@@ -842,6 +842,16 @@ async function main() {
     const sentSoFar=calls.length;
     await assert.rejects(ai.classifyType({...typed,types:[]},fetchWith(answer('{}'))),/No types/,'a document no type can go on asks nothing');
     assert.equal(calls.length,sentSoFar);
+    // Process image (issue #507): the image goes beside the rules, and the answer is a task or a note with its lines.
+    const png={bytes:new Uint8Array([137,80]),mimeType:'image/png'};
+    await assert.rejects(ai.readImage({...png,mimeType:'image/heic'},fetchWith(answer('{}'))),/PNG, JPEG/,'an image the model cannot read asks nothing');
+    assert.equal(calls.length,sentSoFar);
+    assert.deepEqual(await ai.readImage(png,fetchWith(answer('\u0060\u0060\u0060json\n{"kind": "task", "title": " Reply to Stan ", "notes": ["Budget by Friday", "", 3]}\n\u0060\u0060\u0060'))),
+      {kind:'task',title:'Reply to Stan',notes:['Budget by Friday']},'a task, trimmed, with only the lines that say something');
+    const imageSent=calls.at(-1).init.body;
+    assert.deepEqual([imageSent.instructions,imageSent.input[0].content[1]],[ai.IMAGE_INSTRUCTIONS,{type:'input_image',image_url:'data:image/png;base64,iVA='}],'the image goes as a data URL beside the input, the rules as instructions');
+    assert.deepEqual(await ai.readImage(png,fetchWith(answer('{"kind": "meeting", "title": "Invoice 42"}'))),{kind:'doc',title:'Invoice 42',notes:[]},'anything but a task is a note');
+    await assert.rejects(ai.readImage(png,fetchWith(answer('I cannot read this image.'))),/nothing useful/,'an answer with no title makes nothing');
     const agent=require('../main/agent'), originalRpc=agent.appServerRpc, originalBin=agent.codexBin;
     const userData=fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(),'orbital-ai-auth-'));
     let signedIn=false, note, threadStart, turnStart, serverOptions=null;
@@ -884,6 +894,8 @@ async function main() {
       assert.equal(Object.hasOwn(threadStart,'allowProviderModelFallback'),false,'thread/start uses fields accepted by older Codex CLI app-servers too');
       assert.equal(Object.hasOwn(threadStart,'runtimeWorkspaceRoots'),false,'and none the app-server gates behind the experimentalApi capability, which Orbital does not ask for');
       assert.deepEqual([turnStart.input.length,turnStart.input[0].text],[1,'Discuss with ChatGPT person'],'only the title is sent');
+      await assert.rejects(ai.readImage({bytes:new Uint8Array([137,80]),mimeType:'image/png'},fallback,userData),/nothing useful/);
+      assert.deepEqual(turnStart.input[1],{type:'image',url:'data:image/png;base64,iVA='},'a dropped image goes along the ChatGPT turn as well');
       const signedOut=await ai.logoutChatGPT(userData);
       assert.equal(signedOut.signedIn,false,'sign-out clears ChatGPT account status');
       assert.equal(await ai.suggestDiscussWith('Discuss with API fallback',fallback,userData),'API fallback','the local API key works again after sign-out');

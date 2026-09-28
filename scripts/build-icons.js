@@ -77,6 +77,7 @@ WANT.toMessage = path.join(__dirname, '..', 'build', 'icons', 'arrow-turn-down.s
 WANT.help = path.join(__dirname, '..', 'build', 'icons', 'circle-question.svg'); // the header button beside it that opens Help (renderer/overlays.js)
 WANT.cloudSlash = path.join(__dirname, '..', 'build', 'icons', 'cloud-slash.svg'); // the badge beside an @Codex question and answer: never saved to Tana, kept on this device (renderer/chat.js)
 WANT.textPlus = path.join(__dirname, '..', 'build', 'icons', 'text-plus.svg'); // the Create new button in the window's corner (shell.html #create), Nucleo UI 12px outline
+WANT.imageSparkle = path.join(__dirname, '..', 'build', 'icons', 'image-sparkle-3.svg'); // the same button with an image over it: Process image (shell.js createAs)
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   if (!SRC && !path.isAbsolute(file)) { if (!current[name]) throw new Error(name + ' needs the icon set: node scripts/build-icons.js <dir>'); out[name] = current[name]; continue; }

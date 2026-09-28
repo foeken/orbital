@@ -68,3 +68,13 @@ async function uploadImages(docId, after, files) {
   }
   if (last && here()) placeCaret(keyFor(docId, { kind: 'block', id: last }));
 }
+// Process image (issue #507): an image dropped on Create new (shell.js) becomes a task or a note, read by the model in
+// main (ai:processImage), and opens here. Resolves once it is open or has failed, for the button to stop saying busy.
+async function processImage(file) {
+  try {
+    if (!(file instanceof File) || !imageFiles([file]).length) throw new Error('Drop an image to process');
+    if (file.size > UPLOAD_MAX) throw new Error('File is too large (max 50 MB)');
+    const node = await tana.processImage({ bytes: new Uint8Array(await file.arrayBuffer()), filename: file.name || 'image', mimeType: file.type });
+    await goTo(node.id);
+  } catch (e) { showError(e); }
+}

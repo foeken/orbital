@@ -14,7 +14,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
@@ -517,6 +517,16 @@ ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id,
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
+// Process image (issue #507): an image dropped on Create new (shell.js), read by the model into a task or a note, made
+// with what it read as its lines and the image under them. Returns the Node for the page to open.
+ipcMain.handle('ai:processImage', async (_e, file) => {
+  const read = await ai.readImage(file, globalThis.fetch, app.getPath('userData'));
+  const node = await createDocument(read.title, { kind: read.kind });
+  const content = require('./sdk/content');
+  if (read.notes.length) await mut(node.id, (doc) => { for (const line of read.notes) content.insertAfter(doc, null, line); });
+  await require('./main/images').insertImage(node.id, null, { bytes: file.bytes, filename: file.filename || 'image', mimeType: file.mimeType });
+  return node;
+});
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
 // A link in node text opens in the user's browser; only http(s), never a file or custom scheme.
 ipcMain.handle('shell:open', (_e, url) => {

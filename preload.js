@@ -93,6 +93,7 @@ contextBridge.exposeInMainWorld('api', {
   // on this machine or the title names nobody. Rejects when the call itself failed.
   suggestDiscussWith: (title) => ipcRenderer.invoke('ai:discussWith', title),
   classifyType: (id) => ipcRenderer.invoke('ai:classifyType', id), // {current, choices:[{uri|null,title,hue?,p}]}, most likely first
+  processImage: (file) => ipcRenderer.invoke('ai:processImage', file), // file { bytes, filename, mimeType } dropped on Create new: the model makes it a task or a note, the image inside; returns the Node to open
   // Presence (main/presence.js): open and close the room of a document on screen (the page, and the rows listed on it),
   // name the page being viewed (it alone gets the viewing heartbeat), say where the caret is ({ blockId, anchor, focus }
   // or null), and hear who else is in each: [{ peer, userHash, name, blockId, editing }], your own tabs left out.
