@@ -412,6 +412,9 @@ function selectionRows() {
     if (tana.todayNode) rows.push({ id: 'addTomorrow', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Tomorrow`, run: () => addToDateNode(nodes, 'tomorrow') });
     if (tana.weekNode) rows.push({ id: 'addWeek', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to This Week`, run: () => addToDateNode(nodes, 'week') });
   }
+  // references to them in a chat's message, the same ones a drag onto it makes (renderer/chat.js openAddToChat)
+  const refs = tana.newChat && tana.searchPreview && items.has(keys[0]) ? dragSegs(items.get(keys[0])) : [];
+  if (refs.length) rows.push({ id: 'addToChat', group, icon: 'chat', label: `Add${count(refs.length, 'item')} to chat …`, hint: 'New or recent chat', keepOpen: true, run: () => openAddToChat(composerDropSegs(refs)) });
   if (ids.length && tana.setSensitive && sensitiveIds) {
     const marked = ids.every((id) => sensitiveIds.has(id));
     rows.push({ id: 'sensitive', group, icon: 'hidden', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });

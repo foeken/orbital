@@ -533,6 +533,7 @@ function chatAfterRender(parent, stick) {
   if (opened) agentLoad(docId);
   if (!chat) showQuestions(null, null);
   composer.hidden = !chat || !!asking;
+  if (chatCompose && chatCompose.docId === docId && !composer.hidden) { const { segs } = chatCompose; chatCompose = null; composeAdd(segs); } // ⌘K Add to chat, to a chat that was opening
   sc.classList.toggle('chatting', chat);
   chatShown = docId;
   if (!chat) return;
@@ -685,4 +686,43 @@ function inviteToChat(docId, uri) {
 // ⌘K New chat: a chat with Tana, opened with the caret in its composer
 function startNewChat() {
   return run(async () => { openResult(await tana.newChat()); });
+}
+
+// ---- Add to chat ----
+// ⌘K Add to chat … on a row, the zoomed node or a selection (renderer/tasks.js selectionRows): New chat and the recent
+// chats, and the one picked gets references to them at the start of its message, the chips a drag onto it makes
+// (composerDropSegs). A chat another pane of the window shows is brought into view there and gets them (shell.js
+// addToChat); any other chat opens in this pane.
+let addChatList = null; // loadList's answer: the chats, last changed first
+let chatCompose = null; // { docId, segs } for a chat still opening: its message gets them once its composer is up
+function openAddToChat(segs) {
+  loadList('addToChat', () => tana.searchPreview({ types: ['chats'] }), (list) => { addChatList = list; });
+  openPage('addToChat', 'Add to which chat?', { back: BACK_TO_COMMANDS, rows: (q) => [
+    ...(fuzzyMatch('New chat', q) ? [{ group: 'Chats', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => run(async () => { const n = await tana.newChat(); composeInto(n.id, segs, n); }) }] : []),
+    ...listRows('Chats', addChatList, q, '', (list) => list.map((n) => [n, n.text || n.title || 'New chat']).filter(([, label]) => fuzzyMatch(label, q))
+      .map(([n, label]) => ({ group: 'Chats', icon: 'chat', label: demoText(label, n.id), run: () => addToChat(n, segs) }))),
+  ] });
+}
+function addToChat(n, segs) {
+  const msg = JSON.parse(JSON.stringify({ docId: n.id, segs, doc: n })); // data only: postMessage throws on anything else
+  if (window.frameElement && composer.dataset.doc !== n.id) return toShell({ ...msg, orbital: 'addToChat' });
+  composeInto(msg.docId, msg.segs, msg.doc);
+}
+// The chat's message gets them here: now when this page shows it, else once it has opened (chatAfterRender)
+function composeInto(docId, segs, doc) {
+  if (composer.dataset.doc === docId && !composer.hidden) return composeAdd(segs);
+  chatCompose = { docId, segs };
+  openResult(doc);
+}
+// At the start of the message, the caret back where it was in it; with no caret in it (or at its very start), after them
+function composeAdd(segs) {
+  if (chatReadOnly.has(composer.dataset.doc)) return showNote('You can read this chat but not write in it', true);
+  const empty = !composerText.textContent.trim() && !composerText.querySelector('.mention');
+  const sel = getSelection(), keep = !empty && beforeCaret() ? sel.getRangeAt(0).cloneRange() : null; // a live range: it moves along as they go in before it
+  const last = segs.at(-1);
+  // the message's own words start on a line of their own; not the last segment, or renderSegs adds the empty line a caret needs at the end
+  if (!empty && !('text' in last && /\s$/.test(last.text))) segs = [...segs, { text: '\n' }, { text: '' }];
+  const start = document.createRange(); start.setStart(composerText, 0);
+  composerInsert(segs, empty ? null : start);
+  if (keep) { sel.removeAllRanges(); sel.addRange(keep); }
 }
