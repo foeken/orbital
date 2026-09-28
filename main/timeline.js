@@ -83,19 +83,23 @@ let live = null, liveClient = null, liveKey = null;
 // the timeline on its own. One timer, set by every read (the read it causes sets the one after it).
 let startTimer = null;
 // the tagline and summary too: a summary landing is heard, and the entry brightens
-const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, attendeesOf(ev).map((a) => [a.displayName, a.email, a.role, a.identityUri])]); }; // all meetingNote reads of them
+const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, attendeesOf(ev).map((a) => [a.displayName, a.email, a.role, a.cutype, a.identityUri])]); }; // all meetingNote and meetingPeople read of them
 // Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
 const attendeesOf = (ev) => (Array.isArray(ev.roster) && ev.roster.length ? ev.roster : Array.isArray(ev.attendees) ? ev.attendees : []).filter((a) => a && typeof a === 'object');
 const duration = (ms) => { const m = Math.round(ms / 6e4), h = Math.floor(m / 60); return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
 // A meeting's grey line: how long it is (or, for one still to come, when: "14:00–15:00"), then who else is on it
 // (rooms and you left out), four names and an ellipsis
-function meetingNote(ev, me, myEmail, when = false) {
+function meetingNote(ev, when = false) {
   const start = Date.parse(ev.startTime || ''), end = Date.parse(ev.endTime || '');
-  const names = [...new Set(attendeesOf(ev).filter((a) => a.role !== 'resource' && a.identityUri !== me && !(myEmail && String(a.email || '').toLowerCase() === myEmail))
-    .map((a) => a.displayName || String(a.email || '').split('@')[0]).filter(Boolean))];
-  const people = names.slice(0, 4).join(', ') + (names.length > 4 ? ', …' : '');
-  const time = !(end > start) ? '' : when ? hm(new Date(start)) + '–' + hm(new Date(end)) : duration(end - start);
-  return [time, people].filter(Boolean).join(' · ') || null;
+  return !(end > start) ? null : when ? hm(new Date(start)) + '–' + hm(new Date(end)) : duration(end - start);
+}
+// Who else is in it, drawn as faces after the time (renderer/views.js subtextEl, the bubbles Visible to uses): you,
+// rooms and other resources left out. uri keys a person's grey and demo name; name is the calendar's, a member or not.
+function meetingPeople(ev, me, myEmail) {
+  const seen = new Set();
+  return attendeesOf(ev).filter((a) => a.role !== 'resource' && !['room', 'resource'].includes(a.cutype) && a.identityUri !== me && !(myEmail && String(a.email || '').toLowerCase() === myEmail))
+    .map((a) => ({ uri: a.identityUri || String(a.email || '').toLowerCase(), name: a.displayName || String(a.email || '').split('@')[0] }))
+    .filter((p) => p.name && !seen.has(p.name) && seen.add(p.name));
 }
 function watchMeetings(me, since) {
   const end = new Date(); end.setHours(24, 0, 0, 0);
@@ -257,7 +261,7 @@ async function rows(progress) {
     const events = shown.map((n) => {
       const ev = n.calendarEvent || {}, going = Date.parse(ev.endTime || '') > Date.now(), bare = !going && !String(ev.tagline || ev.summary || '').trim();
       // still under way: joined from Tana (row.join, the meeting's id: renderer/timeline.js opens it there)
-      return { kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail),
+      return { kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev), people: meetingPeople(ev, me, myEmail),
         join: going ? n.id : undefined, end: going ? Date.parse(ev.endTime) : undefined, recording: going && recording.has(n.id) };
     });
     // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
@@ -265,7 +269,7 @@ async function rows(progress) {
     const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
       .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
       .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: n.id,
-        subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
+        subtext: meetingNote(n.calendarEvent, true), people: meetingPeople(n.calendarEvent, me, myEmail) }));
     return { events, upcoming };
   }
   // Today's Tasks: the tasks pinned through today. Completed tasks age out after their pinned day; a pin for today
@@ -343,7 +347,7 @@ function pageOf(got, seen, now, date) {
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
       createdAt: iso(e.at), unread: e.kind !== 'meeting' && (e.tasks || [e]).some((t) => t.at > seen), // a meeting is on your calendar: not news
       // an "added to your Inbox" line opens nothing: the rows under it open themselves, one task or six
-      join: e.join, timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone, recording: e.recording || undefined } };
+      join: e.join, people: e.people, timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone, recording: e.recording || undefined } };
   })];
 }
 

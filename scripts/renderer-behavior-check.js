@@ -130,7 +130,7 @@ const withShims = (src) => {
   // stub returning '' would quietly answer for it. The last guard stops the recursion its own source would cause.
   // subtextEl (renderer/views.js) builds that line with the row's field values ahead of it; sliced in before the
   // subtextOf guard below, which then supplies what it calls.
-  if (/\bsubtextEl\(/.test(src) && !/function subtextEl\(/.test(src)) src = functionSource('subtextEl') + '\nglobalThis.shownFieldValues ??= (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);\n' + src;
+  if (/\bsubtextEl\(/.test(src) && !/function subtextEl\(/.test(src)) src = functionSource('subtextEl') + '\n' + functionSource('meetingPeopleEl') + '\nglobalThis.shownFieldValues ??= (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);\n' + src;
   // a row's facts share their icon and click helpers with who can see it (renderer/tasks.js peopleEl), which the
   // subtext leads with; a harness with no member list sees nobody's bubbles
   if (/\b(clickable|iconEl|audienceIcon|peopleEl)\(/.test(src) && !/function clickable\(/.test(src)) src = sourceBetween('function clickable(', '// node: the row') + '\nglobalThis.loadMembers ??= () => {}; globalThis.memberName ??= (id) => id; globalThis.members ??= null; globalThis.sensitiveHidden ??= () => false;\n' + src;
