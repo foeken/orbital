@@ -186,3 +186,6 @@ no public forks, no download page or site promoting it, no selling it or shippin
 product (open source or commercial) and no hosting it for others. Built something others would want
 too? Send it as a pull request. The actual terms are in
 [LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
+
+Does Orbital save you or your team time? You can chip in through
+[GitHub Sponsors](https://github.com/sponsors/foeken). It is entirely optional and keeps the work going.
