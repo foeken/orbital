@@ -3208,11 +3208,25 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   api.set('library', 'none', 'title');
   assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'title' }, 'a page\'s own choice still wins over its starting arrangement');
   // the guard that matters: an option may only sort on a field the row objects really carry
+  // (Meeting time reads the event start main/rows.js toNode puts on a meeting row, and on nothing else)
+  const meetings = [{ id: 'm1', icon: 'meeting', start: '2026-09-28T09:00:00.000Z' }, { id: 'm2', icon: 'meeting', start: '2026-09-27T09:00:00.000Z' }, { id: 'm3', icon: 'meeting', start: '2026-09-29T09:00:00.000Z' }];
   for (const [id] of plain(api.SORTS).filter(([id]) => id !== 'default')) {
     const key = api.SORT_KEY[id];
     assert.ok(key, id + ' has a sort key');
-    assert.notEqual(key(rows[0]), undefined, id + ' reads a field the rows carry');
+    assert.notEqual(key(id === 'meeting' ? meetings[0] : rows[0]), undefined, id + ' reads a field the rows carry');
   }
+  // #492: meetings alone get a When pill, one preset at a time, and a Meeting time sort that runs the way the query does
+  api.set('library', 'none', 'meeting');
+  api.stage({ types: ['meetings'], window: 'upcoming' });
+  const when = api.pillDefs().find((d) => d.id === 'when');
+  assert.deepEqual(plain([when.value, when.rows().map((r) => [r.label, !!r.checked])]), ['Upcoming', [['Any time', false], ['Recent', false], ['Today', false], ['Upcoming', true], ['Past', false]]], 'the When pill names the window and offers Tana\'s presets');
+  assert.deepEqual(order(meetings), ['m2', 'm1', 'm3'], 'Meeting time lists what is to come soonest first');
+  when.rows()[4].run();
+  assert.deepEqual(plain(api.savedPatch()), { window: 'past' }, 'picking Past writes the window to the filter');
+  assert.deepEqual(order(meetings), ['m3', 'm1', 'm2'], 'and what is over latest first');
+  api.stage({ types: ['meetings', 'tasks'], window: 'past' });
+  assert.equal(api.pillDefs().some((d) => d.id === 'when'), false, 'with anything beside meetings there is no When pill');
+  assert.equal(api.prefs().sort, 'default', 'and no Meeting time sort: nothing else has a start');
   // A saved search draws its rows through the same helper a view does, keyed by the search document rather than by a
   // view id. renderOutline itself needs a DOM to test, so this is the part that can be pinned: deleting the sort or
   // the grouping from the search branch leaves nothing else in the suite to notice.
@@ -3520,7 +3534,7 @@ async function runPinToMeetingCheck() {
   picker.run();
   assert.deepEqual(plain([api.mode(), api.page().map((r) => [r.label, r.disabled])]), ['pinMeeting', [['Loading…', true]]], 'it opens a page of its own, which says it is loading until the list lands');
   await api.settle();
-  assert.deepEqual(plain(api.state().previews), [{ types: ['meetings'], participant: 'me', window: 'recent' }],
+  assert.deepEqual(plain(api.state().previews), [{ types: ['meetings'], participant: 'me', window: 'week' }],
     'the list is the meetings I take part in from a week back to a week ahead, read through the existing preview path');
   assert.deepEqual(plain(api.page().map((r) => r.label)), ['Bingo', 'NTP Sync', 'Lunch', 'Foundry weekly', 'Standup', 'Bingo'],
     'the meeting on now leads, then the soonest to start (two at the same minute keeping the order they came in) and the one further out, then what is over, most recent first');

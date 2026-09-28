@@ -409,7 +409,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set colour, Mark as
   sensitive); the agent (Assign to Agent, Go to / Link Agent task, Send to agent); Edit visibility, Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
-- **View options**: the pills by what they do — Filter by type, Filter by status, Filter by assignee, Sort by, Group
+- **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Filter rows by text, Switch to table/outliner and Column widths ….
 - **Actions**: Log in (signed out), Create new …, Create task, Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
@@ -552,7 +552,8 @@ Pins are stored as [PINNING.md](PINNING.md) describes; this is what the outliner
 ## 10. Grouped pages
 
 Sort, Group and Display are pills on every page with pills ([VIEWS.md](VIEWS.md)): Sort Default, Status, Updated,
-Created, Title; Group None, Status, Assignee, Responsibility, Updated, Type (and a type's fields on a one-type page);
+Created, Title, and Meeting time where meetings are the only kind (the event's start, running the way the When pill's
+window does: soonest first for Upcoming and Today, latest first otherwise); Group None, Status, Assignee, Responsibility, Updated, Type (and a type's fields on a one-type page);
 Display chooses the facts a row shows. Each is kept per page key in the synced `groupBy`, `sortBy` and `display`
 preferences; a saved search keeps its own in its document. Group by Updated sorts rows into Last hour, Last day, Last
 week, Last month and Older.

@@ -4064,12 +4064,21 @@ async function main() {
     // the graph for still matters: a saved search aimed at them must reach it the same way those pages used to.
     assert.deepEqual(viewParams({ types: ['chats'] }, ME), { nodeTypes: ['chat'], limit: 1000, sortOptions: UPD, mode: COUNT });
     assert.deepEqual(viewParams({ types: ['people'] }, ME), { nodeTypes: ['user-profile'], limit: 1000, sortOptions: UPD, mode: COUNT });
-    const meetingStart = new Date(); meetingStart.setHours(0, 0, 0, 0); meetingStart.setDate(meetingStart.getDate() - 7);
-    assert.deepEqual(viewParams({ types: ['meetings'], participant: 'me', window: 'recent' }, ME), {
-      nodeTypes: ['event'], limit: 1000, hasParticipantUris: [ME], eventStartTimeMin: meetingStart.toISOString(),
-      eventStartTimeMax: new Date(meetingStart.getTime() + 14 * 864e5).toISOString(),
-      sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }], mode: COUNT,
-    });
+    const localDay = (offset) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + offset); return d; };
+    const BY_START = (direction) => [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_' + direction }];
+    assert.deepEqual(viewParams({ types: ['meetings'], participant: 'me', window: 'week' }, ME), {
+      nodeTypes: ['event'], limit: 1000, hasParticipantUris: [ME], eventStartTimeMin: localDay(-7).toISOString(),
+      eventStartTimeMax: localDay(7).toISOString(), sortOptions: BY_START('DESCENDING'), mode: COUNT,
+    }, 'the meeting picker: a week either side of today');
+    // the When pill (#492): Tana's presets, soonest first only for what is still to come
+    const whenParams = (window) => viewParams({ types: ['meetings'], window }, ME);
+    assert.deepEqual([whenParams('today').eventStartTimeMin, whenParams('today').eventStartTimeMax], [localDay(0).toISOString(), new Date(localDay(1) - 1).toISOString()], 'today is today');
+    assert.deepEqual([whenParams('recent').eventStartTimeMin, whenParams('recent').eventStartTimeMax], [undefined, new Date(localDay(2) - 1).toISOString()], 'recent runs to the end of tomorrow');
+    assert.ok(whenParams('upcoming').eventStartTimeMin && !whenParams('upcoming').eventStartTimeMax, 'upcoming starts now');
+    assert.ok(whenParams('past').eventStartTimeMax && !whenParams('past').eventStartTimeMin, 'past ends now');
+    assert.deepEqual(['upcoming', 'today', 'recent', 'past', null].map((w) => whenParams(w).sortOptions[0].direction.slice(15)), ['ASCENDING', 'ASCENDING', 'DESCENDING', 'DESCENDING', 'DESCENDING'], 'soonest first for what is to come, latest first otherwise');
+    assert.equal(viewParams({ types: ['meetings', 'tasks'], window: 'past' }, ME).eventStartTimeMax, undefined, 'a window only narrows meetings listed alone, like a state only narrows tasks');
+    assert.equal(validViewFilter({ window: 'tomorrow' }), false, 'and only the presets and the picker\'s week are windows');
     const OTHER = 'tana:user-profile:01examples0000000000000000';
     assert.deepEqual(viewParams({ types: null, assignee: OTHER }, ME).assignedTo, [OTHER], 'any type includes tasks');
     assert.deepEqual(viewParams({ types: ['tasks', 'meetings'], assignee: 'unassigned' }, ME).unassigned, true);
@@ -4221,9 +4230,15 @@ async function main() {
     // The two documented asymmetries: neither has a viewer-relative form in the stored schema.
     assert.deepEqual(filterToSearchQuery({ participant: 'me' }, ME).participantUris, [ME],
       'participant has no viewer-relative flag, so a saved search names the user rather than the viewer');
-    const windowed = filterToSearchQuery({ types: ['meetings'], window: 'recent' }, ME);
-    assert.equal(typeof windowed.eventTime.min, 'number', 'a recent window becomes a concrete range at save time');
-    assert.equal(windowed.eventTime.max - windowed.eventTime.min, 14 * 864e5, 'spanning the same fourteen days the view asked for');
+    const windowed = filterToSearchQuery({ types: ['meetings'], window: 'week' }, ME);
+    assert.deepEqual(windowed.eventTime, { min: localDay(-7).getTime(), max: localDay(7).getTime() }, 'the picker\'s week is no Tana preset, so it is saved as the range it is');
+    // The When pill's presets are Tana's own, so they are stored as Tana stores them and come back as the same pill (#492)
+    for (const window of ['recent', 'today', 'upcoming', 'past']) {
+      const q = filterToSearchQuery({ types: ['meetings'], window }, ME);
+      assert.deepEqual(q.eventTime, { preset: window }, window + ' is stored as Tana\'s preset');
+      assert.equal(searchQueryToFilter(q, ME).window, window, 'and reads back as the same pill');
+    }
+    assert.equal(filterToSearchQuery({ types: ['tasks'], window: 'past' }, ME).eventTime, undefined, 'a window hidden with the pill is not stored either');
     // The pills edit a saved search through the same filter vocabulary they edit a view with, so the stored query has
     // to come back the other way too. This is the pair the Save button rests on: read a query, show it as pills, write
     // it back. A filter that does not round-trip would quietly rewrite the user's search the first time they saved it.
@@ -4253,7 +4268,7 @@ async function main() {
     assert.equal(searchQueryToFilter({}, ME).assignee, 'anyone', 'a query with no assignee at all is "Anyone", not "You"');
     assert.equal(searchQueryToFilter({ types: ['event'], participantUris: [ME] }, ME).participant, 'me', 'the viewer among the participants is the Meetings filter');
     assert.equal(searchQueryToFilter({ types: ['event'], participantUris: [OTHER] }, ME).participant, null, 'someone else among them is not a filter the pills can show');
-    assert.equal(searchQueryToFilter({ types: ['event'], eventTime: { min: 1, max: 2 } }, ME).window, 'recent', 'a stored range reads as the window pill');
+    assert.equal(searchQueryToFilter({ types: ['event'], eventTime: { min: 1, max: 2 } }, ME).window, 'week', 'a stored range (the week, or an older save) reads as the week');
     // The vocabulary no pill can express is dropped rather than guessed at, and must not leak into the filter or
     // break its validity — saving then rewrites the query from the pills alone, which is why saving is explicit.
     const rich = searchQueryToFilter({ types: ['text'], stateTypes: ['open'], attributes: { 'tana:type:x?attribute=y': ['z'] }, workflowStates: ['w'], visibility: 'private' }, ME);

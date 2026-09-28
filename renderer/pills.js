@@ -28,6 +28,11 @@ function pillDefs() {
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]), fields: null }) } : { div: true })), // multi-select: the menu stays open to tick more
     ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri), fields: null }) }))] : []),
   ]) });
+  // Meetings alone: when they take place (#492), Tana's presets, one at a time.
+  if (onlyMeetings(f)) defs.push({ id: 'when', label: 'When', command: 'Filter by meeting time', icon: 'calendar', value: whenName(f.window), rows: () => [
+    { label: 'Any time', reset: true, checked: !f.window, run: () => save({ window: null }) },
+    ...WHEN.map(([v, l]) => ({ label: l, checked: f.window === v, run: () => save({ window: v }) })),
+  ] });
   // One workspace type (a type's page, or a search or view picking that type alone): its fields get pills.
   const ft = fieldType();
   if (ft) {

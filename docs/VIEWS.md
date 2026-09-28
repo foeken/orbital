@@ -32,7 +32,7 @@ and sorts its rows and `renderer/pills.js` draws the pills.
 | `assignee` | `me` \| `anyone` \| `unassigned` \| user-profile uri | in effect only when tasks are in scope (`types` is null or contains `tasks`). |
 | `text` | string | server-side `textQuery`. |
 | `participant` | `me` or null | events the user is a participant of (`hasParticipantUris`). |
-| `window` | `recent` or null | events from 7 days ago to 7 days ahead. |
+| `window` | `recent` \| `today` \| `upcoming` \| `past` \| `week` \| null | when meetings take place, in effect only while meetings are the only kind (like a state for tasks). The first four are Tana's presets (`timeRange` in sdk/query.js, on local days): Recent runs to the end of tomorrow, Today is today, Upcoming starts now and Past ends now. The When pill offers them (#492). `week` is a week either side of today, the range ⌘K's meeting picker asks for, and what a saved search holding a fixed range reads back as. A saved search stores a preset as Tana does (`eventTime: { preset }`), so Tana's client lists the same, and `week` as its range. |
 | `completedWithin` | `3` | `7` | `30` | `'all'` | how old a **completed** task may be and still be listed. Not a way to hide them — `states` alone decides whether they are asked for — so it has no "off", and its value is kept while Completed is out of `states`. Unset reads as `7`. |
 | `audience` | `'everyone'` or null | what everyone in the org can see (#253), the "Visible to" pill. The graph can only ask Tana's "Open" (`restricted: false`: the node's own flag, so it also lists what a restricted space or meeting holds — live 286 against 51), so that is the query, and `everyoneOnly` (sdk/access.js) keeps the rows with no restricted owner above them, one `GetOwnerChain` per distinct owner. A saved search stores it in its `view` map, like `completedWithin`, and `visibility: 'open'` in its query, so Tana's client lists the superset. |
 
@@ -61,7 +61,7 @@ One `graph.listNodes` call per fetch, built by `viewParams(filter, meUri, limit 
   every listable node type except `user-profile` and `space`, listed explicitly (never `nodeTypes: []`,
   which is no filter at all to the graph).
 - `stateTypes` and `assignedTo`/`unassigned` only while tasks are among the kinds; `textQuery`
-  when `text`; `hasParticipantUris` when `participant`; `eventStartTimeMin/Max` when `window`.
+  when `text`; `hasParticipantUris` when `participant`; `eventStartTimeMin/Max` when `window` and meetings are the only kind.
 - `completedWithin` is asked for **nowhere**: `ListNodesRequest` has no field for the age of a state
   (checked against the descriptors — there is `event_start_time_min/max` and nothing for `state.entered_at`,
   and no sort field for it either). It is applied to the answer instead, in `viewRows`, `searchChildren` and
@@ -72,7 +72,8 @@ One `graph.listNodes` call per fetch, built by `viewParams(filter, meUri, limit 
   **Consequence:** the limit applies before the window, so a graph answer full of old completed tasks can come
   back thin. A saved search stores its window in its `view` map beside the sort and grouping, never inside
   Tana's query vocabulary.
-- `sortOptions`: event start ascending when meetings are the only kind, else update time descending.
+- `sortOptions`: when meetings are the only kind, event start, soonest first for Upcoming and Today and latest first
+  otherwise (Tana's own order, which the limit then cuts at the far end); else update time descending.
 - `mode: 'LIST_NODES_MODE_WITH_COUNT'`; `truncated` comes from the response.
 - `docs` selected without `tasks`: text nodes that carry a state are dropped after the query (today's rule).
 

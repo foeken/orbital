@@ -99,6 +99,11 @@ const USER = /^tana:user-profile:[0-9a-z]{26}$/;
 const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
 const splitTypes = (types) => { const all = Array.isArray(types) ? types : []; return { kinds: all.filter((t) => !TYPE_URI.test(t)), typeUris: all.filter((t) => TYPE_URI.test(t)) }; };
 const tasksInScope = (types) => { const { kinds, typeUris } = splitTypes(types); return kinds.length ? kinds.includes('tasks') : !typeUris.length; };
+// When meetings take place (#492): Tana's four presets (timeRange), offered by the When pill while meetings are the only
+// kind, and 'week', a week either side of today, which only Cmd+K's meeting picker asks for. Like a state, a window only
+// means something while meetings are all that is listed, so it is applied (and stored) only then.
+const MEETING_WINDOWS = ['recent', 'today', 'upcoming', 'past'];
+const meetingsOnly = (types) => Array.isArray(types) && types.length === 1 && types[0] === 'meetings';
 // Completed tasks are the one thing a list drowns in, so a window says how far back they still count: 3 days, 7
 // days, 30 days, or All. Whether they appear at all is the Status filter's business and only its — this never hides them,
 // it only ages them out, which is why it has no "off" and why its value is kept while Completed is out of Status.
@@ -122,7 +127,7 @@ function validViewFilter(f) {
     && (f.assignee === undefined || ['me', 'anyone', 'unassigned'].includes(f.assignee) || USER.test(f.assignee))
     && (f.text === undefined || typeof f.text === 'string')
     && (f.participant === undefined || f.participant === null || f.participant === 'me')
-    && (f.window === undefined || f.window === null || f.window === 'recent')
+    && (f.window === undefined || f.window === null || f.window === 'week' || MEETING_WINDOWS.includes(f.window))
     && (f.completedWithin === undefined || COMPLETED_WINDOWS.includes(f.completedWithin))
     && (f.audience === undefined || f.audience === null || f.audience === 'everyone')
     // a type page's field pills: Tana's own stored attributes ({ refs, textMatches, date } per field key), which
@@ -145,10 +150,13 @@ function viewParams(f, me, limit = 1000) {
   // No kinds selected is "any kind we list", never an unconstrained query: nodeTypes: [] is no filter at all to the
   // graph, which answers with images, calls and transcripts that no view can render.
   const { kinds: chosen, typeUris } = splitTypes(f.types), kinds = chosen.length ? chosen : ANY_KINDS;
+  // Meetings in time order, soonest first for what is still to come and latest first otherwise, so the limit keeps the
+  // ones nearest the window's edge that matters.
+  const soonFirst = f.window === 'upcoming' || f.window === 'today';
   const p = {
     nodeTypes: [...new Set(kinds.map((k) => KIND_NODE_TYPE[k]))], limit,
-    sortOptions: f.types && f.types.length === 1 && f.types[0] === 'meetings'
-      ? [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] : UPDATE_DESC,
+    sortOptions: meetingsOnly(f.types)
+      ? [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: soonFirst ? 'SORT_DIRECTION_ASCENDING' : 'SORT_DIRECTION_DESCENDING' }] : UPDATE_DESC,
     mode: 'LIST_NODES_MODE_WITH_COUNT',
   };
   if (typeUris.length) p.entityTypes = typeUris;
@@ -164,11 +172,9 @@ function viewParams(f, me, limit = 1000) {
   const attributes = attributeFilters(typeFields(f), Date.now());
   if (attributes) p.attributeFilters = attributes;
   if (f.participant === 'me') p.hasParticipantUris = [me];
-  if (f.window === 'recent') {
-    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
-    p.eventStartTimeMin = start.toISOString();
-    p.eventStartTimeMax = new Date(start.getTime() + 14 * 864e5).toISOString();
-  }
+  const t = f.window && meetingsOnly(f.types) ? timeRange({ preset: f.window }, Date.now()) : {};
+  if (t.min != null) p.eventStartTimeMin = new Date(t.min).toISOString();
+  if (t.max != null) p.eventStartTimeMax = new Date(t.max).toISOString();
   return p;
 }
 
@@ -246,12 +252,13 @@ function visibilityParams(visibility, me) {
   return {};
 }
 // A stored { preset } or { min, max } (epoch ms) as a { min, max } window. The presets are Tana's (v$), on local days:
-// recent = up to the end of tomorrow, upcoming = from now, past = until now, today = today.
+// recent = up to the end of tomorrow, upcoming = from now, past = until now, today = today. 'week' is Orbital's own
+// (MEETING_WINDOWS), never stored as a preset: filterToSearchQuery writes it as the range it is.
 function timeRange(range, now) {
   if (!range || typeof range !== 'object') return {};
   if (range.preset === undefined) return { min: range.min, max: range.max };
   const day = (offset) => { const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + offset); return d.getTime(); };
-  return { recent: { max: day(2) - 1 }, upcoming: { min: now }, past: { max: now }, today: { min: day(0), max: day(1) - 1 } }[range.preset] || {};
+  return { recent: { max: day(2) - 1 }, upcoming: { min: now }, past: { max: now }, today: { min: day(0), max: day(1) - 1 }, week: { min: day(-7), max: day(7) } }[range.preset] || {};
 }
 const TEXT_MODES = { equals: 'MODE_EQUALS', prefix: 'MODE_PREFIX', listContains: 'MODE_LIST_CONTAINS' };
 const defined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null));
@@ -281,8 +288,8 @@ function attributeFilters(attributes, now) {
 //   - `participant: 'me'` has no viewer-relative form in the stored schema (it has participantUris and no
 //     participantsViewer, unlike assignedTo/createdBy), so it is baked in as the user's own uri. A search saved
 //     from Meetings therefore names you rather than "whoever is viewing" — correct for a personal search.
-//   - `window: 'recent'` becomes a concrete eventTime range at save time, since the stored schema's preset
-//     vocabulary (recent/upcoming/today/past) is not translated on the way back out.
+//   - `window: 'week'` becomes a concrete eventTime range at save time: Tana's presets (recent/upcoming/today/past)
+//     are stored as presets, and 'week' is not one of them.
 function filterToSearchQuery(filter = {}, me) {
   const q = {};
   const kinds = Array.isArray(filter.types) && filter.types.length ? filter.types : null;
@@ -303,10 +310,7 @@ function filterToSearchQuery(filter = {}, me) {
   else if (a && a !== 'anyone') q.assignedTo = [a];
   if (filter.participant === 'me' && me) q.participantUris = [me];
   if (filter.audience === 'everyone') q.visibility = 'open'; // Tana's nearest: its client lists this superset (#253)
-  if (filter.window === 'recent') {
-    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
-    q.eventTime = { min: start.getTime(), max: start.getTime() + 14 * 864e5 };
-  }
+  if (filter.window && meetingsOnly(filter.types)) q.eventTime = filter.window === 'week' ? timeRange({ preset: 'week' }, Date.now()) : { preset: filter.window };
   return q;
 }
 
@@ -333,7 +337,8 @@ function searchQueryToFilter(query, me) {
     states: states.length ? states : null,
     text: typeof q.textQuery === 'string' ? q.textQuery : '',
     participant: me && (list(q.participantUris) || []).includes(me) ? 'me' : null,
-    window: q.eventTime && (q.eventTime.min != null || q.eventTime.max != null) ? 'recent' : null,
+    // a stored range (what saving 'week' writes, and what Orbital wrote before #492) has no preset to name it
+    window: !q.eventTime ? null : MEETING_WINDOWS.includes(q.eventTime.preset) ? q.eventTime.preset : q.eventTime.min != null || q.eventTime.max != null ? 'week' : null,
   };
   const stored = q.attributes && typeof q.attributes === 'object' && !Array.isArray(q.attributes) ? q.attributes : {};
   const fields = Object.fromEntries(Object.entries(stored).filter(([k, v]) => FIELD_KEY.test(k) && !!v && typeof v === 'object' && !Array.isArray(v)));
