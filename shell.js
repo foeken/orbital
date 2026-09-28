@@ -181,10 +181,11 @@ function focusPage(viewId) {
   windowOf(frameOf(viewId))?.focus();
 }
 // The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js); Graph runs
-// its Cmd+K Show/Hide graph row there (renderer/palette.js railToggle), so it opens beside that page.
-for (const [id, icon, msg] of [['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['headLinks', 'graph', { orbital: 'action', id: 'railToggle' }]]) {
+// its Cmd+K Show/Hide graph row there (renderer/palette.js railToggle), so it opens beside that page, and the corner's
+// Create new runs Cmd+K Create new … there.
+for (const [id, icon, msg] of [['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['headLinks', 'graph', { orbital: 'action', id: 'railToggle' }], ['create', 'textPlus', { orbital: 'action', id: 'create' }]]) {
   const button = document.getElementById(id);
-  if (icon) button.innerHTML = window.ICONS?.[icon] || ''; // icons.js: our own markup
+  if (icon) button.insertAdjacentHTML('afterbegin', window.ICONS?.[icon] || ''); // icons.js: our own markup, before a label the button has
   button.onmousedown = (e) => e.preventDefault();
   button.onclick = () => { const win = windowOf(frameOf(ws.getSnapshot().focusedView)); win?.focus(); win?.postMessage(msg, '*'); };
 }

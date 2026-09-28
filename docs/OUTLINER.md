@@ -97,6 +97,10 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   pages' `sensitiveVisible` storage and follows a switch from any page. The panes sit below it, so every tab bar has the
   full width. Home has no button: it is a window, so it is Cmd+K Go to Home (⇧⌘H), which the Help tour teaches (issue
   #444). There are no breadcrumbs: the title says where you are and Back walks the history.
+- **Create new** (shell.html `#create`, issue #499): a round button in the window's bottom-right corner with the
+  text-plus glyph; on hover the words "Create new" slide out beside it. A click runs Cmd+K Create new … in the page in
+  front (shell.js posts `action` `create`, renderer/palette.js `runAction`). It sits under a covering palette's scrim
+  and is gone while signed out.
 - **Header row**: over the page title, the empty line the buttons at the top right sit on, while the page is alone in
   its window. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
