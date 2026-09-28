@@ -760,8 +760,8 @@ function nodeEl(node, docId, parent) {
   const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) addIcon(bullet, bulletIcon).classList.add('icon', bulletIcon);
   if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike, a task's type glyph included
-  // the grab: a row is picked up by its own marker (renderer/drag.js); a task under Today's Tasks shows a box in its
-  // place, so the whole read-only line is the handle there
+  // the grab: a row is picked up by its own marker (renderer/drag.js); under Today's Tasks the whole read-only line is
+  // the handle, so a press on the box beside the marker still picks it up
   if (canDragItem(item)) (parent?.node?.timeline?.today ? line : bullet).draggable = true;
   // The press on a marker keeps the caret where it is — except on one that can be dragged, where Chromium starts
   // the drag from exactly this default and preventDefault would quietly stop it from ever beginning. Ending an
