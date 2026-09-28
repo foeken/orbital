@@ -970,7 +970,7 @@ function renderPalette() {
   const els = [];
   palRows.forEach((r, i) => {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
-    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : '') + (r.arrive ? ' arrive' : ''); row.dataset.index = i;
+    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : '') + (r.note ? ' note' : '') + (r.arrive ? ' arrive' : ''); row.dataset.index = i;
     // a row names its glyph, or hands over the markup itself (the "/" menu's block glyphs, the refusal ban)
     const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); if (r.icon) addIcon(icon, r.icon); else icon.innerHTML = r.svg || ''; // r.svg: our own markup (glyphSvg, banSvg)
     if (r.spin) icon.classList.add('thinking'); // a row waiting on an answer: its glyph breathes while it waits
