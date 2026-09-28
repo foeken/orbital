@@ -25,7 +25,9 @@ stored), [MEETINGS.md](MEETINGS.md) (meeting structure, the write-up, editing a 
 - **Errors and notices.** In the outliner, a failed action is a red toast at the foot of the window (`showError`,
   renderer/nodes.js), up for 6 s; `run()` sends every error it catches there. A notice that reports something done
   ("Link copied", "Added 3 items to Today") is the same toast, not red (`showNote`; `#toast`, `role="status"`): it
-  fades after 2.5 s, restarts on a newer notice and sits above the palette. The line under the title (`#error`) is the
+  fades after 2.5 s, restarts on a newer notice and sits above the palette. A notice about one node (the task Quick Add
+  Task made, the meeting a drop pinned to) opens that node when clicked (`showNote(note, false, id)`, issue #532): it shows a
+  pointer and stays 5 s. The line under the title (`#error`) is the
   session's alone: it shows when Tana needs a new login, with the relogin button (renderer/app.js `showStatus`). The
   Quick Add Task card (task.html) keeps a failed create on the card, so the press can be repeated.
 - **Signed out.** The login button shows only after a completed session check says signed-out; an unresolved or
@@ -95,7 +97,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   acts in the page in front, which takes the keys first (shell.js posts `sensitive`, `palette` or `help`;
   renderer/app.js runs `toggleSensitiveVisibility`, `togglePalette('cmd')` or `openHelp`). The eye is drawn from the
   pages' `sensitiveVisible` storage and follows a switch from any page. The panes sit below it, so every tab bar has the
-  full width. Home has no button: it is a window, so it is Cmd+K Go to Home (⇧⌘H), which the Help tour teaches (issue
+  full width. The house before the eye opens the **Work View** (issue #529): it runs Cmd+K's Work View row (Saved views)
+  in the page in front, whatever Home is set to; Home itself stays Cmd+K Go to Home (⇧⌘H), which the Help tour teaches (issue
   #444). There are no breadcrumbs: the title says where you are and Back walks the history.
 - **Create new** (shell.html `#create`, issue #499): a round button in the window's bottom-right corner with the
   text-plus glyph; on hover the words "Create new" slide out beside it. A click runs Cmd+K Create new … in the page in
@@ -288,7 +291,9 @@ Mouse: a click on the bullet zooms into the row, on the chevron toggles it, on t
 Selecting text in a row shows a floating toolbar of marks and block styles (renderer/toolbar.js); the style menu
 greys Text out for a child rather than offering a row that errors. "/" at the start of an empty row opens the "/"
 menu (`slashRows`): the block types, Divider, Table and Image (also found by picture, photo, upload), then Create Doc,
-Task and the rest of what Create new … offers, workspace types under their own heading.
+Task and the rest of what Create new … offers, workspace types under their own heading. Choosing one opens a page that
+asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens it, Escape goes back to the choices.
+The “/” menu in a row keeps drafting in place instead.
 
 ### @ linking
 
@@ -339,7 +344,8 @@ owned by the page and the block (main/images.js), outside the renderer's write q
 - **`api.createDocument(title, { kind, typeUri? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
   assigned to you, with a workflow type when `typeUri` names one), a `meeting` (a `tana:event:` laid out like a
   Tana-native event, the next half hour by default, so it shows in Tana's calendar), a `chat`, a `search` (which must
-  carry a `query`) or an instance of a workspace type (`custom`, with its `typeUri`), and answers its Node.
+  carry a `query`) or an instance of a workspace type (`custom`, with its `typeUri`; a type with a workflow makes an open task of yours, as
+  Quick Add Task does, and its draft has a box, issue #534), and answers its Node.
 
 ### Undo and redo
 
@@ -430,7 +436,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   sensitive); the agent (Assign to Agent, Go to / Link Agent task, Send to agent); Edit visibility, Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
-  by, each hinting its value — then Clean up, Filter rows by text, Switch to table/outliner and Column widths ….
+  by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
+  Filter rows by text, Switch to table/outliner and Column widths ….
 - **Actions**: Log in (signed out), Create new …, Quick Add Task, Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
@@ -444,7 +451,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode, Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
-  key. **Help**: Help, and About Orbital: a page with the website and the licence as links, the big dependencies
+  key. **Help**: Help, Check for updates (the app menu's Check for Updates…, whose dialogs answer), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
   not affiliated with Tana (renderer/palette.js `openAboutPalette`, the same words as the README's License section).
 
@@ -994,15 +1001,21 @@ chat." shows as a centred status line, as other status lines do.
   workspace (`@danfessler/trellis`, shell.js) of any number of pages, each an iframe of `index.html?side=<id>`: '' the first,
   then '2', '3', ..., an id that never changes while the page lives. Main keys a page by its frame, so a page is to
   main what another window is: each has its own view, place, history, filter and sidebar, stored under its id
-  (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **New pane** (⌘N) opens a
+  (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **One pane per place** (issue #533):
+  a document, a node or a view already shown in another pane of the window is not opened a second time; going there (a
+  row, a link, ⌘K, ⌘-click) takes you to that pane instead (renderer/edit.js `inOtherPane`, over the places each page tells
+  the shell). The Library alone may be open in any number of panes. **New pane** (⌘N) opens the Library in a
   page to the right of yours, **New tab** one in your panel and **Float pane** a floating one: main gives the id
   (`api.splitWindow(where)` answers it) and tells the shell (`shell:command` 'open'), the page that asked stores its
   view and place under that id, and the new page opens there and takes the keyboard. Panes are docked, tabbed or
   floating and dragged between those by their tabs; the tab's title is the page's (renderer/render.js `tellTitle`
   posts `{ orbital: 'title', renamable }`: masked in demo mode, "Hidden" for a blurred sensitive document). Under a tab
   bar a view, a saved search or an app page drops its heading, which the tab already names (`html.listing`, issue
-  #441); a document keeps its own. A right click on a tab opens the panel menu, led by **Rename** when the page's title
-  can be typed in: the shell posts `{ orbital: 'rename' }` and the page shows its heading (`html.renaming`) with its
+  #441); a document keeps its own. A right click on a tab opens the panel menu, led by **Save as new search** on a view with pills such as the Library
+  (the Cmd+K row, run in that page; issue #538), **Copy link** on a page showing a node of Tana's (that node's link, not
+  the row with the caret; issue #542) and **Rename** when the page's title
+  can be typed in (a chat's, agent's or skill's too, where you are its admin or editor, and a type's: their bodies stay
+  read-only, only the title is written; a meeting's title stays calendar protected; sdk/node.js `editable(n, me, true)`, issue #540): the shell posts `{ orbital: 'rename' }` and the page shows its heading (`html.renaming`) with its
   words selected until it loses the focus (renderer/document.js `renameTitle`); Cmd+K **Rename** under Current node does the same, with or
   without a tab. ⌘W, a tab's X and the
   panel menu's Close close a page; the shell's close guard first asks the page to flush (renderer/app.js
@@ -1158,6 +1171,10 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   out. Past five lines "And n more" shows the rest on a click, Enter or Space, for as long as the page is open. The
   answer is kept per meeting and read again when the event changes (renderer/meeting.js `meetingInfoOf`,
   renderer/fields.js `attendeesFieldEl`).
+- **A chat** has neither field: one grey line at the top right says who can see it ("Only you can see this chat", or
+  the audience's glyph and words or faces as a row's subtext has them) and, for a meeting's chat, "about" the meeting as
+  a link. The meeting's attendees stay on the meeting's page: listed on the chat they read as its audience (renderer/chat.js
+  `chatContextEl`, issue #543).
 - **Sections**: Pinned (a meeting's or space's `EDGE_TYPE_HAS_PIN` items, read from the hub's own `pinnedItems` too,
   since a pin just written is there before its edge), Outcomes (documents it owns that carry a task state), Proposals
   (on a meeting's write-up: the proposed documents from chats the meeting owns, #106), References (documents it owns

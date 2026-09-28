@@ -44,6 +44,7 @@ function choiceEl(parent, field, host) {
       if (!offered(field, chip.textContent)) { chip.classList.add('gone'); chip.title = 'No longer offered'; }
     } else {
       renderSegs(chip, segs);
+      if (segs.some((s) => s.mention)) chip.classList.add('fref'); // a reference reads as one anywhere else does: a link with its glyph, no chip behind it
       // a link written elsewhere may point at a type this field does not link to: Tana would refuse it, so it says so
       if (targets.length && segs.some((s) => s.mention && s.mention.type && !targets.includes(s.mention.type))) {
         chip.classList.add('wrong'); chip.title = 'Not a ' + field.to.map((t) => t.name || t.title || 'type').join(' or ');
@@ -141,7 +142,7 @@ function attendeesFieldEl(parent) {
   const row = document.createElement('div'); row.className = 'field';
   const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'member');
   const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Attendees';
-  const values = document.createElement('div'); values.className = 'fvalues';
+  const values = document.createElement('div'); values.className = 'fvalues fattendees';
   const all = attendeesOpen.has(meeting.id) || people.length <= ATTENDEES_SHOWN;
   for (const a of all ? people : people.slice(0, ATTENDEES_SHOWN)) {
     const line = document.createElement('div'); line.className = 'fvalue';

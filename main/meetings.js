@@ -14,7 +14,7 @@ const REFUSED = 'Only the event organizer can change this meeting'; // Tana's ow
 const canEdit = async (doc) => access.canEditEvent(doc, S.me.userUri, await accessContext());
 const snapshot = async (doc) => {
   const n = readNode(doc);
-  return { id: doc.id, editable: await canEdit(doc), start: n.startTime, end: n.endTime, allDay: n.allDay === true, location: n.location || '',
+  return { id: doc.id, title: n.title || '', editable: await canEdit(doc), start: n.startTime, end: n.endTime, allDay: n.allDay === true, location: n.location || '',
     participants: Object.keys(n.participants || {}), attendees: events.attendees(doc).map(({ key, name, email, identityUri, role, cutype }) => ({ key, name, email, identityUri, role, cutype })),
     syncStatus: n.syncStatus, syncError: n.syncError };
 };

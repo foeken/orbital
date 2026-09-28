@@ -98,15 +98,26 @@ function authView(response) {
   };
 }
 
+// A device sign-in ends when Codex says so (account/login/completed) or when a read finds the account signed in,
+// whichever comes first: Codex's own log has that notification reaching no connection at all (2026-09-23,
+// targeted_connections=0), which left the page waiting for a sign-in that had long finished.
+function loginDone(success, error) {
+  activeLogin = null;
+  loginError = success ? null : (error || 'ChatGPT sign-in failed');
+  if (success) module.exports.onSignedIn?.(); // main.js: the boot icon pick, which had nobody to ask until now
+}
 async function readChatGPT(rpc, refreshToken = false) {
-  return authView(await rpc.call('account/read', { refreshToken }));
+  const response = await rpc.call('account/read', { refreshToken });
+  const done = !!activeLogin && response?.account?.type === 'chatgpt';
+  if (done) loginDone(true);
+  const view = authView(response);
+  if (done) send('ai:chatgptChanged', view); // every page, whoever asked
+  return view;
 }
 
 function chatgptNote(note) {
   if (note.method === 'account/login/completed' && activeLogin && (!note.params.loginId || note.params.loginId === activeLogin.loginId)) {
-    activeLogin = null;
-    loginError = note.params.success ? null : (note.params.error || 'ChatGPT sign-in failed');
-    if (note.params.success) module.exports.onSignedIn?.(); // main.js: the boot icon pick, which had nobody to ask until now
+    loginDone(note.params.success, note.params.error);
     if (authRpc) readChatGPT(authRpc).then((status) => send('ai:chatgptChanged', status), () => send('ai:chatgptChanged', { available: false, signedIn: false, error: loginError }));
   }
   if (note.method === 'turn/completed' && activeTurn && note.params?.threadId === activeTurn.threadId) {
@@ -131,6 +142,13 @@ async function startChatGPTLogin(userData) {
   activeLogin = { loginId: result.loginId, verificationUrl: result.verificationUrl, userCode: result.userCode };
   loginError = null;
   send('ai:chatgptChanged', authView({ account: null }));
+  // and in case that notification never comes, a slow look at the account for as long as this sign-in is open
+  // ponytail: a 4 s poll while a device code is out; drop it once Codex's notification is trusted to arrive
+  const { loginId } = activeLogin, poll = setInterval(() => {
+    if (activeLogin?.loginId !== loginId || !authRpc) return clearInterval(poll);
+    readChatGPT(authRpc).catch(() => {});
+  }, 4000);
+  poll.unref?.();
   return activeLogin;
 }
 

@@ -59,7 +59,7 @@ function mockApi() {
   // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' and are hidden from every list and search while
   // the Cmd+K switch is on (mcpOff below; the per-view includeMcp filter is still gone, #247)
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
-    .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
+    .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', editable: false, renamable: true, hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
   let mcpOff = false; // the app-local switch, off every launch of the mock
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
@@ -73,7 +73,7 @@ function mockApi() {
     const crowd = i !== 2 ? [] : [...['robin', 'sam', 'priya', 'tomas'].map((p) => ({ key: 'tana:mock' + p, identityUri: 'tana:user-profile:' + p })),
       ...['Noor Haddad', 'Jonas Berg', 'Mei Lin', 'Alex Moreau'].map((name) => ({ key: 'email:' + name.split(' ')[0].toLowerCase() + '@example.com', name, email: name.split(' ')[0].toLowerCase() + '@example.com' })),
       { key: 'email:room412@example.com', name: 'Room 4.12', email: 'room412@example.com', cutype: 'room' }];
-    meetingEdits['mockmeeting' + i] = { start, end: start + (h == null ? 864e5 : 36e5), allDay: h == null, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: crowd };
+    meetingEdits['mockmeeting' + i] = { title: text, start, end: start + (h == null ? 864e5 : 36e5), allDay: h == null, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: crowd };
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting], start: new Date(start).toISOString(), end: new Date(meetingEdits['mockmeeting' + i].end).toISOString() };
   });
   // the When pill's window (sdk/query.js timeRange), on meetings alone
@@ -96,6 +96,7 @@ function mockApi() {
     participants: i % 2 === 0 ? [{ uri: members[0].id, type: 'user', role: 'admin' }] : [{ uri: members[0].id, type: 'user', role: 'admin' }, { uri: members[1].id, type: 'user', role: 'editor' }],
     audience: i % 2 === 0 ? 'only-me' : 'everyone',
   }]));
+  taskDetails.set('tana:chat:mockchat0', { assignees: [], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); // a private chat, as a meeting's AI chat is
   taskDetails.set('mockmeeting2', { assignees: [], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); // a private meeting: Visible to names you
   const filters = {
     inbox: { types: null, states: ['proposed'], assignee: 'anyone', text: '' },

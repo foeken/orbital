@@ -4,13 +4,14 @@
 // their rows and draws every page; the agent's badge and state are renderer/render.js and renderer/nodes.js.
 
 // ---- ChatGPT sign-in and the OpenAI API key ----
-let chatgptAuth = null, chatgptAuthLoading = null;
+let chatgptAuth = null, chatgptAuthLoading = null, chatgptPushes = 0; // pushes: main's announcements, newer than any read asked for before them
 function openOpenAIKeyPalette() {
   openPage('openaiKey', 'Paste OpenAI API key', { rows: openAIKeyRows, back: BACK_TO_COMMANDS }); palInput.type = 'password';
 }
 function refreshChatGPTStatus() {
   if (!tana.chatgptStatus || chatgptAuthLoading) return;
-  chatgptAuthLoading = Promise.resolve(tana.chatgptStatus()).then((status) => { chatgptAuth = status; }, (error) => { chatgptAuth = { available: false, signedIn: false, error: error.message }; })
+  const asked = chatgptPushes; // a read that answers after main announced a change is older than it, and must not undo it
+  chatgptAuthLoading = Promise.resolve(tana.chatgptStatus()).then((status) => { if (asked === chatgptPushes) chatgptAuth = status; }, (error) => { chatgptAuth = { available: false, signedIn: false, error: error.message }; })
     .then(() => { chatgptAuthLoading = null; if (!palette.hidden && (palMode === 'cmd' || palMode === 'chatgpt')) renderPalette(); });
 }
 function startChatGPTLogin() {
@@ -32,6 +33,8 @@ function chatgptRows(q) {
   else if (chatgptAuth.installing) rows = [{ group: 'ChatGPT', icon: 'chatgpt', label: 'Getting ChatGPT sign-in ready…', hint: 'One-time download', disabled: true }];
   else if (chatgptAuth.loggingIn) rows = [
     { group: 'ChatGPT', icon: 'chatgpt', label: 'Enter ' + chatgptAuth.userCode + ' in your browser', hint: 'Waiting for sign-in', disabled: true },
+    // the page stays: the sign-in is still waiting for the browser, where the code is pasted
+    { group: 'Actions', icon: 'chatgpt', label: 'Copy code', hint: chatgptAuth.userCode, keepOpen: true, run: () => run(() => copyText(chatgptAuth.userCode, 'Code copied')) },
     { group: 'Actions', icon: 'chatgpt', label: 'Cancel ChatGPT sign-in', run: () => run(async () => { chatgptAuth = await tana.chatgptCancel(); renderPalette(); }) },
   ];
   else if (chatgptAuth.signedIn) rows = [
@@ -45,6 +48,7 @@ function chatgptRows(q) {
   return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
 }
 if (tana.onChatGPTStatus) tana.onChatGPTStatus((status) => {
+  chatgptPushes++;
   chatgptAuth = status;
   if (!palette.hidden && (palMode === 'cmd' || palMode === 'chatgpt')) renderPalette();
 });

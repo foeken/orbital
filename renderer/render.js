@@ -274,10 +274,13 @@ const retellTitle = (again) => {
 };
 function tellTitle(title, renamable, icon = '') {
   if (LINKS) { title = 'Graph'; renamable = false; icon = iconNode('graph')?.outerHTML || ''; } // its tab names what it is; the document is the followed page's
-  const told = title + '\n' + renamable + '\n' + icon;
+  // a view with pills (the Library, where Save as search is): its tab's menu offers Save as new search too (shell.js, #538)
+  const saveSearch = !LINKS && !zoom && authed && !!tana.createSearch && pillsApply();
+  const link = !LINKS && !!zoom && !String(zoom.docId).startsWith('orbital:'); // a node of Tana's, not an app page: Copy link on its tab (shell.js, #542)
+  const told = title + '\n' + renamable + '\n' + icon + '\n' + saveSearch + '\n' + link;
   if (told === toldTitle || !window.frameElement) return;
   toldTitle = told; toldIcon = icon;
-  window.parent.postMessage({ orbital: 'title', title, renamable, icon }, '*');
+  window.parent.postMessage({ orbital: 'title', title, renamable, icon, saveSearch, link }, '*');
 }
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
 // title fills the line the browser wraps them onto a line of their own, where they read as a second title rather
@@ -586,13 +589,15 @@ function renderFields(parent, force = false, el = $('fields')) {
   // a task's assignees lead its fields (renderer/fields.js assigneeFieldEl); the rail no longer lists them
   const assigned = parent && parent.node.kind === 'document' && isTask(parent.node) && tana.taskMeta ? assigneeFieldEl(parent) : null;
   const visible = parent && parent.node.kind === 'document' && tana.taskMeta && !isChatPage(parent) && !isSearchDoc(parent.node) ? visibilityFieldEl(parent) : null; // and who can see it, any document but a chat or a saved search (a conversation and a list, not a page)
-  const attendees = parent && parent.node.kind === 'document' && tana.meetingInfo ? attendeesFieldEl(parent) : null; // a meeting's people, after who can see it
-  el.hidden = !fields.length && !defs.length && !assigned && !visible && !attendees;
+  const attendees = parent && parent.node.kind === 'document' && tana.meetingInfo && !isChatPage(parent) ? attendeesFieldEl(parent) : null; // a meeting's people, after who can see it
+  const chatLine = isChatPage(parent) ? chatContextEl(parent) : null; // a chat: who can see it and its meeting, one line (renderer/chat.js, #543)
+  el.hidden = !fields.length && !defs.length && !assigned && !visible && !attendees && !chatLine;
   el.replaceChildren();
   for (const def of defs) el.append(definitionEl(parent, def));
   if (assigned) el.append(assigned);
   if (visible) el.append(visible);
   if (attendees) el.append(attendees);
+  if (chatLine) el.append(chatLine);
   for (const field of fields) {
     const row = document.createElement('div'); row.className = 'field';
     const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'field');
@@ -911,6 +916,10 @@ async function materialise(item, el) {
     if (node.kind === 'document') {
       const n = await tana.createDocument(text, node.createOptions || { kind: node.draft });
       real = { ...n, text: n.title ?? n.text ?? '', hasChildren: true };
+      // a row of a saved search that lists one type: the field values its filter asks for (searchPreset, #537)
+      for (const [key, v] of Object.entries(node.preset || {})) await tana.setField(real.id, key, v.ref ? [[{ mention: { uri: v.ref, label: await refLabel(v.ref) } }]] : [v.text]);
+      const list = parent && kids.get(parent.docId), at = Array.isArray(list) ? list.indexOf(node) : -1;
+      if (at >= 0) list.splice(at, 1, real); // it takes the draft's place among the search's rows
       addSearch(real); // a saved search drafted here is in Cmd+K at once (#141); anything else is left alone
       const s = sectionOf(node.id), i = s ? s.nodes.indexOf(node) : -1;
       if (i >= 0) { s.nodes.splice(i, 1, real); fresh.set(real.id, { section: s.id, after: i ? s.nodes[i - 1].id : null, node: real }); }
@@ -941,11 +950,43 @@ async function materialise(item, el) {
   if (latest !== text) scheduleSave(item, [{ text: latest }]);
 }
 function dropDraft(item) {
-  if (item.node.kind === 'document') { const s = sectionOf(item.docId); if (s) s.nodes.splice(s.nodes.indexOf(item.node), 1); }
+  if (item.node.kind === 'document') {
+    const s = sectionOf(item.docId); if (s) s.nodes.splice(s.nodes.indexOf(item.node), 1);
+    const list = item.parent && kids.get(item.parent.docId); if (Array.isArray(list) && list.includes(item.node)) list.splice(list.indexOf(item.node), 1); // one drafted in a saved search (searchDraft)
+  }
   else open.delete(item.parent.key);
   render(true);
 }
 function dropDrafts() { for (const s of views) s.nodes = s.nodes.filter((n) => !n.draft); } // navigating away drops empty draft documents
+// ---- a new row of a saved search that lists one workspace type (#537) ----
+// What a new row has to be to belong there: the type, and each field the filter pins to one value (a link or a person,
+// or one option). A field it leaves open, a choice of several or a date range is left for you. null for any other search.
+const EQUALS = [undefined, 'equals', 'MODE_EQUALS'];
+function searchPreset(searchId) {
+  const filter = filters.get(searchId) || searchFilters.get(searchId)?.filter, types = (filter && filter.types) || [];
+  if (types.length !== 1 || !isTypeId(types[0])) return null;
+  const fields = {};
+  for (const [key, f] of Object.entries((filter && filter.fields) || {})) {
+    const refs = (f && f.refs) || [], texts = ((f && f.textMatches) || []).filter((m) => EQUALS.includes(m.mode));
+    if (f && f.date) continue;
+    if (refs.length === 1 && !texts.length) fields[key] = { ref: refs[0] };
+    else if (texts.length === 1 && !refs.length) fields[key] = { text: texts[0].value };
+  }
+  return { typeUri: types[0], fields };
+}
+const refLabel = async (uri) => (/^tana:user-profile:/.test(uri) ? memberName(uri) : (docOf(uri) || {}).text || (await tana.node(uri).catch(() => null))?.title || uri);
+// Enter at the end of one of its rows: a draft of that type below it, which materialise creates with those values
+function searchDraft(item) {
+  const searchId = item.parent && item.parent.docId, preset = isSearchDoc({ id: searchId }) ? searchPreset(searchId) : null, list = preset && kids.get(searchId);
+  if (!Array.isArray(list)) return false;
+  flush(item.key);
+  const choice = creationChoices.find((c) => c.typeUri === preset.typeUri), type = (typeListCache || []).find((t) => t.uri === preset.typeUri);
+  const node = { ...draftDocNode('custom', { typeUri: preset.typeUri, icon: choice ? choice.icon : typeGlyph(preset.typeUri), tags: type ? [{ label: type.title, uri: type.uri, hue: type.hue }] : undefined }), preset: preset.fields };
+  list.splice(list.indexOf(item.node) + 1, 0, node);
+  render(true);
+  placeCaret(node.id, 0);
+  return true;
+}
 // Enter on a collapsed top-level document (or with nothing focused in an empty view): a draft sibling document below it
 function draftDoc(after) {
   const s = viewOf();

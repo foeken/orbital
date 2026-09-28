@@ -143,6 +143,9 @@ const withShims = (src) => {
   // a type's or a saved search's own glyph (renderer/nodes.js iconOf): a harness that draws neither only needs the names
   if (/\btypeGlyph\(/.test(src) && !/const typeGlyph =/.test(src)) src = "globalThis.typeGlyph ??= (uri) => (typeof typeGlyphs !== 'undefined' && typeGlyphs.get(uri)) || (String(uri).startsWith(SEARCH_ID) ? 'search' : 'type');\n" + src;
   if (/\bisSearchDoc\(/.test(src) && !/const isSearchDoc =/.test(src)) src = "globalThis.isSearchDoc ??= (node) => !!node && String(node.id || '').startsWith(SEARCH_ID);\n" + src;
+  // one pane per place (renderer/edit.js, #533): a harness is one page, so no other pane shows anything and it tells nobody
+  if (/\b(tellPlace|inOtherPane|placeKey|viewKey)\(/.test(src) && !/function inOtherPane\(/.test(src)) src = "globalThis.tellPlace ??= () => {}; globalThis.inOtherPane ??= () => false; globalThis.placeKey ??= (docId, nodeId) => (docId ? String(docId) + (nodeId ? '#' + nodeId : '') : null); globalThis.viewKey ??= (id) => (id === 'library' ? null : 'view:' + id);\n" + src;
+  if (/\b(isChatPage|chatContextEl)\(/.test(src) && !/const isChatPage =/.test(src)) src = "globalThis.isChatPage ??= (p) => !!p && !p.nodeId && String(p.docId).startsWith('tana:chat:'); globalThis.chatContextEl ??= () => null;\n" + src; // renderer/chat.js, after render.js
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
@@ -2361,7 +2364,7 @@ function runInlineFieldsCheck() {
 async function runTaskMetaRetryCheck() {
   const context = vm.createContext({ setTimeout, clearTimeout, Date, Promise });
   vm.runInContext(`
-    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaAgain = new Set(), taskMetaFailed = new Map();
     ${source.match(/const META_RETRY_MS = \d+, META_RETRY_MAX = \d+;/)[0]}
     const palette = { hidden: true };
     let palDoc = null, connected = true, attempts = 0, renders = 0;
@@ -2385,6 +2388,27 @@ async function runTaskMetaRetryCheck() {
   assert.equal(settled.attempts, 2, 'the backoff expires and the metadata is requested again');
   assert.equal(settled.audience, 'only-me', 'the retry resolves the real visibility without a reload');
   assert.equal(settled.blocked, false, 'a successful retry clears the recorded failure');
+  // #531: metadata that moved is read again while the old answer stays on screen, and a move during a read reads once more
+  const again = vm.createContext({ setTimeout, clearTimeout, Date, Promise });
+  vm.runInContext(`
+    const taskMetaById = new Map([['tana:text:t', { assignees: ['old'] }]]), taskMetaLoading = new Set(), taskMetaAgain = new Set(), taskMetaFailed = new Map();
+    ${source.match(/const META_RETRY_MS = \d+, META_RETRY_MAX = \d+;/)[0]}
+    const palette = { hidden: true }, isRealId = () => true, renderPalette = () => {}, render = () => {}, renderSoon = () => {};
+    let palDoc = null, connected = true, answer = 'new', reads = 0, release = null;
+    const tana = { taskMeta: () => { reads++; const now = answer; return new Promise((resolve) => { release = () => resolve({ assignees: [now] }); }); } };
+    ${functionSource('loadTaskMeta')}
+    Object.assign(globalThis, { load: (a) => loadTaskMeta('tana:text:t', a), land: () => release(), next: (v) => { answer = v; }, state: () => ({ reads, shown: taskMetaById.get('tana:text:t').assignees[0] }) });
+  `, again);
+  again.load(false);
+  assert.equal(again.state().reads, 0, 'cached metadata is not read again for a render');
+  again.load(true);
+  assert.deepEqual(plain(again.state()), { reads: 1, shown: 'old' }, 'a move reads it again and keeps the old answer on screen meanwhile');
+  again.next('newer'); again.load(true);
+  assert.equal(again.state().reads, 1, 'a second move while that read is out waits for it');
+  again.land(); await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(plain(again.state()), { reads: 2, shown: 'new' }, 'the first answer lands, and the read the second move asked for goes out');
+  again.land(); await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(again.state().shown, 'newer', 'and the newest answer is the one left on screen');
 }
 
 // Palette arrows step over rows that cannot run (info lines, unavailable choices) instead of parking on a dead row.
@@ -3006,7 +3030,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
       ['tq1', [localDate(3)]], ['tq2', [localDate(10)]], ['tq3', [localDate(-1)]], ['tq4', [localDate(9), localDate(7)]], ['tq5', [localDate(8)]]]);
     // loadTaskMeta is the real one (renderer/tasks.js): Responsibility asks for the metadata it is missing, since a
     // row it filters out never reaches the screen to ask for itself
-    const asked = [], taskMetaFailed = new Map(), taskMetaLoading = new Set(), connected = true, isRealId = () => true;
+    const asked = [], taskMetaFailed = new Map(), taskMetaLoading = new Set(), taskMetaAgain = new Set(), connected = true, isRealId = () => true;
     const tana = { taskMeta: (id) => { asked.push(id); return new Promise(() => {}); } }, palette = { hidden: true };
     const $ = () => ({ hidden: true });
     const renderPills = () => {}, render = () => {}, showError = () => {};
@@ -3971,7 +3995,7 @@ function runRowAudienceCheck() {
     let watching = null;
     let metaSeen = null;
     class IntersectionObserver { constructor(fn) { watching = fn; } observe(el) { observed.push(el); } unobserve() {} }
-    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaAgain = new Set(), taskMetaFailed = new Map();
     const loadTaskMeta = (id) => { fetched.push(id); };
     const isPinned = () => false; // the pin mark has its own check; here the audience icons are the subject
     const loadMembers = () => {}, memberName = (uri) => (uri === 'tana:user-profile:sam' ? 'Sam' : uri); // the real one answers with the uri until the member list lands
@@ -8134,7 +8158,7 @@ async function runDeletedNodeCheck() {
     let renders = 0;
     const errors = [], asked = [], opened = [];
     const localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-    const extra = new Map(), kids = new Map(), taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
+    const extra = new Map(), kids = new Map(), taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaAgain = new Set(), taskMetaFailed = new Map();
     ${source.match(/const META_RETRY_MS = \d+, META_RETRY_MAX = \d+;/)[0]}
     const connected = true, palette = { hidden: true }, palDoc = null;
     const tana = {
@@ -9173,6 +9197,65 @@ function runLandingFlashCheck() {
   console.log('ok  landing: one changed row flashes, a whole list changed at once does not');
 }
 checks.push(runLandingFlashCheck);
+
+// A new row of a saved search that lists one workspace type (#537) starts as one of its rows: the type, and each field
+// the filter pins to one value; a choice of several, a date range or any other search sets nothing.
+checks.push(function runSearchPresetCheck() {
+  const T = 'tana:type:01j0projecttask00000000000', P = T + '?attribute=project', S = T + '?attribute=status', W = T + '?attribute=who', D = T + '?attribute=due';
+  const api = vm.runInNewContext(`
+    const filters = new Map(), searchFilters = new Map();
+    ${sourceLine('const isTypeId =')}
+    ${sourceBetween('const EQUALS', 'const refLabel')}
+    ({ stage: (id, f) => filters.set(id, f), store: (id, f) => searchFilters.set(id, { filter: f }), preset: (id) => searchPreset(id) });
+  `);
+  api.store('s1', { types: [T], fields: { [P]: { refs: ['tana:text:orbital'] }, [S]: { textMatches: [{ value: 'Doing', mode: 'MODE_EQUALS' }] }, [W]: { refs: ['tana:user-profile:a', 'tana:user-profile:b'] }, [D]: { date: 'upcoming' } } });
+  assert.deepEqual(plain(api.preset('s1')), { typeUri: T, fields: { [P]: { ref: 'tana:text:orbital' }, [S]: { text: 'Doing' } } }, 'the type, one link and one option are set; two people or a date range are left open');
+  api.stage('s1', { types: [T], fields: { [P]: { refs: ['tana:text:other'] } } });
+  assert.deepEqual(plain(api.preset('s1')).fields, { [P]: { ref: 'tana:text:other' } }, 'the pills as they are now, saved or not');
+  api.store('s2', { types: [T, 'tana:type:01j0another00000000000000000'] }); api.store('s3', { types: ['tasks'] });
+  assert.deepEqual([api.preset('s2'), api.preset('s3'), api.preset('s4')], [null, null, null], 'two types, a kind, or no filter known: no preset');
+  console.log('ok  a saved search of one type drafts its new rows with the values its filter asks for');
+});
+
+// Create new … names the node on a page of its own (#535): nothing to run until a name is typed, then Enter makes it with the
+// choice's options and opens it, once however often Enter is pressed.
+checks.push(async function runNamePageCheck() {
+  const api = vm.runInNewContext(`
+    let page = null, opened = [], closed = 0; const made = [], extra = new Map();
+    const openPage = (mode, placeholder, p) => { page = { mode, placeholder, ...p }; }, openCreationPalette = () => {};
+    const closePalette = () => { closed++; }, openDoc = (id) => opened.push(id), addSearch = () => {};
+    const run = (fn) => Promise.resolve().then(fn);
+    const tana = { createDocument: async (title, opts) => { made.push([title, opts]); return { id: 'tana:text:new' + made.length, title }; } };
+    ${sourceBetween('let creatingNamed', '// search result / pin')}
+    ({ open: (c) => openNamePage(c), page: () => page, rows: (typed) => page.rows(typed.toLowerCase(), typed), state: () => ({ made, opened, closed }) });
+  `);
+  api.open({ kind: 'custom', title: 'Project Task', icon: 'task', typeUri: 'tana:type:pt' });
+  assert.equal(api.page().placeholder, 'Name the new Project Task…', 'the page asks for the name of what was chosen');
+  assert.deepEqual(plain(api.rows('   ').map((r) => [r.label, !!r.disabled])), [['Type a name', true]], 'with nothing typed there is nothing to create');
+  const [row] = api.rows(' Ship the release ');
+  assert.equal(row.label, 'Create “Ship the release”', 'a typed name is the one row');
+  const first = row.run(); row.run(); await first;
+  assert.deepEqual(plain(api.state()), { made: [['Ship the release', { kind: 'custom', typeUri: 'tana:type:pt' }]], opened: ['tana:text:new1'], closed: 1 }, 'Enter makes it once, with the type, closes the palette and opens it');
+  console.log('ok  Create new names the node in Cmd+K, then opens it');
+});
+
+// One pane per place (#533): a place another pane shows focuses that pane instead, the Library may be open anywhere, and a
+// page tells the shell where it is once per move.
+checks.push(function runOnePanePerPlaceCheck() {
+  const api = vm.runInNewContext(`
+    const sent = [], toShell = (m) => sent.push(m); let LINKS = false, zoom = null, view = 'library';
+    ${sourceBetween('// ---- one pane per place', 'function setView(')}
+    ({ panes: (p) => { otherPanes = p; }, inOther: (k) => inOtherPane(k), placeKey, viewKey, at: (v, z) => { view = v; zoom = z; tellPlace(); }, sent: () => sent.splice(0) });
+  `);
+  api.panes({ 'view:inbox': 'p2', 'tana:text:x': 'p3', 'tana:text:x#b1': 'p4' });
+  assert.deepEqual([api.inOther(api.viewKey('inbox')), api.inOther(api.placeKey('tana:text:x')), api.inOther(api.placeKey('tana:text:x', 'b1'))], [true, true, true], 'a view, a document or a node another pane shows is gone to there');
+  assert.deepEqual(plain(api.sent()), [{ orbital: 'focusPane', id: 'p2' }, { orbital: 'focusPane', id: 'p3' }, { orbital: 'focusPane', id: 'p4' }], 'by focusing that pane');
+  assert.deepEqual([api.viewKey('library'), api.inOther(api.viewKey('library')), api.inOther(api.placeKey('tana:text:y'))], [null, false, false], 'the Library is no place of one pane, and a place nobody shows opens here');
+  api.at('library', null); api.at('library', null); api.at('inbox', null); api.at('inbox', { docId: 'tana:text:x', nodeId: null });
+  assert.deepEqual(plain(api.sent()), [{ orbital: 'place', key: null }, { orbital: 'place', key: 'view:inbox' }, { orbital: 'place', key: 'tana:text:x' }], 'a page tells where it is once per move');
+  assert.equal(api.inOther(api.placeKey('tana:text:x')), false, 'and a page already on a place another pane shows too stays on it when asked for it');
+  console.log('ok  one pane per place: another pane showing it takes the keys, the Library excepted');
+});
 
 // Demo mode masks words, never numbers: a meeting's "14:00–15:00" and a date stay as they are, a word with a digit in it is still masked.
 checks.push(function runDemoNumbersCheck() {

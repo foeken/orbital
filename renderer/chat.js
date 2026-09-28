@@ -44,7 +44,8 @@ function chatPartEls(n, docId) {
   if (n.block !== 'divider') renderSegs(el, n.segments || [], docId);
   return [el, ...(n.children || []).flatMap((c) => chatPartEls(c, docId))];
 }
-function chatMessageEl(n, docId) {
+// name: who said it (chatNameEl), inside the message so its selection ring takes it in (#541), under the thought (#544)
+function chatMessageEl(n, docId, name) {
   const c = n.chat, el = document.createElement('div'), bubble = document.createElement('div');
   el.className = 'chat-msg ' + (c.mine ? 'mine' : 'theirs');
   if (c.id) selectable(el, c.id);
@@ -58,6 +59,7 @@ function chatMessageEl(n, docId) {
     else bubble.append(...chatPartEls(part, docId));
   }
   if (!bubble.childNodes.length && c.streaming) bubble.append(chatDotsEl());
+  if (name) el.insertBefore(name, [...el.children].find((x) => !x.classList.contains('chat-thought')) || null); // after the thought, over what it says (#544)
   if (bubble.childNodes.length) el.append(bubble);
   return el;
 }
@@ -131,8 +133,7 @@ function chatEls(list, docId) {
     // a status line ("Sam was added to the chat.") stands on its own between the messages, as Tana shows it
     if (n.chat.status) { const line = document.createElement('div'); line.className = 'chat-status'; line.textContent = demoText(n.text, n.chat.author || docId); out.push(line); prev = null; continue; }
     // who said it, in bold over each run of replies: a person, Tana AI (or Codex, agentAskEls)
-    if (!n.chat.mine && (!prev || prev.chat.author !== n.chat.author)) out.push(chatNameEl(demoText(n.text, n.chat.author)));
-    out.push(chatMessageEl(n, docId));
+    out.push(chatMessageEl(n, docId, !n.chat.mine && (!prev || prev.chat.author !== n.chat.author) ? chatNameEl(demoText(n.text, n.chat.author)) : null));
     prev = n;
   }
   asksUntil(Infinity);
@@ -187,6 +188,22 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
 // answer on the other side as a reply, in grey text, under Codex's name; the cloud-slash glyph (its tooltip says why) as a
 // badge on the question bubble's top-right corner and plain after that name. Add to message, after them on the same line
 // once the answer is in, puts it in the message box, to send as your own words.
+// Who can see a chat and, for a meeting's chat, which meeting it is about: one quiet line at the top right (#543). The
+// meeting's attendees stay on the meeting's page: drawn here, as they were, they read as the chat's audience.
+function chatContextEl(parent) {
+  const node = parent.node;
+  if (sensitiveHidden(node.id)) return null; // a sensitive chat says nothing about who
+  const summary = documentSummary(node), meeting = tana.meetingInfo ? meetingOf(node) : null, el = document.createElement('div');
+  el.className = 'chat-context';
+  if (summary && summary.scope === 'only-me') el.append(addIcon(document.createElement('span'), summary.audience.icon), 'Only you can see this chat');
+  else if (summary) { const who = peopleEl(summary, node); if (who) el.append(who); }
+  if (meeting) {
+    const info = meetingInfoOf(meeting.id), ref = document.createElement('span');
+    renderSegs(ref, [{ mention: { uri: meeting.id, label: (info && info.title) || (docOf(meeting.id) || {}).text || 'its meeting', icon: 'meeting' } }], meeting.id);
+    el.append(el.childNodes.length ? ' · about ' : 'About ', ref);
+  }
+  return el.childNodes.length ? el : null;
+}
 const chatNameEl = (text) => { const name = document.createElement('div'); name.className = 'chat-name'; name.textContent = text; return name; };
 function localBadge(bubble) {
   const badge = document.createElement('span');
@@ -216,7 +233,8 @@ function agentAskEls(a, docId) {
     const dot = document.createElement('span'); dot.className = 'agent-sep'; dot.textContent = '·'; // outside the button, so its underline stops at the words
     name.append(dot, add);
   }
-  return [q, name, el];
+  el.prepend(name); // inside the answer, so its selection ring takes it in (#541)
+  return [q, el];
 }
 // The one way an answer reaches Tana: added after whatever is in the message box, to be sent as your message (the
 // name line's Add to message, Enter on the answer, or Cmd+K Add …’s answer to message)

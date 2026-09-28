@@ -108,7 +108,10 @@ function readNode(document) {
 
 // Companion outline capability, not a replacement for server authorization. Unknown/inherited ACLs stay null.
 // Profiles expose name/displayName, not an editable document title. Other unsupported bodies stay read-only.
-function editable(n, userUri) {
+// title: the title alone, which a chat, an agent, a skill and a type have too (renamed as Tana does) while their
+// bodies stay read-only here (#540). A type carries no participants: its title, like its field definitions
+// (main/documents.js mutType), is Tana's to refuse.
+function editable(n, userUri, title = false) {
   if (n.writeDenied) return false; // Tana refused our edits to it (sdk/sync.js _denyWrites), whatever the ACL says
   const kind = (n.id || '').split(':')[1];
   // 'search' is here because a saved search is a document the user owns and renames: a real one carries
@@ -117,7 +120,8 @@ function editable(n, userUri) {
   // return: a search's title is ordinary document data, not a calendar-protected field.
   // 'action' too: an action's body is an ordinary outline (what it will do, in words), and Tana edits it in place,
   // a proposed one included, before it is approved; the ACL decides as it does for text.
-  if (!['text', 'space', 'event', 'search', 'action'].includes(kind)) return false;
+  if (title && kind === 'type') return true;
+  if (!['text', 'space', 'event', 'search', 'action'].includes(kind) && !(title && ['chat', 'agent', 'skill'].includes(kind))) return false;
   const role = n.participants && n.participants[userUri] && n.participants[userUri].role;
   if (kind === 'event') return false; // protected title needs organizer + external-calendar write capability, not exposed by our graph contract
   if (role === 'admin' || role === 'editor') return true;

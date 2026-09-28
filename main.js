@@ -191,13 +191,14 @@ function closeOverlay(win, result = {}) {
   const main = win.panes.find((p) => !p.side) || win.panes[0]; // page '' when it is open: the tour's own
   const help = !!pending && !win.isDestroyed() && !!main && firstHelp(main, pending.theme);
   const note = typeof result.note === 'string' ? result.note.slice(0, 200) : undefined;
+  const open = typeof result.open === 'string' && /^tana:[a-z-]+:[0-9a-z]{26}$/.test(result.open) ? result.open : undefined; // the node the note is about, which its toast opens
   if (opener && !opener.isDestroyed()) {
     if (!help) opener.focus(); // the tour has the keys now
-    opener.send('overlay:closed', { palette: result.palette === true && !help, chatgpt: result.chatgpt === true && !help, note: help ? undefined : note });
+    opener.send('overlay:closed', { palette: result.palette === true && !help, chatgpt: result.chatgpt === true && !help, note: help ? undefined : note, open: help ? undefined : open });
   }
-  if (help && note) win.overlay.later = { opener, note }; // the task's toast waits for the tour: under it, it would be gone first
+  if (help && note) win.overlay.later = { opener, note, open }; // the task's toast waits for the tour: under it, it would be gone first
   const later = view.later; // this was that tour: the toast it held back is due now
-  if (later && later.opener && !later.opener.isDestroyed()) later.opener.send('overlay:closed', { palette: false, note: later.note });
+  if (later && later.opener && !later.opener.isDestroyed()) later.opener.send('overlay:closed', { palette: false, note: later.note, open: later.open });
 }
 const frontPane = () => (S.win && !S.win.isDestroyed() ? (S.win.panes.includes(S.pane) ? S.pane : S.win.panes[0]) || null : null);
 function createWindow() {
@@ -353,6 +354,7 @@ ipcMain.on('window:theme', (e, theme) => {
 });
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
+ipcMain.on('app:checkUpdates', () => updater.check({ manual: true })); // Cmd+K Check for updates: the menu item's check, its dialogs saying what it found
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 // The Help tour's first start (renderer/overlays.js helpOnce), opened here, by main, once. Only after this session has
 // read the settings document — the snapshot above is this machine's last copy, which on a new machine knows nothing yet,
@@ -575,7 +577,7 @@ ipcMain.handle('sync:logout', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, reliveRefs: require('./main/documents').reliveRefs, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, weekTitle, weekNode,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, reliveRefs: require('./main/documents').reliveRefs, rememberEdit: require('./main/documents').rememberEdit, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, savedDoc, closeFront, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
     nodePin, dropSearchHeads,

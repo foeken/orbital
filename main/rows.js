@@ -49,8 +49,10 @@ const hueOf = (n) => { if (n && typeHueOverrides()[n.id] !== undefined) return t
 // (Tana has no grey: every hue it stores is a colour), and no entry means Tana's own hue shows through.
 const typeHueOverrides = () => { const v = settings.get('typeHues'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; };
 const typeHue = (uri) => { const own = typeHueOverrides()[uri]; return own === 'grey' ? undefined : typeof own === 'number' ? own : typeHues.get(uri); };
+const titleOnly = new Map(); // id -> true: a read-only node whose title alone can be renamed (a chat, agent, skill or type, #540)
 function rememberNodeHue(n) {
   editability.set(n.id, editable(n, S.me && S.me.userUri));
+  titleOnly.set(n.id, editability.get(n.id) === false && editable(n, S.me && S.me.userUri, true) === true);
   rememberMeta(n); // every graph node and every Loro read passes here, so it is the one place both are learned
   if (!n.appearance) return false;
   const hue = ownHue(n), had = nodeHues.has(n.id), before = nodeHues.get(n.id);
@@ -155,7 +157,7 @@ const meetingRow = (n, withDate) => {
 // An event also carries its own window (`start`/`end`), and only an event does: the keys are added rather than always
 // present, so every other kind of node keeps the shape it had. A row restored from the SQLite cache has no window —
 // the cache stores the label, not the times — so a consumer that needs one asks the graph, as the meeting picker does.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: newer(r.updatedAt, (nodeMeta.get(r.id) || {}).updatedAt), createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}) });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), ...(titleOnly.get(r.id) ? { renamable: true } : {}), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: newer(r.updatedAt, (nodeMeta.get(r.id) || {}).updatedAt), createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}) });
 // A typed node's field values as the graph lists them (`attributes`, keyed "<type uri>?attribute=<key>"): one string
 // per value, which is what a row shows of a field (renderer/views.js fieldValues). Verified live on Goal 2026-09-25.
 function fieldValues(n) {

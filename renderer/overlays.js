@@ -11,7 +11,7 @@ function openOverlay(page) {
 if (tana.onOverlayClosed) tana.onOverlayClosed((result) => {
   if (result.palette) togglePalette('cmd');
   if (result.chatgpt) startChatGPTLogin();
-  if (result.note) showNote(result.note);
+  if (result.note) showNote(result.note, false, result.open); // a click on it opens the task it names
 });
 // Help: from ⌘K Help, the ? in the window's header (shell.js, renderer/app.js), and once by itself on a first start (helpOnce,
 // renderer/app.js); helpSeen is a synced preference, so that is once per person.

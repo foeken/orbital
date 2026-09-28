@@ -76,7 +76,7 @@ function createTask() {
       try { await taskApi.setAssignees(node.id, [person.id]); note += ', assigned to ' + person.title; }
       catch (e) { note += ' (not assigned to ' + person.title + ': ' + errorText(e) + ')'; }
     }
-    closeTask({ note });
+    closeTask({ note, open: node.id }); // the toast opens the task it names
   }, (e) => { // the card stays with what was typed, so the press can simply be repeated
     taskBusy = false;
     taskError.textContent = errorText(e);

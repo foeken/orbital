@@ -35,19 +35,24 @@ function audienceInfo(audience, audienceSpace) {
   // a space audience names the space, so a row can read "Robin Vega · Platform Guild"
   return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + named, space: named, word: named } : info;
 }
-function loadTaskMeta(docId) {
+// again: the metadata moved (renderer/app.js onChanged), so it is read afresh while the answer it replaces stays on
+// screen. Dropped instead, Assigned to and Visible to blinked out and back on every assignment, and the whole fields
+// block with them where they were all it held (#531).
+function loadTaskMeta(docId, again = false) {
   // Metadata is supplemental. Calling it before the sync client connects retries on every render.
   const backoff = taskMetaFailed.get(docId);
+  if (again && taskMetaLoading.has(docId)) { taskMetaAgain.add(docId); return; } // the read already out may predate the move
   // A deleted node answers nothing and never will, so it is not asked: the backoff doubles but never gives up, which
   // is what turned one gone row into a "Node has been deleted" in the log for the rest of the session.
-  if (!connected || !tana.taskMeta || !isRealId(docId) || isGone(docId) || taskMetaById.has(docId) || taskMetaLoading.has(docId) || (backoff && Date.now() < backoff.until)) return;
+  if (!connected || !tana.taskMeta || !isRealId(docId) || isGone(docId) || (!again && taskMetaById.has(docId)) || taskMetaLoading.has(docId) || (backoff && Date.now() < backoff.until)) return;
   taskMetaLoading.add(docId);
   tana.taskMeta(docId).then((meta) => {
     taskMetaLoading.delete(docId); taskMetaFailed.delete(docId); taskMetaById.set(docId, meta);
     if (!palette.hidden && palDoc && palDoc.id === docId) renderPalette();
     patchMeta(docId);
+    if (taskMetaAgain.delete(docId)) loadTaskMeta(docId, true);
   }, (e) => { // a brand-new document can still be settling in main: wait, then let the next render ask again
-    taskMetaLoading.delete(docId);
+    taskMetaLoading.delete(docId); taskMetaAgain.delete(docId); // what is on screen stays: a failed re-read is no reason to blank it
     if (noteGone(docId, e)) return; // gone, not settling: nothing to wait for
     const wait = Math.min(META_RETRY_MAX, backoff ? backoff.wait * 2 : META_RETRY_MS);
     const entry = { until: Date.now() + wait, wait };

@@ -196,7 +196,7 @@ async function agentStatuses(links, rpc) {
 function codexBin() {
   const fs = require('node:fs'), path = require('node:path'), home = require('node:os').homedir();
   const dirs = [...(process.env.PATH || '').split(':').filter(Boolean), home + '/.local/bin', '/opt/homebrew/bin', '/usr/local/bin'];
-  const apps = ['/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex', '/Applications/Codex.app/Contents/Resources/codex'];
+  const apps = ['/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex', '/Applications/ChatGPT.app/Contents/Resources/codex', '/Applications/Codex.app/Contents/Resources/codex'];
   return [...dirs.map((d) => path.join(d, 'codex')), ...apps].find((f) => { try { fs.accessSync(f, fs.constants.X_OK); return fs.statSync(f).isFile(); } catch { return false; } }) || null;
 }
 // `codex app-server` speaks JSON-RPC on stdio. Read callers stop this child after one call; ChatGPT auth holds it

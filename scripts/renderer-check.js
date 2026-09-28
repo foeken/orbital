@@ -141,8 +141,8 @@ assert.match(source, /const ticks = canEditItem\(item\) \|\| \(!!node\.checkable
 assert.match(source, /check\.disabled = target \? !canEditNode\(display\) : !ticks;/);
 assert.match(source, /if \(!canEditItem\(item\) \|\| opensOnClick\(item\)\) \{/);
 assert.match(source, /tana\.taskMeta\(docId\)/);
-assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaFailed = new Map\(\);/);
-assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| !isRealId\(docId\) \|\| isGone\(docId\) \|\| taskMetaById\.has\(docId\) \|\| taskMetaLoading\.has\(docId\) \|\| \(backoff && Date\.now\(\) < backoff\.until\)\) return;/);
+assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaAgain = new Set\(\), taskMetaFailed = new Map\(\);/);
+assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| !isRealId\(docId\) \|\| isGone\(docId\) \|\| \(!again && taskMetaById\.has\(docId\)\) \|\| taskMetaLoading\.has\(docId\) \|\| \(backoff && Date\.now\(\) < backoff\.until\)\) return;/);
 assert.match(source, /const isRealId = \(id\) => typeof id === 'string' && id\.startsWith\('tana:'\);/);
 // Tana titles are plain text: the @ picker must not open there, so the key types an ordinary character (#53)
 assert.doesNotMatch(source.slice(source.indexOf("titleEl.addEventListener('keydown'"), source.indexOf('// the document Cmd+K context actions')), /startLink/, 'the title keydown handler never opens the link picker');
@@ -329,7 +329,7 @@ async function cachedBootMetadataCheck() {
   const context = { setTimeout, clearTimeout, Date };
   vm.runInNewContext(`
     let authed = false, authChecking = true, signedOut = false, connected = false, placed = false, calls = 0, renders = 0, outcome = 'fail';
-    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaAgain = new Set(), taskMetaFailed = new Map();
     ${source.match(/const META_RETRY_MS = \d+, META_RETRY_MAX = \d+;/)[0]}
     const tana = { taskMeta: () => {
       calls++;

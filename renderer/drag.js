@@ -178,7 +178,7 @@ const pinIds = (segs, meetingId) => [...new Set(segs.filter((s) => s.length === 
 function dropOnMeeting(meeting, segs) {
   const ids = pinIds(segs, meeting.id);
   if (!ids.length) return showError(new Error('Only a node can be pinned to a meeting'));
-  return run(async () => { for (const id of ids) await pinDocToMeeting(meeting.id, id); showNote('Pinned to ' + meeting.title); });
+  return run(async () => { for (const id of ids) await pinDocToMeeting(meeting.id, id); showNote('Pinned to ' + meeting.title, false, meeting.id); });
 }
 
 // ---- a task dropped on a group (#169) ----

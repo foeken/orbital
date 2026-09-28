@@ -242,6 +242,7 @@ async function inheritCheckbox(parent, nodeId) {
   await reload(parent.docId);
 }
 function zoomTo(item) {
+  if (inOtherPane(placeKey(item.docId, item.node.kind === 'document' ? null : item.node.id))) return;
   flushAll(); dropDrafts(); caretOnOpen = true;
   if (item.node.kind === 'document') recordRecent(item.node);
   let top = item; while (top.parent && top.parent.docId === item.docId) top = top.parent; // the item's document row (itself, or an ancestor in the same document)
@@ -273,8 +274,29 @@ function toggleReference(node) {
   render(true);
   run(() => tana.setDone(target.id, done));
 }
+// ---- one pane per place (#533) ----
+// A place already on screen in another pane of this window is gone to there rather than opened a second time: each page
+// tells the shell where it is (tellPlace) and the shell hands every page the others' places (renderer/app.js 'panes').
+// The Library alone may be open in any number of panes, and New pane (⌘N) opens one.
+const placeKey = (docId, nodeId) => (docId ? String(docId) + (nodeId ? '#' + nodeId : '') : null);
+const viewKey = (id) => (id === 'library' ? null : 'view:' + id);
+let otherPanes = {}; // place key -> the pane (the shell's view id) showing it
+let toldPlace; // where this page last said it is
+function inOtherPane(key) {
+  const pane = key && key !== toldPlace && otherPanes[key]; // a page already there stays: it is the place asked for
+  if (pane) toShell({ orbital: 'focusPane', id: pane });
+  return !!pane;
+}
+function tellPlace() {
+  if (LINKS) return; // the Graph pane follows others' places, it has none of its own
+  const key = zoom ? placeKey(zoom.docId, zoom.nodeId) : viewKey(view);
+  if (key === toldPlace) return;
+  toldPlace = key;
+  toShell({ orbital: 'place', key });
+}
 function setView(id) {
   if (LINKS && !followingNow) return toShell({ orbital: 'open', view: id }); // the Graph pane opens a view in the page it follows (renderer/rail.js)
+  if (inOtherPane(viewKey(id))) return;
   turnPage('swap', () => { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); });
 }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
@@ -284,6 +306,7 @@ function openDoc(docId, from) {
   // mention, a notification, a meeting's write-up redirect — so this is where a deleted node is refused. Opening one
   // put an empty page on screen whose every read came back "Node has been deleted", once per metadata retry.
   if (isGone(docId)) return showError(new Error('That node has been deleted'));
+  if (inOtherPane(placeKey(docId))) return;
   flushAll(); dropDrafts(); caretOnOpen = true;
   const s = from ? null : sectionOf(docId);
   if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view' + SIDE, view); }
@@ -331,6 +354,7 @@ function placeJSON() { // what rememberPlace stores, and what a pane or window o
 }
 function rememberPlace() { localStorage.setItem('place' + SIDE, placeJSON()); }
 function noteNavigation() {
+  tellPlace();
   const here = navPlace();
   if (navHere && navHere.key === here.key) return;
   // the Graph pane goes where the page it follows is (renderer/rail.js follow), which is no place of its own to go back to

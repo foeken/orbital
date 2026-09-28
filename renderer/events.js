@@ -109,6 +109,7 @@ onRows('keydown', (e) => {
   else if (e.key === '@' && (!collapsed || !isDoc)) { const range = collapsed ? [off, off] : selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // a selection links it; a caret in a block inserts a reference there (a title cannot hold one, so "@" is typed)
   else if (combo === hotkeyFor('toggleDone')) { e.preventDefault(); if (isDoc) toggleDone(item); else toggleCheckbox(item); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
+  else if (e.key === 'Enter' && isDoc && item.parent && collapsed && (off ?? len) === len && searchDraft(item)) e.preventDefault(); // a saved search of one type: a new row of it, its filter's values set (#537)
   else if (e.key === 'Enter' && isDoc && item.parent) e.preventDefault(); // document child (inside a space): nothing to split or draft yet
   else if (e.key === 'Enter' && isDoc && !zoom && !isOpen(item)) { e.preventDefault(); draftDoc(item); } // collapsed document in a view: draft sibling document
   else if (e.key === 'Enter') { e.preventDefault(); splitNode(item, el, off ?? len); }

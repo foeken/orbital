@@ -1,11 +1,13 @@
 'use strict';
 // The Timeline page (issue #135): tasks pinned through today, then what happened to the nodes you watch and what landed in
 // your Inbox — the same two things the banners announce (main/documents.js notifyWatched, main/views.js
-// announceNewInbox), read back from Tana rather than kept here. Nothing is stored but the time of the last visit: the
+// announceNewInbox), read back from Tana rather than kept here. Nothing is stored but the time of the last visit, and the
+// edits a banner announced that Tana wrote no summary for (main/documents.js announcedEdits, #536): the
 // page is rebuilt on every arrival, which measured 0.2 s for 53 watched nodes (ListChanges, twelve at a time), so it
 // holds what happened before this page existed and while the app was closed, and reads the same on every machine.
 // Like Notifications the page is not a Tana document and has an id of its own.
-//   watched: a written change summary (the sidebar's Changes, sdk/history.js) somebody other than you had a hand in
+//   watched: a written change summary (the sidebar's Changes, sdk/history.js) somebody other than you had a hand in,
+//            or an edit a banner told of that no summary from around then covers ("Someone edited …")
 //   inbox:   a task assigned to you that someone else, an MCP client or Tana's AI created (views.js inboxFrom)
 //   agent:   a task an MCP client or Tana's AI moved to another state (from the chat it did so in, see below)
 //   meeting: a meeting you are in that has started, at its start time (all-day ones mark a day, not a moment)
@@ -23,7 +25,7 @@ const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates } = require('./pins');
 const { NOT_CONNECTED, S, iso, isMcp, send } = require('./state');
 const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
-const { notifySilencedIds, notifyWatchedIds } = require('./documents');
+const { announcedEdits, notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 const { openLiveQuery } = require('../sdk/livequery');
 const { callState } = require('../sdk/calls');
@@ -201,6 +203,13 @@ async function rows(progress) {
           : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), icon: 'updated', tone: 'edit', change: text, detail: detailOf(s, text) });
       }
     });
+    // ...and the edits a banner announced that no summary of that node from around then stands in for (#536): Tana writes
+    // none for many edits, or only much later. Nobody but this machine knows who made one, so it says Someone.
+    const quiet = new Set(silenced);
+    for (const e of announcedEdits()) {
+      if (!(e.at > since) || quiet.has(e.id) || events.some((x) => x.uri === e.id && Math.abs(x.at - e.at) < 30 * 6e4)) continue;
+      events.push({ kind: 'edit', uri: e.id, title: nodes.get(e.id)?.title || e.title, at: e.at, actor: 'Someone', icon: 'updated', tone: 'edit', change: null });
+    }
     return events;
   }
   // Agents: an MCP client writes with your login, so the moves it makes read as yours above (state.changedBy, the
@@ -282,7 +291,7 @@ async function rows(progress) {
     return pinnedIds.map((id) => byId.get(id)).filter(Boolean).map((n) => {
       rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
       const row = toNode(graphRow(n));
-      return row.done && !pinDatesById.get(n.id).includes(date) ? null : { ...row, editable: false, checkable: row.editable === true };
+      return row.done && !pinDatesById.get(n.id).includes(date) ? null : { ...row, editable: false, checkable: row.editable !== false }; // unknown (null) ticks, as a log row's box and every other row does; Tana refuses what it refuses (#545)
     }).filter(Boolean);
   }
   const got = {};
@@ -332,7 +341,7 @@ function pageOf(got, seen, now, date) {
     // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".
     // An edit's what-changed rides in the quote under it: Tana's line for it, then its longer words.
     // person/content: the words demo mode masks in this row of the app's own; the rest is the app's wording (renderer/segments.js)
-    const person = !/^(An AI agent|Tana's AI)$/.test(e.actor);
+    const person = !/^(An AI agent|Tana's AI|Someone)$/.test(e.actor);
     const who = { text: e.actor + ' ', ...(person ? { person } : {}) }, what = (verb) => ({ text: verb, marks: { bold: true } });
     if (e.kind === 'edit') { segments = [who, what('edited'), { text: ' ' }, { text: title, content: true }]; change = e.change; detail = e.detail || null; }
     else if (e.kind === 'status') { segments = [who, what(e.verb), { text: ' ' }, { text: title, content: true, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.note || null; }
