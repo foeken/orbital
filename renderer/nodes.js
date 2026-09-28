@@ -50,7 +50,7 @@ function draftNode(parent, prev) { // shown under an expanded empty node; create
 }
 // Draft documents stay local until their first title character, then use their selected native kind/type.
 function draftDocNode(kind, option = {}) {
-  const nativeKind = kind === 'custom' ? 'doc' : kind;
+  const nativeKind = kind === 'custom' ? (['task', 'meeting'].includes(option.icon) ? option.icon : 'doc') : kind; // a type with a workflow makes a task (main/documents.js customCreation, #534), so its draft has a box
   // A saved search is the one kind that cannot be created from a title alone: createDocument refuses a search with
   // no query, because searchChildren reads an empty query container as unreadable. The empty query is a real one —
   // writeSearchQuery materialises every key — so a search starts by finding everything and is narrowed by the pills.
@@ -114,10 +114,14 @@ const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.
 // that fades on its own; an error is red and stays longer. The line under the title is only the signed-out state
 // with its relogin button (app.js), which writing into it used to wipe out (#123).
 let toastTimer = null;
-function showNote(note, error = false) {
+// open: the node the note is about (a task just made, a meeting just pinned to), which a click on the toast opens;
+// such a toast stays a little longer, so there is time to reach it (#532)
+function showNote(note, error = false, open = null) {
   const el = $('toast');
   el.textContent = note; el.classList.toggle('error', error); el.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), error ? 6000 : 2500); // a newer toast gets its own time
+  el.classList.toggle('opens', !!open);
+  el.onclick = open ? () => { el.classList.remove('show'); goTo(open); } : null;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), error ? 6000 : open ? 5000 : 2500); // a newer toast gets its own time
 }
 const showError = (e) => { if (e && !signedOut) showNote(String(e.message || e), true); }; // signed out, what still fails is the old session's
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
@@ -235,7 +239,7 @@ const canEditStructure = (item) => canEditItem(item) || ((item.node.type === 're
 // an inline reference renders the referenced document's title: editing the row edits that document, and a read-only
 // target stays read-only. The containing document counts too: a chat's attachment row would otherwise offer to
 // rename the attached document (only a positively read-only container blocks, so ordinary embeds are unchanged).
-const canEditText = (item) => (isReference(item.node) ? canEditNode(referenceTarget(item.node)) && docOf(item.docId)?.editable !== false : canEditItem(item));
+const canEditText = (item) => (isReference(item.node) ? canEditNode(referenceTarget(item.node)) && docOf(item.docId)?.editable !== false : canEditItem(item) || !!item.node.renamable); // renamable: a chat, agent, skill or type, whose title alone can be typed in (#540)
 const chatIcon = (n) => n.icon || ((n.tags || []).some((t) => t.label === 'chat') ? 'chat' : undefined);
 const nodeIcon = (n) => chatIcon(n) || ((n.tags || []).some((t) => t.label === 'agent') ? 'agent' : undefined);
 const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: nodeIcon(n) }); // api.node / search / library result -> document Node

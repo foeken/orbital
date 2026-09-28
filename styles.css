@@ -178,6 +178,9 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .fields .fchoice > .fhint { margin-left: 6px; }
 .fields .fchoice:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 .fields .fchip { padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); line-height: 20px; }
+.fields .fchip.fref { padding: 0; background: none; } /* a link field's value is a reference, drawn as every reference is */
+.fields .fchip.fref + .fchip.fref { margin-left: 8px; }
+.fields .fattendees > .fvalue { margin-left: 10px; } /* in line with the values of the fields around it (.fchoice's margin) */
 .fields .fchip.gone { color: var(--muted); text-decoration: line-through; }
 .fields .fchip.wrong::after { content: ' ⚠'; color: #c8841c; }
 .fields .fhint, .fields .fkind { color: var(--muted); line-height: 22px; }
@@ -187,6 +190,7 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .fields .fkind { color: var(--muted); padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
 /* a row's field values on its grey line (renderer/views.js subtextEl): the same chip, a step quieter */
 [data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }
+[data-theme="dark"] .fields .fchip.fref { background: none; }
 /* ==== Table view (renderer/views.js) ==== */
 /* a list page as a table (renderer/views.js tableCells): each row's body is a grid, its grey line's cells are the
    columns after the title, and the header uses the same columns. The body starts at one fixed gutter on every row —
@@ -571,6 +575,11 @@ html.links .app { display: none; }
 .chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
 .chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 13px; background: var(--chat-mine); color: var(--chat-mine-text); }
 .bubble > * + * { margin-top: 8px; }
+.fields .chat-context { grid-column: 1 / -1; } /* the whole width, not the glyph's column */
+.fields:has(> .chat-context:only-child) { border: 0; padding: 0; }
+.chat-context { margin: 0 0 28px; text-align: right; font-size: 14px; color: var(--muted); } /* who can see a chat, and its meeting (renderer/chat.js chatContextEl, #543) */
+.chat-context > span:first-child > svg, .chat-context .people svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; }
+.chat-context .mention svg { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 3px; }
 .chat-name { font-size: 14px; font-weight: 600; margin: 0 0 2px; } /* who said a reply: in the text's colour, bold */
 .chat-note { font-size: 14px; color: var(--muted); margin: 0 0 6px; }
 /* "Thought for 1m 28s ›" as Codex draws its "Worked for": grey, a chevron, and a hairline under it across the message */
@@ -1090,6 +1099,7 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
   transition: opacity var(--dur-quick) var(--ease-in), transform var(--dur-quick) var(--ease-in), visibility 0s linear var(--dur-quick); }
 .toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring); }
 .toast.error, [data-theme="dark"] .toast.error { background: #c0392b; color: #fff; }
+.toast.show.opens { pointer-events: auto; cursor: pointer; } /* about one node, which a click opens (showNote open) */
 .palette .card {
   width: 100%; max-width: 620px; max-height: min(70vh, 440px); display: flex; flex-direction: column; overflow: hidden;
   background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-card);

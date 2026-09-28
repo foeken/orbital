@@ -363,8 +363,9 @@ function paletteRows(q, typed = q) {
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
   // A new page starts where you are: main hands it this view and place with its id, before it reads them (main.js starts)
   rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(() => tana.newWindow({ view, place: placeJSON() })) });
-  const openPage = (where) => run(() => tana.splitWindow(where, { view, place: placeJSON() }));
-  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'To the right', run: () => openPage('right') });
+  // a new page opens on the Library, the one place more than one pane may show (#533): a copy of this one would be a second pane on it
+  const openPage = (where) => run(() => tana.splitWindow(where, { view: 'library', place: '{}' }));
+  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'Library, to the right', run: () => openPage('right') });
   rows.push({ id: 'newTab', group: 'Window', icon: 'createNew', label: 'New tab', hint: 'Beside this page', run: () => openPage('tab') });
   rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', run: () => openPage('float') }); // "Float" in a pane's menu floats that pane
   // With more than one page, the workspace's own moves (shell.js run): Trellis does them, this page only asks
@@ -401,6 +402,7 @@ function paletteRows(q, typed = q) {
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
   if (tana.openExternal) rows.push({ id: 'about', group: 'Help', icon: 'info', label: 'About Orbital', keepOpen: true, run: openAboutPalette });
+  if (tana.checkUpdates) rows.push({ id: 'checkUpdates', group: 'Help', icon: 'reload', label: 'Check for updates', run: () => tana.checkUpdates() }); // main's dialogs say what it found
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
@@ -584,7 +586,7 @@ function openHiddenPalette() {
 }
 function creationRows(q) {
   if (palBusy) return [{ group: 'Create new', label: 'Loading choices…', disabled: true }];
-  return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
+  return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => openNamePage(choice) }));
 }
 function openCreationPalette() {
   // The clipboard's image leads the page, and only the page: a folded row under Create new … could get a key.
@@ -609,7 +611,7 @@ function creationSection() {
   return views.find((section) => section.id === 'library') || viewOf();
 }
 function startCreation(choice) {
-  const section = creationSection(), tags = choice.kind === 'custom' ? [{ label: choice.title, hue: choice.hue }] : undefined;
+  const section = creationSection(), tags = choice.kind === 'custom' ? [{ label: choice.title, hue: choice.hue, uri: choice.typeUri }] : undefined; // uri: a task draft finds its type's glyph as the row it becomes does (iconOf)
   const node = draftDocNode(choice.kind, { typeUri: choice.typeUri, icon: choice.icon, tags });
   section.nodes.unshift(node); view = section.id; localStorage.setItem('view' + SIDE, view);
   // render(true), like every other action that changes the page: closePalette puts the caret back in the row ⌘K was
@@ -617,6 +619,27 @@ function startCreation(choice) {
   // caret never reached its title, and the empty draft sat in the view as a node nobody created.
   closePalette(); zoom = { docId: node.id, nodeId: null }; render(true); setCaret(titleEl, 0);
   loadView(view); // the target view may not have fetched its rows yet
+}
+// Create new … (Cmd+K and the corner button) asks the name on a page of its own, in the palette's field (#535): Enter makes
+// the node and opens it, Escape goes back to the choices. The "/" menu, typed in a row, keeps its draft on the page
+// (startCreation), where the words go on being typed.
+let creatingNamed = false; // one create per Enter: a second press while main answers makes no second node
+function openNamePage(choice) {
+  const group = 'New ' + choice.title;
+  openPage('createName', 'Name the new ' + choice.title + '…', { back: openCreationPalette, typed: true, rows: (q, typed) => {
+    const title = String(typed || '').trim();
+    return [title ? { group, icon: choice.icon, label: 'Create “' + title + '”', run: () => createNamed(choice, title) } : { group, icon: choice.icon, label: 'Type a name', disabled: true, note: true }];
+  } });
+}
+function createNamed(choice, title) {
+  if (creatingNamed) return;
+  creatingNamed = true;
+  const opts = { kind: choice.kind, ...(choice.typeUri ? { typeUri: choice.typeUri } : {}), ...(choice.kind === 'search' ? { query: {} } : {}) }; // what a draft would have been created with (draftDocNode)
+  return run(async () => {
+    const n = await tana.createDocument(title, opts), made = { ...n, text: n.title ?? n.text ?? '', hasChildren: true };
+    addSearch(made); // a saved search is in Cmd+K at once (#141)
+    extra.set(made.id, made); closePalette(); openDoc(made.id);
+  }).finally(() => { creatingNamed = false; });
 }
 // search result / pin: zoom into it wherever it lives (api.node shape -> extra); from = breadcrumb root when not opened in its view
 function openResult(n, from) {
@@ -1107,6 +1130,7 @@ const shellRun = (command) => { if (window.frameElement) window.parent.postMessa
 // this pane. Main gives the new page its id, and it opens on the place stored under that id (shell.js open, edit.js).
 const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'right' : e.altKey ? 'tab' : null);
 async function openElsewhere(where, docId, nodeId = null) {
+  if (inOtherPane(placeKey(docId, nodeId))) return; // already on screen in another pane: that pane takes the keys (#533)
   const d = docOf(docId) || {};
   await tana.splitWindow(where, { view, place: JSON.stringify({ docId, nodeId, title: d.text ?? d.title, icon: d.icon }) });
 }

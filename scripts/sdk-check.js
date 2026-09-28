@@ -503,6 +503,7 @@ async function main() {
     const plainDoc=await backend.createDocument('Plain note',{kind:'doc'});
     assert.equal(plainDoc.icon,'doc');assert.ok(plainDoc.id.startsWith('tana:text:'));
     assert.equal(choices.options.find(o=>o.typeUri===unknownType.id).selectable,false);
+    assert.equal(choices.options.find(o=>o.typeUri===textType.id).icon,'type','a type is offered with the glyph its documents wear, so its draft does not start as a plain doc');
     const chat=await backend.createDocument('New conversation',{kind:'chat'});
     assert.equal(chat.icon,'chat');assert.ok(chat.id.startsWith('tana:chat:'));
     const chatData=readNode(docs.get(chat.id));assert.deepEqual(chatData.messages,[]);assert.deepEqual(chatData.participantUris,[]);
@@ -713,20 +714,21 @@ async function main() {
       {uri:described.id,title:'Decision Record',description:'One decision',instructions:'Return exactly one decision'},{uri:handmade.id,title:'discussion task'}]},
       'the types Set type would offer, each with its own words, and none that lives in another space');
     // Undo is not only the write going back: the page has to hear about it, or it keeps showing the name that was
-    // undone until something else refreshes it. The field's value is part of what doc:taskMeta compares, so both
-    // directions announce a metadata change and the zoomed page re-reads its fields.
+    // undone until something else refreshes it. Both directions announce a field change — not a metadata one, which
+    // throws the page's assignees and audience away (Visible to vanished while a field was edited) — and the zoomed
+    // page re-reads its fields.
     docs.get(plain.id).on('change',()=>backend.onChange(plain.id));
-    const metaOf=()=>events.filter(([channel,id])=>channel==='outline:changed'&&id===plain.id).map(e=>e[2]&&e[2].meta);
+    const metaOf=()=>events.filter(([channel,id])=>channel==='outline:changed'&&id===plain.id).map(e=>e[2]&&[e[2].meta,e[2].fields]);
     await backend.discussWith(plain.id,'Peter Leppers');
     await backend.discussWith(plain.id,'Stan Engbers');
     events.length=0;
     assert.equal(await backend.undo(),plain.id);
     assert.deepEqual(fieldsSdk.readFields(docs.get(plain.id)).map(f=>f.text),['Peter Leppers'],'undo puts the previous name back');
-    assert.deepEqual(metaOf(),[true],'and announces it as metadata, which is what redraws the field');
+    assert.deepEqual(metaOf(),[[false,true]],'and announces it as a field change, which redraws the field and keeps the metadata');
     events.length=0;
     await backend.redo();
     assert.deepEqual(fieldsSdk.readFields(docs.get(plain.id)).map(f=>f.text),['Stan Engbers'],'redo brings it forward again');
-    assert.deepEqual(metaOf(),[true],'and says so the same way');
+    assert.deepEqual(metaOf(),[[false,true]],'and says so the same way');
     console.log('ok  discuss with: the type found by title or created in the Library with its field, the document typed and the name written');
   }
   // A field value edited through main, by the id the page uses: "<document>|<type>?attribute=<key>". Every block:
@@ -898,6 +900,17 @@ async function main() {
       assert.deepEqual(turnStart.input[1],{type:'image',url:'data:image/png;base64,iVA='},'a dropped image goes along the ChatGPT turn as well');
       const signedOut=await ai.logoutChatGPT(userData);
       assert.equal(signedOut.signedIn,false,'sign-out clears ChatGPT account status');
+      { // a sign-in whose completion notification never arrives still ends: the next account read finds it done
+        await ai.startChatGPTLogin(userData);
+        let again=0; ai.onSignedIn=()=>again++;
+        signedIn=true;
+        const read=await ai.chatgptStatus(userData);
+        assert.deepEqual([read.signedIn,read.loggingIn,read.userCode,again],[true,false,null,1],'a read that finds the account signed in ends the open sign-in and tells main once');
+        note({method:'account/login/completed',params:{loginId:'login-1',success:true}});
+        assert.equal(again,1,'and the notification arriving late changes nothing');
+        ai.onSignedIn=null;
+        await ai.logoutChatGPT(userData);
+      }
       assert.equal(await ai.suggestDiscussWith('Discuss with API fallback',fallback,userData),'API fallback','the local API key works again after sign-out');
       assert.equal(calls.length,before+1,'only the signed-out request reaches the API-key endpoint');
     } finally { ai.stop(); agent.appServerRpc=originalRpc; agent.codexBin=originalBin; fs.rmSync(userData,{recursive:true,force:true}); }
@@ -1452,6 +1465,11 @@ async function main() {
     const typed = readNode(docs.get((await backend.createDocument('Login fails', { kind: 'task', typeUri: bug.id })).id));
     assert.deepEqual([typed.entityTypeUri, typed.stateType, plainJson(typed.assignedToUris)], [bug.id, 'open', [ME]], 'a task of a type is an open task of yours, with the type');
     await assert.rejects(backend.createDocument('Standup', { kind: 'task', typeUri: agenda.id }), /applies to meetings/, 'a type for meetings makes no task');
+    // Create new … with a workflow type (#534): the same open task of yours, not a document with the type and no state
+    const chosen = readNode(docs.get((await backend.createDocument('Crash on save', { kind: 'custom', typeUri: bug.id })).id));
+    assert.deepEqual([chosen.entityTypeUri, chosen.stateType, plainJson(chosen.assignedToUris)], [bug.id, 'open', [ME]], 'Create new with a workflow type makes a task of that type');
+    const noted = readNode(docs.get((await backend.createDocument('Meeting notes', { kind: 'custom', typeUri: note.id })).id));
+    assert.deepEqual([noted.entityTypeUri, noted.stateType ?? null], [note.id, null], 'and a type without a workflow still makes a document');
     // The handoff names the task after its node title, so Codex names the thread after the work.
     const handed = [];
     backend.agent.createTask = async (opts) => { handed.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca0e'; };
@@ -1686,6 +1704,13 @@ async function main() {
     assert.equal(editable({ id: DOC, ownerUri: ME }, ME), null, 'ownership does not grant editing');
     assert.equal(editable(node('event', 'admin'), ME), false, 'calendar protected fields need separate capability');
     assert.equal(editable(node('chat', 'editor'), ME), false);
+    assert.equal(editable(node('chat', 'admin'), ME, true), true, 'a chat you administer can be renamed (#540)');
+    assert.equal(editable(node('chat', 'viewer'), ME, true), false, 'a viewer still cannot rename it');
+    assert.equal(editable(node('skill', 'admin'), ME, true), true, 'nor an agent or skill you made');
+    assert.equal(editable({ id: 'tana:skill:builtin' }, ME, true), null, 'a built-in skill has no role to rename it with');
+    assert.equal(editable({ id: 'tana:type:example' }, ME, true), true, 'a type title is Tana\'s to refuse, like its fields');
+    assert.equal(editable(node('event', 'admin'), ME, true), false, 'a meeting title stays calendar protected');
+    assert.equal(editable(node('type', 'admin'), ME), false, 'and without title a type stays read-only');
     // A saved search is a document the user owns and renames, so its kind must reach the ACL logic rather than
     // being refused outright — but only its kind: the roles still decide, exactly as they do for text.
     assert.equal(editable(node('search', 'editor'), ME), true, 'a saved search you can edit is renamable');
@@ -3034,6 +3059,7 @@ async function main() {
     const id = () => 'tana:text:' + ulid();
     const pinnedEditable = { id: id(), title: 'Pinned and editable', participants: { [ME]: { type: 'user', role: 'admin' } }, state: { type: 'open' } };
     const pinnedReadOnly = { id: id(), title: 'Pinned but read-only', participants: { [ME]: { type: 'user', role: 'viewer' } }, state: { type: 'open' } };
+    const pinnedInherited = { id: id(), title: 'Pinned, access inherited', state: { type: 'open' } }; // no participants entry: editability unknown (#545)
     const completedOverdue = { id: id(), title: 'Completed yesterday', state: { type: 'open' } };
     const completedDoc = new Document(completedOverdue.id);
     completedDoc.transact((l) => initDocument(l, completedOverdue.title, ME, { kind: 'task' })); setState(completedDoc, 'closed', COLLEAGUE);
@@ -3041,7 +3067,7 @@ async function main() {
     const pinMapUri = 'tana:pin-map:' + ulid(), today = new Date().toLocaleDateString('sv-SE');
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     const profile = { data: { get: (key) => key === 'pinMapUri' ? pinMapUri : undefined } };
-    const pinMap = { loro: { getMap: () => ({ toJSON: () => Object.fromEntries([[pinnedEditable, today], [pinnedReadOnly, today], [completedOverdue, yesterday.toLocaleDateString('sv-SE')]].map(([n, datetime]) => [n.id, { pins: [{ type: 'plain', datetime }] }])) }) } };
+    const pinMap = { loro: { getMap: () => ({ toJSON: () => Object.fromEntries([[pinnedEditable, today], [pinnedReadOnly, today], [pinnedInherited, today], [completedOverdue, yesterday.toLocaleDateString('sv-SE')]].map(([n, datetime]) => [n.id, { pins: [{ type: 'plain', datetime }] }])) }) } };
     const watched = { id: id(), title: 'Contract renewal', createdBy: ME, assignedTo: [COLLEAGUE], state: { type: 'closed', enteredAt: ago(0.1 * H), changedBy: COLLEAGUE } };
     const kept = { id: id(), title: 'Mine to do', createdBy: ME, assignedTo: [ME], state: { type: 'open' } }; // assigned to you: not watched
     const MCP_CHAT = 'tana:chat:' + ulid(), AI_CHAT = 'tana:chat:' + ulid();
@@ -3086,7 +3112,7 @@ async function main() {
             if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Rob Jansen', userProfile: {} }] };
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
             if ((p.nodeTypes || []).includes('chat')) return { nodes: [agentChat] };
-            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, completedOverdue, byAgent, doneThenEdited].filter((n) => p.nodeIds.includes(n.id)) };
+            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, pinnedInherited, completedOverdue, byAgent, doneThenEdited].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
             if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [...(soonToo ? [soon] : []), going, meeting, summed, allDay] }; }
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
@@ -3106,7 +3132,7 @@ async function main() {
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
     const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
     assert.deepEqual(await read(), [
-      ["Today's Tasks", null, 'todayTasks', 'new', false, ['Pinned and editable', 'Pinned but read-only']],
+      ["Today's Tasks", null, 'todayTasks', 'new', false, ['Pinned and editable', 'Pinned but read-only', 'Pinned, access inherited']],
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['An AI agent completed Order more canisters', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
@@ -3165,11 +3191,18 @@ async function main() {
     assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
     assert.equal(rows[1].timeline.uri, watched.id, 'and each row opens the node it is about');
     assert.equal(rows[4].timeline.uri, null, 'except a group, whose tasks open themselves');
-    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, false]], 'timeline task text is read-only, and only tasks with confirmed edit access get a checkbox');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, false], [false, true]], 'timeline task text is read-only, and a box ticks unless the task is known read-only: unknown access ticks, as everywhere else (#545)');
     assert.deepEqual(JSON.parse(JSON.stringify(rows[4].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'inbox task words are read-only there and their boxes tick');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
+    { // #536: an edit a banner announced shows though Tana wrote no summary of it; one a summary from then covers shows once
+      const lone = id();
+      backend.rememberEdit(lone, 'Quiet change'); backend.rememberEdit(watched.id, 'Contract renewal');
+      const texts = (await read()).map((r) => r[0]);
+      assert.equal(texts.filter((t) => t === 'Someone edited Quiet change').length, 1, 'the announced edit is on the Timeline, by Someone, as nobody here knows who');
+      assert.equal(texts.filter((t) => t.endsWith('edited Contract renewal')).length, next.filter((r) => r[0].endsWith('edited Contract renewal')).length, 'and one Tana has summarised from around then is not told twice');
+    }
     // Today's meetings still to come: a block of their own under Today's Tasks, earliest first, each saying when and who
     soonToo = true;
     const timersBefore = backend.timers.length;
@@ -5357,12 +5390,13 @@ async function main() {
     {
       pinDoc.on('change', () => backend.onChange(pinId));
       const metaEvents = () => events.filter(([channel, id]) => channel === 'outline:changed' && id === pinId).map((e) => e[2] && e[2].meta);
+      const fieldEvents = () => events.filter(([channel, id]) => channel === 'outline:changed' && id === pinId).map((e) => e[2] && e[2].fields);
       events.length = 0;
       setTitle(pinDoc, 'first title'); // the first change after boot has no signature to compare with: conservative
       assert.deepEqual(metaEvents(), [true], 'an unseen document invalidates once');
       events.length = 0;
       setTitle(pinDoc, 'second title');
-      assert.deepEqual(metaEvents(), [false], 'a title edit leaves the metadata alone');
+      assert.deepEqual([metaEvents(), fieldEvents()], [[false], [false]], 'a title edit leaves the metadata alone, and is no field change');
       events.length = 0;
       pinDoc.transact((l) => { l.getMap('data').set('stateType', 'open'); }); // a task now, so assignees can change
       events.length = 0;
@@ -5373,7 +5407,7 @@ async function main() {
       assert.deepEqual(metaEvents(), [true], 'so does a type change: the page\'s fields come with the sidebar it refreshes');
       events.length = 0;
       require('../sdk/fields').setFieldText(pinDoc, 'tana:type:01j0typ000000000000000000?attribute=n5e1hgxz', 'Stan Engbers');
-      assert.deepEqual(metaEvents(), [true], 'and so does a value written into one of those fields, or a zoomed page shows it empty until something else refreshes it');
+      assert.deepEqual([metaEvents(), fieldEvents()], [[false], [true]], 'a value written into one of those fields is a field change, not metadata: the page re-reads its fields (or shows the value empty until something else refreshes it) and keeps its assignees and audience (Visible to vanished while a field was edited)');
       pinDoc.removeAllListeners('change');
     }
     const remotePin = new Document(pinId, {peerId:'889'});

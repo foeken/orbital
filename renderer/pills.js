@@ -155,6 +155,7 @@ function pillCommandRows() {
     const now = needsCleanup(shownDocs());
     rows.push({ id: 'cleanup', group: 'View options', icon: 'cleanup', label: 'Clean up', hint: now ? '' : 'Nothing to clean up', disabled: !now, run: cleanupNow });
   }
+  if (defs.length && tana.createSearch && !onSearchPage() && !onTypePage()) rows.push({ id: 'saveSearch', group: 'View options', icon: 'search', label: 'Save as new search', hint: 'What the pills show', run: saveAsSearch }); // where the pill is (saveSearchPill)
   if (listPage()) rows.push({ id: 'tableView', group: 'View options', icon: tableView() ? 'outline' : 'table', label: tableLabel(), run: () => setTableView(!tableView()) });
   if (tableView() && tableKeys().length) rows.push({ id: 'columnWidths', group: 'View options', icon: 'table', label: 'Column widths …', keepOpen: true, run: openColumnWidths }); // the grips' keyboard way (renderer/views.js)
   return rows;
@@ -308,13 +309,15 @@ function savePill() {
 // becomes somewhere to go. The renderer sends only the view id — the filter→query vocabulary lives in sdk/query,
 // which classic renderer scripts cannot require, and main already holds the canonical filter for every view.
 // The new search is opened straight away: saving something you cannot see saved reads as nothing happening.
+// The pill, Cmd+K's row and the tab's right-click menu (shell.js) are three ways of pressing it (#538).
+const saveAsSearch = () => run(async () => {
+  const node = await tana.createSearch(view);
+  if (!node || !node.id) return;
+  addSearch(node); // the Cmd+K Searches group lists it straight away (#141)
+  goTo(node.id);
+});
 function saveSearchPill() {
-  return actionPill('savesearch', 'saveSearch', 'Keep this query as a saved search', 'Save as search', () => run(async () => {
-    const node = await tana.createSearch(view);
-    if (!node || !node.id) return;
-    addSearch(node); // the Cmd+K Searches group lists it straight away (#141)
-    goTo(node.id);
-  }));
+  return actionPill('savesearch', 'saveSearch', 'Keep this query as a saved search', 'Save as search', saveAsSearch);
 }
 // Clean up: let go of the rows a status change kept in place and draw the view the way it is now. Like the last pill,
 // Right moves on to the first row.

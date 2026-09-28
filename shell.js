@@ -9,6 +9,8 @@ const bridge = window.shell || { state: () => ({ doc: null }), onCommand() {}, l
 const start = bridge.state();
 let theme = start.theme === 'dark' ? 'dark' : 'light', covering = null, last = '', many = null;
 const renamable = new Set(); // the pages whose title can be typed in (renderer/render.js tellTitle): Rename on their tab
+const linkable = new Set(); // the pages showing a node of Tana's: Copy link on their tab (#542)
+const saveable = new Set(); // the views whose pills can be kept as a saved search (the Library): Save as new search on their tab (#538)
 const tabIcons = new Map(); // page id -> the glyph its page told (renderer/render.js tellTitle), our own markup
 // the header buttons drawn per page (drawNav below), and with one page the window header's slot for them; up here
 // because sync() runs at load and clears the slot when the page count crosses one
@@ -28,7 +30,12 @@ const tokens = () => theme === 'dark'
 // a right click on it opens the panel menu, led by Rename where the page's title can be typed in (issue #441).
 // Content keeps its layout down to 280 x 200 and scales below that, which is what zooming out shows.
 const types = (tabs) => ({ page: { title: 'Orbital', tabbar: tabs ? 'always' : 'never', minSize: { width: 280, height: 200 },
-  menu: (view) => (renamable.has(view.id) ? [{ id: 'rename', label: 'Rename', run: () => rename(view.id) }, 'separator'] : []),
+  menu: (view) => {
+    const items = [...(renamable.has(view.id) ? [{ id: 'rename', label: 'Rename', run: () => rename(view.id) }] : []),
+      ...(linkable.has(view.id) ? [{ id: 'copyLink', label: 'Copy link', run: () => { focusPage(view.id); windowOf(frameOf(view.id))?.postMessage({ orbital: 'copyLink' }, '*'); } }] : []), // focused first: the clipboard wants the page in front
+      ...(saveable.has(view.id) ? [{ id: 'saveSearch', label: 'Save as new search', run: () => { focusPage(view.id); windowOf(frameOf(view.id))?.postMessage({ orbital: 'action', id: 'saveSearch' }, '*'); } }] : [])]; // Cmd+K's row, in that page
+    return items.length ? [...items, 'separator'] : [];
+  },
   iframe: (view) => ({ src: 'index.html?side=' + encodeURIComponent(view.params.side) + (view.params.links ? '&links=1' : ''), title: 'Orbital' }) } });
 
 const ws = createWorkspace(document.getElementById('workspace'), {
@@ -56,6 +63,11 @@ const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().lengt
 // document it is on (its row too, so the Graph pane opens it without asking main), and a row opened there opens in it.
 const linksView = () => pages().find((v) => v.params.links)?.id;
 const docs = new Map(); // page view id -> { docId, doc } it last told
+// Where each page is, and every page told where the others are, so none opens a place another pane shows (renderer/edit.js
+// inOtherPane, #533). A key is a document, a node in one, or a view; the Library is none, as any number may show it.
+const places = new Map(); // page view id -> place key
+const placesFor = (id) => Object.fromEntries([...places].filter(([p, key]) => p !== id && key && others().includes(p)).map(([p, key]) => [key, p]));
+const tellPlaces = () => { for (const id of others()) windowOf(frameOf(id))?.postMessage({ orbital: 'panes', places: placesFor(id) }, '*'); };
 let followed = null;
 const others = () => pages().filter((v) => !v.params.links).map((v) => v.id); // the pages a Graph pane can follow
 // The page followed: the last to take the keys, else the one in front, else the first. A restored window may open with
@@ -119,7 +131,7 @@ function guard() {
 const drawTabIcons = () => { for (const s of ws.surfaces()) { const g = tabIcons.get(s.view.id) || ''; if (s.icon.dataset.glyph !== g) { s.icon.dataset.glyph = g; s.icon.innerHTML = g; } } };
 ws.on('surfaces', drawTabIcons);
 ws.on('close', (view) => {
-  guarded.delete(view.id); renamable.delete(view.id); tabIcons.delete(view.id); docs.delete(view.id);
+  guarded.delete(view.id); renamable.delete(view.id); saveable.delete(view.id); linkable.delete(view.id); tabIcons.delete(view.id); docs.delete(view.id); places.delete(view.id);
   if (followed === view.id) { followed = null; follow(); }
   requestAnimationFrame(() => { if (document.activeElement?.tagName !== 'IFRAME') windowOf(frameOf(ws.getSnapshot().focusedView))?.focus(); });
 });
@@ -128,7 +140,7 @@ ws.on('close', (view) => {
 function sync() {
   const tabs = pages().length > 1;
   if (tabs !== many) { many = tabs; ws.update({ types: types(tabs), navigation: tabs ? 'free' : false }); document.body.classList.toggle('many', tabs); headNav.replaceChildren(); navDrawn.delete(HEAD); } // the pages send their buttons again on the layout below, to the tab bars or the header
-  guard(); mark(); place(); drawLinks(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a move shifts a covering page's pane
+  guard(); mark(); place(); drawLinks(); frames().forEach((f) => tell(windowOf(f))); tellPlaces(); // place: a divider or a move shifts a covering page's pane
 }
 ws.on('change', (doc) => {
   sync();
@@ -180,10 +192,11 @@ function focusPage(viewId) {
   ws.focus(viewId);
   windowOf(frameOf(viewId))?.focus();
 }
-// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js); Graph runs
+// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js); the house
+// runs Cmd+K's Work View row (renderer/palette.js, Saved views), so the window becomes the Work View; Graph runs
 // its Cmd+K Show/Hide graph row there (renderer/palette.js railToggle), so it opens beside that page, and the corner's
 // Create new runs Cmd+K Create new … there.
-for (const [id, icon, msg] of [['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['headLinks', 'graph', { orbital: 'action', id: 'railToggle' }], ['create', 'textPlus', { orbital: 'action', id: 'create' }]]) {
+for (const [id, icon, msg] of [['headHome', 'home', { orbital: 'action', id: 'workView' }], ['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['headLinks', 'graph', { orbital: 'action', id: 'railToggle' }], ['create', 'textPlus', { orbital: 'action', id: 'create' }]]) {
   const button = document.getElementById(id);
   if (icon) button.insertAdjacentHTML('afterbegin', window.ICONS?.[icon] || ''); // icons.js: our own markup, before a label the button has
   button.onmousedown = (e) => e.preventDefault();
@@ -318,12 +331,16 @@ addEventListener('message', (e) => {
     if (!id) return;
     ws.setTitle(id, String(e.data.title || '').trim() || 'Orbital');
     if (e.data.renamable === true) renamable.add(id); else renamable.delete(id);
+    if (e.data.saveSearch === true) saveable.add(id); else saveable.delete(id);
+    if (e.data.link === true) linkable.add(id); else linkable.delete(id);
     tabIcons.set(id, typeof e.data.icon === 'string' ? e.data.icon : ''); drawTabIcons();
   }
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
   else if (what === 'reload') reloadAll(); // Cmd+K Reload: the window, every page in it
   else if (what === 'navbtns') drawNav(sourceOf(e.source), String(e.data.html || ''), e.data.on === true);
   else if (what === 'doc') { const id = sourceOf(e.source); if (!id) return; docs.set(id, { docId: typeof e.data.docId === 'string' ? e.data.docId : null, doc: e.data.doc || null }); if (id === following()) follow(); }
+  else if (what === 'place') { const id = sourceOf(e.source); if (!id) return; places.set(id, typeof e.data.key === 'string' ? e.data.key : null); tellPlaces(); }
+  else if (what === 'focusPane') { if (others().includes(e.data.id)) focusPage(e.data.id); } // that place is on screen there already (#533)
   else if (what === 'focus') { const id = sourceOf(e.source); if (id && id !== linksView() && id !== followed) { followed = id; follow(); } }
   else if (what === 'open') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); if (typeof e.data.id === 'string' || typeof e.data.view === 'string') win.postMessage({ orbital: 'goto', id: e.data.id, view: e.data.view }, '*'); } // from the Graph pane
   else if (what === 'links') { const id = linksView(); if (id) ws.close(id); } // Cmd+K Hide graph

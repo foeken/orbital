@@ -175,6 +175,9 @@ The field filter is part of the filter (`fields`): the Library sends it as `attr
 search stores it as the query's `attributes` and reads it back on load (`searchQueryToFilter`), so Save keeps it and
 changing it marks the search unsaved. Field values only apply while that one type is the whole Type selection
 (`typeFields` in sdk/query.js), and any change of the Type pill clears them.
+In such a saved search, Enter at the end of a row drafts a new row of that type below it (renderer/render.js
+`searchDraft`, issue #537), created with every field the filter pins to one value: a link or a person, or one option.
+A field it leaves open, a choice of several or a date range is left for you.
 
 **Outliner or Table.** Every page with pills — a view, a saved search, a type's page — can be drawn as a table: the
 switch at the top right of the header, or ⌘K Switch to table / Switch to outliner (one row, id `tableView`, so a

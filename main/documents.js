@@ -269,7 +269,10 @@ async function customCreation(typeUri) {
     if (!/^tana:space:[0-9a-z]{26}$/.test(type.ownerUri)) throw new Error('Unsupported type scope');
     if (!await access.canWrite(readNode(await document(type.ownerUri)), S.me.userUri, await accessContext())) throw new Error('Type home space write permission is unknown or unavailable');
   }
-  return {kind:appliesTo === 'events' ? 'meeting' : 'doc',entityTypeUri:typeUri,ownerUri:type.ownerUri};
+  // A type with a workflow (data.workflowUri) is one whose documents are tasks: made from Create new … it has to be one,
+  // open and yours, as Quick Add Task makes it. Answering 'doc' for it made a document with the type and no state,
+  // a Project Task that was no task (#534).
+  return {kind:appliesTo === 'events' ? 'meeting' : type.workflowUri ? 'task' : 'doc',entityTypeUri:typeUri,ownerUri:type.ownerUri};
 }
 async function creationOptions() {
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -282,7 +285,7 @@ async function creationOptions() {
     rememberType(n);
     // the chooser shows a type the way its documents render: the type's own hue and its app-local icon
     const look = { hue: hueOf(n) };
-    try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:config.kind === 'meeting' ? 'meeting' : 'doc',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
+    try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:config.kind === 'meeting' ? 'meeting' : config.kind === 'task' ? 'task' : require('./icons').typeIconName(n.id) || 'type',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
     catch(e) { return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:'doc',selectable:false,reason:errText(e)}; }
   }));
   return {options:[...options,...types.sort((a,b)=>a.title.localeCompare(b.title))],complete:result.totalCount !== undefined && result.totalCount === result.nodes.length};
@@ -300,7 +303,7 @@ async function taskTypes() {
     try {
       if (!readNode(await document(t.id)).workflowUri) return null;
       const config = await customCreation(t.id); // a type for meetings, or one in a space this user cannot write, throws
-      return config.kind === 'doc' ? { uri: t.id, title: t.title || '', hue: hueOf(t) } : null;
+      return config.kind === 'task' ? { uri: t.id, title: t.title || '', hue: hueOf(t) } : null;
     } catch { return null; }
   }));
   return types.filter(Boolean).sort((a, b) => a.title.localeCompare(b.title));
@@ -530,7 +533,7 @@ async function createDocument(title, opts = {}) {
   // task — open, assigned to its creator — rather than becoming the type's plain document.
   else if (config.kind === 'task' && opts.typeUri !== undefined) {
     config = await customCreation(opts.typeUri);
-    if (config.kind !== 'doc') throw new Error('That type applies to meetings, not tasks');
+    if (config.kind === 'meeting') throw new Error('That type applies to meetings, not tasks');
     config = {...config, kind:'task'};
   }
   else if (opts.typeUri !== undefined) throw new Error('Custom type requires kind custom');
@@ -835,7 +838,16 @@ async function notifyWatched(id, doc, n, info) {
   if (!S.notify) return;
   if (state) return S.notify(id, n.title || 'Untitled', state);
   S.notify(id, n.title || 'Untitled', 'Edited', 'edit');
+  rememberEdit(id, n.title);
   followSummary(id, n.title).catch(() => {});
+}
+// The edits a banner announced, kept on this machine for the Timeline (main/timeline.js): Tana writes no summary for many
+// of them, or only a week's worth later, and the Timeline had nothing else to show an edit by, so a banner came for a
+// change the Timeline never showed (#536). Only somebody else's edit gets a banner, so each one here is news.
+const EDITS_KEEP_MS = 30 * 864e5, EDITS_MAX = 300;
+function announcedEdits() { const list = db.setting('announcedEdits'); return Array.isArray(list) ? list.filter((e) => e && typeof e.id === 'string' && Number.isFinite(e.at)) : []; }
+function rememberEdit(id, title, at = Date.now()) {
+  db.setSetting('announcedEdits', [...announcedEdits().filter((e) => at - e.at < EDITS_KEEP_MS), { id, title: title || '', at }].slice(-EDITS_MAX));
 }
 // The oplog version each document's last change left. Its first change is the bootstrap, a read; a later one that moved
 // the version is an edit when it was made here, or arrived live from another client, and the row says so until
@@ -884,8 +896,13 @@ function onChange(docId, info) {
     // edit must not cost it the owner-chain and link-sharing lookups, so the event says whether they did.
     const sig = metaSig(n), meta = metaSigs.get(docId) !== sig;
     metaSigs.set(docId, sig);
+    // A field's value is not metadata: announced as one, every saved keystroke in a field threw the page's assignees and
+    // audience away, and Assigned to and Visible to vanished until the caret left the field. It says fields instead,
+    // which re-reads the page's fields and keeps the rest.
+    const fsig = JSON.stringify(n.attributes ?? null), fieldsMoved = fieldSigs.get(docId) !== fsig; // unseen: says so, like meta
+    fieldSigs.set(docId, fsig);
     notifyWatched(docId, doc, n, info).catch(report); // the signature is taken here and now; the audience it may need is not
-    sendChanged(docId, { meta }); // the renderer patches this one row from doc:info; the page that typed it knows it has it
+    sendChanged(docId, { meta, fields: fieldsMoved }); // the renderer patches this one row from doc:info; the page that typed it knows it has it
     if (pinsChanged || restored) send('outline:changed', null);
     if (restored) scheduleRefresh(0);
   } catch (e) {
@@ -898,7 +915,8 @@ function onChange(docId, info) {
 // So are the values in them: a field written anywhere else — "Discuss with …", another machine, Tana itself —
 // changes what a zoomed page shows, and without this the page kept the values it opened with until something else
 // refreshed it. The page's own field editor already shows what it just typed, so the extra read costs it nothing.
-const metaSig = (n) => JSON.stringify([n.assignedToUris, n.restricted, n.participants, n.entityTypeUri, n.attributes]);
+const metaSig = (n) => JSON.stringify([n.assignedToUris, n.restricted, n.participants, n.entityTypeUri]);
+const fieldSigs = new Map(); // docId -> its field values as last announced (onChange: fields, apart from meta)
 
 // A field's value is an outline of its own, addressed as "<document uri>|<type uri>?attribute=<key>". Everything
 // that edits an outline — every block: handler, undo, the children read — takes one of these without knowing it:
@@ -984,11 +1002,11 @@ function historyIds() {
   for (const step of [...undoStack, ...redoStack]) for (const id of Array.isArray(step) ? step : [step && typeof step === 'object' ? step.id : step]) ids.add(id);
   return ids;
 }
-async function mut(id, fn, accessMutation = false) {
+async function mut(id, fn, accessMutation = false, title = false) {
   if (S.historyBusy) throw new Error('History operation is still running');
   // A write into a field needs its value to exist; a read of the same id must not make one.
   const result = await op(id, (doc) => {
-    if (!accessMutation && editable(readNode(doc), S.me && S.me.userUri) === false) throw new Error('This node is read-only in the outliner');
+    if (!accessMutation && editable(readNode(doc), S.me && S.me.userUri, title) === false) throw new Error('This node is read-only in the outliner');
     return fn(doc);
   }, { create: true });
   // Sharing and moves are gated by an audience disclosure and a preview token; a raw CRDT undo would rewrite
@@ -1180,7 +1198,7 @@ const ipc = {
   'doc:unarchive': (_e, id) => documentAction(id, 'unarchive'),
   'types:archived': () => archivedTypes(),
   'deleted:list': () => db.deletedList(), // local: the graph does not list deleted documents
-  'doc:setTitle': (e, id, title, own) => mut(id, (doc) => typed(e, own, () => { setTitle(doc, title); })),
+  'doc:setTitle': (e, id, title, own) => mut(id, (doc) => typed(e, own, () => { setTitle(doc, title); }), false, true), // true: the title alone, which a chat, agent, skill or type has too (#540)
   'doc:setDone': (_e, id, done) => mut(id, (doc) => {
     setState(doc, done ? 'closed' : 'open', S.me.userUri);
     docStates.set(id, done ? 'closed' : 'open');
@@ -1268,4 +1286,4 @@ const ipc = {
   },
 };
 
-module.exports = { actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

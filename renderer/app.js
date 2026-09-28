@@ -48,7 +48,7 @@ window.addEventListener('blur', loginKeys);
 
 // ---- live updates ----
 // One document changed (info.meta says whether its assignees, audience or sharing moved — main compares them, so a
-// text edit does not throw the row's metadata away); null is a global change: the refresh wrote every open view's
+// text edit does not throw the row's metadata away; info.fields whether a field's value moved, which re-reads the page's fields only); null is a global change: the refresh wrote every open view's
 // fresh rows into the cache before saying so, so roots already carry them and no second query is needed.
 // Clicking a notification opens the node it was about; main has already raised and focused the window.
 if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) openLink(docId); }); // in the Graph pane: in the page it follows (renderer/rail.js)
@@ -81,8 +81,10 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'navclick') navRow.querySelector('#' + CSS.escape(String(e.data.id)))?.click(); // a press on its copy in the tab bar
   else if (e.data?.orbital === 'follow' && LINKS) follow(e.data.docId, e.data.doc); // the Graph pane: the focused pane's document (renderer/rail.js)
   else if (e.data?.orbital === 'goto') { if (typeof e.data.view === 'string') setView(e.data.view); else if (typeof e.data.id === 'string') goTo(e.data.id); } // what the Graph pane opened, opened here
+  else if (e.data?.orbital === 'panes') otherPanes = e.data.places && typeof e.data.places === 'object' ? e.data.places : {}; // where the other panes are (shell.js tellPlaces, #533)
   else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id); // a key pressed in the Graph pane
   else if (e.data?.orbital === 'rename') renameTitle(); // Rename on the tab (shell.js)
+  else if (e.data?.orbital === 'copyLink' && zoom) run(async () => copyText(await tana.nodeLink(zoom.docId), 'Link copied')); // Copy link on the tab: the page's node, whatever row has the caret (#542)
   else if (e.data?.orbital === 'processImage') processImage(e.data.file); // an image dropped on Create new (shell.js)
   else if (e.data?.orbital === 'compose' && typeof e.data.docId === 'string' && Array.isArray(e.data.segs) && e.data.doc) composeInto(e.data.docId, e.data.segs, e.data.doc); // ⌘K Add to chat, from this pane or another (renderer/chat.js)
 });
@@ -116,7 +118,8 @@ tana.onChanged((docId, info) => {
       if (row) holdRow(row);
     }
     // the watch state goes with it: its default follows the assignees, and another page's watch choice arrives this way
-    if (!info || info.meta !== false) { taskMetaById.delete(docId); notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
+    // and the metadata is read again with the old answer kept on screen until the new one lands (loadTaskMeta again)
+    if (!info || info.meta !== false) { notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); if (taskMetaById.has(docId)) loadTaskMeta(docId, true); }
     if (meetingInfos.has(docId)) meetingInfoOf(docId, true); // a meeting's attendees, read again for its page's field
     // and a node linked to an agent task asks what its task is doing: another page may have relinked it to another task
     if (info && info.meta && (agentStates.has(docId) || agentTaskHosts.has(docId))) loadAgentStates();
@@ -126,7 +129,7 @@ tana.onChanged((docId, info) => {
     // asks for it again, and that read keeps the old payload on screen until the new one lands. What this gives up
     // is the Changes section noticing your own latest edit: it says what it said when the page opened. Pins refresh
     // it themselves, because they do change a section.
-    if (!info || info.meta !== false || isTypeId(docId)) refreshRelated(docId); // a type's own change can be its fields, which its page's pills and columns are
+    if (!info || info.meta !== false || info.fields || isTypeId(docId)) refreshRelated(docId); // fields: a field's value moved (main keeps that apart from meta); a type's own change can be its fields, which its page's pills and columns are
     // What this page just typed (main.js typed): the words are already on screen, so the page is not read again and not
     // rebuilt under the caret on every save. The document's copies elsewhere — a list row, a search result — still take
     // the new title and time, drawn when the caret leaves. Another page, another pane of this window included, never
