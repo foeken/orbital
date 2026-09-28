@@ -88,16 +88,17 @@ body.pressing .trellis [data-trellis-part="content"] { pointer-events: none; } /
 /* Create new (shell.html #create): a round button floating in the window's corner, the words sliding out beside its
    glyph on hover. It floats, so it gets the chat composer's softness; under the panes while a page's palette covers the
    window (its scrim goes over it), and gone while signed out. */
-.create { position: fixed; right: 20px; bottom: 20px; z-index: 2; display: flex; align-items: center; height: 40px; padding: 0 12px; border: 0; border-radius: 20px;
+.create { position: fixed; right: 20px; bottom: 20px; z-index: 2; display: flex; align-items: center; height: 40px; padding: 0 12px; border: 0; border-radius: 20px; interpolate-size: allow-keywords; /* the label opens to its own width (auto), so the slide runs its whole length */
   background: #fff; color: #6b6b6b; font: 500 13px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; cursor: pointer;
   box-shadow: 0 6px 24px rgba(0, 0, 0, .1), 0 1px 3px rgba(0, 0, 0, .06), 0 0 0 1px rgba(0, 0, 0, .06); }
 .create svg { display: block; flex: none; width: 16px; height: 16px; }
-.create span { max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; color: #333; }
-.create:hover span { max-width: 120px; margin-left: 8px; opacity: 1; }
+.create span { width: 0; overflow: hidden; white-space: nowrap; opacity: 0; color: #333; }
+.create:hover span { width: auto; margin-left: 8px; opacity: 1; }
 .create:active { transform: scale(.96); }
 @media (prefers-reduced-motion: no-preference) {
   .create { transition: transform 160ms cubic-bezier(.2, .8, .2, 1); }
-  .create span { transition: max-width 240ms cubic-bezier(.2, .8, .2, 1), margin 240ms cubic-bezier(.2, .8, .2, 1), opacity 240ms cubic-bezier(.2, .8, .2, 1); }
+  .create span { transition: width 420ms cubic-bezier(.3, 0, .2, 1), margin 420ms cubic-bezier(.3, 0, .2, 1), opacity 200ms cubic-bezier(.3, 0, .2, 1); }
+  .create:hover span { transition-duration: 420ms, 420ms, 300ms; transition-delay: 0s, 0s, 120ms; } /* the words fade in once there is room for them */
 }
 [data-theme="dark"] .create { background: #242729; color: #a6a6a6; box-shadow: 0 6px 24px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .create span { color: #ddd; }
