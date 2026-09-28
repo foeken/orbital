@@ -503,7 +503,7 @@ function openAboutPalette() {
   const link = (icon, label, hint, url) => ({ group: 'Links', icon, label, hint, run: () => run(() => tana.openExternal(url)) });
   const notes = ['Change it and run your own version, yourself or across your company',
     'Don\'t pass it on or claim it as yours: no public forks, downloads or hosting',
-    'Helping others set it up is fine; changing its code for them needs my OK'].map((label) => ({ group: 'How you can use it', label, disabled: true, note: true }));
+    'Paid help setting it up is fine; paid changes to its code need my OK'].map((label) => ({ group: 'How you can use it', label, disabled: true, note: true }));
   const links = [link('globe', 'Website', 'orbital.md', 'https://orbital.md'), link('license', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE')];
   openPage('about', 'Orbital: a keyboard-first outliner over your Tana', { back: BACK_TO_COMMANDS, rows: (q) => [...(q ? links.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : links), ...notes] });
 }
