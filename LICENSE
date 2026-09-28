@@ -22,12 +22,18 @@ Copyright (c) 2026 Andre Foeken. All rights reserved, except as granted below.
    example as a pull request or a patch. By doing so you allow the copyright
    holder to use, change and distribute those changes under any licence.
 
-4. Other people's code. Third-party components included with or installed by
+4. Doing it for others as a business. Setting up, customising or supporting
+   this software for other organisations as a paid service, for example as a
+   consultant rolling out tailored versions to clients, is not covered by
+   section 1 and needs a commercial licence from the copyright holder. Get in
+   touch through https://orbital.md or GitHub (@foeken).
+
+5. Other people's code. Third-party components included with or installed by
    this software (for example under node_modules) keep their own licences.
 
-5. Ending. If you break these terms, your permission under them ends.
+6. Ending. If you break these terms, your permission under them ends.
 
-6. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+7. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
    EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES

@@ -1,5 +1,7 @@
 # Orbital
 
+**[orbital.md](https://orbital.md)**
+
 A small macOS app for the new Tana (home.tana.inc), rendered the way Tana's own outliner reads: every
 line is a node, top-level rows are documents and their children are the document's content blocks.
 It is not a wrapper around the web app — it talks to Tana's platform sync directly (Connect-RPC plus
@@ -8,6 +10,10 @@ second.
 
 It exists because a keyboard-first outline over your own tasks, meetings and notes is a different
 thing from a browser tab, and because the round trip through a web view makes a list feel slow.
+
+![The Timeline: what others changed in the nodes you watch, day by day](docs/images/timeline.png)
+
+![Cmd+K over the Timeline, in the dark theme](docs/images/palette.png)
 
 ## What it does
 
@@ -186,6 +192,10 @@ no public forks, no download page or site promoting it, no selling it or shippin
 product (open source or commercial) and no hosting it for others. Built something others would want
 too? Send it as a pull request. The actual terms are in
 [LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
+
+Making a business out of it, say as a consultant rolling out tailored versions of Orbital for
+clients? That needs a licence, which usually takes the form of a paid GitHub sponsorship. Get in touch
+first through [orbital.md](https://orbital.md) or [@foeken](https://github.com/foeken).
 
 Does Orbital save you or your team time? You can chip in through
 [GitHub Sponsors](https://github.com/sponsors/foeken). It is entirely optional and keeps the work going.
