@@ -497,14 +497,19 @@ function confirmLogout() {
   ];
   openPage('logout', 'Log out of Tana?', { back: BACK_TO_COMMANDS, rows: (q) => (q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows) });
 }
-// About Orbital: what it is (the field's placeholder), its links first so the first row is one you can run, then the
-// licence in three lines. The same words as the README's License section and LICENSE, public in the releases repo.
+// About Orbital: what it is (the field's placeholder), its links first so the first row is one you can run, the big
+// dependencies with their licences, then Orbital's own licence in three lines (the README's License section and
+// LICENSE, public in the releases repo).
 function openAboutPalette() {
-  const link = (icon, label, hint, url) => ({ group: 'Links', icon, label, hint, run: () => run(() => tana.openExternal(url)) });
+  const link = (group, icon, label, hint, url) => ({ group, icon, label, hint, run: () => run(() => tana.openExternal(url)) });
   const notes = ['Free to use, change, fork and share; charging for your help is fine',
     'Keep the credit: copies and forks say it was made by Andre Foeken',
     'Don\'t sell Orbital itself, changed or repackaged, as your own product'].map((label) => ({ group: 'How you can use it', label, disabled: true, note: true }));
-  const links = [link('globe', 'Website', 'orbital.md', 'https://orbital.md'), link('license', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE')];
+  const links = [link('Links', 'globe', 'Website', 'orbital.md', 'https://orbital.md'),
+    link('Links', 'license', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE'),
+    link('Built with', 'code', 'Trellis', 'Panes · free for non-commercial use', 'https://github.com/DanFessler/trellis/blob/main/LICENSE.md'),
+    link('Built with', 'code', 'Electron', 'The app · MIT', 'https://github.com/electron/electron/blob/main/LICENSE'),
+    link('Built with', 'code', 'Loro', 'Live sync · MIT', 'https://github.com/loro-dev/loro/blob/main/LICENSE')];
   openPage('about', 'Orbital: a keyboard-first outliner over your Tana', { back: BACK_TO_COMMANDS, rows: (q) => [...(q ? links.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : links), ...notes] });
 }
 function openPillPalette(id) {

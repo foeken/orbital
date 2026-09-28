@@ -428,8 +428,9 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode, Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
-  key. **Help**: Help, and About Orbital: a page with the website and the licence as links, then the licence's three
-  main points as notes (renderer/palette.js `openAboutPalette`, the same words as the README's License section).
+  key. **Help**: Help, and About Orbital: a page with the website and the licence as links, the big dependencies
+  (Trellis, Electron, Loro) each opening its licence, then the licence's main points as notes (renderer/palette.js
+  `openAboutPalette`, the same words as the README's License section).
 
 **Matching** (`fuzzyMatch`): tiers, the way Raycast ranks a title — 0 the label starts with the query ("in" → Inbox),
 1 the first words' initials ("mtl" → Move to Library), 2 the query starts a later word ("in" → Zoom in), 3
