@@ -3201,6 +3201,13 @@ async function main() {
     recordingStatus('processing'); for (const fn of syncHeard) fn(CALL);
     assert.equal(pageSends(), 4, 'the recording stopping re-reads it again');
     assert.equal(await recordingOf(), false, 'and the mark goes');
+    // a Tana Meet call is transcribed, not video-recorded: somebody in it and on the record is what lights it
+    callDoc.transact((l) => { const s = l.getMap('sessions').setContainer('s1', new LoroMap()); s.set('userUri', ME); s.set('joinedAt', 1); }); for (const fn of syncHeard) fn(CALL);
+    assert.equal(await recordingOf(), true, 'a call somebody is in, being transcribed, marks its meeting');
+    callDoc.transact((l) => l.getMap('data').set('transcriptionPaused', true)); for (const fn of syncHeard) fn(CALL);
+    assert.equal(await recordingOf(), false, 'off the record, it does not');
+    callDoc.transact((l) => { l.getMap('data').set('transcriptionPaused', false); l.getMap('sessions').delete('s1'); }); for (const fn of syncHeard) fn(CALL);
+    assert.equal(await recordingOf(), false, 'nor once everyone has left');
     assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ', person: true }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', content: true, marks: { strike: true } }],
       'the person plain, the verb bold, and a finished node struck through; demo mode masks the name and title and keeps the verb');
     const rows = await backend.timelinePage.rows();
