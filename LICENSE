@@ -1,0 +1,31 @@
+Orbital License
+
+Copyright (c) 2026 Andre Foeken. All rights reserved, except as granted below.
+
+1. What you may do. You may use, copy and modify this software for your own
+   use, and build and run your modified versions, as long as you have lawfully
+   received a copy of it.
+
+2. What you may not do. You may not distribute, publish, sublicense, sell or
+   otherwise make available to anyone else this software, a modified version of
+   it, or a substantial part of either, whether for money or for free. That
+   includes public forks, releasing it as or inside another open source or
+   commercial project, and offering it to others as a hosted service. Each of
+   these needs the copyright holder's written permission.
+
+3. Contributions. You may send your changes to the copyright holder, for
+   example as a pull request or a patch. By doing so you allow the copyright
+   holder to use, change and distribute those changes under any licence.
+
+4. Other people's code. Third-party components included with or installed by
+   this software (for example under node_modules) keep their own licences.
+
+5. Ending. If you break these terms, your permission under them ends.
+
+6. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+   EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+   OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
