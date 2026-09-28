@@ -13,22 +13,26 @@ Copyright (c) 2026 Andre Foeken. All rights reserved, except as granted below.
    publish, sublicense, sell or otherwise make available to anyone else this
    software, a modified version of it, or a substantial part of either, whether
    for money or for free. That includes public forks, releasing it as or inside
-   another open source or commercial product, offering it for download or
-   promoting it as a product (on a website, in an app store or anywhere else),
-   and offering it to others as a hosted service. Each of these needs the
-   copyright holder's written permission.
+   another open source or commercial product, offering it for download yourself
+   (on a website, in an app store or anywhere else), and offering it to others
+   as a hosted service. Each of these needs the copyright holder's written
+   permission. Pointing people to the official releases (https://orbital.md
+   and https://github.com/foeken/orbital-releases) is always fine.
 
 3. Contributions. You may send your changes to the copyright holder, for
    example as a pull request or a patch. By doing so you allow the copyright
    holder to use, change and distribute those changes under any licence.
 
-4. No money from it, no tailoring for others. You may not make money from this
+4. Money, and work for others. You may not make money from this
    software itself, by selling it or a modified version of it or by charging
    for access to it. Helping others install, set up or use an unchanged copy
    that they got from the official releases is fine, paid or not. Changing
    the code for a person or organisation outside your own, to tailor it to
    their needs, is not, whether you charge for it or not. Using it for your own
    work, or for your organisation's, is not making money from it.
+   Neither is talking about it: promoting, reviewing, recommending, demoing or
+   teaching Orbital is fine, paid, sponsored or not, as long as you do not
+   present it as yours (section 5).
 
 5. Credit. Keep the copyright notice and this licence in every copy. Do not
    remove or change who made this software, and do not present it, a modified

@@ -187,16 +187,18 @@ current bundle and diffed against `sdk/proto/descriptors.js`; the how is in
 
 Make it yours. You are welcome to change Orbital however you like and run your own version of it:
 new keys, a different look, features only you need. That goes for a company too, which can roll its
-own version out to everyone who works there. What you can't do is offer it to the outside world, so
-no public forks, no download page or site promoting it, no selling it or shipping it inside another
-product (open source or commercial) and no hosting it for others. Built something others would want
+own version out to everyone who works there. What you can't do is hand it out yourself, so no public
+forks, no download page of your own, no selling it or shipping it inside another product (open source
+or commercial) and no hosting it for others. Built something others would want
 too? Send it as a pull request. The actual terms are in
 [LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
 
 A few more things. Don't make money from Orbital itself, and don't change its code to tailor it for
 someone else, say as a consultant rolling out customised versions for clients. Helping people install
-and set up Orbital as it is? Go ahead, paid or not. And don't pass it off as your own: keep the credit
-and the licence in every copy. Using it for your own work is fine, of course.
+and set up Orbital as it is? Go ahead, paid or not. Writing about it, making videos, reviewing or
+promoting it, sponsored or not? Please do, and point people to the official releases. Just don't pass
+it off as your own: keep the credit and the licence in every copy. Using it for your own work is fine,
+of course.
 Want to do something the licence doesn't allow? Just ask through [orbital.md](https://orbital.md) or
 [@foeken](https://github.com/foeken). A business licence usually takes the form of a paid GitHub sponsorship.
 
