@@ -429,8 +429,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode, Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
   key. **Help**: Help, and About Orbital: a page with the website and the licence as links, the big dependencies
-  (Trellis, Electron, Loro) each opening its licence, then the licence's main points as notes (renderer/palette.js
-  `openAboutPalette`, the same words as the README's License section).
+  (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
+  not affiliated with Tana (renderer/palette.js `openAboutPalette`, the same words as the README's License section).
 
 **Matching** (`fuzzyMatch`): tiers, the way Raycast ranks a title — 0 the label starts with the query ("in" → Inbox),
 1 the first words' initials ("mtl" → Move to Library), 2 the query starts a later word ("in" → Zoom in), 3

@@ -504,9 +504,10 @@ function openAboutPalette() {
   const link = (group, icon, label, hint, url) => ({ group, icon, label, hint, run: () => run(() => tana.openExternal(url)) });
   const notes = ['Free to use, change, fork and share; charging for your help is fine',
     'Keep the credit: copies and forks say it was made by Andre Foeken',
-    'Don\'t sell Orbital itself, changed or repackaged, as your own product'].map((label) => ({ group: 'How you can use it', label, disabled: true, note: true }));
-  const links = [link('Links', 'globe', 'Website', 'orbital.md', 'https://orbital.md'),
-    link('Links', 'license', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE'),
+    'Don\'t sell Orbital itself, changed or repackaged, as your own product',
+    'Tana and its trademarks are Tana\'s own; Orbital is not affiliated with Tana'].map((label) => ({ group: 'Good to know', label, disabled: true, note: true }));
+  const links = [link('', 'globe', 'Website', 'orbital.md', 'https://orbital.md'), // no heading: the two rows say what they are, and the page fits
+    link('', 'license', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE'),
     link('Built with', 'code', 'Trellis', 'Panes · free for non-commercial use', 'https://github.com/DanFessler/trellis/blob/main/LICENSE.md'),
     link('Built with', 'code', 'Electron', 'The app · MIT', 'https://github.com/electron/electron/blob/main/LICENSE'),
     link('Built with', 'code', 'Loro', 'Live sync · MIT', 'https://github.com/loro-dev/loro/blob/main/LICENSE')];

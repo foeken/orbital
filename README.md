@@ -195,4 +195,7 @@ want? Send it as a pull request. Two things I ask:
 Want to do something else? Just ask through [orbital.md](https://orbital.md). The full terms are in
 [LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
 
+Tana and its trademarks belong to Tana. Orbital is an independent project, not affiliated with or
+endorsed by Tana.
+
 If Orbital saves you time, you can chip in through [GitHub Sponsors](https://github.com/sponsors/foeken).
