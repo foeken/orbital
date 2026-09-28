@@ -397,7 +397,7 @@ function paletteRows(q, typed = q) {
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
-  if (tana.openExternal) rows.push({ id: 'about', group: 'Help', icon: 'help', label: 'About Orbital', keepOpen: true, run: openAboutPalette });
+  if (tana.openExternal) rows.push({ id: 'about', group: 'Help', icon: 'info', label: 'About Orbital', keepOpen: true, run: openAboutPalette });
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
@@ -504,7 +504,7 @@ function openAboutPalette() {
   const notes = ['Change it and run your own version, yourself or across your company',
     'Don\'t pass it on or claim it as yours: no public forks, downloads or hosting',
     'Helping others set it up is fine; changing its code for them needs my OK'].map((label) => ({ group: 'How you can use it', label, disabled: true, note: true }));
-  const links = [link('globe', 'Website', 'orbital.md', 'https://orbital.md'), link('doc', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE')];
+  const links = [link('globe', 'Website', 'orbital.md', 'https://orbital.md'), link('license', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE')];
   openPage('about', 'Orbital: a keyboard-first outliner over your Tana', { back: BACK_TO_COMMANDS, rows: (q) => [...(q ? links.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : links), ...notes] });
 }
 function openPillPalette(id) {
