@@ -453,7 +453,7 @@ async function assignToAgent(id, prompt, model, host) {
   const title = open ? readNode(open).title : '';
   const plan = agent.handoff(id, prompt, __dirname, title);
   if (plan.kind === 'create') {
-    // Made here rather than through the public link: this is what gets a blank workspace, the chosen model and the
+    // Made here rather than through the public link: this is what gets the app's own workspace, the chosen model and the
     // id up front, so the badge can stop being pending the moment the task exists and the app opens it directly.
     const threadId = await agent.createTask({ nodeUri: id, prompt: agent.agentPrompt(id, __dirname, title), model, userData: S.userData, host: where });
     agent.setCodexTask(id, threadId, where); // host and id land together, before anything reads either
