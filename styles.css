@@ -550,7 +550,7 @@ html.links .app { display: none; }
    target (renderer/nodes.js onRowBlank). An "added to your Inbox" line opens nothing itself, so it has no .opens; its rows do. */
 .node.tl .line { cursor: default; } /* no caret on the Timeline: a click there never edits */
 .node.opens > .line > .body > * { cursor: pointer; }
-.node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 24px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
+.node.tl.unread > .line::after { content: ''; position: absolute; left: 84px; top: 23px; /* centred between the time and the marker, on the time's middle */ width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .tl-divider::before { border-top-color: #34373a; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }

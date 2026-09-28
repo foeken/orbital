@@ -28,7 +28,7 @@ const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./
 const { announcedEdits, notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 const { openLiveQuery } = require('../sdk/livequery');
-const { callState } = require('../sdk/calls');
+const { callState, callSessions } = require('../sdk/calls');
 
 const PAGE = 'orbital:timeline';
 // Inbox to In Progress is a task being taken on, so it reads as accepted, the way Tana's own box accepts it first
@@ -119,9 +119,11 @@ function watchMeetings(me, since) {
   const opened = live = openLiveQuery(S.client.sync, { types: ['event'], hasParticipantUris: [me], eventStartTimeMin: since, eventStartTimeMax: end.getTime(), orderBy: ['-updatedAt'], limit: 200 },
     { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => { if (live === opened) live = null; }); return h; }, () => { if (live === opened) live = null; return null; }); // refused, now or later: the next read asks again
 }
-// Recording: a meeting under way whose call is recording now gets a pulsing marker (renderer/render.js, styles.css
-// .tl-recording). Tana's own rule (activeRecording in its call schema): an entry in the call's recordings root with
-// status 'recording'. The call is the tana:call: document the meeting owns, and it only exists once somebody joins, so a
+// Recording: a meeting under way whose call is on the record now gets a pulsing marker (renderer/render.js, styles.css
+// .tl-recording): somebody is in the call and it is being transcribed (not paused off the record), or a video recording
+// runs (Tana's activeRecording: an entry in the call's recordings root with status 'recording'). A Tana Meet call is
+// transcribed without a video recording, so the recordings root alone never lit a real meeting (live 2026-09-28: two
+// transcribed calls, 750 and 353 segments, recordings empty). The call is the tana:call: document the meeting owns, and it only exists once somebody joins, so a
 // live query over the calls these meetings own says when one appears; each is kept live, and a recording starting or
 // stopping reads the page again. Set by every read, like the meetings' query; the same meetings keep what is open.
 const recording = new Set(); // event uris whose call records now
@@ -130,7 +132,7 @@ let callQ = null, callKey = null, callClient = null;
 function checkCall(uri) {
   const c = heldCalls.get(uri), doc = c && S.client.sync.getDocument(uri);
   if (!doc) return;
-  const on = callState(doc).recordings.some((r) => r.status === 'recording');
+  const state = callState(doc), on = state.recordings.some((r) => r.status === 'recording') || (callSessions(doc).sessions.length > 0 && !state.offTheRecord);
   if (on === recording.has(c.event)) return;
   if (on) recording.add(c.event); else recording.delete(c.event);
   send('outline:changed', PAGE);

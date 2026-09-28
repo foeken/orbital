@@ -948,10 +948,11 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
     start, earliest first, each with its time and who else is on it ("14:00–15:00 · Jeroen Oostewechel"), opening the
     meeting. A meeting still to come, or under way on the timeline, has the Tana glyph after its title ("Join in
     Tana"), which opens it in Tana (`row.join` through `doc:link`). One timer per read, a second after the next start
-    or end (`startTimer`), re-reads the page. A meeting under way whose call is recording has a blue marker with a
-    blue ring pulsing out of it (`.tl-recording`; the ring stays still under reduced motion): Tana's own rule, an entry in the call's
-    `recordings` with status `recording`, read from the `tana:call:` documents those meetings own, which a live query
-    finds and main keeps live, so the mark comes and goes as the recording starts and stops (main/timeline.js
+    or end (`startTimer`), re-reads the page. A meeting under way whose call is on the record has a blue marker with a
+    blue ring pulsing out of it (`.tl-recording`; the ring stays still under reduced motion): somebody is in the call and it
+    is transcribed (`data.transcriptionPaused` not set), or a video recording runs (Tana's activeRecording, an entry in the call's
+    `recordings` with status `recording`; a Tana Meet call is transcribed without one), read from the `tana:call:` documents those meetings own, which a live query
+    finds and main keeps live, so the mark comes and goes as people join and leave and the call goes on or off the record (main/timeline.js
     `watchCalls`). A rule separates these blocks from the history (16px above, 8px below).
   - **History**, newest first in day sections (Today, Yesterday, the date): the time in a column (24-hour), a rail, a
     20px marker per entry (a filled green circle with a white check for finished work, a grey pen for an edit, grey
