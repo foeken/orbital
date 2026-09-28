@@ -720,8 +720,9 @@ function composeAdd(segs) {
   const empty = !composerText.textContent.trim() && !composerText.querySelector('.mention');
   const sel = getSelection(), keep = !empty && beforeCaret() ? sel.getRangeAt(0).cloneRange() : null; // a live range: it moves along as they go in before it
   const last = segs.at(-1);
-  // the message's own words start on a line of their own; not the last segment, or renderSegs adds the empty line a caret needs at the end
-  if (!empty && !('text' in last && /\s$/.test(last.text))) segs = [...segs, { text: '\n' }, { text: '' }];
+  // the message's own words start on a line of their own, in place of the space a closing chip gets to type on from;
+  // the newline is not the last segment, or renderSegs adds the empty line a caret needs at the end
+  if (!empty) segs = [...('text' in last && !last.text.trim() ? segs.slice(0, -1) : segs), { text: '\n' }, { text: '' }];
   const start = document.createRange(); start.setStart(composerText, 0);
   composerInsert(segs, empty ? null : start);
   if (keep) { sel.removeAllRanges(); sel.addRange(keep); }
