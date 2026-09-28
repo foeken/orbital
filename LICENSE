@@ -22,12 +22,13 @@ Copyright (c) 2026 Andre Foeken. All rights reserved, except as granted below.
    example as a pull request or a patch. By doing so you allow the copyright
    holder to use, change and distribute those changes under any licence.
 
-4. No money from it. You may not make money from this software itself: by
-   selling it or a modified version of it, by charging for access to it, or by
-   selling services built on it, such as setting up, customising or supporting
-   it for other organisations (a consultant rolling out tailored versions to
-   clients, for example). Using it for your own work, or for your
-   organisation's, is not making money from it.
+4. No money from it, no tailoring for others. You may not make money from this
+   software itself, by selling it or a modified version of it or by charging
+   for access to it. Helping others install, set up or use an unchanged copy
+   that they got from the official releases is fine, paid or not. Changing
+   the code for a person or organisation outside your own, to tailor it to
+   their needs, is not, whether you charge for it or not. Using it for your own
+   work, or for your organisation's, is not making money from it.
 
 5. Credit. Keep the copyright notice and this licence in every copy. Do not
    remove or change who made this software, and do not present it, a modified
