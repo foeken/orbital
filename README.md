@@ -1,5 +1,7 @@
 # Orbital
 
+**[orbital.md](https://orbital.md)**
+
 A small macOS app for the new Tana (home.tana.inc), rendered the way Tana's own outliner reads: every
 line is a node, top-level rows are documents and their children are the document's content blocks.
 It is not a wrapper around the web app — it talks to Tana's platform sync directly (Connect-RPC plus
@@ -8,6 +10,10 @@ second.
 
 It exists because a keyboard-first outline over your own tasks, meetings and notes is a different
 thing from a browser tab, and because the round trip through a web view makes a list feel slow.
+
+![The Timeline: what others changed in the nodes you watch, day by day](docs/images/timeline.png)
+
+![Cmd+K over the Timeline, in the dark theme](docs/images/palette.png)
 
 ## What it does
 
@@ -176,3 +182,20 @@ This speaks Tana's undocumented `v1alpha1` protocol, reverse-engineered from the
 break with any deploy of theirs. When it does, the protobuf descriptors are re-extracted from the
 current bundle and diffed against `sdk/proto/descriptors.js`; the how is in
 [docs/PLATFORM-PROTOCOL.md](docs/PLATFORM-PROTOCOL.md).
+
+## License
+
+Orbital is free, and you can do pretty much anything with it: use it, change it, fork it publicly,
+share it, and get paid for customising, setting up or explaining it. Built something others would
+want? Send it as a pull request. Two things I ask:
+
+- Keep the credit. Every copy and fork keeps the licence and says Orbital was originally made by me.
+- Don't sell Orbital itself, changed or repackaged, as your own product.
+
+Want to do something else? Just ask through [orbital.md](https://orbital.md). The full terms are in
+[LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
+
+Tana and its trademarks belong to Tana. Orbital is an independent project, not affiliated with or
+endorsed by Tana.
+
+If Orbital saves you time, you can chip in through [GitHub Sponsors](https://github.com/sponsors/foeken).

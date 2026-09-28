@@ -419,7 +419,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **Current node** is the zoomed node or the row under the caret (with a selection, the Selection group counts what
   each row acts on and says "N skipped" for rows it cannot). Its rows follow `NODE_ROW_ORDER` (renderer/palette.js)
   whichever file builds them: the focused field's rows; Zoom in, Expand, Collapse; the task state (Complete/Reopen,
-  Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Discuss with …);
+  Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Discuss with …,
+  Add to chat …);
   a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set colour, Mark as
@@ -440,7 +441,9 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode, Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
-  key. **Help**: Help.
+  key. **Help**: Help, and About Orbital: a page with the website and the licence as links, the big dependencies
+  (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
+  not affiliated with Tana (renderer/palette.js `openAboutPalette`, the same words as the README's License section).
 
 **Matching** (`fuzzyMatch`): tiers, the way Raycast ranks a title — 0 the label starts with the query ("in" → Inbox),
 1 the first words' initials ("mtl" → Move to Library), 2 the query starts a later word ("in" → Zoom in), 3
@@ -946,6 +949,7 @@ Opening a chat puts the caret in it. After a send, three dots stand where the an
 at most); the answer streams in as live changes to the chat, and a message Tana is still writing with no words yet
 shows the dots in its place. A failed send puts the words back. **@Codex** (offered after Tana in "@") asks a Codex task on this Mac instead, and nothing of it reaches Tana: the question shows on your side in a grey bubble where it was asked, "@Codex" in bold, and the answer under it on the other side as a reply, in grey text, with dots until it arrives; each carries the cloud-slash glyph (as a badge on the top-right corner of the question’s bubble, and plain after Codex’s name over the answer) whose tooltip says it is only visible for you, on this device; **Add to message** on Codex’s name line (once the answer is in), Enter on the answer, or Cmd+K **Add Codex’s answer to message**, adds it to the message box to send as your own words (docs/CHATS.md §12). The questions and answers are kept on this Mac, so they are there again after a restart. **By keyboard**: ↑ at the very start of the message box selects the newest message, and ↑↓ with nothing focused go on from the selected message or, with none, select the lowest (↑) or highest (↓) message in view; ↑↓ walk the messages (a focus ring on the bubble, or around a message without one), ↓ past the last or Esc goes back to the box, Enter on a Codex answer adds it to the message box, and ⇧⌘⌫ or Cmd+K **Delete message** deletes the selected message when it is yours: your own message in the chat for everyone, as Tana's Delete message does (`chat:delete`), or a Codex question with its answer from this Mac (`chatAgent:delete`). The selection survives a redraw. With a message selected, Cmd+K opens with that message's own rows under **Message** at the top (Delete message; for a Codex question or answer also Add … answer to message and Open … task), and nothing that acts on the chat document itself (the Current node rows: pins, link, visibility, move, delete, export) is offered, nor does a recorded key for one of them act; with none selected, Add … answer and Open … task act on the latest ask, under Actions. **New chat** (Cmd+K, Actions) makes a chat with
 Tana that is yours alone (`chat:new`) and opens it.
+**Add to chat …** (Cmd+K, `addToChat`, on the row under the caret, the zoomed node or a selection: "Add 3 items to chat …") opens a page with **New chat** and the chats, last changed first, and puts references to them at the start of the picked chat's message: the same ones dragging the rows onto it makes (a document or a reference as a chip, a block's words as text), the message's own words on the line after them and the caret back where it was in them; an empty message just gets them, the caret after. A chat another pane of the window shows is brought into view there (its tab selected) and takes the keys (shell.js `addToChat`); any other chat, and a new one, opens in the pane the row ran in.
 
 When Tana's AI asks questions (`row.chat.questions`, docs/CHATS.md §11), the composer gives way to a question card
 like Codex's (`#chatQuestion`): one question at a time with "‹ 2 of 3 ›", its options numbered with the highlighted one on

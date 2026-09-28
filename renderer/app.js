@@ -84,6 +84,7 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id); // a key pressed in the Graph pane
   else if (e.data?.orbital === 'rename') renameTitle(); // Rename on the tab (shell.js)
   else if (e.data?.orbital === 'processImage') processImage(e.data.file); // an image dropped on Create new (shell.js)
+  else if (e.data?.orbital === 'compose' && typeof e.data.docId === 'string' && Array.isArray(e.data.segs) && e.data.doc) composeInto(e.data.docId, e.data.segs, e.data.doc); // ⌘K Add to chat, from this pane or another (renderer/chat.js)
 });
 titleEl.addEventListener('blur', () => document.documentElement.classList.remove('renaming'));
 // Under a tab bar (html.tabbed) the header buttons are drawn in this page's tab bar, beside its ⋯ (shell.js navbtns),

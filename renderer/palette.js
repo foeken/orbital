@@ -29,7 +29,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets',
   'zoomIn', 'expand', 'collapse',
   'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status',
-  'assign', 'assignTo', 'discussWith',
+  'assign', 'assignTo', 'discussWith', 'addToChat',
   'meetingTime', 'meetingLocation', 'meetingAttendee',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
@@ -399,6 +399,7 @@ function paletteRows(q, typed = q) {
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
+  if (tana.openExternal) rows.push({ id: 'about', group: 'Help', icon: 'info', label: 'About Orbital', keepOpen: true, run: openAboutPalette });
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
@@ -497,6 +498,22 @@ function confirmLogout() {
     { group: 'Log out of Tana?', label: 'Cancel', keepOpen: true, run: BACK_TO_COMMANDS },
   ];
   openPage('logout', 'Log out of Tana?', { back: BACK_TO_COMMANDS, rows: (q) => (q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows) });
+}
+// About Orbital: what it is (the field's placeholder), its links first so the first row is one you can run, the big
+// dependencies with their licences, then Orbital's own licence in three lines (the README's License section and
+// LICENSE, public in the releases repo).
+function openAboutPalette() {
+  const link = (group, icon, label, hint, url) => ({ group, icon, label, hint, run: () => run(() => tana.openExternal(url)) });
+  const notes = ['Free to use, change, fork and share; charging for your help is fine',
+    'Keep the credit: copies and forks say it was made by Andre Foeken',
+    'Don\'t sell Orbital itself, changed or repackaged, as your own product',
+    'Tana and its trademarks are Tana\'s own; Orbital is not affiliated with Tana'].map((label) => ({ group: 'Good to know', label, disabled: true, note: true }));
+  const links = [link('', 'globe', 'Website', 'orbital.md', 'https://orbital.md'), // no heading: the two rows say what they are, and the page fits
+    link('', 'license', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE'),
+    link('Built with', 'code', 'Trellis', 'Panes · free for non-commercial use', 'https://github.com/DanFessler/trellis/blob/main/LICENSE.md'),
+    link('Built with', 'code', 'Electron', 'The app · MIT', 'https://github.com/electron/electron/blob/main/LICENSE'),
+    link('Built with', 'code', 'Loro', 'Live sync · MIT', 'https://github.com/loro-dev/loro/blob/main/LICENSE')];
+  openPage('about', 'Orbital: a keyboard-first outliner over your Tana', { back: BACK_TO_COMMANDS, rows: (q) => [...(q ? links.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : links), ...notes] });
 }
 function openPillPalette(id) {
   pillCtx = id; openPage('pill', 'Choose ' + id, { rows: pillRows, back: BACK_TO_COMMANDS });
@@ -980,7 +997,7 @@ function renderPalette() {
   const els = [];
   palRows.forEach((r, i) => {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
-    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : '') + (r.arrive ? ' arrive' : ''); row.dataset.index = i;
+    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : '') + (r.note ? ' note' : '') + (r.arrive ? ' arrive' : ''); row.dataset.index = i;
     // a row names its glyph, or hands over the markup itself (the "/" menu's block glyphs, the refusal ban)
     const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); if (r.icon) addIcon(icon, r.icon); else icon.innerHTML = r.svg || ''; // r.svg: our own markup (glyphSvg, banSvg)
     if (r.spin) icon.classList.add('thinking'); // a row waiting on an answer: its glyph breathes while it waits
