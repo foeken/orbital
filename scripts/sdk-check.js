@@ -842,6 +842,16 @@ async function main() {
     const sentSoFar=calls.length;
     await assert.rejects(ai.classifyType({...typed,types:[]},fetchWith(answer('{}'))),/No types/,'a document no type can go on asks nothing');
     assert.equal(calls.length,sentSoFar);
+    // Process image (issue #507): the image goes beside the rules, and the answer is a task or a note with its lines.
+    const png={bytes:new Uint8Array([137,80]),mimeType:'image/png'};
+    await assert.rejects(ai.readImage({...png,mimeType:'image/heic'},fetchWith(answer('{}'))),/PNG, JPEG/,'an image the model cannot read asks nothing');
+    assert.equal(calls.length,sentSoFar);
+    assert.deepEqual(await ai.readImage(png,fetchWith(answer('\u0060\u0060\u0060json\n{"kind": "task", "title": " Reply to Stan ", "notes": ["Budget by Friday", "", 3]}\n\u0060\u0060\u0060'))),
+      {kind:'task',title:'Reply to Stan',notes:['Budget by Friday']},'a task, trimmed, with only the lines that say something');
+    const imageSent=calls.at(-1).init.body;
+    assert.deepEqual([imageSent.instructions,imageSent.input[0].content[1]],[ai.IMAGE_INSTRUCTIONS,{type:'input_image',image_url:'data:image/png;base64,iVA='}],'the image goes as a data URL beside the input, the rules as instructions');
+    assert.deepEqual(await ai.readImage(png,fetchWith(answer('{"kind": "meeting", "title": "Invoice 42"}'))),{kind:'doc',title:'Invoice 42',notes:[]},'anything but a task is a note');
+    await assert.rejects(ai.readImage(png,fetchWith(answer('I cannot read this image.'))),/nothing useful/,'an answer with no title makes nothing');
     const agent=require('../main/agent'), originalRpc=agent.appServerRpc, originalBin=agent.codexBin;
     const userData=fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(),'orbital-ai-auth-'));
     let signedIn=false, note, threadStart, turnStart, serverOptions=null;
@@ -884,6 +894,8 @@ async function main() {
       assert.equal(Object.hasOwn(threadStart,'allowProviderModelFallback'),false,'thread/start uses fields accepted by older Codex CLI app-servers too');
       assert.equal(Object.hasOwn(threadStart,'runtimeWorkspaceRoots'),false,'and none the app-server gates behind the experimentalApi capability, which Orbital does not ask for');
       assert.deepEqual([turnStart.input.length,turnStart.input[0].text],[1,'Discuss with ChatGPT person'],'only the title is sent');
+      await assert.rejects(ai.readImage({bytes:new Uint8Array([137,80]),mimeType:'image/png'},fallback,userData),/nothing useful/);
+      assert.deepEqual(turnStart.input[1],{type:'image',url:'data:image/png;base64,iVA='},'a dropped image goes along the ChatGPT turn as well');
       const signedOut=await ai.logoutChatGPT(userData);
       assert.equal(signedOut.signedIn,false,'sign-out clears ChatGPT account status');
       assert.equal(await ai.suggestDiscussWith('Discuss with API fallback',fallback,userData),'API fallback','the local API key works again after sign-out');
@@ -1270,20 +1282,20 @@ async function main() {
     assert.equal(settings.prefs().helpSeen, true, 'and marked as the synced helpSeen preference');
     assert.equal(await two.ask(), false, 'and nobody after them');
     for (const p of [early, two]) backend.S.windows.delete(p.win);
-    // Create task open from the right half of a split while the left half asks: the close is told only to the right
+    // Quick Add Task open from the right half of a split while the left half asks: the close is told only to the right
     // half, so main keeps the ask and opens the tour itself once there is room.
     settings.setPref('helpSeen', undefined);
     const told = [], right = { isDestroyed: () => false, focus() {}, send: (channel) => told.push(channel) };
     const task = { webContents: { isDestroyed: () => false, close() {} }, opener: right };
     const covered = pageOf(task);
-    assert.equal(await covered.ask(), false, 'a window with Create task open cannot show it yet');
+    assert.equal(await covered.ask(), false, 'a window with Quick Add Task open cannot show it yet');
     assert.equal(settings.prefs().helpSeen, undefined, 'so nothing is marked');
     const survivor = { isDestroyed: () => false, focus() {}, send() {}, win: covered.win };
-    covered.win.panes = [survivor]; // the half that asked closed under Create task (⌘W): the other is the main half now
+    covered.win.panes = [survivor]; // the half that asked closed under Quick Add Task (⌘W): the other is the main half now
     const heard = [];
     right.send = (channel, result) => { told.push(channel); heard.push(result); };
     await backend.handlers.get('overlay:close')({ sender: task.webContents }, { palette: true, note: 'Task created' }); // made a task, closed with ⌘K
-    assert.deepEqual(told, ['overlay:closed'], 'Create task\u2019s half hears it closed');
+    assert.deepEqual(told, ['overlay:closed'], 'Quick Add Task\u2019s half hears it closed');
     assert.equal(heard[0].palette, false, 'without the palette its ⌘K asked for: the tour opens instead, and nothing is left open under it');
     assert.equal(heard[0].note, undefined, 'and without its toast yet, which would be gone under the tour before the tour is');
     assert.ok(covered.win.overlay && covered.win.overlay !== task, 'and main opens the tour over the window at once');
@@ -1380,7 +1392,7 @@ async function main() {
     console.log('ok  settings document: two machines settle on the oldest, a deleted one is replaced, the page hears what the document changed');
   }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current
-  // meeting), a task from its title alone (⌘K Create task), and the one agent handoff, driven through its real path.
+  // meeting), a task from its title alone (⌘K Quick Add Task), and the one agent handoff, driven through its real path.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     // main/ runs in its own vm realm, so what comes back is built from that realm's prototypes: normalise before deepEqual.
@@ -1401,7 +1413,7 @@ async function main() {
     });
     joinCall(true);
     docs.set(callDoc.id, callDoc);
-    // Three types for Create task's picker: a workflow type for documents, a plain type, and a workflow type for meetings
+    // Three types for Quick Add Task's picker: a workflow type for documents, a plain type, and a workflow type for meetings
     const typeDoc = (title, extra) => { const d = new Document('tana:type:' + ulid()); d.transact((l) => { const data = l.getMap('data'); data.set('type', 'type'); data.set('title', title); for (const [k, v] of Object.entries(extra)) data.set(k, v); }); docs.set(d.id, d); return d; };
     const bug = typeDoc('Bug', { workflowUri: 'tana:workflow:' + ulid() }), note = typeDoc('Note', {}), agenda = typeDoc('Agenda', { workflowUri: 'tana:workflow:' + ulid(), appliesTo: 'events' });
     backend.testRuntime({
@@ -1428,8 +1440,8 @@ async function main() {
     const added = await backend.createDocument('Draft the agenda', { kind: 'task' });
     const task = readNode(docs.get(added.id));
     assert.deepEqual([task.title, task.stateType, plainJson(task.assignedToUris)], ['Draft the agenda', 'open', [ME]], 'a task from its title alone is open and assigned to its creator');
-    // Create task's picker (issue #237): workflow types for documents only, and a task of one keeps being an open task of yours
-    assert.deepEqual(plainJson(await backend.handlers.get('doc:taskTypes')(null)).map((t) => t.title), ['Bug'], 'Create task offers only the workflow types for documents');
+    // Quick Add Task's picker (issue #237): workflow types for documents only, and a task of one keeps being an open task of yours
+    assert.deepEqual(plainJson(await backend.handlers.get('doc:taskTypes')(null)).map((t) => t.title), ['Bug'], 'Quick Add Task offers only the workflow types for documents');
     const typed = readNode(docs.get((await backend.createDocument('Login fails', { kind: 'task', typeUri: bug.id })).id));
     assert.deepEqual([typed.entityTypeUri, typed.stateType, plainJson(typed.assignedToUris)], [bug.id, 'open', [ME]], 'a task of a type is an open task of yours, with the type');
     await assert.rejects(backend.createDocument('Standup', { kind: 'task', typeUri: agenda.id }), /applies to meetings/, 'a type for meetings makes no task');

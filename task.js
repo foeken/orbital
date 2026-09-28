@@ -1,5 +1,5 @@
 'use strict';
-// Create task (task.html; issues #232, #237, #241): the title, the type the task is made with — plain Task, or one of
+// Quick Add Task (task.html; issues #232, #237, #241): the title, the type the task is made with — plain Task, or one of
 // the workflow types main offers (main/documents.js taskTypes) — and who it is for. ↑/↓ choose the type, ⇥ turns the
 // field into "Assign to…" over the workspace members (↑/↓, ↩ picks, Esc or ⇥ goes back), ↩ creates, Esc closes, ⌘K
 // closes and opens the palette. A page of its own that main lays over the whole window, both halves of a split

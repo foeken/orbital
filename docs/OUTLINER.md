@@ -27,7 +27,7 @@ stored), [MEETINGS.md](MEETINGS.md) (meeting structure, the write-up, editing a 
   ("Link copied", "Added 3 items to Today") is the same toast, not red (`showNote`; `#toast`, `role="status"`): it
   fades after 2.5 s, restarts on a newer notice and sits above the palette. The line under the title (`#error`) is the
   session's alone: it shows when Tana needs a new login, with the relogin button (renderer/app.js `showStatus`). The
-  Create task card (task.html) keeps a failed create on the card, so the press can be repeated.
+  Quick Add Task card (task.html) keeps a failed create on the card, so the press can be repeated.
 - **Signed out.** The login button shows only after a completed session check says signed-out; an unresolved or
   failed check is not signed-out. Signed out, the outline area is a welcome that teaches ⌘K: two big ⌘ and K keycaps
   as a planet, with Tasks, Meetings, Notes, People and Inbox orbiting them as chips; the keycaps go down under the keys
@@ -101,6 +101,18 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   text-plus glyph; on hover the words "Create new" slide out beside it. A click runs Cmd+K Create new … in the page in
   front (shell.js posts `action` `create`, renderer/palette.js `runAction`). It sits under a covering palette's scrim
   and is gone while signed out.
+  **Process image** (issue #507): a file dragged over it swaps the glyph for image-sparkle and the words for "Process
+  image". Dropped, the file goes to the page in front (`processImage`, renderer/upload.js), which sends it to main
+  (`ai:processImage`): the fast AI (main/ai.js `readImage`, PNG, JPEG, WebP or GIF) answers with a task or a note,
+  its title and the lines worth keeping, and main makes it with those lines and the image under them. The page opens
+  it; the button says "Processing image …" until then, and a failure is the red toast.
+  Cmd+K offers the same under **Image**, and only there (the rows have no id, so no key can be recorded on them):
+  **Process image** while the caret or the selection is on an image row (main reads that image, main/images.js
+  `image`), and **Process image from clipboard** while the clipboard holds an image (`clipboard:hasImage`, asked
+  each time ⌘K opens; main reads it with Electron's clipboard as PNG). Pasting an image still inserts it as before.
+  Cmd+K's **Create new …** row wears the corner button's text-plus glyph. With an image on the clipboard its page (from
+  Cmd+K or the corner button's click) leads with Process image from clipboard, above the choices. That row is on the page
+  only, never among the folded Create new rows, so no key can be recorded on it either.
 - **Header row**: over the page title, the empty line the buttons at the top right sit on, while the page is alone in
   its window. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
@@ -416,7 +428,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Filter rows by text, Switch to table/outliner and Column widths ….
-- **Actions**: Log in (signed out), Create new …, Create task, Search Tana, Undo, Redo, Mark all as read, Sync.
+- **Actions**: Log in (signed out), Create new …, Quick Add Task, Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
@@ -462,7 +474,7 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 
 | Row | Default |
 |---|---|
-| Create task | ⇧⌘Space |
+| Quick Add Task | ⇧⌘Space |
 | Search Tana | ⌘S |
 | Filter rows by text | ⌘F |
 | Copy link | ⌘C |
@@ -959,7 +971,7 @@ chat." shows as a centred status line, as other status lines do.
   saved under its id if you replaced it, this one if you removed it. A first launch opens it as two panes.
   On a new account both panes are empty, so an empty page says what would fill it (`emptyText`, renderer/render.js):
   the Timeline what shows up there, Notifications and Proposals that there are none, a saved search or a type's page
-  "Nothing matches.", with the Create task key after it when the search lists tasks, so an empty My Tasks is where the
+  "Nothing matches.", with the Quick Add Task key after it when the search lists tasks, so an empty My Tasks is where the
   first task starts. Only a document says "No content".
 - **Windows** (issue #137). File › New Window, ⌥⌘N or Cmd+K New window opens another outliner window 24px down and right
   of the front one, with one page on the place the page that asked was on (`window:new` answers its id). A page's id is
@@ -1014,7 +1026,7 @@ chat." shows as a centred status line, as other status lines do.
   place while the shell resizes it. A click on the scrim over another pane is a click on
   the opener's scrim and closes the palette; the page lets go once the scrim has faded (`MOTION.quick`), or at once when
   it goes away. A page alone asks too, which only takes the drag strip away so the scrim gets its clicks. A Help tour
-  or Create task stays above it.
+  or Quick Add Task stays above it.
 
 ### Overlays
 
@@ -1028,11 +1040,11 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
   in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference): after login, once
   the connection is up and the page the launch came back to is drawn. Main opens it (`api.claimHelp`, main.js
   `help:claim`): only after this session read the settings document (a failed read declines), over the first page asking
-  in a window nothing covers, and marks `helpSeen` in the same step; a window Create task was covering gets it from main the
-  moment that closes (`firstHelp`, `helpPending`), whichever half opened Create task. So it neither covers the login, nor
+  in a window nothing covers, and marks `helpSeen` in the same step; a window Quick Add Task was covering gets it from main the
+  moment that closes (`firstHelp`, `helpPending`), whichever half opened Quick Add Task. So it neither covers the login, nor
   shows again on a new machine, nor opens in every window, nor is spent
   unseen. ⌘K closes it and opens the palette.
-- **Create task** (task.html; `createTask`, ⇧⌘Space, issues #232, #237, #241): the palette's card with a title field
+- **Quick Add Task** (task.html; `createTask`, ⇧⌘Space, issues #232, #237, #241): the palette's card with a title field
   and, under it, the type — plain Task first, then the workflow types main offers (`api.taskTypes`: types with a board
   of states, `data.workflowUri`, that this user may create in); ↑/↓ choose. A line under the field says what the task
   will be and for whom ("Bug · Assigned to Me"); ⇥ or a click there turns the field into "Assign to…" over the members

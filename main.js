@@ -3,7 +3,7 @@
 // views, pins, images, and each one's ipc table); this file owns the window, the menu, the boot sequence and the
 // registering of those tables, plus the test hook that scripts/sdk-check.js and the CLI use to drive the same
 // modules without a window.
-const { app, BaseWindow, Menu, Notification, WebContentsView, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BaseWindow, Menu, Notification, WebContentsView, clipboard, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -14,7 +14,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
@@ -117,7 +117,7 @@ function nextPane(page) {
   return win.panes.find((p) => p.side === next && p !== page) || null;
 }
 // A page registers when its preload asks window:getSide. Only an iframe of a window's shell is a page: the shell itself
-// and the Help tour or Create task are main frames. Its id is its url's and never changes while it lives; one already
+// and the Help tour or Quick Add Task are main frames. Its id is its url's and never changes while it lives; one already
 // taken (which should not happen) gets a free one.
 function addPage(e) {
   const frame = e.senderFrame, win = frame && shellWindow(e.sender);
@@ -146,7 +146,7 @@ function dropPage(page) {
   presence.view(null, page.id);
   if (S.pane === page) S.pane = win.panes[0] || null;
 }
-// The shell fills the window; the Help tour or Create task, when open, covers it (openOverlay).
+// The shell fills the window; the Help tour or Quick Add Task, when open, covers it (openOverlay).
 function fit(win) {
   const { width, height } = win.getContentBounds();
   for (const v of [win.shell, win.overlay]) if (v) v.setBounds({ x: 0, y: 0, width, height });
@@ -161,7 +161,7 @@ function openPage(win, { id = freeId(), where = 'right', from, focus = true }) {
 }
 // Signed in or out: the saved layout comes back, or waits while every page is the login button.
 const relayout = () => { for (const w of S.windows) if (!w.isDestroyed() && w.signedOut !== signedOut()) { w.signedOut = signedOut(); tellShell(w, 'auth', { signedOut: w.signedOut }); } };
-// The Help tour (help.html, issue #230) and Create task (task.html, issue #237): a transparent page of its own laid
+// The Help tour (help.html, issue #230) and Quick Add Task (task.html, issue #237): a transparent page of its own laid
 // over the whole window, so it sits above both halves of a split rather than inside the one that asked. Added last, it
 // is on top, and there is one at a time. Closing it hands the keys back to the page that asked, whose caret is where it
 // was, with what it has to say: open the palette (⌘K closed the tour), or a note for its toast (the task it made).
@@ -185,8 +185,8 @@ function closeOverlay(win, result = {}) {
   if (!view.webContents.isDestroyed()) view.webContents.close();
   const opener = view.opener;
   // a first start this overlay was covering (firstHelp): now there is room for it, whichever half opened this one, over
-  // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Create task). First, so
-  // a ⌘K that closed Create task does not leave the palette open under the tour.
+  // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Quick Add Task). First, so
+  // a ⌘K that closed Quick Add Task does not leave the palette open under the tour.
   const pending = win.helpPending; win.helpPending = null;
   const main = win.panes.find((p) => !p.side) || win.panes[0]; // page '' when it is open: the tour's own
   const help = !!pending && !win.isDestroyed() && !!main && firstHelp(main, pending.theme);
@@ -354,10 +354,10 @@ ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 // The Help tour's first start (renderer/overlays.js helpOnce), opened here, by main, once. Only after this session has
 // read the settings document — the snapshot above is this machine's last copy, which on a new machine knows nothing yet,
 // so a read that failed declines rather than trusting it — and only over a page still open in a window nothing covers
-// (Create task open: main opens it when that closes, firstHelp). helpSeen is marked only once the tour is really opening:
-// one step, so two windows, Create task or a page closing on the way can neither show it twice nor spend it unseen.
-// A window Create task covers keeps the ask (helpPending) and closeOverlay opens it once that closes: the close is told
-// only to the half that opened Create task, which is not always the one that asked.
+// (Quick Add Task open: main opens it when that closes, firstHelp). helpSeen is marked only once the tour is really opening:
+// one step, so two windows, Quick Add Task or a page closing on the way can neither show it twice nor spend it unseen.
+// A window Quick Add Task covers keeps the ask (helpPending) and closeOverlay opens it once that closes: the close is told
+// only to the half that opened Quick Add Task, which is not always the one that asked.
 function firstHelp(page, theme) {
   if (!settings.settingsDocId() || settings.prefs().helpSeen || !page || page.isDestroyed()) return false;
   const win = page.win;
@@ -517,6 +517,29 @@ ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id,
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
+// Process image (issue #507): an image read by the model into a task or a note, made with what it read as its lines
+// and the image under them. Returns the Node for the page to open. The image is a file dropped on Create new
+// (shell.js) { bytes, filename, mimeType }, or from Cmd+K the clipboard's { clipboard: true } or an image row's { uri }.
+async function imageToProcess(file) {
+  if (file?.clipboard) {
+    const png = clipboard.readImage();
+    if (png.isEmpty()) throw new Error('The clipboard holds no image');
+    return { bytes: png.toPNG(), filename: 'Clipboard image.png', mimeType: 'image/png' };
+  }
+  if (typeof file?.uri !== 'string') return file;
+  const [, mimeType, base64] = /^data:([^;,]+);base64,(.*)$/s.exec(await require('./main/images').image(file.uri)) || [];
+  return { bytes: Buffer.from(base64 || '', 'base64'), filename: 'image', mimeType };
+}
+ipcMain.handle('clipboard:hasImage', () => clipboard.availableFormats().some((f) => f.startsWith('image/'))); // Cmd+K's Process image from clipboard
+ipcMain.handle('ai:processImage', async (_e, source) => {
+  const file = await imageToProcess(source);
+  const read = await ai.readImage(file, globalThis.fetch, app.getPath('userData'));
+  const node = await createDocument(read.title, { kind: read.kind });
+  const content = require('./sdk/content');
+  if (read.notes.length) await mut(node.id, (doc) => { for (const line of read.notes) content.insertAfter(doc, null, line); });
+  await require('./main/images').insertImage(node.id, null, { bytes: file.bytes, filename: file.filename || 'image', mimeType: file.mimeType });
+  return node;
+});
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
 // A link in node text opens in the user's browser; only http(s), never a file or custom scheme.
 ipcMain.handle('shell:open', (_e, url) => {

@@ -189,6 +189,29 @@ for (const [id, icon, msg] of [['headSensitive', null, { orbital: 'sensitive' }]
   button.onmousedown = (e) => e.preventDefault();
   button.onclick = () => { const win = windowOf(frameOf(ws.getSnapshot().focusedView)); win?.focus(); win?.postMessage(msg, '*'); };
 }
+// Process image (issue #507): a file dragged over Create new turns it into Process image, with the image-sparkle glyph.
+// Dropped, the file goes to the page in front (renderer/upload.js processImage), and the button says it is busy until
+// that page answers 'processed' (below).
+const create = document.getElementById('create'), createWords = create.querySelector('span');
+function createAs(state) { // '' | 'drop' | 'busy'
+  if ((create.dataset.state || '') === state) return; // dragover fires many times a second
+  if (state) create.dataset.state = state; else delete create.dataset.state;
+  createWords.textContent = { '': 'Create new', drop: 'Process image', busy: 'Processing image …' }[state];
+  create.querySelector('svg')?.remove();
+  create.insertAdjacentHTML('afterbegin', window.ICONS?.[state ? 'imageSparkle' : 'textPlus'] || '');
+}
+create.ondragover = (e) => {
+  if (create.dataset.state === 'busy' || !e.dataTransfer.types.includes('Files')) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; createAs('drop');
+};
+create.ondragleave = (e) => { if (create.dataset.state === 'drop' && !create.contains(e.relatedTarget)) createAs(''); };
+create.ondrop = (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0], win = windowOf(frameOf(ws.getSnapshot().focusedView));
+  if (!file || !win) return createAs('');
+  createAs('busy');
+  win.postMessage({ orbital: 'processImage', file }, '*');
+};
 // The Graph switch shows its state by its look (shell.css): full strength while the window has a Graph pane.
 function drawLinks() {
   const on = !!linksView(), button = document.getElementById('headLinks'), label = on ? 'Hide graph' : 'Show graph';
@@ -307,6 +330,8 @@ addEventListener('message', (e) => {
   else if (what === 'palette') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'palette', mode: e.data.mode }, '*'); } // Cmd+K or Cmd+S pressed in the Graph pane
   else if (what === 'action') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'action', id: String(e.data.id) }, '*'); } // any other key pressed there
   else if (what === 'focusLinks') focusPage(linksView());
+  else if (what === 'processing') createAs('busy'); // Process image from Cmd+K (renderer/upload.js processImage)
+  else if (what === 'processed') createAs(''); // the image is a task or a note now, or it failed and the page said why
   // ⌘K Add to chat (renderer/chat.js): the pane that shows the chat is brought into view and gets the references; with
   // none, the page that asked opens the chat itself
   else if (what === 'addToChat') {

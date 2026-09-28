@@ -287,7 +287,7 @@ async function creationOptions() {
   }));
   return {options:[...options,...types.sort((a,b)=>a.title.localeCompare(b.title))],complete:result.totalCount !== undefined && result.totalCount === result.nodes.length};
 }
-// The types Create task offers (task.html, issue #237): workflow types only — a type with a board of states
+// The types Quick Add Task offers (task.html, issue #237): workflow types only — a type with a board of states
 // (data.workflowUri) is one whose documents are tasks — that apply to documents and that this user may create in,
 // by the same rules as the creation chooser (customCreation). The graph's typeDef carries no workflowUri, so each
 // type's own document is read, as the chooser reads it; one that cannot be used is left out rather than offered.
@@ -526,7 +526,7 @@ async function createDocument(title, opts = {}) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   let config = {kind:opts.kind || 'doc'};
   if (config.kind === 'custom') config = await customCreation(opts.typeUri);
-  // A task of a type (Create task's picker): the type's own rules decide, as for a custom document, and it stays a
+  // A task of a type (Quick Add Task's picker): the type's own rules decide, as for a custom document, and it stays a
   // task — open, assigned to its creator — rather than becoming the type's plain document.
   else if (config.kind === 'task' && opts.typeUri !== undefined) {
     config = await customCreation(opts.typeUri);
@@ -1152,7 +1152,7 @@ const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
 const ipc = {
   'doc:info': (_e, id, patch) => op(id, info, { patch: patch === true }),
   'doc:creationOptions': () => creationOptions(),
-  'doc:taskTypes': () => taskTypes(), // Create task's picker: the workflow types a task can be made with
+  'doc:taskTypes': () => taskTypes(), // Quick Add Task's picker: the workflow types a task can be made with
   // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.
   'doc:types': (_e, id) => typeChoices(id),
   'doc:setType': (_e, id, typeUri) => setType(id, typeUri ?? null),

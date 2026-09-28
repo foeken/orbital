@@ -53,7 +53,7 @@ your own OpenAI key or sign in with ChatGPT; only the title is sent, and the key
 "Classify type" has the same model pick a node's type from each type's description and AI
 instructions: a sure answer is applied, otherwise you choose from the odds.
 
-**Create a task from its title.** Shift+Cmd+Space (or Cmd+K "Create task") asks for the title and,
+**Create a task from its title.** Shift+Cmd+Space (or Cmd+K "Quick Add Task") asks for the title and,
 if you like, one of your workflow types (arrow keys) and who it is for (Tab): press Enter and the
 task is there, open and assigned to you or to whoever you picked. Where it goes and who else has it are the task's own Cmd+K rows afterwards.
 

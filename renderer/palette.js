@@ -312,6 +312,7 @@ function paletteRows(q, typed = q) {
   }
   // only node rows so far: the selection's rows first, then (with a multi-selection) the document's own, each in NODE_ROW_ORDER
   rows.sort((a, b) => (a.group === 'Selection' ? 0 : 1) - (b.group === 'Selection' ? 0 : 1) || nodeRank(a) - nodeRank(b));
+  if (tana.processImage) rows.push(...processImageRows());
   // Views, most used first: the Timeline (today's tasks and what happened), Today and This week, then what came in
   // (Inbox, Notifications, Proposals), and the Library and Types last. Today's node (titled with the date, pinned to
   // today) and the week's ("Week 38 (2026)") are documents created on demand, but places to go all the same.
@@ -335,8 +336,9 @@ function paletteRows(q, typed = q) {
   if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; showHide(filterRow, true); render(); filterEl.focus(); } });
   // The app's own rows, in four groups: Actions (making and finding things, undoing, syncing), Navigate
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
-  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
-  if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
+  // the corner button's glyph (shell.html #create); with an image on the clipboard its page offers that first (openCreationPalette)
+  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'textPlus', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
+  if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Quick Add Task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
@@ -584,7 +586,11 @@ function creationRows(q) {
   return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
 }
 function openCreationPalette() {
-  openPage('create', 'Choose what to create', { rows: creationRows, back: BACK_TO_COMMANDS });
+  // The clipboard's image leads the page, and only the page: a folded row under Create new … could get a key.
+  // The corner button opens this page with ⌘K closed, so the clipboard is asked here too.
+  if (palette.hidden) loadClipImage();
+  const clip = (q) => (clipImage && fuzzyMatch('process image from clipboard', q) ? [clipImageRow()] : []);
+  openPage('create', 'Choose what to create', { rows: (q) => [...clip(q), ...creationRows(q)], back: BACK_TO_COMMANDS });
   loadCreationChoices();
 }
 // the create choices feed both the Cmd+K "Create new …" list and the "/" menu
@@ -635,6 +641,21 @@ function resultRows(nodes, group) {
 }
 // The active meeting behind the Pin to meeting row. Asked once per palette open (togglePalette clears it), because a
 // lookup is a round trip and the row is rebuilt on every keystroke; a failure is kept as the reason the row shows.
+// Process image (issue #507) from Cmd+K only, so neither row has an id a key could be recorded on: the image row the
+// selection or the caret is on, and the clipboard's image when it holds one (clipImage, asked each time ⌘K or the
+// Create new … page opens).
+let clipImage = false;
+const clipImageRow = () => ({ group: 'Image', icon: 'imageSparkle', label: 'Process image from clipboard', hint: 'Make it a task or a note', run: () => processImage({ clipboard: true }) });
+function processImageRows() {
+  const node = [...selKeys(), palReturn && palReturn.key].map((k) => k && items.get(k)?.node).find((n) => n && isImage(n)), rows = [];
+  if (node) { const uri = node.image.uri; rows.push({ group: 'Image', icon: 'imageSparkle', label: 'Process image', hint: 'Make it a task or a note', run: () => processImage({ uri }) }); }
+  if (clipImage) rows.push(clipImageRow());
+  return rows;
+}
+function loadClipImage() {
+  clipImage = false;
+  tana.clipboardHasImage?.().then((has) => { clipImage = has === true; if (clipImage && (palMode === 'cmd' || palMode === 'create') && !palette.hidden) renderPalette(); }, () => {});
+}
 function loadMeeting() {
   if (!tana.currentMeeting || meetingNow !== undefined) return;
   meetingNow = { meeting: null, pending: true }; // asked: the row says Checking… until this is replaced
@@ -1035,7 +1056,7 @@ function togglePalette(mode, link, pin) {
     { cmd: { rows: paletteRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
-  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
+  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); loadClipImage(); }
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }
@@ -1243,7 +1264,7 @@ function showCombo() {
   $('recSave').disabled = !validCombo(rec.combo) || !!warn;
 }
 function closeRecorder() { rec = null; recorder.hidden = true; renderPalette(); palInput.focus(); }
-const saveHotkeys = () => { setPref('hotkeys', hotkeys); renderSoon(); }; // the page may name a key: an empty My Tasks names Create task's (emptyText)
+const saveHotkeys = () => { setPref('hotkeys', hotkeys); renderSoon(); }; // the page may name a key: an empty My Tasks names Quick Add Task's (emptyText)
 $('recReset').onclick = () => { delete hotkeys[rec.row.id]; saveHotkeys(); closeRecorder(); };
 $('recCancel').onclick = closeRecorder;
 $('recSave').onclick = () => { if (validCombo(rec.combo) && !comboTaken(rec.combo, rec.row.id)) { hotkeys[rec.row.id] = rec.combo; saveHotkeys(); closeRecorder(); } };

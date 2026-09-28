@@ -68,3 +68,19 @@ async function uploadImages(docId, after, files) {
   }
   if (last && here()) placeCaret(keyFor(docId, { kind: 'block', id: last }));
 }
+// Process image (issue #507): an image becomes a task or a note, read by the model in main (ai:processImage), and
+// opens here. The image is a File dropped on Create new (shell.js), or from Cmd+K { clipboard: true } or an image
+// row's { uri } (renderer/palette.js). The corner button says "Processing image …" meanwhile (shell.js createAs).
+async function processImage(source) {
+  toShell({ orbital: 'processing' });
+  try {
+    if (source instanceof File) {
+      if (!imageFiles([source]).length) throw new Error('Drop an image to process');
+      if (source.size > UPLOAD_MAX) throw new Error('File is too large (max 50 MB)');
+      source = { bytes: new Uint8Array(await source.arrayBuffer()), filename: source.name || 'image', mimeType: source.type };
+    }
+    const node = await tana.processImage(source);
+    await goTo(node.id);
+  } catch (e) { showError(e); }
+  toShell({ orbital: 'processed' });
+}

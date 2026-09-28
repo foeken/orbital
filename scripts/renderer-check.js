@@ -188,7 +188,7 @@ assert.match(source, /if \(palBusy && \(palMode === 'spaces' \|\| palMode === 's
 assert.match(source, /if \(palMode === 'pinToday'\) \{ palSeq\+\+; palBusy = true; clearTimeout\(palTimer\); palTimer = setTimeout\(todayPickerSearchNow, 150\); return; \}/, 'typing invalidates an older today-pin search immediately');
 assert.match(source, /else if \(e\.key === 'Enter'\) \{[^\n]*\n\s*e\.preventDefault\(\); e\.stopPropagation\(\);/, 'Enter in the palette is its own, whatever row it opens');
 assert.match(source, /function openCreationPalette\(\)/);
-assert.match(source, /id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …'/);
+assert.match(source, /id: 'create', group: 'Actions', icon: 'textPlus', label: 'Create new …'/, 'Create new … wears the corner button\u2019s glyph');
 assert.match(source, /tana\.creationOptions\(\)/);
 assert.match(source, /function startCreation\(choice\)/);
 assert.match(source, /draftDocNode\(choice\.kind, \{ typeUri: choice\.typeUri, icon: choice\.icon, tags \}\)/);

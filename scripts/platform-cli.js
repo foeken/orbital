@@ -672,6 +672,18 @@ commands.classify = async () => {
   }
 };
 // chatsend <chat id|new> <text…> [--attach <uri>]: send a message the way the chat page does (--attach: a skill to run, as "/" in the composer attaches one; main/documents.js chat:new, chat:send) and
+// readimage <file>: what Process image (issue #507) reads from an image — the kind, title and lines the task or note
+// would get — and how long the model took. Read-only in Tana; the image goes to the model.
+commands.readimage = async () => {
+  const file = positional[0], mimeType = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }[path.extname(file || '').toLowerCase()];
+  if (!file) throw new Error('usage: readimage <file>  (read-only; sends the image to the model)');
+  const main = backend(await connect());
+  await client.sync.connect();
+  const status = await main.ai.chatgptStatus(app.getPath('userData'), true);
+  out('ChatGPT: ' + (status.signedIn ? 'signed in' : 'not signed in' + (status.error ? ' (' + status.error + ')' : '')));
+  const started = Date.now(), read = await main.ai.readImage({ bytes: require('node:fs').readFileSync(file), mimeType }, globalThis.fetch, app.getPath('userData'));
+  out(read); out((Date.now() - started) + ' ms');
+};
 // print the conversation once Tana's answer has finished streaming (docs/CHATS.md §10). WRITES: a message, and a new
 // chat with "new".
 commands.chatsend = async () => {
