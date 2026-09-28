@@ -2,37 +2,25 @@ Orbital License
 
 Copyright (c) 2026 Andre Foeken.
 
-Orbital is free to use. These terms say what that covers.
+Anyone may use, copy, change, fork and share Orbital, publicly or privately,
+free of charge, and may charge for their own work around it, such as
+customising, setting up, explaining, teaching or supporting it. Two conditions:
 
-1. You may use, copy and change Orbital and run your changed version, on your
-   own or across your organisation. You may change it for someone else too, as
-   long as you do not charge for it.
+1. Keep the credit. Every copy and fork keeps this notice and says that
+   Orbital was originally made by Andre Foeken. Do not present Orbital, or a
+   changed version of it, as your own work.
 
-2. You may help others with Orbital, paid or not: install it, set it up,
-   explain it, teach it, support it, write about it, review it or promote it.
+2. Do not sell it. Do not sell Orbital, or a changed, renamed or repackaged
+   version of it, as a product, and do not charge for copies of it or for
+   access to it.
 
-3. Without the copyright holder's written permission, you may not:
-   a. hand out copies of Orbital or a changed version to the public, such as a
-      public fork, a download of your own or a hosted service. Point people to
-      the official releases instead (https://orbital.md);
-   b. sell Orbital or a changed version, or charge for changing its code to
-      tailor it for someone. That needs a commercial licence;
-   c. present Orbital or a changed version as your own work, or remove this
-      notice from a copy.
+Want to do something these terms do not allow? Ask through https://orbital.md
+or GitHub (@foeken). Third-party components keep their own licences. If you
+break these terms, your permission under them ends.
 
-4. Changes you send to the copyright holder, for example as a pull request, may
-   be used by the copyright holder under any licence.
-
-5. Not sure, or want to do more? Ask through https://orbital.md or GitHub
-   (@foeken).
-
-6. Third-party components keep their own licences. If you break these terms,
-   your permission under them ends.
-
-7. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-   SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

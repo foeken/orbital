@@ -185,17 +185,14 @@ current bundle and diffed against `sdk/proto/descriptors.js`; the how is in
 
 ## License
 
-Orbital is free to use. Change it however you like and run your own version, on your own or across
-your company. Help others with it too: explain it, teach it, set it up, write or make videos about it,
-and get paid for that if you like. Built something others would want? Send it as a pull request.
+Orbital is free, and you can do pretty much anything with it: use it, change it, fork it publicly,
+share it, and get paid for customising, setting up or explaining it. Built something others would
+want? Send it as a pull request. Two things I ask:
 
-A few things I ask in return:
+- Keep the credit. Every copy and fork keeps the licence and says Orbital was originally made by me.
+- Don't sell Orbital itself, changed or repackaged, as your own product.
 
-- Don't hand out copies yourself. Point people to [orbital.md](https://orbital.md).
-- Don't sell Orbital, or charge for customising its code. That needs a commercial licence.
-- Don't pass it off as your own.
-
-Not sure, or want to do more? Just ask through [orbital.md](https://orbital.md). The full terms are in
+Want to do something else? Just ask through [orbital.md](https://orbital.md). The full terms are in
 [LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
 
 If Orbital saves you time, you can chip in through [GitHub Sponsors](https://github.com/sponsors/foeken).
