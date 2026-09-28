@@ -180,7 +180,8 @@ current bundle and diffed against `sdk/proto/descriptors.js`; the how is in
 ## License
 
 Make it yours. You are welcome to change Orbital however you like and run your own version of it:
-new keys, a different look, features only you need. What you can't do is pass it on, so no public
-forks, no shipping it inside another project (open source or commercial) and no hosting it for
+new keys, a different look, features only you need. That goes for a company too, which can roll its
+own version out to its team. What you can't do is pass it on beyond that, so no public forks, no
+selling it or shipping it inside another product (open source or commercial) and no hosting it for
 others. Built something others would want too? Send it as a pull request. The actual terms are in
 [LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
