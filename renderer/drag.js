@@ -35,6 +35,18 @@ const canDragItem = (item) => !!item && !item.node.draft && !item.node.timeline 
 // everything else is the row itself, moving. (A block cannot be referenced at all: Tana's references are
 // node-level, so there is no uri for a mention to a paragraph to point at.)
 const dragRef = (item) => (item.node.kind === 'document' ? { uri: item.node.id, label: item.node.text || '' } : null);
+// What a drop on a chat's composer puts in (renderer/chat.js composerDropSegs), carried as its own flavour so it
+// reaches the composer of another pane too: a chip for each row that is a node or a reference to one, and the words
+// of any other row, a block having no uri to point at. The whole selection travels when the row picked up is in it.
+const NODES_DRAG_TYPE = 'application/x-orbital-nodes';
+function dragSegs(item) {
+  const keys = sel && sel.keys.has(item.key) ? selKeys() : [item.key];
+  return keys.map((key) => items.get(key).node).map((n) => {
+    const uri = n.kind === 'document' && isRealId(n.id) ? n.id : n.reference?.uri;
+    if (uri) return [{ mention: { uri, label: (n.kind === 'document' ? n.text : referenceLabel(n)) || uri } }];
+    return segsOf(n).map((s) => ('text' in s ? { text: s.text } : { mention: { uri: s.mention.uri, label: s.mention.label } })); // the composer is plain text: marks stay behind
+  }).filter((segs) => segs.length);
+}
 const dragLine = (el) => el.querySelector(':scope > .line');
 const rowDepth = (host, el) => { let d = 0; for (let p = el.parentElement; p && p !== host; p = p.parentElement) if (p.classList.contains('node')) d++; return d; };
 
@@ -238,6 +250,7 @@ document.addEventListener('dragstart', (e) => {
   dragKey = item.key;
   e.dataTransfer.effectAllowed = item.node.kind === 'document' ? 'link' : 'move';
   e.dataTransfer.setData(DRAG_TYPE, item.key);
+  e.dataTransfer.setData(NODES_DRAG_TYPE, JSON.stringify(dragSegs(item)));
   const n = item.node;
   // writable: unknown (null) counts as writable, as everywhere else in the renderer (canEditNode); a task under
   // Today's Tasks is a read-only row whose box says whether the task itself can be edited
