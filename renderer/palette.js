@@ -642,7 +642,7 @@ function pinToMeeting(doc) {
 // per open, matched here with the palette’s own matcher, so typing costs no round trip; the rows are ordinary
 // document rows, so each carries the meeting’s own date and time as its hint and same-named meetings are told apart.
 const MEETING_GROUP = 'Meetings';
-const MEETING_FILTER = { types: ['meetings'], participant: 'me', window: 'recent' };
+const MEETING_FILTER = { types: ['meetings'], participant: 'me', window: 'week' };
 // Next meeting first, against the clock at the moment the page opens: what is on now or still to come, soonest
 // first, then what is over, most recent first. It reads the event window the row carries (`start`/`end`, ISO from
 // the graph), never the `meta` label, which says "Fri 08:20" for six days either side of today and cannot be

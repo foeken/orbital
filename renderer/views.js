@@ -11,6 +11,12 @@ const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Comp
 const COMPLETED = [[3, '3 days'], [7, '7 days'], [30, '30 days'], ['all', 'All']];
 const completedWindow = (f) => (COMPLETED.some(([v]) => v === (f || {}).completedWithin) ? f.completedWithin : 7);
 const showsCompleted = (f) => !!f && (!f.states || f.states.includes('closed'));
+// When meetings take place, while meetings are the only kind listed (#492): Tana's four presets, applied by sdk/query.js.
+// 'week' is Cmd+K's meeting picker's (a week either side of today) and what an older saved range reads back as: the
+// pill names it, but offers only Tana's four.
+const WHEN = [['recent', 'Recent'], ['today', 'Today'], ['upcoming', 'Upcoming'], ['past', 'Past']];
+const whenName = (w) => (w === 'week' ? 'Week either side' : (WHEN.find(([v]) => v === w) || [0, 'Any time'])[1]);
+const onlyMeetings = (f) => !!f && Array.isArray(f.types) && f.types.length === 1 && f.types[0] === 'meetings';
 const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['searches', 'Searches', 'search'], ['spaces', 'Spaces', 'space'], ['people', 'People', 'member'], ['types', 'Types', 'type']];
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
@@ -237,20 +243,24 @@ function showAllTracking(id) { trackingShown.add(collapseKey(id)); render(true);
 // ---- sort: the same rows in another order, again without asking the backend for anything ----
 // Only what a row actually carries can be sorted on. main.js toNode passes updatedAt and createdAt as ISO 8601
 // strings, so they compare as strings; a row that carries neither (an older cached row) keeps its place at the end.
-const SORTS = [['default', 'Default'], ['status', 'Status'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
-const sortList = () => SORTS.filter(([id]) => id !== 'status' || !noTasks());
+const SORTS = [['default', 'Default'], ['status', 'Status'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title'], ['meeting', 'Meeting time']];
+// Meeting time only where meetings are all there is: nothing else has a start to sort on.
+const meetingSort = () => onlyMeetings(filters.get(pillKey()));
+const sortList = () => SORTS.filter(([id]) => (id !== 'status' || !noTasks()) && (id !== 'meeting' || meetingSort()));
 // Status sorts by the workflow rather than by the word: Inbox, In Progress, Completed, Later — the order the Status
 // menu and the Status grouping already run in, so the rank is that table's own index. A row with no task state has
 // nothing to rank and keeps its place at the end, like any other row missing the field it is sorted on.
 const statusRank = (n) => { const i = STATES.findIndex(([id]) => id === stateOf(n)); return i < 0 ? undefined : String(i); };
-const SORT_KEY = { status: statusRank, updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase() };
+const SORT_KEY = { status: statusRank, updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase(), meeting: (n) => n.start };
 const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
+// Meeting time runs the way the query does (sdk/query.js viewParams): soonest first for what is still to come, latest first otherwise.
+const soonestFirst = () => ['upcoming', 'today'].includes((filters.get(pillKey()) || {}).window);
 // Every page, saved searches included, keeps the order its query returned until the user says otherwise; Library's
 // starting arrangement above (newest change first) is the one exception.
-const sortBy = () => { const k = pillKey(), s = sortPref[k] ?? arranged(k, 'sort'); return SORTS.some(([id]) => id === s) ? s : 'default'; };
+const sortBy = () => { const k = pillKey(), s = sortPref[k] ?? arranged(k, 'sort'); return SORTS.some(([id]) => id === s) && (s !== 'meeting' || meetingSort()) ? s : 'default'; };
 function setSortBy(id) { armGlide(); sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(true); }
 function sortRows(list) {
-  const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id);
+  const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id) || (id === 'meeting' && !soonestFirst());
   const sorted = !key ? list : [...list].sort((a, b) => { // no key: Default, the order the view produced
     const x = key(a), y = key(b);
     if (!x || !y) return x ? -1 : y ? 1 : 0; // a row without the field sorts last, in the order it came in

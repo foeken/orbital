@@ -70,8 +70,14 @@ function mockApi() {
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
     const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h ?? 0).getTime();
     meetingEdits['mockmeeting' + i] = { start, end: start + (h == null ? 864e5 : 36e5), allDay: h == null, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: [] };
-    return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] };
+    return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting], start: new Date(start).toISOString(), end: new Date(meetingEdits['mockmeeting' + i].end).toISOString() };
   });
+  // the When pill's window (sdk/query.js timeRange), on meetings alone
+  const meetingWindow = (d, f) => {
+    if (!f.window || !d.start || !(f.types && f.types.length === 1 && f.types[0] === 'meetings')) return true;
+    const t = Date.parse(d.start), now = Date.now(), day = (o) => { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() + o); return x.getTime(); };
+    return { recent: t < day(2), today: t >= day(0) && t < day(1), upcoming: t >= now, past: t <= now, week: t >= day(-7) && t <= day(7) }[f.window] ?? true;
+  };
   // Meetings, Chats and People are no longer views. Their documents remain — the Library lists every kind, and a
   // saved search can name any subset of them — so only the pages are gone, not the content they used to show.
   const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'library', title: 'Library', icon: 'library', nodes: docs }, { id: 'types', title: 'Types', icon: 'type', nodes: types }];
@@ -221,7 +227,7 @@ function mockApi() {
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
-  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me });
+  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me, ...(d.start ? { start: d.start, end: d.end } : {}) });
   // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers).
   // Document delete/restore records an op step instead, like the native bridge where undo restores a soft-deleted document.
   const undoStack = [], redoStack = [];
@@ -256,7 +262,7 @@ function mockApi() {
       const text = String(filter.text || '').trim().toLowerCase();
       return { nodes: [...all, ...members].filter((d) => (!filter.types ? !['people', 'types'].includes(kindOf(d)) : filter.types.includes(kindOf(d)) || (d.tags || []).some((t) => t && filter.types.includes(t.uri)))
         && (!filter.states || (filter.types && !filter.types.includes('tasks')) || listed(d, filter)) // a state only filters tasks (sdk/query.js)
-        && d.text.toLowerCase().includes(text)).map(info), truncated: false };
+        && meetingWindow(d, filter) && d.text.toLowerCase().includes(text)).map(info), truncated: false };
     },
     searches: async () => structuredClone(all.filter((d) => d.id.startsWith('tana:search:')).map(info)),
     // Saving the current view as a search: main translates the filter it owns, so the mock only needs to produce a
@@ -286,7 +292,7 @@ function mockApi() {
       const text = String(filter.text || '').trim().toLowerCase();
       return structuredClone([...all, ...members].filter((d) => (!filter.types ? kindOf(d) !== 'people' : filter.types.includes(kindOf(d)) || (d.tags || []).some((t) => t && filter.types.includes(t.uri)))
         && (!filter.states || listed(d, filter))
-        && d.text.toLowerCase().includes(text)).map(info));
+        && meetingWindow(d, filter) && d.text.toLowerCase().includes(text)).map(info));
     },
     // references resolve on read, as main does: the row always shows the target's current title and state, and a
     // block whose whole content is one mention is resolved the same way
@@ -311,7 +317,7 @@ function mockApi() {
     editMeeting: async (docId, change) => {
       const m = meetingEdits[docId], d = all.find((x) => x.id === docId);
       if (!m) throw new Error('Not a meeting');
-      if ('start' in change) { Object.assign(m, { start: change.start, end: change.end, allDay: false }); const s = new Date(change.start), hm = (t) => new Date(t).toTimeString().slice(0, 5); d.meta = WD[s.getDay()] + ' ' + hm(change.start) + '–' + hm(change.end); }
+      if ('start' in change) { Object.assign(m, { start: change.start, end: change.end, allDay: false }); Object.assign(d, { start: new Date(change.start).toISOString(), end: new Date(change.end).toISOString() }); const s = new Date(change.start), hm = (t) => new Date(t).toTimeString().slice(0, 5); d.meta = WD[s.getDay()] + ' ' + hm(change.start) + '–' + hm(change.end); }
       if ('location' in change) m.location = change.location;
       for (const p of change.attendees || []) {
         m.attendees.push({ key: p.email ? 'email:' + p.email.toLowerCase() : 'tana:mock' + (++seq), email: p.email, identityUri: p.email ? undefined : p.userUri });
