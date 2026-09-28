@@ -185,23 +185,17 @@ current bundle and diffed against `sdk/proto/descriptors.js`; the how is in
 
 ## License
 
-Make it yours. You are welcome to change Orbital however you like and run your own version of it:
-new keys, a different look, features only you need. That goes for a company too, which can roll its
-own version out to everyone who works there. What you can't do is hand it out yourself, so no public
-forks, no download page of your own, no selling it or shipping it inside another product (open source
-or commercial) and no hosting it for others. Built something others would want
-too? Send it as a pull request. The actual terms are in
+Orbital is free to use. Change it however you like and run your own version, on your own or across
+your company. Help others with it too: explain it, teach it, set it up, write or make videos about it,
+and get paid for that if you like. Built something others would want? Send it as a pull request.
+
+A few things I ask in return:
+
+- Don't hand out copies yourself. Point people to [orbital.md](https://orbital.md).
+- Don't sell Orbital, or charge for customising its code. That needs a commercial licence.
+- Don't pass it off as your own.
+
+Not sure, or want to do more? Just ask through [orbital.md](https://orbital.md). The full terms are in
 [LICENSE](LICENSE); Trellis and the other dependencies keep their own licences.
 
-A few more things. Changing it for a friend or another team is fine too, as long as you don't charge
-for it: don't make money from Orbital itself, by selling it or by selling custom versions of its code,
-say as a consultant tailoring it for clients. Selling your help around it is fine, as long as the code
-stays as it is: installing and setting it up, explaining it, teaching it. Writing about it, making
-videos, reviewing or promoting it, sponsored or not? Please do, and point people to the official
-releases. Just don't pass it off as your own: keep the credit and the licence in every copy. Using it
-for your own work is fine, of course.
-Want to do something the licence doesn't allow? Just ask through [orbital.md](https://orbital.md) or
-[@foeken](https://github.com/foeken). A business licence usually takes the form of a paid GitHub sponsorship.
-
-Does Orbital save you or your team time? You can chip in through
-[GitHub Sponsors](https://github.com/sponsors/foeken). It is entirely optional and keeps the work going.
+If Orbital saves you time, you can chip in through [GitHub Sponsors](https://github.com/sponsors/foeken).

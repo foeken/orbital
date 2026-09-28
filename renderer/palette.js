@@ -501,9 +501,9 @@ function confirmLogout() {
 // licence in three lines. The same words as the README's License section and LICENSE, public in the releases repo.
 function openAboutPalette() {
   const link = (icon, label, hint, url) => ({ group: 'Links', icon, label, hint, run: () => run(() => tana.openExternal(url)) });
-  const notes = ['Change it and run your own version, yourself or across your company',
-    'Don\'t pass it on or claim it as yours: no public forks, downloads or hosting',
-    'Paid help setting it up is fine; paid changes to its code need my OK'].map((label) => ({ group: 'How you can use it', label, disabled: true, note: true }));
+  const notes = ['Free to use: change it and run your own version, alone or across your company',
+    'Help others with it, paid or not: explain it, teach it, set it up',
+    'Don\'t hand out copies, sell it, charge for customising it or claim it as yours'].map((label) => ({ group: 'How you can use it', label, disabled: true, note: true }));
   const links = [link('globe', 'Website', 'orbital.md', 'https://orbital.md'), link('license', 'License', 'The full terms on GitHub', 'https://github.com/foeken/orbital-releases/blob/main/LICENSE')];
   openPage('about', 'Orbital: a keyboard-first outliner over your Tana', { back: BACK_TO_COMMANDS, rows: (q) => [...(q ? links.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : links), ...notes] });
 }
