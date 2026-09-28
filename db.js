@@ -5,6 +5,7 @@ let generation = 0; // bumped on every open: whoever caches what the database sa
 // Cached rows come back in the order their view's query returns them, so a boot from the cache and a refresh agree:
 // meetings by start time ascending, everything else newest first (sortKey is the update time there).
 const DESC = new Set(['inbox', 'tasks', 'library', 'chats']);
+const TRANSLATION_TTL = 30 * 864e5; // a translation not shown for a month is asked again, and cleaned out
 
 function open(path) {
   db = new DatabaseSync(path);
@@ -31,6 +32,13 @@ function open(path) {
   // answer "what did I delete": this table is the list.
   db.exec('CREATE TABLE IF NOT EXISTS deleted_nodes (id TEXT PRIMARY KEY, title TEXT NOT NULL, deletedAt TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); // JSON values (task filter, ...)
+  // Auto-translate's answers (main/ai.js translate, #547), on this machine only, keyed by a hash of the target language
+  // and the exact text: an edited text is a new key, so it is asked again. lang NULL: the text was in the target
+  // language already. An answer lasts a month from when it was last shown, and is cleaned out after that (here and on
+  // every save). A table from an earlier build of it is simply rebuilt: it is a cache.
+  if (!db.prepare("SELECT count(*) n FROM pragma_table_info('translations') WHERE name = 'usedAt'").get().n) db.exec('DROP TABLE IF EXISTS translations');
+  db.exec('CREATE TABLE IF NOT EXISTS translations (key TEXT PRIMARY KEY, lang TEXT, text TEXT, usedAt INTEGER NOT NULL)');
+  db.prepare('DELETE FROM translations WHERE usedAt <= ?').run(Date.now() - TRANSLATION_TTL);
 }
 
 // Rows are display data: a tags column that is not a JSON array (older build, interrupted write) must not take a
@@ -130,4 +138,19 @@ function settings() {
   return out;
 }
 
-module.exports = { open, list, get, remove, upsert, setRow, replaceSection, sensitiveIds, setSensitive, noteDeleted, unnoteDeleted, deletedList, setting, setSetting, settings, generation: () => generation };
+// [key] -> Map of the keys answered within the month: key -> { lang, text } | null (already in the target language).
+// Each one found is used now, so its month starts again.
+function translations(keys, now = Date.now()) {
+  const get = db.prepare('SELECT lang, text FROM translations WHERE key = ? AND usedAt > ?'), used = db.prepare('UPDATE translations SET usedAt = ? WHERE key = ?'), out = new Map();
+  for (const key of keys) { const r = get.get(key, now - TRANSLATION_TTL); if (r) { out.set(key, r.lang ? { lang: r.lang, text: r.text } : null); used.run(now, key); } }
+  return out;
+}
+// New answers in; what has not been shown for a month out, and past 5000 the least recently shown
+function saveTranslations(answers, now = Date.now()) { // [[key, { lang, text } | null]]
+  const put = db.prepare('INSERT INTO translations (key, lang, text, usedAt) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET lang = excluded.lang, text = excluded.text, usedAt = excluded.usedAt');
+  for (const [key, found] of answers) put.run(key, found ? found.lang : null, found ? found.text : null, now);
+  db.prepare('DELETE FROM translations WHERE usedAt <= ?').run(now - TRANSLATION_TTL);
+  db.exec('DELETE FROM translations WHERE rowid NOT IN (SELECT rowid FROM translations ORDER BY usedAt DESC LIMIT 5000)');
+}
+
+module.exports = { open, translations, saveTranslations, list, get, remove, upsert, setRow, replaceSection, sensitiveIds, setSensitive, noteDeleted, unnoteDeleted, deletedList, setting, setSetting, settings, generation: () => generation };

@@ -684,6 +684,20 @@ commands.readimage = async () => {
   const started = Date.now(), read = await main.ai.readImage({ bytes: require('node:fs').readFileSync(file), mimeType }, globalThis.fetch, app.getPath('userData'));
   out(read); out((Date.now() - started) + ' ms');
 };
+// translate [--to English] [--model m] [--effort e] [--fresh] [text…] (--fresh: past the cache): what Auto-translate (issue #547) gets back and how long the model takes, for one text
+// and then all of them as one batch (the Dutch sample note when no text is given). Read-only; the texts go to the model.
+commands.translate = async () => {
+  const texts = positional.length ? positional : ['We hebben besloten om Studio als werkwijze te behandelen, niet als entiteit.', 'Twee pilots starten in oktober, met Sam en Dana als trekkers.', 'Open vraag: wie beheert het budget na Q1?', 'Terugblik offsite Studio'];
+  const main = backend(await connect()), to = flag('to') || 'English', userData = app.getPath('userData');
+  let t = Date.now(); const status = await main.ai.chatgptStatus(userData, true);
+  out('ChatGPT: ' + (status.signedIn ? 'signed in' : 'not signed in' + (status.error ? ' (' + status.error + ')' : '')) + ', sign-in check with refresh ' + (Date.now() - t) + ' ms');
+  t = Date.now(); await main.ai.chatgptStatus(userData, false); out('sign-in check without refresh ' + (Date.now() - t) + ' ms');
+  for (const batch of [texts.slice(0, 1), texts]) {
+    const started = Date.now(), answers = await main.ai.translate(batch, to, globalThis.fetch, userData, { model: flag('model') || undefined, effort: flag('effort') || undefined, fresh: !!flag('fresh') });
+    out(batch.length + (batch.length === 1 ? ' text: ' : ' texts: ') + (Date.now() - started) + ' ms');
+    answers.forEach((a, i) => out('  ' + (a ? a.lang + ' → ' + a.text : 'unchanged: ' + batch[i])));
+  }
+};
 // print the conversation once Tana's answer has finished streaming (docs/CHATS.md §10). WRITES: a message, and a new
 // chat with "new".
 commands.chatsend = async () => {
@@ -1130,7 +1144,7 @@ const USAGE = [
   '             changes <id> [--within <summary id>] [--limit 20] | inbox [--limit 20] [--watch seconds] |',
   '             settings   (with a key and a JSON value it writes)',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
-  '             settype <id>   (listing only; with a target it writes) | classify <id>   (the document goes to the model)',
+  '             settype <id>   (listing only; with a target it writes) | classify <id>   (the document goes to the model) | translate [--to English] [text…]   (the texts go to the model)',
   '             caps <id...> | related <id> | incall [--limit 5] | callstate <call id> | suggestions [--limit 10] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | livequery --to <id> [--from <id>] [--edge-types LINKS_TO,…] |',

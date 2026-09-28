@@ -338,9 +338,19 @@ owned by the page and the block (main/images.js), outside the renderer's write q
   the first character is typed (`materialise`: `api.insertChild` or `api.insertAfter`, told which kind to make). An
   empty draft is dropped on collapse or navigation; Enter, Tab and Backspace on it do nothing except Backspace, which
   removes it and moves the caret to the parent.
-- **Draft documents in a view.** Enter on a collapsed document row in a view, or with nothing focused in an empty
-  view, drafts a plain document below it (`draftDoc`), stored on the first typed character (`api.createDocument`) and
-  kept in place until the next refresh. Backspace on an empty one removes it.
+- **Draft documents in a list.** Enter on a collapsed document row in a view, or with nothing focused in an empty
+  view, drafts a plain document below it (`draftDoc`); in a saved search of one type, a row of that type (issue #537); in a
+  list grouped by Responsibility, a task in that row's section (below). A document drafted in a list is typed first and
+  created once, with all its words, when it is left or Enter is pressed (`api.createDocument`): created on the first
+  key, a saved search re-read and re-sorted around it mid-word and what followed was lost (issue #549). Escape or
+  Backspace on an empty one throws it away; it stays right under the row it was drafted from whatever the sort
+  (views.js `keepDrafts`).
+- **A new task in a Responsibility section** (issue #548). Enter at the end of a task in My Tasks (or any list grouped
+  by Responsibility) drafts a task under it in the same section (drag.js `groupDraft`), and creates it with what puts a
+  task there: the same writes as a task dropped on that heading (`groupDropWrites`, #169) read off a new task, which
+  starts open and yours. Unassigned takes you off, My inbox / My later / My completed set the state, Pinned pins it to
+  today. Agent opens the Assign to Agent prompt once it exists, and Tracking takes you off, watches it and opens the
+  assignee picker for who you are waiting on. Assigned by others drafts nothing: only somebody else puts a task there.
 - **`api.createDocument(title, { kind, typeUri? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
   assigned to you, with a workflow type when `typeUri` names one), a `meeting` (a `tana:event:` laid out like a
   Tana-native event, the next half hour by default, so it shows in Tana's calendar), a `chat`, a `search` (which must
@@ -671,6 +681,31 @@ week, Last month and Older.
   Agent task** opens it (or says which machine it is on, from the synced `codexTask` record), **Link Agent Task ...**
   links a task that already exists, **Send to agent** opens a new Codex task with the node's link, and **Manage Codex
   hosts** lists the machines a task can run on. Assign to Agent and Send to agent need a real Codex install.
+
+- **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
+  (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is
+  shown translated, on screen only. A page that does not read as that language as a whole (its title and plain rows:
+  another language's own small words outnumber the chosen one's, or there are none of anyone's to go by) is asked about in one question (`api.translate`, main/ai.js `translate`: everything a render wants, a whole page at once,
+  up to ~20k characters, with 90 s to answer; 50 rows measured at 24 s); it shows the
+  translation and one grey line under the title, a sparkle and "Translated from Dutch · Show original", which switches
+  the whole page to its own words and back. A page is a zoomed document or a zoomed block, and everything under it is
+  covered by that one line: its blocks and the documents in it, however deep, show no line of their own. In a list, a document whose title does not read as that language shows the
+  translated title and "Translated from Dutch" as the first fact of its grey line; a click there switches that row.
+  A row of the app's own that names a node (a Timeline meeting, "Kevin completed <task>", a notification's title: the
+  one segment marked `content`) has only that name translated, the sentence around it kept, and says so the same way.
+  Nothing is written: the caret going into a translated row or title shows its own words first, so an edit is made in,
+  and saves, the original; leaving it shows the translation again (an edited text is asked for, and lands in the row
+  when the answer does, wherever the caret is by then). Turning it on or changing the language takes effect at once,
+  in every pane. Only plain text is asked (a mention, a link or a mark would not survive), never a sensitive
+  node's words and nothing in demo mode; the model answers null for what is in the language already, and an answer that hands the text back unchanged counts as null
+  too, whatever language it names. Answers are kept
+  on this machine under a SHA-256 of the language and the exact text (db.js `translations`), so a note seen before shows
+  translated at once, in any pane or launch, and an edited text is a new key: asked again. An answer lasts a month from
+  when it was last shown; one not shown for 30 days is asked again and is cleaned out on the next save or start (at
+  most 5000 kept, least recently shown out first). While a question is out the page line (or a list row's first fact) says "Translating…" with the sparkle at
+  work, shown only after 0.4 s so an answer from the cache never flashes it (renderer/translate.js). A page is
+  translated as a whole only when it has rows of its own; a title alone (a space listing documents) is left to its list. Measured 2026-09-28 through a
+  ChatGPT sign-in: about 4.5 s for a first question, well under 1 ms once kept.
 
 ## 12. Fields and tables
 

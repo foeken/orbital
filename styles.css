@@ -575,6 +575,14 @@ html.links .app { display: none; }
 .chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
 .chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 13px; background: var(--chat-mine); color: var(--chat-mine-text); }
 .bubble > * + * { margin-top: 8px; }
+.translated-line { display: flex; align-items: center; gap: 6px; margin: 2px 0 10px; font-size: 14px; color: var(--muted); } /* a page shown in English (renderer/translate.js) */
+.translated-line[hidden] { display: none; }
+.translated-line svg, .subtext .translated svg { width: 13px; height: 13px; flex: none; }
+.translated-line button { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.subtext .translated { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; cursor: pointer; } /* a list row's: its first fact, a click switches it */
+.subtext .translated:not(.translating):hover { text-decoration: underline; text-underline-offset: 2px; }
+.translating { animation: translating-late 0s .4s backwards; } /* only once it takes a moment: an answer from the cache never flashes it */
+@keyframes translating-late { from { visibility: hidden; } }
 .fields .chat-context { grid-column: 1 / -1; } /* the whole width, not the glyph's column */
 .fields:has(> .chat-context:only-child) { border: 0; padding: 0; }
 .chat-context { margin: 0 0 28px; text-align: right; font-size: 14px; color: var(--muted); } /* who can see a chat, and its meeting (renderer/chat.js chatContextEl, #543) */
@@ -1151,6 +1159,14 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 }
 @keyframes sparkle-twinkle { 0%, 100% { opacity: .25; transform: scale(.55) rotate(-25deg); } 45% { opacity: 1; transform: scale(1.2) rotate(0deg); } }
 @keyframes sparkle-trail { 0%, 100% { opacity: .15; } 50% { opacity: .75; } }
+/* Auto-translate at work (renderer/translate.js): the same mark, turning and twinkling */
+@media (prefers-reduced-motion: no-preference) {
+  .translating svg { animation: turn calc(var(--dur-loop) * 2) linear infinite; transform-origin: 50% 50%; } /* Auto-translate at work (renderer/translate.js): the same mark */
+  .translating svg path { transform-origin: 50% 50%; transform-box: fill-box; animation: sparkle-twinkle var(--dur-loop) ease-in-out infinite; }
+  .translating svg path:nth-child(2) { animation-delay: calc(var(--dur-loop) / 3); }
+  .translating svg path:nth-child(5) { animation-delay: calc(var(--dur-loop) * 2 / 3); }
+  .translating svg path:nth-child(3), .translating svg path:nth-child(4) { animation: sparkle-trail calc(var(--dur-loop) * 2) ease-in-out infinite; }
+}
 /* And the landing: the answer takes the turning glyph's place, so it comes out of the spin and settles rather than
    being swapped for a still one between two frames, while the name it brought fades in beside it. Played on the
    one render the answer arrives in (renderer/palette.js marks that row), never again as you keep typing. */

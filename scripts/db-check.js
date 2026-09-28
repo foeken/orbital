@@ -200,5 +200,19 @@ assert.strictEqual(db.deletedList(1).length, 1, 'the list is capped');
   console.log('db-check: the app data folder is the app’s name, and an older one is moved there once');
 }
 
+// Auto-translate's answers (#547): a month from when each was last shown, then asked again and cleaned out
+{
+  db.open(file); // the checks above moved on to another file
+  const day = 864e5, t0 = Date.UTC(2026, 0, 1);
+  db.saveTranslations([['k-used', { lang: 'Dutch', text: 'Hello' }], ['k-idle', null]], t0);
+  assert.deepStrictEqual([...db.translations(['k-used', 'k-idle', 'k-none'], t0 + day)], [['k-used', { lang: 'Dutch', text: 'Hello' }], ['k-idle', null]], 'answers come back, "already in the language" too, and an unknown key does not');
+  assert.strictEqual(db.translations(['k-used'], t0 + 25 * day).size, 1, 'shown again within the month: its month starts again');
+  assert.deepStrictEqual([...db.translations(['k-used', 'k-idle'], t0 + 40 * day).keys()], ['k-used'], 'the one shown on day 25 lasts past day 30; the one not shown since day 1 has expired');
+  db.saveTranslations([['k-new', null]], t0 + 40 * day);
+  assert.strictEqual(new DatabaseSync(file).prepare("SELECT count(*) n FROM translations WHERE key = 'k-idle'").get().n, 0, 'and a save cleans the expired ones out');
+  db.saveTranslations([['k-new', null]], Date.now()); db.open(file); db.saveTranslations([], Date.now());
+  assert.deepStrictEqual(new DatabaseSync(file).prepare('SELECT key FROM translations ORDER BY key').all().map((r) => r.key), ['k-new'], 'opening the database cleans out what has not been shown for a month');
+}
+
 fs.rmSync(path.dirname(file), { recursive: true });
 console.log('db-check ok');
