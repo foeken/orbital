@@ -347,6 +347,20 @@ function renderSoon(force) {
   const go = () => { const wait = settling(); if (wait) return setTimeout(go, wait); renderQueued = false; const forced = renderQueuedForce; renderQueuedForce = false; render(forced); };
   requestAnimationFrame(go);
 }
+// A title's "[Name]"s drawn as people (tasks.js memberRefs) from the node's words, when el shows exactly those (not a
+// translation, not masked); the caret going in shows them as written, since that is what an edit saves. false: nothing drawn.
+function drawRefs(el, node, identity) {
+  const segs = segsOf(node), refs = memberRefs(segs);
+  if (refs === segs || el.textContent !== plainOf(segs)) return false;
+  renderSegs(el, refs, identity);
+  originalOnFocus(el, () => renderSegs(el, segs, identity));
+  return true;
+}
+// ...and again each time the caret leaves: what was typed is saved by then (edit.js flush) but not drawn again, so a name
+// just typed or picked with "@" (at the end of the line, most often) shows as a person too
+function refsOnBlur(el, node, identity) {
+  el.addEventListener('blur', () => setTimeout(() => { if (el.isConnected && document.activeElement !== el) drawRefs(el, node, identity); }));
+}
 // What a list row is built from. A row whose signature has not changed since the last render is kept as it is,
 // which turns a live update or a refresh into a handful of rebuilt rows instead of a whole new outline.
 function rowSig(n) {
@@ -362,8 +376,25 @@ function rowSig(n) {
     translateTo(), translations.get(translateSrc(n)), translationPending(translateSrc(n)), shownOriginal.has(translateId(n)), // into which language, shown translated, being translated, or not (renderer/translate.js)
     outline.dataset.key]); // and the page it was built for: a row's editability follows its parent, so a view's row is not a type page's
 }
+// What the header was drawn from, when its "[Name]"s may be people (tasks.js memberRefs): the member list often lands after
+// the zoom, while the caret is in a row and the render it asks for waits, so it draws them itself (tasks.js loadMembers).
+let titleRefsOf = null;
+function paintTitleRefs() {
+  const t = titleRefsOf;
+  if (!t || document.activeElement === titleEl || titleEl.textContent !== demoText(t.text, t.id)) return; // typed in, or showing something else by now
+  const segs = [{ text: t.text }], refs = memberRefs(segs);
+  if (refs === segs) return;
+  renderSegs(titleEl, refs, t.id);
+  if (t.editable) originalOnFocus(titleEl, () => renderSegs(titleEl, segs, t.id));
+}
+// focused() as renderOutline found it, for the rows only: a row being typed in keeps its words as written. The page title
+// answers with its document's key too, which a list row of that document shares once you zoom out (or the row you zoomed
+// in from), so the title's caret is left out: it drew that row untranslated and without its people.
+let caretBefore = null;
 function renderOutline() {
-  const saved = focused();
+  const inTitle = document.activeElement === titleEl;
+  let saved = focused();
+  caretBefore = inTitle ? null : saved;
   // a live update must not eat a selection: the formatting toolbar acts on it, and a re-render lands mid-toggle
   const savedSel = saved && document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('text') ? selectionOffsets(document.activeElement) : null;
   rendered.clear(); docCache.clear();
@@ -458,13 +489,18 @@ function renderOutline() {
     if (!asking) outline.prepend(note);
   }
   // the page title is the zoom target itself: documents use setTitle, blocks use setText through the same debounce
-  const page = pageTranslation(parent), englishTitle = page && !page.pending && !page.original && page.title; // shown translated (renderer/translate.js)
+  // shown translated (renderer/translate.js), but never under the caret: a render while the title is typed in (the answer
+  // landing, a live update) put the translation there, and the edit then saved it over the original
+  const page = pageTranslation(parent), englishTitle = page && !page.pending && !page.original && document.activeElement !== titleEl && page.title;
   drawTranslatedLine(page, parent && parent.docId);
   const editable = !demoMode && parent && !isAtomic(parent.node) && !isReference(parent.node) && canEditText(parent); // demo text is never typed into, so a mask is never saved
   if (editable) titleEl.contentEditable = 'plaintext-only'; else titleEl.removeAttribute('contenteditable');
   titleEl.dataset.key = editable ? parent.key : '';
   titleEl.textContent = englishTitle ? demoText(englishTitle.text, parent.node.id) : editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? demoText(parent.node.text, parent.node.id) : viewOf() ? viewOf().title : 'Tana';
   originalOnFocus(titleEl, englishTitle && editable ? () => { titleEl.textContent = parent.node.text; } : null); // the caret going in finds the original title
+  // a translated title's "[Name]"s too; the caret going in still finds the original (originalOnFocus above), so not editable here
+  titleRefsOf = parent && parent.node.text && !pending.has(parent.key) && document.activeElement !== titleEl ? { text: englishTitle ? englishTitle.text : parent.node.text, id: parent.node.id, editable: !!editable && !englishTitle } : null;
+  paintTitleRefs();
   markTranslatable(titleEl, page && !page.pending && editable ? parent.node.text : null, parent && parent.docId); // and leaving it, the translation again
   blurSensitive(titleEl, parent && parent.docId);
   const pageIcon = parent ? iconOf(parent.node) || nodeIcon(parent.node) : viewOf()?.icon; // nodeIcon: a chat or an agent known by its tag
@@ -533,6 +569,9 @@ function renderOutline() {
   // Putting the caret back is preserving state, not navigating: a render that only rebuilt the rows must not scroll
   // the page to wherever the caret happens to be. Clicking a task's box while another row held the caret rebuilt the
   // outline and then jumped the view to that other row. Typing still scrolls to itself, through scrollOnType.
+  // A caret in the title goes back to that title only: zoomed out, the list row of the same document shares its key, and
+  // placing it there showed that row's own words (untranslated, "[Name]" as written) as if it were being typed in
+  if (inTitle && (!parent || parent.key !== saved?.key)) saved = null;
   if (saved && savedSel) selectRange(saved.key, savedSel[0], savedSel[1], true);
   else if (saved && saved.cell) placeCell(saved.key, saved.cell, saved.offset);
   else if (saved) placeCaret(saved.key, saved.offset, true);
@@ -866,13 +905,17 @@ function nodeEl(node, docId, parent) {
     text.classList.add('table'); text.tabIndex = -1;
     text.append(tableEl(item));
   } else {
-    const english = !pending.has(item.key) && !reference && !fullref && translated && !translated.pending && !translated.original ? translated : null; // shown translated (renderer/translate.js)
+    const english = !pending.has(item.key) && !reference && !fullref && translated && !translated.pending && !translated.original && caretBefore?.key !== item.key ? translated : null; // shown translated (renderer/translate.js), never while typed in, as the title
     if (!demoMode && !clickOpens && canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
-    renderSegs(text, english ? translatedSegs(node, english.text) : pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : segsOf(node), display.id);
+    const own = segsOf(node), segs = english ? translatedSegs(node, english.text) : pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : own;
+    const refs = (english || segs === own) && node.kind === 'document' && caretBefore?.key !== item.key ? memberRefs(segs) : segs; // "[Name]" in a title, translated or not (tasks.js memberRefs)
+    renderSegs(text, refs, display.id);
     text.classList.toggle('chiponly', chipOnly(text));
     if (english) originalOnFocus(text, () => renderSegs(text, segsOf(node), display.id)); // the caret going in finds the original: that is what an edit saves
+    else if (refs !== segs) originalOnFocus(text, () => renderSegs(text, segs, display.id)); // "[Name]" shows as written while typed in
+    if (!english && node.kind === 'document' && text.contentEditable === 'plaintext-only') refsOnBlur(text, item.node, display.id);
     const translatable = !reference && !fullref && translatableOf(item, node); // and leaving it, the translation again, once there is one
     if (translatable && !namedSeg(node)) markTranslatable(text, translatable.src, translatable.id); // a named segment's row is drawn again instead: its words are more than the name
   }
@@ -898,7 +941,7 @@ function nodeEl(node, docId, parent) {
     body.append(q);
   }
   let sub = subtextEl(display, taskInfo, undefined, tableRow(parent));
-  if (translated && !translated.onPage && !tableRow(parent)) { // a list row: said first in its grey line, and switched there
+  if (translated && !tableRow(parent)) { // a list row: said first in its grey line, and switched there
     if (!sub) { sub = document.createElement('div'); sub.className = 'subtext' + (translated.pending ? ' translating' : ''); } // a line only for the notice waits with it
     sub.prepend(translatedFactEl(translated, translated.id || node.id, sub.childNodes.length > 0));
   }

@@ -7,7 +7,7 @@ function loadAccess(docId) {
   // front of the user. Every render asks again, so neither case needs a retry of its own, and a real refusal still shows.
   if (!connected || !tana.accessOptions || !isRealId(docId) || accessById.has(docId) || accessLoading.has(docId)) return;
   accessLoading.add(docId);
-  tana.accessOptions(docId).then((access) => { accessLoading.delete(docId); accessById.set(docId, access); if (!palette.hidden) renderPalette(); }, (e) => { accessLoading.delete(docId); showError(e); }); // any open palette: a selection's Delete row reads it too
+  tana.accessOptions(docId).then((access) => { accessLoading.delete(docId); accessById.set(docId, access); if (!palette.hidden) renderPalette(); else if (zoom && zoom.docId === docId) renderSoon(); }, (e) => { accessLoading.delete(docId); showError(e); }); // any open palette: a selection's Delete row reads it too
 }
 function applySharing(doc, selection) {
   run(async () => {
@@ -38,6 +38,14 @@ function visibilityRows(q, doc = palDoc) {
     rules.has('people') && { group: 'Visibility', icon: 'userLock', label: 'Selected people …', disabled: !hasParticipants, keepOpen: true, run: () => openVisibilityPeople(doc) },
     rules.has('inherit') && { group: 'Visibility', icon: 'houseLock', label: inherit ? 'Inherit: ' + inherit.label : 'Inherit location audience', keepOpen: true, run: () => applySharing(doc, { rule: 'inherit', token: access.sharingToken }) },
   ].filter(Boolean).filter((row) => fuzzyMatch(row.label, q));
+}
+// ⌘K Add participants … and the link beside who can see a chat (renderer/chat.js chatContextEl): Edit visibility, at
+// its Select people step when the document may be shared with people and its participants are in, else at the picker
+// (which says why a step cannot be taken)
+function addParticipants(doc) {
+  palDoc = doc; loadAccess(doc.id); loadTaskMeta(doc.id);
+  if (taskMetaById.has(doc.id) && (accessById.get(doc.id)?.rules || []).includes('people')) return openVisibilityPeople(doc);
+  openVisibilityPalette(doc);
 }
 function openVisibilityPalette(doc) {
   palDoc = doc; loadAccess(doc.id); loadTaskMeta(doc.id); openPage('visibility', 'Choose visibility', { rows: (q) => visibilityRows(q) });

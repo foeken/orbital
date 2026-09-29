@@ -33,9 +33,9 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'meetingTime', 'meetingLocation', 'meetingAttendee',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
-  'setIcon', 'setHue', 'sensitive',
+  'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
   'codex', 'codexOpen', 'codexLink', 'sendToAgent',
-  'visibility', 'notify', 'copyLink', 'exportPdf',
+  'visibility', 'addParticipants', 'notify', 'copyLink', 'exportPdf',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
@@ -145,6 +145,10 @@ function paletteRows(q, typed = q) {
   const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';
   // Rename, as on the page's tab: the zoomed page's title, where it can be typed in (renderer/document.js renameTitle)
   if (palDoc && zoom && palDoc.id === zoom.docId && !zoom.nodeId && (titleEl.dataset || {}).key) rows.push({ id: 'rename', group: docGroup, icon: 'rename', label: 'Rename', run: renameTitle });
+  // the selection, or the row or page you are on, written in the auto-translate language (renderer/translate.js)
+  if (tana.translate && tana.setText && tana.setTitle && !demoMode) { const list = translateTargets(), to = translateTo() || 'English'; if (list.length) rows.push({ id: 'translateNodes', group: selKeys().length ? 'Selection' : docGroup, icon: 'language', label: 'Translate' + (list.length > 1 ? ' ' + list.length + ' nodes' : '') + ' into ' + to, hint: 'Writes the translation', run: () => translateNodes(list, to) }); }
+  // its title shown translated (renderer/translate.js), written as the title for good, where it may be edited
+  if (palDoc && tana.setTitle && !demoMode && canEditNode(palDoc)) { const doc = palDoc, found = titleTranslation(doc); if (found) rows.push({ id: 'replaceTranslation', group: docGroup, icon: 'language', label: 'Replace with translation', hint: 'From ' + found.lang, run: () => replaceWithTranslation(doc, found) }); }
   if (palDoc && tana.exportPdf && DOC_KIND.test(palDoc.id)) {
     const doc = palDoc;
     rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
@@ -309,6 +313,7 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(doc),
       sub: async () => { if (tana.taskMeta && !taskMetaById.has(doc.id)) taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); return visibilityRows('', doc); } }); // doc, not palDoc: focus may move while the participants are asked
+    if (access?.sharing) rows.push({ rank: 'addParticipants', group: docGroup, icon: 'users', label: 'Add participants …', hint: 'Who can see it', keepOpen: true, run: () => addParticipants(doc) }); // Edit visibility, at its people (renderer/access.js)
     if (access?.move) { // Library is a row of its own and the spaces are the folded level of "Move to …"; the Inbox is Set status to Inbox
       rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to …', keepOpen: true, subAlways: true, run: () => openMovePalette(doc), sub: () => moveTargets(doc) });
       if (access.ownerUri) rows.push({ rank: 'moveLibrary', group: docGroup, icon: 'library', label: 'Move to Library', keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, { id: 'library', text: 'Library' }); } });
@@ -346,6 +351,7 @@ function paletteRows(q, typed = q) {
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
+  if (tana.newChat && tana.inviteToChat) rows.push({ id: 'newChatWith', group: 'Actions', icon: 'chat', label: 'New chat with …', hint: 'Someone from the workspace', keepOpen: true, run: () => openNewChatWith() }); // renderer/chat.js
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });

@@ -198,6 +198,13 @@ function chatContextEl(parent) {
   el.className = 'chat-context';
   if (summary && summary.scope === 'only-me') el.append(addIcon(document.createElement('span'), summary.audience.icon), 'Only you can see this chat');
   else if (summary) { const who = peopleEl(summary, node); if (who) el.append(who); }
+  // who can see it, and beside it the way to add someone: ⌘K Add participants … (renderer/access.js), for who may share it
+  loadAccess(node.id);
+  if (el.childNodes.length && accessById.get(node.id)?.sharing) {
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'chat-add'; add.textContent = 'Add participants';
+    add.onmousedown = (e) => e.preventDefault(); add.onclick = () => addParticipants(node);
+    el.append(' · ', add);
+  }
   if (meeting) {
     const info = meetingInfoOf(meeting.id), ref = document.createElement('span');
     renderSegs(ref, [{ mention: { uri: meeting.id, label: (info && info.title) || (docOf(meeting.id) || {}).text || 'its meeting', icon: 'meeting' } }], meeting.id);
@@ -700,6 +707,24 @@ function inviteToChat(docId, uri) {
     await reload(docId);
     if (zoom && zoom.docId === docId) renderSoon(true);
     if (tana.chatAnswers) { const r = await tana.chatAnswers(docId); chatAi.set(docId, !!r.ai); if (composer.dataset.doc === docId) showMode(); }
+  });
+}
+// ⌘K New chat with …: a new chat, yours alone as every new chat is, opened, then the member picked invited to it as
+// Invite to chat does (inviteToChat above): visible to the two of you. Opened first, so a refused invite says why in
+// the chat instead of leaving nothing on screen.
+function openNewChatWith() {
+  loadMembers();
+  openPage('newChatWith', 'New chat with…', { back: BACK_TO_COMMANDS, rows: (q) => {
+    loadMembers();
+    if (!members) return [{ group: 'People', label: 'Loading…', disabled: true, note: true }];
+    return members.filter((m) => !m.me && fuzzyMatch(memberName(m.id), q)).map((m) => ({ group: 'People', icon: 'member', label: memberName(m.id), run: () => newChatWith(m.id) }));
+  } });
+}
+function newChatWith(uri) {
+  return run(async () => {
+    const n = await tana.newChat();
+    openResult(n);
+    inviteToChat(n.id, uri);
   });
 }
 // ⌘K New chat: a chat with Tana, opened with the caret in its composer

@@ -15,6 +15,7 @@ const STATUS = { EXISTING: 1, MISSING: 2, UNAVAILABLE: 3 };
 const DISCARD_LOCAL = 2;
 const EMPTY = new Uint8Array();
 const HANDSHAKE_MS = 15000, BOOTSTRAP_MS = 30000, STABLE_MS = 15000, BATCH_MS = 5, OUTBOUND_BUDGET = 262144;
+const FORCED_RECONNECT_MS = 60000; // at most one reconnect a minute for a bootstrap Tana says has no stream (_bootstrap)
 // A bootstrap answering unavailable is retried while under 60 s or under 5 attempts, as Tana's (#J); then it stops.
 const UNAVAILABLE_MS = 60000, UNAVAILABLE_ATTEMPTS = 5;
 
@@ -199,10 +200,11 @@ class SyncConnection extends EventEmitter {
         const hb = first.value.responseUnion.value.heartbeatIntervalMs;
         const arm = () => {
           clearTimeout(watchdog);
-          if (hb > 0) watchdog = setTimeout(() => { this.logger.warn('sync: stream watchdog elapsed, forcing reconnect'); ac.abort(); }, hb * 3);
+          if (hb > 0) watchdog = setTimeout(() => ac.abort(new Error('no heartbeat for ' + hb * 3 + ' ms, reconnecting')), hb * 3); // the reason is what the stream error below logs
         };
         arm();
         connectedAt = Date.now();
+        this.streamLoaded = false; // no document bootstrapped on this stream yet (_bootstrap)
         everConnected = true;
         this.connected = true;
         this._first.resolve();
@@ -328,7 +330,7 @@ class SyncConnection extends EventEmitter {
         entry.sessionId = null;
         try {
           const status = await this._bootstrapOnce(entry, gen);
-          if (status !== 'missing' && status !== 'unavailable') return;
+          if (status !== 'missing' && status !== 'unavailable') { if (status !== 'stale') this.streamLoaded = true; return; }
           // A MISSING document with local state is a warm create path: keep retrying until the server accepts it,
           // rather than concluding that the id will never exist. Only a truly empty document becomes not found.
           if (status === 'missing' && (entry.queue.length || entry.document.loro.oplogVersion().length())) {
@@ -351,7 +353,18 @@ class SyncConnection extends EventEmitter {
           if (stale()) return;
           const c = code(e), msg = String(e.message || e);
           if (c === Code.PermissionDenied) return this._detach(entry, e);
-          if (c === Code.FailedPrecondition && /no active streams|is not assigned to this pod/.test(msg)) return this.abort.abort();
+          // Tana's client reconnects on these (KTe). Done here only while the stream has loaded nothing (it is the stream that
+          // is lost) and at most once a minute: one document Tana kept answering this for tore the stream down on every
+          // reconnect, re-bootstrapping everything else each time, and the app never finished loading. Past that it is
+          // retried on its own, with the backoff below, while every other document stays live.
+          const noStream = c === Code.FailedPrecondition && /no active streams|is not assigned to this pod/.test(msg);
+          if (noStream && !this.streamLoaded && Date.now() - (this.forcedAt || 0) > FORCED_RECONNECT_MS) {
+            this.forcedAt = Date.now();
+            return this.abort.abort(new Error('bootstrap ' + entry.id + ': ' + msg + ', reconnecting'));
+          }
+          // Said for one document while the stream serves the rest, it is that document (seen for one deleted in Tana):
+          // given up after the unavailable budget, so whoever asked for it hears it failed instead of waiting for ever.
+          if (noStream && (firstMiss = firstMiss || Date.now()) && ++misses >= UNAVAILABLE_ATTEMPTS && Date.now() - firstMiss >= UNAVAILABLE_MS) return this._detach(entry, new Error('document unavailable: ' + entry.id + ' (' + msg + ')'));
           if (c === Code.FailedPrecondition && /system-doc-discard-local/.test(msg)) entry.document.reset();
           // A single [unavailable] is Tana shedding load, and the retry below takes it: logging it looked like a
           // failure that needed acting on when nothing had gone wrong. It is said from the second attempt on, so a

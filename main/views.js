@@ -271,7 +271,9 @@ async function start() {
   // The settings document decides before anything is listed: a view's filter, the hidden titles and the MCP switch
   // are all read on the way into the first refresh, and on a new machine this is also what pushes them up.
   try { await settings.hydrate(); } catch (e) { report(e); } finally { read(); }
-  // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more.
+  // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more. What
+  // this app deleted is known before any of them is asked for (the in-memory set starts empty on every launch).
+  for (const { id } of db.deletedList(1000)) deletedNodes.add(id);
   for (const id of new Set([...notifyWatchedIds(), ...codexIds()])) S.client.sync.subscribe(id).catch(() => {});
   watchInbox().catch(report); // new Inbox tasks, pushed by Tana as they land
   watchMine().catch(report); // the tasks you made for others, which the watch rule follows

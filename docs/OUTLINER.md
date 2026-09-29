@@ -327,6 +327,12 @@ inserts the chosen mention at the caret. For @ linking the palette is a dropdown
 440px card at most 360px tall, hanging under the selection or caret, flipped above when there is more room there. An
 Enter pressed while results are still loading is kept and applied when they land.
 
+A document title holds no reference in Tana, so "@" in a title writes the picked item's title as text, and a person as
+`[Name]`. A title's `[Name]` whose name is exactly a member's is drawn as that member's chip (`memberRefs`, rows and
+the page title), which opens them; the caret going into the title shows `[Name]` again, since that is what is saved.
+A title shown translated does the same: the model is asked to keep `[Name]` as written (main/ai.js), and the
+translation's `[Name]`s are drawn as people too.
+
 ### Pasting a Tana link
 
 Clipboard text that is exactly one Tana node link — a bare `tana:<kind>:<ulid>` or a home.tana.inc url ending in the
@@ -418,6 +424,9 @@ Cmd+K leads with a Selection group for it (§8).
   never repeated in the sidebar ([MEETINGS.md](MEETINGS.md)).
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
   to does nothing: Home is the whole window, which one pane's Back does not replace (issue #444).
+  When the page on screen is deleted or archived (here, in another pane or in Tana), the pane goes back to the page
+  before it in its history, and the deleted page leaves both stacks; with nothing to go back to, it shows the Library
+  (renderer/edit.js `leaveGonePage`).
 - **Home** is the **Work View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
   (`setHome`): its panes and what each shows, kept as the saved view "Home" (`HOME_VIEW`, listed under Saved views, where
   it is removed or, saved again under that name, replaced) and stored as `homeView` in the synced `home` preference. A
@@ -465,7 +474,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set colour, Mark as
-  sensitive); the agent (Assign to Agent, Go to / Link Agent task, Send to agent); Edit visibility, Notify on changes,
+  sensitive); the agent (Assign to Agent, Go to / Link Agent task, Send to agent); Edit visibility, Add participants … (Edit
+  visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
@@ -716,17 +726,27 @@ wrong twenty.
   shown translated, on screen only. Which language a text is in is decided on this Mac, not by the model: Apple's
   NaturalLanguage (main/ai.js `detectLanguages`, through osascript, about 0.3 s for a whole page and no tokens); only a
   text it is at least 60% sure is in another language goes to the model, and the rest is kept as having nothing to
-  translate (a names-only title like "Martijn - Andre" is too unsure to send). A page (its title and plain rows, each
-  judged on its own) is asked about in one question (`api.translate`, main/ai.js `translate`: everything a render wants, a whole page at once,
-  up to ~20k characters, with 90 s to answer; 50 rows measured at 24 s); it shows the
-  translation and one grey line under the title, a sparkle and "Translated from Dutch · Show original", which switches
-  the whole page to its own words and back. A page is a zoomed document or a zoomed block, and everything under it is
-  covered by that one line: its blocks and the documents in it, however deep, show no line of their own. In a list, a document whose title is in another language shows the
+  translate (a names-only title like "Martijn - Andre" is too unsure to send). Only titles of top-level nodes are
+  translated, never a node's content: a zoomed document's title, and a document's title as a row in a list; its blocks
+  and children stay as written. Everything a render wants is asked in one question (`api.translate`, main/ai.js
+  `translate`, up to ~20k characters, with 90 s to answer). A translated page title has one grey line under it, a
+  sparkle and "Translated from Dutch · Show original", which switches it back and forth. In a list, a document whose title is in another language shows the
   translated title and "Translated from Dutch" as the first fact of its grey line; a click there switches that row.
+  Cmd+K **Replace with translation** (Current node, where the title may be edited) writes the translation the title
+  is shown in as its title (`setTitle`), for good (renderer/translate.js `replaceWithTranslation`).
+  Cmd+K **Translate into …** (the Auto-translate language, English while that is off) writes a translation for good into
+  the selection, else the row the caret is in, else the zoomed page: a document's title (`setTitle`) and a block's text
+  (`setText`), in one question (`api.translate`, cache and on-device detection included). Only plain text that may be
+  edited is offered (a mention, link or mark would not survive); what is in the language already is left alone, and a
+  note says how many were translated (renderer/translate.js `translateNodes`).
   A row of the app's own that names a node (a Timeline meeting, "Kevin completed <task>", a notification's title: the
   one segment marked `content`) has only that name translated, the sentence around it kept, and says so the same way.
   Nothing is written: the caret going into a translated row or title shows its own words first, so an edit is made in,
-  and saves, the original; leaving it shows the translation again (an edited text is asked for, and lands in the row
+  and saves, the original — only where it can be typed in: a read-only row (the Timeline, a notification, a reference)
+  keeps its translation when clicked, so the first click opens it (renderer/translate.js focusin). Leaving an edited row
+  While a title is typed in, its notice says so: the page line reads "Original, in Dutch · Show translation" (the
+  button leaves the title, which shows the translation again) and a list row's first fact "Original, in Dutch".
+  shows the translation again (an edited text is asked for, and lands in the row
   when the answer does, wherever the caret is by then). Turning it on or changing the language takes effect at once,
   in every pane. Only plain text is asked (a mention, a link or a mark would not survive), never a sensitive
   node's words; demo mode translates as well and masks the translated words like any other, so its "Translated from …" notices stay; the model answers null for what is in the language already, and an answer that hands the text back unchanged counts as null
@@ -737,8 +757,7 @@ wrong twenty.
   most 5000 kept, least recently shown out first). A batch is asked in two steps: this Mac's answers first (`{ local: true }`: kept
   answers and what it finds already in the language, which settles most of a page at once), then the model for the rest.
   While the model has a text the page line (or a list row's first fact) says "Translating…" with the sparkle at
-  work, shown only after 0.4 s and taking no room until then, so an answer from the cache or a text found already in the language never moves the row (renderer/translate.js, styles.css). A page is
-  translated as a whole only when it has rows of its own; a title alone (a space listing documents) is left to its list. Measured 2026-09-28 through a
+  work, shown only after 0.4 s and taking no room until then, so an answer from the cache or a text found already in the language never moves the row (renderer/translate.js, styles.css). Measured 2026-09-28 through a
   ChatGPT sign-in: about 4.5 s for a first question, well under 1 ms once kept.
   Push notifications are translated the same way before they are shown (main.js `S.notify`: title, subtitle and body
   in one question, never a sensitive node's, and the banner as written when no answer comes within 15 s).
@@ -1048,7 +1067,9 @@ do differently"), then Dismiss (esc) and Continue (↩), Submit on the last. ↑
 (taking the highlighted option when nothing is picked), ←→ step between questions, Esc dismisses (Tana goes on with
 defaults). Submitting writes the answers (`chat:answer`) and Tana goes on. **Invite to chat…** (Cmd+K on a chat) lists
 the workspace's members; the one picked joins the chat as an editor (`chat:invite`), and "<name> was added to the
-chat." shows as a centred status line, as other status lines do.
+chat." shows as a centred status line, as other status lines do. **New chat with …** (Cmd+K, anywhere) lists the
+same members: a new chat opens, yours alone until then, and the one picked is invited to it, so it is visible to the
+two of you; a refused invite says why over the open chat (renderer/chat.js `newChatWith`: `chat:new`, open, then `chat:invite`).
 
 ### Work View, windows and panes
 
@@ -1252,7 +1273,8 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   renderer/fields.js `attendeesFieldEl`).
 - **A chat** has neither field: one grey line at the top right says who can see it ("Only you can see this chat", or
   the audience's glyph and words or faces as a row's subtext has them) and, for a meeting's chat, "about" the meeting as
-  a link. The meeting's attendees stay on the meeting's page: listed on the chat they read as its audience (renderer/chat.js
+  a link, and **Add participants** after who can see it, for whoever may share it (`access.sharing`), which opens
+  Cmd+K Add participants …. The meeting's attendees stay on the meeting's page: listed on the chat they read as its audience (renderer/chat.js
   `chatContextEl`, issue #543).
 - **Sections**: Pinned (a meeting's or space's `EDGE_TYPE_HAS_PIN` items, read from the hub's own `pinnedItems` too,
   since a pin just written is there before its edge), Outcomes (documents it owns that carry a task state), Proposals

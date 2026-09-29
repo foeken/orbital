@@ -125,6 +125,12 @@ document sessions are closed** (a `disconnected` event plus best-effort `unsubsc
 once the transport reports `connected`; ephemeral channel subscriptions are re-sent. A unary command failing with
 `FailedPrecondition` whose message contains `no active streams` or `is not assigned to this pod` also forces a reconnect (`KTe`);
 after five such cycles the client only logs a warning (`terminateAfterFatalCycles` is unset).
+Orbital (sdk/sync.js `_bootstrap`) reconnects on it only while the stream has loaded no document yet, and at most once a
+minute; otherwise that one document is retried with the bootstrap backoff. Seen live 2026-09-29: Tana answered `no active
+streams for peer` for one document on every attempt, and reconnecting each time re-bootstrapped everything in a loop.
+That document was deleted (Tana answers a deleted document's bootstrap this way, not with MISSING): past the unavailable
+budget (5 attempts, 60 s) the subscribe now fails, and main no longer asks for what it knows is deleted (the Recently
+deleted list seeds `deletedNodes` at boot; the Codex and notification watch lists leave deleted ids out).
 
 ## 2. Subscribing to a document (bootstrap -> live)
 

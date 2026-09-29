@@ -366,6 +366,14 @@ html.framed .titlebar { padding-top: 18px; }
 
 /* ==== Page scroll and sidebar (renderer/rail.js, app.js) ==== */
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
+/* Classic scrollbars drawn as the overlay's narrow line (renderer/theme.js checkScrollbars): no track, a 5px rounded
+   thumb, hidden until its area is hovered or scrolled. Overlay scrollbars get none of this. */
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar { width: 11px; height: 11px; background: transparent; }
+.scroll-probe { position: absolute; top: -200px; width: 60px; height: 60px; overflow: scroll; } /* measures what macOS gives, for a moment */
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar-corner { background: transparent; }
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 6px; background-clip: padding-box; background-color: transparent; }
+.classic-scroll :is(:hover, .scrolling):not(.scroll-probe)::-webkit-scrollbar-thumb { background-color: rgb(0 0 0 / 0.28); }
+[data-theme="dark"].classic-scroll :is(:hover, .scrolling):not(.scroll-probe)::-webkit-scrollbar-thumb { background-color: rgb(255 255 255 / 0.28); }
 /* The Graph pane (renderer/rail.js, issue #462): a page that is only its rail, full width, holding the followed
    document's relationships (edges, never editable). Every other page leaves the rail hidden. */
 html.links .app { display: none; }
@@ -602,12 +610,15 @@ html.links .app { display: none; }
 .translated-line svg, .subtext .translated svg { width: 13px; height: 13px; flex: none; }
 .translated-line button { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .subtext .translated { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; cursor: pointer; } /* a list row's: its first fact, a click switches it */
-.subtext .translated:not(.translating):hover { text-decoration: underline; text-underline-offset: 2px; }
+.subtext .translated:not(.translating):hover .tlabel { text-decoration: underline; text-underline-offset: 2px; } /* the words, not the " · " after them */
 .translating { animation: translating-late 0s .4s backwards; } /* only once it takes a moment: an answer from the cache or a text this Mac finds already in the language never shows it, nor takes its room */
 @keyframes translating-late { from { display: none; } }
 .fields .chat-context { grid-column: 1 / -1; } /* the whole width, not the glyph's column */
 .fields:has(> .chat-context:only-child) { border: 0; padding: 0; }
 .chat-context { margin: 0 0 28px; text-align: right; font-size: 14px; color: var(--muted); } /* who can see a chat, and its meeting (renderer/chat.js chatContextEl, #543) */
+.chat-context .chat-add { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; } /* Add participants: a link in the line's own grey, as Show original is */
+.chat-context .chat-add:hover { color: #1c2024; }
+[data-theme="dark"] .chat-context .chat-add:hover { color: #e8eaec; }
 .chat-context > span:first-child > svg, .chat-context .people svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; }
 .chat-context .mention svg { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 3px; }
 .chat-name { font-size: 14px; font-weight: 600; margin: 0 0 2px; } /* who said a reply: in the text's colour, bold */
@@ -830,7 +841,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .node.fullref .text.chiponly .mention { outline: none; }
 /* the row is the node, so its title reads as a title: the blue link is for a reference sitting among text, which is
    the only place it says "this word is somewhere else". The pointer stays, since clicking it still opens the node. */
-.node.fullref :is(.text, .fvalue) .mention { color: inherit; text-decoration: none; }
+.node.fullref :is(.text, .fvalue, .ptitle) .mention { color: inherit; text-decoration: none; }
 /* the row's own line, not `:focus-within` on the row: the children below it are another document's, and a caret
    down there is not the caret on the reference */
 .node.fullref > .line:focus-within, .selected.node.fullref > .line { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
@@ -839,34 +850,34 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
    away: a border snaps to device pixels and a 1px background column does not, so it came out wider and washed out. */
 .node.fullref > .children { border-left-style: dashed; }
 .node.fullref.done > .line .text { color: var(--muted); text-decoration: line-through; }
-:is(.text, .fvalue) .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+:is(.text, .fvalue, .ptitle) .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* a reference that knows what it points at draws its icon in front, in the link's own colour; the underline is
    moved onto the label so it runs under the words rather than under the icon */
-:is(.text, .fvalue) .mention:has(svg) { text-decoration: none; }
-:is(.text, .fvalue) .mention .mlabel { text-decoration: underline; text-underline-offset: 2px; }
+:is(.text, .fvalue, .ptitle) .mention:has(svg) { text-decoration: none; }
+:is(.text, .fvalue, .ptitle) .mention .mlabel { text-decoration: underline; text-underline-offset: 2px; }
 /* the underline is a tint of the link rather than the link colour itself: it marks the words without competing
    with them, and the rule covers both shapes because .mlabel redeclares the decoration */
-:is(.text, .fvalue) .mention, :is(.text, .fvalue) .mention .mlabel { text-decoration-color: #cbddeb; }
-:is(.text, .fvalue) .mention svg { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 3px; }
-:is(.text, .fvalue) .mention:hover { color: #3a75a3; }
+:is(.text, .fvalue, .ptitle) .mention, :is(.text, .fvalue, .ptitle) .mention .mlabel { text-decoration-color: #cbddeb; }
+:is(.text, .fvalue, .ptitle) .mention svg { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 3px; }
+:is(.text, .fvalue, .ptitle) .mention:hover { color: #3a75a3; }
 /* a reference wears its target's colour: the type hue when it has one (the same oklch its chip and bullet use), and
    a meeting the gold its bullet has; the underline follows, paler, the way the blue one does */
-:is(.text, .fvalue) .mention.hue, :is(.text, .fvalue) .mention.hue .mlabel { color: oklch(0.55 0.12 var(--hue)); text-decoration-color: oklch(0.85 0.06 var(--hue)); }
-:is(.text, .fvalue) .mention.hue:hover { color: oklch(0.45 0.12 var(--hue)); }
-:is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone), :is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone) .mlabel { color: #8a6a17; text-decoration-color: #e8dcb3; }
-:is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone):hover { color: #6b5212; }
+:is(.text, .fvalue, .ptitle) .mention.hue, :is(.text, .fvalue, .ptitle) .mention.hue .mlabel { color: oklch(0.55 0.12 var(--hue)); text-decoration-color: oklch(0.85 0.06 var(--hue)); }
+:is(.text, .fvalue, .ptitle) .mention.hue:hover { color: oklch(0.45 0.12 var(--hue)); }
+:is(.text, .fvalue, .ptitle) .mention[data-icon="meeting"]:not(.hue):not(.gone), :is(.text, .fvalue, .ptitle) .mention[data-icon="meeting"]:not(.hue):not(.gone) .mlabel { color: #8a6a17; text-decoration-color: #e8dcb3; }
+:is(.text, .fvalue, .ptitle) .mention[data-icon="meeting"]:not(.hue):not(.gone):hover { color: #6b5212; }
 /* A mention of a node that has been deleted: the words stay — they are what was written — struck through, in the
    ordinary text colour behind a trash glyph, and the pointer goes back to the caret, since there is nowhere to go.
    The strike is declared on both shapes for the same reason the underline is: .mlabel redeclares the decoration. */
-:is(.text, .fvalue) .mention.gone, :is(.text, .fvalue) .mention.gone .mlabel { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--muted); cursor: text; }
-:is(.text, .fvalue) .mention.gone:hover { color: var(--muted); }
+:is(.text, .fvalue, .ptitle) .mention.gone, :is(.text, .fvalue, .ptitle) .mention.gone .mlabel { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--muted); cursor: text; }
+:is(.text, .fvalue, .ptitle) .mention.gone:hover { color: var(--muted); }
 /* and a whole row that references something deleted (a reference row, or a lone chip): the same struck-through grey,
    with the trash glyph as its bullet */
 .node.gone > .line .text { color: var(--muted); text-decoration: line-through; }
 /* one trash glyph, not two: on such a row the bullet is already the trash, and the row's whole text is the chip that
    would draw a second one right beside it. Inside a line of other words a chip keeps its own glyph — there is no
    bullet standing for it there. */
-.node.gone > .line :is(.text, .fvalue) .mention.gone svg { display: none; }
+.node.gone > .line :is(.text, .fvalue, .ptitle) .mention.gone svg { display: none; }
 /* inline marks on a text run (readOutline segments): bold, italic, strike, code, and link marks */
 .text strong { font-weight: 700; }
 .text em { font-style: italic; }
@@ -1354,14 +1365,14 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 @media (prefers-reduced-motion: no-preference) { [data-theme="dark"] .text.image.loading:not(.demo) { background-image: linear-gradient(90deg, #303436 0%, #3d4244 50%, #303436 100%); } }
 [data-theme="dark"] .demo-image { background: #303436; color: #6f7479; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
-[data-theme="dark"] :is(.text, .fvalue) .mention { color: #8fc1e1; }
-[data-theme="dark"] :is(.text, .fvalue) .mention, [data-theme="dark"] :is(.text, .fvalue) .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */
-[data-theme="dark"] :is(.text, .fvalue) .mention:hover { color: #b5ddf4; }
-[data-theme="dark"] :is(.text, .fvalue) .mention.hue, [data-theme="dark"] :is(.text, .fvalue) .mention.hue .mlabel { color: oklch(0.8 0.1 var(--hue)); text-decoration-color: oklch(0.45 0.06 var(--hue)); }
-[data-theme="dark"] :is(.text, .fvalue) .mention.hue:hover { color: oklch(0.88 0.1 var(--hue)); }
-[data-theme="dark"] :is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone), [data-theme="dark"] :is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone) .mlabel { color: #e4c968; text-decoration-color: #5a4d25; }
-[data-theme="dark"] :is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone):hover { color: #f0dc8e; }
-[data-theme="dark"] :is(.text, .fvalue) .mention.gone, [data-theme="dark"] :is(.text, .fvalue) .mention.gone .mlabel, [data-theme="dark"] :is(.text, .fvalue) .mention.gone:hover { color: var(--muted); text-decoration-color: var(--muted); }
+[data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention { color: #8fc1e1; }
+[data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention, [data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */
+[data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention:hover { color: #b5ddf4; }
+[data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention.hue, [data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention.hue .mlabel { color: oklch(0.8 0.1 var(--hue)); text-decoration-color: oklch(0.45 0.06 var(--hue)); }
+[data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention.hue:hover { color: oklch(0.88 0.1 var(--hue)); }
+[data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention[data-icon="meeting"]:not(.hue):not(.gone), [data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention[data-icon="meeting"]:not(.hue):not(.gone) .mlabel { color: #e4c968; text-decoration-color: #5a4d25; }
+[data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention[data-icon="meeting"]:not(.hue):not(.gone):hover { color: #f0dc8e; }
+[data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention.gone, [data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention.gone .mlabel, [data-theme="dark"] :is(.text, .fvalue, .ptitle) .mention.gone:hover { color: var(--muted); text-decoration-color: var(--muted); }
 [data-theme="dark"] .text code { background: #303436; }
 [data-theme="dark"] .text a.link { color: #7fb8dd; }
 [data-theme="dark"] .text a.link:hover { color: #b5ddf4; }

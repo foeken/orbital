@@ -3,7 +3,9 @@
 
 // ---- page title (zoomed into a document): edits go through the same debounce as node text; Enter -> first child, Esc restores ----
 titleEl.addEventListener('input', () => { const item = items.get(titleEl.dataset.key); if (!item) return; if (item.node.draft) item.node.text = titleEl.textContent; if (item.node.draft && !item.busy) { item.busy = true; materialise(item, titleEl); } else if (!item.node.draft) scheduleSave(item, [{ text: titleEl.textContent }]); });
-titleEl.addEventListener('blur', () => { const item = items.get(titleEl.dataset.key); if (item?.node.draft && !item.busy && !titleEl.textContent) { zoom = null; return dropDraft(item); } flush(titleEl.dataset.key); });
+titleEl.addEventListener('blur', () => { const item = items.get(titleEl.dataset.key); if (item?.node.draft && !item.busy && !titleEl.textContent) { zoom = null; return dropDraft(item); } flush(titleEl.dataset.key); if (item && !item.node.draft) drawRefs(titleEl, item.node, item.node.id); }); // flush saved what was typed: its "[Name]"s show as people again (render.js drawRefs)
+titleEl.addEventListener('mousedown', (e) => { if (e.target.closest?.('.mention')) e.preventDefault(); }); // a person's chip ("[Name]") is a link out, as in a row
+titleEl.addEventListener('click', (e) => { const m = e.target.closest?.('.mention'); if (m) goTo(m.dataset.uri); });
 titleEl.addEventListener('keydown', (e) => {
   const item = items.get(titleEl.dataset.key);
   if (!titleEl.isContentEditable || !item) return;
@@ -188,7 +190,7 @@ function invalidateNode(id) {
   for (const [docId, rows] of kids) if (Array.isArray(rows)) kids.set(docId, rows.filter((node) => node.id !== id));
   palRows = palRows.filter((row) => row.node?.id !== id);
   if (palDoc?.id === id) { palDoc = null; pinInfo = null; }
-  if (zoom?.docId === id) zoom = null;
+  if (zoom?.docId === id) leaveGonePage(id); // the page it was: back to the one before it (edit.js), else the Library
 }
 function setSensitiveMark(ids, on) {
   run(async () => {

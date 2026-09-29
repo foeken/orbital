@@ -6556,6 +6556,7 @@ async function main() {
         const sessionId = 's' + (++server.session);
         server.begins.push(value.documentId);
         if (server.fail503 > 0) { server.fail503--; throw new ConnectError('HTTP 503', Code.Unavailable); } // Tana shedding load
+        if (server.noStream > 0) { server.noStream--; throw new ConnectError('no active streams for peer "1"', Code.FailedPrecondition); }
         if (server.unavailable.has(value.documentId)) { server.onUnavailable(); return fromJson(message('sync', 'ServerSyncCommandResponse'), { bootstrapResponse: { sessionId, status: 'BOOTSTRAP_STATUS_UNAVAILABLE' } }); }
         const cold = value.clientVv.length === 0;
         if (value.documentId !== DOC && !server.created.has(value.documentId)) { // unknown id: MISSING, nothing to send (§2.1)
@@ -6675,6 +6676,13 @@ async function main() {
   const said = warns.filter((w) => w.startsWith('sync: bootstrap ' + FLAKY));
   assert.equal(said.length, 1, 'the first [unavailable] stays quiet, the second is reported: ' + JSON.stringify(said));
   assert.match(said[0], /failed \(attempt 2\): .*503/);
+  // "no active streams" for one document on a stream that has loaded others: that document is retried on its own, and
+  // the stream stays up. Tearing it down each time looped for ever when Tana kept saying it for one document.
+  server.noStream = 3;
+  const connectedBefore = connected, NOSTREAM = 'tana:text:' + ulid();
+  const lone = await sync.subscribe(NOSTREAM, (l) => initDocument(l, 'loaded after three refusals', ME));
+  assert.equal(readNode(lone).title, 'loaded after three refusals', 'the document is retried until it loads');
+  assert.equal(connected, connectedBefore, 'and the stream was not reconnected for it');
   // Drain on release (Tana's "Entering drain mode"): a document created and let go while its bootstrap is still running
   // finishes that bootstrap, so the catch-up carrying its content reaches the server, and only then is unsubscribed.
   const DRAINED = 'tana:text:' + ulid();
@@ -6780,6 +6788,23 @@ async function main() {
       sync._bootstrapOnce = savedBootstrapOnce;
       sync.connected = true;
       sync.docs.delete(COLD);
+    }
+    // "no active streams" for one document on a stream that serves the rest (Tana's answer for one deleted there): given
+    // up after the same budget, so whoever asked hears it failed instead of it being asked for every few seconds for ever.
+    const GONE = 'tana:text:' + ulid();
+    let goneTries = 0, goneError = null;
+    const goneEntry = { id: GONE, document: new Document(GONE, { peerId: '4254' }), sessionId: null, state: 'new', gen: 0, queue: [], inflight: false, timer: null, resyncs: 0, liveSince: 0, ready: { resolve() {}, reject(e) { goneError = e; } }, complete: null, onChange() {}, onLocal() {} };
+    sync.docs.set(GONE, goneEntry);
+    try {
+      sync.connected = true; sync.streamLoaded = true;
+      sync._bootstrapOnce = async () => { goneTries++; skew += 20000; if (goneTries >= 20) sync.connected = false; throw new ConnectError('no active streams for peer "1"', Code.FailedPrecondition); };
+      await sync._bootstrap(goneEntry);
+      assert.equal(goneTries, 5, 'five refusals over 60 s, then no more');
+      assert.match(String(goneError && goneError.message), /document unavailable/, 'and the subscribe is told it failed');
+    } finally {
+      sync._bootstrapOnce = savedBootstrapOnce;
+      sync.connected = true;
+      sync.docs.delete(GONE);
     }
   } finally {
     Date.now = realNow;

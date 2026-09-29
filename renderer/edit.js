@@ -401,6 +401,15 @@ function navigate(dir) {
   } finally { navigating = false; }
   if (left) flash(rowFor(left));
 }
+// The page on screen was deleted or archived (document.js invalidateNode): back to the place before it, when this pane
+// has one, rather than the Library. The page leaves both stacks, so neither Back nor Forward reopens it.
+function leaveGonePage(id) {
+  zoom = null;
+  const keep = (place) => !place || !place.zoom || place.zoom.docId !== id;
+  navBack.splice(0, navBack.length, ...navBack.filter(keep));
+  if (navBack.length) navigate(-1);
+  navForward.splice(0, navForward.length, ...navForward.filter(keep));
+}
 // The same two moves as a pair of buttons in the header, beside the sidebar toggle: the mouse route to Cmd+[ and
 // Cmd+]. They run navigate, so there is one history and one set of rules; every render draws their state.
 const backBtn = $('navBack'), fwdBtn = $('navFwd');

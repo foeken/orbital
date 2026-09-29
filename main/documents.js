@@ -653,7 +653,8 @@ const notifyOn = (n, creator) => { const chosen = notifyChoices()[n.id]; return 
 // and the view refresh unsubscribes everything the active view stops listing, so without this "notify me" quietly
 // meant "while this view happens to list it". The rule-based defaults cannot be enumerated without reading every
 // document, so they stay as they were: watched while something is looking at them.
-const notifyWatchedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === true)); };
+// a deleted node is watched no more (deletedNodes, seeded at boot from the Recently deleted list): Tana refuses its bootstrap for ever
+const notifyWatchedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === true && !deletedNodes.has(id))); };
 // The other half of that map: the nodes you silenced. The watch rule (main/views.js refreshWatched) reads graph
 // nodes, whose shape notifyDefault cannot take, so it needs the choice as a set rather than as notifyOn.
 const notifySilencedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === false)); };
@@ -673,7 +674,7 @@ const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Complete
 // App-local on purpose: Tana's assignedToUris takes user-profile uris only, so an agent cannot be a native assignee.
 // The ids live in the settings table beside the watch choices; two states, so a list rather than a map.
 // Assignment only: nothing here dispatches, runs or reports back.
-const codexIds = () => { const stored = settings.get('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string') : []; };
+const codexIds = () => { const stored = settings.get('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string' && !deletedNodes.has(id)) : []; }; // a deleted node's task is let go, as notifyWatchedIds does
 // What the agent was asked to do with the node, by id. A second map rather than a list of pairs: the assignment list
 // is what everything else reads, and turning it into objects would rewrite every reader for a field only the prompt
 // page writes. A prompt exists only alongside the assignment it was given with, so unassigning drops both.
