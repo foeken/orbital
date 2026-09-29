@@ -2650,21 +2650,63 @@ function makeSlashHarness() {
       insertDivider: async (docId, id) => calls.push(['insertDivider', docId, id]),
       insertTable: async (docId, id) => { calls.push(['insertTable', docId, id]); return 'c1'; },
       remove: async (docId, id) => calls.push(['remove', docId, id]),
+      toggleCheckbox: async (docId, id) => calls.push(['toggleCheckbox', docId, id]),
+      createDocument: async (title, opts) => { calls.push(['createDocument', title, opts]); return { id: 'tana:text:task1', title }; },
     };
+    let page = null;
+    const extra = new Map(), showError = (e) => calls.push(['error', String(e.message || e)]);
+    const openPage = (mode, placeholder, p) => { page = { mode, placeholder, ...p }; };
+    const togglePalette = (mode) => calls.push(['palette', mode]), closePalette = () => calls.push(['close']);
+    const linkTo = async (ctx, mention) => calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]);
+    const renderPalette = () => {}, textEl = () => ({}), readSegs = () => node.segments;
+    const plainOf = (segs) => segs.map((s) => s.text).join('');
     ${functionSource('slashTarget')}
     ${functionSource('slashRows')}
     ${functionSource('runSlashBlock')}
     ${functionSource('createFromSlash')}
-    Object.assign(globalThis, { rows: (q) => slashRows(q), calls: () => calls, text: () => node.text });
+    let slashTaskBusy = false;
+    ${functionSource('taskFromSlash')}
+    ${functionSource('taskHere')}
+    Object.assign(globalThis, { rows: (q) => slashRows(q), calls: () => calls, text: () => node.text, node, page: () => page });
   `, context);
   return context;
 }
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Create Task', 'Create Project'],
-    'the "/" menu offers every block type, a divider, a table, an image and the create choices');
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Task', 'Create Project'],
+    'the "/" menu offers every block type, a checklist, a divider, a table, an image and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
+  assert.equal(listing.rows('task')[0].label, 'Task', '"/task" finds the task row first');
+  assert.equal(listing.rows('check')[0].label, 'Checklist', 'and "/check" the checklist');
+
+  // "/" Checklist (#602): the "/" goes and the row gets a checkbox; a row that has one keeps it as it is
+  const checklist = makeSlashHarness();
+  await checklist.rows('').find((row) => row.label === 'Checklist').run();
+  assert.deepEqual(plain(checklist.calls()), [['setText', 'doc', 'block', []], ['toggleCheckbox', 'doc', 'block'], ['reload'], ['caret', 'doc/block', 0]], 'Checklist gives the row a checkbox');
+  const ticked = makeSlashHarness();
+  ticked.node.done = 0;
+  await ticked.rows('').find((row) => row.label === 'Checklist').run();
+  assert.equal(plain(ticked.calls()).some((c) => c[0] === 'toggleCheckbox'), false, 'and never checks a checkbox that is already there');
+
+  // "/" Task (#602): named on a page, made as a task, and the "/" row becomes the reference to it
+  const task = makeSlashHarness();
+  task.rows('task')[0].run();
+  assert.equal(task.page().placeholder, 'Name the new task…', 'Task asks for the task\'s name');
+  assert.deepEqual(plain(task.page().rows('', '  ').map((r) => [r.label, !!r.disabled])), [['Type a name', true]], 'with nothing typed there is nothing to make');
+  task.page().back();
+  const [make] = task.page().rows('', ' Ship it ');
+  assert.equal(make.keepOpen, true, 'the name page stays open while the task is made, so nothing is typed into the row meanwhile');
+  await Promise.all([make.run(), make.run()]);
+  assert.deepEqual(plain(task.calls()), [['palette', 'slash'], ['createDocument', 'Ship it', { kind: 'task' }], ['close'], ['linkTo', 'doc/block', [], 0, 0, { label: 'Ship it', uri: 'tana:text:task1' }]],
+    'Back returns to the menu; Enter makes one task, closes the palette and puts its reference in place of the "/"');
+  const edited = makeSlashHarness();
+  edited.rows('task')[0].run();
+  const run = edited.page().rows('', 'Ship it')[0].run();
+  assert.equal(edited.page().rows('', 'Ship it')[0].label, 'Creating “Ship it”…', 'and says so until it is done');
+  edited.node.segments = [{ text: 'hello' }]; // the row changed while the task was being made
+  await run;
+  assert.deepEqual(plain(edited.calls()).at(-1), ['linkTo', 'doc/block', [{ text: 'hello' }], 5, 5, { label: 'Ship it', uri: 'tana:text:task1' }], 'a row that holds more than the "/" keeps it, the reference after it');
 
   const quote = makeSlashHarness();
   await quote.rows('').find((row) => row.label === 'Quote').run();

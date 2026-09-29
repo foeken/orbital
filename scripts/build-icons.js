@@ -81,6 +81,7 @@ WANT.info = path.join(__dirname, '..', 'build', 'icons', 'circle-info.svg'); // 
 WANT.license = path.join(__dirname, '..', 'build', 'icons', 'license.svg'); // the License link on the About Orbital page
 WANT.imageSparkle = path.join(__dirname, '..', 'build', 'icons', 'image-sparkle-3.svg'); // the same button with an image over it: Process image (shell.js createAs)
 WANT.language = path.join(__dirname, '..', 'build', 'icons', 'language.svg'); // Cmd+K Replace with translation (renderer/palette.js)
+WANT.checklist = path.join(__dirname, '..', 'build', 'icons', 'checkbox-checked.svg'); // the "/" menu's Checklist row (#602), Nucleo UI 18px outline
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   if (!SRC && !path.isAbsolute(file)) { if (!current[name]) throw new Error(name + ' needs the icon set: node scripts/build-icons.js <dir>'); out[name] = current[name]; continue; }

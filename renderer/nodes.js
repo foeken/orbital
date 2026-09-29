@@ -91,7 +91,7 @@ const siblingBlock = (node) => (node.kind === 'block' && ['bullet', 'numbered', 
 const nestedRow = (item) => item?.parent?.node?.kind === 'block';
 // the icon slot of a palette/menu row: a real icon where we have one, else the text glyph. The icon sits in the
 // same slot so it matches the weight of H1/•/1. beside it.
-function glyphSvg(type) { return ['code', 'table', 'image'].includes(type) ? '<span class="glyph icon">' + iconSvg(type) + '</span>' : '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; }
+function glyphSvg(type) { return ['code', 'checklist', 'table', 'image'].includes(type) ? '<span class="glyph icon">' + iconSvg(type) + '</span>' : '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; }
 const images = new Map(); // image uri -> data URL (or the pending api.image promise)
 // image uri -> Promise<title | ''>: the title Tana's AI gives an image document after its upload, read once
 const imageTitles = new Map();
