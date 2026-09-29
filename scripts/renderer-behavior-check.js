@@ -190,14 +190,14 @@ const withShims = (src) => {
   if (/\b(atHome|homeId|homeName|repairHome|setHome|goHome)\b/.test(src) && !/const homeId =/.test(src)) src = "globalThis.atHome ??= () => true; globalThis.homeId ??= () => 'library'; globalThis.homeName ??= () => 'Library'; globalThis.repairHome ??= () => {}; globalThis.setHome ??= () => {}; globalThis.goHome ??= () => {};\n" + src;
   // Motion (renderer/motion.js) is what no harness looks at: a slice that calls it gets moves that change nothing, and
   // the state change a move wraps runs at once, exactly as it does under reduced motion.
-  if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
+  if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|popSound|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
   return /\b(renderSoon|patchMeta|iconNode|addIcon|hotkeyFor|hotkeyIds|comboOf|keyTitle|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
 };
 const MOTION_SHIM = 'globalThis.turnPage ??= (dir, update) => update(); globalThis.foldRow ??= (key, opening, done) => done(); globalThis.foldSection ??= (head, toggle) => toggle(); '
   + "globalThis.showHide ??= (el, show) => { el.hidden = !show; }; globalThis.rowsQuiet ??= false; "
   + 'globalThis.dismissRow ??= (el, kind, done) => done(); globalThis.settleEmpty ??= () => {}; globalThis.crossfade ??= (update) => update(); globalThis.motionBefore ??= () => null; globalThis.motionAfter ??= () => {}; '
   + 'globalThis.armGlide ??= () => {}; globalThis.flash ??= () => {}; globalThis.flashAt ??= () => {}; globalThis.playOnce ??= () => {}; globalThis.rowFor ??= () => null; globalThis.badgeMoved ??= () => {}; '
-  + 'globalThis.popRead ??= () => {}; globalThis.popMention ??= () => {}; globalThis.swapPanel ??= () => {}; globalThis.menuMotion ??= () => {}; globalThis.growFrom ??= async () => {}; globalThis.play ??= async () => {}; '
+  + 'globalThis.popRead ??= () => {}; globalThis.popMention ??= () => {}; globalThis.popSound ??= () => {}; globalThis.swapPanel ??= () => {}; globalThis.menuMotion ??= () => {}; globalThis.growFrom ??= async () => {}; globalThis.play ??= async () => {}; '
   + 'globalThis.settling ??= () => 0; globalThis.MOTION ??= {}; globalThis.motionOK ??= () => false; globalThis.stillPreferred ??= () => true;\n';
 function functionSource(name) {
   const asyncStart = source.indexOf('async function ' + name + '(');

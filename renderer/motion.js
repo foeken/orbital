@@ -340,3 +340,25 @@ function popRead(ids) {
 function popMention(key, uri) {
   for (const m of textEl(key)?.querySelectorAll('.mention') || []) if (m.dataset.uri === uri) playOnce(m, 'pop');
 }
+// The sound of checking a to-do off: a water-drop pop and a small ring after it, a fifth of a second, synthesized so
+// there is no file to ship. Once per check wherever it is drawn; unchecking is silent, like it is still (render.js playTick).
+let popCtx = null;
+function popSound() {
+  if (typeof AudioContext !== 'function') return;
+  const ctx = popCtx || (popCtx = new AudioContext());
+  if (ctx.state === 'suspended') ctx.resume();
+  const t = ctx.currentTime + 0.005;
+  const note = (type, from, to, at, len, peak) => {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, t + at);
+    osc.frequency.exponentialRampToValueAtTime(to, t + at + len * 0.4);
+    gain.gain.setValueAtTime(0.0001, t + at);
+    gain.gain.exponentialRampToValueAtTime(peak, t + at + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + at + len);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t + at); osc.stop(t + at + len + 0.02);
+  };
+  note('sine', 420, 980, 0, 0.09, 0.35); // the pop, rising
+  note('triangle', 1568, 1568, 0.06, 0.16, 0.07); // the ring, a G6, as the box fills
+}

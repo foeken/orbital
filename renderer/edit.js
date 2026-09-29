@@ -225,7 +225,7 @@ function toggleDone(item, direct) {
   const accept = !direct && acceptsFirst(item.node);
   if (!accept) item.node.done = item.node.done ? 0 : 1;
   item.node.stateType = item.node.done ? 'closed' : 'open'; // what setDone makes of it: an unchecked Inbox task comes back In Progress, not dashed
-  if (item.node.done) justDone.set(item.docId, Date.now());
+  if (item.node.done) { justDone.set(item.docId, Date.now()); popSound(); }
   if (item.node.kind === 'document') patchCopies(item.node.id, { done: item.node.done, stateType: item.node.stateType }); // every copy on the page at once
   if (zoom && zoom.docId === item.docId) extra.set(item.docId, item.node); // the page stays open when the task leaves the filtered view
   render(true);
@@ -233,6 +233,7 @@ function toggleDone(item, direct) {
 }
 function toggleCheckbox(item) {
   if (!canEditItem(item) || item.node.kind !== 'block' || !tana.toggleCheckbox) return;
+  if (!item.node.done) popSound();
   run(async () => { await tana.toggleCheckbox(item.docId, item.node.id); await reload(item.docId); });
 }
 async function inheritCheckbox(parent, nodeId) {
@@ -271,7 +272,7 @@ function toggleReference(node) {
   const done = target.done ? 0 : 1; // referenceTarget() hands back a copy: write the new state where the row reads it
   node.reference.node = { ...node.reference.node, done };
   extra.set(target.id, { ...target, done });
-  if (done) justDone.set(target.id, Date.now());
+  if (done) { justDone.set(target.id, Date.now()); popSound(); }
   render(true);
   run(() => tana.setDone(target.id, done));
 }
