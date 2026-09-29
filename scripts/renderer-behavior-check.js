@@ -185,8 +185,8 @@ const withShims = (src) => {
   // Whether a row can be picked up (renderer/drag.js). A harness that draws rows is not about dragging, so its
   // rows are simply not draggable; the drop harness slices the real rules in instead.
   if (/\bcanDragItem\(/.test(src) && !/const canDragItem =/.test(src)) src = 'globalThis.canDragItem ??= () => false;\n' + src;
-  // "[Name]" in a title (renderer/tasks.js memberRefs, render.js drawRefs): a slice that draws rows without it draws titles as written
-  if (/\b(caretBefore|memberRefs|drawRefs|refsOnBlur|titleRefsOf|paintTitleRefs)\b/.test(src) && !/function memberRefs\(/.test(src)) src = 'globalThis.caretBefore ??= null; globalThis.memberRefs ??= (segs) => segs; globalThis.drawRefs ??= () => false; globalThis.refsOnBlur ??= () => {}; globalThis.titleRefsOf ??= null; globalThis.paintTitleRefs ??= () => {};\n' + src;
+  // the caret a render found in a row (render.js caretBefore): a slice that draws rows without it finds none
+  if (/\bcaretBefore\b/.test(src) && !/let caretBefore/.test(src)) src = 'globalThis.caretBefore ??= null;\n' + src;
   // The Home anchor (renderer/nodes.js): the palette's Go back row reads it, Set as Home offers itself from it, and
   // navigate lands on it. A slice that is not about Home gets the shipped default — the Library, and you are on it —
   // so nothing it asserts depends on a choice it never made; the Home harness slices the real ones instead.
@@ -1384,7 +1384,7 @@ function runReferenceEmbedRenderCheck() {
     'and a click on the row once it is selected starts editing it, caret at the end, since its text is one chip with nothing to click into');
 
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
-  assert.match(styles, /\.node\.fullref :is\(\.text, \.fvalue, \.ptitle\) \.mention \{[^}]*color: inherit[^}]*text-decoration: none/,
+  assert.match(styles, /\.node\.fullref :is\(\.text, \.fvalue\) \.mention \{[^}]*color: inherit[^}]*text-decoration: none/,
     'and the row that is the node reads as a title: the blue underlined link is for a reference sitting among text');
   assert.match(styles, /\.node\.fullref > \.children \{[^}]*border-left-style: dashed/,
     'what hangs under it is another document, so its guide line is dashed');
@@ -1396,7 +1396,7 @@ function runReferenceEmbedRenderCheck() {
     'which is what :focus-within on the row would have got wrong');
   assert.match(styles, /\.node\.gone > \.line \.text \{[^}]*text-decoration: line-through/,
     'a row whose reference is gone reads as gone: its text is struck through');
-  assert.match(styles, /\.node\.gone > \.line :is\(\.text, \.fvalue, \.ptitle\) \.mention\.gone svg \{[^}]*display: none/,
+  assert.match(styles, /\.node\.gone > \.line :is\(\.text, \.fvalue\) \.mention\.gone svg \{[^}]*display: none/,
     'and it shows one trash glyph — the bullet — rather than a second one on the chip that is the whole of its text');
 
   // A task put off is drawn asleep. It is still a task — same box, same status — so only the glyph changes.
@@ -5590,55 +5590,6 @@ async function runAddParticipantsCheck() {
   await api.newChatWith('tana:user-profile:sam');
   assert.deepEqual(plain(api.calls), ['new', 'open tana:chat:n', 'invite tana:chat:n tana:user-profile:sam'], 'New chat with: the chat, opened, then the member invited to it');
 }
-// "[Name]" in a title is a person's chip when the name is exactly a member's (renderer/tasks.js memberRefs), and "@" on
-// a person in a title writes "[Name]", since Tana titles hold no reference (renderer/toolbar.js linkTo).
-async function runTitleRefsCheck() {
-  const api = vm.runInNewContext(`
-    let members = [{ id: 'tana:user-profile:sam', title: 'Sam Lee' }], caret = null; const saved = [];
-    const tana = { setTitle: async (id, text) => saved.push(text) };
-    const run = (fn) => fn(), reload = async () => {}, render = () => {}, placeCaret = (key, at) => { caret = at; }, popMention = () => {};
-    const segsOf = (v) => (Array.isArray(v) ? v : [{ text: v }]), plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
-    ${functionSource('splitSegs')}
-    ${functionSource('memberRefs')}
-    ${functionSource('linkTo')}
-    ({ memberRefs, linkTo, saved, caret: () => caret });
-  `);
-  const segs = [{ text: 'Call [Sam Lee] about [Nobody] and [sam lee]' }];
-  assert.deepEqual(plain(api.memberRefs(segs)), [{ text: 'Call ' }, { mention: { uri: 'tana:user-profile:sam', label: 'Sam Lee', icon: 'member' } }, { text: ' about [Nobody] and [sam lee]' }], 'only an exact member name becomes their chip');
-  const blank = [{ text: undefined }];
-  assert.equal(api.memberRefs(blank), blank, 'a title with no words yet (an app page) is left alone instead of throwing mid-render');
-  const none = [{ text: 'No [one] here' }];
-  assert.equal(api.memberRefs(none), none, 'no member named: the same segments, so nothing is redrawn');
-  const item = { key: 'k', docId: 'tana:text:t', node: { kind: 'document', text: 'Ask @' } };
-  await api.linkTo({ item, segs: [{ text: 'Ask @' }], start: 4, end: 5 }, { uri: 'tana:user-profile:sam', label: 'Sam Lee' });
-  assert.deepEqual(plain(api.saved), ['Ask [Sam Lee]'], '"@" on a person in a title stores "[Name]" as text');
-  assert.equal(api.caret(), 13, 'the caret after the closing bracket');
-  // leaving a title draws its "[Name]"s as people from the saved words (render.js drawRefs), a name at the end included,
-  // and leaves a title showing other words (a translation) alone
-  const draw = vm.runInNewContext(`
-    let members = [{ id: 'tana:user-profile:sam', title: 'Sam Lee' }]; const drawn = [];
-    const segsOf = (v) => (v.text ? [{ text: v.text }] : []), plainOf = (v) => (Array.isArray(v) ? v : segsOf(v)).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
-    const renderSegs = (el, segs) => drawn.push(segs.map((s) => ('text' in s ? s.text : '@' + s.mention.label)).join('')), originalOnFocus = () => {};
-    ${functionSource('memberRefs')}
-    ${functionSource('drawRefs')}
-    ({ drawRefs, drawn });
-  `);
-  assert.equal(draw.drawRefs({ textContent: 'Meet up with [Sam Lee]' }, { text: 'Meet up with [Sam Lee]' }), true, 'a name typed at the end of the title');
-  // leaving the title, its words are read back as saved (renderer/translate.js savedWords): the chip drawRefs put there
-  // is "[Name]" again, and the caret anchor after it is nothing, so the translation kept for the title is found
-  const words = vm.runInNewContext(`
-    const CARET_ANCHOR = '\\u200b', unanchored = (s) => (s && s.includes(CARET_ANCHOR) ? s.split(CARET_ANCHOR).join('') : s);
-    const hasMarks = (marks) => !!marks && Object.keys(marks).length > 0, markKey = (marks) => JSON.stringify(Object.entries(marks || {}).sort()), marksOf = (n, m) => m;
-    ${functionSource('readSegs')}
-    ${sourceBetween('const savedWords = ', 'document.addEventListener(\'focusout\'')}
-    ({ savedWords });
-  `);
-  const chip = { nodeType: 1, nodeName: 'A', classList: { contains: (c) => c === 'mention' }, textContent: 'Sam Lee', dataset: { uri: 'tana:user-profile:sam', icon: 'member' } };
-  const titleWithChip = { querySelector: () => chip, childNodes: [{ nodeType: 3, nodeName: '#text', textContent: 'Afspraak met ' }, chip, { nodeType: 3, nodeName: '#text', textContent: '\u200b' }], textContent: 'Afspraak met Sam Lee\u200b' };
-  assert.equal(words.savedWords(titleWithChip), 'Afspraak met [Sam Lee]', 'a drawn person reads back as the "[Name]" that was saved');
-  assert.equal(draw.drawRefs({ textContent: 'Afspraak met [Sam Lee]' }, { text: 'Meet up with [Sam Lee]' }), false, 'a title showing other words is left as it is');
-  assert.deepEqual(plain(draw.drawn), ['Meet up with @Sam Lee'], 'drawn as the person');
-}
 // Auto-translate covers titles of top-level nodes only (renderer/translate.js translatableOf): a document's title, never
 // a block, which is a node's content, whatever page it is on.
 async function runTranslateTitlesOnlyCheck() {
@@ -6914,10 +6865,10 @@ async function runDefaultModeCheck() {
   assert.match(styles, /\.menu \.mrow\.disabled \{/, 'a menu row that cannot run looks different from one that can');
   // an inline reference's icon takes the link's colour (it inherits, rather than setting one of its own) and the
   // underline moves onto the label so it does not run under the icon
-  assert.match(styles, /:is\(\.text, \.fvalue, \.ptitle\) \.mention svg \{[^}]*width: 1em/, 'a reference icon is drawn at the size of the text it sits in');
-  assert.doesNotMatch(styles, /:is\(\.text, \.fvalue, \.ptitle\) \.mention svg \{[^}]*color:/, 'and takes the link colour rather than one of its own');
-  assert.match(styles, /:is\(\.text, \.fvalue, \.ptitle\) \.mention:has\(svg\) \{ text-decoration: none; \}/, 'the link itself stops underlining once it carries an icon');
-  assert.match(styles, /:is\(\.text, \.fvalue, \.ptitle\) \.mention \.mlabel \{ text-decoration: underline/, 'and the label carries the underline instead');
+  assert.match(styles, /:is\(\.text, \.fvalue\) \.mention svg \{[^}]*width: 1em/, 'a reference icon is drawn at the size of the text it sits in');
+  assert.doesNotMatch(styles, /:is\(\.text, \.fvalue\) \.mention svg \{[^}]*color:/, 'and takes the link colour rather than one of its own');
+  assert.match(styles, /:is\(\.text, \.fvalue\) \.mention:has\(svg\) \{ text-decoration: none; \}/, 'the link itself stops underlining once it carries an icon');
+  assert.match(styles, /:is\(\.text, \.fvalue\) \.mention \.mlabel \{ text-decoration: underline/, 'and the label carries the underline instead');
 
   // and a row with no marker is not indented for one: its text starts exactly where the document title starts.
   // The three paddings and the narrowed gutter have to add up, so a change to any of them fails here rather than
@@ -6953,11 +6904,11 @@ async function runDefaultModeCheck() {
 
   // the underline is a tint of the link, not the link colour: it marks the words without competing with them,
   // which in the dark theme means dimmer rather than paler
-  const linkColour = hex(/:is\(\.text, \.fvalue, \.ptitle\) \.mention \{ color: (#[0-9a-f]{6})/, 'an inline reference has a link colour');
-  const underline = hex(/:is\(\.text, \.fvalue, \.ptitle\) \.mention, :is\(\.text, \.fvalue, \.ptitle\) \.mention \.mlabel \{ text-decoration-color: (#[0-9a-f]{6})/, 'and an underline colour of its own');
+  const linkColour = hex(/:is\(\.text, \.fvalue\) \.mention \{ color: (#[0-9a-f]{6})/, 'an inline reference has a link colour');
+  const underline = hex(/:is\(\.text, \.fvalue\) \.mention, :is\(\.text, \.fvalue\) \.mention \.mlabel \{ text-decoration-color: (#[0-9a-f]{6})/, 'and an underline colour of its own');
   assert.ok(lum(underline) > lum(linkColour) + 20, 'the underline is lighter than the words above it: ' + underline + ' against ' + linkColour);
-  const darkLink = hex(/\[data-theme="dark"\] :is\(\.text, \.fvalue, \.ptitle\) \.mention \{ color: (#[0-9a-f]{6})/, 'the dark theme has one too');
-  const darkUnderline = hex(/\[data-theme="dark"\] :is\(\.text, \.fvalue, \.ptitle\) \.mention, \[data-theme="dark"\] :is\(\.text, \.fvalue, \.ptitle\) \.mention \.mlabel \{ text-decoration-color: (#[0-9a-f]{6})/, 'and its own underline');
+  const darkLink = hex(/\[data-theme="dark"\] :is\(\.text, \.fvalue\) \.mention \{ color: (#[0-9a-f]{6})/, 'the dark theme has one too');
+  const darkUnderline = hex(/\[data-theme="dark"\] :is\(\.text, \.fvalue\) \.mention, \[data-theme="dark"\] :is\(\.text, \.fvalue\) \.mention \.mlabel \{ text-decoration-color: (#[0-9a-f]{6})/, 'and its own underline');
   assert.ok(lum(darkUnderline) < lum(darkLink) - 20, 'and dimmer than them in the dark theme: ' + darkUnderline + ' against ' + darkLink);
 
 
@@ -7578,7 +7529,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runTitleRefsCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

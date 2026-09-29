@@ -24,12 +24,11 @@ async function linkTo(ctx, mention) {
   if (ctx.composer) return chatMention(mention); // "@" in a chat's composer (renderer/chat.js)
   const { item, segs, start, end } = ctx;
   const isDoc = item.node.kind === 'document';
-  const label = isDoc && String(mention.uri).startsWith('tana:user-profile:') ? '[' + mention.label + ']' : mention.label; // a title holds no reference: a person goes in as "[Name]" (tasks.js memberRefs)
-  const next = [...splitSegs(segs, start)[0], isDoc ? { text: label } : { mention }, ...splitSegs(segs, end)[1]];
+  const next = [...splitSegs(segs, start)[0], isDoc ? { text: mention.label } : { mention }, ...splitSegs(segs, end)[1]];
   item.node.text = plainOf(next); item.node.segments = isDoc ? undefined : next;
   await run(async () => { if (isDoc) await tana.setTitle(item.docId, item.node.text); else { await tana.setText(item.docId, item.node.id, next); await reload(item.docId); } });
   render(true); // the caret is back in the row by now, and a plain render would wait for it to leave
-  placeCaret(item.key, start + label.length);
+  placeCaret(item.key, start + mention.label.length);
   popMention(item.key, mention.uri); // the chip just made lights up
 }
 function createAndLink(ctx, title = ctx.text) {

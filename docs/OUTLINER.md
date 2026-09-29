@@ -327,12 +327,6 @@ inserts the chosen mention at the caret. For @ linking the palette is a dropdown
 440px card at most 360px tall, hanging under the selection or caret, flipped above when there is more room there. An
 Enter pressed while results are still loading is kept and applied when they land.
 
-A document title holds no reference in Tana, so "@" in a title writes the picked item's title as text, and a person as
-`[Name]`. A title's `[Name]` whose name is exactly a member's is drawn as that member's chip (`memberRefs`, rows and
-the page title), which opens them; the caret going into the title shows `[Name]` again, since that is what is saved.
-A title shown translated does the same: the model is asked to keep `[Name]` as written (main/ai.js), and the
-translation's `[Name]`s are drawn as people too.
-
 ### Pasting a Tana link
 
 Clipboard text that is exactly one Tana node link — a bare `tana:<kind>:<ulid>` or a home.tana.inc url ending in the

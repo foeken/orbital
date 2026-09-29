@@ -11,7 +11,7 @@ function loadMembers() {
   tana.members().then((m) => {
     members = m;
     if (!m.length) setTimeout(renderSoon, META_RETRY_MS); // a render asks again, the way loadTaskMeta retries
-    if (pillsDrawn) renderPills(true); if (!palette.hidden) renderPalette(); renderSoon(); paintTitleRefs(); // the header's "[Name]"s now, even while a row being typed in holds the render back // so the Assigned pill reads "You (<name>)"
+    if (pillsDrawn) renderPills(true); if (!palette.hidden) renderPalette(); renderSoon(); // so the Assigned pill reads "You (<name>)"
   }, showError);
 }
 const me = () => (members || []).find((m) => m.me);
@@ -21,29 +21,6 @@ function memberName(uri) {
   if (demoMode) return demoPersonName(uri);
   const member = (members || []).find((m) => m.id === uri);
   return member ? member.title || member.text : uri;
-}
-// A document title is plain text in Tana, so a person is written into one as "[Name]": a name that is exactly a member's
-// is drawn as their chip (render.js drawRefs). segs unchanged (the same array) when there is none.
-function memberRefs(segs) {
-  if (!members || !members.length) { if (segs.some((s) => typeof s.text === 'string' && s.text.includes('['))) loadMembers(); return segs; } // drawn again when they land
-  let found = false;
-  const out = segs.flatMap((s) => {
-    if (typeof s.text !== 'string' || !s.text.includes('[')) return [s]; // a mention, or a title with no words yet
-    const parts = [];
-    let at = 0;
-    for (const m of s.text.matchAll(/\[([^[\]\n]+)\]/g)) {
-      const who = members.find((p) => (p.title || p.text) === m[1]);
-      if (!who) continue;
-      if (m.index > at) parts.push({ ...s, text: s.text.slice(at, m.index) });
-      parts.push({ mention: { uri: who.id, label: m[1], icon: 'member' } });
-      at = m.index + m[0].length;
-    }
-    if (!parts.length) return [s];
-    found = true;
-    if (at < s.text.length) parts.push({ ...s, text: s.text.slice(at) });
-    return parts;
-  });
-  return found ? out : segs;
 }
 const AUDIENCES = {
   'only-me': { icon: 'lock', label: 'Visible only to you', word: 'Private' }, // word: said instead of the faces (peopleEl, visibilityFieldEl)

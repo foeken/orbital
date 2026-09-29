@@ -108,19 +108,14 @@ function rowNotice(el, typing) {
 }
 // Leaving a translatable row or title shows its translation again: its words may have been edited, so they are what is
 // looked up (from the cache at once, or asked, landing when the answer does), after the edit has been saved.
-// Its words as saved: a person drawn as their chip (render.js drawRefs, which the title's blur runs before this) reads back
-// as the "[Name]" it was written as. textContent read the chip's label alone, a text no translation is kept under, so the
-// model was asked again and its answer, without the brackets, was painted with no person in it.
-const savedWords = (el) => (el.querySelector('.mention') ? readSegs(el).map((s) => ('text' in s ? s.text : '[' + s.mention.label + ']')).join('') : el.textContent);
-document.addEventListener('focusout', (e) => { const el = e.target; rowNotice(el, false); if (el.dataset?.translate == null) return; el.dataset.translate = savedWords(el); setTimeout(() => paintTranslation(el)); });
+document.addEventListener('focusout', (e) => { const el = e.target; rowNotice(el, false); if (el.dataset?.translate == null) return; el.dataset.translate = el.textContent; setTimeout(() => paintTranslation(el)); });
 // el marked by markTranslatable: its translation drawn in place, unless it has the caret or was switched back to its own words
 function paintTranslation(el) {
   const src = el.dataset.translate, id = el.dataset.translateId;
   if (!el.isConnected || el === document.activeElement || shownOriginal.has(id)) return;
   const found = translationOf(src, id);
   if (!found || el.textContent === found.text) return;
-  const segs = [{ text: found.text }], refs = memberRefs(segs); // its "[Name]"s as people, as in any title (tasks.js)
-  if (refs !== segs) renderSegs(el, refs, id); else el.textContent = demoText(found.text, id); // masked in demo mode, like the row drawn around it
+  el.textContent = demoText(found.text, id); // masked in demo mode, like the row drawn around it
   originalOf.set(el, () => { el.textContent = demoText(src, id); });
 }
 // a row's text or the page's title whose words are translated: what paintTranslation needs to keep it in step
