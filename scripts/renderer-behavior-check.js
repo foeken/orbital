@@ -4648,7 +4648,7 @@ function runRailToggleCheck() {
   // Only the Graph pane draws the rail; every other page hides it and tells the shell its document instead.
   // It still reads the document's related data: the fields under its title come with that read, and without it a page
   // opened with no Graph pane beside it showed no fields at all.
-  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; if \(docId\) loadRelated\(docId\); return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail, still reads what its fields need, and names its document');
+  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; if \(docId\) loadRelated\(docId\); drawLinksBtn\(docId\); return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail, still reads what its fields need, offers its Graph switch and names its document');
   // and no outline key of the page (⇧⌘⌫ above all) reaches the hidden page in the Graph pane: its branch comes before them (#463 review)
   assert.match(source, /else if \(!palette\.hidden\) return;\n(?:\s*\/\/[^\n]*\n)*\s*else if \(LINKS\) \{ if \(hotkey && runAction\(hotkey\)\) e\.preventDefault\(\); \}\n[^]*?removeZoomedBlock\(\)/, 'in the Graph pane only its forwarded keys run, never the outline\'s');
   // Anywhere else the Graph pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
@@ -5565,60 +5565,47 @@ function runPillsFoldCheck() {
   api.setReduced(false);
 }
 
+// The check-off pop sounds as the button goes down, once (renderer/motion.js popSound): the click that follows the
+// press leaves it, and a tick with no press before it (⌘↩, Cmd+K) still plays it.
+function runPopSoundCheck() {
+  const src = fs.readFileSync(require.resolve('../renderer/motion.js'), 'utf8');
+  let now = 0; const started = [];
+  const param = { setValueAtTime() {}, exponentialRampToValueAtTime() {} };
+  function FakeContext() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }
+  FakeContext.prototype.createOscillator = () => ({ type: '', frequency: param, connect: () => ({ connect() {} }), start: (t) => started.push(t), stop() {} });
+  FakeContext.prototype.createGain = () => ({ gain: param, connect: () => ({ connect() {} }) });
+  const api = vm.runInNewContext(src.slice(src.indexOf('let popCtx = null')) + '\n({ popSound })', { AudioContext: FakeContext, performance: { now: () => now }, addEventListener() {} });
+  api.popSound(true);
+  assert.equal(started.length, 2, 'the press plays the pop (its two notes)');
+  assert.equal(started[0], 0, 'at once, not a moment later');
+  now = 100; api.popSound();
+  assert.equal(started.length, 2, 'the click that follows does not play it again');
+  now = 1000; api.popSound();
+  assert.equal(started.length, 4, 'a tick with no press before it still pops');
+}
+
 function runRefreshSpinCheck() {
+  // Refresh is the pane menu's (shell.js): offering it retells the title, and the menu's press asks the search again
   const api = vm.runInNewContext(`
     const DOC = 'tana:search:01exampleq0000000000000000';
-    const asked = [], log = [];
-    let reduced = false, available = true, staged = false;
-    const matchMedia = (query) => ({ matches: reduced && query.includes('reduce') });
-    const mkEl = (tagName) => {
-      const classes = new Set();
-      return { tagName, hidden: false, childNodes: [], attrs: {},
-        classList: { add: (...names) => { names.forEach((name) => classes.add(name)); log.push('add ' + names.join(' ')); },
-          remove: (...names) => { names.forEach((name) => classes.delete(name)); log.push('remove ' + names.join(' ')); },
-          contains: (name) => classes.has(name) },
-        get offsetWidth() { log.push('reflow'); return 0; },
-        setAttribute(name, value) { this.attrs[name] = String(value); },
-        append(...kids) { this.childNodes.push(...kids); },
-        get firstChild() { return this.childNodes[0] || null; } };
-    };
-    const button = mkEl('button');
-    const $ = () => button;
-    const iconNode = () => mkEl('svg');
+    const asked = []; let told = 0;
     const zoom = { docId: DOC };
+    const retellTitle = () => { told++; };
     const releaseHeld = () => asked.push('release');
     const run = (fn) => fn();
-    const reload = async (id) => asked.push('reload ' + id); // the fastest answer there is: back within the same tick
+    const reload = async (id) => asked.push('reload ' + id);
     const render = (force) => asked.push('render ' + force);
-    ${sourceBetween('const stillPreferred =', 'function playOnce(')}
-    ${functionSource('playOnce')}
-    ${sourceBetween('const refreshBtn =', '// Clean up: let go of the rows')}
-    const state = () => ({ log: [...log], asked: [...asked], hidden: button.hidden, glyphs: button.childNodes.length,
-      label: button.attrs['aria-label'], spinning: !!button.firstChild && button.firstChild.classList.contains('spin') });
-    ({
-      draw: (offered) => { log.length = 0; renderRefreshBtn(offered); return state(); },
-      press: async () => { log.length = 0; asked.length = 0; button.onclick(); for (let i = 0; i < 5; i++) await Promise.resolve(); return state(); },
-      setReduced: (value) => { reduced = value; },
-    });
+    ${sourceBetween('let refreshable = false;', '// Clean up: let go of the rows')}
+    ({ offer: (on) => { offerRefresh(on); return { told, refreshable }; },
+      press: async () => { asked.length = 0; refreshSearch(); for (let i = 0; i < 5; i++) await Promise.resolve(); return [...asked]; } });
   `, { Promise });
   return (async () => {
-    const drawn = plain(api.draw(true));
-    assert.deepEqual([drawn.hidden, drawn.glyphs, drawn.label], [false, 1, 'Refresh'], 'a saved search is offered Refresh beside the fold button, as a named glyph');
-    assert.equal(plain(api.draw(true)).glyphs, 1, 'and a redraw keeps the glyph it already has, so a turn in progress is not thrown away');
-    assert.equal(plain(api.draw(false)).hidden, true, 'a page with nothing to re-ask is not offered it');
-    api.draw(true);
-    const pressed = plain(await api.press());
-    assert.equal(pressed.spinning, true, 'pressing Refresh turns the glyph');
-    assert.deepEqual(pressed.asked, ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
-      'the rows kept in place are let go, the query goes out, and the page is drawn the moment it answers — the turn finishes on its own, on a button no redraw rebuilds');
-    const again = plain(await api.press());
-    assert.deepEqual(again.log, ['remove spin', 'reflow', 'add spin'],
-      'a second press restarts the turn: dropped, laid out again, re-added — without the reflow in between the class never leaves and nothing moves');
-    api.setReduced(true);
-    const still = plain(await api.press());
-    assert.equal(still.spinning, false, 'under reduced motion nothing turns');
-    assert.deepEqual(still.asked, ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
-      'and the refresh is drawn as soon as it answers, exactly as it is with the turn');
+    assert.deepEqual(plain(api.offer(true)), { told: 1, refreshable: true }, 'a saved search offers Refresh by telling the shell its title again');
+    assert.equal(plain(api.offer(true)).told, 1, 'and an unchanged offer tells nothing');
+    assert.deepEqual(plain(await api.press()), ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
+      'the menu\'s Refresh lets the kept rows go, asks the query again and draws the page when it answers');
+    api.offer(false);
+    assert.deepEqual(plain(await api.press()), [], 'a page with nothing to re-ask ignores a late press');
   })();
 }
 
@@ -7454,7 +7441,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

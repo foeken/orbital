@@ -8,7 +8,7 @@ const { everyoneOnly } = require('../sdk/access');
 const { readSearch } = require('../sdk/node');
 const { callOf, writeUpOf } = require('../sdk/events');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, pageKey, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
-const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
+const { graphRow, rememberNodeHue, resolveMeetings, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe } = require('./documents');
 const { rows: proposalRows } = require('./proposals');
 
@@ -17,7 +17,7 @@ async function spaceChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED); // a space opened before the connection is a startup state, not an error (#97)
   const { nodes } = await S.client.graph.listNodes({ ownerIds: [id], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
   nodes.forEach(rememberNodeHue);
-  await resolveTypes(nodes.map((n) => n.entityType));
+  await Promise.all([resolveTypes(nodes.map((n) => n.entityType)), resolveMeetings(nodes)]);
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // A saved search's "content" is the rows its stored query returns (sdk/node.js readSearch).
@@ -93,7 +93,7 @@ async function searchRows(query, narrow, limit = 200) {
   let nodes = answered.nodes.filter((n) => completedInWindow(n, narrow.completedWithin));
   if (narrow.audience === 'everyone') nodes = await everyoneOnly(S.client.graph, nodes);
   nodes.forEach(rememberNodeHue);
-  await resolveTypes(nodes.map((n) => n.entityType));
+  await Promise.all([resolveTypes(nodes.map((n) => n.entityType)), resolveMeetings(nodes)]);
   return nodes;
 }
 // What a meeting carries besides its notes (verified read-only on a real meeting, docs/MEETINGS.md):

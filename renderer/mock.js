@@ -76,6 +76,8 @@ function mockApi() {
     meetingEdits['mockmeeting' + i] = { title: text, start, end: start + (h == null ? 864e5 : 36e5), allDay: h == null, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: crowd };
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting], start: new Date(start).toISOString(), end: new Date(meetingEdits['mockmeeting' + i].end).toISOString() };
   });
+  // two tasks Tana's AI took from Leadership sync (main/rows.js meetingOf): their rows link back to it on hover
+  for (const i of [1, 4]) docs[i].meeting = { id: meetings[2].id, title: meetings[2].text, start: meetings[2].start };
   // the When pill's window (sdk/query.js timeRange), on meetings alone
   const meetingWindow = (d, f) => {
     if (!f.window || !d.start || !(f.types && f.types.length === 1 && f.types[0] === 'meetings')) return true;
@@ -239,7 +241,7 @@ function mockApi() {
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
-  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me, ...(d.start ? { start: d.start, end: d.end } : {}) });
+  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me, ...(d.start ? { start: d.start, end: d.end } : {}), ...(d.meeting ? { meeting: d.meeting } : {}) });
   // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers).
   // Document delete/restore records an op step instead, like the native bridge where undo restores a soft-deleted document.
   const undoStack = [], redoStack = [];

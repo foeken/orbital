@@ -80,6 +80,7 @@ function patchMeta(docId) {
     const old = body.querySelector('.meta.tmeta'), sep = body.querySelector('.metasep');
     if (old) old.remove();
     if (sep) sep.remove();
+    body.querySelector(':scope > .meeting-link')?.remove(); // the facts carry it now (taskMetaEl)
     // the same line a full render would build, so a row does not change shape when its metadata arrives late: the
     // facts go before the type chips, where nodeEl appends them, not after them
     const had = body.querySelector(':scope > .subtext'), sub = subtextEl(item.node, summary, had || undefined, tableRow(item.parent));
@@ -211,6 +212,8 @@ function taskMetaEl(summary, docId, node) {
     if (tana.pinState) { icon.title = 'Pinned — click to edit pins'; clickable(icon, () => openPinsPalette(node)); }
     el.append(icon);
   }
+  // the meeting a task came from (renderer/meeting.js meetingLinkEl), a fact icon like the rest, just after Pinned
+  if (node && node.meeting && !node.timeline) el.append(meetingLinkEl(node.meeting, true));
   // link sharing is separate from the Tana audience: anyone with the url can read it
   if (summary.linkShared) el.append(iconEl('globe', 'Anyone with the link'));
   // last of the row's icons: a bell says changes to this node reach you, whether you asked or the rule decided

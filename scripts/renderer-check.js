@@ -5,6 +5,16 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const { files, source, tops } = require('./renderer-source');
+
+// Every element the renderer looks up by id with $('…') is in index.html: a lookup of one that was taken out returns
+// null, and the first use at load throws, which stops every script after it and leaves the window loading forever
+// (a Refresh button removed from index.html while pills.js still wired it up, 2026-09-29).
+{
+  const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
+  const missing = [...source.matchAll(/\$\('([A-Za-z0-9_-]+)'\)/g)].map((m) => m[1]).filter((id) => !ids.has(id));
+  assert.deepEqual([...new Set(missing)], [], 'every $(id) the renderer looks up is in index.html');
+}
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
 // top-level statement that runs immediately and reaches for something a later file declares (a ReferenceError).
@@ -467,8 +477,8 @@ assert.match(source, /if \(arriving\) playOnce\(cleanupBtn, 'in'\);/, 'and pops 
 assert.match(source, /if \(!cleanupBtn\.classList\.contains\('out'\)\) return;\n    cleanupBtn\.classList\.remove\('out'\);\n    cleanupBtn\.hidden = true;/, 'and it is hidden only at the end of a leave nothing interrupted');
 // A view re-asks its query every half minute; a saved search is asked once, when it is opened, so it needs a button.
 // It is a header button beside the fold one, not a pill: folding the pills away must not take it with them.
-assert.match(source, /renderRefreshBtn\(search && !searchRows\.has\(zoom\.docId\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
-assert.match(source, /function renderRefreshBtn\(available\) \{[\s\S]{0,320}addIcon\(refreshBtn, 'reload'\)/, 'the Refresh button carries the reload glyph');
+assert.match(source, /offerRefresh\(search && !searchRows\.has\(zoom\.docId\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
+assert.match(source, /const refresh = !LINKS && refreshable;/, 'the offer goes to the pane\'s menu with the title (shell.js)');
 const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
 const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');

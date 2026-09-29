@@ -117,3 +117,18 @@ function openMeetingPage(mode, placeholder) {
   if (mode === 'meetingAttendee') loadAttendeePool();
   openPage(mode, placeholder, { rows: { meetingTime: meetingTimeRows, meetingLocation: meetingLocationRows, meetingAttendee: meetingAttendeeRows }[mode], back: BACK_TO_COMMANDS, typed: true });
 }
+
+// The way back to the meeting a task came from (main/rows.js meetingOf): a grey glyph after the title, there only while
+// the row is hovered or has the caret (styles.css .meeting-link), its tooltip naming the meeting and its day. A click
+// opens the meeting, which forwards to its write-up (renderer/edit.js); the caret stays in the row.
+function meetingLinkEl(meeting, fact = false) { // fact: one of the row's fact icons (.ticon), the size of Pinned beside it
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = fact ? 'ticon meeting-link' : 'meeting-link'; b.tabIndex = -1;
+  const day = meeting.start ? new Date(meeting.start).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+  const label = 'From ' + (meeting.title ? demoText(meeting.title, meeting.id) : 'a meeting') + (day ? ' · ' + day : '');
+  b.title = label; b.setAttribute('aria-label', label); // icon only, so the name comes from here
+  addIcon(b, 'meeting');
+  b.onmousedown = (e) => e.preventDefault();
+  b.onclick = (e) => { e.stopPropagation(); run(() => goTo(meeting.id)); };
+  return b;
+}

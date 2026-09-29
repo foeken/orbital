@@ -157,7 +157,7 @@ const meetingRow = (n, withDate) => {
 // An event also carries its own window (`start`/`end`), and only an event does: the keys are added rather than always
 // present, so every other kind of node keeps the shape it had. A row restored from the SQLite cache has no window —
 // the cache stores the label, not the times — so a consumer that needs one asks the graph, as the meeting picker does.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), ...(titleOnly.get(r.id) ? { renamable: true } : {}), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: newer(r.updatedAt, (nodeMeta.get(r.id) || {}).updatedAt), createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}) });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), ...(titleOnly.get(r.id) ? { renamable: true } : {}), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: newer(r.updatedAt, (nodeMeta.get(r.id) || {}).updatedAt), createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}), ...(r.meeting ? { meeting: r.meeting } : {}) });
 // A typed node's field values as the graph lists them (`attributes`, keyed "<type uri>?attribute=<key>"): one string
 // per value, which is what a row shows of a field (renderer/views.js fieldValues). Verified live on Goal 2026-09-25.
 function fieldValues(n) {
@@ -171,8 +171,21 @@ function fieldValues(n) {
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
-  const row = kindedRow(n, withDate), fields = fieldValues(n);
-  return fields ? { ...row, fields } : row;
+  const row = kindedRow(n, withDate), fields = fieldValues(n), meeting = meetingOf(n);
+  return fields || meeting ? { ...row, ...(fields ? { fields } : {}), ...(meeting ? { meeting } : {}) } : row;
+}
+// The meeting a task came from: Tana's AI files the tasks it takes from a meeting under that event (ownerUri, live
+// 2026-09-29: 16 of 40 newest tasks), so a row can link back to it (renderer/render.js meetingLinkEl). Its title and
+// start come from resolveMeetings, one lookup per list for the meetings not seen yet.
+// ponytail: names are kept for the session; a meeting renamed meanwhile shows its old name until a restart.
+const meetingNames = new Map(); // event uri -> { title, start } (or {} when the graph would not say)
+const meetingOf = (n) => (n.state && n.state.type && idKind(n.ownerUri || '') === 'event' ? { id: n.ownerUri, ...(meetingNames.get(n.ownerUri) || {}) } : null);
+async function resolveMeetings(nodes) {
+  const missing = [...new Set(nodes.filter((n) => n.state && n.state.type && idKind(n.ownerUri || '') === 'event').map((n) => n.ownerUri).filter((u) => !meetingNames.has(u)))];
+  if (!missing.length || !S.client) return;
+  const { nodes: events = [] } = await S.client.graph.listNodes({ nodeIds: missing, limit: missing.length }).catch(() => ({ nodes: [] }));
+  for (const e of events) meetingNames.set(e.id, { title: (e.title || '').trim(), start: (e.calendarEvent && e.calendarEvent.startTime) || undefined });
+  for (const u of missing) if (!meetingNames.has(u)) meetingNames.set(u, {}); // not readable: the link still goes, without a name
 }
 function kindedRow(n, withDate) {
   // every listed node passes through here, so the watch rule's creator lookup is usually already answered
@@ -200,4 +213,4 @@ const ipc = {
   'members': () => members(),
 };
 
-module.exports = { rememberMeta, rememberType, ownHue, hueOf, typeHue, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, isAllDay, resolveTypes, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members, ipc };
+module.exports = { rememberMeta, rememberType, ownHue, hueOf, typeHue, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, isAllDay, resolveTypes, resolveMeetings, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members, ipc };

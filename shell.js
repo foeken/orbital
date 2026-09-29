@@ -10,6 +10,7 @@ const start = bridge.state();
 let theme = start.theme === 'dark' ? 'dark' : 'light', covering = null, last = '', many = null;
 const renamable = new Set(); // the pages whose title can be typed in (renderer/render.js tellTitle): Rename on their tab
 const linkable = new Set(); // the pages showing a node of Tana's: Copy link on their tab (#542)
+const refreshable = new Set(); // the saved searches that can be asked again: Refresh on their tab (renderer/pills.js offerRefresh)
 const saveable = new Set(); // the views whose pills can be kept as a saved search (the Library): Save as new search on their tab (#538)
 const tabIcons = new Map(); // page id -> the glyph its page told (renderer/render.js tellTitle), our own markup
 // the header buttons drawn per page (drawNav below), and with one page the window header's slot for them; up here
@@ -31,7 +32,8 @@ const tokens = () => theme === 'dark'
 // Content keeps its layout down to 280 x 200 and scales below that, which is what zooming out shows.
 const types = (tabs) => ({ page: { title: 'Orbital', tabbar: tabs ? 'always' : 'never', minSize: { width: 280, height: 200 },
   menu: (view) => {
-    const items = [...(renamable.has(view.id) ? [{ id: 'rename', label: 'Rename', run: () => rename(view.id) }] : []),
+    const items = [...(refreshable.has(view.id) ? [{ id: 'refresh', label: 'Refresh', run: () => windowOf(frameOf(view.id))?.postMessage({ orbital: 'refresh' }, '*') }] : []),
+      ...(renamable.has(view.id) ? [{ id: 'rename', label: 'Rename', run: () => rename(view.id) }] : []),
       ...(linkable.has(view.id) ? [{ id: 'copyLink', label: 'Copy link', run: () => { focusPage(view.id); windowOf(frameOf(view.id))?.postMessage({ orbital: 'copyLink' }, '*'); } }] : []), // focused first: the clipboard wants the page in front
       ...(saveable.has(view.id) ? [{ id: 'saveSearch', label: 'Save as new search', run: () => { focusPage(view.id); windowOf(frameOf(view.id))?.postMessage({ orbital: 'action', id: 'saveSearch' }, '*'); } }] : [])]; // Cmd+K's row, in that page
     return items.length ? [...items, 'separator'] : [];
@@ -131,7 +133,7 @@ function guard() {
 const drawTabIcons = () => { for (const s of ws.surfaces()) { const g = tabIcons.get(s.view.id) || ''; if (s.icon.dataset.glyph !== g) { s.icon.dataset.glyph = g; s.icon.innerHTML = g; } } };
 ws.on('surfaces', drawTabIcons);
 ws.on('close', (view) => {
-  guarded.delete(view.id); renamable.delete(view.id); saveable.delete(view.id); linkable.delete(view.id); tabIcons.delete(view.id); docs.delete(view.id); places.delete(view.id);
+  guarded.delete(view.id); renamable.delete(view.id); refreshable.delete(view.id); saveable.delete(view.id); linkable.delete(view.id); tabIcons.delete(view.id); docs.delete(view.id); places.delete(view.id);
   if (followed === view.id) { followed = null; follow(); }
   requestAnimationFrame(() => { if (document.activeElement?.tagName !== 'IFRAME') windowOf(frameOf(ws.getSnapshot().focusedView))?.focus(); });
 });
@@ -140,7 +142,7 @@ ws.on('close', (view) => {
 function sync() {
   const tabs = pages().length > 1;
   if (tabs !== many) { many = tabs; ws.update({ types: types(tabs), navigation: tabs ? 'free' : false }); document.body.classList.toggle('many', tabs); headNav.replaceChildren(); navDrawn.delete(HEAD); } // the pages send their buttons again on the layout below, to the tab bars or the header
-  guard(); mark(); place(); drawLinks(); frames().forEach((f) => tell(windowOf(f))); tellPlaces(); // place: a divider or a move shifts a covering page's pane
+  guard(); mark(); place(); frames().forEach((f) => tell(windowOf(f))); tellPlaces(); // place: a divider or a move shifts a covering page's pane
 }
 ws.on('change', (doc) => {
   sync();
@@ -193,10 +195,9 @@ function focusPage(viewId) {
   windowOf(frameOf(viewId))?.focus();
 }
 // The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js); the house
-// runs Cmd+K's Work View row (renderer/palette.js, Saved views), so the window becomes the Work View; Graph runs
-// its Cmd+K Show/Hide graph row there (renderer/palette.js railToggle), so it opens beside that page, and the corner's
-// Create new runs Cmd+K Create new … there.
-for (const [id, icon, msg] of [['headHome', 'home', { orbital: 'action', id: 'workView' }], ['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['headLinks', 'graph', { orbital: 'action', id: 'railToggle' }], ['create', 'textPlus', { orbital: 'action', id: 'create' }]]) {
+// runs Cmd+K's Work View row (renderer/palette.js, Saved views), so the window becomes the Work View, and the corner's
+// Create new runs Cmd+K Create new … there. The Graph switch is each page's own now (renderer/rail.js drawLinksBtn).
+for (const [id, icon, msg] of [['headHome', 'home', { orbital: 'action', id: 'workView' }], ['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['create', 'textPlus', { orbital: 'action', id: 'create' }]]) {
   const button = document.getElementById(id);
   if (icon) button.insertAdjacentHTML('afterbegin', window.ICONS?.[icon] || ''); // icons.js: our own markup, before a label the button has
   button.onmousedown = (e) => e.preventDefault();
@@ -225,11 +226,6 @@ create.ondrop = (e) => {
   createAs('busy');
   win.postMessage({ orbital: 'processImage', file }, '*');
 };
-// The Graph switch shows its state by its look (shell.css): full strength while the window has a Graph pane.
-function drawLinks() {
-  const on = !!linksView(), button = document.getElementById('headLinks'), label = on ? 'Hide graph' : 'Show graph';
-  button.title = label; button.setAttribute('aria-label', label); button.setAttribute('aria-pressed', String(on));
-}
 // The sensitive switch is drawn from the pages' own storage (renderer/document.js): the glyph is the state, an open eye
 // while sensitive items are shown and the crossed one while they are blurred, and it follows a switch from any page.
 function drawSensitive() {
@@ -333,6 +329,7 @@ addEventListener('message', (e) => {
     if (e.data.renamable === true) renamable.add(id); else renamable.delete(id);
     if (e.data.saveSearch === true) saveable.add(id); else saveable.delete(id);
     if (e.data.link === true) linkable.add(id); else linkable.delete(id);
+    if (e.data.refresh === true) refreshable.add(id); else refreshable.delete(id);
     tabIcons.set(id, typeof e.data.icon === 'string' ? e.data.icon : ''); drawTabIcons();
   }
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
