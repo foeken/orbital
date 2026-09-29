@@ -83,6 +83,11 @@ function upsert(r) {
 function setRow(id, { title, done, updatedAt = new Date().toISOString() }) {
   return db.prepare('UPDATE nodes SET title = ?, done = ?, updatedAt = ? WHERE id = ?').run(title, done ? 1 : 0, updatedAt, id).changes;
 }
+// A document's field values, the same in every view that lists it (a live edit to a field); undefined clears them.
+function setFields(id, fields) {
+  const value = fields ? JSON.stringify(fields) : null;
+  return db.prepare('UPDATE nodes SET fields = ? WHERE id = ? AND fields IS NOT ?').run(value, id, value).changes;
+}
 
 // Returns how many rows were actually written: a refresh that found nothing new writes nothing.
 function replaceSection(section, rows) {
@@ -161,4 +166,4 @@ function saveTranslations(answers, now = Date.now()) { // [[key, { lang, text } 
   db.exec('DELETE FROM translations WHERE rowid NOT IN (SELECT rowid FROM translations ORDER BY usedAt DESC LIMIT 5000)');
 }
 
-module.exports = { open, translations, saveTranslations, list, get, remove, upsert, setRow, replaceSection, sensitiveIds, setSensitive, noteDeleted, unnoteDeleted, deletedList, setting, setSetting, settings, generation: () => generation };
+module.exports = { open, translations, saveTranslations, list, get, remove, upsert, setRow, setFields, replaceSection, sensitiveIds, setSensitive, noteDeleted, unnoteDeleted, deletedList, setting, setSetting, settings, generation: () => generation };

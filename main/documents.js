@@ -552,11 +552,12 @@ async function createDocument(title, opts = {}) {
 
 // A row's field values, read off the document on every change like its title and state: the cached row carries the
 // ones its search saw, which a table cell (renderer/views.js) would otherwise show until the next refresh.
-async function info(doc) {
+function fieldLines(doc) {
   const values = {};
   for (const f of fields.readFields(doc)) { const lines = f.text.split('\n').filter((l) => l.trim()); if (lines.length) values[f.key] = lines; }
-  return { ...(await rowInfo(doc)), fields: Object.keys(values).length ? values : undefined }; // undefined too: a cleared field clears the row's
+  return Object.keys(values).length ? values : undefined; // undefined too: a cleared field clears the row's
 }
+async function info(doc) { return { ...(await rowInfo(doc)), fields: fieldLines(doc) }; }
 // Node shape for any subscribed document: cached row when listed, else derived from the Loro data map.
 async function rowInfo(doc) {
   const n = readNode(doc), row = db.get(doc.id);
@@ -935,6 +936,8 @@ function onChange(docId, info) {
     // which re-reads the page's fields and keeps the rest.
     const fsig = JSON.stringify(n.attributes ?? null), fieldsMoved = fieldSigs.get(docId) !== fsig; // unseen: says so, like meta
     fieldSigs.set(docId, fsig);
+    // and into every view's cached row: a view grouped by a field is sectioned by it after a reload or a restart too
+    if (row && fieldsMoved) db.setFields(docId, fieldLines(doc));
     notifyWatched(docId, doc, n, info).catch(report); // the signature is taken here and now; the audience it may need is not
     sendChanged(docId, { meta, fields: fieldsMoved }); // the renderer patches this one row from doc:info; the page that typed it knows it has it
     if (pinsChanged || restored) send('outline:changed', null);

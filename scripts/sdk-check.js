@@ -1941,6 +1941,21 @@ async function main() {
     resetDoc.reset(); backend.onChange(reset, { origin: 'remote' });
     resetDoc.applyRemote([snapshot]); backend.onChange(reset, { origin: 'remote' });
     assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a reset that discards the edit discards its time');
+    // A live edit to a field reaches every view's cached row (a view grouped by it reads them after a reload or a
+    // restart), and a cleared field clears them.
+    const fielded = 'tana:text:' + ulid(), fieldedDoc = new Document(fielded), prio = 'tana:type:' + ulid() + '?attribute=prio';
+    fieldedDoc.transact((l) => initDocument(l, 'Fielded', ME, {}));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    for (const section of ['library', 'tasks']) cache.upsert({ id: fielded, section, title: 'Fielded', sortKey: '1', updatedAt: '1', fields: { [prio]: ['Low'] } });
+    backend.onChange(fielded, { origin: 'remote' }); // bootstrap: no field set on the document, so the cached value goes
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, 'High');
+    backend.onChange(fielded, { origin: 'remote' });
+    const rootsOf = async () => (await backend.handlers.get('outline:roots')()).find((v) => v.id === 'library').nodes.find((r) => r.id === fielded);
+    assert.deepEqual([cache.list().library, cache.list().tasks].map((rows) => rows.find((r) => r.id === fielded).fields), [{ [prio]: ['High'] }, { [prio]: ['High'] }], 'a field set live is in every view’s cached row');
+    assert.deepEqual((await rootsOf()).fields, { [prio]: ['High'] }, 'and in the rows a reload builds from the cache');
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, '');
+    backend.onChange(fielded, { origin: 'remote' });
+    assert.equal((await rootsOf()).fields, undefined, 'a field cleared live is cleared there too');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
