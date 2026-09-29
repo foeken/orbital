@@ -167,7 +167,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   `hsl(hue 80% 92%)`, text `hsl(hue 45% 30%)`; zero is a valid hue) — and its facts. Node `appearance.hue` colours
   its icon and kind tag; a type's own colour override (§11, Set colour) wins where it is set.
 - **A task's box is its state** (#243). A task in the Inbox (`proposed`) draws a dashed box; In Progress a grey box;
-  completed a green tick, with the title struck through and grey. Clicking a dashed box accepts the task first (In
+  completed a green tick, with the title struck through and grey, and a short pop (`popSound`, renderer/motion.js;
+  a checkbox block pops too, unchecking is silent). Clicking a dashed box accepts the task first (In
   Progress, `acceptsFirst`); the next click completes it. A status change reaches every copy of the task at once: a
   render deferred for the caret still updates every checkbox, the title's and the sidebar's (`refreshRowChrome`), and
   a change patches the task's reference rows and sidebar rows (`patchCopies`). Main keeps a task it holds live at its

@@ -333,7 +333,7 @@ function statusRows(q, ctx = palTaskCtx) {
       const changed = await (ctx.multi ? tana.setStateMany(ctx.docs.map((doc) => doc.id), state) : tana.setState(ctx.docs[0].id, state));
       // shown now rather than when the live update lands: the caret is back in this row, where a plain render waits
       for (const doc of ctx.docs) { doc.stateType = state; doc.done = state === 'closed' ? 1 : 0; }
-      if (state === 'closed') for (const doc of ctx.docs) justDone.set(doc.id, Date.now());
+      if (state === 'closed') { for (const doc of ctx.docs) justDone.set(doc.id, Date.now()); popSound(); }
       return changed;
     }),
   }));
