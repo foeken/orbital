@@ -3131,7 +3131,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const isTask = (n) => n.icon === 'task';
     const visibleTags = (n) => { const tags = n.tags || []; return isTask(n) && tags.some((t) => t.label !== 'task') ? tags.filter((t) => t.label !== 'task') : tags; };
     // a mixed list's rows carry field values of their own type (renderer/views.js pageFieldDefs), named by its definitions
-    const viewOf = () => views.find((s) => s.id === view), relatedBy = new Map([['tana:type:goal', { definitions: [{ key: 'prio', title: 'Priority', type: 'options', options: [{ label: 'High' }, { label: 'Low' }] }, { key: 'note', title: 'Note', type: 'plain' }] }]]);
+    const viewOf = () => views.find((s) => s.id === view), relatedBy = new Map([
+      ['tana:type:goal', { definitions: [{ key: 'prio', title: 'Priority', type: 'options', options: [{ label: 'High' }, { label: 'Low' }] }, { key: 'note', title: 'Note', type: 'plain' }] }],
+      ['tana:type:bug', { definitions: [{ key: 'sev', title: 'Priority', type: 'options', options: [{ label: 'Urgent' }, { label: 'High' }] }] }]]);
     ${definitions}
     ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
@@ -3154,18 +3156,21 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 'd1', text: 'echo', icon: 'doc', tags: [{ label: 'doc' }] },
   ];
   const titles = (list, by) => plain(api.groupRows(list, by)).map((g) => [g.title, g.nodes.map((n) => n.id)]);
-  // The Tasks view lists several types: the fields its rows carry are offered, and a row without one is under No value.
-  const PRIO = 'tana:type:goal?attribute=prio', goals = [
-    { id: 'g1', tags: [{ label: 'Goal', uri: 'tana:type:goal' }], fields: { [PRIO]: ['Low'] } },
-    { id: 'g2', tags: [{ label: 'Goal', uri: 'tana:type:goal' }], fields: { [PRIO]: ['High'] } },
-    { id: 'g3', tags: [{ label: 'Goal', uri: 'tana:type:goal' }], fields: { 'tana:type:goal?attribute=note': ['x'] } },
-    rows[0],
+  // The Tasks view lists several types and docs: the fields its rows carry are offered by name, one Priority over
+  // both types that have one, and a row without a value (a doc, a type without the field) is under No value.
+  const PRIO = 'field?attribute=Priority', goals = [
+    { id: 'g1', tags: [], fields: { 'tana:type:goal?attribute=prio': ['Low'] } },
+    { id: 'g2', tags: [], fields: { 'tana:type:goal?attribute=prio': ['High'] } },
+    { id: 'g3', tags: [], fields: { 'tana:type:goal?attribute=note': ['x'] } },
+    { id: 'b1', tags: [], fields: { 'tana:type:bug?attribute=sev': ['Urgent'] } },
+    { id: 'b2', tags: [], fields: { 'tana:type:bug?attribute=sev': ['High'] } },
+    rows[0], rows[4],
   ];
   api.list(goals);
   assert.deepEqual(plain(api.groupList()).filter(([id]) => id.includes('?attribute=')), [[PRIO, 'Priority']],
     'a list of several types offers the choice fields its rows carry, by name');
-  assert.deepEqual(titles(goals, PRIO), [['High', ['g2']], ['Low', ['g1']], ['No value', ['g3', 't1']]],
-    'sections follow the field’s choices, and a row without a value, or of another type, is under No value');
+  assert.deepEqual(titles(goals, PRIO), [['High', ['g2', 'b2']], ['Low', ['g1']], ['Urgent', ['b1']], ['No value', ['g3', 't1', 'd1']]],
+    'sections follow the choices type by type, one High for both, and a row without a value, a doc or another type, is under No value');
   api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],
     'status groups follow the Status menu order; a row without a task state sits in No status');

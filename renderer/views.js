@@ -90,21 +90,35 @@ const noTasks = () => onTypePage() && !(kids.get(zoom.docId) || []).some(isTask)
 const TASK_ONLY = ['status', 'assignee'];
 const isFieldKey = (key) => String(key).includes('?attribute=');
 // A saved search or the Library narrowed to one workspace type offers that type's fields the same way (fieldType).
-// Every other list (the Tasks view, the Library, a search over several types) offers the fields of the types its
-// rows carry values for; a row of another type, or without a value, is under No value. Two types name theirs.
+// Every other list (the Tasks view, the Library, a search over several types or with docs) offers the fields of the
+// types its rows carry values for, one per name: a Priority on two types is one grouping over both, its choices in
+// the order the types list them. A row without a value, a doc or a row of a type without the field, is under No value.
+const FIELD_BY_NAME = 'field?attribute='; // a field on a mixed list, keyed by its name (isFieldKey still holds)
+const namedFieldKeys = new Map(); // FIELD_BY_NAME + title -> the typed keys a row carries it under, as last listed
 function pageFieldDefs() {
   const t = fieldType();
   if (t) return typeDefs();
   if (!listPage()) return [];
-  const types = new Map(); // type uri -> its title, from the row's own chip
-  for (const n of pageDocs()) for (const k of Object.keys(n.fields || {})) {
-    const uri = k.split('?attribute=')[0];
-    if (!types.has(uri)) types.set(uri, ((n.tags || []).find((x) => x && x.uri === uri) || {}).label || '');
+  const types = new Set(pageDocs().flatMap((n) => Object.keys(n.fields || {}).map((k) => k.split('?attribute=')[0])));
+  const named = new Map();
+  for (const uri of types) {
+    loadRelated(uri, true); // the definitions come with the lite read
+    for (const d of (relatedBy.get(uri) || {}).definitions || []) {
+      const title = d.title || 'Untitled field', key = FIELD_BY_NAME + title;
+      if (!named.has(key)) named.set(key, { title, type: d.type, group: key, keys: [], options: [] });
+      const f = named.get(key);
+      f.keys.push(uri + '?attribute=' + d.key);
+      if (GROUPABLE.includes(d.type)) f.type = d.type;
+      for (const o of d.options || []) if (!f.options.some((x) => x.label === o.label)) f.options.push(o);
+    }
   }
-  return [...types].flatMap(([uri, label]) => { loadRelated(uri); return ((relatedBy.get(uri) || {}).definitions || []).map((d) => ({ ...d, typeUri: uri, typeLabel: types.size > 1 ? label : '' })); });
+  namedFieldKeys.clear();
+  for (const f of named.values()) namedFieldKeys.set(f.group, f.keys);
+  return [...named.values()];
 }
+const GROUPABLE = ['options', 'link', 'member'];
 const groupList = () => {
-  const byField = pageFieldDefs().filter((d) => ['options', 'link', 'member'].includes(d.type)).map((d) => [fieldKey(d), (d.title || 'Untitled field') + (d.typeLabel ? ' (' + d.typeLabel + ')' : '')]);
+  const byField = pageFieldDefs().filter((d) => GROUPABLE.includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field']);
   return onTypePage() ? [...GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))), ...byField] : [...GROUPS, ...byField];
 };
 const fieldOrder = (key) => ((pageFieldDefs().find((d) => fieldKey(d) === key) || {}).options || []).map((o) => o.label);
@@ -173,7 +187,7 @@ function groupKey(n, by) {
   // The same lazily read metadata grouping by assignee uses; null means the row has no section here and is left out.
   if (by === 'responsibility') return responsibilityOf(n);
   // ponytail: a field with several values is filed under the first, like the assignee grouping above
-  if (isFieldKey(by)) return ((n.fields || {})[by] || [])[0] || FALLBACK.field;
+  if (isFieldKey(by)) return (namedFieldKeys.get(by) || [by]).map((k) => ((n.fields || {})[k] || [])[0]).find(Boolean) || FALLBACK.field;
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
@@ -309,7 +323,7 @@ const fieldType = () => {
   return t && t.length === 1 && isTypeId(t[0]) && listPage() ? t[0] : null;
 };
 const typeDefs = () => { const t = fieldType(); if (t) loadRelated(t, true); return (t && (relatedBy.get(t) || {}).definitions) || []; }; // a type's definitions come with the lite read
-const fieldKey = (def) => (def.typeUri || fieldType()) + '?attribute=' + def.key;
+const fieldKey = (def) => def.group || fieldType() + '?attribute=' + def.key;
 const PILL_FIELDS = ['options', 'link', 'member', 'date'];
 const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
 const displayKeys = () => {
