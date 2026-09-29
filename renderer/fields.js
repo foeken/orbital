@@ -130,7 +130,8 @@ function visibilityFieldEl(parent) {
   return row;
 }
 // A meeting's attendees, drawn under Visible to (renderer/render.js renderFields), on the event and on its write-up:
-// one per line, a member as a mention the way Assigned to draws one, anyone else by the calendar's name or address,
+// one per line, a member (by the calendar's profile id, else by address) as a mention the way Assigned to draws one,
+// anyone else by the calendar's name or address,
 // rooms left out. Past five lines "And n more" shows the rest (attendeesOpen, for as long as the page is open).
 const ATTENDEES_SHOWN = 5;
 const attendeesOpen = new Set(); // meetings whose whole list is shown
@@ -146,7 +147,8 @@ function attendeesFieldEl(parent) {
   const all = attendeesOpen.has(meeting.id) || people.length <= ATTENDEES_SHOWN;
   for (const a of all ? people : people.slice(0, ATTENDEES_SHOWN)) {
     const line = document.createElement('div'); line.className = 'fvalue';
-    const uri = a.identityUri || '', known = uri.startsWith('tana:user-profile:') && !memberName(uri).startsWith('tana:');
+    const uri = a.identityUri || memberByEmail(a.email)?.id || '', known = // a calendar attendee often has only an address: the member it belongs to
+      uri.startsWith('tana:user-profile:') && !memberName(uri).startsWith('tana:');
     if (known) renderSegs(line, [{ mention: { uri, label: memberName(uri), icon: 'member' } }]);
     else line.textContent = demoText(a.name || a.email || (isGuest(uri) ? 'Guest' : 'Unknown person'), a.key);
     values.append(line);

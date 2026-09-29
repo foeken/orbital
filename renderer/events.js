@@ -85,7 +85,9 @@ onRows('keydown', (e) => {
     else if (!mod) e.preventDefault(); // every ⌘ combo (⌘K, ⌘S, ⌘F …) is the document handler's to run, as the atomic branch above already does
     return;
   }
-  if (item.node.draft) { // empty draft: Enter/Tab do nothing, Backspace drops it (caret to the node above); typing creates it (input handler)
+  if (item.node.draft) { // a draft: Enter/Tab do nothing, Backspace drops it (caret to the node above); typing creates it (input handler)
+    // a new document in a list is typed first and created once (#549): Enter is done typing, and creates it (focusout)
+    if (e.key === 'Enter' && isDoc && el.textContent.trim()) { e.preventDefault(); return el.blur(); }
     if (e.key === 'Enter' || e.key === 'Tab') return e.preventDefault();
     if (e.key === 'Backspace' && len === 0) { e.preventDefault(); const all = rowsBeside(el), prev = all[all.indexOf(el) - 1], k = prev && keyOfEl(prev); dropDraft(item); return k ? placeCaret(k) : focusAbove(); }
     if (e.key !== 'Escape' && !(e.key.startsWith('Arrow') && !mod)) return;
@@ -104,11 +106,12 @@ onRows('keydown', (e) => {
     const range = selectionOffsets(el);
     if (range && range[0] === 0 && range[1] === len) selectAllRows(el); else selectRange(item.key, 0, len);
   }
-  else if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
+  else if (e.key === 'Escape') { e.preventDefault(); if (item.node.draft && isDoc) el.textContent = ''; flush(item.key); el.blur(); } // a new document not created yet: Escape throws it away
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); } // multi-select over siblings
   else if (e.key === '@' && (!collapsed || !isDoc)) { const range = collapsed ? [off, off] : selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // a selection links it; a caret in a block inserts a reference there (a title cannot hold one, so "@" is typed)
   else if (combo === hotkeyFor('toggleDone')) { e.preventDefault(); if (isDoc) toggleDone(item); else toggleCheckbox(item); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
+  else if (e.key === 'Enter' && isDoc && collapsed && (off ?? len) === len && groupDraft(item)) e.preventDefault(); // My Tasks by Responsibility: a new task in this row's section (#548)
   else if (e.key === 'Enter' && isDoc && item.parent && collapsed && (off ?? len) === len && searchDraft(item)) e.preventDefault(); // a saved search of one type: a new row of it, its filter's values set (#537)
   else if (e.key === 'Enter' && isDoc && item.parent) e.preventDefault(); // document child (inside a space): nothing to split or draft yet
   else if (e.key === 'Enter' && isDoc && !zoom && !isOpen(item)) { e.preventDefault(); draftDoc(item); } // collapsed document in a view: draft sibling document
@@ -147,6 +150,9 @@ onRows('input', (e) => {
   const chip = chipOnly(el);
   el.classList.toggle('chiponly', chip); // typing beside the chip gives the row a caret again
   if (!item.node.draft) scheduleSave(item, readSegs(el));
+  // A new document in a list is created once, with all its words, when it is left (focusout below) or Enter is pressed:
+  // created on its first key, a saved search re-read and re-sorted around it mid-word, and what followed was lost (#549)
+  else if (item.node.kind === 'document') item.node.text = el.textContent;
   else if (!item.busy && !item.node.pendingSplit) { item.busy = true; materialise(item, el); }
   // A full reference stops being one the moment anything is typed beside its chip, and becomes one again when that
   // is deleted. Both are redrawn here, on the keystroke: waiting for the debounced save to come back left the row
@@ -207,6 +213,7 @@ onRows('focusout', (e) => {
   const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));
   if (!item) return;
   if (!item.node.draft) flush(item.key);
+  else if (item.node.kind === 'document' && el.textContent.trim() && !item.busy) { item.busy = true; materialise(item, el).then(() => renderSoon()); } // left with words: now it is created (#549)
   // left empty by the user: no node is created. Deferred one microtask because during focusout nothing is focused yet,
   // so the re-render would find no caret to keep; by then the row the caret moved to (Arrow keys, a click) holds it.
   else if (!rendering && !el.textContent && !item.busy && el.isConnected) queueMicrotask(() => {

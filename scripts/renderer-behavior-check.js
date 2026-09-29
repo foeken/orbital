@@ -111,7 +111,7 @@ const withShims = (src) => {
   // the Timeline's page id (renderer/timeline.js): a row asks whether it is drawn there
   if (/\bTIMELINE_PAGE\b/.test(src) && !/const TIMELINE_PAGE =/.test(src)) src = "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n" + src;
   // a related answer draws the page's fields and sidebar at once when a render would wait (renderer/rail.js loadRelated): a harness with no page has nothing to draw
-  if (/\bloadRelated\b/.test(src) && !/let zoom\b/.test(src) && !/const zoom\b/.test(src)) src = 'globalThis.zoom ??= null;\n' + src;
+  if (/\b(loadRelated|accessOptions)\b/.test(src) && !/let zoom\b/.test(src) && !/const zoom\b/.test(src)) src = 'globalThis.zoom ??= null;\n' + src;
   // Deleted nodes (renderer/nodes.js) are one Set the whole app shares. A harness that is not about deletion gets
   // "nothing is gone", with markGone still answering main's own mark, so rows and chips draw as they always did;
   // the real helpers are sliced in by runDeletedNodeCheck.
@@ -146,6 +146,8 @@ const withShims = (src) => {
   // one pane per place (renderer/edit.js, #533): a harness is one page, so no other pane shows anything and it tells nobody
   if (/\b(tellPlace|inOtherPane|placeKey|viewKey)\(/.test(src) && !/function inOtherPane\(/.test(src)) src = "globalThis.tellPlace ??= () => {}; globalThis.inOtherPane ??= () => false; globalThis.placeKey ??= (docId, nodeId) => (docId ? String(docId) + (nodeId ? '#' + nodeId : '') : null); globalThis.viewKey ??= (id) => (id === 'library' ? null : 'view:' + id);\n" + src;
   if (/\b(isChatPage|chatContextEl)\(/.test(src) && !/const isChatPage =/.test(src)) src = "globalThis.isChatPage ??= (p) => !!p && !p.nodeId && String(p.docId).startsWith('tana:chat:'); globalThis.chatContextEl ??= () => null;\n" + src; // renderer/chat.js, after render.js
+  if (/\bcapRows\(/.test(src) && !/function capRows\(/.test(src)) src = 'globalThis.capRows ??= (id, list, groups) => ({ list, groups, rest: 0 }); globalThis.searchMoreEl ??= () => null;\n' + src; // renderer/views.js: every row drawn in these harnesses
+  if (/\b(rowTranslation|translatedFactEl|translations|shownOriginal|setTranslatePage|pageTranslation|drawTranslatedLine|originalOnFocus|translationPending|markTranslatable|translateTo|translatableOf|translateSrc|translateId|namedSeg|translatedSegs|titleTranslation|replaceWithTranslation|translateTargets|translateNodes)\b/.test(src) && !/function rowTranslation\(/.test(src)) src = 'globalThis.translateTargets ??= () => []; globalThis.translateNodes ??= () => {}; globalThis.titleTranslation ??= () => null; globalThis.replaceWithTranslation ??= () => {}; globalThis.rowTranslation ??= () => null; globalThis.translations ??= new Map(); globalThis.shownOriginal ??= new Set(); globalThis.setTranslatePage ??= () => {}; globalThis.pageTranslation ??= () => null; globalThis.drawTranslatedLine ??= () => {}; globalThis.originalOnFocus ??= () => {}; globalThis.translationPending ??= () => false; globalThis.markTranslatable ??= () => {}; globalThis.translateTo ??= () => null; globalThis.translatableOf ??= () => null; globalThis.translateSrc ??= (n) => n.text; globalThis.translateId ??= (n) => n.id; globalThis.namedSeg ??= () => null; globalThis.translatedSegs ??= (n, text) => [{ text }];\n' + src; // renderer/translate.js: nothing is translated in these harnesses
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
@@ -172,6 +174,7 @@ const withShims = (src) => {
   if (/\bpromptEditor\b/.test(src) && !/function promptEditor\(/.test(src)) src = 'globalThis.promptEditor ??= () => {};\n' + src;
   // Opening or closing a page lays the page over both halves of a split (issue #409); runCoverCheck slices the real one.
   if (/\bcoverWindow\(/.test(src) && !/function coverWindow\(/.test(src)) src = 'globalThis.coverWindow ??= () => {};\n' + src;
+  if (/\banchorPalette\(/.test(src) && !/function anchorPalette\(/.test(src)) src = 'globalThis.anchorPalette ??= () => {};\n' + src;
   if (/\brefreshChatGPTStatus\(/.test(src) && !/function refreshChatGPTStatus\(/.test(src)) src = 'globalThis.refreshChatGPTStatus ??= () => {};\n' + src;
   // Anything that asks the backend checks the connection first: a launch draws the page it is reopening before the
   // sync client exists (renderer/edit.js). A slice that is not about that gets a connected app.
@@ -182,20 +185,22 @@ const withShims = (src) => {
   // Whether a row can be picked up (renderer/drag.js). A harness that draws rows is not about dragging, so its
   // rows are simply not draggable; the drop harness slices the real rules in instead.
   if (/\bcanDragItem\(/.test(src) && !/const canDragItem =/.test(src)) src = 'globalThis.canDragItem ??= () => false;\n' + src;
+  // the caret a render found in a row (render.js caretBefore): a slice that draws rows without it finds none
+  if (/\bcaretBefore\b/.test(src) && !/let caretBefore/.test(src)) src = 'globalThis.caretBefore ??= null;\n' + src;
   // The Home anchor (renderer/nodes.js): the palette's Go back row reads it, Set as Home offers itself from it, and
   // navigate lands on it. A slice that is not about Home gets the shipped default — the Library, and you are on it —
   // so nothing it asserts depends on a choice it never made; the Home harness slices the real ones instead.
   if (/\b(atHome|homeId|homeName|repairHome|setHome|goHome)\b/.test(src) && !/const homeId =/.test(src)) src = "globalThis.atHome ??= () => true; globalThis.homeId ??= () => 'library'; globalThis.homeName ??= () => 'Library'; globalThis.repairHome ??= () => {}; globalThis.setHome ??= () => {}; globalThis.goHome ??= () => {};\n" + src;
   // Motion (renderer/motion.js) is what no harness looks at: a slice that calls it gets moves that change nothing, and
   // the state change a move wraps runs at once, exactly as it does under reduced motion.
-  if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
+  if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|popSound|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
   return /\b(renderSoon|patchMeta|iconNode|addIcon|hotkeyFor|hotkeyIds|comboOf|keyTitle|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
 };
 const MOTION_SHIM = 'globalThis.turnPage ??= (dir, update) => update(); globalThis.foldRow ??= (key, opening, done) => done(); globalThis.foldSection ??= (head, toggle) => toggle(); '
   + "globalThis.showHide ??= (el, show) => { el.hidden = !show; }; globalThis.rowsQuiet ??= false; "
   + 'globalThis.dismissRow ??= (el, kind, done) => done(); globalThis.settleEmpty ??= () => {}; globalThis.crossfade ??= (update) => update(); globalThis.motionBefore ??= () => null; globalThis.motionAfter ??= () => {}; '
   + 'globalThis.armGlide ??= () => {}; globalThis.flash ??= () => {}; globalThis.flashAt ??= () => {}; globalThis.playOnce ??= () => {}; globalThis.rowFor ??= () => null; globalThis.badgeMoved ??= () => {}; '
-  + 'globalThis.popRead ??= () => {}; globalThis.popMention ??= () => {}; globalThis.swapPanel ??= () => {}; globalThis.menuMotion ??= () => {}; globalThis.growFrom ??= async () => {}; globalThis.play ??= async () => {}; '
+  + 'globalThis.popRead ??= () => {}; globalThis.popMention ??= () => {}; globalThis.popSound ??= () => {}; globalThis.swapPanel ??= () => {}; globalThis.menuMotion ??= () => {}; globalThis.growFrom ??= async () => {}; globalThis.play ??= async () => {}; '
   + 'globalThis.settling ??= () => 0; globalThis.MOTION ??= {}; globalThis.motionOK ??= () => false; globalThis.stillPreferred ??= () => true;\n';
 function functionSource(name) {
   const asyncStart = source.indexOf('async function ' + name + '(');
@@ -1727,7 +1732,7 @@ async function runSyncShortcutCheck() {
   `);
   assert.deepEqual(plain(order.labels('')), [
     'Current node: Zoom in', 'Current node: Set status', 'Current node: Discuss with …', 'Current node: Pin to today', 'Current node: Pin to tomorrow', 'Current node: Pin to date …', 'Current node: Edit pins', 'Current node: Move to …', 'Current node: Move to Library',
-    'Current node: Mark as sensitive', 'Current node: Edit visibility', 'Current node: Copy link', 'Current node: Delete',
+    'Current node: Mark as sensitive', 'Current node: Edit visibility', 'Current node: Add participants …', 'Current node: Copy link', 'Current node: Delete',
     'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
@@ -2456,23 +2461,25 @@ function runPaletteSkipCheck() {
   // ↑/↓ move the highlight over the rows already drawn (#272): no row is built again, in the palette or a pill menu.
   const moves = vm.runInNewContext(`
     const el = () => { const cls = new Set(); return { classList: { toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)), has: (c) => cls.has(c) }, scrolled: 0, scrollIntoView() { this.scrolled++; } }; };
-    let drawn = [], renders = 0, pillRenders = 0, palIndex = 0, menu = { index: 0 };
-    let palRows = [{ label: 'a' }, { disabled: true }, { label: 'b' }];
+    let drawn = [], renders = 0, pillRenders = 0, palIndex = 0, menu = { index: 0 }, palMode = 'cmd';
+    let palRows = [{ label: 'a', id: 'a' }, { disabled: true }, { label: 'b' }];
+    const palKeyHint = { hidden: true };
     const palList = { querySelectorAll: () => drawn };
     const renderPalette = () => { renders++; drawn = palRows.map(el); };
     const renderPills = () => { pillRenders++; };
     const pill = { querySelectorAll: () => drawn };
     ${functionSource('nextPalIndex')}
+    ${functionSource('keyHint')}
     ${functionSource('movePalIndex')}
     ${functionSource('moveMenuIndex')}
     renderPalette(); renders = 0;
     const active = () => drawn.findIndex((row) => row.classList.has('active'));
-    ({ key: (step) => { movePalIndex(step); return { palIndex, active: active(), renders, scrolled: drawn[palIndex].scrolled }; },
+    ({ key: (step) => { movePalIndex(step); return { palIndex, active: active(), renders, scrolled: drawn[palIndex].scrolled, keyHint: !palKeyHint.hidden }; },
        drop: () => { palRows = palRows.slice(1); }, // a row taken out of palRows without a redraw (invalidateNode)
        menu: (count, step) => { menu.index = 0; drawn = Array.from({ length: 3 }, el); moveMenuIndex(pill, count, step); return { index: menu.index, active: active(), pillRenders }; } });
   `);
-  assert.deepEqual(plain(moves.key(1)), { palIndex: 2, active: 2, renders: 0, scrolled: 1 }, 'Down moves the highlight past a dead row without drawing the list again');
-  assert.deepEqual(plain(moves.key(1)), { palIndex: 0, active: 0, renders: 0, scrolled: 1 }, 'and wraps, still without a redraw');
+  assert.deepEqual(plain(moves.key(1)), { palIndex: 2, active: 2, renders: 0, scrolled: 1, keyHint: false }, 'Down moves the highlight past a dead row without drawing the list again; a row with no id offers no ⇧⌘K');
+  assert.deepEqual(plain(moves.key(1)), { palIndex: 0, active: 0, renders: 0, scrolled: 1, keyHint: true }, 'and wraps, still without a redraw, to a row ⇧⌘K can give a key');
   moves.drop();
   assert.equal(moves.key(1).renders, 1, 'rows changed under the drawn list: it is drawn again rather than highlighting the wrong row');
   assert.deepEqual(plain(moves.menu(3, -1)), { index: 2, active: 2, pillRenders: 0 }, 'Up in a pill menu wraps to its last row without drawing the pills again');
@@ -2643,21 +2650,63 @@ function makeSlashHarness() {
       insertDivider: async (docId, id) => calls.push(['insertDivider', docId, id]),
       insertTable: async (docId, id) => { calls.push(['insertTable', docId, id]); return 'c1'; },
       remove: async (docId, id) => calls.push(['remove', docId, id]),
+      toggleCheckbox: async (docId, id) => calls.push(['toggleCheckbox', docId, id]),
+      createDocument: async (title, opts) => { calls.push(['createDocument', title, opts]); return { id: 'tana:text:task1', title }; },
     };
+    let page = null;
+    const extra = new Map(), showError = (e) => calls.push(['error', String(e.message || e)]);
+    const openPage = (mode, placeholder, p) => { page = { mode, placeholder, ...p }; };
+    const togglePalette = (mode) => calls.push(['palette', mode]), closePalette = () => calls.push(['close']);
+    const linkTo = async (ctx, mention) => calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]);
+    const renderPalette = () => {}, textEl = () => ({}), readSegs = () => node.segments;
+    const plainOf = (segs) => segs.map((s) => s.text).join('');
     ${functionSource('slashTarget')}
     ${functionSource('slashRows')}
     ${functionSource('runSlashBlock')}
     ${functionSource('createFromSlash')}
-    Object.assign(globalThis, { rows: (q) => slashRows(q), calls: () => calls, text: () => node.text });
+    let slashTaskBusy = false;
+    ${functionSource('taskFromSlash')}
+    ${functionSource('taskHere')}
+    Object.assign(globalThis, { rows: (q) => slashRows(q), calls: () => calls, text: () => node.text, node, page: () => page });
   `, context);
   return context;
 }
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Create Task', 'Create Project'],
-    'the "/" menu offers every block type, a divider, a table, an image and the create choices');
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Task', 'Create Project'],
+    'the "/" menu offers every block type, a checklist, a divider, a table, an image and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
+  assert.equal(listing.rows('task')[0].label, 'Task', '"/task" finds the task row first');
+  assert.equal(listing.rows('check')[0].label, 'Checklist', 'and "/check" the checklist');
+
+  // "/" Checklist (#602): the "/" goes and the row gets a checkbox; a row that has one keeps it as it is
+  const checklist = makeSlashHarness();
+  await checklist.rows('').find((row) => row.label === 'Checklist').run();
+  assert.deepEqual(plain(checklist.calls()), [['setText', 'doc', 'block', []], ['toggleCheckbox', 'doc', 'block'], ['reload'], ['caret', 'doc/block', 0]], 'Checklist gives the row a checkbox');
+  const ticked = makeSlashHarness();
+  ticked.node.done = 0;
+  await ticked.rows('').find((row) => row.label === 'Checklist').run();
+  assert.equal(plain(ticked.calls()).some((c) => c[0] === 'toggleCheckbox'), false, 'and never checks a checkbox that is already there');
+
+  // "/" Task (#602): named on a page, made as a task, and the "/" row becomes the reference to it
+  const task = makeSlashHarness();
+  task.rows('task')[0].run();
+  assert.equal(task.page().placeholder, 'Name the new task…', 'Task asks for the task\'s name');
+  assert.deepEqual(plain(task.page().rows('', '  ').map((r) => [r.label, !!r.disabled])), [['Type a name', true]], 'with nothing typed there is nothing to make');
+  task.page().back();
+  const [make] = task.page().rows('', ' Ship it ');
+  assert.equal(make.keepOpen, true, 'the name page stays open while the task is made, so nothing is typed into the row meanwhile');
+  await Promise.all([make.run(), make.run()]);
+  assert.deepEqual(plain(task.calls()), [['palette', 'slash'], ['createDocument', 'Ship it', { kind: 'task' }], ['close'], ['linkTo', 'doc/block', [], 0, 0, { label: 'Ship it', uri: 'tana:text:task1' }]],
+    'Back returns to the menu; Enter makes one task, closes the palette and puts its reference in place of the "/"');
+  const edited = makeSlashHarness();
+  edited.rows('task')[0].run();
+  const run = edited.page().rows('', 'Ship it')[0].run();
+  assert.equal(edited.page().rows('', 'Ship it')[0].label, 'Creating “Ship it”…', 'and says so until it is done');
+  edited.node.segments = [{ text: 'hello' }]; // the row changed while the task was being made
+  await run;
+  assert.deepEqual(plain(edited.calls()).at(-1), ['linkTo', 'doc/block', [{ text: 'hello' }], 5, 5, { label: 'Ship it', uri: 'tana:text:task1' }], 'a row that holds more than the "/" keeps it, the reference after it');
 
   const quote = makeSlashHarness();
   await quote.rows('').find((row) => row.label === 'Quote').run();
@@ -2857,6 +2906,25 @@ async function runRailPinCheck() {
   await refresh.pin();
   assert.deepEqual(plain(refresh.state()), { calls: [['event', 'chosen']], keys: ['event', 'doc'], kept: true, renders: 1 },
     'pinning re-reads the hub and the open document without taking their sidebars down');
+  {
+    // A row opened in a list reads its fields only; the page on screen reads the whole sidebar over it; a change reads
+    // it again as it was read (renderer/rail.js loadRelated, #579)
+    const lite = vm.runInNewContext(`
+      let releases = 0; const releasedDocs = new Map(), releasedSince = () => false;
+      const relatedBy = new Map(), asked = [], relatedStale = new Set(), connected = true, isRealId = () => true, renderSoon = () => {};
+      const queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false, zoom = null, items = new Map();
+      const tana = { related: async (id, opts) => { asked.push(opts && opts.lite ? 'lite' : 'whole'); return opts && opts.lite ? { lite: true, fields: [] } : { fields: [], pinned: [] }; } };
+      ${functionSource('loadRelated')}
+      ${functionSource('refreshRelated')}
+      ({ loadRelated, refreshRelated, asked, kind: (id) => (relatedBy.get(id) || {}).lite ? 'lite' : 'whole' });
+    `);
+    const settle = () => new Promise((resolve) => setTimeout(resolve));
+    lite.loadRelated('row', true); await settle(); lite.loadRelated('row', true); await settle();
+    lite.refreshRelated('row'); await settle();
+    assert.deepEqual(plain(lite.asked), ['lite', 'lite'], 'a list row reads its fields once, and a change reads them again, no more');
+    lite.loadRelated('row'); await settle(); lite.loadRelated('row', true); await settle();
+    assert.deepEqual([plain(lite.asked), lite.kind('row')], [['lite', 'lite', 'whole'], 'whole'], 'the page on screen reads the whole sidebar over it, and it stays whole');
+  }
   assert.match(functionSource('closePalette'), /pinCtx = null/, 'closing the shared palette clears pin context');
 }
 
@@ -4039,7 +4107,7 @@ function runRowAudienceCheck() {
         const icons = info ? info.children.filter((icon) => icon.attrs['aria-label'] || icon.attrs['aria-hidden']) : null; // the assignee name span is not an icon
         // the gap is styles.css's .tmeta > .ticon:not(:first-child) (renderer-check pins the rule): 6px after anything
         const sub = body.children.find((child) => child.className === 'subtext') || { children: [] }, people = sub.children.find((child) => child.className === 'people');
-        return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className === 'ticon' ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: sub.value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor),
+        return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className.split(' ').includes('ticon') ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: sub.value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor),
           people: people ? [people.children[0].attrs['aria-label'], ...(typeof people.children[1] === 'string' ? [people.children[1]] : people.children[1].children.map((face) => face.value)), people.children[2] || null] : null, // a string: the audience's word (Everyone, Private)
           names: people && typeof people.children[1] !== 'string' ? people.children[1].children.map((face) => face.attrs['aria-label'] || null) : null,
           after: people ? sub.children.filter((child) => typeof child === 'string').join('') : null }; // the words after who can see it
@@ -4624,7 +4692,7 @@ function runRailToggleCheck() {
   // Only the Graph pane draws the rail; every other page hides it and tells the shell its document instead.
   // It still reads the document's related data: the fields under its title come with that read, and without it a page
   // opened with no Graph pane beside it showed no fields at all.
-  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; if \(docId\) loadRelated\(docId\); return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail, still reads what its fields need, and names its document');
+  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; if \(docId\) loadRelated\(docId\); drawLinksBtn\(docId\); return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail, still reads what its fields need, offers its Graph switch and names its document');
   // and no outline key of the page (⇧⌘⌫ above all) reaches the hidden page in the Graph pane: its branch comes before them (#463 review)
   assert.match(source, /else if \(!palette\.hidden\) return;\n(?:\s*\/\/[^\n]*\n)*\s*else if \(LINKS\) \{ if \(hotkey && runAction\(hotkey\)\) e\.preventDefault\(\); \}\n[^]*?removeZoomedBlock\(\)/, 'in the Graph pane only its forwarded keys run, never the outline\'s');
   // Anywhere else the Graph pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
@@ -5219,7 +5287,7 @@ function runCodexAssignCheck() {
       badgeWhenDone: (done) => { const el = codexBadgeEl(DOC, done); return { className: el.className, label: el.attrs['aria-label'], role: el.attrs.role, hasClick: typeof el.onclick === 'function' }; },
       // the row it is drawn beside is the source: a view cache elsewhere must not decide what this row shows
       badgeFromStaleCache: (done) => { palDoc.done = done ? 1 : 0; const el = codexBadgeEl(DOC, false); palDoc.done = 0; return el.className; },
-      // "Go to Agent task" is offered only where both halves hold: assigned now, and a task id known for it
+      // "Go to Codex task" is offered only where both halves hold: assigned now, and a task id known for it
       goRow: (assigned, linked) => { if (assigned) codexIds.add(DOC); else codexIds.delete(DOC); if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const r = paletteRows('').find((row) => row.rank === 'codexOpen'); return r ? r.label : null; },
       // where the task runs decides whether there is a way in at all
       onHost: (host) => { codexIds.add(DOC); agentStates.set(DOC, 'working'); if (host) agentTaskHosts.set(DOC, host); else agentTaskHosts.delete(DOC); agentHosts = [{ id: 'h1', title: 'Donut' }];
@@ -5350,17 +5418,17 @@ function runCodexAssignCheck() {
     // any view's cache — a view that had not refreshed still held it open — so the row it sits on decides instead.
     assert.doesNotMatch(plain(api.badgeFromStaleCache(true)), /\bclosed\b/, 'the row it is drawn beside outranks any cached copy of the node');
     // The row used to read a snapshot alone, so an unassigned node kept offering it until the next status read.
-    assert.equal(api.goRow(true, true), 'Go to Agent task', 'an assigned node with a task offers the way in');
+    assert.equal(api.goRow(true, true), 'Go to Codex task', 'an assigned node with a task offers the way in');
     assert.equal(api.goRow(false, true), null, 'an unassigned node does not, however stale the status map is');
     assert.equal(api.goRow(true, false), null, 'nor does an assigned node whose task is not known yet');
     assert.equal(api.goRow(false, false), null, 'and a node with neither says nothing');
     // A task on this machine can be opened; one on another machine says where it is instead of pretending.
     const here = plain(api.onHost('local'));
-    assert.equal(here.row, 'Go to Agent task', 'a local task offers the way in');
+    assert.equal(here.row, 'Go to Codex task', 'a local task offers the way in');
     assert.equal(here.disabled, false);
     assert.equal(here.role, 'button', 'and its badge is a button');
     const away = plain(api.onHost('h1'));
-    assert.equal(away.row, 'Agent task is on Donut', 'a task elsewhere names its machine');
+    assert.equal(away.row, 'Codex task is on Donut', 'a task elsewhere names its machine');
     assert.equal(away.disabled, true, 'and cannot be run, because there is no route from here');
     assert.equal(away.role, 'img', 'its badge is not a button either');
     assert.match(away.label, /on Donut$/, 'but it says where the work is, for anyone not seeing the colour');
@@ -5541,60 +5609,133 @@ function runPillsFoldCheck() {
   api.setReduced(false);
 }
 
+// Add participants … opens Edit visibility at its people when the document may be shared with people and its
+// participants are in, else at the picker; New chat with … makes the chat, opens it, then invites the member.
+async function runAddParticipantsCheck() {
+  const api = vm.runInNewContext(`
+    let palDoc = null; const opened = [], calls = [];
+    const accessById = new Map(), taskMetaById = new Map();
+    const loadAccess = () => {}, loadTaskMeta = () => {};
+    const openVisibilityPeople = (doc) => opened.push('people ' + doc.id), openVisibilityPalette = (doc) => opened.push('picker ' + doc.id);
+    const tana = { newChat: async () => { calls.push('new'); return { id: 'tana:chat:n' }; }, }, inviteToChat = (id, uri) => calls.push('invite ' + id + ' ' + uri);
+    const run = (fn) => fn(), openResult = (n) => calls.push('open ' + n.id);
+    ${functionSource('addParticipants')}
+    ${functionSource('newChatWith')}
+    ({ addParticipants, newChatWith, opened, calls, accessById, taskMetaById, palDoc: () => palDoc });
+  `);
+  const doc = { id: 'tana:chat:c' };
+  api.addParticipants(doc);
+  api.accessById.set(doc.id, { rules: ['me', 'people'] }); api.taskMetaById.set(doc.id, { participants: [] });
+  api.addParticipants(doc);
+  assert.deepEqual(plain(api.opened), ['picker tana:chat:c', 'people tana:chat:c'], 'Add participants: the picker while what may be done is unknown, the people once it may be shared with them');
+  assert.equal(api.palDoc(), doc, 'acting on the document it was asked for');
+  await api.newChatWith('tana:user-profile:sam');
+  assert.deepEqual(plain(api.calls), ['new', 'open tana:chat:n', 'invite tana:chat:n tana:user-profile:sam'], 'New chat with: the chat, opened, then the member invited to it');
+}
+// Auto-translate covers titles of top-level nodes only (renderer/translate.js translatableOf): a document's title, never
+// a block, which is a node's content, whatever page it is on.
+async function runTranslateTitlesOnlyCheck() {
+  const api = vm.runInNewContext(`
+    const segsOf = (v) => v.segments || (v.text ? [{ text: v.text }] : []);
+    const plainText = (segs) => (segs.length && segs.every((s) => Object.keys(s).every((k) => k === 'text')) ? segs.map((s) => s.text).join('') : '');
+    ${sourceBetween('const namedSeg = ', 'function pageTranslation(')}
+    ({ translatableOf });
+  `);
+  const item = { docId: 'tana:text:page', parent: null };
+  assert.deepEqual(plain(api.translatableOf(item, { kind: 'document', id: 'tana:text:doc', text: 'Vergadering plannen' })), { src: 'Vergadering plannen', id: 'tana:text:doc' }, 'a document title is translated');
+  assert.equal(api.translatableOf(item, { kind: 'block', id: 'b1', text: 'Een regel in de notitie' }), null, 'a block, a node\'s content, is not');
+  // Cmd+K Replace with translation: the translation the title is shown in, written as the title
+  const rep = vm.runInNewContext(`
+    const translations = new Map([['Vergadering plannen', { lang: 'Dutch', text: 'Plan a meeting' }]]), shownOriginal = new Set(['tana:text:doc']), saved = [];
+    const maySend = () => true, tana = { setTitle: async (id, text) => saved.push([id, text]) }, run = (fn) => fn(), showNote = () => {}, render = () => {};
+    ${sourceBetween('const titleTranslation = ', '// ---- Cmd+K "Auto-translate')}
+    ({ titleTranslation, replaceWithTranslation, saved, shownOriginal });
+  `);
+  const doc = { id: 'tana:text:doc', text: 'Vergadering plannen' }, found = rep.titleTranslation(doc);
+  assert.equal(found && found.text, 'Plan a meeting', 'the title\'s translation is found');
+  assert.equal(rep.titleTranslation({ id: 'tana:text:x', text: 'Already English' }), null, 'a title with none offers nothing');
+  await rep.replaceWithTranslation(doc, found);
+  assert.deepEqual(plain(rep.saved), [['tana:text:doc', 'Plan a meeting']], 'written as the title');
+  assert.equal(doc.text, 'Plan a meeting', 'and shown at once');
+  // Cmd+K Translate into …: a title and a block written in the language, what is in it already left alone
+  const tr = vm.runInNewContext(`
+    const writes = [], notes = [];
+    const segsOf = (v) => v.segments || (v.text ? [{ text: v.text }] : []);
+    const plainText = (segs) => (segs.length && segs.every((s) => Object.keys(s).every((k) => k === 'text')) ? segs.map((s) => s.text).join('') : '');
+    const answers = { 'Vergadering plannen': { lang: 'Dutch', text: 'Plan a meeting' }, 'Bel Sam terug': { lang: 'Dutch', text: 'Call Sam back' } };
+    const tana = { translate: async (texts) => texts.map((t) => answers[t] || null), setTitle: async (id, t) => writes.push(['title', id, t]), setText: async (d, id, segs) => writes.push(['text', id, segs[0].text]) };
+    const run = (fn) => fn(), flushAll = () => {}, render = () => {}, showNote = (n) => notes.push(n);
+    ${functionSource('translateNodes')}
+    ({ translateNodes, writes, notes });
+  `);
+  const list = [{ docId: 'tana:text:d', node: { kind: 'document', text: 'Vergadering plannen' } }, { docId: 'tana:text:d', node: { kind: 'block', id: 'b1', text: 'Bel Sam terug' } }, { docId: 'tana:text:d', node: { kind: 'block', id: 'b2', text: 'Already English' } }];
+  await tr.translateNodes(list, 'English');
+  assert.deepEqual(plain(tr.writes), [['title', 'tana:text:d', 'Plan a meeting'], ['text', 'b1', 'Call Sam back']], 'the title and the block are written, the English one is not');
+  assert.deepEqual(plain(tr.notes), ['Translated 2 of 3 nodes into English']);
+}
+// Deleting the page on screen goes back to the page before it in this pane (renderer/edit.js leaveGonePage), and the
+// deleted page leaves the history; with nothing to go back to it is the view (the Library), as before.
+function runLeaveGonePageCheck() {
+  const api = vm.runInNewContext(`
+    let view = 'library', zoom = null, caretOnOpen = false; const LINKS = false, localStorage = { setItem() {} };
+    const flushAll = () => {}, dropDrafts = () => {}, render = () => {}, isGone = () => false;
+    ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation(')}
+    ${functionSource('navigate')}
+    ${functionSource('leaveGonePage')}
+    ({ leaveGonePage, navBack, navForward, set: (z, back) => { zoom = z; navHere = { view, zoom: z }; navBack.push(...back); }, zoom: () => zoom });
+  `);
+  const page = (docId) => ({ view: 'library', zoom: { docId, nodeId: null } });
+  api.set({ docId: 'tana:text:gone', nodeId: null }, [page('tana:text:before'), page('tana:text:gone'), page('tana:text:prev')]);
+  api.leaveGonePage('tana:text:gone');
+  assert.equal(api.zoom()?.docId, 'tana:text:prev', 'back to the page before the deleted one');
+  assert.deepEqual(plain(api.navBack).map((p) => p.zoom?.docId), ['tana:text:before'], 'the deleted page is gone from Back');
+  assert.deepEqual(plain(api.navForward), [], 'and from Forward');
+  api.navBack.length = 0;
+  api.set({ docId: 'tana:text:alone', nodeId: null }, []);
+  api.leaveGonePage('tana:text:alone');
+  assert.equal(api.zoom(), null, 'nothing to go back to: the view');
+}
+// The check-off pop sounds as the button goes down, once (renderer/motion.js popSound): the click that follows the
+// press leaves it, and a tick with no press before it (⌘↩, Cmd+K) still plays it.
+function runPopSoundCheck() {
+  const src = fs.readFileSync(require.resolve('../renderer/motion.js'), 'utf8');
+  let now = 0; const started = [];
+  const param = { setValueAtTime() {}, exponentialRampToValueAtTime() {} };
+  function FakeContext() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }
+  FakeContext.prototype.createOscillator = () => ({ type: '', frequency: param, connect: () => ({ connect() {} }), start: (t) => started.push(t), stop() {} });
+  FakeContext.prototype.createGain = () => ({ gain: param, connect: () => ({ connect() {} }) });
+  const api = vm.runInNewContext(src.slice(src.indexOf('let popCtx = null')) + '\n({ popSound })', { AudioContext: FakeContext, performance: { now: () => now }, addEventListener() {} });
+  api.popSound(true);
+  assert.equal(started.length, 2, 'the press plays the pop (its two notes)');
+  assert.equal(started[0], 0, 'at once, not a moment later');
+  now = 100; api.popSound();
+  assert.equal(started.length, 2, 'the click that follows does not play it again');
+  now = 1000; api.popSound();
+  assert.equal(started.length, 4, 'a tick with no press before it still pops');
+}
+
 function runRefreshSpinCheck() {
+  // Refresh is the pane menu's (shell.js): offering it retells the title, and the menu's press asks the search again
   const api = vm.runInNewContext(`
     const DOC = 'tana:search:01exampleq0000000000000000';
-    const asked = [], log = [];
-    let reduced = false, available = true, staged = false;
-    const matchMedia = (query) => ({ matches: reduced && query.includes('reduce') });
-    const mkEl = (tagName) => {
-      const classes = new Set();
-      return { tagName, hidden: false, childNodes: [], attrs: {},
-        classList: { add: (...names) => { names.forEach((name) => classes.add(name)); log.push('add ' + names.join(' ')); },
-          remove: (...names) => { names.forEach((name) => classes.delete(name)); log.push('remove ' + names.join(' ')); },
-          contains: (name) => classes.has(name) },
-        get offsetWidth() { log.push('reflow'); return 0; },
-        setAttribute(name, value) { this.attrs[name] = String(value); },
-        append(...kids) { this.childNodes.push(...kids); },
-        get firstChild() { return this.childNodes[0] || null; } };
-    };
-    const button = mkEl('button');
-    const $ = () => button;
-    const iconNode = () => mkEl('svg');
+    const asked = []; let told = 0;
     const zoom = { docId: DOC };
+    const retellTitle = () => { told++; };
     const releaseHeld = () => asked.push('release');
     const run = (fn) => fn();
-    const reload = async (id) => asked.push('reload ' + id); // the fastest answer there is: back within the same tick
+    const reload = async (id) => asked.push('reload ' + id);
     const render = (force) => asked.push('render ' + force);
-    ${sourceBetween('const stillPreferred =', 'function playOnce(')}
-    ${functionSource('playOnce')}
-    ${sourceBetween('const refreshBtn =', '// Clean up: let go of the rows')}
-    const state = () => ({ log: [...log], asked: [...asked], hidden: button.hidden, glyphs: button.childNodes.length,
-      label: button.attrs['aria-label'], spinning: !!button.firstChild && button.firstChild.classList.contains('spin') });
-    ({
-      draw: (offered) => { log.length = 0; renderRefreshBtn(offered); return state(); },
-      press: async () => { log.length = 0; asked.length = 0; button.onclick(); for (let i = 0; i < 5; i++) await Promise.resolve(); return state(); },
-      setReduced: (value) => { reduced = value; },
-    });
+    ${sourceBetween('let refreshable = false;', '// Clean up: let go of the rows')}
+    ({ offer: (on) => { offerRefresh(on); return { told, refreshable }; },
+      press: async () => { asked.length = 0; refreshSearch(); for (let i = 0; i < 5; i++) await Promise.resolve(); return [...asked]; } });
   `, { Promise });
   return (async () => {
-    const drawn = plain(api.draw(true));
-    assert.deepEqual([drawn.hidden, drawn.glyphs, drawn.label], [false, 1, 'Refresh'], 'a saved search is offered Refresh beside the fold button, as a named glyph');
-    assert.equal(plain(api.draw(true)).glyphs, 1, 'and a redraw keeps the glyph it already has, so a turn in progress is not thrown away');
-    assert.equal(plain(api.draw(false)).hidden, true, 'a page with nothing to re-ask is not offered it');
-    api.draw(true);
-    const pressed = plain(await api.press());
-    assert.equal(pressed.spinning, true, 'pressing Refresh turns the glyph');
-    assert.deepEqual(pressed.asked, ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
-      'the rows kept in place are let go, the query goes out, and the page is drawn the moment it answers — the turn finishes on its own, on a button no redraw rebuilds');
-    const again = plain(await api.press());
-    assert.deepEqual(again.log, ['remove spin', 'reflow', 'add spin'],
-      'a second press restarts the turn: dropped, laid out again, re-added — without the reflow in between the class never leaves and nothing moves');
-    api.setReduced(true);
-    const still = plain(await api.press());
-    assert.equal(still.spinning, false, 'under reduced motion nothing turns');
-    assert.deepEqual(still.asked, ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
-      'and the refresh is drawn as soon as it answers, exactly as it is with the turn');
+    assert.deepEqual(plain(api.offer(true)), { told: 1, refreshable: true }, 'a saved search offers Refresh by telling the shell its title again');
+    assert.equal(plain(api.offer(true)).told, 1, 'and an unchanged offer tells nothing');
+    assert.deepEqual(plain(await api.press()), ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
+      'the menu\'s Refresh lets the kept rows go, asks the query again and draws the page when it answers');
+    api.offer(false);
+    assert.deepEqual(plain(await api.press()), [], 'a page with nothing to re-ask ignores a late press');
   })();
 }
 
@@ -7085,6 +7226,40 @@ async function runImageViewCheck() {
 // contextBridge freezes everything it exposes, so a store that writes straight into that object throws on the
 // first choice made — and it throws *before* the line that redraws, which is how folding a group heading stopped
 // doing anything and why nothing was kept between launches.
+// A document drawn twice on one page (a task under Today's Tasks and again where it landed in your Inbox) is two rows
+// with two items: sharing one, a click on the first box ticked the other copy (renderer/nodes.js mkItem).
+function runTwiceDrawnItemCheck() {
+  const src = fs.readFileSync(require.resolve('../renderer/nodes.js'), 'utf8');
+  const pick = (start) => src.slice(src.indexOf(start), src.indexOf('\n', src.indexOf(start)) + 1);
+  const mk = src.slice(src.indexOf('const mkItem'), src.indexOf('return item;\n};', src.indexOf('const mkItem')) + 14);
+  const context = vm.createContext({ items: new Map() });
+  const api = vm.runInContext(pick('const keyFor') + pick('const rendered') + mk + '\n({ mkItem, rendered })', context);
+  const doc = 'tana:text:01task', today = { key: 'orbital:timeline/today' }, inbox = { key: 'orbital:timeline/inbox' };
+  const first = { id: doc, kind: 'document' }, second = { id: doc, kind: 'document' };
+  const a = api.mkItem(doc, first, today), b = api.mkItem(doc, second, inbox);
+  assert.notEqual(a, b, 'the second copy has an item of its own');
+  assert.equal(a.node, first, 'and the first keeps its own node');
+  assert.equal(a.key, doc, 'the first copy is keyed by its document, as before');
+  api.rendered.clear();
+  assert.equal(api.mkItem(doc, first, today), a, 'the next render finds the same items');
+  assert.equal(api.mkItem(doc, second, inbox), b, 'both of them');
+}
+// A saved search draws twenty rows at a time in the order shown (renderer/views.js capRows): a flat list is cut, a
+// grouped one keeps its sections in order until twenty rows are drawn, a folded section costs nothing.
+function runSearchCapCheck() {
+  const src = fs.readFileSync(require.resolve('../renderer/views.js'), 'utf8');
+  const cap = vm.runInNewContext(src.slice(src.indexOf('const SEARCH_STEP'), src.indexOf('let searchMoreNext')) + '\n({ capRows, searchShown })');
+  const rows = (n, p = 'r') => Array.from({ length: n }, (_, i) => ({ id: p + i }));
+  const flat = cap.capRows('s', rows(45), null);
+  assert.deepEqual(plain([flat.list.length, flat.rest, flat.list[19].id]), [20, 25, 'r19'], 'a flat list draws its first twenty, the rest counted');
+  assert.equal(cap.capRows('s', rows(12), null).rest, 0, 'a short one draws whole');
+  const groups = [{ id: 'a', nodes: rows(15, 'a') }, { id: 'b', collapsed: true, nodes: rows(9, 'b') }, { id: 'c', nodes: rows(10, 'c') }, { id: 'd', nodes: rows(4, 'd') }];
+  const g = cap.capRows('s', groups.flatMap((x) => (x.collapsed ? [] : x.nodes)), groups);
+  assert.deepEqual(plain(g.groups.map((x) => [x.id, x.nodes.length])), [['a', 15], ['b', 9], ['c', 5]], 'sections in order until twenty rows are drawn; a folded one draws none of its rows, a later one waits');
+  assert.deepEqual(plain([g.list.length, g.rest]), [20, 9], 'the keyboard order is what is drawn');
+  cap.searchShown.set('s', 40);
+  assert.equal(cap.capRows('s', rows(45), null).list.length, 40, 'each Show more draws twenty more');
+}
 function runPrefsStoreCheck() {
   const src = fs.readFileSync(require.resolve('../renderer/prefs.js'), 'utf8');
   const writes = [];
@@ -7225,6 +7400,11 @@ async function runStagedSearchReloadCheck() {
   api.stage(retry); api.stage(retry); // 19, 20
   await api.answer(19, ['preview']); await api.answer(20, Promise.reject(new Error('unavailable')));
   assert.deepEqual([plain(api.rows(retry)), api.staged(retry), plain(api.errors())], [['preview'], true, []], 'a failed retry of a preview that already answered leaves it staged and quiet');
+  // A chat's reads during a burst of live updates: the one from mid-answer landing after the final one is dropped
+  const chat = 'tana:chat:01j0burst0000000000000000';
+  const midAnswer = api.reload(chat), final = api.reload(chat); // 21, 22
+  await api.answer(22, ['Thought for 12 seconds']); await final; await api.answer(21, ['Thinking...']); await midAnswer;
+  assert.deepEqual(plain(api.rows(chat)), ['Thought for 12 seconds'], 'an older read of any page answering last leaves the newer rows');
   console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
 
@@ -7420,7 +7600,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -8597,6 +8777,10 @@ function runGroupDropCheck() {
   assert.deepEqual(at('Today', { dates: ['2026-09-20'] }), [], 'Today leaves a task already on it alone');
   assert.deepEqual(at('Today', { dates: ['2026-09-20'], stateType: 'closed' }), [['pin', DAY]], 'but pins a completed one that has aged off it');
   assert.deepEqual(at('Agent', {}), [['agent', true]], 'Agent asks for a prompt');
+  assert.deepEqual(at('Today', { stateType: 'proposed' }), [['pin', DAY], ['state', 'open']], 'an Inbox task dropped on Today is pinned and accepted, In Progress');
+  assert.deepEqual(at('Today', { stateType: 'proposed', dates: [DAY] }), [['state', 'open']], 'one on Today already is only accepted');
+  assert.deepEqual(at('Pinned', { stateType: 'proposed' }), [['pin', DAY], ['state', 'open']], 'and so on Pinned');
+  assert.deepEqual(at('Today', { stateType: 'proposed', writable: false }), [['pin', DAY]], 'a read-only one is pinned all the same, its status left alone');
   assert.deepEqual(at('Mine', { assignees: [ME] }), [], 'a drop in its own group writes nothing');
   console.log('ok  group drop: each group writes what puts a task there, lets go of what held it elsewhere, and refuses what a drop cannot say');
 }
@@ -8870,7 +9054,7 @@ checks.push(runProposalsCheck);
 async function runPeopleFieldsCheck() {
   const api = vm.runInNewContext(`
     ${FAKE_DOM}
-    const ME = 'tana:user-profile:me', members = [{ id: ME, title: 'Robin Vega', me: true }, { id: 'tana:user-profile:sam', title: 'Sam' }];
+    const ME = 'tana:user-profile:me', members = [{ id: ME, title: 'Robin Vega', me: true }, { id: 'tana:user-profile:sam', title: 'Sam', emails: ['sam@x.nl'] }];
     const me = () => members.find((m) => m.me), memberName = (uri) => (members.find((m) => m.id === uri) || {}).title || uri, loadMembers = () => {};
     const renderSegs = (el, segs) => el.append(...segs.map((s) => (s.mention ? '@' + s.mention.label : s.text)));
     const addIcon = () => {}, facesEls = () => [], sensitiveHidden = () => false, isGuest = (uri) => uri.startsWith('tana:guest-profile:'), demoText = (v) => v;
@@ -8878,6 +9062,7 @@ async function runPeopleFieldsCheck() {
     let renders = 0; const render = () => { renders++; };
     let summary = null; const taskSummary = () => summary, documentSummary = () => null;
     let info = null; const meetingOf = (node) => (node.icon === 'meeting' ? { id: node.id } : null), meetingInfoOf = () => info;
+    ${sourceLine('const memberByEmail')}
     ${functionSource('visibilityFieldEl')}
     ${sourceLine('const ATTENDEES_SHOWN')}
     ${sourceLine('const attendeesOpen')}
@@ -8899,6 +9084,7 @@ async function runPeopleFieldsCheck() {
   assert.deepEqual(plain(api.attendees(people.slice(0, 7))), ['@Sam', 'A', 'B', 'C', 'D'], 'five people, rooms left out, all of them when that is everyone');
   assert.deepEqual(plain(api.attendees(people)), ['@Sam', 'A', 'B', 'C', 'D', 'And 2 more'], 'past five, the rest are counted');
   assert.deepEqual(plain(api.more()), [1, 7], 'a click shows them all');
+  assert.deepEqual(plain(api.attendees([{ name: 'Sam Smith', email: 'Sam@X.nl' }, { name: '+Room 5', email: 'room5@x.nl' }])), ['@Sam', '+Room 5'], 'an attendee with only an address that is a member\'s is that member, as a mention; an unknown address stays its name');
   console.log('ok  people fields: Private names you, Attendees shows five and And n more until clicked, without rooms');
 }
 checks.push(runPeopleFieldsCheck);
@@ -9207,8 +9393,8 @@ function runCoverCheck() {
   console.log('ok  palette over both halves: asked once, drawn in its half only at the whole window\u2019s size, let go after the fade; @ and / stay in the half');
 }
 checks.push(runCoverCheck);
-// A row someone else changed lights up once; a render that changes many at once is the page landing, and flashing
-// each of them forced a layout per row (639 rows: about a second of script before the Library showed).
+// A row changed elsewhere is patched quietly: its blue flash on every live update was distracting, so none lights up,
+// one or many (a render that changes many at once is the page landing).
 function runLandingFlashCheck() {
   const flashed = (changed) => vm.runInNewContext(`
     const flashed = [], view = 'library', zoom = null, performance = { now: () => 1e6 };
@@ -9221,9 +9407,9 @@ function runLandingFlashCheck() {
     motionAfter(root, { page: 'root|library', bodies: new Map(rows.map((el) => [el.dataset.key, 'old'])), fieldsWaiting: new Set(), rects: null });
     flashed;
   `);
-  assert.deepEqual([...flashed(1)], ['k0'], 'an edit elsewhere to one row lights that row up');
-  assert.deepEqual([...flashed(26)], [], 'more than BULK rows changed at once is a landing: none flashes');
-  console.log('ok  landing: one changed row flashes, a whole list changed at once does not');
+  assert.deepEqual([...flashed(1)], [], 'an edit elsewhere to one row does not flash it');
+  assert.deepEqual([...flashed(26)], [], 'nor does a whole list changed at once');
+  console.log('ok  a live update patches its rows without a flash');
 }
 checks.push(runLandingFlashCheck);
 
@@ -9244,6 +9430,29 @@ checks.push(function runSearchPresetCheck() {
   api.store('s2', { types: [T, 'tana:type:01j0another00000000000000000'] }); api.store('s3', { types: ['tasks'] });
   assert.deepEqual([api.preset('s2'), api.preset('s3'), api.preset('s4')], [null, null, null], 'two types, a kind, or no filter known: no preset');
   console.log('ok  a saved search of one type drafts its new rows with the values its filter asks for');
+});
+
+// Enter on a task row of such a search drafts a task, box and all, before Create new … has ever loaded the choices.
+checks.push(function runSearchDraftTaskCheck() {
+  const T = 'tana:type:01j0projecttask00000000000';
+  const api = vm.runInNewContext(`
+    const filters = new Map(), searchFilters = new Map(), kids = new Map(), typeGlyphs = new Map();
+    let creationChoices = [], typeListCache = null, draftSeq = 0;
+    const flush = () => {}, render = () => {}, placeCaret = () => {};
+    ${sourceLine('const SEARCH_ID =')}
+    ${sourceLine('const isSearchDoc =')}
+    ${sourceLine('const isTypeId =')}
+    ${sourceLine('const typeGlyph =')}
+    ${sourceLine('const isTask =')}
+    ${sourceBetween('function draftDocNode', '// a tag chip')}
+    ${sourceBetween('const EQUALS', '// Enter on a collapsed top-level document')}
+    const search = SEARCH_ID + '01j0mysearch000000000000000', row = { id: 'tana:text:t1', kind: 'document', icon: 'task' };
+    searchFilters.set(search, { filter: { types: ['${T}'] } }); kids.set(search, [row]);
+    searchDraft({ key: 'k', node: row, parent: { docId: search } });
+    kids.get(search)[1];
+  `);
+  assert.ok(api && api.icon === 'task' && api.done === 0, 'the draft below a task row is a task with an unticked box');
+  console.log('ok  a new row of a one-type saved search of tasks has its box from the start');
 });
 
 // Create new … names the node on a page of its own (#535): nothing to run until a name is typed, then Enter makes it with the

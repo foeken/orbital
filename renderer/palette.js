@@ -2,7 +2,7 @@
 // Cmd+K commands and Cmd+S search, hidden items, creation, results, and the shortcut recorder.
 
 // ---- palette: Cmd+K commands (Views, Actions; documents are Cmd+S live search, api.search) ----
-const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList');
+const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList'), palKeyHint = $('paletteKeyHint');
 let palMode = 'cmd', palPage = {}, palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: { create, where }, applied when the rows land
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
@@ -33,9 +33,9 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'meetingTime', 'meetingLocation', 'meetingAttendee',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
-  'setIcon', 'setHue', 'sensitive',
+  'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
   'codex', 'codexOpen', 'codexLink', 'sendToAgent',
-  'visibility', 'notify', 'copyLink', 'exportPdf',
+  'visibility', 'addParticipants', 'notify', 'copyLink', 'exportPdf',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
@@ -145,6 +145,10 @@ function paletteRows(q, typed = q) {
   const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';
   // Rename, as on the page's tab: the zoomed page's title, where it can be typed in (renderer/document.js renameTitle)
   if (palDoc && zoom && palDoc.id === zoom.docId && !zoom.nodeId && (titleEl.dataset || {}).key) rows.push({ id: 'rename', group: docGroup, icon: 'rename', label: 'Rename', run: renameTitle });
+  // the selection, or the row or page you are on, written in the auto-translate language (renderer/translate.js)
+  if (tana.translate && tana.setText && tana.setTitle && !demoMode) { const list = translateTargets(), to = translateTo() || 'English'; if (list.length) rows.push({ id: 'translateNodes', group: selKeys().length ? 'Selection' : docGroup, icon: 'language', label: 'Translate' + (list.length > 1 ? ' ' + list.length + ' nodes' : '') + ' into ' + to, hint: 'Writes the translation', run: () => translateNodes(list, to) }); }
+  // its title shown translated (renderer/translate.js), written as the title for good, where it may be edited
+  if (palDoc && tana.setTitle && !demoMode && canEditNode(palDoc)) { const doc = palDoc, found = titleTranslation(doc); if (found) rows.push({ id: 'replaceTranslation', group: docGroup, icon: 'language', label: 'Replace with translation', hint: 'From ' + found.lang, run: () => replaceWithTranslation(doc, found) }); }
   if (palDoc && tana.exportPdf && DOC_KIND.test(palDoc.id)) {
     const doc = palDoc;
     rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
@@ -208,7 +212,9 @@ function paletteRows(q, typed = q) {
   if (palDoc && isRealId(palDoc.id)) { const call = callRow(relatedBy.get(palDoc.id)); if (call) rows.push({ ...call, group: docGroup }); }
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'sendToAgent', group: docGroup, icon: 'robot', label: 'Send to agent', run: () => run(async () => {
+    // Open in Codex: a new Codex task with the node's link, nothing tracked (Assign to Agent is the tracked one). The id
+    // keeps its old name so a recorded key still finds the row.
+    rows.push({ id: 'sendToAgent', group: docGroup, icon: 'chatgpt', label: 'Open in Codex', hint: 'New task with this link', run: () => run(async () => {
       const link = await tana.nodeLink(doc.id);
       await tana.openExternal('https://chatgpt.com/codex/open-app?q=' + encodeURIComponent(link + '\n'));
     }) });
@@ -243,9 +249,12 @@ function paletteRows(q, typed = q) {
   // And what a type looks like. The glyph belongs to the type, so every document of that type is drawn with it: its
   // bullet, its row in the sidebar, a breadcrumb, and the chip an inline mention of it draws. A saved search takes one
   // the same way, for itself: its row, its page and its line under Searches (#521).
-  if (palDoc && tana.searchIcons && tana.setTypeIcon && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc))) {
-    const doc = palDoc;
-    rows.push({ id: 'setIcon', group: docGroup, icon: typeGlyph(doc.id), label: 'Set icon',
+  // On a saved search's page it is the search's, wherever the caret is: its rows are other documents (a goal, a task),
+  // which have no icon of their own to set, and the search is what the page is (#551).
+  const iconDoc = !tana.searchIcons || !tana.setTypeIcon ? null : palDoc && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc)) ? palDoc : onSearchPage() ? docOf(zoom.docId) || extra.get(zoom.docId) || { id: zoom.docId, text: titleEl.textContent } : null;
+  if (iconDoc) {
+    const doc = iconDoc;
+    rows.push({ id: 'setIcon', group: doc === palDoc ? docGroup : 'Current page', icon: typeGlyph(doc.id), label: 'Set icon',
       hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
   }
   // And what colour it is here: our own hue or grey for the type, kept with the glyph in the settings document, so
@@ -285,7 +294,7 @@ function paletteRows(q, typed = q) {
       } });
   }
   // A task that already exists in Codex, linked by pasting its link (#143): the page below.
-  if (palDoc && tana.linkCodexTask && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ rank: 'codexLink', group: docGroup, icon: 'robot', label: 'Link Agent Task ...', keepOpen: true, run: () => openAgentLink(doc) }); }
+  if (palDoc && tana.linkCodexTask && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ rank: 'codexLink', group: docGroup, icon: 'robot', label: 'Link Codex task …', keepOpen: true, run: () => openAgentLink(doc) }); }
   // The way into the task the agent is handling, from the keyboard. Both halves have to hold: the node is assigned
   // now, and a task id is known for it. The status map alone was not enough — it is a snapshot, and an unassigned
   // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.
@@ -295,8 +304,8 @@ function paletteRows(q, typed = q) {
     // A task on another machine has no route from here, so the row says where it is rather than offering to open
     // something it cannot. Disabled rather than hidden: the palette already greys rows it will not run, and knowing
     // where the work is happening is worth a line.
-    if (!where || where === 'local') rows.push({ rank: 'codexOpen', group: docGroup, icon: 'robot', label: 'Go to Agent task', run: () => run(() => tana.openCodexTask(doc.id)) });
-    else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Agent task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
+    if (!where || where === 'local') rows.push({ rank: 'codexOpen', group: docGroup, icon: 'robot', label: 'Go to Codex task', run: () => run(() => tana.openCodexTask(doc.id)) });
+    else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Codex task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
   }
   if (palDoc && tana.accessOptions) {
     if (!palette.hidden) loadAccess(palDoc.id); // for the open palette only (#274): a key on a choice folded under these asks in runAction
@@ -306,6 +315,7 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(doc),
       sub: async () => { if (tana.taskMeta && !taskMetaById.has(doc.id)) taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); return visibilityRows('', doc); } }); // doc, not palDoc: focus may move while the participants are asked
+    if (access?.sharing) rows.push({ rank: 'addParticipants', group: docGroup, icon: 'users', label: 'Add participants …', hint: 'Who can see it', keepOpen: true, run: () => addParticipants(doc) }); // Edit visibility, at its people (renderer/access.js)
     if (access?.move) { // Library is a row of its own and the spaces are the folded level of "Move to …"; the Inbox is Set status to Inbox
       rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to …', keepOpen: true, subAlways: true, run: () => openMovePalette(doc), sub: () => moveTargets(doc) });
       if (access.ownerUri) rows.push({ rank: 'moveLibrary', group: docGroup, icon: 'library', label: 'Move to Library', keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, { id: 'library', text: 'Library' }); } });
@@ -343,6 +353,7 @@ function paletteRows(q, typed = q) {
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
+  if (tana.newChat && tana.inviteToChat) rows.push({ id: 'newChatWith', group: 'Actions', icon: 'chat', label: 'New chat with …', hint: 'Someone from the workspace', keepOpen: true, run: () => openNewChatWith() }); // renderer/chat.js
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
@@ -393,6 +404,7 @@ function paletteRows(q, typed = q) {
   if (tana.setMcpHidden) rows.push({ id: 'mcpChats', group: 'Settings', icon: 'hiddenItems', label: 'Toggle MCP chats', hint: mcpHidden ? 'Hidden' : 'Shown',
     run: () => run(async () => { mcpHidden = await tana.setMcpHidden(!mcpHidden); }) });
   // names and Tana's words swapped for made-up ones on screen, for showing the app to someone (renderer/segments.js)
+  if (tana.translate) rows.push({ id: 'autoTranslate', group: 'Settings', icon: 'sparkle', label: 'Auto-translate …', hint: translateTo() ? 'Into ' + translateTo() : 'Off', run: openTranslatePage }); // renderer/translate.js
   rows.push({ id: 'demoMode', group: 'Settings', icon: 'hidden', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
   if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Settings', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
@@ -1013,6 +1025,9 @@ function openTodayTaskSearch(node) {
   togglePalette('pinToday');
   todayPickerSearchNow();
 }
+// "⇧⌘K Set key" at the end of the field, while the highlighted command is one ⇧⌘K can record a key for (the keydown
+// handler's own test) and nowhere else: it never offers what the key would not do.
+function keyHint() { const r = palRows[palIndex]; palKeyHint.hidden = !(palMode === 'cmd' && r && r.id); }
 function renderPalette() {
   const q = palInput.value.trim();
   swapPanel(palList, palMode); // a mode changed while open slides its list across
@@ -1050,6 +1065,7 @@ function renderPalette() {
       if (palRows[i] !== r) return renderPalette(); // the rows changed under the drawn list (invalidateNode): draw them again first
       palList.querySelector('.row.active')?.classList.remove('active');
       row.classList.add('active'); palIndex = i;
+      keyHint();
     };
     els.push(row);
   });
@@ -1057,6 +1073,7 @@ function renderPalette() {
   // prompt, "Discuss with …", a meeting's time or place and a field turn what is typed into their row.
   if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node || r.note) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
+  keyHint();
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
@@ -1101,6 +1118,7 @@ function anchorPalette(rect) {
 function closePalette() {
   swapPanel(null, null);
   palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; fieldLinkCtx = null; promptEditor(false); returnFocus();
+  anchorPalette(null); // an "@" dropdown's place and size go with it: a page opened next without togglePalette (Create new from the corner button, a recorded key) is the centred card
   coverWindow(null);
   const field = fieldReturn; fieldReturn = null;
   if (field && !focused()) focusField(field); // a field that holds choices is no row: returnFocus cannot find it
@@ -1223,6 +1241,7 @@ function movePalIndex(step) {
   palIndex = nextPalIndex(palRows, palIndex, step);
   if (drawn.length !== palRows.length) return renderPalette();
   drawn.forEach((row, i) => row.classList.toggle('active', i === palIndex));
+  keyHint();
   drawn[palIndex].scrollIntoView({ block: 'nearest' });
 }
 // pages whose rows are built from what is typed, with nothing to fetch

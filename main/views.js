@@ -2,12 +2,12 @@
 const db = require('../db');
 const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
-const { createTanaClient } = require('../sdk');
+const { createTanaClient, takeCalls } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
-const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
+const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { codexIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
@@ -54,7 +54,7 @@ async function viewRows(id, filter) {
   // Also the spaces the rows live in, for the Types view's subtext. A type node carries its space on the graph node
   // itself (verified: `spaceUri`, the same uri as `ownerUri`), so this is the one nodeIds lookup resolveTypes already
   // does for type titles rather than an owner chain per row.
-  await resolveTypes([...nodes.map((n) => n.entityType), ...nodes.filter((n) => idKind(n.id) === 'type').map((n) => n.spaceUri)]);
+  await Promise.all([resolveTypes([...nodes.map((n) => n.entityType), ...nodes.filter((n) => idKind(n.id) === 'type').map((n) => n.spaceUri)]), resolveMeetings(nodes)]);
   const withDate = !(f.types && f.types.length === 1 && f.types[0] === 'meetings');
   const rows = nodes.map((n) => {
     const row = graphRow(n, withDate);
@@ -143,7 +143,7 @@ async function search(query, scope) {
     related = ids.map((id) => got.get(id)).filter(Boolean);
   }
   [...nodes, ...related].forEach(rememberNodeHue);
-  await resolveTypes([...nodes, ...related].map((n) => n.entityType));
+  await Promise.all([resolveTypes([...nodes, ...related].map((n) => n.entityType)), resolveMeetings([...nodes, ...related])]);
   // Title matches first (exact, then prefix, then contains), and within a class the title the query covers most:
   // "Tana" beats "The one where Tana meets the team". Full-text hits keep the server's relevance order.
   const q = text.toLowerCase();
@@ -242,13 +242,22 @@ function stop() {
   if (!S.client) return;
   const previous = S.client; S.client = null; subscribed.clear(); undoStack.length = 0; redoStack.length = 0; previous.sync.removeAllListeners(); previous.close().catch(() => {});
 }
+// Once a minute, what this app asked of Tana in it, by method, appended to tana-calls.log in the app's data folder:
+// the evidence for what Orbital costs Tana's servers (#579). A quiet minute writes nothing.
+let callLog = false;
+function logCalls() {
+  const counts = takeCalls(), names = Object.keys(counts).sort();
+  if (names.length && S.userData) require('node:fs').appendFile(path.join(S.userData, 'tana-calls.log'), new Date().toISOString() + ' ' + names.map((n) => n + '=' + counts[n]).join(' ') + '\n', () => {});
+  setTimeout(logCalls, 60000).unref?.();
+}
 async function start() {
   let read;
   settingsRead = new Promise((resolve) => { read = resolve; });
   stop();
+  if (!callLog) { callLog = true; setTimeout(logCalls, 60000); }
   S.me = await S.session.info();
   const peer = peerIdentity({ file: path.join(S.userData, 'peer.json'), userExternalId: S.me.userExternalId });
-  S.client = createTanaClient({ getAccessToken: (o) => S.session.getAccessToken(o), orgId: S.me.orgId, ...peer, logger: console });
+  S.client = createTanaClient({ getAccessToken: (o) => S.session.getAccessToken(o), orgId: S.me.orgId, ...peer, logger: console, userAgent: 'Orbital/' + require('../package.json').version });
   listFilter(S.client);
   S.client.sync.on('connected', () => setStatus({ connected: true, error: null }));
   S.client.sync.on('disconnected', () => setStatus({ connected: false }));
@@ -262,7 +271,9 @@ async function start() {
   // The settings document decides before anything is listed: a view's filter, the hidden titles and the MCP switch
   // are all read on the way into the first refresh, and on a new machine this is also what pushes them up.
   try { await settings.hydrate(); } catch (e) { report(e); } finally { read(); }
-  // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more.
+  // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more. What
+  // this app deleted is known before any of them is asked for (the in-memory set starts empty on every launch).
+  for (const { id } of db.deletedList(1000)) deletedNodes.add(id);
   for (const id of new Set([...notifyWatchedIds(), ...codexIds()])) S.client.sync.subscribe(id).catch(() => {});
   watchInbox().catch(report); // new Inbox tasks, pushed by Tana as they land
   watchMine().catch(report); // the tasks you made for others, which the watch rule follows

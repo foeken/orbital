@@ -19,7 +19,8 @@
 // under it. The latest move comes from the node's own state (type, enteredAt, changedBy — exact, and there before
 // Tana has written a word about it), older ones from summaries that say which state they went to. New Inbox tasks
 // matter less than both, so a run of them from one source on one day is one quiet row with the tasks listed under it
-// ("An AI agent added 3 tasks to your Inbox"), each a task row of its own that opens as one.
+// ("An AI agent added 3 tasks to your Inbox"), each a task row of its own that opens as one. The tasks you added
+// yourself, for you or for someone else, are one such row too ("You added 2 tasks"), never marked new.
 const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates } = require('./pins');
@@ -28,7 +29,7 @@ const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./
 const { announcedEdits, notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 const { openLiveQuery } = require('../sdk/livequery');
-const { callState } = require('../sdk/calls');
+const { callState, callSessions } = require('../sdk/calls');
 
 const PAGE = 'orbital:timeline';
 // Inbox to In Progress is a task being taken on, so it reads as accepted, the way Tana's own box accepts it first
@@ -119,9 +120,11 @@ function watchMeetings(me, since) {
   const opened = live = openLiveQuery(S.client.sync, { types: ['event'], hasParticipantUris: [me], eventStartTimeMin: since, eventStartTimeMax: end.getTime(), orderBy: ['-updatedAt'], limit: 200 },
     { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => { if (live === opened) live = null; }); return h; }, () => { if (live === opened) live = null; return null; }); // refused, now or later: the next read asks again
 }
-// Recording: a meeting under way whose call is recording now gets a pulsing marker (renderer/render.js, styles.css
-// .tl-recording). Tana's own rule (activeRecording in its call schema): an entry in the call's recordings root with
-// status 'recording'. The call is the tana:call: document the meeting owns, and it only exists once somebody joins, so a
+// Recording: a meeting under way whose call is on the record now gets a pulsing marker (renderer/render.js, styles.css
+// .tl-recording): somebody is in the call and it is being transcribed (not paused off the record), or a video recording
+// runs (Tana's activeRecording: an entry in the call's recordings root with status 'recording'). A Tana Meet call is
+// transcribed without a video recording, so the recordings root alone never lit a real meeting (live 2026-09-28: two
+// transcribed calls, 750 and 353 segments, recordings empty). The call is the tana:call: document the meeting owns, and it only exists once somebody joins, so a
 // live query over the calls these meetings own says when one appears; each is kept live, and a recording starting or
 // stopping reads the page again. Set by every read, like the meetings' query; the same meetings keep what is open.
 const recording = new Set(); // event uris whose call records now
@@ -130,7 +133,7 @@ let callQ = null, callKey = null, callClient = null;
 function checkCall(uri) {
   const c = heldCalls.get(uri), doc = c && S.client.sync.getDocument(uri);
   if (!doc) return;
-  const on = callState(doc).recordings.some((r) => r.status === 'recording');
+  const state = callState(doc), on = state.recordings.some((r) => r.status === 'recording') || (callSessions(doc).sessions.length > 0 && !state.offTheRecord);
   if (on === recording.has(c.event)) return;
   if (on) recording.add(c.event); else recording.delete(c.event);
   send('outline:changed', PAGE);
@@ -178,9 +181,12 @@ async function rows(progress) {
   // news) and what you switched on, less what you switched off. Titles come with the rule's own answer.
   async function watched() {
     const silenced = notifySilencedIds();
-    const [names, { nodes: made }] = await Promise.all([namesP, graph.listNodes({ nodeTypes: ['text'], createdBy: [me], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 200 })]);
+    const [names, { nodes: made }] = await Promise.all([namesP, graph.listNodes({ nodeTypes: ['text'], createdBy: [me], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 200,
+      sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] })]); // newest first: the ones added in the window are among them
     const who = whoOf(names), events = [];
     const nodes = new Map(made.filter((n) => !(n.assignedTo || []).includes(me)).map((n) => [n.id, n]));
+    // the tasks you added for someone else (or no one) in the window, as "You added a task"; yours for yourself come from inbox()
+    for (const n of nodes.values()) if (Date.parse(n.createTime || '') > since) events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor: 'You', icon: 'tlNew', tone: 'new', node: n });
     const chosen = [...notifyWatchedIds()].filter((id) => !nodes.has(id));
     if (chosen.length) for (const n of (await graph.listNodes({ nodeIds: chosen, limit: chosen.length })).nodes) nodes.set(n.id, n);
     for (const id of silenced) nodes.delete(id);
@@ -246,9 +252,9 @@ async function rows(progress) {
     const chats = new Map(chatIds.length ? (await graph.listNodes({ nodeIds: chatIds, nodeTypes: ['chat'], includeOwnedChats: true, limit: chatIds.length })).nodes.map((c) => [c.id, c]) : []);
     for (const n of recent) {
       const chat = createdIn.has(n.id) ? chats.get(createdIn.get(n.id)) || {} : null;
-      if (!inboxFrom(me, n.createdBy, chat, names)) continue; // yours, by hand
+      const byHand = !inboxFrom(me, n.createdBy, chat, names); // yours, by hand: "You added a task"
       // who put it there: the person, or for a chat the kind of writer (an MCP client is somebody's agent)
-      const actor = n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'An AI agent' : "Tana's AI";
+      const actor = byHand ? 'You' : n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'An AI agent' : "Tana's AI";
       // the marker says who: a robot for an agent, Tana's prism for Tana's own AI, a dotted ring for a person
       const icon = actor === 'An AI agent' ? 'robot' : actor === "Tana's AI" ? 'tana' : 'tlNew';
       events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
@@ -336,25 +342,26 @@ function pageOf(got, seen, now, date) {
     else merged.push(e.kind === 'inbox' ? { ...e, tasks: [e] } : e);
   }
   return [...todayRow, ...upcomingRow, ...merged.map((e) => {
-    const title = e.title || 'Untitled';
+    const title = (e.title || '').trim() || 'Untitled'; // a calendar's titles can end in a space ("Kick-off | My Nedap Pilot "), which pushed the Join glyph out
     let segments, note = null, change = null, detail = null, children = [];
     // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".
     // An edit's what-changed rides in the quote under it: Tana's line for it, then its longer words.
     // person/content: the words demo mode masks in this row of the app's own; the rest is the app's wording (renderer/segments.js)
-    const person = !/^(An AI agent|Tana's AI|Someone)$/.test(e.actor);
+    const person = !/^(An AI agent|Tana's AI|Someone|You)$/.test(e.actor);
     const who = { text: e.actor + ' ', ...(person ? { person } : {}) }, what = (verb) => ({ text: verb, marks: { bold: true } });
     if (e.kind === 'edit') { segments = [who, what('edited'), { text: ' ' }, { text: title, content: true }]; change = e.change; detail = e.detail || null; }
     else if (e.kind === 'status') { segments = [who, what(e.verb), { text: ' ' }, { text: title, content: true, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.note || null; }
     else if (e.kind === 'meeting') { segments = [{ text: title, content: true }]; note = e.note; } // the meeting's name is what happened, how long and who under it
     else {
       const n = e.tasks.length;
-      segments = [{ ...who, text: e.actor }, { text: ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
+      // yours: added, not put in your Inbox (a task made by hand is usually In Progress already, or someone else's)
+      segments = [{ ...who, text: e.actor }, { text: ' added ' + (n === 1 ? 'a task' : n + ' tasks') + (e.actor === 'You' ? '' : ' to your Inbox') }];
       // each a task row, opening as one: its words read-only here, its box ticking the task where you may tick it anywhere
       children = e.tasks.map((t) => { const row = toNode(graphRow(t.node)); return { ...row, editable: false, checkable: row.editable !== false }; });
     }
     return { id: PAGE + ':' + e.kind + ':' + e.uri + ':' + e.at, text: segments.map((x) => x.text).join(''), segments,
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
-      createdAt: iso(e.at), unread: e.kind !== 'meeting' && (e.tasks || [e]).some((t) => t.at > seen), // a meeting is on your calendar: not news
+      createdAt: iso(e.at), unread: e.kind !== 'meeting' && e.actor !== 'You' && (e.tasks || [e]).some((t) => t.at > seen), // a meeting is on your calendar, and what you added yourself is no news either
       // an "added to your Inbox" line opens nothing: the rows under it open themselves, one task or six
       join: e.join, people: e.people, timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone, recording: e.recording || undefined } };
   })];
@@ -365,4 +372,15 @@ const ipc = {
   'timeline:pages': (_e, n) => setPages(n), // how many pages of three days back the Timeline reads
 };
 
-module.exports = { PAGE, rows, said, statusOf, setPages, ipc };
+// One build at a time for every pane and window that asks (#579): each change to a task under Today's Tasks, each pane
+// showing the Timeline and each meeting starting asked for a build of its own, a ListEdges and a dozen reads each. A
+// request made while one runs is answered by the next build, started when that one ends and shared by all who asked
+// meanwhile, so it still sees whatever moved; only the first asker's page hears the parts as they come (progress).
+let building = null, rebuild = null;
+function sharedRows(progress) {
+  if (!building) { building = rows(progress).finally(() => { building = null; }); return building; }
+  rebuild ||= building.catch(() => {}).then(() => { rebuild = null; return sharedRows(); });
+  return rebuild;
+}
+
+module.exports = { PAGE, rows: sharedRows, said, statusOf, setPages, ipc };

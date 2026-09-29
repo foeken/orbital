@@ -158,7 +158,7 @@ function foldRow(key, opening, done) {
   const unasked = doc && (!tana.related || !isRealId(doc.id));
   const ready = () => !doc || doc.kind !== 'document' || ((unasked || relatedBy.get(doc.id) != null) && (!own || kids.get(doc.id) != null));
   if (!motionOK() || !connected || ready()) return open();
-  loadRelated(doc.id);
+  loadRelated(doc.id, true); // the fields it opens onto (render.js)
   if (own) ensureLoaded(item);
   const until = performance.now() + 400;
   settleAt = until; // the renders those answers ask for wait too (renderSoon), or they would draw the row closed again under the turned chevron
@@ -235,7 +235,6 @@ function motionBefore(root) {
   const nodes = [...root.querySelectorAll('.node[data-key]')];
   return {
     page: root.dataset.key + '|' + view,
-    bodies: new Map(nodes.map((el) => [el.dataset.key, el.dataset.body])),
     fieldsWaiting: new Set([...root.querySelectorAll('.inline-fields[hidden]')].map((el) => el.dataset.docId)),
     rects: performance.now() < glideUntil ? new Map(nodes.map((el) => [el.dataset.key, el.getBoundingClientRect()])) : null,
   };
@@ -259,12 +258,6 @@ function motionAfter(root, was) {
       const up = moved.get(el.parentElement && el.parentElement.closest('.node')) || [0, 0], x = dx - up[0], y = dy - up[1];
       if (Math.abs(x) > 1 || Math.abs(y) > 1) play(el, [{ transform: 'translate(' + x + 'px, ' + y + 'px)' }, { transform: 'none' }], { duration: MOTION.base, easing: MOTION.move });
     }
-  }
-  // Someone else's edit: a row whose words or state changed while your hands were elsewhere lights up once. Your own
-  // edits come with a key or a press just before them, so they never do. Many at once is the page landing (BULK).
-  if (!acted(3000)) {
-    const changed = nodes.filter((el) => { const was2 = was.bodies.get(el.dataset.key); return was2 != null && was2 !== el.dataset.body; });
-    if (changed.length <= BULK) for (const el of changed) flash(el, 'here');
   }
   // Inbox zero: the last rows of a view just left, and what is left is the note saying so.
   if (nodes.some((el) => el.classList.contains('leaving'))) rowsLeftAt = performance.now();
@@ -346,4 +339,33 @@ function popRead(ids) {
 // a mention just linked lights up in its row (renderer/toolbar.js linkTo)
 function popMention(key, uri) {
   for (const m of textEl(key)?.querySelectorAll('.mention') || []) if (m.dataset.uri === uri) playOnce(m, 'pop');
+}
+// The sound of checking a to-do off: a water-drop pop and a small ring after it, a fifth of a second, synthesized so
+// there is no file to ship. Once per check wherever it is drawn; unchecking is silent, like it is still (render.js playTick).
+// Instant: the context is made on the first press anywhere (starting one takes a moment, which the first tick used to
+// wait for), and a box plays it as the button goes down (early; renderer/render.js), a click being the release, a
+// tenth of a second later. The click's own call then leaves it, so it sounds once.
+let popCtx = null, poppedAt = -1e9;
+const popContext = () => (typeof AudioContext === 'function' ? (popCtx ||= new AudioContext({ latencyHint: 'interactive' })) : null);
+addEventListener('pointerdown', () => { const c = popContext(); if (c && c.state === 'suspended') c.resume(); }, { capture: true, once: true });
+function popSound(early = false) {
+  if (!early && performance.now() - poppedAt < 600) return; // the press already played it
+  if (early) poppedAt = performance.now();
+  const ctx = popContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume();
+  const t = ctx.currentTime;
+  const note = (type, from, to, at, len, peak) => {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, t + at);
+    osc.frequency.exponentialRampToValueAtTime(to, t + at + len * 0.4);
+    gain.gain.setValueAtTime(0.0001, t + at);
+    gain.gain.exponentialRampToValueAtTime(peak, t + at + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + at + len);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t + at); osc.stop(t + at + len + 0.02);
+  };
+  note('sine', 420, 980, 0, 0.09, 0.35); // the pop, rising
+  note('triangle', 1568, 1568, 0.06, 0.16, 0.07); // the ring, a G6, as the box fills
 }

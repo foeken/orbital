@@ -192,9 +192,12 @@ const GROUP_STATES = { 'My inbox': 'proposed', Mine: 'open', 'My completed': 'cl
 function groupDropWrites(target, t, me, today) {
   const mine = !!me && t.createdBy === me, assigned = t.assignees.includes(me);
   const unagent = t.agent ? [['agent', false]] : [], clear = [...unagent, ...t.dates.map((date) => ['unpin', date])];
+  // a task given a day is being worked on: one still in the Inbox is accepted (In Progress) as it lands, where you may
+  // change its status (writable false: it is pinned all the same, its status left alone)
+  const accept = t.stateType === 'proposed' && t.writable !== false ? [['state', 'open']] : [];
   // on Today already: pinned to it, or an open task pinned to a day before it (main/timeline.js ages completed ones out)
-  if (target === 'Today') return t.dates.includes(today) || (t.stateType !== 'closed' && t.dates.some((date) => date < today)) ? [] : [['pin', today]];
-  if (target === 'Pinned') return [...unagent, ...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : [])];
+  if (target === 'Today') return [...(t.dates.includes(today) || (t.stateType !== 'closed' && t.dates.some((date) => date < today)) ? [] : [['pin', today]]), ...accept];
+  if (target === 'Pinned') return [...unagent, ...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : accept)];
   if (target === 'Agent') return t.agent ? [] : [['agent', true]];
   if (!mine) return null; // every other group is about tasks you made
   if (target === 'Unassigned') return [...clear, ...(t.assignees.length ? [['assign', []]] : [])];
@@ -212,6 +215,31 @@ const GROUP_WRITES = {
   state: (id, state) => tana.setState(id, state),
   watch: (id, on) => tana.setNotify(id, on),
 };
+// ---- a new task under a section (#548): Enter at the end of a task in My Tasks by Responsibility ----
+// A task drafted below it, in the same section, created with what puts a task there: groupDropWrites read off a new
+// task (open, yours, made by you). Two sections ask one more thing once it exists: Agent the prompt it is handed over
+// with, Tracking who you are waiting on (it is unassigned and watched until then). Nobody but somebody else puts a
+// task under Assigned by others, so Enter there drafts nothing.
+function groupDraft(item) {
+  if (groupBy() !== 'responsibility' || !isTask(item.node)) return false;
+  const group = groupKey(item.node, 'responsibility'), list = item.parent ? kids.get(item.parent.docId) : viewOf()?.nodes;
+  if (!group || group === 'Assigned by others' || !Array.isArray(list)) return false;
+  flush(item.key);
+  const node = { ...draftDocNode('task'), group, after: item.node.id }; // under this row, whatever the sort (views.js keepDrafts)
+  list.splice(list.indexOf(item.node) + 1, 0, node);
+  render(true);
+  placeCaret(node.id, 0);
+  return true;
+}
+// the writes for a task just created under group, and what to open next (Agent, Tracking) once it is on screen
+async function groupDefaults(task, group) {
+  const uri = me()?.id, fresh = { createdBy: uri, stateType: 'open', assignees: uri ? [uri] : [], watched: false, dates: [], agent: false };
+  const writes = group === 'Tracking' ? [['assign', []], ['watch', true]] : groupDropWrites(group, fresh, uri, localDate()) || [];
+  for (const [op, arg] of writes) if (op !== 'agent') await GROUP_WRITES[op](task.id, arg);
+  try { taskMetaById.set(task.id, await tana.taskMeta(task.id)); } catch { taskMetaById.delete(task.id); }
+  if (writes.some(([op]) => op === 'pin')) loadPinned(true);
+  return group === 'Agent' ? () => openAgentPrompt(task) : group === 'Tracking' ? () => openAssigneePalette(task) : null;
+}
 function dropOnGroup(task, target) {
   armGlide();
   run(async () => {

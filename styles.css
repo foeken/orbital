@@ -28,12 +28,13 @@ html { --nucleo-stroke-width: 1; }
   /* secondary text (meta, subtext, headings, hints, placeholders, done rows): the one grey for words, at WCAG AA —
      5.7:1 on white, 4.6:1 on a grey pill under the pointer. Icons keep their lighter greys (3:1 is theirs); disabled rows too. */
   --muted: #666;
+  --working-ink: #1b4a8f; /* an agent at work: the working badge's words, and the sweep over "Thinking..." in a chat */
   --chat-width: 860px; /* a chat's column, its message box and question card: lines the eye can follow (renderer/chat.js) */
   interpolate-size: allow-keywords; /* heights go to and from auto (a row arriving, a section closing) without measuring */
 }
 @media (prefers-reduced-motion: reduce) { :root { --dur-quick: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-flash: 0ms; --stagger: 0ms; --loader-wait: 0ms; } }
 [data-theme="dark"] { --flash-in: rgba(90, 190, 120, .2); --flash-out: rgba(240, 90, 80, .2); --flash-here: rgba(110, 168, 220, .22); }
-[data-theme="dark"] { --muted: #a0a5a8; } /* 6.8:1 on the page, 6:1 on menus and ⌘K, 5.6:1 on the grey pills, 4.6:1 on the active ⌘K row */
+[data-theme="dark"] { --muted: #a0a5a8; --working-ink: #9dc2f5; } /* muted: 6.8:1 on the page, 6:1 on menus and ⌘K, 5.6:1 on the grey pills, 4.6:1 on the active ⌘K row */
 /* A type's colour is Tana's `appearance.hue`, and it is an **OKLCH** hue, not an HSL one: the Organization type's
    232 draws as #58aad2 in Tana, which is oklch(0.7 0.1 232) — read as an HSL angle the same number lands 42° away
    and half as light (a navy #2b336f instead of that blue). So every hued rule below is oklch(L C var(--hue)), with
@@ -276,6 +277,7 @@ html.framed .titlebar { padding-top: 18px; }
 }
 .navbtn:hover:not(:disabled) { background: #ddd; opacity: 1; }
 .navbtn:disabled { opacity: .15; cursor: default; } /* nowhere to go: still there, saying so */
+#navLinks[aria-pressed="true"] { opacity: 1; } /* the Graph pane is open (renderer/rail.js drawLinksBtn) */
 /* Back and forward are always there; Refresh and the fold button are offered only on a saved search, and their
    own display would otherwise win over the browser's rule for [hidden] and leave a blank, glyphless slot. */
 .navbtn[hidden] { display: none; }
@@ -364,6 +366,14 @@ html.framed .titlebar { padding-top: 18px; }
 
 /* ==== Page scroll and sidebar (renderer/rail.js, app.js) ==== */
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
+/* Classic scrollbars drawn as the overlay's narrow line (renderer/theme.js checkScrollbars): no track, a 5px rounded
+   thumb, hidden until its area is hovered or scrolled. Overlay scrollbars get none of this. */
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar { width: 11px; height: 11px; background: transparent; }
+.scroll-probe { position: absolute; top: -200px; width: 60px; height: 60px; overflow: scroll; } /* measures what macOS gives, for a moment */
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar-corner { background: transparent; }
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 6px; background-clip: padding-box; background-color: transparent; }
+.classic-scroll :is(:hover, .scrolling):not(.scroll-probe)::-webkit-scrollbar-thumb { background-color: rgb(0 0 0 / 0.28); }
+[data-theme="dark"].classic-scroll :is(:hover, .scrolling):not(.scroll-probe)::-webkit-scrollbar-thumb { background-color: rgb(255 255 255 / 0.28); }
 /* The Graph pane (renderer/rail.js, issue #462): a page that is only its rail, full width, holding the followed
    document's relationships (edges, never editable). Every other page leaves the rail hidden. */
 html.links .app { display: none; }
@@ -517,6 +527,10 @@ html.links .app { display: none; }
 .node.tl-new > .line > .bullet.icon:is(.robot, .tana) svg { color: #aeb1b5; }
 /* A meeting under way that is recording (main/timeline.js): its marker blue, a blue ring pulsing out from behind it */
 .node.tl-recording > .line > .bullet.icon svg, .node.tl-recording > .line > .bullet.icon:hover svg { color: #0090ff; }
+/* the glyph's own disc (the one that hides the rail) goes under the ring, so the ring shows through the glyph instead
+   of around a white disc: disc, ring, glyph, in that order inside the bullet */
+.node.tl-recording > .line > .bullet.icon svg, .node.tl-recording > .line > .bullet.icon:hover svg { background: transparent; }
+.node.tl-recording > .line > .bullet.icon::before { display: block; left: 0; top: 3px; width: 18px; height: 18px; z-index: -2; background: #fff; box-shadow: none; }
 .node.tl-recording > .line > .bullet::after { content: ''; position: absolute; left: 0; top: 3px; width: 18px; height: 18px; z-index: -1; border-radius: 50%; background: #0090ff; opacity: .25; }
 @media (prefers-reduced-motion: no-preference) { .node.tl-recording > .line > .bullet::after { animation: rec-pulse var(--dur-loop) ease-out infinite; } }
 .node.tl > .line > .body { margin-left: 11px; } /* room between the rail and what happened: 16px with the body padding */
@@ -541,22 +555,38 @@ html.links .app { display: none; }
    meeting's gold, a type's hue — so the page stays monochrome */
 .node.tl > .children .bullet.icon svg, .node.tl > .children .bullet.icon:hover svg { color: #8e9297; }
 /* Join (renderer/timeline.js): the Tana glyph after a meeting's title, in the page's grey until it is pointed at */
-.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 4px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -3px; cursor: pointer; }
+.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 0; padding: 0; /* the glyph sits 4px from the title: the button's own room around it */ border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -3px; cursor: pointer; }
 .tl-join svg { width: 16px; height: 16px; }
-.tl-join:hover { background: #ececec; color: #1c2024; }
+/* A task from a meeting (renderer/meeting.js meetingLinkEl): a grey glyph after the title, a little further off than
+   the Join glyph, always there so a list shows which tasks came from a meeting (faint as every row icon is, below) */
+.meeting-link { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 2px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8a8a8a; vertical-align: -3px; cursor: pointer; }
+.meeting-link svg { width: 16px; height: 16px; }
+/* among the row's facts, beside Pinned (renderer/tasks.js taskMetaEl): a fact icon, its size and its grey */
+.meeting-link.ticon { width: 14px; height: 14px; margin-left: 0; border-radius: 0; color: inherit; vertical-align: -2px; }
+.meeting-link.ticon svg { width: 14px; height: 14px; }
+.tmeta > .meeting-link.ticon:not(:first-child) { margin-left: 6px; }
+/* Row icons, one rule: the small glyphs a row carries (its facts' icons: assignee, audience, bell, pin; the Join glyph;
+   the meeting link) are faint on the rows you are not on and in full on the one under the pointer or with the caret,
+   fading between the two (at once under reduced motion). No background on hover: only the glyph's own colour moves.
+   Who can see a row (.audience, its visibility icon) and a warning (assigned to someone who cannot see it) stay in
+   full everywhere: they are there to be seen. */
+.line :is(.ticon, .tl-join, .meeting-link) { opacity: .45; transition: opacity var(--dur-base) var(--ease-out), color var(--dur-quick) var(--ease-out); }
+.line:is(:hover, :focus-within) :is(.ticon, .tl-join, .meeting-link), .line .ticon:is(.audience, .hiddenfrom) { opacity: 1; }
+:is(.tl-join, .meeting-link):hover { color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
 .node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
 /* a row that opens on a click shows the pointer over what it draws, and only there: the empty width beside it is no
    target (renderer/nodes.js onRowBlank). An "added to your Inbox" line opens nothing itself, so it has no .opens; its rows do. */
 .node.tl .line { cursor: default; } /* no caret on the Timeline: a click there never edits */
 .node.opens > .line > .body > * { cursor: pointer; }
-.node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 24px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
+.node.tl.unread > .line::after { content: ''; position: absolute; left: 84px; top: 23px; /* centred between the time and the marker, on the time's middle */ width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .tl-divider::before { border-top-color: #34373a; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }
-[data-theme="dark"] .node.tl-recording > .line > .bullet.icon svg { color: #3b9eff; }
-[data-theme="dark"] .tl-join { color: #8a8f95; }
-[data-theme="dark"] .tl-join:hover { background: #2e3134; color: #e8eaec; }
+[data-theme="dark"] .node.tl-recording > .line > .bullet.icon svg { color: #3b9eff; background: transparent; }
+[data-theme="dark"] .node.tl-recording > .line > .bullet.icon::before { background: #1b1d1e; }
+[data-theme="dark"] .tl-join, [data-theme="dark"] .meeting-link { color: #8a8f95; }
+[data-theme="dark"] .tl-join:hover, [data-theme="dark"] .meeting-link:hover { color: #e8eaec; }
 [data-theme="dark"] .node.tl > .children .bullet.icon svg, [data-theme="dark"] .node.tl > .children .bullet.icon:hover svg { color: #8a8f95; }
 [data-theme="dark"] .node.tl-done > .line > .bullet.icon svg { color: #fff; background: none; }
 [data-theme="dark"] .node:is(.tl-new, .tl-faint) > .line > .bullet.icon svg { color: #5a5d60; }
@@ -575,9 +605,20 @@ html.links .app { display: none; }
 .chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
 .chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 13px; background: var(--chat-mine); color: var(--chat-mine-text); }
 .bubble > * + * { margin-top: 8px; }
+.translated-line { display: flex; align-items: center; gap: 6px; margin: 8px 0 10px; font-size: 14px; color: var(--muted); } /* a page shown in English (renderer/translate.js) */
+.translated-line[hidden] { display: none; }
+.translated-line svg, .subtext .translated svg { width: 13px; height: 13px; flex: none; }
+.translated-line button { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.subtext .translated { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; cursor: pointer; } /* a list row's: its first fact, a click switches it */
+.subtext .translated:not(.translating):hover .tlabel { text-decoration: underline; text-underline-offset: 2px; } /* the words, not the " · " after them */
+.translating { animation: translating-late 0s .4s backwards; } /* only once it takes a moment: an answer from the cache or a text this Mac finds already in the language never shows it, nor takes its room */
+@keyframes translating-late { from { display: none; } }
 .fields .chat-context { grid-column: 1 / -1; } /* the whole width, not the glyph's column */
 .fields:has(> .chat-context:only-child) { border: 0; padding: 0; }
 .chat-context { margin: 0 0 28px; text-align: right; font-size: 14px; color: var(--muted); } /* who can see a chat, and its meeting (renderer/chat.js chatContextEl, #543) */
+.chat-context .chat-add { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; } /* Add participants: a link in the line's own grey, as Show original is */
+.chat-context .chat-add:hover { color: #1c2024; }
+[data-theme="dark"] .chat-context .chat-add:hover { color: #e8eaec; }
 .chat-context > span:first-child > svg, .chat-context .people svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; }
 .chat-context .mention svg { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 3px; }
 .chat-name { font-size: 14px; font-weight: 600; margin: 0 0 2px; } /* who said a reply: in the text's colour, bold */
@@ -589,6 +630,13 @@ html.links .app { display: none; }
 button.chat-thought-head { cursor: pointer; }
 button.chat-thought-head::after { content: ''; width: 5px; height: 5px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; rotate: 45deg; transition: rotate var(--dur-quick) var(--ease-out); }
 button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translate: 0 -2px; }
+/* "Thinking..." while Tana is still at work (sdk/chat.js): the working badge's sweep, crossing the letters instead of a tag.
+   Its pass and pause (cbadge-sweep's stops) and its blue over the line's grey, clipped to the words so the line never
+   moves; the chevron keeps its own colour. It stops when the line says what it thought, and stands still under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .chat-thought.thinking .chat-thought-head { width: fit-content; background: linear-gradient(100deg, var(--muted) 40%, var(--working-ink) 50%, var(--muted) 60%) 100% 0 / 300% 100% no-repeat;
+    background-clip: text; -webkit-text-fill-color: transparent; animation: thinking-sweep calc(var(--dur-loop) * 2) ease-in-out infinite; }
+}
 .chat-sub { margin: 8px 0 0; font-size: 14px; }
 .chat-sub[hidden] { display: none; }
 /* a proposal in an answer (renderer/chat.js chatProposalEl): a card with the proposed thing's glyph and name, its kind
@@ -773,6 +821,9 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text.image { display: block; cursor: default; }
 .text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; cursor: zoom-in; }
 .text.image.loading img { visibility: hidden; }
+/* demo mode (renderer/render.js demoImageEl): a picture's place at its size, the privacy glyph on it */
+.demo-image { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: min(100%, 360px); max-width: 100%; aspect-ratio: 3 / 1; border-radius: 6px; background: #f1f1f1; color: #aeb1b5; }
+.demo-image svg { width: 28px; height: 28px; }
 .text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
 /* a picture on its way, and a file on its way up: the same shimmer and breath the loading skeleton has (Ambient) */
 @media (prefers-reduced-motion: no-preference) {
@@ -860,7 +911,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text.table table { border-collapse: collapse; margin: 4px 0; }
 .text.table th, .text.table td { border: 1px solid #dcdcdc; padding: 3px 8px; vertical-align: top; text-align: left; min-width: 48px; }
 .text.table .cellimg { display: block; max-width: 100%; max-height: 240px; margin-top: 4px; border-radius: 3px; cursor: zoom-in; }
-.text.table .cellimg.demo { width: 120px; height: 68px; background: #f1f1f1; cursor: default; } /* demo mode: where a picture is, not the picture */
+.text.table .cellimg.demo-image { max-height: 240px; cursor: default; }
 .text.table th { background: #f6f6f6; font-weight: 600; }
 .text.table .cell { outline: none; min-height: 1.4em; white-space: pre-wrap; cursor: text; }
 .text.table .more { color: var(--muted); }
@@ -910,7 +961,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .cbadge.done.shine:not(.closed)::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 28%, var(--cbadge-sheen) 50%, transparent 72%); transform: translateX(-130%); animation: cbadge-sweep var(--dur-flash) var(--ease-out) var(--dur-quick) backwards; }
 /* one colour per state, and the label says the same thing in words (renderer/state.js AGENT_BADGE) */
 .cbadge.pending { background: #ececec; color: #5a5a5a; }
-.cbadge.working, .cbadge.waiting { background: #dde8fb; color: #1b4a8f; --cbadge-sheen: rgba(255, 255, 255, .9); }
+.cbadge.working, .cbadge.waiting { background: #dde8fb; color: var(--working-ink); --cbadge-sheen: rgba(255, 255, 255, .9); }
 .cbadge.done { background: #d9f0de; color: #17652f; }
 .cbadge.broken { background: #fbdede; color: #8f1b1b; }
 .cbadge.unavailable { background: #ececec; color: #6a6a6a; } /* the machine is away, not the task broken: grey, still */
@@ -926,6 +977,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .pbutton.reject:hover { background: rgba(0, 0, 0, .06); color: #555; } /* a trash can: the grey hover every row glyph has, no red */
 .pbutton:disabled { opacity: .35; cursor: default; }
 @keyframes cbadge-sweep { 0%, 18% { transform: translateX(-130%); } 72%, 100% { transform: translateX(130%); } }
+@keyframes thinking-sweep { 0%, 18% { background-position: 100% 0; } 72%, 100% { background-position: 0 0; } } /* the same pass, over a background three times the words' width */
 /* ==== Children, empty notes, group headings (renderer/render.js, views.js) ==== */
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children > .node.fullref > .line > .bullet { margin-right: 4px; } /* give the full-reference icon more room before its status or title */
@@ -1105,6 +1157,12 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
   background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-card);
 }
 .palette input { border: 0; outline: none; font: inherit; font-size: 17px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; }
+/* ⇧⌘K Set key (renderer/palette.js keyHint): quiet words at the field's right end, and typing stops short of them */
+.palette .card { position: relative; }
+.palette .keyhint { position: absolute; top: 17px; right: 20px; font-size: 13px; color: var(--muted); pointer-events: none; user-select: none; }
+.palette .keyhint[hidden] { display: none; }
+.palette .keyhint kbd, [data-theme="dark"] .palette .keyhint kbd { padding: 0 4px 0 0; background: none; color: inherit; }
+.palette:has(.keyhint:not([hidden])) input { padding-right: 116px; }
 /* Quick Add Task (task.html): the palette's card, with a line saying why the task could not be made */
 .palette .terror { padding: 10px 20px 0; font-size: 13px; color: #d0433a; }
 /* what the task will be and who it is for, under the field; a click or ⇥ there chooses someone else */
@@ -1151,6 +1209,14 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 }
 @keyframes sparkle-twinkle { 0%, 100% { opacity: .25; transform: scale(.55) rotate(-25deg); } 45% { opacity: 1; transform: scale(1.2) rotate(0deg); } }
 @keyframes sparkle-trail { 0%, 100% { opacity: .15; } 50% { opacity: .75; } }
+/* Auto-translate at work (renderer/translate.js): the same mark, turning and twinkling */
+@media (prefers-reduced-motion: no-preference) {
+  .translating svg { animation: turn calc(var(--dur-loop) * 2) linear infinite; transform-origin: 50% 50%; } /* Auto-translate at work (renderer/translate.js): the same mark */
+  .translating svg path { transform-origin: 50% 50%; transform-box: fill-box; animation: sparkle-twinkle var(--dur-loop) ease-in-out infinite; }
+  .translating svg path:nth-child(2) { animation-delay: calc(var(--dur-loop) / 3); }
+  .translating svg path:nth-child(5) { animation-delay: calc(var(--dur-loop) * 2 / 3); }
+  .translating svg path:nth-child(3), .translating svg path:nth-child(4) { animation: sparkle-trail calc(var(--dur-loop) * 2) ease-in-out infinite; }
+}
 /* And the landing: the answer takes the turning glyph's place, so it comes out of the spin and settles rather than
    being swapped for a still one between two frames, while the name it brought fades in beside it. Played on the
    one render the answer arrives in (renderer/palette.js marks that row), never again as you keep typing. */
@@ -1287,7 +1353,9 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line:hover > .bullet[draggable="true"]:not(.icon)::after { background-image: radial-gradient(circle at center, #6f7679 1.1px, transparent 1.3px); }
 [data-theme="dark"] #dropline { background: #6ea8dc; }
 [data-theme="dark"] .drop-into { box-shadow: 0 0 0 2px #6ea8dc; }
-[data-theme="dark"] .check { background: #3a3e40; --check-on: #5b976c; }
+/* the box only while unticked: the `background` shorthand on every .check replaced .check:checked's tick and green (#604) */
+[data-theme="dark"] .check { --check-on: #5b976c; }
+[data-theme="dark"] .check:not(:checked) { background: #3a3e40; }
 [data-theme="dark"] .check:hover:not(:checked) { background: #474c4e; }
 [data-theme="dark"] .check.inbox:not(:checked) { background: #5d6467; }
 [data-theme="dark"] .empty-note { color: var(--muted); } /* over .empty-note.cleared's green, which the light theme keeps */
@@ -1297,7 +1365,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
 @media (prefers-reduced-motion: no-preference) { [data-theme="dark"] .text.image.loading:not(.demo) { background-image: linear-gradient(90deg, #303436 0%, #3d4244 50%, #303436 100%); } }
-[data-theme="dark"] .text.table .cellimg.demo { background: #303436; }
+[data-theme="dark"] .demo-image { background: #303436; color: #6f7479; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] :is(.text, .fvalue) .mention { color: #8fc1e1; }
 [data-theme="dark"] :is(.text, .fvalue) .mention, [data-theme="dark"] :is(.text, .fvalue) .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */
@@ -1364,7 +1432,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .meta.pending { color: #454b4e; }
 [data-theme="dark"] .cbadge { --cbadge-sheen: rgba(200, 225, 255, .45); }
 [data-theme="dark"] .cbadge.pending { background: #33383a; color: #b6bbbd; }
-[data-theme="dark"] .cbadge.working, [data-theme="dark"] .cbadge.waiting { background: #1e3050; color: #9dc2f5; }
+[data-theme="dark"] .cbadge.working, [data-theme="dark"] .cbadge.waiting { background: #1e3050; }
 [data-theme="dark"] .cbadge.done { background: #1d3c27; color: #7fd396; }
 [data-theme="dark"] .cbadge.broken { background: #45201f; color: #f0a3a0; }
 [data-theme="dark"] .cbadge.unavailable { background: #33383a; color: #a8adaf; }

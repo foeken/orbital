@@ -8,7 +8,7 @@ const { everyoneOnly } = require('../sdk/access');
 const { readSearch } = require('../sdk/node');
 const { callOf, writeUpOf } = require('../sdk/events');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, pageKey, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
-const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
+const { graphRow, rememberNodeHue, resolveMeetings, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe } = require('./documents');
 const { rows: proposalRows } = require('./proposals');
 
@@ -17,7 +17,7 @@ async function spaceChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED); // a space opened before the connection is a startup state, not an error (#97)
   const { nodes } = await S.client.graph.listNodes({ ownerIds: [id], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
   nodes.forEach(rememberNodeHue);
-  await resolveTypes(nodes.map((n) => n.entityType));
+  await Promise.all([resolveTypes(nodes.map((n) => n.entityType)), resolveMeetings(nodes)]);
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // A saved search's "content" is the rows its stored query returns (sdk/node.js readSearch).
@@ -93,7 +93,7 @@ async function searchRows(query, narrow, limit = 200) {
   let nodes = answered.nodes.filter((n) => completedInWindow(n, narrow.completedWithin));
   if (narrow.audience === 'everyone') nodes = await everyoneOnly(S.client.graph, nodes);
   nodes.forEach(rememberNodeHue);
-  await resolveTypes(nodes.map((n) => n.entityType));
+  await Promise.all([resolveTypes(nodes.map((n) => n.entityType)), resolveMeetings(nodes)]);
   return nodes;
 }
 // What a meeting carries besides its notes (verified read-only on a real meeting, docs/MEETINGS.md):
@@ -272,10 +272,19 @@ async function backlinkGroups(edges, node, row) {
 
 // The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
 const hubOf = (id, self) => (idKind(id) === 'event' ? id : (self && typeof self.ownerUri === 'string' && idKind(self.ownerUri) === 'event' ? self.ownerUri : id));
-async function related(id) {
+// lite: what a row opened in a list draws under its title (renderer/render.js), its fields, a type's definitions, the
+// meeting it belongs to and its call link, without the sidebar's pins, backlinks, notes and history. Those cost two
+// ListEdges and a handful of reads each, and a list opening sixty rows made ~120 ListEdges in a second (#579).
+async function related(id, { lite = false } = {}) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const [self0] = (await S.client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({ nodes: [] }))).nodes || [];
   const hub = hubOf(id, self0);
+  if (lite) {
+    const hubDoc = hub !== id && PIN_HUBS.has(idKind(hub)) ? await S.client.sync.subscribe(hub).then((doc) => { readOnDemand(hub); return doc; }, () => null) : null;
+    const canPin = hubDoc ? await canWriteDoc(hubDoc).catch(() => false) : false;
+    return { lite: true, call: callOf((self0 && self0.calendarEvent) || {}), fields: await fieldsOf(id),
+      definitions: idKind(id) === 'type' ? await fieldDefs(id) : undefined, pinHub: canPin ? hub : undefined };
+  }
   const [edges, owned, self] = await Promise.all([
     S.client.graph.listEdges({ fromNodeIds: [hub], edgeTypes: ['EDGE_TYPE_HAS_PIN'] }).catch(() => ({ edges: [] })),
     S.client.graph.listNodes({ ownerIds: [hub], limit: 200, sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] }).catch(() => ({ nodes: [] })),
@@ -376,7 +385,7 @@ function watchRelated(id, key = 'main') {
   if (!S.client || !DOC_URI.test(id || '')) return Promise.resolve(false);
   const w = { id, client: S.client };
   watching.set(key, w);
-  const moved = ({ added, removed, initial }) => { if (!initial && (added.length || removed.length) && watching.get(key) === w) send('related:changed', id); };
+  const moved = ({ added, removed, initial }) => { if (!initial && (added.length || removed.length) && watching.get(key) === w) { w.client.graph.forget?.(); send('related:changed', id); } }; // the edges kept a few seconds are read again (sdk/graph.js)
   const open = (query, label) => openEdgeQuery(w.client.sync, query, { label }).then((h) => { h.on('rows', moved); return h; });
   const self = w.client.graph.listNodes({ nodeIds: [id], limit: 1 }).then(({ nodes = [] }) => nodes[0]);
   const openBacklinks = (node) => open({ object: { uris: backlinkUris(id, node) }, predicate: { edgeTypes: [EDGE_TYPES.LINKS_TO, EDGE_TYPES.ATTRIBUTE_LINKS_TO] } }, 'Orbital sidebar backlinks');
@@ -405,7 +414,7 @@ function watchRelated(id, key = 'main') {
 const watchedPages = () => [...watching.values()].map((w) => w.id); // each page's document, whose sidebar is on screen
 // What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
 const ipc = {
-  'doc:related': (_e, id) => related(id), // { summary, tagline, pinned[], outcomes[], proposals[], notes[], backlinks[] }
+  'doc:related': (_e, id, opts) => related(id, opts), // { summary, tagline, pinned[], outcomes[], proposals[], notes[], backlinks[] }; { lite: true }: a list row's fields only
   'doc:watchRelated': (e, id) => watchRelated(id, pageKey(e)), // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
   'doc:summaryUri': (_e, id) => summaryUri(id), // where a meeting should actually open, or null
   // what the pills would find if they were saved: a staged edit has to change the rows, or the pills read as broken

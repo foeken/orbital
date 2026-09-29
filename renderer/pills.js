@@ -179,7 +179,7 @@ function renderPills(show) {
   renderCleanupBtn(!!show && needsCleanup(shownDocs()));
   // Not while the pills are staging an unsaved filter: those rows are a preview of what Save would store, and
   // re-asking the stored query would quietly replace them with something else.
-  renderRefreshBtn(search && !searchRows.has(zoom.docId));
+  offerRefresh(search && !searchRows.has(zoom.docId));
   renderTableBtn(!!show);
   if (show && !pillsShown()) return foldPills(box);
   // Folded until now, so the pills come in rather than appear. Only for a press on the button: the movement is what
@@ -324,25 +324,17 @@ function saveSearchPill() {
 // playOnce and stillPreferred, the one-shot class and the reduced-motion question, are renderer/motion.js's.
 // Refresh: ask this saved search's query again. Its rows are subscribed (main/related.js), so an edit elsewhere
 // reaches the rows it is already showing — but a row that has since started or stopped answering the query is only
-// learned by asking again, which nothing else on this page does. It sits beside the fold button rather than among
-// the pills: it asks the query rather than describing it, and folding them away must not take it with them.
-// The button outlives the redraw its answer brings — the glyph is appended once, like the nav buttons' — so the
-// turn runs to the end on its own and the rows land as soon as they arrive rather than waiting for it.
-const refreshBtn = $('navRefresh');
-function renderRefreshBtn(available) {
-  refreshBtn.hidden = !available;
-  if (!available) return;
-  refreshBtn.title = 'Ask this search again';
-  refreshBtn.setAttribute('aria-label', 'Refresh'); // icon only, so the name has to come from here
-  if (!refreshBtn.childNodes.length) addIcon(refreshBtn, 'reload');
-}
-refreshBtn.onmousedown = (e) => e.preventDefault(); // the caret may be in a row with a render waiting on it (cleanupPill)
-refreshBtn.onclick = () => {
-  playOnce(refreshBtn.firstChild, 'spin');
+// learned by asking again, which nothing else on this page does. It is Refresh in the pane's "…" menu (shell.js), told
+// with the title (renderer/render.js tellTitle) whenever it is on offer, so the page's buttons keep to moving about.
+let refreshable = false;
+function offerRefresh(available) { if (refreshable === available) return; refreshable = available; retellTitle(); }
+// the menu's Refresh (renderer/app.js): the rows kept in place are let go, the query goes out, and the page is drawn the moment it answers
+function refreshSearch() {
+  if (!refreshable || !zoom) return;
   const id = zoom.docId;
   releaseHeld();
   run(async () => { await reload(id); render(true); });
-};
+}
 // Clean up: let go of the rows a status change kept in place and draw the page the way it is now. A header button
 // beside the other two rather than a pill, for the same reason Refresh is one — a row kept in place is exactly when
 // you want it, and folding the pills away must not take it with them. Icon only; Cmd+K carries the words.

@@ -5,6 +5,16 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const { files, source, tops } = require('./renderer-source');
+
+// Every element the renderer looks up by id with $('…') is in index.html: a lookup of one that was taken out returns
+// null, and the first use at load throws, which stops every script after it and leaves the window loading forever
+// (a Refresh button removed from index.html while pills.js still wired it up, 2026-09-29).
+{
+  const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
+  const missing = [...source.matchAll(/\$\('([A-Za-z0-9_-]+)'\)/g)].map((m) => m[1]).filter((id) => !ids.has(id));
+  assert.deepEqual([...new Set(missing)], [], 'every $(id) the renderer looks up is in index.html');
+}
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
 // top-level statement that runs immediately and reaches for something a later file declares (a ReferenceError).
@@ -205,7 +215,7 @@ assert.match(source, /blockSelection\(keys, true, 'Move'\)/, 'while moving it st
 assert.match(source, /tana\.setStateMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);
 assert.match(source, /const rows = \[\.\.\.selection\];/, 'what acts on the selection comes before everything else in Cmd+K');
-assert.match(source, /id: 'sendToAgent'[\s\S]*?tana\.openExternal\('https:\/\/chatgpt\.com\/codex\/open-app\?q=' \+ encodeURIComponent\(link \+ '\\n'\)\)/, 'Send to agent opens a new Codex thread with the current node link and a trailing newline');
+assert.match(source, /id: 'sendToAgent'[^\n]*label: 'Open in Codex'[\s\S]*?tana\.openExternal\('https:\/\/chatgpt\.com\/codex\/open-app\?q=' \+ encodeURIComponent\(link \+ '\\n'\)\)/, 'Open in Codex opens a new Codex thread with the current node link and a trailing newline');
 // the current document's own actions (pins, link, icon, visibility, location) follow under the same heading, before the views
 assert.ok(source.indexOf("const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';") < source.indexOf("const viewRows = views.map((s) => ({ id: 'view:'"), 'the document actions join the Current node group ahead of the views');
 assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);
@@ -467,8 +477,8 @@ assert.match(source, /if \(arriving\) playOnce\(cleanupBtn, 'in'\);/, 'and pops 
 assert.match(source, /if \(!cleanupBtn\.classList\.contains\('out'\)\) return;\n    cleanupBtn\.classList\.remove\('out'\);\n    cleanupBtn\.hidden = true;/, 'and it is hidden only at the end of a leave nothing interrupted');
 // A view re-asks its query every half minute; a saved search is asked once, when it is opened, so it needs a button.
 // It is a header button beside the fold one, not a pill: folding the pills away must not take it with them.
-assert.match(source, /renderRefreshBtn\(search && !searchRows\.has\(zoom\.docId\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
-assert.match(source, /function renderRefreshBtn\(available\) \{[\s\S]{0,320}addIcon\(refreshBtn, 'reload'\)/, 'the Refresh button carries the reload glyph');
+assert.match(source, /offerRefresh\(search && !searchRows\.has\(zoom\.docId\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
+assert.match(source, /const refresh = !LINKS && refreshable;/, 'the offer goes to the pane\'s menu with the title (shell.js)');
 const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
 const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
@@ -704,3 +714,7 @@ assert.match(source, /const outlinesOf = \(docId\) => \[\.\.\.kids\.keys\(\)\]\.
   'a document\u2019s outlines are its page and its fields');
 assert.match(source, /for \(const id of docId \? outlinesOf\(docId\) : \[\]\) await reload\(id\);/, 'undo re-reads all of them');
 assert.match(source, /for \(const id of outlinesOf\(docId\)\) work\.push\(reload\(id\)\);/, 'and so does a live update');
+// A ticked box is drawn by .check:checked's background; a dark-theme rule on every box that sets a background of its
+// own comes later with the same specificity and repaints ticked boxes as empty ones (#604).
+assert.doesNotMatch(styleSheet, /\[data-theme="dark"\] \.check(?![^{]*:not\(:checked\))[^{,]*\{[^}]*background/,
+  'a dark-theme checkbox rule that sets a background leaves ticked boxes alone');

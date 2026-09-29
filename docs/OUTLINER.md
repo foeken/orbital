@@ -45,7 +45,8 @@ a LoroMap `{ nodeName, attributes, children }`; inline content of a paragraph or
 and inline maps such as `{ nodeName: 'mention', attributes: { label, tanaUri } }`. Block names: paragraph, heading
 (`attributes.level`), bulletList > listItem > (paragraph, optional nested list), orderedList, blockquote, codeBlock,
 horizontalRule (a divider), image, embed (a native reference), table (§12), and the atoms video, audio and
-unsupportedBlock. A checkbox is `checked` on a listItem's attributes, never on the paragraph. Blocks carry
+unsupportedBlock. A checkbox is `checked` on a listItem's attributes, never on the paragraph, and a checkbox row always
+draws its bullet beside the box (#602). Blocks carry
 `attributes.blockId` (8 lowercase alphanumerics); every block we create gets one, and `assignBlockIds` gives one,
 once, to blocks that arrive without.
 
@@ -108,21 +109,28 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   image". Dropped, the file goes to the page in front (`processImage`, renderer/upload.js), which sends it to main
   (`ai:processImage`): the fast AI (main/ai.js `readImage`, PNG, JPEG, WebP or GIF) answers with a task or a note,
   its title and the lines worth keeping, and main makes it with those lines and the image under them. The page opens
-  it; the button says "Processing image …" until then, and a failure is the red toast.
+  it; the button says "Processing image …" until then, and a failure is the red toast. With Auto-translate on, the model writes
+  the title and lines in that language, translating the image's words (names, dates, amounts and links kept); off, in
+  the image's own language.
   Cmd+K offers the same under **Image**, and only there (the rows have no id, so no key can be recorded on them):
   **Process image** while the caret or the selection is on an image row (main reads that image, main/images.js
   `image`), and **Process image from clipboard** while the clipboard holds an image (`clipboard:hasImage`, asked
-  each time ⌘K opens; main reads it with Electron's clipboard as PNG). Pasting an image still inserts it as before.
+  each time ⌘K opens; main reads it with Electron's clipboard as PNG: Chromium's image/png, or macOS's own PNG type,
+  which is all a copied image file offers, from Finder or CleanShot). Pasting an image still inserts it as before.
   Cmd+K's **Create new …** row wears the corner button's text-plus glyph. With an image on the clipboard its page (from
   Cmd+K or the corner button's click) leads with Process image from clipboard, above the choices. That row is on the page
-  only, never among the folded Create new rows, so no key can be recorded on it either.
+  only, never among the folded Create new rows, so no key can be recorded on it either. Quick Add Task (⇧⌘Space) shows it
+  too, under **Clipboard**: ↩ with no title typed runs it, and the page that opened Quick Add processes the image as
+  Cmd+K's row does. Every page of the palette opens as the centred card: closing it drops an "@" dropdown's place and
+  size, so a page opened next without ⌘K (Create new from the corner button) does not wear them.
 - **Header row**: over the page title, the empty line the buttons at the top right sit on, while the page is alone in
   its window. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
   takes a click there as a window drag and the backdrop never hears the click that closes it).
 - **Buttons at the top right** (`.navbtns`, one flex row anchored to the right edge of `.titlebar`, so they stay put as
   the rows under the title come and go): Back and Forward, the sensitive toggle, the pills toggle, the Outliner/Table
-  switch, Clean up and Refresh (a page among others closes from its tab, Panes below; the links are a pane, §18). A button that
+  switch, Clean up and the Graph switch on a page with a document (a page among others closes from its tab, Panes
+  below; the links are a pane, §18). A button that
   does not apply is gone rather than empty, and the others move up to the edge. Back and Forward run `navigate(-1)` and
   `navigate(1)`, the history ⌘[ and ⌘] walk; `renderNav()` runs after `noteNavigation()` on every render, disables
   them when the move does nothing and puts the current combo in the tooltip. Every header button with a Cmd+K row
@@ -150,13 +158,15 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   after a 300 ms wait (renderer/loading.js): the header and title, then rows of small outlined glyphs and rounded text
   bars growing in one by one, a highlight sweeping through each, fading toward the bottom; slow on the Timeline, 2.2
   times faster elsewhere. When the rows land it fades and they rise in top to bottom. The Timeline lands in parts
-  (`timeline:part`), each drawn at once, and the loader keeps building below the last real row (`.tail`) until the
+  (`timeline:part`), each drawn at once (main builds it once for every pane asking at the same time, and once more
+  after it for whatever asked meanwhile, #579), and the loader keeps building below the last real row (`.tail`) until the
   whole page is in. A page opened later, or a reconnect, waits blank for its rows; the loader never shows once rows
   exist.
 - **Rows arriving.** A row that arrives in a settled view glows once; a row that leaves flashes as it goes. A first
   paint is not an arrival (an empty `before` is a first paint, and so is a row added to a view that was empty), the
   zoomed branch clears `animView` so returning to a view is a wholesale replacement, and a change of more than
-  `BULK` (25) rows is not animated.
+  `BULK` (25) rows is not animated. A row whose words or state change while it stays (someone else's edit, a live update) is patched
+  in place without a flash: the blue tint it used to get was distracting.
 
 ## 5. Rows
 
@@ -166,8 +176,21 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   task`, `# meeting` (gold), `# doc`, `# space`, `# member`, or the type's name in the type's colour (background
   `hsl(hue 80% 92%)`, text `hsl(hue 45% 30%)`; zero is a valid hue) — and its facts. Node `appearance.hue` colours
   its icon and kind tag; a type's own colour override (§11, Set colour) wins where it is set.
+- **A task from a meeting links back to it.** Tana's AI files the tasks it takes from a meeting under that event
+  (`ownerUri`), so such a row carries `meeting: { id, title, start }` (main/rows.js `meetingOf`; the names come from
+  one lookup per list, `resolveMeetings`, next to `resolveTypes`). A meeting glyph sits among the row's facts, a fact icon the size of Pinned and just
+  after it (renderer/tasks.js `taskMetaEl`), or 2px after the title on a row that shows no facts, quiet as every row
+  icon is (renderer/meeting.js `meetingLinkEl`); its tooltip "From <meeting> · <day>"
+  (masked in demo mode); a click opens the meeting and the caret stays.
+- **Row icons are quiet until you are on the row.** The small glyphs a row carries — its facts' icons (assignee,
+  audience, bell, pin: `.ticon`), the Timeline's Join glyph and the meeting link — are drawn at .45 opacity, and in full
+  on the row under the pointer or with the caret, fading between the two (styles.css). None of them gets a background
+  on hover, only its own colour darkens. The visibility icon (`.audience`) and a warning (assigned to someone who cannot see it,
+  `.hiddenfrom`) stay in full.
 - **A task's box is its state** (#243). A task in the Inbox (`proposed`) draws a dashed box; In Progress a grey box;
-  completed a green tick, with the title struck through and grey. Clicking a dashed box accepts the task first (In
+  completed a green tick, with the title struck through and grey, and a short pop (`popSound`, renderer/motion.js;
+  a checkbox block pops too, unchecking is silent; it sounds as the mouse button goes down on a box the
+  click will tick, from a context made on the first press, and the click then leaves it). Clicking a dashed box accepts the task first (In
   Progress, `acceptsFirst`); the next click completes it. A status change reaches every copy of the task at once: a
   render deferred for the caret still updates every checkbox, the title's and the sidebar's (`refreshRowChrome`), and
   a change patches the task's reference rows and sidebar rows (`patchCopies`). Main keeps a task it holds live at its
@@ -269,7 +292,7 @@ debounce flushes it. Read-only rows ignore every edit key.
 | ⌘↑ / ⌘↓ | Collapse / expand (built-in keys, §8). |
 | ⇧⌘↑ / ⇧⌘↓ | Move the row, or the selection, one step among its siblings. |
 | ⇧⌘⌫ | Remove the current block with its children, wherever the caret is; the caret goes to the row before (or after). Document rows ignore it. |
-| ⌘↩ | Toggle done on a task, or a checkbox; a plain block becomes an unchecked checkbox in Tana's native structure. |
+| ⌘↩ | Toggle done on a task, or a checkbox; a plain block becomes an unchecked checkbox in Tana's native structure, drawn with its bullet. |
 | Space on a read-only row | Zoom into it; on a reference row, open what it points at. With exactly one row selected and nothing focused, the same. Editable rows keep Space for typing. |
 | Escape | Blur. |
 
@@ -302,10 +325,12 @@ Mouse: a click on the bullet zooms into the row, on the chevron toggles it, on t
 
 Selecting text in a row shows a floating toolbar of marks and block styles (renderer/toolbar.js); the style menu
 greys Text out for a child rather than offering a row that errors. "/" at the start of an empty row opens the "/"
-menu (`slashRows`): the block types, Divider, Table and Image (also found by picture, photo, upload), then Create Doc,
-Task and the rest of what Create new … offers, workspace types under their own heading. Choosing one opens a page that
-asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens it, Escape goes back to the choices.
-The “/” menu in a row keeps drafting in place instead.
+menu (`slashRows`): the block types with Checklist after the lists (the checkbox ⌘↩ gives, #602), Divider, Table and
+Image (also found by picture, photo, upload), then Create Doc, Task and the rest of what Create new … offers, workspace
+types under their own heading. Task (`taskFromSlash`, #602) asks the task's name on a page of its own and the row
+becomes a reference to the new task, as Tana's own "/" Task embeds one; Escape goes back to the menu. Choosing one
+of the others opens a page that asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens
+it, Escape goes back to the choices. The “/” menu in a row keeps drafting in place instead.
 
 ### @ linking
 
@@ -350,9 +375,19 @@ owned by the page and the block (main/images.js), outside the renderer's write q
   the first character is typed (`materialise`: `api.insertChild` or `api.insertAfter`, told which kind to make). An
   empty draft is dropped on collapse or navigation; Enter, Tab and Backspace on it do nothing except Backspace, which
   removes it and moves the caret to the parent.
-- **Draft documents in a view.** Enter on a collapsed document row in a view, or with nothing focused in an empty
-  view, drafts a plain document below it (`draftDoc`), stored on the first typed character (`api.createDocument`) and
-  kept in place until the next refresh. Backspace on an empty one removes it.
+- **Draft documents in a list.** Enter on a collapsed document row in a view, or with nothing focused in an empty
+  view, drafts a plain document below it (`draftDoc`); in a saved search of one type, a row of that type (issue #537); in a
+  list grouped by Responsibility, a task in that row's section (below). A document drafted in a list is typed first and
+  created once, with all its words, when it is left or Enter is pressed (`api.createDocument`): created on the first
+  key, a saved search re-read and re-sorted around it mid-word and what followed was lost (issue #549). Escape or
+  Backspace on an empty one throws it away; it stays right under the row it was drafted from whatever the sort
+  (views.js `keepDrafts`).
+- **A new task in a Responsibility section** (issue #548). Enter at the end of a task in My Tasks (or any list grouped
+  by Responsibility) drafts a task under it in the same section (drag.js `groupDraft`), and creates it with what puts a
+  task there: the same writes as a task dropped on that heading (`groupDropWrites`, #169) read off a new task, which
+  starts open and yours. Unassigned takes you off, My inbox / My later / My completed set the state, Pinned pins it to
+  today. Agent opens the Assign to Agent prompt once it exists, and Tracking takes you off, watches it and opens the
+  assignee picker for who you are waiting on. Assigned by others drafts nothing: only somebody else puts a task there.
 - **`api.createDocument(title, { kind, typeUri? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
   assigned to you, with a workflow type when `typeUri` names one), a `meeting` (a `tana:event:` laid out like a
   Tana-native event, the next half hour by default, so it shows in Tana's calendar), a `chat`, a `search` (which must
@@ -398,6 +433,9 @@ Cmd+K leads with a Selection group for it (§8).
   never repeated in the sidebar ([MEETINGS.md](MEETINGS.md)).
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
   to does nothing: Home is the whole window, which one pane's Back does not replace (issue #444).
+  When the page on screen is deleted or archived (here, in another pane or in Tana), the pane goes back to the page
+  before it in its history, and the deleted page leaves both stacks; with nothing to go back to, it shows the Library
+  (renderer/edit.js `leaveGonePage`).
 - **Home** is the **Work View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
   (`setHome`): its panes and what each shows, kept as the saved view "Home" (`HOME_VIEW`, listed under Saved views, where
   it is removed or, saved again under that name, replaced) and stored as `homeView` in the synced `home` preference. A
@@ -445,7 +483,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set colour, Mark as
-  sensitive); the agent (Assign to Agent, Go to / Link Agent task, Send to agent); Edit visibility, Notify on changes,
+  sensitive); the agent (Assign to Agent, Go to Codex task, Link Codex task …, Open in Codex); Edit visibility, Add participants … (Edit
+  visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
@@ -536,6 +575,8 @@ with a red dot, Reset / Cancel / Save. Combos are stored in the synced `hotkeys`
 as a chip on the row. A combo must include ⌘ or ⌃. Fixed and refused: ⌘K, ⇧⌘K, the text-size keys (⌘0, ⇧⌘+/-,
 shown as literal chips), ⇧⌘⌫ and ⇧⌘↑/↓ (`RESERVED`, renderer/palette.js), and any combo another row has; the reason
 is shown (⌃ counts as ⌘, ⌥ is ignored for the fixed ones). Sync has no default key.
+While the highlighted Cmd+K row is one ⇧⌘K can record for (it has an id), the field's right end says "⇧⌘K Set key" in
+muted grey (renderer/palette.js `keyHint`); on any other row, and on every other page, it is not drawn.
 
 ### Cmd+S search
 
@@ -598,6 +639,11 @@ window does: soonest first for Upcoming and Today, latest first otherwise); Grou
 Display chooses the facts a row shows. Each is kept per page key in the synced `groupBy`, `sortBy` and `display`
 preferences; a saved search keeps its own in its document. Group by Updated sorts rows into Last hour, Last day, Last
 week, Last month and Older.
+A saved search or a type’s page draws its rows twenty at a time (`capRows`, renderer/views.js): the first twenty in
+the order shown, sorted and grouped over the whole answer, then twenty more each time “Show 20 more” at its end comes within a
+screen of view (or is clicked). Only a drawn row asks for its metadata, translation and fields. The list itself is
+still one query: Tana’s list takes no sort and returns no next page, so fetching twenty at a time would draw the
+wrong twenty.
 
 - **Folding a section.** On any grouped page the heading is a `button.ghead` with `aria-expanded` and a disclosure
   triangle drawn from it in CSS. A click, or Enter/Space on it, folds that section alone; its rows leave
@@ -680,9 +726,51 @@ week, Last month and Older.
   and hands the node to a new Codex task through Codex's deep link; the task registers itself back with
   scripts/agent-link.js, so the node is pending until it does. The node then carries the agent badge, which says what
   the task is doing, read every 30 s while anything is assigned. **Unassign from Agent** takes it back at once. **Go to
-  Agent task** opens it (or says which machine it is on, from the synced `codexTask` record), **Link Agent Task ...**
-  links a task that already exists, **Send to agent** opens a new Codex task with the node's link, and **Manage Codex
-  hosts** lists the machines a task can run on. Assign to Agent and Send to agent need a real Codex install.
+  Codex task** opens it (or says which machine it is on, from the synced `codexTask` record), **Link Codex task …**
+  links a task that already exists, **Open in Codex** opens a new Codex task with the node's link and tracks nothing,
+  and **Manage Codex hosts** lists the machines a task can run on. Assign to Agent and Open in Codex need a real Codex
+  install.
+
+- **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
+  (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is
+  shown translated, on screen only. Which language a text is in is decided on this Mac, not by the model: Apple's
+  NaturalLanguage (main/ai.js `detectLanguages`, through osascript, about 0.3 s for a whole page and no tokens); only a
+  text it is at least 60% sure is in another language goes to the model, and the rest is kept as having nothing to
+  translate (a names-only title like "Martijn - Andre" is too unsure to send). Only titles of top-level nodes are
+  translated, never a node's content: a zoomed document's title, and a document's title as a row in a list; its blocks
+  and children stay as written. Everything a render wants is asked in one question (`api.translate`, main/ai.js
+  `translate`, up to ~20k characters, with 90 s to answer). A translated page title has one grey line under it, a
+  sparkle and "Translated from Dutch · Show original", which switches it back and forth. In a list, a document whose title is in another language shows the
+  translated title and "Translated from Dutch" as the first fact of its grey line; a click there switches that row.
+  Cmd+K **Replace with translation** (Current node, where the title may be edited) writes the translation the title
+  is shown in as its title (`setTitle`), for good (renderer/translate.js `replaceWithTranslation`).
+  Cmd+K **Translate into …** (the Auto-translate language, English while that is off) writes a translation for good into
+  the selection, else the row the caret is in, else the zoomed page: a document's title (`setTitle`) and a block's text
+  (`setText`), in one question (`api.translate`, cache and on-device detection included). Only plain text that may be
+  edited is offered (a mention, link or mark would not survive); what is in the language already is left alone, and a
+  note says how many were translated (renderer/translate.js `translateNodes`).
+  A row of the app's own that names a node (a Timeline meeting, "Kevin completed <task>", a notification's title: the
+  one segment marked `content`) has only that name translated, the sentence around it kept, and says so the same way.
+  Nothing is written: the caret going into a translated row or title shows its own words first, so an edit is made in,
+  and saves, the original — only where it can be typed in: a read-only row (the Timeline, a notification, a reference)
+  keeps its translation when clicked, so the first click opens it (renderer/translate.js focusin). Leaving an edited row
+  While a title is typed in, its notice says so: the page line reads "Original, in Dutch · Show translation" (the
+  button leaves the title, which shows the translation again) and a list row's first fact "Original, in Dutch".
+  shows the translation again (an edited text is asked for, and lands in the row
+  when the answer does, wherever the caret is by then). Turning it on or changing the language takes effect at once,
+  in every pane. Only plain text is asked (a mention, a link or a mark would not survive), never a sensitive
+  node's words; demo mode translates as well and masks the translated words like any other, so its "Translated from …" notices stay; the model answers null for what is in the language already, and an answer that hands the text back unchanged counts as null
+  too, whatever language it names. Answers are kept
+  on this machine under a SHA-256 of the language and the exact text (db.js `translations`), so a note seen before shows
+  translated at once, in any pane or launch, and an edited text is a new key: asked again. An answer lasts a month from
+  when it was last shown; one not shown for 30 days is asked again and is cleaned out on the next save or start (at
+  most 5000 kept, least recently shown out first). A batch is asked in two steps: this Mac's answers first (`{ local: true }`: kept
+  answers and what it finds already in the language, which settles most of a page at once), then the model for the rest.
+  While the model has a text the page line (or a list row's first fact) says "Translating…" with the sparkle at
+  work, shown only after 0.4 s and taking no room until then, so an answer from the cache or a text found already in the language never moves the row (renderer/translate.js, styles.css). Measured 2026-09-28 through a
+  ChatGPT sign-in: about 4.5 s for a first question, well under 1 ms once kept.
+  Push notifications are translated the same way before they are shown (main.js `S.notify`: title, subtitle and body
+  in one question, never a sensitive node's, and the banner as written when no answer comes within 15 s).
 
 ## 12. Fields and tables
 
@@ -692,7 +780,9 @@ A zoomed node shows its typed fields between the title and the outline (`#fields
 with the content), from `api.related(docId).fields` (`[{ key, label, text, lines, segments, type, cardinality,
 options, to }]`, read from the type document on every call, main/related.js `fieldDefs`). Fields are Tana
 attributes: the value lives in the node's data map, the label in its type's template (sdk/fields.js). An expanded
-document shows its fields above its body children too.
+document shows its fields above its body children too, read with `api.related(docId, { lite: true })`: its fields,
+a type's definitions, its meeting and call link, none of the sidebar's pins, backlinks or history, which the page on
+screen reads whole over it (#579: a list opening sixty rows asked ~120 ListEdges in a second).
 
 - **A text or date field is an outline**, drawn by the outline's own rows, so a field row does everything a row does
   ("- ", Tab, Enter, ⌘Z; every row listener is bound to both places rows live, `onRows`). Its id is the document and
@@ -809,9 +899,9 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   | Tracking | Off the agent, every day pin removed, watched | unless you made it and it is someone else's |
   | Agent | the Assign to Agent prompt; nothing until it is sent | — |
   | My inbox, Mine, My completed, My later | Off the agent, every day pin removed, you as the only assignee, the status; a watch on a task you were not assigned is forgotten | a task you did not make |
-  | Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens | — |
+  | Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens, one in the Inbox is accepted (In Progress) | — |
   | Assigned by others | — | always: it is about who made it |
-  | Today's Tasks | Pinned to today unless it is on Today already | anything but a task |
+  | Today's Tasks | Pinned to today unless it is on Today already; one in the Inbox is accepted (In Progress), where its status may be changed (a read-only one is pinned only) | anything but a task |
 
   A drop in its own section writes nothing. A drop inside a task is offered only once that task is expanded. A task
   you cannot edit is refused before anything is written wherever the drop would change its assignees or status. While
@@ -925,10 +1015,11 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
     start, earliest first, each with its time and who else is on it ("14:00–15:00 · Jeroen Oostewechel"), opening the
     meeting. A meeting still to come, or under way on the timeline, has the Tana glyph after its title ("Join in
     Tana"), which opens it in Tana (`row.join` through `doc:link`). One timer per read, a second after the next start
-    or end (`startTimer`), re-reads the page. A meeting under way whose call is recording has a blue marker with a
-    blue ring pulsing out of it (`.tl-recording`; the ring stays still under reduced motion): Tana's own rule, an entry in the call's
-    `recordings` with status `recording`, read from the `tana:call:` documents those meetings own, which a live query
-    finds and main keeps live, so the mark comes and goes as the recording starts and stops (main/timeline.js
+    or end (`startTimer`), re-reads the page. A meeting under way whose call is on the record has a blue marker with a
+    blue ring pulsing out of it (`.tl-recording`; the ring stays still under reduced motion): somebody is in the call and it
+    is transcribed (`data.transcriptionPaused` not set), or a video recording runs (Tana's activeRecording, an entry in the call's
+    `recordings` with status `recording`; a Tana Meet call is transcribed without one), read from the `tana:call:` documents those meetings own, which a live query
+    finds and main keeps live, so the mark comes and goes as people join and leave and the call goes on or off the record (main/timeline.js
     `watchCalls`). A rule separates these blocks from the history (16px above, 8px below).
   - **History**, newest first in day sections (Today, Yesterday, the date): the time in a column (24-hour), a rail, a
     20px marker per entry (a filled green circle with a white check for finished work, a grey pen for an edit, grey
@@ -941,8 +1032,9 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
     start once started, with their length and others on the grey line ("45 min · …", four names then an ellipsis);
     all-day and future ones stay out; one over with no summary is drawn quiet (`faint`); the summary is Tana's own on
     the event (`calendarEvent.tagline`/`.summary`), part of the live signature. A live query over your meetings to the
-    end of today (`watchMeetings`) re-reads the page when one is added, gone, renamed or moved. Changes only you made,
-    tasks you made by hand and anything older than the page's days stay out.
+    end of today (`watchMeetings`) re-reads the page when one is added, gone, renamed or moved. The tasks you add yourself,
+    for you or for someone else, are one such line too, "You added 2 tasks" (no "to your Inbox": a task made by hand is
+    In Progress or someone else's), never marked new. Changes only you made and anything older than the page's days stay out.
   - A blue dot marks what came after your last visit; opening an entry goes to its node. The page opens on today and
     the two days before, and reads three days further back when its end comes within a screen (an
     IntersectionObserver on "Show three more days", which also works pressed and reads "Loading…"), up to 120 pages
@@ -985,7 +1077,9 @@ do differently"), then Dismiss (esc) and Continue (↩), Submit on the last. ↑
 (taking the highlighted option when nothing is picked), ←→ step between questions, Esc dismisses (Tana goes on with
 defaults). Submitting writes the answers (`chat:answer`) and Tana goes on. **Invite to chat…** (Cmd+K on a chat) lists
 the workspace's members; the one picked joins the chat as an editor (`chat:invite`), and "<name> was added to the
-chat." shows as a centred status line, as other status lines do.
+chat." shows as a centred status line, as other status lines do. **New chat with …** (Cmd+K, anywhere) lists the
+same members: a new chat opens, yours alone until then, and the one picked is invited to it, so it is visible to the
+two of you; a refused invite says why over the open chat (renderer/chat.js `newChatWith`: `chat:new`, open, then `chat:invite`).
 
 ### Work View, windows and panes
 
@@ -1023,7 +1117,9 @@ chat." shows as a centred status line, as other status lines do.
   floating and dragged between those by their tabs; the tab's title is the page's (renderer/render.js `tellTitle`
   posts `{ orbital: 'title', renamable }`: masked in demo mode, "Hidden" for a blurred sensitive document). Under a tab
   bar a view, a saved search or an app page drops its heading, which the tab already names (`html.listing`, issue
-  #441); a document keeps its own. A right click on a tab opens the panel menu, led by **Save as new search** on a view with pills such as the Library
+  #441); a document keeps its own. A right click on a tab (or its "…") opens the panel menu, led by **Refresh** on a saved search
+  (its query asked again, the rows kept in place let go: renderer/pills.js `offerRefresh` tells the shell with the title,
+  `{ refresh }`, and the menu posts `{ orbital: 'refresh' }`; not while pills stage an unsaved filter), **Save as new search** on a view with pills such as the Library
   (the Cmd+K row, run in that page; issue #538), **Copy link** on a page showing a node of Tana's (that node's link, not
   the row with the caret; issue #542) and **Rename** when the page's title
   can be typed in (a chat's, agent's or skill's too, where you are its admin or editor, and a type's: their bodies stay
@@ -1131,8 +1227,9 @@ structure; an unsandboxed `electron scripts/pdf-check.js --render` writes three 
   docs/CHATS.md). Cmd+K rows that carry Tana's words without being document rows are masked where they are built (the
   current meeting beside Pin to current meeting, Edit pins' meetings and spaces, Move to space, a meeting's location),
   as are a space audience's name, a Changes tooltip and an image's description; a type row's grey meta is masked, a
-  date is not. Pictures are never shown: an image is the grey box of a loading one, nothing is fetched, the full view
-  does not open. **Nothing is saved while it is on**: no text is editable, checkboxes are disabled, and `tana`
+  date is not. Pictures are never shown: an image is a grey box at the size the picture is drawn (the block's stored size, else the
+  picture's own read off it without drawing it, shrunk to the row's 360px or a cell's 240px), the privacy glyph in its middle (renderer/render.js `demoImageEl`; a 360px 3:1 box
+  until a size is known); the pixels are never drawn and the full view does not open. **Nothing is saved while it is on**: no text is editable, checkboxes are disabled, and `tana`
   (`readOnlyInDemo`, renderer/state.js) refuses every call in `DEMO_WRITES` with "Demo mode is on: nothing is saved to
   Tana", whatever asked; the day and week nodes are only looked up (`findOnly`). The switch reaches every window at
   once (the storage event) and main (`app:demoMode`), which then posts no notification banner. It is remembered on this
@@ -1147,8 +1244,9 @@ A document's relationships are shown in the window's **Graph pane** (issue #462,
 `api.related(docId)`: one Trellis pane per window that follows the pane with the keys, so a window of several panes
 has one list of links rather than a sidebar in each. Cmd+K **Show graph** opens it beside the page you are on, about
 320px wide (Trellis scales a pane's content below 280px), and leaves you the keys; **Hide graph** closes it, as its
-tab's X or ⌘W in it do. The rightmost button in the window's header runs the same row for the page in front, its
-glyph the row's (shell.js `drawLinks`). It is a pane like any other: tabbed, floated, maximized or dragged, and kept in the window's
+tab's X or ⌘W in it do. The page's own Graph switch runs the same row: one of its buttons at the top right, since
+what it shows is this page's links, there only on a page with a document (not a view, a saved search or an app page)
+and at full strength while the pane is open (renderer/rail.js `drawLinksBtn`). It is a pane like any other: tabbed, floated, maximized or dragged, and kept in the window's
 layout and in a saved view.
 
 How it works: it is an outliner page opened with `links=1` (`api.splitWindow('links')`, main.js `window:split`;
@@ -1185,7 +1283,8 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   renderer/fields.js `attendeesFieldEl`).
 - **A chat** has neither field: one grey line at the top right says who can see it ("Only you can see this chat", or
   the audience's glyph and words or faces as a row's subtext has them) and, for a meeting's chat, "about" the meeting as
-  a link. The meeting's attendees stay on the meeting's page: listed on the chat they read as its audience (renderer/chat.js
+  a link, and **Add participants** after who can see it, for whoever may share it (`access.sharing`), which opens
+  Cmd+K Add participants …. The meeting's attendees stay on the meeting's page: listed on the chat they read as its audience (renderer/chat.js
   `chatContextEl`, issue #543).
 - **Sections**: Pinned (a meeting's or space's `EDGE_TYPE_HAS_PIN` items, read from the hub's own `pinnedItems` too,
   since a pin just written is there before its edge), Outcomes (documents it owns that carry a task state), Proposals

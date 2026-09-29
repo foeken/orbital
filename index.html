@@ -16,9 +16,10 @@
     <button id="pillsToggle" class="navbtn" tabindex="-1" hidden></button>
     <button id="navTable" class="navbtn" tabindex="-1" hidden></button>
     <button id="navCleanup" class="navbtn" tabindex="-1" hidden></button>
-    <button id="navRefresh" class="navbtn" tabindex="-1" hidden></button>
+    <button id="navLinks" class="navbtn" tabindex="-1" hidden></button>
   </div>
   <div id="pagehead" class="pagehead"><input id="titleCheck" type="checkbox" class="check" tabindex="-1" hidden><h1 id="title">Tana</h1></div>
+  <div id="translated" class="translated-line" hidden></div><!-- a page shown in English: renderer/translate.js -->
   <div id="taskInfo" class="meta" hidden></div>
   <div id="error" class="error" hidden><span id="errorText"></span><button id="errorLogin" hidden>Log in to Tana</button></div>
 </header>
@@ -57,6 +58,7 @@
 <div id="palette" class="palette" hidden>
   <div class="card">
     <input id="paletteInput" type="text" placeholder="Run a command" autocomplete="off" spellcheck="false">
+    <span id="paletteKeyHint" class="keyhint" hidden><kbd>⇧⌘K</kbd> Set key</span>
     <textarea id="paletteText" class="ptext" rows="4" placeholder="What should the agent do?" aria-label="What should the agent do?" autocomplete="off" spellcheck="false" hidden></textarea>
     <div id="paletteList" class="list"></div>
   </div>
@@ -85,6 +87,7 @@
 <script src="renderer/segments.js"></script>
 <script src="renderer/state.js"></script>
 <script src="renderer/nodes.js"></script>
+<script src="renderer/translate.js"></script>
 <script src="renderer/rail.js"></script>
 <script src="renderer/render.js"></script>
 <script src="renderer/edit.js"></script>

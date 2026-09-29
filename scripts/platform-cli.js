@@ -41,7 +41,7 @@ async function connect() {
   pins = require('../sdk/pins');
   const me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
-  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
+  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: 'Orbital-CLI/' + require('../package.json').version }); // told apart from the app in Tana's logs
   return me;
 }
 
@@ -630,6 +630,19 @@ commands.rows = async () => {
   const main = backend(await connect());
   out(await main.search(positional.join(' ')));
 };
+// children <id>: a document's outline rows as main hands them to the renderer: readOutline with the references
+// resolved, as outline:children does for a document (main/documents.js outlineWithReferences), minus the block ids that
+// helper writes onto blocks arriving without one, so this stays read-only. Each row's depth, id, kind, checkbox and
+// text. Chats, spaces and saved searches take other routes in outline:children (main.js) and are refused here.
+commands.children = async () => {
+  const id = positional[0];
+  if (!id || /^tana:(chat|space|search):/.test(id)) throw new Error('usage: children <document id>  (a document\'s outline rows, read-only; not a chat, space or saved search)');
+  const main = backend(await connect());
+  await client.sync.connect();
+  const { resolveReferences } = require('../main/documents');
+  const walk = (rows, depth = 0) => rows.flatMap((n) => [[depth, n.id, n.block || n.type || n.kind, n.done ?? '-', String(n.text || '').slice(0, 60)].join('  '), ...walk(n.children || [], depth + 1)]);
+  out(walk(await main.op(id, (doc) => (doc.content.get('children') ? resolveReferences(readOutline(doc)) : []))).join('\n'));
+};
 // settings [<key> <json>]: the app's own settings document (main/settings.js) — which document it is and what it
 // carries. Read-only without arguments; with a key and a JSON value it writes one setting the way the app does.
 commands.settings = async () => {
@@ -683,6 +696,20 @@ commands.readimage = async () => {
   out('ChatGPT: ' + (status.signedIn ? 'signed in' : 'not signed in' + (status.error ? ' (' + status.error + ')' : '')));
   const started = Date.now(), read = await main.ai.readImage({ bytes: require('node:fs').readFileSync(file), mimeType }, globalThis.fetch, app.getPath('userData'));
   out(read); out((Date.now() - started) + ' ms');
+};
+// translate [--to English] [--model m] [--effort e] [--fresh] [text…] (--fresh: past the cache): what Auto-translate (issue #547) gets back and how long the model takes, for one text
+// and then all of them as one batch (the Dutch sample note when no text is given). Read-only; the texts go to the model.
+commands.translate = async () => {
+  const texts = positional.length ? positional : ['We hebben besloten om Studio als werkwijze te behandelen, niet als entiteit.', 'Twee pilots starten in oktober, met Sam en Dana als trekkers.', 'Open vraag: wie beheert het budget na Q1?', 'Terugblik offsite Studio'];
+  const main = backend(await connect()), to = flag('to') || 'English', userData = app.getPath('userData');
+  let t = Date.now(); const status = await main.ai.chatgptStatus(userData, true);
+  out('ChatGPT: ' + (status.signedIn ? 'signed in' : 'not signed in' + (status.error ? ' (' + status.error + ')' : '')) + ', sign-in check with refresh ' + (Date.now() - t) + ' ms');
+  t = Date.now(); await main.ai.chatgptStatus(userData, false); out('sign-in check without refresh ' + (Date.now() - t) + ' ms');
+  for (const batch of [texts.slice(0, 1), texts]) {
+    const started = Date.now(), answers = await main.ai.translate(batch, to, globalThis.fetch, userData, { model: flag('model') || undefined, effort: flag('effort') || undefined, fresh: !!flag('fresh') });
+    out(batch.length + (batch.length === 1 ? ' text: ' : ' texts: ') + (Date.now() - started) + ' ms');
+    answers.forEach((a, i) => out('  ' + (a ? a.lang + ' → ' + a.text : 'unchanged: ' + batch[i])));
+  }
 };
 // print the conversation once Tana's answer has finished streaming (docs/CHATS.md §10). WRITES: a message, and a new
 // chat with "new".
@@ -792,7 +819,7 @@ commands.libraryprobe = async () => {
 commands.listnodes = async () => {
   await connect();
   const { nodes, totalCount } = await client.graph.listNodes({ limit: 50, mode: 'LIST_NODES_MODE_WITH_COUNT', ...JSON.parse(positional[0] || '{}') });
-  for (const n of nodes) out(n.id + '\t' + JSON.stringify(n.title || '') + '\t' + JSON.stringify(n.attributes || {}));
+  for (const n of nodes) out(flag('full') ? JSON.stringify(n) : n.id + '\t' + JSON.stringify(n.title || '') + '\t' + JSON.stringify(n.attributes || {})); // --full 1: the whole node
   out(nodes.length + ' nodes (totalCount ' + totalCount + ')');
 };
 // string list on the wire (scalar, not an enum — fromJson accepts any string, including nonsense), so asking the
@@ -1129,8 +1156,8 @@ const USAGE = [
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates] |',
   '             changes <id> [--within <summary id>] [--limit 20] | inbox [--limit 20] [--watch seconds] |',
   '             settings   (with a key and a JSON value it writes)',
-  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
-  '             settype <id>   (listing only; with a target it writes) | classify <id>   (the document goes to the model)',
+  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | children <document id> | pinrows |',
+  '             settype <id>   (listing only; with a target it writes) | classify <id>   (the document goes to the model) | translate [--to English] [text…]   (the texts go to the model)',
   '             caps <id...> | related <id> | incall [--limit 5] | callstate <call id> | suggestions [--limit 10] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | livequery --to <id> [--from <id>] [--edge-types LINKS_TO,…] |',

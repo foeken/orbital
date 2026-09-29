@@ -76,10 +76,11 @@ const hm = (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(
 // the web client's label, word for word: completedAt - sentAt, not usage.durationMs (docs/CHATS.md §4)
 const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
 const took = (ms) => { const s = Math.round(ms / 1000), m = Math.floor(s / 60); return s < 60 ? plural(s, 'second') : s % 60 ? m + 'm ' + (s % 60) + 's' : plural(m, 'minute'); };
-// Tana's progress line exists only for a message that called tools: "Thought for …" once every call has finished,
-// "Finished thinking" when there is no duration to show.
+// Tana's progress line exists only for a message that called tools: "Thought for …" once the message stopped streaming
+// and every call has finished (the web client's own test, docs/CHATS.md §4), "Finished thinking" when there is no
+// duration to show, "Thinking..." until then.
 // ponytail: a call still running reads "Thinking..." where Tana names the tool's own in-progress label.
-const thinking = (m, calls) => (calls.some((c) => c && c.status === 'awaiting_user_input') ? 'Waiting for your input' : calls.some((c) => c && c.status === 'running') ? 'Thinking...' : m.completedAt > m.sentAt ? 'Thought for ' + took(m.completedAt - m.sentAt) : 'Finished thinking');
+const thinking = (m, calls, streaming) => (calls.some((c) => c && c.status === 'awaiting_user_input') ? 'Waiting for your input' : streaming || calls.some((c) => c && c.status === 'running') ? 'Thinking...' : m.completedAt > m.sentAt ? 'Thought for ' + took(m.completedAt - m.sentAt) : 'Finished thinking');
 // "accepted N changes" is the one status update the web client shows in a conversation.
 const accepted = (m) => !!m.isStatusUpdate && String((m.content && m.content.text) || '').startsWith('accepted ');
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -102,9 +103,10 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', 
       if (line) rows.push(row('m' + i, line, { chat: { id: m.id, status: true, author: m.fromUserUri || '', sentAt: typeof m.sentAt === 'number' ? m.sentAt : undefined } }));
       return;
     }
-    const ai = m.fromUserType === 'ai', id = 'm' + i, children = [];
+    const ai = m.fromUserType === 'ai', id = 'm' + i, children = [], streaming = !!m.id && m.id === streamingId;
     // keep/person mark the app's own words and a name for demo mode (renderer/segments.js); the conversation is content
-    if (list(m.toolCalls).length) { const line = thinking(m, list(m.toolCalls)); children.push(row(id + '.t', line, { note: true, thought: true, segments: [{ text: line, keep: true }] })); }
+    // thinking: still at work, so the line shimmers until it says what it thought (renderer/chat.js chatThoughtEl)
+    if (list(m.toolCalls).length) { const line = thinking(m, list(m.toolCalls), streaming); children.push(row(id + '.t', line, { note: true, thought: true, ...(line === 'Thinking...' ? { thinking: true } : {}), segments: [{ text: line, keep: true }] })); }
     const status = Object.hasOwn(MESSAGE_STATUS, m.status) ? MESSAGE_STATUS[m.status] : undefined;
     if (status) {
       const error = typeof m.errorMessage === 'string' && m.errorMessage.trim() ? ': ' + m.errorMessage : '';
@@ -138,7 +140,7 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', 
       icon: ai ? 'chat' : 'member', block: 'heading3', heading: 3,
       meta: typeof m.sentAt === 'number' ? hm(m.sentAt) + (m.editedAt !== undefined ? ' (edited)' : '') : undefined,
       chat: { id: m.id, mine: !ai && !!me && m.fromUserUri === me, author: m.fromUserUri || (ai ? 'ai' : ''), sentAt: typeof m.sentAt === 'number' ? m.sentAt : undefined,
-        ...(m.id && m.id === streamingId ? { streaming: true } : {}), ...(questions ? { questions } : {}) },
+        ...(streaming ? { streaming: true } : {}), ...(questions ? { questions } : {}) },
       hasChildren: children.length > 0, children,
     }));
   });

@@ -653,7 +653,8 @@ const notifyOn = (n, creator) => { const chosen = notifyChoices()[n.id]; return 
 // and the view refresh unsubscribes everything the active view stops listing, so without this "notify me" quietly
 // meant "while this view happens to list it". The rule-based defaults cannot be enumerated without reading every
 // document, so they stay as they were: watched while something is looking at them.
-const notifyWatchedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === true)); };
+// a deleted node is watched no more (deletedNodes, seeded at boot from the Recently deleted list): Tana refuses its bootstrap for ever
+const notifyWatchedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === true && !deletedNodes.has(id))); };
 // The other half of that map: the nodes you silenced. The watch rule (main/views.js refreshWatched) reads graph
 // nodes, whose shape notifyDefault cannot take, so it needs the choice as a set rather than as notifyOn.
 const notifySilencedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === false)); };
@@ -673,7 +674,7 @@ const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Complete
 // App-local on purpose: Tana's assignedToUris takes user-profile uris only, so an agent cannot be a native assignee.
 // The ids live in the settings table beside the watch choices; two states, so a list rather than a map.
 // Assignment only: nothing here dispatches, runs or reports back.
-const codexIds = () => { const stored = settings.get('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string') : []; };
+const codexIds = () => { const stored = settings.get('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string' && !deletedNodes.has(id)) : []; }; // a deleted node's task is let go, as notifyWatchedIds does
 // What the agent was asked to do with the node, by id. A second map rather than a list of pairs: the assignment list
 // is what everything else reads, and turning it into objects would rewrite every reader for a field only the prompt
 // page writes. A prompt exists only alongside the assignment it was given with, so unassigning drops both.
@@ -723,9 +724,43 @@ async function setCodex(id, on, prompt) {
 const notifySigs = new Map();
 const notifyQuiet = new Map(); // docId -> when a plain edit was last announced
 const EDIT_QUIET_MS = 60000; // a remote edit arrives op by op: someone typing is one banner a minute, not fifty
+// ...and the banner waits until the typing stops, then says what the burst did from the document itself: the text now
+// against the text at the version last seen (Loro keeps the history, forkAt reads it back). Announced at the first op,
+// it said "Edited", or a word cut off after two letters.
+const EDIT_SETTLE_MS = 4000;
+const settling = new Map(); // docId -> { frontiers before the burst, timer }
+const clip = (t) => '“' + (t.length > 120 ? t.slice(0, 119) + '…' : t) + '”';
+function whatChanged(doc, frontiers) {
+  let old;
+  try { old = doc.loro.forkAt(frontiers); } catch { return null; } // history it does not have: "Edited" it is
+  const was = old.getMap('data').get('title'), now = doc.loro.getMap('data').get('title');
+  if (was !== now) return 'Renamed from ' + clip(was || 'Untitled');
+  const lines = (c) => contentText({ content: c }).split('\n').map((l) => l.trim()).filter(Boolean);
+  const a = lines(old.getMap('content')), b = lines(doc.content);
+  const added = b.filter((l) => !a.includes(l)), removed = a.filter((l) => !b.includes(l));
+  const more = (list) => (list.length > 1 ? ` and ${list.length - 1} more` : '');
+  if (added.length) return (removed.length ? 'Changed to ' : 'Added ') + clip(added[0]) + more(added);
+  if (removed.length) return 'Removed ' + clip(removed[0]) + more(removed);
+  return null; // a mark, a checkbox, a field: nothing a line of text says
+}
+function announceEdit(id, doc, frontiers) {
+  const p = settling.get(id) || { frontiers };
+  clearTimeout(p.timer);
+  const timer = setTimeout(() => {
+    if (p.timer !== timer) return; // a later op moved the banner on
+    settling.delete(id);
+    if (!S.notify) return;
+    const title = readNode(doc).title || 'Untitled';
+    S.notify(id, title, whatChanged(doc, p.frontiers) || 'Edited', 'edit');
+    rememberEdit(id, title);
+    followSummary(id, title).catch(() => {});
+  }, EDIT_SETTLE_MS);
+  p.timer = timer;
+  settling.set(id, p);
+}
 // What an edit was, in Tana's own words (issue #131). ChangeSummaryService (sdk/history.js, the sidebar's Changes
 // section) writes a sentence about a window of edits only once the edits stop — 3m20s after a one-line edit, measured
-// 2026-09-25 — so the banner goes out as "Edited" and is replaced by that sentence when it appears: same notification
+// 2026-09-25 — so the banner goes out with what the text says changed (whatChanged) and is replaced by that sentence when it appears: same notification
 // id, silently (main.js S.notify). A summary counts when it was not there, or said something else, at the time of the
 // edit; its window's own times do not say it covers this edit (the measured one ended before the edit it described).
 // A newer edit banner for the node takes the follow-up over. Not imported from main/related.js: that module requires
@@ -828,7 +863,8 @@ async function notifyWatched(id, doc, n, info) {
   if (!(typeof chosen === 'boolean' ? chosen : notifyDefault(n, await creatorOf(id)))) return;
   const was = before || away; // what it is measured against: this launch's last sight, or the stored one
   const moved = was[0] !== sig[0] || was[1] !== sig[1]; // a rename or a status change: rare, and always worth a banner
-  if (!moved) { const last = notifyQuiet.get(id) || 0; if (Date.now() - last < EDIT_QUIET_MS) return; notifyQuiet.set(id, Date.now()); }
+  // a banner still waiting for the typing to stop takes the op in (announceEdit) however quiet the node has to be
+  if (!moved && !settling.has(id)) { const last = notifyQuiet.get(id) || 0; if (Date.now() - last < EDIT_QUIET_MS) return; notifyQuiet.set(id, Date.now()); }
   if (catchUp) caughtUp++;
   // A status move already says the one thing that matters about it; everything else asks what the change was.
   let state = was[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : null;
@@ -837,9 +873,7 @@ async function notifyWatched(id, doc, n, info) {
   if (who && !who.me && who.title) state += ' by ' + who.title;
   if (!S.notify) return;
   if (state) return S.notify(id, n.title || 'Untitled', state);
-  S.notify(id, n.title || 'Untitled', 'Edited', 'edit');
-  rememberEdit(id, n.title);
-  followSummary(id, n.title).catch(() => {});
+  announceEdit(id, doc, JSON.parse(was[2]));
 }
 // The edits a banner announced, kept on this machine for the Timeline (main/timeline.js): Tana writes no summary for many
 // of them, or only a week's worth later, and the Timeline had nothing else to show an edit by, so a banner came for a

@@ -15,6 +15,8 @@ function loadMembers() {
   }, showError);
 }
 const me = () => (members || []).find((m) => m.me);
+// the member an address belongs to (main/rows.js members: emails), or undefined
+const memberByEmail = (email) => (email ? (members || []).find((m) => (m.emails || []).includes(String(email).toLowerCase())) : undefined);
 function memberName(uri) {
   if (demoMode) return demoPersonName(uri);
   const member = (members || []).find((m) => m.id === uri);
@@ -78,6 +80,7 @@ function patchMeta(docId) {
     const old = body.querySelector('.meta.tmeta'), sep = body.querySelector('.metasep');
     if (old) old.remove();
     if (sep) sep.remove();
+    body.querySelector(':scope > .meeting-link')?.remove(); // the facts carry it now (taskMetaEl)
     // the same line a full render would build, so a row does not change shape when its metadata arrives late: the
     // facts go before the type chips, where nodeEl appends them, not after them
     const had = body.querySelector(':scope > .subtext'), sub = subtextEl(item.node, summary, had || undefined, tableRow(item.parent));
@@ -143,6 +146,7 @@ function iconEl(name, label, tag = 'span') {
 function audienceIcon(summary, node) {
   const label = summary.audience.label + (summary.hiddenFrom ? ' — not visible to ' + summary.hiddenFrom : '');
   const icon = iconEl(summary.audience.icon, label);
+  icon.className += ' audience'; // who can see it: never faint (styles.css, row icons)
   if (summary.hiddenFrom) icon.classList.add('hiddenfrom');
   if (node && canEditNode(node) && isRealId(node.id) && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
   return icon;
@@ -209,6 +213,8 @@ function taskMetaEl(summary, docId, node) {
     if (tana.pinState) { icon.title = 'Pinned — click to edit pins'; clickable(icon, () => openPinsPalette(node)); }
     el.append(icon);
   }
+  // the meeting a task came from (renderer/meeting.js meetingLinkEl), a fact icon like the rest, just after Pinned
+  if (node && node.meeting && !node.timeline) el.append(meetingLinkEl(node.meeting, true));
   // link sharing is separate from the Tana audience: anyone with the url can read it
   if (summary.linkShared) el.append(iconEl('globe', 'Anyone with the link'));
   // last of the row's icons: a bell says changes to this node reach you, whether you asked or the rule decided
@@ -333,7 +339,7 @@ function statusRows(q, ctx = palTaskCtx) {
       const changed = await (ctx.multi ? tana.setStateMany(ctx.docs.map((doc) => doc.id), state) : tana.setState(ctx.docs[0].id, state));
       // shown now rather than when the live update lands: the caret is back in this row, where a plain render waits
       for (const doc of ctx.docs) { doc.stateType = state; doc.done = state === 'closed' ? 1 : 0; }
-      if (state === 'closed') for (const doc of ctx.docs) justDone.set(doc.id, Date.now());
+      if (state === 'closed') { for (const doc of ctx.docs) justDone.set(doc.id, Date.now()); popSound(); }
       return changed;
     }),
   }));

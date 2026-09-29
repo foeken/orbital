@@ -77,13 +77,14 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'palette') togglePalette(e.data.mode === 'search' ? 'search' : 'cmd'); // the window header's ⌘K and ? (shell.js), for the page in front, or the Graph pane's
   else if (e.data?.orbital === 'help') openHelp();
   else if (e.data?.orbital === 'sensitive') toggleSensitiveVisibility();
-  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages, links: e.data.links === true }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); document.documentElement.classList.add('framed'); navSent = ''; tellNav(); retell(); } // framed: the shell draws the header buttons, in a tab bar or its header; retell: the title and document again (renderer/rail.js)
+  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages, links: e.data.links === true }; drawLinksBtn(); document.documentElement.classList.toggle('tabbed', e.data.pages > 1); document.documentElement.classList.add('framed'); navSent = ''; tellNav(); retell(); } // framed: the shell draws the header buttons, in a tab bar or its header; retell: the title and document again (renderer/rail.js)
   else if (e.data?.orbital === 'navclick') navRow.querySelector('#' + CSS.escape(String(e.data.id)))?.click(); // a press on its copy in the tab bar
   else if (e.data?.orbital === 'follow' && LINKS) follow(e.data.docId, e.data.doc); // the Graph pane: the focused pane's document (renderer/rail.js)
   else if (e.data?.orbital === 'goto') { if (typeof e.data.view === 'string') setView(e.data.view); else if (typeof e.data.id === 'string') goTo(e.data.id); } // what the Graph pane opened, opened here
   else if (e.data?.orbital === 'panes') otherPanes = e.data.places && typeof e.data.places === 'object' ? e.data.places : {}; // where the other panes are (shell.js tellPlaces, #533)
   else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id); // a key pressed in the Graph pane
   else if (e.data?.orbital === 'rename') renameTitle(); // Rename on the tab (shell.js)
+  else if (e.data?.orbital === 'refresh') refreshSearch(); // Refresh in the pane's menu (shell.js)
   else if (e.data?.orbital === 'copyLink' && zoom) run(async () => copyText(await tana.nodeLink(zoom.docId), 'Link copied')); // Copy link on the tab: the page's node, whatever row has the caret (#542)
   else if (e.data?.orbital === 'processImage') processImage(e.data.file); // an image dropped on Create new (shell.js)
   else if (e.data?.orbital === 'compose' && typeof e.data.docId === 'string' && Array.isArray(e.data.segs) && e.data.doc) composeInto(e.data.docId, e.data.segs, e.data.doc); // ⌘K Add to chat, from this pane or another (renderer/chat.js)
@@ -161,7 +162,8 @@ tana.onChanged((docId, info) => {
 // their note or sidebar reloads (#413).
 function patchCopies(docId, state) {
   const changes = Object.fromEntries(Object.entries(state).filter(([, value]) => value !== undefined));
-  const walk = (rows) => { for (const n of rows || []) { if (n.reference && n.reference.uri === docId && n.reference.node) Object.assign(n.reference.node, changes); walk(n.children); } };
+  // and the document's own rows nested in a list (a task under Today's Tasks and the same task again further down)
+  const walk = (rows) => { for (const n of rows || []) { if (n.reference && n.reference.uri === docId && n.reference.node) Object.assign(n.reference.node, changes); else if (n.id === docId) Object.assign(n, changes); walk(n.children); } };
   for (const rows of kids.values()) walk(rows);
   for (const data of relatedBy.values()) for (const [, rows] of railGroups(data)) for (const n of rows || []) if (n.id === docId) Object.assign(n, changes);
 }

@@ -38,7 +38,7 @@ contextBridge.exposeInMainWorld('api', {
   // Native embed blocks keep their id; type:reference, reference:{uri,label?,node?}. Target actions use reference.uri.
   children: (docId) => ipcRenderer.invoke('outline:children', docId),
   node: (docId, patch) => ipcRenderer.invoke('doc:info', docId, patch), // patch: a change read back, which holds nothing (#438)
-  related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,call?,pinned[],outcomes[],proposals[],notes[],backlinks[]}
+  related: (docId, opts) => ipcRenderer.invoke('doc:related', docId, opts), // meeting context: {summary,tagline,call?,pinned[],outcomes[],proposals[],notes[],backlinks[]}; opts { lite: true }: a list row's fields, call and meeting only
   // The page on screen (null: none): main keeps its backlinks and its hub's pins live, and says 'related:changed' when one moves
   relatedWatch: (docId) => ipcRenderer.invoke('doc:watchRelated', docId),
   onRelatedChanged: (cb) => ipcRenderer.on('related:changed', (_e, docId) => cb(docId)),
@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('api', {
   suggestDiscussWith: (title) => ipcRenderer.invoke('ai:discussWith', title),
   classifyType: (id) => ipcRenderer.invoke('ai:classifyType', id), // {current, choices:[{uri|null,title,hue?,p}]}, most likely first
   activateWindow: () => ipcRenderer.send('window:activate'), // bring this page's window forward with the keys, as a left click would (a right-click does not)
+  translate: (texts, to, opts) => ipcRenderer.invoke('ai:translate', texts, to, opts), // [text], a language -> [{ lang, text } | null]: shown translated, never saved; opts { local: true }: this Mac's answers now, { ask: true } for each the model is still to translate
   processImage: (source) => ipcRenderer.invoke('ai:processImage', source), // { bytes, filename, mimeType } | { clipboard: true } | { uri: tana:image: }: the model makes it a task or a note, the image inside; returns the Node to open
   clipboardHasImage: () => ipcRenderer.invoke('clipboard:hasImage'), // Cmd+K offers Process image from clipboard
   // Presence (main/presence.js): open and close the room of a document on screen (the page, and the rows listed on it),

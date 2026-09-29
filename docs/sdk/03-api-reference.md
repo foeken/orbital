@@ -5,18 +5,20 @@ All modules are CommonJS. "Node" below means the plain graph JSON node; "Documen
 ## `sdk/index.js`
 
 ```js
-createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName? })
+createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName?, userAgent? })
   → { transport, graph: GraphClient, history: HistoryClient, search: SearchClient, sync: SyncConnection, close(): Promise }
 ```
-Also exports the client's parts: `createTransport`, `GraphClient`, `HistoryClient`, `SearchClient`, `SyncConnection`, `Document` and `derivePeerId`. That is the whole index. Every helper is required from its own module — `sdk/node` (`readNode`, `setTitle`, …), `sdk/content`, `sdk/livequery`, `sdk/presence`, `sdk/access`, `sdk/calls` and the rest — which is what every caller does; a new helper goes in the module that owns it and is not added here.
+Also exports the client's parts: `createTransport`, `takeCalls`, `GraphClient`, `HistoryClient`, `SearchClient`, `SyncConnection`, `Document` and `derivePeerId`. That is the whole index. Every helper is required from its own module — `sdk/node` (`readNode`, `setTitle`, …), `sdk/content`, `sdk/livequery`, `sdk/presence`, `sdk/access`, `sdk/calls` and the rest — which is what every caller does; a new helper goes in the module that owns it and is not added here.
 
 ## `sdk/transport.js`
 
-`createTransport({ baseUrl = 'https://home.tana.inc/platform', getAccessToken, clientName = 'tana-tasks', fetch = globalThis.fetch })` → Connect transport (`@connectrpc/connect-web`, binary protobuf). Sets `authorization`, `x-client-name`, `x-request-id`; on HTTP 401 calls `getAccessToken({ refresh: true })` once and resends (safe: bodies are byte arrays). Covers the stream too, since an unauthenticated stream fails before its first frame.
+`createTransport({ baseUrl = 'https://home.tana.inc/platform', getAccessToken, clientName = 'orbital', userAgent?, fetch = globalThis.fetch })` → Connect transport (`@connectrpc/connect-web`, binary protobuf). Sets `authorization`, `x-client-name`, `user-agent` (when given: the app sends `Orbital/<version>`, the CLI `Orbital-CLI/<version>`, so Tana can tell them from any other Node.js client), `x-request-id`; on HTTP 401 calls `getAccessToken({ refresh: true })` once and resends (safe: bodies are byte arrays). Covers the stream too, since an unauthenticated stream fails before its first frame.
 
-`unary(client, service, name, params)` → protobuf JSON: one unary call on a Connect client of `service` (a descriptor from `sdk/proto/descriptors.js`), `params` as protobuf JSON, retried once after 250 ms on `fetch failed`. `GraphClient`, `HistoryClient` and `SearchClient` make every unary read through it.
+`unary(client, service, name, params)` → protobuf JSON: one unary call on a Connect client of `service` (a descriptor from `sdk/proto/descriptors.js`), `params` as protobuf JSON, retried once after 250 ms on `fetch failed`. `GraphClient`, `HistoryClient` and `SearchClient` make every unary read through it, and it counts each by method; `takeCalls()` hands the counts over and starts again (main logs them once a minute to `tana-calls.log` in the app's data folder).
 
 ## `sdk/graph.js` — `class GraphClient(transport)`
+
+What it asks of Tana is held to agreed limits (#579): every GraphService call at most 50/s with bursts of 500 (a start asks ~550 in its first seconds), `ListEdges` at most 5/s with bursts of 10; a call past a limit waits its turn. Identical calls made at once share one answer (each caller gets its own copy), and a `ListEdges` answer is reused for 10 s until `forget()`, which `createTanaClient` calls on every local write and main calls when an edge live query moves. RESOURCE_EXHAUSTED (or HTTP 429) is asked again after 1, 2, 4, 8 and 16 s, or after the server's `retry-after`; anything else fails at once.
 
 | Method | Params (protobuf JSON, lowerCamelCase) | Returns |
 |---|---|---|

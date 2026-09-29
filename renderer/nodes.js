@@ -10,8 +10,13 @@ const keyFor = (docId, node) => (node.kind === 'document' ? docId : docId + '/' 
 // working, and a rebuilt one sees the current node through the same object. rendered is the set of keys this render
 // touched; renderOutline drops the rest when it is done.
 const rendered = new Set();
+// A document drawn twice on one page (the Timeline lists a task under Today's Tasks and again where it landed in your
+// Inbox) is two rows: the second copy this render gets its own key, after its parent's, or both rows shared one item and
+// the last drawn won it — a click on the first box ticked the other copy, and the row clicked only caught up when the
+// page was read again, flashing as each read landed.
 const mkItem = (docId, node, parent) => {
-  const key = keyFor(docId, node);
+  let key = keyFor(docId, node);
+  if (rendered.has(key) && items.get(key)?.node !== node) key += '@' + (parent ? parent.key : '');
   let item = items.get(key);
   if (item) { item.node = node; item.docId = docId; item.parent = parent; } else { item = { key, node, docId, parent }; items.set(key, item); }
   rendered.add(key);
@@ -86,7 +91,7 @@ const siblingBlock = (node) => (node.kind === 'block' && ['bullet', 'numbered', 
 const nestedRow = (item) => item?.parent?.node?.kind === 'block';
 // the icon slot of a palette/menu row: a real icon where we have one, else the text glyph. The icon sits in the
 // same slot so it matches the weight of H1/•/1. beside it.
-function glyphSvg(type) { return ['code', 'table', 'image'].includes(type) ? '<span class="glyph icon">' + iconSvg(type) + '</span>' : '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; }
+function glyphSvg(type) { return ['code', 'checklist', 'table', 'image'].includes(type) ? '<span class="glyph icon">' + iconSvg(type) + '</span>' : '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; }
 const images = new Map(); // image uri -> data URL (or the pending api.image promise)
 // image uri -> Promise<title | ''>: the title Tana's AI gives an image document after its upload, read once
 const imageTitles = new Map();
@@ -429,6 +434,9 @@ async function reload(docId) {
   // A saved search's stored answer is its rows only while it still answers the stored filter (a Save since replaced
   // it) and no staged pills are on screen; then the newest such answer wins. lands() last: a refused answer claims nothing.
   if (search) { const now = storedFilter(docId); if ((asked && now && asked !== now) || searchRows.has(docId) || !lands(docId, seq)) return; landedPreview.delete(docId); }
+  // Any page: an older read answering after a newer one landed leaves the newer rows. A chat's live updates come in
+  // bursts and each read waits on its references, so the read from mid-answer could land last and leave "Thinking..."
+  else if (!lands(docId, seq)) return;
   kids.set(docId, syncUploads(docId, rows)); // uploads still running keep their placeholders
 }
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
