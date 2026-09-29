@@ -55,6 +55,7 @@ const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed'
 // Once completed it is done asking for attention, so it goes to My completed (yours, like the pin) and keeps its pin.
 const RESPONSIBILITY = ['Unassigned', 'Agent', 'My inbox', 'Pinned', 'Mine', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
 function responsibilityOf(n) {
+  if (n.draft) return n.group || null; // a new task drafted under a section (renderer/drag.js groupDraft) stays in it while it is typed
   if (codexIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadCodex)
   if (isTask(n) && datePinsById.has(n.id)) return stateOf(n) === 'closed' ? 'My completed' : 'Pinned';
   const uri = me() && me().id, meta = taskMetaById.get(n.id);
@@ -189,7 +190,16 @@ function groupsOf(list) {
 }
 // The Pinned section runs by latest pin date after Clean up; while held, the on-screen order wins like every group.
 const latestPin = (n) => [...(datePinsById.get(n.id) || [])].sort().at(-1) || '';
-const latestPinFirst = (g) => (g.id === 'Pinned' ? { ...g, nodes: [...g.nodes].sort((a, b) => latestPin(b).localeCompare(latestPin(a))) } : g);
+const latestPinFirst = (g) => (g.id === 'Pinned' ? { ...g, nodes: keepDrafts([...g.nodes].sort((a, b) => latestPin(b).localeCompare(latestPin(a)))) } : g);
+// A new row drafted below another (renderer/drag.js groupDraft) stays right under it while it is typed: it has no time
+// or pin yet, so any sort would carry it to the end of its section, out of sight of the row it was made from.
+function keepDrafts(rows) {
+  const drafts = rows.filter((n) => n.draft && n.after);
+  if (!drafts.length) return rows;
+  const out = rows.filter((n) => !drafts.includes(n));
+  for (const d of drafts) out.splice(out.findIndex((n) => n.id === d.after) + 1, 0, d);
+  return out;
+}
 // ---- collapsing a section: the heading stays, its rows fold away, one heading at a time ----
 // Keyed by the page, its grouping and the section: Inbox folded away on Tasks says nothing about an Inbox heading on
 // another page, and each grouping of a page folds on its own. The page key is a view id or a saved search's document
@@ -234,7 +244,7 @@ const OPENS_ON = { Tracking: movedRecently, Pinned: pinnedSoon };
 function trimTracking(g) {
   const keep = OPENS_ON[g.id];
   if (!keep || g.collapsed || trackingShown.has(collapseKey(g.id))) return g;
-  const recent = g.nodes.filter(keep);
+  const recent = g.nodes.filter((n) => n.draft || keep(n)); // a row being typed is never the tail
   // "more" is what the link offers; without one the section is drawn exactly as any other
   return recent.length === g.nodes.length ? g : { ...g, nodes: recent, more: g.nodes.length - recent.length };
 }
@@ -485,7 +495,9 @@ function subtextOf(node, taskInfo) {
   const bits = [];
   if (node.subtext) bits.push(demoText(node.subtext, node.id)); // a line main wrote for the row: an upcoming meeting's time and people (main/timeline.js)
   if (node.proposal) bits.push(demoText(node.proposal.note, node.id)); // where it was proposed, first: it is why the row is on the Proposals page
-  if (node.timeline && node.timeline.note) bits.push(demoText(node.timeline.note, node.timeline.uri)); // Tana's words for an edit, or where a new task came from
+  // Tana's words for an edit, or where a new task came from; a meeting's is its length ("45 min"), the app's own words,
+  // kept in demo mode: masked word by word it read "1 red"
+  if (node.timeline && node.timeline.note) bits.push(['meeting', 'faint'].includes(node.timeline.tone) ? node.timeline.note : demoText(node.timeline.note, node.timeline.uri));
   const pinned = pinnedOn(node); if (pinned) bits.push(pinned);
   // ...unless the line already leads with it: who can see it names the space (peopleEl)
   if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space && !(audienceUris(taskInfo).length && !sensitiveHidden(node.id))) bits.push(demoText(taskInfo.audience.space, node.id));
@@ -505,7 +517,7 @@ function subtextOf(node, taskInfo) {
 // can be checked without a DOM, which is why it is a function rather than three lines inlined twice.
 function pageRows(list, q) {
   const found = q ? list.filter((n) => String(n.text || '').toLowerCase().includes(q)) : list;
-  const sorted = sortRows(found);
+  const sorted = keepDrafts(sortRows(found));
   const groups = groupsOf(sorted); // null when the page is not grouped: one flat list
   // a folded section's rows are not drawn, so they leave the keyboard order too — Down from the heading above lands
   // on the next section, never on a row nobody can see
@@ -526,6 +538,40 @@ function groupHeadEl(g) {
   el.onmousedown = (e) => e.preventDefault();
   // a page with sections of its own folds them itself (renderer/proposals.js); the rows close up or open out either way
   el.onclick = () => foldSection(el, () => (g.toggle ? g.toggle() : toggleGroup(g.id)), () => [...outline.querySelectorAll('.ghead')].find((h) => h.dataset.group === g.id));
+  return el;
+}
+// A saved search or a type's page draws its rows twenty at a time: the first twenty in the order shown, sorted and
+// grouped as the page is, then twenty more each time the end comes within a screen of view (the button below, watched
+// like the Timeline's). Only a drawn row asks for what it shows (its task meta, translation, fields), so a long search
+// no longer reads every row the moment it opens. The list itself stays one query: Tana's list takes no sort and hands
+// back no next page, and the page's sort and grouping are its own, over the whole answer, so twenty fetched at a time
+// would draw the wrong twenty.
+const SEARCH_STEP = 20;
+const searchShown = new Map(); // page id -> rows drawn, for as long as this page is open
+function capRows(id, list, groups) {
+  const cap = searchShown.get(id) || SEARCH_STEP;
+  if (list.length <= cap) return { list, groups, rest: 0 };
+  if (!groups) return { list: list.slice(0, cap), groups: null, rest: list.length - cap };
+  let left = cap; const kept = [];
+  for (const g of groups) {
+    if (left <= 0) break; // later sections come with their rows
+    if (g.collapsed) { kept.push(g); continue; }
+    const nodes = g.nodes.slice(0, left); left -= nodes.length;
+    kept.push(nodes.length === g.nodes.length ? g : { ...g, nodes, more: undefined });
+  }
+  return { list: kept.flatMap((g) => (g.collapsed ? [] : g.nodes)), groups: kept, rest: list.length - cap };
+}
+let searchMoreNext = null;
+const searchEnd = typeof IntersectionObserver === 'function'
+  ? new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting) && searchMoreNext) searchMoreNext(); }, { root: outline.parentElement, rootMargin: '0px 0px 100% 0px' }) : null;
+function searchMoreEl(id, rest) {
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'gmore search-more';
+  el.textContent = 'Show ' + Math.min(rest, SEARCH_STEP) + ' more';
+  el.onmousedown = (e) => e.preventDefault();
+  const more = () => { searchMoreNext = null; searchShown.set(id, (searchShown.get(id) || SEARCH_STEP) + SEARCH_STEP); renderSoon(true); };
+  el.onclick = more;
+  if (searchEnd) { searchEnd.disconnect(); searchMoreNext = more; searchEnd.observe(el); }
   return el;
 }
 // The tail of a trimmed section, one click away. A button like the heading rather than a row: no key, no bullet, and

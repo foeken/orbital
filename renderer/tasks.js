@@ -15,6 +15,8 @@ function loadMembers() {
   }, showError);
 }
 const me = () => (members || []).find((m) => m.me);
+// the member an address belongs to (main/rows.js members: emails), or undefined
+const memberByEmail = (email) => (email ? (members || []).find((m) => (m.emails || []).includes(String(email).toLowerCase())) : undefined);
 function memberName(uri) {
   if (demoMode) return demoPersonName(uri);
   const member = (members || []).find((m) => m.id === uri);

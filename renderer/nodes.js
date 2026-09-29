@@ -10,8 +10,13 @@ const keyFor = (docId, node) => (node.kind === 'document' ? docId : docId + '/' 
 // working, and a rebuilt one sees the current node through the same object. rendered is the set of keys this render
 // touched; renderOutline drops the rest when it is done.
 const rendered = new Set();
+// A document drawn twice on one page (the Timeline lists a task under Today's Tasks and again where it landed in your
+// Inbox) is two rows: the second copy this render gets its own key, after its parent's, or both rows shared one item and
+// the last drawn won it — a click on the first box ticked the other copy, and the row clicked only caught up when the
+// page was read again, flashing as each read landed.
 const mkItem = (docId, node, parent) => {
-  const key = keyFor(docId, node);
+  let key = keyFor(docId, node);
+  if (rendered.has(key) && items.get(key)?.node !== node) key += '@' + (parent ? parent.key : '');
   let item = items.get(key);
   if (item) { item.node = node; item.docId = docId; item.parent = parent; } else { item = { key, node, docId, parent }; items.set(key, item); }
   rendered.add(key);

@@ -14,7 +14,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
@@ -224,9 +224,11 @@ function createWindow() {
   win.shell.webContents.on('render-process-gone', () => { for (const p of [...win.panes]) dropPage(p); });
   win.shell.webContents.loadFile(path.join(__dirname, 'shell.html'));
   S.windows.add(win); S.win = win;
-  if (!front && saved && saved.maximized) win.maximize();
   for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, saveSoon);
-  win.on('resize', () => fit(win));
+  // every way the frame changes size: a window saved maximized is made at its normal bounds and maximized after, which
+  // macOS reports as maximize and no resize, so the shell kept the normal size in the corner of the screen (#550)
+  for (const name of ['resize', 'maximize', 'unmaximize', 'restore', 'enter-full-screen', 'leave-full-screen']) win.on(name, () => fit(win));
+  if (!front && saved && saved.maximized) win.maximize(); // after the listeners: maximizing here reports at once, and a shell not told stays at the normal size
   win.on('close', saveBounds);
   // Coming back to a window re-reads the lists, unless they were read moments ago: the live queries keep them
   // current, and every Cmd+Tab re-reading all of them (and every page reloading after it) was chatter (issue #268).
@@ -519,6 +521,7 @@ let agentStatusRead = null;
 ipcMain.handle('codex:status', () => (agentStatusRead ||= agent.readAgentStatuses(agent.codexTasks()).finally(() => { agentStatusRead = null; })));
 ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(pageOf(e)); return stored; });
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
+ipcMain.handle('ai:translate', (_e, texts, to) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'))); // a note shown in English, never saved (renderer/translate.js)
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
@@ -602,8 +605,15 @@ if (process.env.TANA_MAIN_TEST) {
     // An edit banner has one macOS identifier per node, so the 'summary' that follows it (Tana's sentence for the edit,
     // main/documents.js followSummary) replaces it in place, silently — unless it was clicked, and so already seen.
     const clickedEdits = new Set();
-    S.notify = (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
+    S.notify = async (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
       if (S.demo || !Notification.isSupported || !Notification.isSupported()) return; // demo mode: nothing real on screen, banners included
+      // Auto-translate (#547) covers banners too: their words in the chosen language, never a sensitive node's, and the
+      // banner as written when the answer does not come within 15 s (main/ai.js translate: this Mac detects, the model translates)
+      const to = settings.prefs().translateTo;
+      if (to && !sensitiveIds().includes(docId)) {
+        const found = await ai.translate([title, subtitle || '', body || ''], to, globalThis.fetch, S.userData, { timeout: 15000 }).catch(() => []);
+        [title, subtitle, body] = [title, subtitle, body].map((t, i) => found[i]?.text || t);
+      }
       const id = kind ? 'edit:' + docId : undefined; // undefined: a fresh random id, as before
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);

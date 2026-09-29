@@ -146,6 +146,8 @@ const withShims = (src) => {
   // one pane per place (renderer/edit.js, #533): a harness is one page, so no other pane shows anything and it tells nobody
   if (/\b(tellPlace|inOtherPane|placeKey|viewKey)\(/.test(src) && !/function inOtherPane\(/.test(src)) src = "globalThis.tellPlace ??= () => {}; globalThis.inOtherPane ??= () => false; globalThis.placeKey ??= (docId, nodeId) => (docId ? String(docId) + (nodeId ? '#' + nodeId : '') : null); globalThis.viewKey ??= (id) => (id === 'library' ? null : 'view:' + id);\n" + src;
   if (/\b(isChatPage|chatContextEl)\(/.test(src) && !/const isChatPage =/.test(src)) src = "globalThis.isChatPage ??= (p) => !!p && !p.nodeId && String(p.docId).startsWith('tana:chat:'); globalThis.chatContextEl ??= () => null;\n" + src; // renderer/chat.js, after render.js
+  if (/\bcapRows\(/.test(src) && !/function capRows\(/.test(src)) src = 'globalThis.capRows ??= (id, list, groups) => ({ list, groups, rest: 0 }); globalThis.searchMoreEl ??= () => null;\n' + src; // renderer/views.js: every row drawn in these harnesses
+  if (/\b(rowTranslation|translatedFactEl|translations|shownOriginal|setTranslatePage|pageTranslation|drawTranslatedLine|originalOnFocus|translationPending|markTranslatable|translateTo|translatableOf|translateSrc|translateId|namedSeg|translatedSegs)\b/.test(src) && !/function rowTranslation\(/.test(src)) src = 'globalThis.rowTranslation ??= () => null; globalThis.translations ??= new Map(); globalThis.shownOriginal ??= new Set(); globalThis.setTranslatePage ??= () => {}; globalThis.pageTranslation ??= () => null; globalThis.drawTranslatedLine ??= () => {}; globalThis.originalOnFocus ??= () => {}; globalThis.translationPending ??= () => false; globalThis.markTranslatable ??= () => {}; globalThis.translateTo ??= () => null; globalThis.translatableOf ??= () => null; globalThis.translateSrc ??= (n) => n.text; globalThis.translateId ??= (n) => n.id; globalThis.namedSeg ??= () => null; globalThis.translatedSegs ??= (n, text) => [{ text }];\n' + src; // renderer/translate.js: nothing is translated in these harnesses
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
@@ -7056,6 +7058,40 @@ async function runImageViewCheck() {
 // contextBridge freezes everything it exposes, so a store that writes straight into that object throws on the
 // first choice made — and it throws *before* the line that redraws, which is how folding a group heading stopped
 // doing anything and why nothing was kept between launches.
+// A document drawn twice on one page (a task under Today's Tasks and again where it landed in your Inbox) is two rows
+// with two items: sharing one, a click on the first box ticked the other copy (renderer/nodes.js mkItem).
+function runTwiceDrawnItemCheck() {
+  const src = fs.readFileSync(require.resolve('../renderer/nodes.js'), 'utf8');
+  const pick = (start) => src.slice(src.indexOf(start), src.indexOf('\n', src.indexOf(start)) + 1);
+  const mk = src.slice(src.indexOf('const mkItem'), src.indexOf('return item;\n};', src.indexOf('const mkItem')) + 14);
+  const context = vm.createContext({ items: new Map() });
+  const api = vm.runInContext(pick('const keyFor') + pick('const rendered') + mk + '\n({ mkItem, rendered })', context);
+  const doc = 'tana:text:01task', today = { key: 'orbital:timeline/today' }, inbox = { key: 'orbital:timeline/inbox' };
+  const first = { id: doc, kind: 'document' }, second = { id: doc, kind: 'document' };
+  const a = api.mkItem(doc, first, today), b = api.mkItem(doc, second, inbox);
+  assert.notEqual(a, b, 'the second copy has an item of its own');
+  assert.equal(a.node, first, 'and the first keeps its own node');
+  assert.equal(a.key, doc, 'the first copy is keyed by its document, as before');
+  api.rendered.clear();
+  assert.equal(api.mkItem(doc, first, today), a, 'the next render finds the same items');
+  assert.equal(api.mkItem(doc, second, inbox), b, 'both of them');
+}
+// A saved search draws twenty rows at a time in the order shown (renderer/views.js capRows): a flat list is cut, a
+// grouped one keeps its sections in order until twenty rows are drawn, a folded section costs nothing.
+function runSearchCapCheck() {
+  const src = fs.readFileSync(require.resolve('../renderer/views.js'), 'utf8');
+  const cap = vm.runInNewContext(src.slice(src.indexOf('const SEARCH_STEP'), src.indexOf('let searchMoreNext')) + '\n({ capRows, searchShown })');
+  const rows = (n, p = 'r') => Array.from({ length: n }, (_, i) => ({ id: p + i }));
+  const flat = cap.capRows('s', rows(45), null);
+  assert.deepEqual(plain([flat.list.length, flat.rest, flat.list[19].id]), [20, 25, 'r19'], 'a flat list draws its first twenty, the rest counted');
+  assert.equal(cap.capRows('s', rows(12), null).rest, 0, 'a short one draws whole');
+  const groups = [{ id: 'a', nodes: rows(15, 'a') }, { id: 'b', collapsed: true, nodes: rows(9, 'b') }, { id: 'c', nodes: rows(10, 'c') }, { id: 'd', nodes: rows(4, 'd') }];
+  const g = cap.capRows('s', groups.flatMap((x) => (x.collapsed ? [] : x.nodes)), groups);
+  assert.deepEqual(plain(g.groups.map((x) => [x.id, x.nodes.length])), [['a', 15], ['b', 9], ['c', 5]], 'sections in order until twenty rows are drawn; a folded one draws none of its rows, a later one waits');
+  assert.deepEqual(plain([g.list.length, g.rest]), [20, 9], 'the keyboard order is what is drawn');
+  cap.searchShown.set('s', 40);
+  assert.equal(cap.capRows('s', rows(45), null).list.length, 40, 'each Show more draws twenty more');
+}
 function runPrefsStoreCheck() {
   const src = fs.readFileSync(require.resolve('../renderer/prefs.js'), 'utf8');
   const writes = [];
@@ -7391,7 +7427,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -8568,6 +8604,10 @@ function runGroupDropCheck() {
   assert.deepEqual(at('Today', { dates: ['2026-09-20'] }), [], 'Today leaves a task already on it alone');
   assert.deepEqual(at('Today', { dates: ['2026-09-20'], stateType: 'closed' }), [['pin', DAY]], 'but pins a completed one that has aged off it');
   assert.deepEqual(at('Agent', {}), [['agent', true]], 'Agent asks for a prompt');
+  assert.deepEqual(at('Today', { stateType: 'proposed' }), [['pin', DAY], ['state', 'open']], 'an Inbox task dropped on Today is pinned and accepted, In Progress');
+  assert.deepEqual(at('Today', { stateType: 'proposed', dates: [DAY] }), [['state', 'open']], 'one on Today already is only accepted');
+  assert.deepEqual(at('Pinned', { stateType: 'proposed' }), [['pin', DAY], ['state', 'open']], 'and so on Pinned');
+  assert.deepEqual(at('Today', { stateType: 'proposed', writable: false }), [['pin', DAY]], 'a read-only one is pinned all the same, its status left alone');
   assert.deepEqual(at('Mine', { assignees: [ME] }), [], 'a drop in its own group writes nothing');
   console.log('ok  group drop: each group writes what puts a task there, lets go of what held it elsewhere, and refuses what a drop cannot say');
 }
@@ -8841,7 +8881,7 @@ checks.push(runProposalsCheck);
 async function runPeopleFieldsCheck() {
   const api = vm.runInNewContext(`
     ${FAKE_DOM}
-    const ME = 'tana:user-profile:me', members = [{ id: ME, title: 'Robin Vega', me: true }, { id: 'tana:user-profile:sam', title: 'Sam' }];
+    const ME = 'tana:user-profile:me', members = [{ id: ME, title: 'Robin Vega', me: true }, { id: 'tana:user-profile:sam', title: 'Sam', emails: ['sam@x.nl'] }];
     const me = () => members.find((m) => m.me), memberName = (uri) => (members.find((m) => m.id === uri) || {}).title || uri, loadMembers = () => {};
     const renderSegs = (el, segs) => el.append(...segs.map((s) => (s.mention ? '@' + s.mention.label : s.text)));
     const addIcon = () => {}, facesEls = () => [], sensitiveHidden = () => false, isGuest = (uri) => uri.startsWith('tana:guest-profile:'), demoText = (v) => v;
@@ -8849,6 +8889,7 @@ async function runPeopleFieldsCheck() {
     let renders = 0; const render = () => { renders++; };
     let summary = null; const taskSummary = () => summary, documentSummary = () => null;
     let info = null; const meetingOf = (node) => (node.icon === 'meeting' ? { id: node.id } : null), meetingInfoOf = () => info;
+    ${sourceLine('const memberByEmail')}
     ${functionSource('visibilityFieldEl')}
     ${sourceLine('const ATTENDEES_SHOWN')}
     ${sourceLine('const attendeesOpen')}
@@ -8870,6 +8911,7 @@ async function runPeopleFieldsCheck() {
   assert.deepEqual(plain(api.attendees(people.slice(0, 7))), ['@Sam', 'A', 'B', 'C', 'D'], 'five people, rooms left out, all of them when that is everyone');
   assert.deepEqual(plain(api.attendees(people)), ['@Sam', 'A', 'B', 'C', 'D', 'And 2 more'], 'past five, the rest are counted');
   assert.deepEqual(plain(api.more()), [1, 7], 'a click shows them all');
+  assert.deepEqual(plain(api.attendees([{ name: 'Sam Smith', email: 'Sam@X.nl' }, { name: '+Room 5', email: 'room5@x.nl' }])), ['@Sam', '+Room 5'], 'an attendee with only an address that is a member\'s is that member, as a mention; an unknown address stays its name');
   console.log('ok  people fields: Private names you, Attendees shows five and And n more until clicked, without rooms');
 }
 checks.push(runPeopleFieldsCheck);
@@ -9178,8 +9220,8 @@ function runCoverCheck() {
   console.log('ok  palette over both halves: asked once, drawn in its half only at the whole window\u2019s size, let go after the fade; @ and / stay in the half');
 }
 checks.push(runCoverCheck);
-// A row someone else changed lights up once; a render that changes many at once is the page landing, and flashing
-// each of them forced a layout per row (639 rows: about a second of script before the Library showed).
+// A row changed elsewhere is patched quietly: its blue flash on every live update was distracting, so none lights up,
+// one or many (a render that changes many at once is the page landing).
 function runLandingFlashCheck() {
   const flashed = (changed) => vm.runInNewContext(`
     const flashed = [], view = 'library', zoom = null, performance = { now: () => 1e6 };
@@ -9192,9 +9234,9 @@ function runLandingFlashCheck() {
     motionAfter(root, { page: 'root|library', bodies: new Map(rows.map((el) => [el.dataset.key, 'old'])), fieldsWaiting: new Set(), rects: null });
     flashed;
   `);
-  assert.deepEqual([...flashed(1)], ['k0'], 'an edit elsewhere to one row lights that row up');
-  assert.deepEqual([...flashed(26)], [], 'more than BULK rows changed at once is a landing: none flashes');
-  console.log('ok  landing: one changed row flashes, a whole list changed at once does not');
+  assert.deepEqual([...flashed(1)], [], 'an edit elsewhere to one row does not flash it');
+  assert.deepEqual([...flashed(26)], [], 'nor does a whole list changed at once');
+  console.log('ok  a live update patches its rows without a flash');
 }
 checks.push(runLandingFlashCheck);
 

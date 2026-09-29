@@ -161,7 +161,8 @@ tana.onChanged((docId, info) => {
 // their note or sidebar reloads (#413).
 function patchCopies(docId, state) {
   const changes = Object.fromEntries(Object.entries(state).filter(([, value]) => value !== undefined));
-  const walk = (rows) => { for (const n of rows || []) { if (n.reference && n.reference.uri === docId && n.reference.node) Object.assign(n.reference.node, changes); walk(n.children); } };
+  // and the document's own rows nested in a list (a task under Today's Tasks and the same task again further down)
+  const walk = (rows) => { for (const n of rows || []) { if (n.reference && n.reference.uri === docId && n.reference.node) Object.assign(n.reference.node, changes); else if (n.id === docId) Object.assign(n, changes); walk(n.children); } };
   for (const rows of kids.values()) walk(rows);
   for (const data of relatedBy.values()) for (const [, rows] of railGroups(data)) for (const n of rows || []) if (n.id === docId) Object.assign(n, changes);
 }

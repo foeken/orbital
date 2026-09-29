@@ -550,7 +550,7 @@ html.links .app { display: none; }
    target (renderer/nodes.js onRowBlank). An "added to your Inbox" line opens nothing itself, so it has no .opens; its rows do. */
 .node.tl .line { cursor: default; } /* no caret on the Timeline: a click there never edits */
 .node.opens > .line > .body > * { cursor: pointer; }
-.node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 24px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
+.node.tl.unread > .line::after { content: ''; position: absolute; left: 84px; top: 23px; /* centred between the time and the marker, on the time's middle */ width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .tl-divider::before { border-top-color: #34373a; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }
@@ -575,6 +575,14 @@ html.links .app { display: none; }
 .chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
 .chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 13px; background: var(--chat-mine); color: var(--chat-mine-text); }
 .bubble > * + * { margin-top: 8px; }
+.translated-line { display: flex; align-items: center; gap: 6px; margin: 2px 0 10px; font-size: 14px; color: var(--muted); } /* a page shown in English (renderer/translate.js) */
+.translated-line[hidden] { display: none; }
+.translated-line svg, .subtext .translated svg { width: 13px; height: 13px; flex: none; }
+.translated-line button { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.subtext .translated { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; cursor: pointer; } /* a list row's: its first fact, a click switches it */
+.subtext .translated:not(.translating):hover { text-decoration: underline; text-underline-offset: 2px; }
+.translating { animation: translating-late 0s .4s backwards; } /* only once it takes a moment: an answer from the cache or a text this Mac finds already in the language never shows it, nor takes its room */
+@keyframes translating-late { from { display: none; } }
 .fields .chat-context { grid-column: 1 / -1; } /* the whole width, not the glyph's column */
 .fields:has(> .chat-context:only-child) { border: 0; padding: 0; }
 .chat-context { margin: 0 0 28px; text-align: right; font-size: 14px; color: var(--muted); } /* who can see a chat, and its meeting (renderer/chat.js chatContextEl, #543) */
@@ -773,6 +781,9 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text.image { display: block; cursor: default; }
 .text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; cursor: zoom-in; }
 .text.image.loading img { visibility: hidden; }
+/* demo mode (renderer/render.js demoImageEl): a picture's place at its size, the privacy glyph on it */
+.demo-image { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: min(100%, 360px); max-width: 100%; aspect-ratio: 3 / 1; border-radius: 6px; background: #f1f1f1; color: #aeb1b5; }
+.demo-image svg { width: 28px; height: 28px; }
 .text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
 /* a picture on its way, and a file on its way up: the same shimmer and breath the loading skeleton has (Ambient) */
 @media (prefers-reduced-motion: no-preference) {
@@ -860,7 +871,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text.table table { border-collapse: collapse; margin: 4px 0; }
 .text.table th, .text.table td { border: 1px solid #dcdcdc; padding: 3px 8px; vertical-align: top; text-align: left; min-width: 48px; }
 .text.table .cellimg { display: block; max-width: 100%; max-height: 240px; margin-top: 4px; border-radius: 3px; cursor: zoom-in; }
-.text.table .cellimg.demo { width: 120px; height: 68px; background: #f1f1f1; cursor: default; } /* demo mode: where a picture is, not the picture */
+.text.table .cellimg.demo-image { max-height: 240px; cursor: default; }
 .text.table th { background: #f6f6f6; font-weight: 600; }
 .text.table .cell { outline: none; min-height: 1.4em; white-space: pre-wrap; cursor: text; }
 .text.table .more { color: var(--muted); }
@@ -1151,6 +1162,14 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 }
 @keyframes sparkle-twinkle { 0%, 100% { opacity: .25; transform: scale(.55) rotate(-25deg); } 45% { opacity: 1; transform: scale(1.2) rotate(0deg); } }
 @keyframes sparkle-trail { 0%, 100% { opacity: .15; } 50% { opacity: .75; } }
+/* Auto-translate at work (renderer/translate.js): the same mark, turning and twinkling */
+@media (prefers-reduced-motion: no-preference) {
+  .translating svg { animation: turn calc(var(--dur-loop) * 2) linear infinite; transform-origin: 50% 50%; } /* Auto-translate at work (renderer/translate.js): the same mark */
+  .translating svg path { transform-origin: 50% 50%; transform-box: fill-box; animation: sparkle-twinkle var(--dur-loop) ease-in-out infinite; }
+  .translating svg path:nth-child(2) { animation-delay: calc(var(--dur-loop) / 3); }
+  .translating svg path:nth-child(5) { animation-delay: calc(var(--dur-loop) * 2 / 3); }
+  .translating svg path:nth-child(3), .translating svg path:nth-child(4) { animation: sparkle-trail calc(var(--dur-loop) * 2) ease-in-out infinite; }
+}
 /* And the landing: the answer takes the turning glyph's place, so it comes out of the spin and settles rather than
    being swapped for a still one between two frames, while the name it brought fades in beside it. Played on the
    one render the answer arrives in (renderer/palette.js marks that row), never again as you keep typing. */
@@ -1297,7 +1316,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
 @media (prefers-reduced-motion: no-preference) { [data-theme="dark"] .text.image.loading:not(.demo) { background-image: linear-gradient(90deg, #303436 0%, #3d4244 50%, #303436 100%); } }
-[data-theme="dark"] .text.table .cellimg.demo { background: #303436; }
+[data-theme="dark"] .demo-image { background: #303436; color: #6f7479; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] :is(.text, .fvalue) .mention { color: #8fc1e1; }
 [data-theme="dark"] :is(.text, .fvalue) .mention, [data-theme="dark"] :is(.text, .fvalue) .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */
