@@ -212,7 +212,9 @@ function paletteRows(q, typed = q) {
   if (palDoc && isRealId(palDoc.id)) { const call = callRow(relatedBy.get(palDoc.id)); if (call) rows.push({ ...call, group: docGroup }); }
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'sendToAgent', group: docGroup, icon: 'robot', label: 'Send to agent', run: () => run(async () => {
+    // Open in Codex: a new Codex task with the node's link, nothing tracked (Assign to Agent is the tracked one). The id
+    // keeps its old name so a recorded key still finds the row.
+    rows.push({ id: 'sendToAgent', group: docGroup, icon: 'chatgpt', label: 'Open in Codex', hint: 'New task with this link', run: () => run(async () => {
       const link = await tana.nodeLink(doc.id);
       await tana.openExternal('https://chatgpt.com/codex/open-app?q=' + encodeURIComponent(link + '\n'));
     }) });
