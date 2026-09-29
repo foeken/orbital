@@ -6477,6 +6477,23 @@ async function main() {
     assert.equal(await has('text/plain'), false, 'no image, no row');
     console.log('ok  clipboard image: a copied bitmap or a copied image file');
   }
+  {
+    // A task from a meeting links back to it (main/rows.js meetingOf): Tana's AI files it under the event (ownerUri); the
+    // meeting's title and start come from one lookup for the list, and a meeting seen before is not asked again
+    const backend = mainHelpers(), EV = 'tana:event:' + ulid(), SPACE = 'tana:space:' + ulid(), asked = [];
+    const fromMeeting = { id: 'tana:text:' + ulid(), title: 'Send the deck', ownerUri: EV, state: { type: 'open' }, updateTime: '2026-09-29T10:00:00Z' };
+    const note = { id: 'tana:text:' + ulid(), title: 'Minutes', ownerUri: EV, updateTime: '2026-09-29T10:00:00Z' }; // a note in the meeting is no task
+    const plainTask = { id: 'tana:text:' + ulid(), title: 'Water the plants', ownerUri: SPACE, state: { type: 'open' }, updateTime: '2026-09-29T10:00:00Z' };
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => null }, graph: {
+      listNodes: async (p) => { if (p.nodeIds) { asked.push(p.nodeIds); return { nodes: [{ id: EV, title: 'Leadership sync ', calendarEvent: { startTime: '2026-09-28T07:00:00Z' } }].filter((n) => p.nodeIds.includes(n.id)) }; } return { nodes: [fromMeeting, note, plainTask] }; },
+    } } });
+    const rows = JSON.parse(JSON.stringify(await backend.spaceChildren(SPACE)));
+    assert.deepEqual(rows.map((r) => r.meeting || null), [{ id: EV, title: 'Leadership sync', start: '2026-09-28T07:00:00Z' }, null, null], 'the task from the meeting names it; a note in it and a task elsewhere do not');
+    assert.deepEqual(JSON.parse(JSON.stringify(asked)), [[EV]], 'one lookup for the list');
+    await backend.spaceChildren(SPACE);
+    assert.equal(asked.length, 1, 'and none the next time');
+    console.log('ok  a task from a meeting names the meeting it came from');
+  }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];
   let tokens = 0;

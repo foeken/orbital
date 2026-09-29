@@ -10,7 +10,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
 [data-theme="dark"] .head { background: #232627; }
 .head button { -webkit-app-region: no-drag; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: #777; opacity: .5; cursor: pointer; }
 .head button:hover { background: #ddd; opacity: 1; }
-#headLinks[aria-pressed="true"] { opacity: 1; } /* the Graph pane is open: its switch at full strength, as a pressed toggle */
+/* the page's Graph switch, copied here (renderer/rail.js): at full strength while the Graph pane is open, as a pressed toggle */
+:is(.trellis [data-trellis-part="accessory"], .headnav) button[data-for="navLinks"][aria-pressed="true"] { opacity: 1; }
 [data-theme="dark"] .head button { color: #aaa; }
 [data-theme="dark"] .head button:hover { background: #3a3f42; }
 .head svg { display: block; width: 18px; height: 18px; }

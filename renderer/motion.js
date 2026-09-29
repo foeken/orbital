@@ -342,12 +342,19 @@ function popMention(key, uri) {
 }
 // The sound of checking a to-do off: a water-drop pop and a small ring after it, a fifth of a second, synthesized so
 // there is no file to ship. Once per check wherever it is drawn; unchecking is silent, like it is still (render.js playTick).
-let popCtx = null;
-function popSound() {
-  if (typeof AudioContext !== 'function') return;
-  const ctx = popCtx || (popCtx = new AudioContext());
+// Instant: the context is made on the first press anywhere (starting one takes a moment, which the first tick used to
+// wait for), and a box plays it as the button goes down (early; renderer/render.js), a click being the release, a
+// tenth of a second later. The click's own call then leaves it, so it sounds once.
+let popCtx = null, poppedAt = -1e9;
+const popContext = () => (typeof AudioContext === 'function' ? (popCtx ||= new AudioContext({ latencyHint: 'interactive' })) : null);
+addEventListener('pointerdown', () => { const c = popContext(); if (c && c.state === 'suspended') c.resume(); }, { capture: true, once: true });
+function popSound(early = false) {
+  if (!early && performance.now() - poppedAt < 600) return; // the press already played it
+  if (early) poppedAt = performance.now();
+  const ctx = popContext();
+  if (!ctx) return;
   if (ctx.state === 'suspended') ctx.resume();
-  const t = ctx.currentTime + 0.005;
+  const t = ctx.currentTime;
   const note = (type, from, to, at, len, peak) => {
     const osc = ctx.createOscillator(), gain = ctx.createGain();
     osc.type = type;

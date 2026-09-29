@@ -128,7 +128,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   takes a click there as a window drag and the backdrop never hears the click that closes it).
 - **Buttons at the top right** (`.navbtns`, one flex row anchored to the right edge of `.titlebar`, so they stay put as
   the rows under the title come and go): Back and Forward, the sensitive toggle, the pills toggle, the Outliner/Table
-  switch, Clean up and Refresh (a page among others closes from its tab, Panes below; the links are a pane, §18). A button that
+  switch, Clean up and the Graph switch on a page with a document (a page among others closes from its tab, Panes
+  below; the links are a pane, §18). A button that
   does not apply is gone rather than empty, and the others move up to the edge. Back and Forward run `navigate(-1)` and
   `navigate(1)`, the history ⌘[ and ⌘] walk; `renderNav()` runs after `noteNavigation()` on every render, disables
   them when the move does nothing and puts the current combo in the tooltip. Every header button with a Cmd+K row
@@ -174,9 +175,20 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   task`, `# meeting` (gold), `# doc`, `# space`, `# member`, or the type's name in the type's colour (background
   `hsl(hue 80% 92%)`, text `hsl(hue 45% 30%)`; zero is a valid hue) — and its facts. Node `appearance.hue` colours
   its icon and kind tag; a type's own colour override (§11, Set colour) wins where it is set.
+- **A task from a meeting links back to it.** Tana's AI files the tasks it takes from a meeting under that event
+  (`ownerUri`), so such a row carries `meeting: { id, title, start }` (main/rows.js `meetingOf`; the names come from
+  one lookup per list, `resolveMeetings`, next to `resolveTypes`). A meeting glyph sits among the row's facts, a fact icon the size of Pinned and just
+  after it (renderer/tasks.js `taskMetaEl`), or 2px after the title on a row that shows no facts, quiet as every row
+  icon is (renderer/meeting.js `meetingLinkEl`); its tooltip "From <meeting> · <day>"
+  (masked in demo mode); a click opens the meeting and the caret stays.
+- **Row icons are quiet until you are on the row.** The small glyphs a row carries — its facts' icons (assignee,
+  audience, bell, pin: `.ticon`), the Timeline's Join glyph and the meeting link — are drawn at .45 opacity, and in full
+  on the row under the pointer or with the caret, fading between the two (styles.css). None of them gets a background
+  on hover, only its own colour darkens. A warning (assigned to someone who cannot see it, `.hiddenfrom`) stays in full.
 - **A task's box is its state** (#243). A task in the Inbox (`proposed`) draws a dashed box; In Progress a grey box;
   completed a green tick, with the title struck through and grey, and a short pop (`popSound`, renderer/motion.js;
-  a checkbox block pops too, unchecking is silent). Clicking a dashed box accepts the task first (In
+  a checkbox block pops too, unchecking is silent; it sounds as the mouse button goes down on a box the
+  click will tick, from a context made on the first press, and the click then leaves it). Clicking a dashed box accepts the task first (In
   Progress, `acceptsFirst`); the next click completes it. A status change reaches every copy of the task at once: a
   render deferred for the caret still updates every checkbox, the title's and the sidebar's (`refreshRowChrome`), and
   a change patches the task's reference rows and sidebar rows (`patchCopies`). Main keeps a task it holds live at its
@@ -1071,7 +1083,9 @@ chat." shows as a centred status line, as other status lines do.
   floating and dragged between those by their tabs; the tab's title is the page's (renderer/render.js `tellTitle`
   posts `{ orbital: 'title', renamable }`: masked in demo mode, "Hidden" for a blurred sensitive document). Under a tab
   bar a view, a saved search or an app page drops its heading, which the tab already names (`html.listing`, issue
-  #441); a document keeps its own. A right click on a tab opens the panel menu, led by **Save as new search** on a view with pills such as the Library
+  #441); a document keeps its own. A right click on a tab (or its "…") opens the panel menu, led by **Refresh** on a saved search
+  (its query asked again, the rows kept in place let go: renderer/pills.js `offerRefresh` tells the shell with the title,
+  `{ refresh }`, and the menu posts `{ orbital: 'refresh' }`; not while pills stage an unsaved filter), **Save as new search** on a view with pills such as the Library
   (the Cmd+K row, run in that page; issue #538), **Copy link** on a page showing a node of Tana's (that node's link, not
   the row with the caret; issue #542) and **Rename** when the page's title
   can be typed in (a chat's, agent's or skill's too, where you are its admin or editor, and a type's: their bodies stay
@@ -1196,8 +1210,9 @@ A document's relationships are shown in the window's **Graph pane** (issue #462,
 `api.related(docId)`: one Trellis pane per window that follows the pane with the keys, so a window of several panes
 has one list of links rather than a sidebar in each. Cmd+K **Show graph** opens it beside the page you are on, about
 320px wide (Trellis scales a pane's content below 280px), and leaves you the keys; **Hide graph** closes it, as its
-tab's X or ⌘W in it do. The rightmost button in the window's header runs the same row for the page in front, its
-glyph the row's (shell.js `drawLinks`). It is a pane like any other: tabbed, floated, maximized or dragged, and kept in the window's
+tab's X or ⌘W in it do. The page's own Graph switch runs the same row: one of its buttons at the top right, since
+what it shows is this page's links, there only on a page with a document (not a view, a saved search or an app page)
+and at full strength while the pane is open (renderer/rail.js `drawLinksBtn`). It is a pane like any other: tabbed, floated, maximized or dragged, and kept in the window's
 layout and in a saved view.
 
 How it works: it is an outliner page opened with `links=1` (`api.splitWindow('links')`, main.js `window:split`;

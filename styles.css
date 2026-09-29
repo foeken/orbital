@@ -277,6 +277,7 @@ html.framed .titlebar { padding-top: 18px; }
 }
 .navbtn:hover:not(:disabled) { background: #ddd; opacity: 1; }
 .navbtn:disabled { opacity: .15; cursor: default; } /* nowhere to go: still there, saying so */
+#navLinks[aria-pressed="true"] { opacity: 1; } /* the Graph pane is open (renderer/rail.js drawLinksBtn) */
 /* Back and forward are always there; Refresh and the fold button are offered only on a saved search, and their
    own display would otherwise win over the browser's rule for [hidden] and leave a blank, glyphless slot. */
 .navbtn[hidden] { display: none; }
@@ -548,7 +549,21 @@ html.links .app { display: none; }
 /* Join (renderer/timeline.js): the Tana glyph after a meeting's title, in the page's grey until it is pointed at */
 .tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 0; padding: 0; /* the glyph sits 4px from the title: the button's own room around it */ border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -3px; cursor: pointer; }
 .tl-join svg { width: 16px; height: 16px; }
-.tl-join:hover { background: #ececec; color: #1c2024; }
+/* A task from a meeting (renderer/meeting.js meetingLinkEl): a grey glyph after the title, a little further off than
+   the Join glyph, always there so a list shows which tasks came from a meeting (faint as every row icon is, below) */
+.meeting-link { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 2px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8a8a8a; vertical-align: -3px; cursor: pointer; }
+.meeting-link svg { width: 16px; height: 16px; }
+/* among the row's facts, beside Pinned (renderer/tasks.js taskMetaEl): a fact icon, its size and its grey */
+.meeting-link.ticon { width: 14px; height: 14px; margin-left: 0; border-radius: 0; color: inherit; vertical-align: -2px; }
+.meeting-link.ticon svg { width: 14px; height: 14px; }
+.tmeta > .meeting-link.ticon:not(:first-child) { margin-left: 6px; }
+/* Row icons, one rule: the small glyphs a row carries (its facts' icons: assignee, audience, bell, pin; the Join glyph;
+   the meeting link) are faint on the rows you are not on and in full on the one under the pointer or with the caret,
+   fading between the two (at once under reduced motion). No background on hover: only the glyph's own colour moves.
+   A warning (assigned to someone who cannot see it) stays in full everywhere: it is there to be seen. */
+.line :is(.ticon, .tl-join, .meeting-link) { opacity: .45; transition: opacity var(--dur-base) var(--ease-out), color var(--dur-quick) var(--ease-out); }
+.line:is(:hover, :focus-within) :is(.ticon, .tl-join, .meeting-link), .line .ticon.hiddenfrom { opacity: 1; }
+:is(.tl-join, .meeting-link):hover { color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
 .node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
 /* a row that opens on a click shows the pointer over what it draws, and only there: the empty width beside it is no
@@ -561,8 +576,8 @@ html.links .app { display: none; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }
 [data-theme="dark"] .node.tl-recording > .line > .bullet.icon svg { color: #3b9eff; background: transparent; }
 [data-theme="dark"] .node.tl-recording > .line > .bullet.icon::before { background: #1b1d1e; }
-[data-theme="dark"] .tl-join { color: #8a8f95; }
-[data-theme="dark"] .tl-join:hover { background: #2e3134; color: #e8eaec; }
+[data-theme="dark"] .tl-join, [data-theme="dark"] .meeting-link { color: #8a8f95; }
+[data-theme="dark"] .tl-join:hover, [data-theme="dark"] .meeting-link:hover { color: #e8eaec; }
 [data-theme="dark"] .node.tl > .children .bullet.icon svg, [data-theme="dark"] .node.tl > .children .bullet.icon:hover svg { color: #8a8f95; }
 [data-theme="dark"] .node.tl-done > .line > .bullet.icon svg { color: #fff; background: none; }
 [data-theme="dark"] .node:is(.tl-new, .tl-faint) > .line > .bullet.icon svg { color: #5a5d60; }

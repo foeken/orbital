@@ -277,10 +277,11 @@ function tellTitle(title, renamable, icon = '') {
   // a view with pills (the Library, where Save as search is): its tab's menu offers Save as new search too (shell.js, #538)
   const saveSearch = !LINKS && !zoom && authed && !!tana.createSearch && pillsApply();
   const link = !LINKS && !!zoom && !String(zoom.docId).startsWith('orbital:'); // a node of Tana's, not an app page: Copy link on its tab (shell.js, #542)
-  const told = title + '\n' + renamable + '\n' + icon + '\n' + saveSearch + '\n' + link;
+  const refresh = !LINKS && refreshable; // a saved search that can be asked again: Refresh on its tab (renderer/pills.js offerRefresh)
+  const told = title + '\n' + renamable + '\n' + icon + '\n' + saveSearch + '\n' + link + '\n' + refresh;
   if (told === toldTitle || !window.frameElement) return;
   toldTitle = told; toldIcon = icon;
-  window.parent.postMessage({ orbital: 'title', title, renamable, icon, saveSearch, link }, '*');
+  window.parent.postMessage({ orbital: 'title', title, renamable, icon, saveSearch, link, refresh }, '*');
 }
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
 // title fills the line the browser wraps them onto a line of their own, where they read as a second title rather
@@ -355,7 +356,7 @@ function rowSig(n) {
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
-    n.proposal ? n.proposal.note : null, n.subtext, n.people, n.join, n.timeline && n.timeline.recording, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    n.proposal ? n.proposal.note : null, n.subtext, n.people, n.join, n.meeting && n.meeting.id, n.timeline && n.timeline.recording, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
     tableView() ? typeDefs() : null, // a table cell's picker is made from the page's field definitions (views.js cellPicker)
     demoMode, // demo mode masks the words and makes every row read-only: a row drawn before the switch shows real titles
     translateTo(), translations.get(translateSrc(n)), translationPending(translateSrc(n)), shownOriginal.has(translateId(n)), // into which language, shown translated, being translated, or not (renderer/translate.js)
@@ -477,6 +478,7 @@ function renderOutline() {
   titleCheck.classList.toggle('inbox', !!zoomedTask && acceptsFirst(parent.node)); // dashed while it waits in the Inbox
   titleCheck.disabled = zoomedTask && !canEditItem(parent);
   titleCheck.onclick = zoomedTask && canEditItem(parent) ? () => toggleDone(parent) : null;
+  titleCheck.onmousedown = (e) => { if (titleCheck.onclick && !titleCheck.disabled && e.button === 0 && !titleCheck.checked && !titleCheck.classList.contains('inbox')) popSound(true); }; // the pop on the press, as a row's box
   if (demoMode) { titleCheck.disabled = true; titleCheck.onclick = null; } // read-only while demo mode is on
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
   codexHeader(); // a rebuilt header loses the badge with everything else, so it is put back with the title
@@ -827,7 +829,8 @@ function nodeEl(node, docId, parent) {
     const check = document.createElement('input');
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!display.done; check.tabIndex = -1;
     if (isTask(display) && display.stateType === 'proposed') check.classList.add('inbox'); // not accepted yet: a dashed box
-    check.onmousedown = (e) => e.preventDefault();
+    // the pop as the button goes down on a box this click will tick (not an unticking, not an Inbox box, whose click accepts): renderer/motion.js popSound
+    check.onmousedown = (e) => { e.preventDefault(); if (check.onclick && !check.disabled && e.button === 0 && !check.checked && !check.classList.contains('inbox')) popSound(true); };
     // a read-only row can still carry a box that ticks (node.checkable: a task listed on the Timeline)
     const ticks = canEditItem(item) || (!!node.checkable && isTask(node));
     check.disabled = target ? !canEditNode(display) : !ticks;
@@ -881,8 +884,10 @@ function nodeEl(node, docId, parent) {
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
   if (displayOn('assigned')) {
     if (taskInfo) body.append(taskMetaEl(taskInfo, display.id, display));
-    else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true })); // hold the slot: the real icon lands in the same place, so the row never shifts
+    else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true }, display.id, display)); // hold the slot: the real icon lands in the same place, so the row never shifts (the meeting link already in it)
   } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out
+  // a task from a meeting: its way back sits among the row's facts, beside Pinned (renderer/tasks.js taskMetaEl), or after the title when the row shows none
+  if (display.meeting && !node.timeline && !body.querySelector(':scope > .tmeta')) body.append(meetingLinkEl(display.meeting));
   if (displayOn('type') && !(zoom?.docId === TIMELINE_PAGE && isTask(display))) appendTags(body, display); // the Timeline's tasks go without their # chip
   // when it was made, when it last moved and where it lives, as one grey line under the title (renderer/views.js)
   // what a Timeline edit put there (renderer/timeline.js): Tana's longer words, quoted between the headline and who did it

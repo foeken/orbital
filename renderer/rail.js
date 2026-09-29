@@ -241,7 +241,7 @@ function railPinAction(pinHub, docId) {
 function renderRail(parent) {
   const docId = parent && parent.node.kind === 'document' && !parent.node.draft && !String(parent.docId).startsWith(SEARCH_ID) ? parent.docId : null;
   // a page is no Graph pane, but its fields under the title come with the same read (api.related): still asked for here
-  if (!LINKS) { railEl.hidden = true; if (docId) loadRelated(docId); return tellDoc(docId); }
+  if (!LINKS) { railEl.hidden = true; if (docId) loadRelated(docId); drawLinksBtn(docId); return tellDoc(docId); }
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
   railEl.hidden = false;
@@ -277,3 +277,21 @@ function renderRail(parent) {
   }
   if (keep) { const again = railEl.querySelector('.rrow[data-id="' + keep + '"]'); if (again) again.focus(); }
 }
+
+// The Graph switch is the page's own, among its buttons at the top right (index.html .navbtns, which the shell copies
+// into the tab bar or the window's header), since what it shows is this page's links: there on a page with a document
+// (renderRail's docId), gone on a view or a saved search, and pressed while the window has a Graph pane. It runs Cmd+K's
+// Show/Hide graph row (renderer/palette.js railToggle), so the pane opens beside this page.
+const linksBtn = $('navLinks');
+let linksDoc = null;
+function drawLinksBtn(docId = linksDoc) {
+  linksDoc = docId;
+  linksBtn.hidden = !docId || !isRealId(docId);
+  const label = windowPanes.links ? 'Hide graph' : 'Show graph';
+  keyTitle(linksBtn, label, 'railToggle');
+  linksBtn.setAttribute('aria-label', label);
+  linksBtn.setAttribute('aria-pressed', String(!!windowPanes.links));
+  if (!linksBtn.childNodes.length) addIcon(linksBtn, 'graph'); // the glyph never changes, like the other buttons'
+}
+linksBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
+linksBtn.onclick = () => runAction('railToggle');

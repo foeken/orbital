@@ -7,7 +7,7 @@ const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
-const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
+const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { codexIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
@@ -54,7 +54,7 @@ async function viewRows(id, filter) {
   // Also the spaces the rows live in, for the Types view's subtext. A type node carries its space on the graph node
   // itself (verified: `spaceUri`, the same uri as `ownerUri`), so this is the one nodeIds lookup resolveTypes already
   // does for type titles rather than an owner chain per row.
-  await resolveTypes([...nodes.map((n) => n.entityType), ...nodes.filter((n) => idKind(n.id) === 'type').map((n) => n.spaceUri)]);
+  await Promise.all([resolveTypes([...nodes.map((n) => n.entityType), ...nodes.filter((n) => idKind(n.id) === 'type').map((n) => n.spaceUri)]), resolveMeetings(nodes)]);
   const withDate = !(f.types && f.types.length === 1 && f.types[0] === 'meetings');
   const rows = nodes.map((n) => {
     const row = graphRow(n, withDate);
@@ -143,7 +143,7 @@ async function search(query, scope) {
     related = ids.map((id) => got.get(id)).filter(Boolean);
   }
   [...nodes, ...related].forEach(rememberNodeHue);
-  await resolveTypes([...nodes, ...related].map((n) => n.entityType));
+  await Promise.all([resolveTypes([...nodes, ...related].map((n) => n.entityType)), resolveMeetings([...nodes, ...related])]);
   // Title matches first (exact, then prefix, then contains), and within a class the title the query covers most:
   // "Tana" beats "The one where Tana meets the team". Full-text hits keep the server's relevance order.
   const q = text.toLowerCase();
