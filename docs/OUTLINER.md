@@ -45,11 +45,8 @@ a LoroMap `{ nodeName, attributes, children }`; inline content of a paragraph or
 and inline maps such as `{ nodeName: 'mention', attributes: { label, tanaUri } }`. Block names: paragraph, heading
 (`attributes.level`), bulletList > listItem > (paragraph, optional nested list), orderedList, blockquote, codeBlock,
 horizontalRule (a divider), image, embed (a native reference), table (§12), and the atoms video, audio and
-unsupportedBlock. A checkbox is `checked` on a listItem's attributes, never on the paragraph. Orbital draws a checkbox
-row with its bullet, whoever made it, except one that was a plain line before it got its box: that one is drawn with the
-box in the bullet's place, recorded as `orbitalPlain: true` on its listItem (the Node's `plain`, #602). Tana's
-editor deletes attributes its schema does not declare whenever it rewrites the block, so an edit in Tana turns such a
-row back into bullet and box. A new row after a checkbox row is the same kind. Blocks carry
+unsupportedBlock. A checkbox is `checked` on a listItem's attributes, never on the paragraph, and a checkbox row always
+draws its bullet beside the box (#602). Blocks carry
 `attributes.blockId` (8 lowercase alphanumerics); every block we create gets one, and `assignBlockIds` gives one,
 once, to blocks that arrive without.
 
@@ -295,7 +292,7 @@ debounce flushes it. Read-only rows ignore every edit key.
 | ⌘↑ / ⌘↓ | Collapse / expand (built-in keys, §8). |
 | ⇧⌘↑ / ⇧⌘↓ | Move the row, or the selection, one step among its siblings. |
 | ⇧⌘⌫ | Remove the current block with its children, wherever the caret is; the caret goes to the row before (or after). Document rows ignore it. |
-| ⌘↩ | Toggle done on a task, or a checkbox; a plain line becomes an unchecked plain checkbox (the box where the bullet would be), a bullet or numbered row keeps its marker and gains the box. |
+| ⌘↩ | Toggle done on a task, or a checkbox; a plain block becomes an unchecked checkbox in Tana's native structure, drawn with its bullet. |
 | Space on a read-only row | Zoom into it; on a reference row, open what it points at. With exactly one row selected and nothing focused, the same. Editable rows keep Space for typing. |
 | Escape | Blur. |
 

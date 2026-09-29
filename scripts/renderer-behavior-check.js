@@ -7176,8 +7176,8 @@ async function runImageViewCheck() {
   const keydown = sourceBetween("onRows('keydown'", "onRows('input'");
   assert.match(keydown, /e\.key === ' ' && isImage\(item\.node\)\) openImage\(item\.node\)/, 'Space on an image row opens it');
   assert.match(source, /img\.onclick = \(e\) => \{ e\.stopPropagation\(\); openImage\(node\); \}/, 'and so does a click on the picture');
-  assert.match(source, /isDivider\(node\) \? 'divider' : isImage\(node\) \? \(node\.block \|\| 'image'\) : plainCheck\(node\) \? 'check' : blockTypeOf\(node\)/,
-    'an image takes the marker of the list row it sits in, and none when it sits on its own; a plain checkbox row draws its box in the bullet\'s place');
+  assert.match(source, /isDivider\(node\) \? 'divider' : isImage\(node\) \? \(node\.block \|\| 'image'\) : blockTypeOf\(node\)/,
+    'an image takes the marker of the list row it sits in, and none when it sits on its own');
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
   assert.match(styles, /\.lightbox \{ position: fixed; inset: 0;/, 'the full view covers the page');
   assert.match(styles, /\.lightbox img \{[^}]*max-width: 92vw; max-height: 92vh/, 'and fits the picture to the window rather than cropping it');
