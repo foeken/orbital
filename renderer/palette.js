@@ -1105,6 +1105,7 @@ function anchorPalette(rect) {
 function closePalette() {
   swapPanel(null, null);
   palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; fieldLinkCtx = null; promptEditor(false); returnFocus();
+  anchorPalette(null); // an "@" dropdown's place and size go with it: a page opened next without togglePalette (Create new from the corner button, a recorded key) is the centred card
   coverWindow(null);
   const field = fieldReturn; fieldReturn = null;
   if (field && !focused()) focusField(field); // a field that holds choices is no row: returnFocus cannot find it

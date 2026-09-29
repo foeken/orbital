@@ -11,6 +11,7 @@ function openOverlay(page) {
 if (tana.onOverlayClosed) tana.onOverlayClosed((result) => {
   if (result.palette) togglePalette('cmd');
   if (result.chatgpt) startChatGPTLogin();
+  if (result.image) processImage({ clipboard: true }); // Quick Add's Process image from clipboard: here, as Cmd+K's row does it (renderer/upload.js)
   if (result.note) showNote(result.note, false, result.open); // a click on it opens the task it names
 });
 // Help: from ⌘K Help, the ? in the window's header (shell.js, renderer/app.js), and once by itself on a first start (helpOnce,

@@ -112,10 +112,14 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   Cmd+K offers the same under **Image**, and only there (the rows have no id, so no key can be recorded on them):
   **Process image** while the caret or the selection is on an image row (main reads that image, main/images.js
   `image`), and **Process image from clipboard** while the clipboard holds an image (`clipboard:hasImage`, asked
-  each time ⌘K opens; main reads it with Electron's clipboard as PNG). Pasting an image still inserts it as before.
+  each time ⌘K opens; main reads it with Electron's clipboard as PNG: Chromium's image/png, or macOS's own PNG type,
+  which is all a copied image file offers, from Finder or CleanShot). Pasting an image still inserts it as before.
   Cmd+K's **Create new …** row wears the corner button's text-plus glyph. With an image on the clipboard its page (from
   Cmd+K or the corner button's click) leads with Process image from clipboard, above the choices. That row is on the page
-  only, never among the folded Create new rows, so no key can be recorded on it either.
+  only, never among the folded Create new rows, so no key can be recorded on it either. Quick Add Task (⇧⌘Space) shows it
+  too, under **Clipboard**: ↩ with no title typed runs it, and the page that opened Quick Add processes the image as
+  Cmd+K's row does. Every page of the palette opens as the centred card: closing it drops an "@" dropdown's place and
+  size, so a page opened next without ⌘K (Create new from the corner button) does not wear them.
 - **Header row**: over the page title, the empty line the buttons at the top right sit on, while the page is alone in
   its window. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
