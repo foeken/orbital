@@ -229,5 +229,28 @@ const saveValue = (segs) => (segs.some((s) => 'mention' in s || hasMarks(s.marks
 // A dash further into the line, a pasted list and a sentence containing one all fail it.
 // `listRest` is the other half: what the line still holds once the marker is dropped, so no caller decides for
 // itself how much to throw away.
-const startsList = (before) => before === '- ';
+const startsList = (before) => before === '- ' || before === '* ';
 const listRest = (segs, offset) => splitSegs(segs, offset || 0)[1];
+// The rest of markdown's line starts (#598), typed the same way: the marker at the very start of the row, the caret
+// just past it. toolbar.js restyle turns the row into that kind.
+const LINE_MARKERS = { '# ': 'heading1', '## ': 'heading2', '### ': 'heading3', '1. ': 'numbered', '> ': 'quote', '```': 'code', '[] ': 'todo', '[ ] ': 'todo', '---': 'divider' };
+const lineMarker = (before) => (Object.hasOwn(LINE_MARKERS, before) ? LINE_MARKERS[before] : null);
+// Inline markdown as it is typed (#598): when the closing delimiter lands, the words it closes take the mark and the
+// delimiters go. Only over plain words: a chip or code inside leaves what was typed alone. { segs, caret } or null.
+const TYPED_MARKS = [[/\*\*([^*\n]+)\*\*$/, 'bold'], [/~~([^~\n]+)~~$/, 'strike'], [/`([^`\n]+)`$/, 'code'],
+  [/(?<![*\w])\*([^*\s][^*\n]*)\*$/, 'italic'], [/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/, 'link']];
+function typedMark(segs, off) {
+  const before = plainOf(splitSegs(segs, off)[0]);
+  for (const [re, mark] of TYPED_MARKS) {
+    const m = re.exec(before);
+    if (!m) continue;
+    const open = m[0].indexOf(m[1]), [head, rest] = splitSegs(segs, m.index), [marked, tail] = splitSegs(rest, m[0].length);
+    if (marked.some((s) => !('text' in s) || (s.marks && s.marks.code))) return null;
+    const words = mergeSegs([...head, ...splitSegs(splitSegs(marked, open)[1], m[1].length)[0], ...tail]);
+    return { segs: markRange(words, m.index, m.index + m[1].length, mark, mark === 'link' ? m[2] : true), caret: m.index + m[1].length };
+  }
+  return null;
+}
+// Pasted text read as markdown (#598, edit.js pasteMarkdown): two lines or more, a line starting with a marker, or an
+// inline mark or link. A plain line pastes as it is.
+const looksMarkdown = (text) => /\S[^\S\n]*\n\s*\S|^\s*(?:[-*+] |\d+[.)] |#{1,6} |> |```|-{3,}\s*$)|\*\*[^*\n]+\*\*|~~[^~\n]+~~|`[^`\n]+`|\[[^\]\n]*\]\((?:https?:|tana:)[^)\s]+\)|(?<![*\w])\*[^*\s][^*\n]*\*/m.test(text);

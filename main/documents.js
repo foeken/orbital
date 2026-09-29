@@ -1040,6 +1040,17 @@ async function mutTasks(ids, fn) {
 }
 // ponytail: one undo step per mutation call across docs; inside a document the UndoManager keeps one step per
 // transact (mergeInterval 0), so a multi-document mutation is as many steps as documents.
+// Pasted markdown (#598) as the rows and marks Tana's editor writes: sdk/chat.js reads it, the reader chat messages
+// go through, and content.insertBlocks writes it. Every line is a row of its own, where markdown would join
+// consecutive lines into one paragraph: an outliner reads pasted lines as rows. "- [ ]" and "- [x]" are checkboxes.
+async function pasteMarkdown(id, nodeId, before, after, markdown) {
+  if (typeof markdown !== 'string' || !Array.isArray(before) || !Array.isArray(after)) throw new Error('Paste takes markdown and the row around the caret');
+  const blocks = chat.blocks(markdown).flatMap((b) => (b.block === 'paragraph' ? b.text.split('\n').map((text) => ({ ...b, text })) : [b])).map((b) => {
+    const task = ['bullet', 'numbered'].includes(b.block) && /^\[([ xX])\]\s+/.exec(b.text), text = task ? b.text.slice(task[0].length) : b.text;
+    return { block: b.block, depth: b.depth, ...(task ? { checked: task[1] !== ' ' } : {}), segments: b.verbatim ? (text ? [{ text }] : []) : chat.segments(text) };
+  });
+  return mut(id, (doc) => content.insertBlocks(doc, nodeId, before, after, blocks));
+}
 // The two ends of a drag (docs/OUTLINER.md): the move is written on the outline the row lands in, and the outline
 // it came from is read from the same document — a page and one of its fields are two roots of one Loro document
 // (sdk/fields.js), so the whole move is one transaction and one undo step. Across two documents it is refused:
@@ -1260,6 +1271,7 @@ const ipc = {
   'block:split': (_e, id, nodeId, before, after, asChild) => mut(id, (doc) => content.split(doc, nodeId, before, after, asChild)), // one undo step for both halves
   'block:join': (_e, id, nodeId, intoId, value) => mut(id, (doc) => content.join(doc, nodeId, intoId, value)), // its reverse: the row above takes the words, one undo step
   'block:insertChild': (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)),
+  'block:pasteMarkdown': (_e, id, nodeId, before, after, markdown) => pasteMarkdown(id, nodeId, before, after, markdown), // { id, offset } where the caret goes
   'block:removeMany': (_e, id, nodeIds) => mut(id, doc => content.removeMany(doc, nodeIds)),
   'block:moveMany': (_e, id, nodeIds, direction) => mut(id, doc => content.moveMany(doc, nodeIds, direction)),
   'block:indentMany': (_e, id, nodeIds) => mut(id, doc => content.indentMany(doc, nodeIds)),

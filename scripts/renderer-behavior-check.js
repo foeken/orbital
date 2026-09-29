@@ -3932,7 +3932,7 @@ function runCaretOnOpenScrollCheck() {
     let editable = true;
     const canEditText = () => editable;
     const scheduleSave = () => {}, readSegs = () => [], materialise = () => {}, openSlash = () => {};
-    const caretOffset = () => 0, startSl = null, startsList = () => false, rebullet = () => {}; // the dash shortcut has its own check
+    const caretOffset = () => 0, startSl = null, startsList = () => false, rebullet = () => {}, restyle = () => false, markTyped = () => {}; // the dash and markdown shortcuts have their own checks
     const palette = { hidden: true };
     const el = {
       textContent: 'a', classList: { toggle: () => {} },
@@ -5897,6 +5897,7 @@ async function runPasteLinkCheck() {
     const getSelection = () => ({ isCollapsed: collapsed });
     const caretOffset = () => offset;
     const selectionOffsets = () => sel;
+    const pasteMarkdown = () => false; // a paste of markdown has its own check (runMarkdownCheck)
     const flush = (key) => flushed.push(key);
     const reload = async () => {}, render = () => { renders++; };
     const placeCaret = (key, at) => { caret = [key, at]; };
@@ -6007,6 +6008,7 @@ async function runPasteImageCheck() {
     const flush = (key) => flushed.push(key);
     const render = () => { renders++; };
     const moveTo = () => {};
+    const pasteMarkdown = () => false; // a paste of markdown has its own check (runMarkdownCheck)
     const placeCaret = (key) => carets.push(key);
     const reload = async (docId) => { calls.push(['reload', docId]); syncUploads(docId); };
     const showError = (e) => { errors.push(String(e && e.message || e)); };
@@ -6653,13 +6655,17 @@ async function runDefaultModeCheck() {
     ${functionSource('splitSegs')}
     ${sourceLine('const startsList')}
     ${sourceLine('const listRest')}
+    ${sourceBetween('const LINE_MARKERS', '// Inline markdown as it is typed')}
     const tana = {
       setBlockType: async (docId, id, type) => calls.push(['setBlockType', docId, id, type]),
       setText: async (docId, id, value) => calls.push(['setText', docId, id, value]),
       indent: async (docId, id) => calls.push(['indent', docId, id]),
+      toggleCheckbox: async (docId, id) => calls.push(['toggleCheckbox', docId, id]),
+      insertDivider: async (docId, id) => calls.push(['insertDivider', docId, id]),
     };
     ${functionSource('unbullet')}
     ${functionSource('rebullet')}
+    ${functionSource('restyle')}
     ${functionSource('bulletOrIndent')}
     const childrenOf = (item) => (item && item.rows) || [];
     const keyFor = (docId, node) => docId + '/' + node.id;
@@ -6677,6 +6683,14 @@ async function runDefaultModeCheck() {
         const took = rebullet({ key: 'doc/b', docId: 'doc', node });
         await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
         return { took, calls: calls.slice(), text: node.text };
+      },
+      // a markdown line start typed at the start of a row (#598): marker, then whatever else the row already held
+      marker: async (marker, node, rest = '') => {
+        calls.length = 0; editable = true;
+        const segs = [{ text: marker + rest }], item = { key: 'doc/b', docId: 'doc', node: { text: marker + rest, segments: segs, ...node } };
+        const took = restyle(item, { textContent: marker + rest, segs, off: marker.length });
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+        return { took, calls: calls.slice() };
       },
       shiftTab: async (node, parent = null) => {
         calls.length = 0; editable = true;
@@ -6747,6 +6761,20 @@ async function runDefaultModeCheck() {
     [{ id: 'b', kind: 'block', block: 'paragraph', draft: true }, 'a draft row is not in Tana yet'],
   ]) assert.deepEqual(plain(await api.dash(node)), { took: false, calls: [], text: '- ' }, why);
   assert.deepEqual(plain(await api.dash({ id: 'b', kind: 'block', block: 'paragraph' }, false)), { took: false, calls: [], text: '- ' }, 'and a read-only row is left alone');
+  // the rest of markdown's line starts (#598): the marker goes, the row becomes that kind and keeps its words
+  assert.deepEqual(plain(await api.marker('## ', { id: 'b', kind: 'block', block: 'bullet' }, 'Plan')),
+    { took: true, calls: [['dropPending', 'doc/b'], ['setText', 'doc', 'b', [{ text: 'Plan' }]], ['setBlockType', 'doc', 'b', 'heading2'], ['reload', 'doc'], ['render'], ['caret', 'doc/b', 0]] },
+    '"## " makes the row a heading and keeps what it held');
+  assert.deepEqual(plain(await api.marker('[ ] ', { id: 'b', kind: 'block', block: 'bullet' })).calls.slice(1, 3), [['setText', 'doc', 'b', []], ['toggleCheckbox', 'doc', 'b']], '"[ ] " gives the row a checkbox');
+  assert.deepEqual(plain(await api.marker('---', { id: 'b', kind: 'block', block: 'paragraph' })).calls.slice(1, 3), [['setText', 'doc', 'b', []], ['insertDivider', 'doc', 'b']], '"---" on an empty row is a divider');
+  for (const [marker, node, rest, why] of [
+    ['# ', { block: 'code' }, '', 'a code block keeps what is typed in it'],
+    ['1. ', { block: 'numbered' }, '', 'a numbered row types "1. " as text'],
+    ['[] ', { block: 'bullet', done: 0 }, '', 'a row with a checkbox already keeps it'],
+    ['---', { block: 'paragraph' }, 'words', 'a row with words is no divider'],
+    ['---', { block: 'bullet', hasChildren: true }, '', 'nor one with children'],
+    ['> ', { block: 'paragraph', draft: true }, '', 'a draft row is not in Tana yet'],
+  ]) assert.deepEqual(plain(await api.marker(marker, { id: 'b', kind: 'block', ...node }, rest)), { took: false, calls: [] }, why);
 
   // the keydown branch that reaches it: the bullet comes off first and the row goes on the next press
   const keydown = sourceBetween("onRows('keydown'", "onRows('input'");
@@ -6756,6 +6784,7 @@ async function runDefaultModeCheck() {
   assert.match(source, /\nconst siblingBlock = .*;\n/, 'siblingBlock stays on one line');
   const typing = sourceBetween("onRows('input'", "onRows('paste'");
   assert.match(typing, /startsList\(el\.textContent\.slice\(0, caretOffset\(el\) \?\? 0\)\)\) rebullet\(item, el\)/, 'and typing "- " at the start of a row reaches the other direction, whatever else the row holds');
+  assert.match(typing, /!restyle\(item, el\) && e\.inputType === 'insertText'\) markTyped\(item, el\)/, 'and the other markdown line starts, then the inline marks, are tried on every typed character (#598)');
 
   // only a list row draws a marker, and the dot is hidden rather than removed so the gutter keeps its width
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
@@ -9265,6 +9294,42 @@ checks.push(function runDemoNumbersCheck() {
   assert.match(masked, / 28 [A-Z][a-z]* 2026$/, 'and a date keeps its numbers');
   assert.doesNotMatch(masked, /Sam|Q3|plan/, 'the words around them are still masked');
   console.log('ok  demo mode keeps numbers: times and dates read as themselves');
+});
+
+// Markdown in the editor (#598): inline marks convert as their closing delimiter is typed, line markers are known by
+// what stands before the caret, and a paste worth reading as markdown goes to main with the words around the caret.
+checks.push(async function runMarkdownCheck() {
+  const api = vm.runInNewContext(`
+    ${FAKE_DOM}
+    ${sourceBetween('// accepts segments, a plain string, or a Node', 'const tana = window.api')}
+    const calls = [], item = { key: 'doc/row', docId: 'doc', node: { id: 'row', kind: 'block', block: 'bullet' } };
+    let collapsed = true, offset = 2, sel = null;
+    const getSelection = () => ({ isCollapsed: collapsed }), caretOffset = () => offset, selectionOffsets = () => sel;
+    const el = document.createElement('div'), bold = document.createElement('strong'), blockTypeOf = (node) => node.block;
+    bold.append('cd'); el.append('ab', bold); // what readSegs reads: "ab", then "cd" in bold
+    const dropPending = (key) => calls.push(['drop', key]), run = (fn) => fn(), reload = async () => {}, render = () => {};
+    const placeCaret = (key, at) => calls.push(['caret', key, at]);
+    const tana = { pasteMarkdown: async (...args) => { calls.push(['paste', ...args]); return { id: 'new', offset: 3 }; } };
+    ${functionSource('pasteMarkdown')}
+    ({ typedMark, lineMarker, looksMarkdown, calls, item, paste: async (text, range) => { calls.length = 0; collapsed = !range; sel = range || null; const took = pasteMarkdown(item, el, text); for (let i = 0; i < 5; i++) await Promise.resolve(); return took; } });
+  `);
+  const typed = (text, off = text.length) => plain(api.typedMark([{ text }], off));
+  assert.deepEqual(typed('a **b**'), { segs: [{ text: 'a ' }, { text: 'b', marks: { bold: true } }], caret: 3 }, '**b** is bold the moment it closes');
+  assert.equal(typed('a **b*'), null, 'and half a closing pair is not italic');
+  assert.deepEqual(typed('a *b*').segs[1], { text: 'b', marks: { italic: true } }, '*b* is italic');
+  assert.deepEqual(typed('~~x~~ `y`', 5).segs, [{ text: 'x', marks: { strike: true } }, { text: ' `y`' }], 'strike, with the words after the caret left as they are');
+  assert.deepEqual(typed('see [Tana](https://tana.inc)').segs, [{ text: 'see ' }, { text: 'Tana', marks: { link: 'https://tana.inc' } }], 'a markdown link is a link mark on its label');
+  assert.equal(typed('2*3*'), null, 'arithmetic is not italic');
+  assert.equal(plain(api.typedMark([{ text: '**' }, { mention: { label: 'Sam', uri: 'tana:user-profile:x' } }, { text: '**' }], 7)), null, 'a chip inside the pair leaves it as typed');
+  assert.deepEqual(['## ', '[ ] ', '1. ', '---', '#', ' # '].map(api.lineMarker), ['heading2', 'todo', 'numbered', 'divider', null, null], 'line markers count only at the very start, with their space');
+  assert.deepEqual(['plain words', 'a\nb', '# Title', 'use **this**', 'x*y', 'trailing\n', 'see [x](https://a.b)'].map(api.looksMarkdown), [false, true, true, true, false, false, true], 'a paste is read as markdown only when it has some');
+  assert.equal(await api.paste('plain words'), false, 'a plain line pastes the browser\'s way');
+  assert.equal(await api.paste('- a\n- b', [1, 3]), true, 'markdown is taken over');
+  assert.deepEqual(plain(api.calls), [['drop', 'doc/row'], ['paste', 'doc', 'row', [{ text: 'a' }], [{ text: 'd', marks: { bold: true } }], '- a\n- b'], ['caret', 'doc/new', 3]],
+    'the selection is replaced, the words either side go along with their marks, and the caret lands where main says');
+  api.item.node.block = 'code';
+  assert.equal(await api.paste('- a\n- b'), false, 'a code block takes a paste as its text');
+  console.log('ok  markdown in the editor: typed marks and line markers, and pastes read as markdown');
 });
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {

@@ -284,6 +284,18 @@ paragraph; only a new sibling after a checkbox item inherits an unchecked checkb
 dropped. A code block keeps "- " as text. The list is built inside the same transaction as the row, so Enter and "- "
 are each one undo step.
 
+**Markdown** (#598) becomes Tana's own structure and marks, never markdown characters in the text. Typed at the very
+start of a row, the way "- " is: "* " a bullet, "# " to "### " a heading, "1. " numbered, "> " a quote, "\`\`\`" a code
+block, "[] " or "[ ] " a checkbox, and "---" on a row with nothing else a divider after it (`lineMarker`, `restyle`);
+the marker goes, the words stay, and a row already of that kind or a code block types it as text. Typed inline, the
+mark lands the moment its closing delimiter does: \*\*bold\*\*, \*italic\*, ~~strike~~, \`code\`, [label](https://…) a
+link (`typedMark`, `markTyped`), and the caret stays just past the marked words, outside them. A paste with more than
+one line, a line marker or an inline mark (`looksMarkdown`) goes to main in one call (`api.pasteMarkdown`,
+sdk/content.js `insertBlocks`): a row per line, headings, bullets and numbered items nested by their indentation,
+"- [ ]" and "- [x]" checkboxes, quotes, fenced code, dividers, the inline marks, and [label](tana:…) as a mention. The
+first line continues the row at the caret, what stood after the caret ends the last line, and one undo takes it all
+back. A plain line, a draft row and a code block paste as text.
+
 Mouse: a click on the bullet zooms into the row, on the chevron toggles it, on the checkbox toggles done.
 
 ### Toolbar, "/" and marks
