@@ -543,6 +543,8 @@ with a red dot, Reset / Cancel / Save. Combos are stored in the synced `hotkeys`
 as a chip on the row. A combo must include ⌘ or ⌃. Fixed and refused: ⌘K, ⇧⌘K, the text-size keys (⌘0, ⇧⌘+/-,
 shown as literal chips), ⇧⌘⌫ and ⇧⌘↑/↓ (`RESERVED`, renderer/palette.js), and any combo another row has; the reason
 is shown (⌃ counts as ⌘, ⌥ is ignored for the fixed ones). Sync has no default key.
+While the highlighted Cmd+K row is one ⇧⌘K can record for (it has an id), the field's right end says "⇧⌘K Set key" in
+muted grey (renderer/palette.js `keyHint`); on any other row, and on every other page, it is not drawn.
 
 ### Cmd+S search
 

@@ -2459,23 +2459,25 @@ function runPaletteSkipCheck() {
   // ↑/↓ move the highlight over the rows already drawn (#272): no row is built again, in the palette or a pill menu.
   const moves = vm.runInNewContext(`
     const el = () => { const cls = new Set(); return { classList: { toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)), has: (c) => cls.has(c) }, scrolled: 0, scrollIntoView() { this.scrolled++; } }; };
-    let drawn = [], renders = 0, pillRenders = 0, palIndex = 0, menu = { index: 0 };
-    let palRows = [{ label: 'a' }, { disabled: true }, { label: 'b' }];
+    let drawn = [], renders = 0, pillRenders = 0, palIndex = 0, menu = { index: 0 }, palMode = 'cmd';
+    let palRows = [{ label: 'a', id: 'a' }, { disabled: true }, { label: 'b' }];
+    const palKeyHint = { hidden: true };
     const palList = { querySelectorAll: () => drawn };
     const renderPalette = () => { renders++; drawn = palRows.map(el); };
     const renderPills = () => { pillRenders++; };
     const pill = { querySelectorAll: () => drawn };
     ${functionSource('nextPalIndex')}
+    ${functionSource('keyHint')}
     ${functionSource('movePalIndex')}
     ${functionSource('moveMenuIndex')}
     renderPalette(); renders = 0;
     const active = () => drawn.findIndex((row) => row.classList.has('active'));
-    ({ key: (step) => { movePalIndex(step); return { palIndex, active: active(), renders, scrolled: drawn[palIndex].scrolled }; },
+    ({ key: (step) => { movePalIndex(step); return { palIndex, active: active(), renders, scrolled: drawn[palIndex].scrolled, keyHint: !palKeyHint.hidden }; },
        drop: () => { palRows = palRows.slice(1); }, // a row taken out of palRows without a redraw (invalidateNode)
        menu: (count, step) => { menu.index = 0; drawn = Array.from({ length: 3 }, el); moveMenuIndex(pill, count, step); return { index: menu.index, active: active(), pillRenders }; } });
   `);
-  assert.deepEqual(plain(moves.key(1)), { palIndex: 2, active: 2, renders: 0, scrolled: 1 }, 'Down moves the highlight past a dead row without drawing the list again');
-  assert.deepEqual(plain(moves.key(1)), { palIndex: 0, active: 0, renders: 0, scrolled: 1 }, 'and wraps, still without a redraw');
+  assert.deepEqual(plain(moves.key(1)), { palIndex: 2, active: 2, renders: 0, scrolled: 1, keyHint: false }, 'Down moves the highlight past a dead row without drawing the list again; a row with no id offers no ⇧⌘K');
+  assert.deepEqual(plain(moves.key(1)), { palIndex: 0, active: 0, renders: 0, scrolled: 1, keyHint: true }, 'and wraps, still without a redraw, to a row ⇧⌘K can give a key');
   moves.drop();
   assert.equal(moves.key(1).renders, 1, 'rows changed under the drawn list: it is drawn again rather than highlighting the wrong row');
   assert.deepEqual(plain(moves.menu(3, -1)), { index: 2, active: 2, pillRenders: 0 }, 'Up in a pill menu wraps to its last row without drawing the pills again');
