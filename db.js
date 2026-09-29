@@ -24,7 +24,10 @@ function open(path) {
   db.exec(`CREATE TABLE IF NOT EXISTS nodes (
     id TEXT NOT NULL, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
     icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL,
-    PRIMARY KEY (section, id))`);
+    fields TEXT, PRIMARY KEY (section, id))`);
+  // a row's field values (main/rows.js fieldValues), which a view grouped by a field is sectioned by: a cache from
+  // before them gains the column, and each row its values at the next refresh
+  if (!db.prepare("SELECT count(*) n FROM pragma_table_info('nodes') WHERE name = 'fields'").get().n) db.exec('ALTER TABLE nodes ADD COLUMN fields TEXT');
   db.exec("DROP TABLE IF EXISTS icons"); // app-local custom icons were removed (#224); an old cache still carries the table
   db.exec('CREATE TABLE IF NOT EXISTS sensitive_nodes (id TEXT PRIMARY KEY)'); // app-local sensitive documents
   // Deletions this app saw, for Cmd+K "Recently deleted". Tana keeps the document itself (a soft delete only sets
@@ -43,7 +46,12 @@ function open(path) {
 
 // Rows are display data: a tags column that is not a JSON array (older build, interrupted write) must not take a
 // whole view down with it.
-const parse = (r) => { if (!r) return r; let tags; try { tags = JSON.parse(r.tags); } catch { tags = []; } return { ...r, tags: Array.isArray(tags) ? tags : [] }; };
+const json = (s) => { try { return JSON.parse(s); } catch { return undefined; } };
+const parse = (r) => {
+  if (!r) return r;
+  const tags = json(r.tags), fields = r.fields && json(r.fields);
+  return { ...r, tags: Array.isArray(tags) ? tags : [], fields: fields && typeof fields === 'object' && !Array.isArray(fields) ? fields : undefined };
+};
 
 // -> { [section]: rows[] } in sortKey order (see DESC)
 function list() {
@@ -59,15 +67,15 @@ function get(id) {
   return parse(db.prepare('SELECT * FROM nodes WHERE id = ?').get(id));
 }
 
-const UPSERT = `INSERT INTO nodes (id, section, title, done, icon, meta, tags, sortKey, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+const UPSERT = `INSERT INTO nodes (id, section, title, done, icon, meta, tags, sortKey, updatedAt, fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(section, id) DO UPDATE SET title = excluded.title, done = excluded.done, icon = excluded.icon,
-  meta = excluded.meta, tags = excluded.tags, sortKey = excluded.sortKey, updatedAt = excluded.updatedAt
+  meta = excluded.meta, tags = excluded.tags, sortKey = excluded.sortKey, updatedAt = excluded.updatedAt, fields = excluded.fields
   WHERE title IS NOT excluded.title OR done IS NOT excluded.done OR icon IS NOT excluded.icon OR meta IS NOT excluded.meta
-    OR tags IS NOT excluded.tags OR sortKey IS NOT excluded.sortKey OR updatedAt IS NOT excluded.updatedAt`; // an unchanged row is no write
+    OR tags IS NOT excluded.tags OR sortKey IS NOT excluded.sortKey OR updatedAt IS NOT excluded.updatedAt OR fields IS NOT excluded.fields`; // an unchanged row is no write
 
 function upsert(r) {
   const updatedAt = r.updatedAt ?? new Date().toISOString();
-  return db.prepare(UPSERT).run(r.id, r.section, r.title, r.done ? 1 : 0, r.icon ?? null, r.meta ?? null, JSON.stringify(r.tags || []), r.sortKey ?? updatedAt, updatedAt).changes;
+  return db.prepare(UPSERT).run(r.id, r.section, r.title, r.done ? 1 : 0, r.icon ?? null, r.meta ?? null, JSON.stringify(r.tags || []), r.sortKey ?? updatedAt, updatedAt, r.fields ? JSON.stringify(r.fields) : null).changes;
 }
 
 // A document's title and done state are the same in every view that lists it, so a live change writes them to

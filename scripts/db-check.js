@@ -29,7 +29,7 @@ assert.deepStrictEqual(all.meetings.map((r) => r.id), ['tana:event:x', 'tana:eve
 assert.deepStrictEqual(all.tasks[0].tags, [{ label: 'task', color: 'grey' }, { label: 'Project', color: 'grey' }], 'tags round-trip as JSON');
 assert.strictEqual(all.meetings[0].meta, 'Mon, all day');
 assert.strictEqual(all.meetings[0].done, 0);
-assert.deepStrictEqual(Object.keys(all.tasks[0]).sort(), ['done', 'icon', 'id', 'meta', 'section', 'sortKey', 'tags', 'title', 'updatedAt']);
+assert.deepStrictEqual(Object.keys(all.tasks[0]).sort(), ['done', 'fields', 'icon', 'id', 'meta', 'section', 'sortKey', 'tags', 'title', 'updatedAt']);
 
 assert.strictEqual(db.upsert({ ...db.get('tana:text:a'), title: 'A2', done: 1, updatedAt: '2026-01-03T00:00:00Z' }), 1, 'a changed row is one write');
 const edited = db.get('tana:text:a');
@@ -112,6 +112,24 @@ assert.strictEqual((db.list().tasks || []).length, 1, 'and emptying one view lea
 db.replaceSection('tasks', []);
 
 // A cache written by the one-row-per-document schema is rebuilt rather than read back wrong.
+// A row's field values come back from the cache (a view grouped by a field is sectioned by them), and a value that
+// changed is a write while the same values again are none.
+const PRIO = { 'tana:type:goal?attribute=prio': ['High'] };
+db.replaceSection('tasks', [{ id: 'tana:text:f', title: 'F', done: 0, sortKey: '1', updatedAt: '1', fields: PRIO }, { id: 'tana:text:nof', title: 'N', done: 0, sortKey: '2', updatedAt: '2' }]);
+assert.deepStrictEqual(db.list().tasks.map((r) => r.fields), [undefined, PRIO], 'field values survive the cache, and a row without any has none');
+assert.strictEqual(db.replaceSection('tasks', db.list().tasks), 0, 'the same values again are no write');
+assert.strictEqual(db.upsert({ ...db.get('tana:text:f'), section: 'tasks', fields: { 'tana:type:goal?attribute=prio': ['Low'] } }), 1, 'a changed value is one');
+db.replaceSection('tasks', []);
+// A cache from before field values gains the column and keeps its rows.
+const nofields = path.join(path.dirname(file), 'nofields.sqlite'), pre = new DatabaseSync(nofields);
+pre.exec("CREATE TABLE nodes (id TEXT NOT NULL, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL, PRIMARY KEY (section, id))");
+pre.exec("INSERT INTO nodes (id, section, title, sortKey, updatedAt) VALUES ('tana:text:kept', 'tasks', 'Kept', '1', '1')");
+pre.close();
+db.open(nofields);
+assert.deepStrictEqual(db.list().tasks.map((r) => [r.title, r.fields]), [['Kept', undefined]], 'an older cache keeps its rows');
+db.replaceSection('tasks', [{ id: 'tana:text:kept', title: 'Kept', done: 0, sortKey: '1', updatedAt: '1', fields: PRIO }]);
+assert.deepStrictEqual(db.get('tana:text:kept').fields, PRIO, 'and stores field values from then on');
+db.open(file);
 const legacy = path.join(path.dirname(file), 'legacy.sqlite');
 const old = new DatabaseSync(legacy);
 old.exec("CREATE TABLE nodes (id TEXT PRIMARY KEY, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL)");
