@@ -1589,6 +1589,11 @@ async function main() {
     assert.deepEqual(plainJson(at),{id:last.id,offset:4},'the caret goes where the pasted text ends, before what stood after it');
     await backend.undo();
     assert.deepEqual(flat(outline.readOutline(d)),[[0,'paragraph',null,[{text:'Before after'}]]],'one undo takes the whole paste back');
+    // Only a line that says "[ ]" or "[x]" gets a box, and a blank line separates rows without making one.
+    const task=outline.insertAfter(d,row,'');
+    await backend.handlers.get('block:pasteMarkdown')(null,DOC,task,[],[],'- [x] task\n\nplain');
+    assert.deepEqual(flat(outline.readOutline(d)).slice(1).map(r=>r.slice(1)),[['bullet',1,[{text:'task'}]],['bullet',null,[{text:'plain'}]]],'a plain line after a ticked item is a row without a box, and the blank line between them makes no row');
+    await backend.undo(); outline.remove(d,task);
     // Into an empty child row: it takes the first block's kind, and a row nested under a heading, which cannot own
     // children, lands beside it.
     outline.setBlockType(d,row,'bullet'); const child=outline.insertChild(d,row,'');

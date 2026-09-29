@@ -657,16 +657,18 @@ function insertChild(document, id, text) {
 // The first continues the row the caret is in, after `before`; the rest follow it as rows of their own, a deeper depth
 // as a child of the row above (beside it where that row cannot own children: a heading, a quote, code, a divider),
 // and `after`, what stood behind the caret, ends the last one. A paragraph is whatever kind a new row there is, so
-// pasted lines in a list stay list rows; an empty row takes the first block's kind. One transaction, one undo step.
+// pasted lines in a list stay list rows, though without a checkbox unless `checked` says so; an empty row takes the
+// first block's kind. One transaction, one undo step.
 // Returns the row and offset the caret goes to: the end of what was pasted.
 function insertBlocks(document, id, before, after, blocks) {
   if (!blocks.length || blocks[0].block === 'divider') blocks = [{ block: 'paragraph', segments: [] }, ...blocks];
   const kind = (rowId, b) => {
     if (b.block !== 'paragraph' && blockType(must(document, rowId).block) !== b.block) setBlockType(document, rowId, b.block);
-    // a list item has a checkbox when its markdown says so, not because the row above had one (insertAfter's rule)
+    // a row has a checkbox when its markdown says so, not because the row above had one (insertAfter's rule), so a
+    // plain line after "- [x] task" is a row without one
     const f = must(document, rowId), a = f.item && f.item.get('attributes');
     if (typeof b.checked === 'boolean') (f.item || wrap(f.block)).get('attributes').set('checked', b.checked);
-    else if (b.block !== 'paragraph' && a && a.get('checked') !== undefined) a.delete('checked');
+    else if (a && a.get('checked') !== undefined) a.delete('checked');
   };
   const plain = (segs) => segs.map((s) => (s.mention ? s.mention.label : s.text)).join('');
   let last = null;

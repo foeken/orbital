@@ -314,8 +314,10 @@ the marker goes, the words stay, and a row already of that kind or a code block 
 mark lands the moment its closing delimiter does: \*\*bold\*\*, \*italic\*, ~~strike~~, \`code\`, [label](https://…) a
 link (`typedMark`, `markTyped`), and the caret stays just past the marked words, outside them. A paste with more than
 one line, a line marker or an inline mark (`looksMarkdown`) goes to main in one call (`api.pasteMarkdown`,
-sdk/content.js `insertBlocks`): a row per line, headings, bullets and numbered items nested by their indentation,
-"- [ ]" and "- [x]" checkboxes, quotes, fenced code, dividers, the inline marks, and [label](tana:…) as a mention. The
+sdk/content.js `insertBlocks`): a row per line with words (a blank line only separates), headings, bullets and
+numbered items nested by their indentation, "- [ ]" and "- [x]" checkboxes (and no other line gets one), quotes,
+fenced code, dividers, the inline marks, and [label](tana:…) as a mention. "- " and "* " typed at the start of a
+numbered row make it a bullet, as "1. " makes a bullet numbered. The
 first line continues the row at the caret, what stood after the caret ends the last line, and one undo takes it all
 back. A plain line, a draft row and a code block paste as text.
 

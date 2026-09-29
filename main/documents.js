@@ -1075,8 +1075,9 @@ async function mutTasks(ids, fn) {
 // ponytail: one undo step per mutation call across docs; inside a document the UndoManager keeps one step per
 // transact (mergeInterval 0), so a multi-document mutation is as many steps as documents.
 // Pasted markdown (#598) as the rows and marks Tana's editor writes: sdk/chat.js reads it, the reader chat messages
-// go through, and content.insertBlocks writes it. Every line is a row of its own, where markdown would join
-// consecutive lines into one paragraph: an outliner reads pasted lines as rows. "- [ ]" and "- [x]" are checkboxes.
+// go through, and content.insertBlocks writes it. Every line with words is a row of its own, where markdown would join
+// consecutive lines into one paragraph: an outliner reads pasted lines as rows. A blank line only separates, as it
+// does in markdown, so it makes no empty row. "- [ ]" and "- [x]" are checkboxes, and nothing else is.
 async function pasteMarkdown(id, nodeId, before, after, markdown) {
   if (typeof markdown !== 'string' || !Array.isArray(before) || !Array.isArray(after)) throw new Error('Paste takes markdown and the row around the caret');
   const blocks = chat.blocks(markdown).flatMap((b) => (b.block === 'paragraph' ? b.text.split('\n').map((text) => ({ ...b, text })) : [b])).map((b) => {

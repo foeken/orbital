@@ -6901,6 +6901,9 @@ async function runDefaultModeCheck() {
     [{ id: 'b', kind: 'block', block: 'code' }, 'a code block is content, not prose: "- " stays "- "'],
     [{ id: 'b', kind: 'block', block: 'paragraph', draft: true }, 'a draft row is not in Tana yet'],
   ]) assert.deepEqual(plain(await api.dash(node)), { took: false, calls: [], text: '- ' }, why);
+  const numbered = plain(await api.dash({ id: 'b', kind: 'block', block: 'numbered' }));
+  assert.deepEqual([numbered.took, numbered.calls.find((c) => c[0] === 'setBlockType')], [true, ['setBlockType', 'doc', 'b', 'bullet']], 'a numbered row takes "- " and becomes a bullet, as "1. " makes a bullet numbered');
+  assert.equal(plain(await api.tab({ id: 'b', kind: 'block', block: 'numbered' }, { id: 'a', kind: 'block', block: 'bullet' })).took, false, 'while Tab at the start of a list row stays the indent');
   assert.deepEqual(plain(await api.dash({ id: 'b', kind: 'block', block: 'paragraph' }, false)), { took: false, calls: [], text: '- ' }, 'and a read-only row is left alone');
   // the rest of markdown's line starts (#598): the marker goes, the row becomes that kind and keeps its words
   assert.deepEqual(plain(await api.marker('## ', { id: 'b', kind: 'block', block: 'bullet' }, 'Plan')),

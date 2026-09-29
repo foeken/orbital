@@ -219,11 +219,12 @@ function unbullet(item) {
 // so it is dropped and whatever else the row holds stays — typing it in front of a line that is already written
 // bullets that line. It has to be typed there: a dash further in, a pasted list and a sentence containing one all
 // arrive without the caret sitting just past a leading dash (startsList, renderer/segments.js). A code block is
-// content, not prose: "- " there stays "- ".
+// content, not prose: "- " there stays "- ". A numbered row takes it too and becomes a bullet, the way "1. " turns a
+// bullet numbered (restyle); a bullet row types it as text.
 function rebullet(item, el, indent = false) {
   if (!item || item.node.kind !== 'block' || item.node.draft || !tana.setBlockType || !canEditItem(item)) return false;
   const type = blockTypeOf(item.node);
-  if (type === 'code' || ['bullet', 'numbered'].includes(type)) return false;
+  if (type === 'code' || type === 'bullet') return false;
   const { docId, node, key } = item;
   dropPending(key); // the "- " is never written: the pending save for it goes with it
   const rest = el ? listRest(readSegs(el), caretOffset(el)) : []; // everything but the marker just typed
@@ -242,6 +243,7 @@ function rebullet(item, el, indent = false) {
 // row above into a parent.
 function bulletOrIndent(item, el) {
   if (!item || item.node.kind !== 'block') return false;
+  if (['bullet', 'numbered'].includes(blockTypeOf(item.node))) return false; // a list row: Tab is the indent it always was
   const siblings = childrenOf(item.parent) || [];
   const above = siblings[siblings.indexOf(item.node) - 1];
   const under = !!above && ['bullet', 'numbered'].includes(blockTypeOf(above));
