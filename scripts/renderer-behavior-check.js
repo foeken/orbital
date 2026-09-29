@@ -3208,6 +3208,23 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.equal(api.prefs().group, PRIO, 'a grouping by field name is kept while no row on the page has that field');
   assert.equal(plain(api.pillDefs()).find((d) => d.id === 'group').value, 'Priority', 'and the Group pill still says which');
   assert.deepEqual(titles([rows[4]], PRIO), [['No value', ['d1']]], 'its rows are under No value');
+  // …and when the page is narrowed to one type that has it: the name stays, read on that type's fields
+  api.stage({ types: ['tana:type:goal'], states: null, assignee: 'anyone' });
+  const onlyGoals = goals.filter((n) => n.id.startsWith('g'));
+  api.list(onlyGoals);
+  assert.equal(api.prefs().group, PRIO, 'a grouping by field name survives narrowing the page to one type');
+  assert.deepEqual(plain(api.groupsOf(onlyGoals)).map((g) => [g.id, g.nodes.map((n) => n.id)]),
+    [['High', ['g2']], ['Low', ['g1', 'g5']], ['No value', ['g4']], ['\u0000no value', ['g3']]], 'and still sections that type’s rows by the field of that name');
+  // Clean up tells the real No value choice from the missing value, though their headings read the same
+  api.stage({ types: ['tasks'], states: ['open'], assignee: 'me' });
+  const g4 = { ...goals.find((n) => n.id === 'g4') }, pair = [goals[0], g4]; // Low, and the one No value choice: no row is missing a value
+  api.list(pair);
+  api.releaseHeld();
+  api.holdRow(g4);
+  assert.equal(api.needsCleanup(pair), false, 'nothing to clean up while the row is where it belongs');
+  g4.fields = {};
+  assert.equal(api.needsCleanup(pair), true, 'a held row that lost its No value choice offers Clean up, though both sections read No value');
+  api.releaseHeld();
   api.set('tasks', 'none', 'default');
   api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],

@@ -84,11 +84,15 @@ const arranged = (k, what) => (VIEW_ARRANGEMENT[k] || {})[what];
 // Keyed by the page, not the view: a saved search carries its own sort and grouping, stored in the document beside
 // its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
 // A search's key is its document id, so the per-view defaults below simply do not match it.
-// A field chosen by name on a mixed list stays chosen while no row offers it (an empty search, definitions still
-// being read): its rows are simply all under No value, and a saved search is not changed behind your back.
-const keptByName = (g) => String(g).startsWith(FIELD_BY_NAME) && !fieldType() && listPage();
-const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'), offered = groupList(isFieldKey(g)).some(([id]) => id === g); return offered || keptByName(g) ? g : 'none'; };
-const groupLabel = () => { const g = groupBy(); return (groupList().find(([id]) => id === g) || [g, String(g).slice(FIELD_BY_NAME.length)])[1]; };
+// A field chosen by name stays chosen on any list: one narrowed to a single type, an empty search, definitions still
+// being read. Rows without it are under No value, and a saved search is not changed behind your back. Only a typed
+// field (a page of one type) asks what the page offers; a built-in grouping never scans the rows.
+const groupOf = (k) => {
+  const g = groupPref[k] ?? arranged(k, 'group');
+  if (fieldName(g) !== null) return listPage() ? g : 'none';
+  return (isFieldKey(g) ? groupList() : baseGroups()).some(([id]) => id === g) ? g : 'none';
+};
+const groupLabel = () => { const g = groupBy(); return fieldName(g) ?? ((isFieldKey(g) ? groupList() : baseGroups()).find(([id]) => id === g) || [])[1]; };
 // On a type page the menu speaks the type: its options, link and member fields join it (sections per value, an
 // options field's in the order of its choices), Type goes (every row is one), and so do the task-only choices unless
 // the rows are tasks. Everywhere else it is GROUPS as it was.
@@ -102,33 +106,36 @@ const isFieldKey = (key) => String(key).includes('?attribute=');
 // value, a doc or a row of a type without the field, is under No value. The definitions are read only once they are
 // wanted (load: the Group menu is open or a field grouping is chosen), so a mixed list alone reads nothing.
 const FIELD_BY_NAME = 'field?attribute='; // a field on a mixed list, keyed by its name (isFieldKey still holds)
-const namedFieldKeys = new Map(); // FIELD_BY_NAME + title -> Map(type uri -> its typed keys of that name), as last listed
+const fieldName = (key) => (String(key).startsWith(FIELD_BY_NAME) ? String(key).slice(FIELD_BY_NAME.length) : null);
 const rowTypes = (n) => (n.tags || []).map((t) => t && t.uri).filter(isTypeId);
+// a type's choice fields of this name (a type may name two alike); every one if no name is given
+const choicesNamed = (uri, name = null) => ((relatedBy.get(uri) || {}).definitions || []).filter((d) => GROUPABLE.includes(d.type) && (name === null || (d.title || 'Untitled field') === name));
+const pageTypes = () => [...new Set(fieldType() ? [fieldType()] : pageDocs().flatMap(rowTypes))];
 function pageFieldDefs(load = false) {
   const t = fieldType();
   if (t) return typeDefs();
   if (!listPage()) return [];
   const named = new Map();
-  for (const uri of new Set(pageDocs().flatMap(rowTypes))) {
+  for (const uri of pageTypes()) {
     if (load) loadRelated(uri, true); // the definitions come with the lite read
-    for (const d of ((relatedBy.get(uri) || {}).definitions || []).filter((x) => GROUPABLE.includes(x.type))) {
+    for (const d of choicesNamed(uri)) {
       const title = d.title || 'Untitled field', key = FIELD_BY_NAME + title;
-      if (!named.has(key)) named.set(key, { title, type: d.type, group: key, keys: new Map(), options: [] });
-      const f = named.get(key);
-      f.keys.set(uri, [...(f.keys.get(uri) || []), uri + '?attribute=' + d.key]); // a type may name two fields alike
-      for (const o of d.options || []) if (!f.options.some((x) => x.label === o.label)) f.options.push(o);
+      if (!named.has(key)) named.set(key, { title, type: d.type, group: key });
     }
   }
-  namedFieldKeys.clear();
-  for (const f of named.values()) namedFieldKeys.set(f.group, f.keys);
   return [...named.values()];
 }
 const GROUPABLE = ['options', 'link', 'member'];
+const baseGroups = () => (onTypePage() ? GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))) : GROUPS);
 const groupList = (load) => {
   const byField = pageFieldDefs(load).filter((d) => GROUPABLE.includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field']);
-  return onTypePage() ? [...GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))), ...byField] : [...GROUPS, ...byField];
+  return [...baseGroups(), ...byField];
 };
-const fieldOrder = (key) => ((pageFieldDefs().find((d) => fieldKey(d) === key) || {}).options || []).map((o) => o.label);
+// a field's choices in order; one by name follows the types on the page in turn, a label they share listed once
+const fieldOrder = (key) => {
+  const name = fieldName(key), defs = name === null ? typeDefs().filter((d) => fieldKey(d) === key) : pageTypes().flatMap((t) => choicesNamed(t, name));
+  return [...new Set(defs.flatMap((d) => (d.options || []).map((o) => o.label)))];
+};
 // Responsibility is about your tasks, and leaves out every row that is not yours: with no tasks in the filter (only
 // Risk picked in the Type pill, #139) it would hide the other people's risks, so such a list is not sectioned and the
 // Group menu does not offer it. The choice is kept: ticking Tasks again brings the sections back.
@@ -156,7 +163,8 @@ function holdRow(n) {
 const releaseHeld = () => { held = null; };
 // The rows as ids per group: once the held layout differs from the one the view would show now (a row that belongs in
 // another group, an order a refresh changed), the view offers a Clean up pill (renderer/pills.js) that lets go.
-function layoutOf(list) { const sorted = sortRows(list), groups = groupsOf(sorted); return JSON.stringify(groups ? groups.map((g) => [g.title, g.nodes.map((n) => n.id)]) : sorted.map((n) => n.id)); }
+// by section id: a choice called No value and a missing value share a heading
+function layoutOf(list) { const sorted = sortRows(list), groups = groupsOf(sorted); return JSON.stringify(groups ? groups.map((g) => [g.id, g.nodes.map((n) => n.id)]) : sorted.map((n) => n.id)); }
 function needsCleanup(list) {
   if (!held || held.view !== pillKey()) return false;
   const kept = held, order = lastOrder, shown = layoutOf(list);
@@ -194,8 +202,8 @@ function groupKey(n, by) {
   // The same lazily read metadata grouping by assignee uses; null means the row has no section here and is left out.
   if (by === 'responsibility') return responsibilityOf(n);
   // ponytail: a field with several values is filed under the first, like the assignee grouping above
-  // a name over several types reads the key of the type the row is now; a value left from a former type is not its
-  if (isFieldKey(by)) { const named = namedFieldKeys.get(by), keys = named ? rowTypes(n).flatMap((t) => named.get(t) || []) : [by]; return keys.map((k) => ((n.fields || {})[k] || [])[0]).find(Boolean) || NO_FIELD; }
+  // a field by name reads the keys of the type the row is now; a value left from a former type is not its
+  if (isFieldKey(by)) { const name = fieldName(by), keys = name === null ? [by] : rowTypes(n).flatMap((t) => choicesNamed(t, name).map((d) => t + '?attribute=' + d.key)); return keys.map((k) => ((n.fields || {})[k] || [])[0]).find(Boolean) || NO_FIELD; }
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
@@ -218,6 +226,7 @@ function groupsOf(list) {
   const by = groupBy();
   if (by === 'none') return null;
   if (by === 'assignee' || by === 'responsibility') loadMembers(); // the names for the headings, and who you are
+  if (fieldName(by) !== null) for (const t of new Set(list.flatMap(rowTypes))) loadRelated(t, true); // the definitions its sections are read from
   // every section holds rows: folded away (below) the heading stays and its rows are left out
   return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; }).map(trimTracking)
     .map((g) => (by === 'responsibility' && !(held && held.view === pillKey() && held.by === by) ? latestPinFirst(g) : g));
