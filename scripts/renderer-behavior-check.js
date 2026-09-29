@@ -1477,6 +1477,10 @@ async function runLinkPaletteCheck() {
   open.settleEnter(); await open.settle();
   open.chooseRow(false, false);
   assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⇧↩ opens Today beside, ⌘↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+  // the modifiers every key and click opens elsewhere with (#608): ⌘ a tab, ⇧ a pane beside, ⌥ floating, ⌘ winning
+  const elsewhere = vm.runInNewContext(source.match(/^const elsewhere = [^\n]+;$/m)[0].replace('const elsewhere = ', ''));
+  const mods = (m) => ({ metaKey: m.includes('⌘'), ctrlKey: false, shiftKey: m.includes('⇧'), altKey: m.includes('⌥') });
+  assert.deepEqual(['⌘', '⇧', '⌥', '', '⌘⇧', '⇧⌥'].map((m) => elsewhere(mods(m))), ['tab', 'right', 'float', null, 'tab', 'right'], '⌘ opens a tab, ⇧ a pane beside, ⌥ a floating pane, nothing in place');
 
   const resultRows = functionSource('resultRows');
   const searchNow = functionSource('searchNow');
