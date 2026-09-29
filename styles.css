@@ -1353,7 +1353,9 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line:hover > .bullet[draggable="true"]:not(.icon)::after { background-image: radial-gradient(circle at center, #6f7679 1.1px, transparent 1.3px); }
 [data-theme="dark"] #dropline { background: #6ea8dc; }
 [data-theme="dark"] .drop-into { box-shadow: 0 0 0 2px #6ea8dc; }
-[data-theme="dark"] .check { background: #3a3e40; --check-on: #5b976c; }
+/* the box only while unticked: the `background` shorthand on every .check replaced .check:checked's tick and green (#604) */
+[data-theme="dark"] .check { --check-on: #5b976c; }
+[data-theme="dark"] .check:not(:checked) { background: #3a3e40; }
 [data-theme="dark"] .check:hover:not(:checked) { background: #474c4e; }
 [data-theme="dark"] .check.inbox:not(:checked) { background: #5d6467; }
 [data-theme="dark"] .empty-note { color: var(--muted); } /* over .empty-note.cleared's green, which the light theme keeps */

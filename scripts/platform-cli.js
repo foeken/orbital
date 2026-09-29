@@ -630,6 +630,15 @@ commands.rows = async () => {
   const main = backend(await connect());
   out(await main.search(positional.join(' ')));
 };
+// children <id>: a page's outline exactly as the renderer receives it (outline:children), each row's id, kind,
+// checkbox and text. Read-only.
+commands.children = async () => {
+  if (!positional[0]) throw new Error('usage: children <id>  (outline:children as the renderer receives it)');
+  const main = backend(await connect());
+  await client.sync.connect();
+  const walk = (rows, depth = 0) => rows.flatMap((n) => [[depth, n.id, n.block || n.type || n.kind, n.done ?? '-', String(n.text || '').slice(0, 60)].join('  '), ...walk(n.children || [], depth + 1)]);
+  out(walk(await main.op(positional[0], (doc) => main.outlineWithReferences(doc))).join('\n')); // the outline:children path for a document (main.js)
+};
 // settings [<key> <json>]: the app's own settings document (main/settings.js) — which document it is and what it
 // carries. Read-only without arguments; with a key and a JSON value it writes one setting the way the app does.
 commands.settings = async () => {
@@ -1143,7 +1152,7 @@ const USAGE = [
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates] |',
   '             changes <id> [--within <summary id>] [--limit 20] | inbox [--limit 20] [--watch seconds] |',
   '             settings   (with a key and a JSON value it writes)',
-  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
+  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | children <id> | pinrows |',
   '             settype <id>   (listing only; with a target it writes) | classify <id>   (the document goes to the model) | translate [--to English] [text…]   (the texts go to the model)',
   '             caps <id...> | related <id> | incall [--limit 5] | callstate <call id> | suggestions [--limit 10] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
