@@ -571,13 +571,17 @@ async function rowInfo(doc) {
   // whose type has moved on is therefore rebuilt from the document below rather than patched.
   if (row && (typeUriOf(row) || null) === (n.entityTypeUri || null)) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, meta: ev || row.meta });
   await resolveHue(doc.id); // cached rows already carry the hue the refresh learned from the graph
+  await resolveTypes([n.entityTypeUri]);
+  return builtRow(doc, n);
+}
+// The row a document makes of itself, with what is known now: a type whose name is not read yet has no chip.
+function builtRow(doc, n) {
   // No updatedAt of our own: toNode falls back to nodeMeta — the graph's updateTime, or the time onChange saw an edit.
   // A current time here made a row jump to the top of a list sorted by last update whenever it was merely read —
   // expanding it subscribes it, and the bootstrap comes back as a change the renderer patches every copy of the row with.
   if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', undefined, hueOf(n)));
   if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', undefined, hueOf(n)));
   const isEvent = n.type === 'event' || doc.id.startsWith('tana:event:');
-  await resolveTypes([n.entityTypeUri]);
   if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', undefined, n.entityTypeUri, hueOf(n)));
   return toNode({
     id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
@@ -940,11 +944,13 @@ function onChange(docId, info) {
     if (row && fieldsMoved) db.setFields(docId, fieldLines(doc));
     // A retype leaves the old type's values on the document: the cached rows' chips say which type counts, so they
     // follow it too (rowInfo rebuilds a row whose type moved on), or a reload would group it by its former type
-    // The old chip goes now, before anyone is told (the new one with it when its name is known), and the rebuilt row
-    // follows once the name is read: written only while the document is still that type, as a later retype may land first.
+    // The rebuild starts while the cache still holds the former type (rowInfo decides on the cached row before it
+    // waits); the row as it can be built now goes in at once, before anyone is told, and the rebuilt one follows
+    // once the type's name is read: written only while the document is still that type, as a later retype may land first.
     if (row && (typeUriOf(row) || null) !== (n.entityTypeUri || null)) {
-      db.setTags(docId, [...(row.tags || []).filter((t) => !t || !t.uri), ...typeTag(n.entityTypeUri)], row.icon);
       rowInfo(doc).then((node) => { if (readNode(doc).entityTypeUri === n.entityTypeUri) db.setTags(docId, node.tags, node.icon); }, report);
+      const now = builtRow(doc, n);
+      db.setTags(docId, now.tags, now.icon);
     }
     notifyWatched(docId, doc, n, info).catch(report); // the signature is taken here and now; the audience it may need is not
     sendChanged(docId, { meta, fields: fieldsMoved }); // the renderer patches this one row from doc:info; the page that typed it knows it has it

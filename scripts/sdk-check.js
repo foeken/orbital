@@ -1976,6 +1976,20 @@ async function main() {
     fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeC));
     backend.onChange(fielded, { origin: 'remote' });
     assert.deepEqual((await rootsOf()).tags.map((t) => t.uri).filter(Boolean), [], 'a reload during the type lookup no longer carries the former type');
+    // To a type whose name is known: the new chip and the row's own icon at once, not the one the cache had
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async (q) => ({ nodes: (q.nodeIds || []).map((id) => ({ id, title: 'Bug' })) }) } } });
+    for (const section of ['library', 'tasks']) cache.upsert({ ...cache.list()[section].find((r) => r.id === fielded), section, icon: 'stale-glyph', tags: [{ label: 'Goal', uri: typeA }] });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeB));
+    backend.onChange(fielded, { origin: 'remote' });
+    const typedNow = await rootsOf();
+    assert.deepEqual([typedNow.icon, typedNow.tags.map((t) => t.uri).filter(Boolean)], ['type', [typeB]], 'typed to typed: the new type’s chip and icon, at once');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal((await rootsOf()).icon, 'type', 'and the rebuild that follows keeps them');
+    // To no type at all: a plain document again, with its doc chip and icon
+    fieldedDoc.transact((l) => l.getMap('data').delete('entityTypeUri'));
+    backend.onChange(fielded, { origin: 'remote' });
+    const untyped = await rootsOf();
+    assert.deepEqual([untyped.icon, untyped.tags.map((t) => t.label), untyped.tags.some((t) => t.uri)], ['doc', ['doc'], false], 'typed to untyped: a plain document, doc chip and icon');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
