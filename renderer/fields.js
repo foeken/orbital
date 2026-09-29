@@ -236,7 +236,7 @@ function definitionEl(parent, def) {
   const key = parent.docId + '|def|' + def.key, ctx = { typeUri: parent.docId, key, def };
   fieldCtxs.set(key, ctx);
   const row = document.createElement('div'); row.className = 'field';
-  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, fieldGlyph(parent.docId + '?attribute=' + def.key));
+  const icon = document.createElement('span'); icon.className = 'ricon'; icon.dataset.field = parent.docId + '?attribute=' + def.key; addIcon(icon, fieldGlyph(icon.dataset.field));
   const label = document.createElement('span'); label.className = 'flabel fdef-title'; label.textContent = def.title || def.key;
   const values = document.createElement('div'); values.className = 'fvalues';
   const el = document.createElement('div'); el.className = 'fvalue fchoice fdef'; el.tabIndex = 0; el.dataset.key = key;
@@ -299,6 +299,11 @@ function palFieldKey() {
   if (palField) return palField.def ? palField.typeUri + '?attribute=' + palField.def.key : palField.field.key;
   const at = palette.hidden ? focused() : palReturn, item = at && at.key && items.get(at.key);
   return item && inField(item.docId) ? item.docId.split('|')[1] : null;
+}
+// A glyph just chosen for a field, on every row of this page that draws that field. The render that would redraw them
+// waits while the caret is in a field's value, and Set field icon hands the caret straight back there.
+function patchFieldGlyphs(key) {
+  for (const el of document.querySelectorAll('.ricon[data-field="' + CSS.escape(key) + '"]')) { el.replaceChildren(); addIcon(el, fieldGlyph(key)); }
 }
 function kindRows(q) {
   const ctx = fieldCtx, def = ctx.def, now = def.type || '';

@@ -905,6 +905,7 @@ function applyIcon(doc, name) {
   run(async () => {
     const chosen = await tana.setTypeIcon(doc.id, name);
     if (chosen) { registerIcons([chosen]); typeGlyphs.set(doc.id, chosen.name); } else typeGlyphs.delete(doc.id);
+    patchFieldGlyphs(doc.id); // a field's glyph shows now, even with the caret in its value
     closePalette();
   });
 }

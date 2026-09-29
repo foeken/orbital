@@ -483,7 +483,8 @@ function mockApi() {
     },
     typeIcons: async () => structuredClone(Object.entries(typeIconChoices).map(([uri, name]) => ({ uri, ...mockIcons.find((i) => i.name === name) }))),
     setTypeIcon: async (typeUri, name) => {
-      if (!types.some((t) => t.id === typeUri) && !String(typeUri).startsWith('tana:search:')) throw new Error('Icons are set on a type or a saved search');
+      // a type's field is the type's uri with "?attribute=<key>" (Set field icon, #606)
+      if (!types.some((t) => t.id === String(typeUri).split('?attribute=')[0]) && !String(typeUri).startsWith('tana:search:')) throw new Error('Icons are set on a type, a field or a saved search');
       const icon = name ? mockIcons.find((i) => i.name === name) : null;
       if (name && !icon) throw new Error('No icon called ' + name);
       if (icon) typeIconChoices[typeUri] = icon.name; else delete typeIconChoices[typeUri];

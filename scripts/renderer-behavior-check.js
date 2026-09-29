@@ -52,6 +52,7 @@ const withShims = (src) => {
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
   // a field is drawn with its own glyph when one was chosen (renderer/nodes.js fieldGlyph): none in a harness
   if (/\bfieldGlyph\(/.test(src) && !/const fieldGlyph =/.test(src)) src = "globalThis.fieldGlyph ??= () => 'field';\n" + src;
+  if (/\bpatchFieldGlyphs\(/.test(src) && !/function patchFieldGlyphs\(/.test(src)) src = 'globalThis.patchFieldGlyphs ??= () => {};\n' + src;
   // a date mention's day (renderer/segments.js): the real one, since chips and clicks both ask it
   if (/\bdayOfUri\(/.test(src) && !/const dayOfUri =/.test(src)) src = sourceLine('const dayOfUri').replace('const dayOfUri =', 'globalThis.dayOfUri ??=') + '\n' + src;
   // how many rows changing at once is a new list rather than an edit (renderer/motion.js): the real number
@@ -2337,6 +2338,8 @@ function runInlineFieldsCheck() {
     const kids = new Map(), loaded = [], built = [];
     let fieldsDeferred = false;
     const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false, tana = {}; // not a task, no metadata: neither Assigned to nor Visible to
+    const typeGlyphs = new Map(), drawn = [], addIcon = (el, icon) => { drawn.push(icon); return el; }; // which glyph each field row is drawn with
+    ${sourceLine('const fieldGlyph =')}
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
     const ensureLoaded = (host) => loaded.push(host.docId);
     const renderSegs = (el, segments) => { el.textContent = segments.map(s => s.text).join(''); };
@@ -2344,12 +2347,16 @@ function runInlineFieldsCheck() {
     const childEl = (node, host) => { built.push({ id: host.docId, editable: host.node.editable }); const el = makeEl('div'); el.textContent = node.text; return el; };
     ${functionSource('renderFields')}
     const parent = { docId: 'doc', node: { kind: 'document', editable: true } };
-    ({ draw: () => renderFields(parent, true, inline), state: () => ({ text: inline.textContent, page: page.textContent, loaded, built }),
+    ({ draw: () => renderFields(parent, true, inline), state: () => ({ text: inline.textContent, page: page.textContent, loaded, built }), drawn, typeGlyphs,
        ready: () => kids.set('doc|tana:type:test?attribute=who', [{ text: 'Updated value' }]),
        readonly: () => { parent.node.editable = false; } });
   `);
   api.draw();
   assert.equal(api.state().text, 'Discuss withRob Schuurman', 'inline fields show their labels and cached values while loading');
+  assert.equal(api.drawn.at(-1), 'field', 'a field with no glyph of its own is drawn with the generic one');
+  api.typeGlyphs.set('tana:type:test?attribute=who', 'nc-rocket'); api.draw();
+  assert.equal(api.drawn.at(-1), 'nc-rocket', 'and with the one chosen for it once there is one (#606)');
+  api.typeGlyphs.clear();
   assert.equal(api.state().page, '', 'drawing inline fields leaves the zoomed page fields untouched');
   assert.equal(api.state().loaded[0], 'doc|tana:type:test?attribute=who', 'field editing uses the existing document-field address');
   api.ready(); api.readonly(); api.draw();
@@ -8104,6 +8111,33 @@ async function runSetFieldIconCheck() {
   assert.equal(api.row().run() && api.opened.at(-1), api.KEY, 'and so is a row inside a text field\u2019s value');
   api.set(null, { key: 'r2' });
   assert.equal(api.row(), undefined, 'a row of the page itself is no field');
+  // The other two places a field is drawn: its definition on the type's page, and its filter pill.
+  const draw = vm.runInNewContext(`
+    ${FAKE_DOM}
+    const TYPE = 'tana:type:01j0type000000000000000000', KEY = TYPE + '?attribute=ab12cd34', typeGlyphs = new Map();
+    const addIcon = (el, icon) => { el.dataset.icon = icon; return el; }, fieldCtxs = new Map(), togglePalette = () => {}, choiceKey = () => {};
+    const PILL_FIELDS = ['options', 'link', 'member', 'date'], DATE_PRESETS = [], fieldType = () => TYPE, putField = () => {};
+    ${sourceLine('const FIELD_KINDS =')}
+    ${sourceLine('const kindName =')}
+    ${sourceLine('const fieldKey =')}
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('definitionEl')}
+    ${functionSource('fieldPill')}
+    const def = { key: 'ab12cd34', title: 'Due', type: 'date' };
+    ({ KEY, typeGlyphs, definition: () => definitionEl({ docId: TYPE }, def).childNodes[0].dataset, pill: () => fieldPill(def, {}, () => {}).icon })`, {});
+  assert.deepEqual(plain([draw.definition().icon, draw.definition().field, draw.pill()]), ['field', draw.KEY, 'field'], 'a definition and a pill with no glyph of their own draw the generic one, the definition marked with its field');
+  draw.typeGlyphs.set(draw.KEY, 'nc-flask');
+  assert.deepEqual(plain([draw.definition().icon, draw.pill()]), ['nc-flask', 'nc-flask'], 'and both wear the one chosen for the field');
+  // A choice redraws the field's glyphs in place, since the render that would waits while the caret is in its value.
+  const patched = vm.runInNewContext(`
+    const KEY = 'tana:type:01j0type000000000000000000?attribute=ab12cd34', typeGlyphs = new Map([[KEY, 'nc-rocket']]), asked = [];
+    const el = { childNodes: ['old'], replaceChildren() { this.childNodes = []; } }, CSS = { escape: (s) => s };
+    const document = { querySelectorAll: (sel) => { asked.push(sel); return sel === '.ricon[data-field="' + KEY + '"]' ? [el] : []; } };
+    const addIcon = (target, icon) => { target.childNodes.push(icon); return target; };
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('patchFieldGlyphs')}
+    patchFieldGlyphs(KEY); ({ nodes: el.childNodes, asked })`, {});
+  assert.deepEqual(plain(patched.nodes), ['nc-rocket'], 'a chosen glyph replaces the old one on the rows already drawn');
   console.log('ok  Set field icon: offered on a choice field, a definition and a text field\u2019s row, all under the field\u2019s key (#606)');
 }
 async function runSetIconCheck() {
