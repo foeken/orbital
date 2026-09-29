@@ -1464,12 +1464,13 @@ async function runVisibilityPickerCheck() {
 }
 
 async function runLinkPaletteCheck() {
-  // ⌘↩ / ⌥↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
+  // ⇧↩ / ⌘↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
   const open = vm.runInNewContext(`
     let linkCtx = null, palBusy = false, palMode = 'search', palEnter = null, palIndex = 0, palRows = [], opened = [], pending;
     const closePalette = () => {}, run = (fn) => (pending = fn()), runRow = (r) => opened.push(['plain', r.label]);
     const openElsewhere = (where, id) => opened.push([where, id]);
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ({ opened, set: (rows, busy) => { palRows = rows; palBusy = busy; }, chooseRow, settleEnter, settle: () => pending });
   `);
@@ -1480,7 +1481,11 @@ async function runLinkPaletteCheck() {
   open.set([{ label: 'Hit', opens: 'tana:text:hit' }], false);
   open.settleEnter(); await open.settle();
   open.chooseRow(false, false);
-  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⌘↩ opens Today beside, ⌥↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⇧↩ opens Today beside, ⌘↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+  // the modifiers every key and click opens elsewhere with (#608): ⌘ a tab, ⇧ a pane beside, ⌥ floating, ⌘ winning
+  const elsewhere = vm.runInNewContext(source.match(/^const elsewhere = [^\n]+;$/m)[0].replace('const elsewhere = ', ''));
+  const mods = (m) => ({ metaKey: m.includes('⌘'), ctrlKey: false, shiftKey: m.includes('⇧'), altKey: m.includes('⌥') });
+  assert.deepEqual(['⌘', '⇧', '⌥', '', '⌘⇧', '⇧⌥'].map((m) => elsewhere(mods(m))), ['tab', 'right', 'float', null, 'tab', 'right'], '⌘ opens a tab, ⇧ a pane beside, ⌥ a floating pane, nothing in place');
 
   const resultRows = functionSource('resultRows');
   const searchNow = functionSource('searchNow');
@@ -1504,6 +1509,7 @@ async function runLinkPaletteCheck() {
     const showError = (error) => { throw error; };
     const runRow = (row) => row.run();
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ${resultRows}
     ${functionSource('titleHits')}
@@ -8124,6 +8130,7 @@ async function runSetIconCheck() {
     ${functionSource('applyIcon')}
     ${functionSource('backPalette')}
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ({ row: () => paletteRows('').find((r) => r.id === 'setIcon'),
        node: (next) => { palDoc = next; },
