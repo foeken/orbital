@@ -611,6 +611,10 @@ if (process.env.TANA_MAIN_TEST) {
     // An edit banner has one macOS identifier per node, so the 'summary' that follows it (Tana's sentence for the edit,
     // main/documents.js followSummary) replaces it in place, silently — unless it was clicked, and so already seen.
     const clickedEdits = new Set();
+    // Held until clicked or closed: a Notification that only lived in this function was garbage-collected while it sat in
+    // Notification Center, and its click handler with it, so a click minutes later did nothing. One per macOS id: a
+    // banner replaced in place lets go of the one it replaced.
+    const onScreen = new Map();
     S.notify = async (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
       if (S.demo || !Notification.isSupported || !Notification.isSupported()) return; // demo mode: nothing real on screen, banners included
       // Auto-translate (#547) covers banners too: their words in the chosen language, never a sensitive node's, and the
@@ -624,7 +628,11 @@ if (process.env.TANA_MAIN_TEST) {
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);
       const note = new Notification({ id, title, subtitle, body, silent: kind === 'summary' });
+      const key = id || note;
+      onScreen.set(key, note);
+      note.on('close', () => { if (onScreen.get(key) === note) onScreen.delete(key); });
       note.on('click', () => { // the page used last, not all of them; a new window when the last one was closed
+        if (onScreen.get(key) === note) onScreen.delete(key);
         if (id) clickedEdits.add(id);
         const page = frontPane();
         if (page) { S.win.show(); S.win.focus(); page.focus(); return page.send('notify:open', docId); }
