@@ -10,11 +10,15 @@ let meetingList = null, pinMeetingDoc = null; // the meeting picker: loadList's 
 let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
-// where: ⌘↩ / ⇧↩ / ⌥↩ open a row that opens a place in a tab, a pane beside or a floating pane (`opens` an id, or a function finding one).
+// where: ⌘↩ / ⇧↩ / ⌥↩ (or the same click, openRow) open a row that opens a place in a tab, a pane beside or a floating
+// pane (`opens` an id, or a function finding one).
 function chooseRow(create, where) {
   // the four pages whose rows main finds (the input listener below): an Enter there waits for the answer to what was typed
   if (palBusy && (palMode === 'spaces' || palMode === 'search' || palMode === 'pinToday' || palMode === 'setIcon')) { palEnter = { create, where }; return; }
   const r = create && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex];
+  openRow(r, where);
+}
+function openRow(r, where) {
   if (r && where && !linkCtx && r.opens && !r.disabled) { closePalette(); run(async () => openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens)); }
   else if (r) runRow(r);
 }
@@ -1043,7 +1047,7 @@ function renderPalette() {
     if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
     if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = demoMeta(r.node, r.hint); blurSensitive(h, r.node && r.node.id); row.append(h); }
     row.onmousedown = (e) => e.preventDefault();
-    row.onclick = () => runRow(r);
+    row.onclick = (e) => openRow(r, elsewhere(e)); // ⌘/⇧/⌥-click opens it where ⌘↩/⇧↩/⌥↩ would
     // the pointer moves the one highlight, as ↑/↓ do (and past the same rows): a pointer that only rests there does not
     row.onmousemove = () => {
       if (palIndex === i || (r.disabled && !r.id)) return;

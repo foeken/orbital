@@ -359,7 +359,7 @@ audience disclosure and preview token are the gate (§14).
 **Opening elsewhere** (issues #443, #608): ⌘ opens a place as a new tab in this pane (as browsers and Obsidian do), ⇧ in
 a new pane beside this one (as Roam's and Logseq's sidebar), ⌥ in a new floating pane (renderer/palette.js `elsewhere` and
 `openElsewhere`, which stores the place under the id main gives the new page, as ⌘N does). In Cmd+K
-and Cmd+S that is ⌘↩ / ⇧↩ / ⌥↩ on a row that opens a place (search results, saved searches, types, Today and This week:
+and Cmd+S that is ⌘↩ / ⇧↩ / ⌥↩, or ⌘- / ⇧- / ⌥-click, on a row that opens a place (search results, saved searches, types, Today and This week:
 rows with `opens`, an id or a function finding it), also when pressed before the search has answered; while an @ link
 is being made ⌘↩ still creates. On the outline it is ⌘-click / ⇧-click / ⌥-click on a bullet, and ⌥-click on a
 row that opens on a click (⌘- and ⇧-click there keep selecting rows; a Timeline row opens on ⌘-click too).

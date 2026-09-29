@@ -1465,6 +1465,7 @@ async function runLinkPaletteCheck() {
     const closePalette = () => {}, run = (fn) => (pending = fn()), runRow = (r) => opened.push(['plain', r.label]);
     const openElsewhere = (where, id) => opened.push([where, id]);
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ({ opened, set: (rows, busy) => { palRows = rows; palBusy = busy; }, chooseRow, settleEnter, settle: () => pending });
   `);
@@ -1499,6 +1500,7 @@ async function runLinkPaletteCheck() {
     const showError = (error) => { throw error; };
     const runRow = (row) => row.run();
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ${resultRows}
     ${functionSource('titleHits')}
@@ -7944,6 +7946,7 @@ async function runSetIconCheck() {
     ${functionSource('applyIcon')}
     ${functionSource('backPalette')}
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ({ row: () => paletteRows('').find((r) => r.id === 'setIcon'),
        node: (next) => { palDoc = next; },
