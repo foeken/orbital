@@ -304,8 +304,8 @@ function paletteRows(q, typed = q) {
     // A task on another machine has no route from here, so the row says where it is rather than offering to open
     // something it cannot. Disabled rather than hidden: the palette already greys rows it will not run, and knowing
     // where the work is happening is worth a line.
-    if (!where || where === 'local') rows.push({ rank: 'codexOpen', group: docGroup, icon: 'robot', label: 'Go to Agent task', run: () => run(() => tana.openCodexTask(doc.id)) });
-    else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Agent task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
+    if (!where || where === 'local') rows.push({ rank: 'codexOpen', group: docGroup, icon: 'robot', label: 'Go to Codex task', run: () => run(() => tana.openCodexTask(doc.id)) });
+    else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Codex task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
   }
   if (palDoc && tana.accessOptions) {
     if (!palette.hidden) loadAccess(palDoc.id); // for the open palette only (#274): a key on a choice folded under these asks in runAction

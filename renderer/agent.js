@@ -83,7 +83,7 @@ function openHostsPalette() {
 }
 // ---- linking a node to a Codex task that already exists (#143) ----
 // Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, and a bare id works too. Main checks it
-// again and stores it as a task on this machine; the badge and Go to Agent task then work as for any assignment.
+// again and stores it as a task on this machine; the badge and Go to Codex task then work as for any assignment.
 const CODEX_LINK = /^(?:codex:\/\/threads\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
 let agentLinkDoc = null; // the node the pasted link is for, while this page is up
 function agentLinkRows(q, typed) {
