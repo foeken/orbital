@@ -17,7 +17,10 @@ const TRANSLATE_BUDGET = 20000; // characters per question (main/ai.js keeps 200
 const shownOriginal = new Set(); // a page's document id or a list row's id, switched back to its own words
 let translateTimer = null, translatePage = null; // the zoomed page to translate, set at the start of each render
 let translatingInto = null; // the language the answers above are in: another (chosen here or in another pane) starts over
-const translationPending = (text) => translateWaiting.has(text) || (translateAsked.has(text) && !translations.has(text));
+// being translated: only what the model was given, never what this Mac is still looking at (a moment, and mostly
+// English), so a row says "Translating…" only when it will change
+const translateModel = new Set();
+const translationPending = (text) => translateModel.has(text);
 const plainText = (segs) => (segs.length && segs.every((s) => Object.keys(s).every((k) => k === 'text')) ? segs.map((s) => s.text).join('') : '');
 // demo mode translates too, so its notices show; every translated word is masked where it is drawn (renderSegs, demoText)
 const maySend = (id) => !!translateTo() && !!tana.translate && typeof id === 'string' && sensitiveIds !== null && !sensitiveIds.has(id); // unknown marks count as sensitive
@@ -35,13 +38,24 @@ function askTranslations() {
   for (const t of batch) { translateWaiting.delete(t); translateAsked.add(t); }
   if (!batch.length || !to) return;
   const next = () => { if (translateWaiting.size) translateTimer = setTimeout(askTranslations, 50); };
-  tana.translate(batch, to).then((answers) => {
-      if (to !== translateTo()) return;
-      batch.forEach((t, i) => translations.set(t, (answers || [])[i] || null));
-      for (const el of document.querySelectorAll('[data-translate]')) if (batch.includes(el.dataset.translate)) paintTranslation(el); // a row the render is holding back for (the caret is in another) gets it now
-      renderSoon(); next();
-    },
-    () => { for (const t of batch) translations.set(t, null); next(); }); // refused (no sign-in, the model busy): shown as written this session
+  const land = (texts, answers) => {
+    texts.forEach((t, i) => { translateModel.delete(t); translations.set(t, (answers || [])[i] || null); });
+    for (const el of document.querySelectorAll('[data-translate]')) if (texts.includes(el.dataset.translate)) paintTranslation(el); // a row the render is holding back for (the caret is in another) gets it now
+    renderSoon();
+  };
+  const refused = (texts) => { for (const t of texts) { translateModel.delete(t); translations.set(t, null); } renderSoon(); }; // no sign-in, the model busy: shown as written this session
+  // Two steps: this Mac first (kept answers, and what it finds already in the language: most of a page, settled at
+  // once), then the model for the rest, while the next batch goes on to this Mac (main/ai.js translate, local)
+  tana.translate(batch, to, { local: true }).then((first) => {
+    if (to !== translateTo()) return;
+    const ask = batch.filter((t, i) => first && first[i] && first[i].ask);
+    land(batch.filter((t) => !ask.includes(t)), batch.filter((t) => !ask.includes(t)).map((t) => first[batch.indexOf(t)]));
+    next();
+    if (!ask.length) return;
+    for (const t of ask) translateModel.add(t);
+    renderSoon();
+    tana.translate(ask, to).then((answers) => { if (to === translateTo()) land(ask, answers); }, () => refused(ask));
+  }, () => { refused(batch); next(); });
 }
 function pageTexts(docId, title) {
   const texts = [title];

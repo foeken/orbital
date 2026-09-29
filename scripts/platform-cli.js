@@ -41,7 +41,7 @@ async function connect() {
   pins = require('../sdk/pins');
   const me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
-  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
+  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: 'Orbital-CLI/' + require('../package.json').version }); // told apart from the app in Tana's logs
   return me;
 }
 

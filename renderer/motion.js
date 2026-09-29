@@ -158,7 +158,7 @@ function foldRow(key, opening, done) {
   const unasked = doc && (!tana.related || !isRealId(doc.id));
   const ready = () => !doc || doc.kind !== 'document' || ((unasked || relatedBy.get(doc.id) != null) && (!own || kids.get(doc.id) != null));
   if (!motionOK() || !connected || ready()) return open();
-  loadRelated(doc.id);
+  loadRelated(doc.id, true); // the fields it opens onto (render.js)
   if (own) ensureLoaded(item);
   const until = performance.now() + 400;
   settleAt = until; // the renders those answers ask for wait too (renderSoon), or they would draw the row closed again under the turned chevron

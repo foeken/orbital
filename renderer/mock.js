@@ -380,7 +380,11 @@ function mockApi() {
     setAssignees: async (docId, uris) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('not a task'); meta.assignees = [...new Set(uris)]; emit(docId); },
     setAssigneesMany: async (docIds, uris) => { const metas = docIds.map((id) => taskDetails.get(id)); if (metas.some((meta) => !meta)) throw new Error('not a task'); mut(docIds[0], () => { for (const meta of metas) meta.assignees = [...new Set(uris)]; }); emit(null); return metas.length; },
     image: async (uri) => { await new Promise((r) => setTimeout(r, 30)); if (uri !== 'tana:image:mock') throw new Error('unknown image ' + uri); return PNG; },
-    translate: async (texts, to) => { await new Promise((r) => setTimeout(r, 1500)); return texts.map((t) => (to === 'English' && DUTCH[t] ? { lang: 'Dutch', text: DUTCH[t] } : null)); }, // a model takes a moment: the Translating… state shows
+    translate: async (texts, to, opts) => { // this Mac answers at once; a model takes a moment, so the Translating… state shows
+      const dutch = (t) => to === 'English' && DUTCH[t];
+      if (opts && opts.local) return texts.map((t) => (dutch(t) ? { ask: true } : null));
+      await new Promise((r) => setTimeout(r, 1500)); return texts.map((t) => (dutch(t) ? { lang: 'Dutch', text: DUTCH[t] } : null));
+    },
     systemTheme: async () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
     onSystemTheme: (cb) => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => cb(e.matches ? 'dark' : 'light')),
     // "#task", "#meeting", "#member", "#<type>" tokens filter; the rest is a substring query; events get date-style meta

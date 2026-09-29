@@ -296,7 +296,7 @@ const fieldType = () => {
   const t = (filters.get(pillKey()) || {}).types;
   return t && t.length === 1 && isTypeId(t[0]) && listPage() ? t[0] : null;
 };
-const typeDefs = () => { const t = fieldType(); if (t) loadRelated(t); return (t && (relatedBy.get(t) || {}).definitions) || []; };
+const typeDefs = () => { const t = fieldType(); if (t) loadRelated(t, true); return (t && (relatedBy.get(t) || {}).definitions) || []; }; // a type's definitions come with the lite read
 const fieldKey = (def) => fieldType() + '?attribute=' + def.key;
 const PILL_FIELDS = ['options', 'link', 'member', 'date'];
 const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];

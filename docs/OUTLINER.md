@@ -108,7 +108,9 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   image". Dropped, the file goes to the page in front (`processImage`, renderer/upload.js), which sends it to main
   (`ai:processImage`): the fast AI (main/ai.js `readImage`, PNG, JPEG, WebP or GIF) answers with a task or a note,
   its title and the lines worth keeping, and main makes it with those lines and the image under them. The page opens
-  it; the button says "Processing image …" until then, and a failure is the red toast.
+  it; the button says "Processing image …" until then, and a failure is the red toast. With Auto-translate on, the model writes
+  the title and lines in that language, translating the image's words (names, dates, amounts and links kept); off, in
+  the image's own language.
   Cmd+K offers the same under **Image**, and only there (the rows have no id, so no key can be recorded on them):
   **Process image** while the caret or the selection is on an image row (main reads that image, main/images.js
   `image`), and **Process image from clipboard** while the clipboard holds an image (`clipboard:hasImage`, asked
@@ -154,7 +156,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   after a 300 ms wait (renderer/loading.js): the header and title, then rows of small outlined glyphs and rounded text
   bars growing in one by one, a highlight sweeping through each, fading toward the bottom; slow on the Timeline, 2.2
   times faster elsewhere. When the rows land it fades and they rise in top to bottom. The Timeline lands in parts
-  (`timeline:part`), each drawn at once, and the loader keeps building below the last real row (`.tail`) until the
+  (`timeline:part`), each drawn at once (main builds it once for every pane asking at the same time, and once more
+  after it for whatever asked meanwhile, #579), and the loader keeps building below the last real row (`.tail`) until the
   whole page is in. A page opened later, or a reconnect, waits blank for its rows; the loader never shows once rows
   exist.
 - **Rows arriving.** A row that arrives in a settled view glows once; a row that leaves flashes as it goes. A first
@@ -716,7 +719,9 @@ wrong twenty.
   on this machine under a SHA-256 of the language and the exact text (db.js `translations`), so a note seen before shows
   translated at once, in any pane or launch, and an edited text is a new key: asked again. An answer lasts a month from
   when it was last shown; one not shown for 30 days is asked again and is cleaned out on the next save or start (at
-  most 5000 kept, least recently shown out first). While a question is out the page line (or a list row's first fact) says "Translating…" with the sparkle at
+  most 5000 kept, least recently shown out first). A batch is asked in two steps: this Mac's answers first (`{ local: true }`: kept
+  answers and what it finds already in the language, which settles most of a page at once), then the model for the rest.
+  While the model has a text the page line (or a list row's first fact) says "Translating…" with the sparkle at
   work, shown only after 0.4 s and taking no room until then, so an answer from the cache or a text found already in the language never moves the row (renderer/translate.js, styles.css). A page is
   translated as a whole only when it has rows of its own; a title alone (a space listing documents) is left to its list. Measured 2026-09-28 through a
   ChatGPT sign-in: about 4.5 s for a first question, well under 1 ms once kept.
@@ -731,7 +736,9 @@ A zoomed node shows its typed fields between the title and the outline (`#fields
 with the content), from `api.related(docId).fields` (`[{ key, label, text, lines, segments, type, cardinality,
 options, to }]`, read from the type document on every call, main/related.js `fieldDefs`). Fields are Tana
 attributes: the value lives in the node's data map, the label in its type's template (sdk/fields.js). An expanded
-document shows its fields above its body children too.
+document shows its fields above its body children too, read with `api.related(docId, { lite: true })`: its fields,
+a type's definitions, its meeting and call link, none of the sidebar's pins, backlinks or history, which the page on
+screen reads whole over it (#579: a list opening sixty rows asked ~120 ListEdges in a second).
 
 - **A text or date field is an outline**, drawn by the outline's own rows, so a field row does everything a row does
   ("- ", Tab, Enter, ⌘Z; every row listener is bound to both places rows live, `onRows`). Its id is the document and
@@ -981,8 +988,9 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
     start once started, with their length and others on the grey line ("45 min · …", four names then an ellipsis);
     all-day and future ones stay out; one over with no summary is drawn quiet (`faint`); the summary is Tana's own on
     the event (`calendarEvent.tagline`/`.summary`), part of the live signature. A live query over your meetings to the
-    end of today (`watchMeetings`) re-reads the page when one is added, gone, renamed or moved. Changes only you made,
-    tasks you made by hand and anything older than the page's days stay out.
+    end of today (`watchMeetings`) re-reads the page when one is added, gone, renamed or moved. The tasks you add yourself,
+    for you or for someone else, are one such line too, "You added 2 tasks" (no "to your Inbox": a task made by hand is
+    In Progress or someone else's), never marked new. Changes only you made and anything older than the page's days stay out.
   - A blue dot marks what came after your last visit; opening an entry goes to its node. The page opens on today and
     the two days before, and reads three days further back when its end comes within a screen (an
     IntersectionObserver on "Show three more days", which also works pressed and reads "Loading…"), up to 120 pages
