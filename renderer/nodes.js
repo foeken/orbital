@@ -76,10 +76,13 @@ function chipEl(t, nodeHue) {
 const BLOCK_TYPES = [['paragraph', 'Text'], ['heading1', 'Heading 1'], ['heading2', 'Heading 2'], ['heading3', 'Heading 3'],
   ['bullet', 'Bullet List'], ['numbered', 'Numbered List'], ['code', 'Code Block'], ['quote', 'Quote']];
 const BLOCK_LABEL = new Map(BLOCK_TYPES);
-const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', quote: '❝', divider: '—' };
+const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', checklist: '☐', quote: '❝', divider: '—' };
 // A row with no type of its own is an outline row: every row readOutline returns carries one, so this is the
 // mock's rows and anything built by hand. The draft tail states the mode it will be written in (draftNode).
 const blockTypeOf = (node) => (BLOCK_LABEL.has(node.block) ? node.block : node.heading ? 'heading' + node.heading : 'bullet');
+// A checkbox row that was plain text before it got its box (sdk/content.js BULLET_MARK): stored as a list row, as
+// Tana stores every checkbox, and drawn the way Tana draws one, the box in the bullet's place (#602).
+const plainCheck = (node) => node.done != null && !node.bulleted && blockTypeOf(node) === 'bullet';
 const headingOf = (node) => node.heading || Number((blockTypeOf(node).match(/^heading(\d)$/) || [])[1]) || 0;
 // What the write will make of a new sibling of this row (sdk/content.js insertAfter), so a row the renderer shows
 // before the write lands is already the right kind and nothing flashes under the caret: a list row makes a list

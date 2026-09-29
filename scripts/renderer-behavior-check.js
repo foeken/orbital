@@ -2650,21 +2650,53 @@ function makeSlashHarness() {
       insertDivider: async (docId, id) => calls.push(['insertDivider', docId, id]),
       insertTable: async (docId, id) => { calls.push(['insertTable', docId, id]); return 'c1'; },
       remove: async (docId, id) => calls.push(['remove', docId, id]),
+      toggleCheckbox: async (docId, id) => calls.push(['toggleCheckbox', docId, id]),
+      createDocument: async (title, opts) => { calls.push(['createDocument', title, opts]); return { id: 'tana:text:task1', title }; },
     };
+    let page = null;
+    const extra = new Map(), showError = (e) => calls.push(['error', String(e.message || e)]);
+    const openPage = (mode, placeholder, p) => { page = { mode, placeholder, ...p }; };
+    const togglePalette = (mode) => calls.push(['palette', mode]), closePalette = () => calls.push(['close']);
+    const linkTo = async (ctx, mention) => calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]);
     ${functionSource('slashTarget')}
     ${functionSource('slashRows')}
     ${functionSource('runSlashBlock')}
     ${functionSource('createFromSlash')}
-    Object.assign(globalThis, { rows: (q) => slashRows(q), calls: () => calls, text: () => node.text });
+    let slashTaskBusy = false;
+    ${functionSource('taskFromSlash')}
+    ${functionSource('taskHere')}
+    Object.assign(globalThis, { rows: (q) => slashRows(q), calls: () => calls, text: () => node.text, node, page: () => page });
   `, context);
   return context;
 }
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Create Task', 'Create Project'],
-    'the "/" menu offers every block type, a divider, a table, an image and the create choices');
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Task', 'Create Project'],
+    'the "/" menu offers every block type, a checklist, a divider, a table, an image and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
+  assert.equal(listing.rows('task')[0].label, 'Task', '"/task" finds the task row first');
+  assert.equal(listing.rows('check')[0].label, 'Checklist', 'and "/check" the checklist');
+
+  // "/" Checklist (#602): the "/" goes and the row gets a checkbox; a row that has one keeps it as it is
+  const checklist = makeSlashHarness();
+  await checklist.rows('').find((row) => row.label === 'Checklist').run();
+  assert.deepEqual(plain(checklist.calls()), [['setText', 'doc', 'block', []], ['toggleCheckbox', 'doc', 'block'], ['reload'], ['caret', 'doc/block', 0]], 'Checklist gives the row a checkbox');
+  const ticked = makeSlashHarness();
+  ticked.node.done = 0;
+  await ticked.rows('').find((row) => row.label === 'Checklist').run();
+  assert.equal(plain(ticked.calls()).some((c) => c[0] === 'toggleCheckbox'), false, 'and never checks a checkbox that is already there');
+
+  // "/" Task (#602): named on a page, made as a task, and the "/" row becomes the reference to it
+  const task = makeSlashHarness();
+  task.rows('task')[0].run();
+  assert.equal(task.page().placeholder, 'Name the new task…', 'Task asks for the task\'s name');
+  assert.deepEqual(plain(task.page().rows('', '  ').map((r) => [r.label, !!r.disabled])), [['Type a name', true]], 'with nothing typed there is nothing to make');
+  task.page().back();
+  const [make] = task.page().rows('', ' Ship it ');
+  await Promise.all([make.run(), make.run()]);
+  assert.deepEqual(plain(task.calls()), [['palette', 'slash'], ['createDocument', 'Ship it', { kind: 'task' }], ['close'], ['linkTo', 'doc/block', [], 0, 0, { label: 'Ship it', uri: 'tana:text:task1' }]],
+    'Back returns to the menu; Enter makes one task, closes the palette and puts its reference in place of the "/"');
 
   const quote = makeSlashHarness();
   await quote.rows('').find((row) => row.label === 'Quote').run();
@@ -7144,8 +7176,8 @@ async function runImageViewCheck() {
   const keydown = sourceBetween("onRows('keydown'", "onRows('input'");
   assert.match(keydown, /e\.key === ' ' && isImage\(item\.node\)\) openImage\(item\.node\)/, 'Space on an image row opens it');
   assert.match(source, /img\.onclick = \(e\) => \{ e\.stopPropagation\(\); openImage\(node\); \}/, 'and so does a click on the picture');
-  assert.match(source, /isDivider\(node\) \? 'divider' : isImage\(node\) \? \(node\.block \|\| 'image'\) : blockTypeOf\(node\)/,
-    'an image takes the marker of the list row it sits in, and none when it sits on its own');
+  assert.match(source, /isDivider\(node\) \? 'divider' : isImage\(node\) \? \(node\.block \|\| 'image'\) : plainCheck\(node\) \? 'check' : blockTypeOf\(node\)/,
+    'an image takes the marker of the list row it sits in, and none when it sits on its own; a plain checkbox row draws its box in the bullet\'s place');
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
   assert.match(styles, /\.lightbox \{ position: fixed; inset: 0;/, 'the full view covers the page');
   assert.match(styles, /\.lightbox img \{[^}]*max-width: 92vw; max-height: 92vh/, 'and fits the picture to the window rather than cropping it');

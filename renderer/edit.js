@@ -53,7 +53,7 @@ async function splitNode(item, el, off) {
     // the kind the write will make it (siblingBlock), not the default one: a bullet flashing under the caret for
     // the length of a round trip on a row that is about to be plain text is a visible wrong answer
     const block = asChild ? 'bullet' : siblingBlock(node); // a child is a listItem in Tana's schema, whatever its parent is
-    splitDraft = { id: 'draft:split:' + node.id + ':' + Date.now(), text: plainOf(after), segments: after, kind: 'block', block, done: node.kind === 'block' && node.done != null ? 0 : undefined, draft: true, pendingSplit: true };
+    splitDraft = { id: 'draft:split:' + node.id + ':' + Date.now(), text: plainOf(after), segments: after, kind: 'block', block, done: node.kind === 'block' && node.done != null ? 0 : undefined, bulleted: node.bulleted, draft: true, pendingSplit: true };
     list.splice(index, 0, splitDraft);
     splitKey = docId + '/' + splitDraft.id;
     render(true); placeCaret(splitKey, 0);

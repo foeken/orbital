@@ -263,14 +263,18 @@ function openSlash(item) {
   loadCreationChoices();
 }
 function slashRows(q) {
-  const rows = [...BLOCK_TYPES.filter(([type]) => type !== 'paragraph'), ['divider', 'Divider'], ['table', 'Table'], ['image', 'Image']].map(([type, label]) => ({
+  const types = BLOCK_TYPES.filter(([type]) => type !== 'paragraph'), lists = types.findIndex(([type]) => type === 'numbered') + 1;
+  const rows = [...types.slice(0, lists), ['checklist', 'Checklist'], ...types.slice(lists), ['divider', 'Divider'], ['table', 'Table'], ['image', 'Image']].map(([type, label]) => ({
     group: 'Blocks', svg: glyphSvg(type), label,
-    disabled: type === 'divider' ? !tana.insertDivider : type === 'image' ? !tana.insertImage : type === 'table' ? !tana.insertTable : !tana.setBlockType,
+    disabled: type === 'divider' ? !tana.insertDivider : type === 'image' ? !tana.insertImage : type === 'table' ? !tana.insertTable : type === 'checklist' ? !tana.toggleCheckbox : !tana.setBlockType,
     run: () => (type === 'image' ? pickImages() : runSlashBlock(type)),
   }));
   // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new …" list
   const choices = creationChoices.some((c) => c.kind === 'doc') ? creationChoices : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...creationChoices];
-  for (const choice of choices) rows.push({
+  for (const choice of choices) rows.push(choice.kind === 'task' ? { // "/" Task: made here and referenced in the row (taskFromSlash)
+    group: 'Create', icon: choice.icon, label: 'Task', hint: choice.selectable ? 'New task, referenced here' : choice.reason || 'Unavailable', disabled: !choice.selectable,
+    run: () => taskFromSlash(choice),
+  } : {
     group: choice.kind === 'custom' ? 'Workspace types' : 'Create', icon: choice.icon,
     label: 'Create ' + choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
     run: () => createFromSlash(choice),
@@ -306,6 +310,7 @@ async function runSlashBlock(type) {
     await tana.setText(docId, node.id, []); // the "/" was the command, not text
     if (type === 'divider') await tana.insertDivider(docId, node.id);
     else if (type === 'table') { cell = await tana.insertTable(docId, node.id); if (bare) await tana.remove(docId, node.id); }
+    else if (type === 'checklist') { if (node.done == null) await tana.toggleCheckbox(docId, node.id); } // a row that has one keeps it
     else await tana.setBlockType(docId, node.id, type);
     await reload(docId);
   });
@@ -322,4 +327,27 @@ function createFromSlash(choice) {
     run(() => tana.setText(item.docId, item.node.id, []));
   }
   startCreation(choice);
+}
+// "/" Task (#602): the task is named on a page of its own and takes the row the "/" was typed in, as a reference to it
+// (Tana's own "/" Task creates and embeds one). Escape goes back to the menu; until a task is made the "/" stays.
+// Not through run(): linkTo queues its own write there, and waiting on it from inside the queue would never end.
+let slashTaskBusy = false; // one task per Enter
+function taskFromSlash(choice) {
+  const item = slashTarget();
+  if (!item || item.node.kind !== 'block') return;
+  openPage('slashTask', 'Name the new task…', { back: () => togglePalette('slash'), typed: true, rows: (q, typed) => {
+    const title = String(typed || '').trim();
+    return [title ? { group: 'New task', icon: choice.icon, label: 'Create “' + title + '”', run: () => taskHere(item, title) }
+      : { group: 'New task', icon: choice.icon, label: 'Type a name', disabled: true, note: true }];
+  } });
+}
+function taskHere(item, title) {
+  if (slashTaskBusy) return;
+  slashTaskBusy = true;
+  dropPending(item.key);
+  return tana.createDocument(title, { kind: 'task' }).then((n) => {
+    extra.set(n.id, { ...n, text: n.title || '', hasChildren: true });
+    closePalette();
+    return linkTo({ item, segs: [], start: 0, end: 0 }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) });
+  }).catch(showError).finally(() => { slashTaskBusy = false; });
 }

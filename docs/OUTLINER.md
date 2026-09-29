@@ -45,7 +45,11 @@ a LoroMap `{ nodeName, attributes, children }`; inline content of a paragraph or
 and inline maps such as `{ nodeName: 'mention', attributes: { label, tanaUri } }`. Block names: paragraph, heading
 (`attributes.level`), bulletList > listItem > (paragraph, optional nested list), orderedList, blockquote, codeBlock,
 horizontalRule (a divider), image, embed (a native reference), table (§12), and the atoms video, audio and
-unsupportedBlock. A checkbox is `checked` on a listItem's attributes, never on the paragraph. Blocks carry
+unsupportedBlock. A checkbox is `checked` on a listItem's attributes, never on the paragraph. Tana draws every checkbox
+in place of the bullet; Orbital draws a bullet beside the box when the row was a list row before it got one, which it
+records as `orbitalBullet: true` on that listItem (the Node's `bulleted`, #602). Tana's editor deletes attributes its
+schema does not declare whenever it rewrites the block, so an edit in Tana can turn such a row back into a plain
+checkbox. A new row after a checkbox row is the same kind. Blocks carry
 `attributes.blockId` (8 lowercase alphanumerics); every block we create gets one, and `assignBlockIds` gives one,
 once, to blocks that arrive without.
 
@@ -291,7 +295,7 @@ debounce flushes it. Read-only rows ignore every edit key.
 | ⌘↑ / ⌘↓ | Collapse / expand (built-in keys, §8). |
 | ⇧⌘↑ / ⇧⌘↓ | Move the row, or the selection, one step among its siblings. |
 | ⇧⌘⌫ | Remove the current block with its children, wherever the caret is; the caret goes to the row before (or after). Document rows ignore it. |
-| ⌘↩ | Toggle done on a task, or a checkbox; a plain block becomes an unchecked checkbox in Tana's native structure. |
+| ⌘↩ | Toggle done on a task, or a checkbox; a plain line becomes an unchecked plain checkbox (the box where the bullet would be), a bullet or numbered row keeps its marker and gains the box. |
 | Space on a read-only row | Zoom into it; on a reference row, open what it points at. With exactly one row selected and nothing focused, the same. Editable rows keep Space for typing. |
 | Escape | Blur. |
 
@@ -312,10 +316,12 @@ Mouse: a click on the bullet zooms into the row, on the chevron toggles it, on t
 
 Selecting text in a row shows a floating toolbar of marks and block styles (renderer/toolbar.js); the style menu
 greys Text out for a child rather than offering a row that errors. "/" at the start of an empty row opens the "/"
-menu (`slashRows`): the block types, Divider, Table and Image (also found by picture, photo, upload), then Create Doc,
-Task and the rest of what Create new … offers, workspace types under their own heading. Choosing one opens a page that
-asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens it, Escape goes back to the choices.
-The “/” menu in a row keeps drafting in place instead.
+menu (`slashRows`): the block types with Checklist after the lists (the checkbox ⌘↩ gives, #602), Divider, Table and
+Image (also found by picture, photo, upload), then Create Doc, Task and the rest of what Create new … offers, workspace
+types under their own heading. Task (`taskFromSlash`, #602) asks the task's name on a page of its own and the row
+becomes a reference to the new task, as Tana's own "/" Task embeds one; Escape goes back to the menu. Choosing one
+of the others opens a page that asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens
+it, Escape goes back to the choices. The “/” menu in a row keeps drafting in place instead.
 
 ### @ linking
 

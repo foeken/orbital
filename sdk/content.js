@@ -19,6 +19,12 @@ const BLOCK_TYPES = ['paragraph', 'heading1', 'heading2', 'heading3', 'bullet', 
 // `inclusive`, so every mark ends up with expand 'none'.
 const MARKS = ['bold', 'italic', 'strike', 'underline', 'code', 'link'];
 const TEXT_STYLE = Object.fromEntries(MARKS.map((m) => [m, { expand: 'none' }]));
+// A checkbox row that was a list row before it got its box keeps its bullet in Orbital (#602): Tana stores every
+// checkbox as listItem.checked and its list item view draws the box in the bullet's place, so nothing of Tana's says
+// which kind a row was. This attribute on the listItem does. Tana's editor binding deletes attributes its schema does
+// not declare whenever it rewrites that block, so an edit there can drop it; the row is then the plain checkbox Tana
+// shows, which is also what every checkbox made in Tana is.
+const BULLET_MARK = 'orbitalBullet';
 const styled = new WeakSet();
 const name = (m) => m.get('nodeName');
 const kids = (m) => m.get('children');
@@ -81,8 +87,8 @@ function nodes(list, from = 0) {
       const c = kids(items.get(j));
       if (c.length) {
         const n = node(c.get(0), nodes(c, 1));
-        const checked = items.get(j).get('attributes')?.get('checked');
-        if (typeof checked === 'boolean') n.done = checked ? 1 : 0;
+        const a = items.get(j).get('attributes'), checked = a?.get('checked');
+        if (typeof checked === 'boolean') { n.done = checked ? 1 : 0; if (a.get(BULLET_MARK) === true) n.bulleted = true; }
         if (first) { n.start = start; first = false; }
         out.push(n);
       }
@@ -322,7 +328,11 @@ function paragraph(list, index, text) {
 
 function item(list, index, text, source) {
   const li = create(list, index, 'listItem');
-  if (typeof source?.get('attributes')?.get('checked') === 'boolean') li.get('attributes').set('checked', false);
+  const from = source?.get('attributes');
+  if (typeof from?.get('checked') === 'boolean') { // a new row after a checkbox row is one of the same kind, bullet or not
+    li.get('attributes').set('checked', false);
+    if (from.get(BULLET_MARK) === true) li.get('attributes').set(BULLET_MARK, true);
+  }
   paragraph(kids(li), 0, text);
   return li;
 }
@@ -845,13 +855,15 @@ function place(list, index, src, asChild) {
 }
 
 // Scratchpad: checked belongs to listItem.attributes, never the paragraph or document data.
-// Plain -> unchecked; existing checkbox -> toggle. wrap copies inline marks, mentions and blockId.
+// Plain -> unchecked; existing checkbox -> toggle. wrap copies inline marks, mentions and blockId. A row that was
+// already a list row gets BULLET_MARK with its box, so it keeps its bullet; a plain line becomes a plain checkbox.
 function toggleCheckbox(document, id) {
   document.transact(() => {
     const found = must(document, id);
     if (!['paragraph', 'heading'].includes(name(found.block))) throw new Error('This block cannot become a checkbox');
     const li = found.item || wrap(found.block);
     const a = li.get('attributes');
+    if (found.item && typeof a.get('checked') !== 'boolean') a.set(BULLET_MARK, true);
     a.set('checked', a.get('checked') === false);
   });
 }

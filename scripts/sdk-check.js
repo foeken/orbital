@@ -1719,6 +1719,23 @@ async function main() {
   }
 
   {
+    // Cmd+Enter and "/" Checklist (#602): a plain line gets a plain checkbox, a bullet keeps its bullet, and a new row
+    // after either is the same kind. Both are Tana's listItem.checked; only Orbital's own mark tells them apart.
+    const d = new Document(DOC, { peerId: '75' });
+    const line = outline.insertAfter(d, null, 'Plain line');
+    const bullet = outline.insertAfter(d, line, 'Bullet'); outline.setBlockType(d, bullet, 'bullet');
+    outline.toggleCheckbox(d, line); outline.toggleCheckbox(d, bullet);
+    const pick = (tree, id) => { const n = tree.find((x) => x.id === id); return [n.block, n.done, n.bulleted ?? false]; };
+    let tree = outline.readOutline(d);
+    assert.deepEqual([pick(tree, line), pick(tree, bullet)], [['bullet', 0, false], ['bullet', 0, true]], 'a plain line becomes a plain checkbox, a bullet a bullet with a box');
+    const afterLine = outline.insertAfter(d, line, 'Next'), afterBullet = outline.insertAfter(d, bullet, 'Next');
+    outline.toggleCheckbox(d, bullet);
+    tree = outline.readOutline(d);
+    assert.deepEqual([pick(tree, afterLine), pick(tree, afterBullet), pick(tree, bullet)], [['bullet', 0, false], ['bullet', 0, true], ['bullet', 1, true]], 'a new row keeps its sibling\'s kind, and ticking keeps the bullet');
+    console.log('ok  a checkbox is plain or bulleted after the row it was made from');
+  }
+
+  {
     const d = new Document(DOC, { peerId: '74' });
     const heading = outline.insertAfter(d, null, 'component');
     outline.setBlockType(d, heading, 'heading2');
