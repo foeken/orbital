@@ -518,6 +518,10 @@ html.links .app { display: none; }
 .node.tl-new > .line > .bullet.icon:is(.robot, .tana) svg { color: #aeb1b5; }
 /* A meeting under way that is recording (main/timeline.js): its marker blue, a blue ring pulsing out from behind it */
 .node.tl-recording > .line > .bullet.icon svg, .node.tl-recording > .line > .bullet.icon:hover svg { color: #0090ff; }
+/* the glyph's own disc (the one that hides the rail) goes under the ring, so the ring shows through the glyph instead
+   of around a white disc: disc, ring, glyph, in that order inside the bullet */
+.node.tl-recording > .line > .bullet.icon svg, .node.tl-recording > .line > .bullet.icon:hover svg { background: transparent; }
+.node.tl-recording > .line > .bullet.icon::before { display: block; left: 0; top: 3px; width: 18px; height: 18px; z-index: -2; background: #fff; box-shadow: none; }
 .node.tl-recording > .line > .bullet::after { content: ''; position: absolute; left: 0; top: 3px; width: 18px; height: 18px; z-index: -1; border-radius: 50%; background: #0090ff; opacity: .25; }
 @media (prefers-reduced-motion: no-preference) { .node.tl-recording > .line > .bullet::after { animation: rec-pulse var(--dur-loop) ease-out infinite; } }
 .node.tl > .line > .body { margin-left: 11px; } /* room between the rail and what happened: 16px with the body padding */
@@ -555,7 +559,8 @@ html.links .app { display: none; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .tl-divider::before { border-top-color: #34373a; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }
-[data-theme="dark"] .node.tl-recording > .line > .bullet.icon svg { color: #3b9eff; }
+[data-theme="dark"] .node.tl-recording > .line > .bullet.icon svg { color: #3b9eff; background: transparent; }
+[data-theme="dark"] .node.tl-recording > .line > .bullet.icon::before { background: #1b1d1e; }
 [data-theme="dark"] .tl-join { color: #8a8f95; }
 [data-theme="dark"] .tl-join:hover { background: #2e3134; color: #e8eaec; }
 [data-theme="dark"] .node.tl > .children .bullet.icon svg, [data-theme="dark"] .node.tl > .children .bullet.icon:hover svg { color: #8a8f95; }
