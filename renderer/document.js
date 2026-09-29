@@ -188,7 +188,7 @@ function invalidateNode(id) {
   for (const [docId, rows] of kids) if (Array.isArray(rows)) kids.set(docId, rows.filter((node) => node.id !== id));
   palRows = palRows.filter((row) => row.node?.id !== id);
   if (palDoc?.id === id) { palDoc = null; pinInfo = null; }
-  if (zoom?.docId === id) zoom = null;
+  if (zoom?.docId === id) leaveGonePage(id); // the page it was: back to the one before it (edit.js), else the Library
 }
 function setSensitiveMark(ids, on) {
   run(async () => {

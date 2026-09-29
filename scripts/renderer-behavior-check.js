@@ -111,7 +111,7 @@ const withShims = (src) => {
   // the Timeline's page id (renderer/timeline.js): a row asks whether it is drawn there
   if (/\bTIMELINE_PAGE\b/.test(src) && !/const TIMELINE_PAGE =/.test(src)) src = "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n" + src;
   // a related answer draws the page's fields and sidebar at once when a render would wait (renderer/rail.js loadRelated): a harness with no page has nothing to draw
-  if (/\bloadRelated\b/.test(src) && !/let zoom\b/.test(src) && !/const zoom\b/.test(src)) src = 'globalThis.zoom ??= null;\n' + src;
+  if (/\b(loadRelated|accessOptions)\b/.test(src) && !/let zoom\b/.test(src) && !/const zoom\b/.test(src)) src = 'globalThis.zoom ??= null;\n' + src;
   // Deleted nodes (renderer/nodes.js) are one Set the whole app shares. A harness that is not about deletion gets
   // "nothing is gone", with markGone still answering main's own mark, so rows and chips draw as they always did;
   // the real helpers are sliced in by runDeletedNodeCheck.
@@ -147,7 +147,7 @@ const withShims = (src) => {
   if (/\b(tellPlace|inOtherPane|placeKey|viewKey)\(/.test(src) && !/function inOtherPane\(/.test(src)) src = "globalThis.tellPlace ??= () => {}; globalThis.inOtherPane ??= () => false; globalThis.placeKey ??= (docId, nodeId) => (docId ? String(docId) + (nodeId ? '#' + nodeId : '') : null); globalThis.viewKey ??= (id) => (id === 'library' ? null : 'view:' + id);\n" + src;
   if (/\b(isChatPage|chatContextEl)\(/.test(src) && !/const isChatPage =/.test(src)) src = "globalThis.isChatPage ??= (p) => !!p && !p.nodeId && String(p.docId).startsWith('tana:chat:'); globalThis.chatContextEl ??= () => null;\n" + src; // renderer/chat.js, after render.js
   if (/\bcapRows\(/.test(src) && !/function capRows\(/.test(src)) src = 'globalThis.capRows ??= (id, list, groups) => ({ list, groups, rest: 0 }); globalThis.searchMoreEl ??= () => null;\n' + src; // renderer/views.js: every row drawn in these harnesses
-  if (/\b(rowTranslation|translatedFactEl|translations|shownOriginal|setTranslatePage|pageTranslation|drawTranslatedLine|originalOnFocus|translationPending|markTranslatable|translateTo|translatableOf|translateSrc|translateId|namedSeg|translatedSegs)\b/.test(src) && !/function rowTranslation\(/.test(src)) src = 'globalThis.rowTranslation ??= () => null; globalThis.translations ??= new Map(); globalThis.shownOriginal ??= new Set(); globalThis.setTranslatePage ??= () => {}; globalThis.pageTranslation ??= () => null; globalThis.drawTranslatedLine ??= () => {}; globalThis.originalOnFocus ??= () => {}; globalThis.translationPending ??= () => false; globalThis.markTranslatable ??= () => {}; globalThis.translateTo ??= () => null; globalThis.translatableOf ??= () => null; globalThis.translateSrc ??= (n) => n.text; globalThis.translateId ??= (n) => n.id; globalThis.namedSeg ??= () => null; globalThis.translatedSegs ??= (n, text) => [{ text }];\n' + src; // renderer/translate.js: nothing is translated in these harnesses
+  if (/\b(rowTranslation|translatedFactEl|translations|shownOriginal|setTranslatePage|pageTranslation|drawTranslatedLine|originalOnFocus|translationPending|markTranslatable|translateTo|translatableOf|translateSrc|translateId|namedSeg|translatedSegs|titleTranslation|replaceWithTranslation|translateTargets|translateNodes)\b/.test(src) && !/function rowTranslation\(/.test(src)) src = 'globalThis.translateTargets ??= () => []; globalThis.translateNodes ??= () => {}; globalThis.titleTranslation ??= () => null; globalThis.replaceWithTranslation ??= () => {}; globalThis.rowTranslation ??= () => null; globalThis.translations ??= new Map(); globalThis.shownOriginal ??= new Set(); globalThis.setTranslatePage ??= () => {}; globalThis.pageTranslation ??= () => null; globalThis.drawTranslatedLine ??= () => {}; globalThis.originalOnFocus ??= () => {}; globalThis.translationPending ??= () => false; globalThis.markTranslatable ??= () => {}; globalThis.translateTo ??= () => null; globalThis.translatableOf ??= () => null; globalThis.translateSrc ??= (n) => n.text; globalThis.translateId ??= (n) => n.id; globalThis.namedSeg ??= () => null; globalThis.translatedSegs ??= (n, text) => [{ text }];\n' + src; // renderer/translate.js: nothing is translated in these harnesses
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
@@ -185,6 +185,8 @@ const withShims = (src) => {
   // Whether a row can be picked up (renderer/drag.js). A harness that draws rows is not about dragging, so its
   // rows are simply not draggable; the drop harness slices the real rules in instead.
   if (/\bcanDragItem\(/.test(src) && !/const canDragItem =/.test(src)) src = 'globalThis.canDragItem ??= () => false;\n' + src;
+  // the caret a render found in a row (render.js caretBefore): a slice that draws rows without it finds none
+  if (/\bcaretBefore\b/.test(src) && !/let caretBefore/.test(src)) src = 'globalThis.caretBefore ??= null;\n' + src;
   // The Home anchor (renderer/nodes.js): the palette's Go back row reads it, Set as Home offers itself from it, and
   // navigate lands on it. A slice that is not about Home gets the shipped default — the Library, and you are on it —
   // so nothing it asserts depends on a choice it never made; the Home harness slices the real ones instead.
@@ -1730,7 +1732,7 @@ async function runSyncShortcutCheck() {
   `);
   assert.deepEqual(plain(order.labels('')), [
     'Current node: Zoom in', 'Current node: Set status', 'Current node: Discuss with …', 'Current node: Pin to today', 'Current node: Pin to tomorrow', 'Current node: Pin to date …', 'Current node: Edit pins', 'Current node: Move to …', 'Current node: Move to Library',
-    'Current node: Mark as sensitive', 'Current node: Edit visibility', 'Current node: Copy link', 'Current node: Delete',
+    'Current node: Mark as sensitive', 'Current node: Edit visibility', 'Current node: Add participants …', 'Current node: Copy link', 'Current node: Delete',
     'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
@@ -5565,6 +5567,92 @@ function runPillsFoldCheck() {
   api.setReduced(false);
 }
 
+// Add participants … opens Edit visibility at its people when the document may be shared with people and its
+// participants are in, else at the picker; New chat with … makes the chat, opens it, then invites the member.
+async function runAddParticipantsCheck() {
+  const api = vm.runInNewContext(`
+    let palDoc = null; const opened = [], calls = [];
+    const accessById = new Map(), taskMetaById = new Map();
+    const loadAccess = () => {}, loadTaskMeta = () => {};
+    const openVisibilityPeople = (doc) => opened.push('people ' + doc.id), openVisibilityPalette = (doc) => opened.push('picker ' + doc.id);
+    const tana = { newChat: async () => { calls.push('new'); return { id: 'tana:chat:n' }; }, }, inviteToChat = (id, uri) => calls.push('invite ' + id + ' ' + uri);
+    const run = (fn) => fn(), openResult = (n) => calls.push('open ' + n.id);
+    ${functionSource('addParticipants')}
+    ${functionSource('newChatWith')}
+    ({ addParticipants, newChatWith, opened, calls, accessById, taskMetaById, palDoc: () => palDoc });
+  `);
+  const doc = { id: 'tana:chat:c' };
+  api.addParticipants(doc);
+  api.accessById.set(doc.id, { rules: ['me', 'people'] }); api.taskMetaById.set(doc.id, { participants: [] });
+  api.addParticipants(doc);
+  assert.deepEqual(plain(api.opened), ['picker tana:chat:c', 'people tana:chat:c'], 'Add participants: the picker while what may be done is unknown, the people once it may be shared with them');
+  assert.equal(api.palDoc(), doc, 'acting on the document it was asked for');
+  await api.newChatWith('tana:user-profile:sam');
+  assert.deepEqual(plain(api.calls), ['new', 'open tana:chat:n', 'invite tana:chat:n tana:user-profile:sam'], 'New chat with: the chat, opened, then the member invited to it');
+}
+// Auto-translate covers titles of top-level nodes only (renderer/translate.js translatableOf): a document's title, never
+// a block, which is a node's content, whatever page it is on.
+async function runTranslateTitlesOnlyCheck() {
+  const api = vm.runInNewContext(`
+    const segsOf = (v) => v.segments || (v.text ? [{ text: v.text }] : []);
+    const plainText = (segs) => (segs.length && segs.every((s) => Object.keys(s).every((k) => k === 'text')) ? segs.map((s) => s.text).join('') : '');
+    ${sourceBetween('const namedSeg = ', 'function pageTranslation(')}
+    ({ translatableOf });
+  `);
+  const item = { docId: 'tana:text:page', parent: null };
+  assert.deepEqual(plain(api.translatableOf(item, { kind: 'document', id: 'tana:text:doc', text: 'Vergadering plannen' })), { src: 'Vergadering plannen', id: 'tana:text:doc' }, 'a document title is translated');
+  assert.equal(api.translatableOf(item, { kind: 'block', id: 'b1', text: 'Een regel in de notitie' }), null, 'a block, a node\'s content, is not');
+  // Cmd+K Replace with translation: the translation the title is shown in, written as the title
+  const rep = vm.runInNewContext(`
+    const translations = new Map([['Vergadering plannen', { lang: 'Dutch', text: 'Plan a meeting' }]]), shownOriginal = new Set(['tana:text:doc']), saved = [];
+    const maySend = () => true, tana = { setTitle: async (id, text) => saved.push([id, text]) }, run = (fn) => fn(), showNote = () => {}, render = () => {};
+    ${sourceBetween('const titleTranslation = ', '// ---- Cmd+K "Auto-translate')}
+    ({ titleTranslation, replaceWithTranslation, saved, shownOriginal });
+  `);
+  const doc = { id: 'tana:text:doc', text: 'Vergadering plannen' }, found = rep.titleTranslation(doc);
+  assert.equal(found && found.text, 'Plan a meeting', 'the title\'s translation is found');
+  assert.equal(rep.titleTranslation({ id: 'tana:text:x', text: 'Already English' }), null, 'a title with none offers nothing');
+  await rep.replaceWithTranslation(doc, found);
+  assert.deepEqual(plain(rep.saved), [['tana:text:doc', 'Plan a meeting']], 'written as the title');
+  assert.equal(doc.text, 'Plan a meeting', 'and shown at once');
+  // Cmd+K Translate into …: a title and a block written in the language, what is in it already left alone
+  const tr = vm.runInNewContext(`
+    const writes = [], notes = [];
+    const segsOf = (v) => v.segments || (v.text ? [{ text: v.text }] : []);
+    const plainText = (segs) => (segs.length && segs.every((s) => Object.keys(s).every((k) => k === 'text')) ? segs.map((s) => s.text).join('') : '');
+    const answers = { 'Vergadering plannen': { lang: 'Dutch', text: 'Plan a meeting' }, 'Bel Sam terug': { lang: 'Dutch', text: 'Call Sam back' } };
+    const tana = { translate: async (texts) => texts.map((t) => answers[t] || null), setTitle: async (id, t) => writes.push(['title', id, t]), setText: async (d, id, segs) => writes.push(['text', id, segs[0].text]) };
+    const run = (fn) => fn(), flushAll = () => {}, render = () => {}, showNote = (n) => notes.push(n);
+    ${functionSource('translateNodes')}
+    ({ translateNodes, writes, notes });
+  `);
+  const list = [{ docId: 'tana:text:d', node: { kind: 'document', text: 'Vergadering plannen' } }, { docId: 'tana:text:d', node: { kind: 'block', id: 'b1', text: 'Bel Sam terug' } }, { docId: 'tana:text:d', node: { kind: 'block', id: 'b2', text: 'Already English' } }];
+  await tr.translateNodes(list, 'English');
+  assert.deepEqual(plain(tr.writes), [['title', 'tana:text:d', 'Plan a meeting'], ['text', 'b1', 'Call Sam back']], 'the title and the block are written, the English one is not');
+  assert.deepEqual(plain(tr.notes), ['Translated 2 of 3 nodes into English']);
+}
+// Deleting the page on screen goes back to the page before it in this pane (renderer/edit.js leaveGonePage), and the
+// deleted page leaves the history; with nothing to go back to it is the view (the Library), as before.
+function runLeaveGonePageCheck() {
+  const api = vm.runInNewContext(`
+    let view = 'library', zoom = null, caretOnOpen = false; const LINKS = false, localStorage = { setItem() {} };
+    const flushAll = () => {}, dropDrafts = () => {}, render = () => {}, isGone = () => false;
+    ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation(')}
+    ${functionSource('navigate')}
+    ${functionSource('leaveGonePage')}
+    ({ leaveGonePage, navBack, navForward, set: (z, back) => { zoom = z; navHere = { view, zoom: z }; navBack.push(...back); }, zoom: () => zoom });
+  `);
+  const page = (docId) => ({ view: 'library', zoom: { docId, nodeId: null } });
+  api.set({ docId: 'tana:text:gone', nodeId: null }, [page('tana:text:before'), page('tana:text:gone'), page('tana:text:prev')]);
+  api.leaveGonePage('tana:text:gone');
+  assert.equal(api.zoom()?.docId, 'tana:text:prev', 'back to the page before the deleted one');
+  assert.deepEqual(plain(api.navBack).map((p) => p.zoom?.docId), ['tana:text:before'], 'the deleted page is gone from Back');
+  assert.deepEqual(plain(api.navForward), [], 'and from Forward');
+  api.navBack.length = 0;
+  api.set({ docId: 'tana:text:alone', nodeId: null }, []);
+  api.leaveGonePage('tana:text:alone');
+  assert.equal(api.zoom(), null, 'nothing to go back to: the view');
+}
 // The check-off pop sounds as the button goes down, once (renderer/motion.js popSound): the click that follows the
 // press leaves it, and a tick with no press before it (⌘↩, Cmd+K) still plays it.
 function runPopSoundCheck() {
@@ -7441,7 +7529,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

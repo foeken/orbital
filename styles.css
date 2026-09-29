@@ -366,6 +366,14 @@ html.framed .titlebar { padding-top: 18px; }
 
 /* ==== Page scroll and sidebar (renderer/rail.js, app.js) ==== */
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
+/* Classic scrollbars drawn as the overlay's narrow line (renderer/theme.js checkScrollbars): no track, a 5px rounded
+   thumb, hidden until its area is hovered or scrolled. Overlay scrollbars get none of this. */
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar { width: 11px; height: 11px; background: transparent; }
+.scroll-probe { position: absolute; top: -200px; width: 60px; height: 60px; overflow: scroll; } /* measures what macOS gives, for a moment */
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar-corner { background: transparent; }
+.classic-scroll :not(.scroll-probe)::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 6px; background-clip: padding-box; background-color: transparent; }
+.classic-scroll :is(:hover, .scrolling):not(.scroll-probe)::-webkit-scrollbar-thumb { background-color: rgb(0 0 0 / 0.28); }
+[data-theme="dark"].classic-scroll :is(:hover, .scrolling):not(.scroll-probe)::-webkit-scrollbar-thumb { background-color: rgb(255 255 255 / 0.28); }
 /* The Graph pane (renderer/rail.js, issue #462): a page that is only its rail, full width, holding the followed
    document's relationships (edges, never editable). Every other page leaves the rail hidden. */
 html.links .app { display: none; }
@@ -602,12 +610,15 @@ html.links .app { display: none; }
 .translated-line svg, .subtext .translated svg { width: 13px; height: 13px; flex: none; }
 .translated-line button { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .subtext .translated { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; cursor: pointer; } /* a list row's: its first fact, a click switches it */
-.subtext .translated:not(.translating):hover { text-decoration: underline; text-underline-offset: 2px; }
+.subtext .translated:not(.translating):hover .tlabel { text-decoration: underline; text-underline-offset: 2px; } /* the words, not the " · " after them */
 .translating { animation: translating-late 0s .4s backwards; } /* only once it takes a moment: an answer from the cache or a text this Mac finds already in the language never shows it, nor takes its room */
 @keyframes translating-late { from { display: none; } }
 .fields .chat-context { grid-column: 1 / -1; } /* the whole width, not the glyph's column */
 .fields:has(> .chat-context:only-child) { border: 0; padding: 0; }
 .chat-context { margin: 0 0 28px; text-align: right; font-size: 14px; color: var(--muted); } /* who can see a chat, and its meeting (renderer/chat.js chatContextEl, #543) */
+.chat-context .chat-add { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; } /* Add participants: a link in the line's own grey, as Show original is */
+.chat-context .chat-add:hover { color: #1c2024; }
+[data-theme="dark"] .chat-context .chat-add:hover { color: #e8eaec; }
 .chat-context > span:first-child > svg, .chat-context .people svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; }
 .chat-context .mention svg { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 3px; }
 .chat-name { font-size: 14px; font-weight: 600; margin: 0 0 2px; } /* who said a reply: in the text's colour, bold */
