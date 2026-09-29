@@ -2719,7 +2719,11 @@ async function main() {
     const docs = new Map(), creators = new Map(), notified = [];
     // The decision to announce may need a creator lookup, so onChange takes the signature now and answers on its
     // own. Each change is given a turn of the loop before what it announced is read.
-    const settle = () => new Promise(setImmediate);
+    // An edit banner also waits 4 s for the typing to stop; main's timers are held (mainHelpers), so they are run here.
+    const settle = async (helpers = backend) => {
+      await new Promise(setImmediate);
+      for (const t of helpers.timers) if (t.ms === 4000 && !t.ran) { t.ran = true; t.fn(); }
+    };
     const watched = new Document('tana:text:' + ulid());
     watched.transact((l) => initDocument(l, 'Contract', ME, { kind: 'task' }));
     setAssignees(watched, [], ME); // stated rather than assumed: the rule turns on whether it is assigned
@@ -2753,8 +2757,8 @@ async function main() {
     setTitle(watched, 'Contract v2');
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
-    assert.deepEqual(notified.map((n) => [n[0], n[2]]), [[watched.id, 'Edited']], 'a remote edit to a watched node is announced');
-    assert.equal(notified.length, 1, 'and with nothing written about it, "Edited" is all there is to say');
+    assert.deepEqual(notified.map((n) => [n[0], n[2]]), [[watched.id, 'Renamed from “Contract”']], 'a remote edit to a watched node is announced, saying what it did');
+    assert.equal(notified.length, 1, 'once');
     // The whole feature rests on this: onChange fires for your own typing too, and being told about your own edits
     // would make it unusable. sdk/document.js marks every change local or remote; this is what reads that mark.
     setTitle(watched, 'Contract v3');
@@ -2778,11 +2782,25 @@ async function main() {
     await settle();
     assert.equal(notified.length, 3, 'a change to the body alone is announced too');
     assert.deepEqual([notified.at(-1)[2], notified.at(-1)[3]], ['Edited', 'edit'],
-      'as an edit banner at once: Tana writes its sentence about an edit minutes later, and followSummary brings it in then');
+      'as an edit banner, "Edited" when no line of text moved: Tana writes its sentence minutes later, and followSummary brings it in then');
     watched.transact((l) => l.getMap('content').set('rev', 2));
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
     assert.equal(notified.length, 3, 'and the rest of that burst is quiet: remote typing arrives op by op');
+    // Somebody typing: one banner once the ops stop, saying what the whole burst wrote, read from the document's history.
+    const typed = new Document('tana:text:' + ulid());
+    typed.transact((l) => initDocument(l, 'Notes', ME, { kind: 'task' }));
+    setAssignees(typed, [], ME);
+    docs.set(typed.id, typed); creators.set(typed.id, ME);
+    backend.onChange(typed.id, { origin: 'remote' }); // baseline
+    await settle();
+    const beforeTyping = notified.length, row = outline.insertAfter(typed, null, 'Bu');
+    backend.onChange(typed.id, { origin: 'remote' });
+    outline.setText(typed, row, 'Budget moves to Q3');
+    backend.onChange(typed.id, { origin: 'remote' });
+    await settle();
+    assert.deepEqual(notified.slice(beforeTyping).map((n) => [n[0], n[2], n[3]]), [[typed.id, 'Added “Budget moves to Q3”', 'edit']],
+      'the words typed, not "Edited" nor the first two letters');
     // What the edit was arrives later (issue #131): followSummary waits for a sentence Changes did not have at the
     // time of the edit and replaces the banner with it. The waits are driven by hand here; the app waits 30 s each.
     const stale = new Document('tana:text:' + ulid());
@@ -3042,7 +3060,7 @@ async function main() {
     setTitle(editFromColleague, 'Sam’s edit');
     remoteTask.applyRemote([editFromColleague.exportSince(beforeColleagueEdit)]);
     peerWatch.onChange(remoteTask.id, { origin: 'remote' });
-    await settle();
+    await settle(peerWatch);
     assert.equal(peerNotified.length, 1, 'another user’s edit still announces');
     console.log('ok  watched-node edits from another tab by the same user stay quiet');
     console.log('ok  watching a node: the default is a task you made and did not keep, only remote changes announce, an explicit choice wins');
