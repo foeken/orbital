@@ -5245,7 +5245,7 @@ function runCodexAssignCheck() {
       badgeWhenDone: (done) => { const el = codexBadgeEl(DOC, done); return { className: el.className, label: el.attrs['aria-label'], role: el.attrs.role, hasClick: typeof el.onclick === 'function' }; },
       // the row it is drawn beside is the source: a view cache elsewhere must not decide what this row shows
       badgeFromStaleCache: (done) => { palDoc.done = done ? 1 : 0; const el = codexBadgeEl(DOC, false); palDoc.done = 0; return el.className; },
-      // "Go to Agent task" is offered only where both halves hold: assigned now, and a task id known for it
+      // "Go to Codex task" is offered only where both halves hold: assigned now, and a task id known for it
       goRow: (assigned, linked) => { if (assigned) codexIds.add(DOC); else codexIds.delete(DOC); if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const r = paletteRows('').find((row) => row.rank === 'codexOpen'); return r ? r.label : null; },
       // where the task runs decides whether there is a way in at all
       onHost: (host) => { codexIds.add(DOC); agentStates.set(DOC, 'working'); if (host) agentTaskHosts.set(DOC, host); else agentTaskHosts.delete(DOC); agentHosts = [{ id: 'h1', title: 'Donut' }];
@@ -5376,17 +5376,17 @@ function runCodexAssignCheck() {
     // any view's cache — a view that had not refreshed still held it open — so the row it sits on decides instead.
     assert.doesNotMatch(plain(api.badgeFromStaleCache(true)), /\bclosed\b/, 'the row it is drawn beside outranks any cached copy of the node');
     // The row used to read a snapshot alone, so an unassigned node kept offering it until the next status read.
-    assert.equal(api.goRow(true, true), 'Go to Agent task', 'an assigned node with a task offers the way in');
+    assert.equal(api.goRow(true, true), 'Go to Codex task', 'an assigned node with a task offers the way in');
     assert.equal(api.goRow(false, true), null, 'an unassigned node does not, however stale the status map is');
     assert.equal(api.goRow(true, false), null, 'nor does an assigned node whose task is not known yet');
     assert.equal(api.goRow(false, false), null, 'and a node with neither says nothing');
     // A task on this machine can be opened; one on another machine says where it is instead of pretending.
     const here = plain(api.onHost('local'));
-    assert.equal(here.row, 'Go to Agent task', 'a local task offers the way in');
+    assert.equal(here.row, 'Go to Codex task', 'a local task offers the way in');
     assert.equal(here.disabled, false);
     assert.equal(here.role, 'button', 'and its badge is a button');
     const away = plain(api.onHost('h1'));
-    assert.equal(away.row, 'Agent task is on Donut', 'a task elsewhere names its machine');
+    assert.equal(away.row, 'Codex task is on Donut', 'a task elsewhere names its machine');
     assert.equal(away.disabled, true, 'and cannot be run, because there is no route from here');
     assert.equal(away.role, 'img', 'its badge is not a button either');
     assert.match(away.label, /on Donut$/, 'but it says where the work is, for anyone not seeing the colour');

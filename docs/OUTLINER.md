@@ -468,7 +468,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set colour, Mark as
-  sensitive); the agent (Assign to Agent, Go to / Link Agent task, Send to agent); Edit visibility, Add participants … (Edit
+  sensitive); the agent (Assign to Agent, Go to Codex task, Link Codex task …, Open in Codex); Edit visibility, Add participants … (Edit
   visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
@@ -711,9 +711,10 @@ wrong twenty.
   and hands the node to a new Codex task through Codex's deep link; the task registers itself back with
   scripts/agent-link.js, so the node is pending until it does. The node then carries the agent badge, which says what
   the task is doing, read every 30 s while anything is assigned. **Unassign from Agent** takes it back at once. **Go to
-  Agent task** opens it (or says which machine it is on, from the synced `codexTask` record), **Link Agent Task ...**
-  links a task that already exists, **Send to agent** opens a new Codex task with the node's link, and **Manage Codex
-  hosts** lists the machines a task can run on. Assign to Agent and Send to agent need a real Codex install.
+  Codex task** opens it (or says which machine it is on, from the synced `codexTask` record), **Link Codex task …**
+  links a task that already exists, **Open in Codex** opens a new Codex task with the node's link and tracks nothing,
+  and **Manage Codex hosts** lists the machines a task can run on. Assign to Agent and Open in Codex need a real Codex
+  install.
 
 - **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
   (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is

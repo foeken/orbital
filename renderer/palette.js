@@ -212,7 +212,9 @@ function paletteRows(q, typed = q) {
   if (palDoc && isRealId(palDoc.id)) { const call = callRow(relatedBy.get(palDoc.id)); if (call) rows.push({ ...call, group: docGroup }); }
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'sendToAgent', group: docGroup, icon: 'robot', label: 'Send to agent', run: () => run(async () => {
+    // Open in Codex: a new Codex task with the node's link, nothing tracked (Assign to Agent is the tracked one). The id
+    // keeps its old name so a recorded key still finds the row.
+    rows.push({ id: 'sendToAgent', group: docGroup, icon: 'chatgpt', label: 'Open in Codex', hint: 'New task with this link', run: () => run(async () => {
       const link = await tana.nodeLink(doc.id);
       await tana.openExternal('https://chatgpt.com/codex/open-app?q=' + encodeURIComponent(link + '\n'));
     }) });
@@ -292,7 +294,7 @@ function paletteRows(q, typed = q) {
       } });
   }
   // A task that already exists in Codex, linked by pasting its link (#143): the page below.
-  if (palDoc && tana.linkCodexTask && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ rank: 'codexLink', group: docGroup, icon: 'robot', label: 'Link Agent Task ...', keepOpen: true, run: () => openAgentLink(doc) }); }
+  if (palDoc && tana.linkCodexTask && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ rank: 'codexLink', group: docGroup, icon: 'robot', label: 'Link Codex task …', keepOpen: true, run: () => openAgentLink(doc) }); }
   // The way into the task the agent is handling, from the keyboard. Both halves have to hold: the node is assigned
   // now, and a task id is known for it. The status map alone was not enough — it is a snapshot, and an unassigned
   // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.
@@ -302,8 +304,8 @@ function paletteRows(q, typed = q) {
     // A task on another machine has no route from here, so the row says where it is rather than offering to open
     // something it cannot. Disabled rather than hidden: the palette already greys rows it will not run, and knowing
     // where the work is happening is worth a line.
-    if (!where || where === 'local') rows.push({ rank: 'codexOpen', group: docGroup, icon: 'robot', label: 'Go to Agent task', run: () => run(() => tana.openCodexTask(doc.id)) });
-    else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Agent task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
+    if (!where || where === 'local') rows.push({ rank: 'codexOpen', group: docGroup, icon: 'robot', label: 'Go to Codex task', run: () => run(() => tana.openCodexTask(doc.id)) });
+    else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Codex task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
   }
   if (palDoc && tana.accessOptions) {
     if (!palette.hidden) loadAccess(palDoc.id); // for the open palette only (#274): a key on a choice folded under these asks in runAction
