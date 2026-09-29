@@ -3217,6 +3217,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const onlyGoals = goals.filter((n) => n.id.startsWith('g'));
   api.list(onlyGoals);
   assert.equal(api.prefs().group, PRIO, 'a grouping by field name survives narrowing the page to one type');
+  assert.equal(api.pillDefs().find((d) => d.id === 'group').rows().filter((r) => r.checked).map((r) => r.label).join(), 'Priority', 'and the Group menu ticks it there');
   assert.deepEqual(plain(api.groupsOf(onlyGoals)).map((g) => [g.id, g.nodes.map((n) => n.id)]),
     [['High', ['g2']], ['Low', ['g1', 'g5']], ['No value', ['g4']], ['\u0000no value', ['g3']]], 'and still sections that type’s rows by the field of that name');
   // Clean up tells the real No value choice from the missing value, though their headings read the same
@@ -3236,6 +3237,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   api.list(goals);
   const blurred = Object.fromEntries(plain(api.groupsOf(goals).map((g) => [g.id, !!api.groupHeadEl(g).childNodes.at(-1).dataset.sensitive])));
   assert.deepEqual([blurred.Low, blurred.High, blurred['\u0000no value']], [true, false, false], 'a section of only sensitive rows blurs its heading; one with a row that is not keeps it');
+  assert.equal(api.groupHeadEl({ id: '\u0000no value', title: 'No value', nodes: [goals[0]] }).childNodes.at(-1).dataset.sensitive, undefined, 'No value is the app’s words, never blurred');
   api.set('tasks', 'none', 'default');
   api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],

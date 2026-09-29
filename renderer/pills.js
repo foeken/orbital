@@ -77,7 +77,7 @@ function pillDefs() {
   // A view keeps them in the browser; a saved search stores them in its document, so the arrangement travels with
   // the search and is what it opens on next time.
   defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => sortList().map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
-  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: groupLabel(), rows: () => groupList(true).filter(([id]) => id !== 'responsibility' || tasksInFilter(f)).map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
+  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: groupLabel(), rows: () => groupList(true, true).filter(([id]) => id !== 'responsibility' || tasksInFilter(f)).map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   // what each row shows of itself; multi-select, so the menu stays open to tick more, like the type and status lists
   // the first two it shows and an ellipsis for the rest, so ticking more does not stretch the pill across the bar
   const shown = displayList().filter(([id]) => displayOn(id)).map(([, label]) => label);

@@ -127,9 +127,12 @@ function pageFieldDefs(load = false) {
 }
 const GROUPABLE = ['options', 'link', 'member'];
 const baseGroups = () => (onTypePage() ? GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))) : GROUPS);
-const groupList = (load) => {
+// menu: the Group menu's own list, which also names a field kept by name that the page does not offer now (groupOf),
+// so the choice in effect is ticked there
+const groupList = (load, menu = false) => {
   const byField = pageFieldDefs(load).filter((d) => GROUPABLE.includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field']);
-  return [...baseGroups(), ...byField];
+  const g = menu && groupBy(), kept = g && fieldName(g) !== null && !byField.some(([id]) => id === g) ? [[g, fieldName(g)]] : [];
+  return [...baseGroups(), ...byField, ...kept];
 };
 // a field's choices in order; one by name follows the types on the page in turn, a label they share listed once
 const fieldOrder = (key) => {
@@ -576,10 +579,10 @@ function groupHeadEl(g) {
   el.dataset.group = g.id; // what a task dropped under it joins (renderer/drag.js groupAt)
   const chev = iconNode('chevronRight'); // the icon set's own chevron, turned a quarter down by CSS while the section is open
   // a field's heading is one of its values, which demo mode masks on the rows too (subtextEl), and which is blurred
-  // while every row it comes from is (a row that is not shows the value anyway)
-  const field = isFieldKey(groupBy()), words = document.createElement('span');
-  words.textContent = field ? demoText(g.title, g.id) : g.title;
-  if (field && g.nodes.length && g.nodes.every((n) => sensitiveIds === null || sensitiveIds.has(n.id))) blurSensitive(words, ...g.nodes.map((n) => n.id));
+  // while every row it comes from is (a row that is not shows the value anyway); No value is the app's own words
+  const value = isFieldKey(groupBy()) && g.id !== NO_FIELD, words = document.createElement('span');
+  words.textContent = value ? demoText(g.title, g.id) : g.title;
+  if (value && g.nodes.length && g.nodes.every((n) => sensitiveIds === null || sensitiveIds.has(n.id))) blurSensitive(words, ...g.nodes.map((n) => n.id));
   el.append(...(chev ? [chev] : []), words);
   el.setAttribute('aria-expanded', g.collapsed ? 'false' : 'true');
   el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use

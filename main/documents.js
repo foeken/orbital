@@ -942,11 +942,11 @@ function onChange(docId, info) {
     fieldSigs.set(docId, fsig);
     // and into every view's cached row: a view grouped by a field is sectioned by it after a reload or a restart too
     if (row && fieldsMoved) db.setFields(docId, fieldLines(doc));
-    // A retype leaves the old type's values on the document: the cached rows' chips say which type counts, so they
-    // follow it too (rowInfo rebuilds a row whose type moved on), or a reload would group it by its former type
-    // The rebuild starts while the cache still holds the former type (rowInfo decides on the cached row before it
-    // waits); the row as it can be built now goes in at once, before anyone is told, and the rebuilt one follows
-    // once the type's name is read: written only while the document is still that type, as a later retype may land first.
+    // A retype leaves the old type's values on the document, and the cached rows' chips say which type counts, so
+    // they follow it or a reload would group the row by its former type. The rebuild starts while the cache still
+    // holds the former type (rowInfo decides on the cached row before it waits), the row as it can be built now goes
+    // in at once, before anyone is told, and the rebuilt one once the type's name is read: only while the document is
+    // still that type, as a later retype's may land first.
     if (row && (typeUriOf(row) || null) !== (n.entityTypeUri || null)) {
       rowInfo(doc).then((node) => { if (readNode(doc).entityTypeUri === n.entityTypeUri) db.setTags(docId, node.tags, node.icon); }, report);
       const now = builtRow(doc, n);
