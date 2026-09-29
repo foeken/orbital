@@ -8351,8 +8351,10 @@ async function runDeletedNodeCheck() {
     const tana = {
       node: async (uri) => { asked.push('node ' + uri); return { id: uri, title: 'still here' }; },
       taskMeta: async (id) => { asked.push('taskMeta ' + id); throw new Error('Node has been deleted'); },
+      openCanvas: async (id) => { asked.push('canvas ' + id); },
     };
     const showError = (e) => errors.push(String((e && e.message) || e));
+    const run = (fn) => fn();
     const render = () => { renders++; }, renderSoon = () => { renders++; }, patchMeta = () => {}, renderPalette = () => {};
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {}, recordRecent = () => {};
     const LINKS = false; // a page of its own, not the Graph pane (renderer/state.js)
@@ -8360,6 +8362,7 @@ async function runDeletedNodeCheck() {
     const atHome = () => false, goHome = () => { view = 'home'; };
     const setTimeout = () => 0;
     ${sourceBetween('const isRealId = (id)', '// ---- Home ----')}
+    ${sourceLine('const opensCanvas =')}
     ${functionSource('openDoc')}
     ${functionSource('goTo')}
     ${functionSource('loadTaskMeta')}
@@ -8397,6 +8400,12 @@ async function runDeletedNodeCheck() {
   api.clear();
   await api.goTo(live);
   assert.equal(api.state().zoom, live, 'a node that is still there opens as it always did');
+  // A canvas never opens as a page here: it goes to a window of its own, drawn by Tana (main.js canvas:open, #611).
+  api.clear();
+  const canvas = 'tana:canvas:01canvasnode00000000000000';
+  await api.goTo(canvas);
+  assert.equal(api.state().zoom, live, 'a canvas leaves the page where it was');
+  assert.deepEqual(plain(api.state().asked), ['node ' + canvas, 'canvas ' + canvas], 'and asks main for its window');
 
   // 3. The Back stack walks past the pages that have gone since.
   api.clear();

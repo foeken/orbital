@@ -37,7 +37,7 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: {}, BrowserWindow: function () {}, WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
+  const electron = { app: {}, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => false; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } },
     clipboard: { items: [], read: async () => electron.clipboard.items } }; // items: what a check puts on it, as clipboard.read() hands them over
   const context = vm.createContext({
@@ -1245,6 +1245,24 @@ async function main() {
     const link = (kind) => backend.handlers.get('doc:link')(null, 'tana:' + kind + ':01m2nrv0v6qj2brghq04t8wv87');
     assert.deepEqual(['text', 'type', 'user-profile', 'event', 'space', 'chat'].map((k) => link(k).split('/')[5]), ['l', 't', 'u', 'e', 's', 'l'], 'a type opens its type page, not the document route');
     assert.equal(link('type'), 'https://home.tana.inc/o/01ks7rqsrqjn7vwyjhx75r6jg0/t/tana%3Atype%3A01m2nrv0v6qj2brghq04t8wv87');
+    // A canvas opens in a window of its own, on the page Tana opens for it and in the Tana session (issue #611).
+    const canvas = 'tana:canvas:01m2nrv0v6qj2brghq04t8wv87', openCanvas = backend.handlers.get('canvas:open'), made = backend.electron.windows;
+    await openCanvas(null, canvas);
+    const [cw] = made;
+    assert.equal(cw.url, link('canvas'), 'on the page Tana itself opens for it');
+    assert.equal(cw.options.webPreferences.partition, 'persist:tana', 'signed in with the session Orbital already has');
+    assert.match(cw.options.webPreferences.preload, /canvas-preload\.js$/, 'with a preload of its own, never the one that hands a page window.api');
+    assert.ok(!/Electron/.test(cw.userAgent), 'not taken for Tana\'s desktop app');
+    cw.webContents.handlers['dom-ready']();
+    assert.match(cw.webContents.css[0], /body:has\(\.tl-container\) \*/, 'with everything but the board hidden, once the board is there');
+    assert.equal(cw.openHandler({ url: 'https://example.com/' }).action, 'deny', 'no Tana pop-up window of its own');
+    assert.equal(backend.opened.at(-1), 'https://example.com/', 'a link out of it goes to the browser');
+    await openCanvas(null, canvas);
+    assert.deepEqual([made.length, cw.focused], [1, 1], 'opening it again brings that window forward');
+    cw.webContents.handlers['window:closed']();
+    await openCanvas(null, canvas);
+    assert.equal(made.length, 2, 'and a closed one opens anew');
+    await assert.rejects(async () => openCanvas(null, 'tana:text:01m2nrv0v6qj2brghq04t8wv87'), /Not a canvas/, 'nothing but a canvas opens there');
     // It is app plumbing rather than a note, so no list or search offers it.
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: doc.id, title: settings.TITLE, updateTime: '2026-09-20T10:00:00Z' }, { id: 'tana:text:' + ulid(), title: 'A real note', updateTime: '2026-09-20T10:00:00Z' }] }) } } });
     const rows = await backend.handlers.get('view:list')(null, 'library', { types: ['docs'], states: null, assignee: 'anyone' });
