@@ -14,7 +14,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
@@ -605,8 +605,15 @@ if (process.env.TANA_MAIN_TEST) {
     // An edit banner has one macOS identifier per node, so the 'summary' that follows it (Tana's sentence for the edit,
     // main/documents.js followSummary) replaces it in place, silently — unless it was clicked, and so already seen.
     const clickedEdits = new Set();
-    S.notify = (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
+    S.notify = async (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
       if (S.demo || !Notification.isSupported || !Notification.isSupported()) return; // demo mode: nothing real on screen, banners included
+      // Auto-translate (#547) covers banners too: their words in the chosen language, never a sensitive node's, and the
+      // banner as written when the answer does not come within 15 s (main/ai.js translate: this Mac detects, the model translates)
+      const to = settings.prefs().translateTo;
+      if (to && !sensitiveIds().includes(docId)) {
+        const found = await ai.translate([title, subtitle || '', body || ''], to, globalThis.fetch, S.userData, { timeout: 15000 }).catch(() => []);
+        [title, subtitle, body] = [title, subtitle, body].map((t, i) => found[i]?.text || t);
+      }
       const id = kind ? 'edit:' + docId : undefined; // undefined: a fresh random id, as before
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);

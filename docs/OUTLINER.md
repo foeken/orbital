@@ -715,6 +715,8 @@ wrong twenty.
   work, shown only after 0.4 s and taking no room until then, so an answer from the cache or a text found already in the language never moves the row (renderer/translate.js, styles.css). A page is
   translated as a whole only when it has rows of its own; a title alone (a space listing documents) is left to its list. Measured 2026-09-28 through a
   ChatGPT sign-in: about 4.5 s for a first question, well under 1 ms once kept.
+  Push notifications are translated the same way before they are shown (main.js `S.notify`: title, subtitle and body
+  in one question, never a sensitive node's, and the banner as written when no answer comes within 15 s).
 
 ## 12. Fields and tables
 
