@@ -45,11 +45,11 @@ a LoroMap `{ nodeName, attributes, children }`; inline content of a paragraph or
 and inline maps such as `{ nodeName: 'mention', attributes: { label, tanaUri } }`. Block names: paragraph, heading
 (`attributes.level`), bulletList > listItem > (paragraph, optional nested list), orderedList, blockquote, codeBlock,
 horizontalRule (a divider), image, embed (a native reference), table (§12), and the atoms video, audio and
-unsupportedBlock. A checkbox is `checked` on a listItem's attributes, never on the paragraph. Tana draws every checkbox
-in place of the bullet; Orbital draws a bullet beside the box when the row was a list row before it got one, which it
-records as `orbitalBullet: true` on that listItem (the Node's `bulleted`, #602). Tana's editor deletes attributes its
-schema does not declare whenever it rewrites the block, so an edit in Tana can turn such a row back into a plain
-checkbox. A new row after a checkbox row is the same kind. Blocks carry
+unsupportedBlock. A checkbox is `checked` on a listItem's attributes, never on the paragraph. Orbital draws a checkbox
+row with its bullet, whoever made it, except one that was a plain line before it got its box: that one is drawn with the
+box in the bullet's place, recorded as `orbitalPlain: true` on its listItem (the Node's `plain`, #602). Tana's
+editor deletes attributes its schema does not declare whenever it rewrites the block, so an edit in Tana turns such a
+row back into bullet and box. A new row after a checkbox row is the same kind. Blocks carry
 `attributes.blockId` (8 lowercase alphanumerics); every block we create gets one, and `assignBlockIds` gives one,
 once, to blocks that arrive without.
 

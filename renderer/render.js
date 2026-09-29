@@ -352,7 +352,7 @@ function renderSoon(force) {
 function rowSig(n) {
   const meta = taskMetaById.get(n.id);
   // stateType too: accepting an Inbox task changes only the state, and a reused row would keep the tick the click put in its box
-  return JSON.stringify([n.text, n.done, n.bulleted, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type, n.start,
+  return JSON.stringify([n.text, n.done, n.plain, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type, n.start,
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,

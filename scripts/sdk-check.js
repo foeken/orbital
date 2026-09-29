@@ -1675,7 +1675,7 @@ async function main() {
     outline.setText(d, id, [{ text: 'Keep ' }, { mention: { label: 'Member', uri: ME } }]);
     const original = outline.readOutline(d)[0];
     outline.toggleCheckbox(d, id);
-    assert.deepEqual(outline.readOutline(d)[0], { ...original, done: 0, block: 'bullet' }, 'a checkbox node is a listItem, so it reads as a bullet');
+    assert.deepEqual(outline.readOutline(d)[0], { ...original, done: 0, block: 'bullet', plain: true }, 'a checkbox node is a listItem, so it reads as a bullet, marked as the plain line it was');
     outline.insertChild(d, id, 'Child');
     const nested = outline.readOutline(d)[0];
     outline.toggleCheckbox(d, id);
@@ -1720,18 +1720,19 @@ async function main() {
 
   {
     // Cmd+Enter and "/" Checklist (#602): a plain line gets a plain checkbox, a bullet keeps its bullet, and a new row
-    // after either is the same kind. Both are Tana's listItem.checked; only Orbital's own mark tells them apart.
+    // after either is the same kind. Both are Tana's listItem.checked; only Orbital's mark on the plain one tells them
+    // apart, so a checkbox made anywhere else keeps its bullet.
     const d = new Document(DOC, { peerId: '75' });
     const line = outline.insertAfter(d, null, 'Plain line');
     const bullet = outline.insertAfter(d, line, 'Bullet'); outline.setBlockType(d, bullet, 'bullet');
     outline.toggleCheckbox(d, line); outline.toggleCheckbox(d, bullet);
-    const pick = (tree, id) => { const n = tree.find((x) => x.id === id); return [n.block, n.done, n.bulleted ?? false]; };
+    const pick = (tree, id) => { const n = tree.find((x) => x.id === id); return [n.block, n.done, n.plain ?? false]; };
     let tree = outline.readOutline(d);
-    assert.deepEqual([pick(tree, line), pick(tree, bullet)], [['bullet', 0, false], ['bullet', 0, true]], 'a plain line becomes a plain checkbox, a bullet a bullet with a box');
+    assert.deepEqual([pick(tree, line), pick(tree, bullet)], [['bullet', 0, true], ['bullet', 0, false]], 'a plain line becomes a plain checkbox, a bullet a bullet with a box');
     const afterLine = outline.insertAfter(d, line, 'Next'), afterBullet = outline.insertAfter(d, bullet, 'Next');
     outline.toggleCheckbox(d, bullet);
     tree = outline.readOutline(d);
-    assert.deepEqual([pick(tree, afterLine), pick(tree, afterBullet), pick(tree, bullet)], [['bullet', 0, false], ['bullet', 0, true], ['bullet', 1, true]], 'a new row keeps its sibling\'s kind, and ticking keeps the bullet');
+    assert.deepEqual([pick(tree, afterLine), pick(tree, afterBullet), pick(tree, bullet)], [['bullet', 0, true], ['bullet', 0, false], ['bullet', 1, false]], 'a new row keeps its sibling\'s kind, and ticking keeps the bullet');
     console.log('ok  a checkbox is plain or bulleted after the row it was made from');
   }
 
