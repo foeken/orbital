@@ -630,14 +630,18 @@ commands.rows = async () => {
   const main = backend(await connect());
   out(await main.search(positional.join(' ')));
 };
-// children <id>: a page's outline exactly as the renderer receives it (outline:children), each row's id, kind,
-// checkbox and text. Read-only.
+// children <id>: a document's outline rows as main hands them to the renderer: readOutline with the references
+// resolved, as outline:children does for a document (main/documents.js outlineWithReferences), minus the block ids that
+// helper writes onto blocks arriving without one, so this stays read-only. Each row's depth, id, kind, checkbox and
+// text. Chats, spaces and saved searches take other routes in outline:children (main.js) and are refused here.
 commands.children = async () => {
-  if (!positional[0]) throw new Error('usage: children <id>  (outline:children as the renderer receives it)');
+  const id = positional[0];
+  if (!id || /^tana:(chat|space|search):/.test(id)) throw new Error('usage: children <document id>  (a document\'s outline rows, read-only; not a chat, space or saved search)');
   const main = backend(await connect());
   await client.sync.connect();
+  const { resolveReferences } = require('../main/documents');
   const walk = (rows, depth = 0) => rows.flatMap((n) => [[depth, n.id, n.block || n.type || n.kind, n.done ?? '-', String(n.text || '').slice(0, 60)].join('  '), ...walk(n.children || [], depth + 1)]);
-  out(walk(await main.op(positional[0], (doc) => main.outlineWithReferences(doc))).join('\n')); // the outline:children path for a document (main.js)
+  out(walk(await main.op(id, (doc) => (doc.content.get('children') ? resolveReferences(readOutline(doc)) : []))).join('\n'));
 };
 // settings [<key> <json>]: the app's own settings document (main/settings.js) — which document it is and what it
 // carries. Read-only without arguments; with a key and a JSON value it writes one setting the way the app does.
@@ -1152,7 +1156,7 @@ const USAGE = [
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates] |',
   '             changes <id> [--within <summary id>] [--limit 20] | inbox [--limit 20] [--watch seconds] |',
   '             settings   (with a key and a JSON value it writes)',
-  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | children <id> | pinrows |',
+  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | children <document id> | pinrows |',
   '             settype <id>   (listing only; with a target it writes) | classify <id>   (the document goes to the model) | translate [--to English] [text…]   (the texts go to the model)',
   '             caps <id...> | related <id> | incall [--limit 5] | callstate <call id> | suggestions [--limit 10] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
