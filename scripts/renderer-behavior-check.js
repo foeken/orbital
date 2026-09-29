@@ -2658,6 +2658,8 @@ function makeSlashHarness() {
     const openPage = (mode, placeholder, p) => { page = { mode, placeholder, ...p }; };
     const togglePalette = (mode) => calls.push(['palette', mode]), closePalette = () => calls.push(['close']);
     const linkTo = async (ctx, mention) => calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]);
+    const renderPalette = () => {}, textEl = () => ({}), readSegs = () => node.segments;
+    const plainOf = (segs) => segs.map((s) => s.text).join('');
     ${functionSource('slashTarget')}
     ${functionSource('slashRows')}
     ${functionSource('runSlashBlock')}
@@ -2694,9 +2696,17 @@ async function runSlashMenuCheck() {
   assert.deepEqual(plain(task.page().rows('', '  ').map((r) => [r.label, !!r.disabled])), [['Type a name', true]], 'with nothing typed there is nothing to make');
   task.page().back();
   const [make] = task.page().rows('', ' Ship it ');
+  assert.equal(make.keepOpen, true, 'the name page stays open while the task is made, so nothing is typed into the row meanwhile');
   await Promise.all([make.run(), make.run()]);
   assert.deepEqual(plain(task.calls()), [['palette', 'slash'], ['createDocument', 'Ship it', { kind: 'task' }], ['close'], ['linkTo', 'doc/block', [], 0, 0, { label: 'Ship it', uri: 'tana:text:task1' }]],
     'Back returns to the menu; Enter makes one task, closes the palette and puts its reference in place of the "/"');
+  const edited = makeSlashHarness();
+  edited.rows('task')[0].run();
+  const run = edited.page().rows('', 'Ship it')[0].run();
+  assert.equal(edited.page().rows('', 'Ship it')[0].label, 'Creating “Ship it”…', 'and says so until it is done');
+  edited.node.segments = [{ text: 'hello' }]; // the row changed while the task was being made
+  await run;
+  assert.deepEqual(plain(edited.calls()).at(-1), ['linkTo', 'doc/block', [{ text: 'hello' }], 5, 5, { label: 'Ship it', uri: 'tana:text:task1' }], 'a row that holds more than the "/" keeps it, the reference after it');
 
   const quote = makeSlashHarness();
   await quote.rows('').find((row) => row.label === 'Quote').run();

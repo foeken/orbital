@@ -330,24 +330,32 @@ function createFromSlash(choice) {
 }
 // "/" Task (#602): the task is named on a page of its own and takes the row the "/" was typed in, as a reference to it
 // (Tana's own "/" Task creates and embeds one). Escape goes back to the menu; until a task is made the "/" stays.
-// Not through run(): linkTo queues its own write there, and waiting on it from inside the queue would never end.
+// The page stays open, saying so, until the task exists, so nothing is typed into the row meanwhile. The row is read
+// again before the reference goes in: still just the "/", the reference takes its place; anything else is kept and
+// the reference goes after it. Not through run(): linkTo queues its own write there, and waiting on it from inside
+// the queue would never end.
 let slashTaskBusy = false; // one task per Enter
 function taskFromSlash(choice) {
   const item = slashTarget();
   if (!item || item.node.kind !== 'block') return;
   openPage('slashTask', 'Name the new task…', { back: () => togglePalette('slash'), typed: true, rows: (q, typed) => {
     const title = String(typed || '').trim();
-    return [title ? { group: 'New task', icon: choice.icon, label: 'Create “' + title + '”', run: () => taskHere(item, title) }
+    if (slashTaskBusy) return [{ group: 'New task', icon: choice.icon, label: 'Creating “' + title + '”…', disabled: true, note: true }];
+    return [title ? { group: 'New task', icon: choice.icon, label: 'Create “' + title + '”', keepOpen: true, run: () => taskHere(item, title) }
       : { group: 'New task', icon: choice.icon, label: 'Type a name', disabled: true, note: true }];
   } });
 }
 function taskHere(item, title) {
   if (slashTaskBusy) return;
   slashTaskBusy = true;
+  renderPalette();
   dropPending(item.key);
   return tana.createDocument(title, { kind: 'task' }).then((n) => {
     extra.set(n.id, { ...n, text: n.title || '', hasChildren: true });
     closePalette();
-    return linkTo({ item, segs: [], start: 0, end: 0 }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) });
+    const el = items.get(item.key) === item && textEl(item.key);
+    if (!el) return; // the row went meanwhile: the task stays, in the Library
+    const segs = readSegs(el), words = plainOf(segs), at = words.trim() === '/' || !words.trim() ? 0 : words.length;
+    return linkTo({ item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) });
   }).catch(showError).finally(() => { slashTaskBusy = false; });
 }
