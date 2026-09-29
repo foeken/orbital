@@ -1013,6 +1013,13 @@ async function main() {
       icons.setTypeIcon(SEARCH, null);
       assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'search', 'No icon puts the search glyph back');
     }
+    { // and a type's field, under its own key, sent with the rest of the glyphs (#606)
+      const FIELD = TYPE + '?attribute=ab12cd34';
+      assert.equal(icons.setTypeIcon(FIELD, 'nc-rocket').name, 'nc-rocket', 'a field takes an icon');
+      assert.ok(icons.typeIcons().some((i) => i.uri === FIELD && i.name === 'nc-rocket'), 'and the renderer is told it with the type glyphs');
+      assert.throws(() => icons.setTypeIcon('tana:text:' + ulid() + '?attribute=ab12cd34', 'nc-rocket'), /set on a type/, 'only a type has fields');
+      icons.setTypeIcon(FIELD, null);
+    }
     console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
     // The colour the same way: a hue of our own, or grey, kept beside the glyph in the settings; Tana's own hue on
     // the type shows through when there is no entry, and is never written.

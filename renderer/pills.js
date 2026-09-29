@@ -43,7 +43,7 @@ function pillDefs() {
     if ((relatedBy.get(ft) || {}).definitions) for (const key of Object.keys(f.fields || {})) {
       if (pills.some((p) => fieldKey({ key: p.id.slice(6) }) === key)) continue;
       const title = (typeDefs().find((d) => fieldKey(d) === key) || {}).title || 'Removed field';
-      defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: 'field', value: 'Filtered', rows: () => [{ label: 'Any', reset: true, checked: false, run: () => putField(f, save, key, null) }] });
+      defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: fieldGlyph(key), value: 'Filtered', rows: () => [{ label: 'Any', reset: true, checked: false, run: () => putField(f, save, key, null) }] });
     }
   }
   if (tasksInFilter(f)) {
@@ -116,7 +116,7 @@ function fieldPill(def, f, save) {
   const key = fieldKey(def), now = (f.fields || {})[key] || {}, title = def.title || 'Untitled field';
   const put = (value) => putField(f, save, key, value);
   // a link or member field can point at hundreds of nodes, so its menu says it can be searched (menuEl)
-  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field', search: def.type === 'link' || def.type === 'member' };
+  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: fieldGlyph(key), search: def.type === 'link' || def.type === 'member' };
   if (def.type === 'date') {
     const preset = now.date && now.date.preset;
     return { ...pill, value: (DATE_PRESETS.find(([p]) => p === preset) || [])[1] || 'Any', rows: () => [

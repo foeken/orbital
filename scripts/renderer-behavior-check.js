@@ -50,6 +50,8 @@ const withShims = (src) => {
   if (/\bdemo(Mode|Text|Segments|PersonName|WordCount|Meta)\b/.test(src) && !/let demoMode =/.test(src)) src = 'globalThis.demoMode ??= false; globalThis.demoText ??= (value) => value; globalThis.demoSegments ??= (segs) => segs; globalThis.demoPersonName ??= (id) => id; globalThis.demoWordCount ??= () => 2; globalThis.demoMeta ??= (node, meta) => meta;\n' + src;
   // a row knows whether it is drawn in a field from the id it is addressed with (renderer/nodes.js)
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
+  // a field is drawn with its own glyph when one was chosen (renderer/nodes.js fieldGlyph): none in a harness
+  if (/\bfieldGlyph\(/.test(src) && !/const fieldGlyph =/.test(src)) src = "globalThis.fieldGlyph ??= () => 'field';\n" + src;
   // a date mention's day (renderer/segments.js): the real one, since chips and clicks both ask it
   if (/\bdayOfUri\(/.test(src) && !/const dayOfUri =/.test(src)) src = sourceLine('const dayOfUri').replace('const dayOfUri =', 'globalThis.dayOfUri ??=') + '\n' + src;
   // how many rows changing at once is a new list rather than an edit (renderer/motion.js): the real number
@@ -7571,7 +7573,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -8077,6 +8079,33 @@ async function runClassifyTypeCheck() {
 // is main's (main/icons.js) — what is checked here is that the row is offered to a type and nothing else, that the
 // page draws what main answers and registers those glyphs so the rows can show them, that the type it already wears
 // is ticked and can be taken off, and that choosing is one call.
+async function runSetFieldIconCheck() {
+  const api = vm.runInNewContext(`
+    const TYPE = 'tana:type:01j0type000000000000000000', KEY = TYPE + '?attribute=ab12cd34';
+    let palField = null, palReturn = null; const palDoc = null, palette = { hidden: false }, zoom = null, opened = [];
+    const tableView = () => false, fieldType = () => null, shownDocs = () => [], onTypePage = () => false, focused = () => null;
+    const tana = { searchIcons() {}, setTypeIcon() {} }, typeGlyphs = new Map();
+    const items = new Map([['r1', { docId: 'tana:text:01j0doc000000000000000000|' + KEY }], ['r2', { docId: 'tana:text:01j0doc000000000000000000' }]]);
+    const openIconPalette = (doc) => opened.push(doc.id);
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('fieldRows')}
+    ${functionSource('palFieldKey')}
+    const row = () => fieldRows('Current node').find((r) => r.id === 'setFieldIcon');
+    ({ KEY, TYPE, row, opened, typeGlyphs, set: (f, r) => { palField = f; palReturn = r; } })`, {});
+  api.set({ field: { key: api.KEY, type: 'options' }, editable: false });
+  assert.deepEqual(plain([api.row().label, api.row().icon, api.row().hint]), ['Set field icon', 'field', 'The generic glyph'], 'a choice field offers the row under the generic glyph');
+  api.typeGlyphs.set(api.KEY, 'nc-rocket');
+  assert.deepEqual(plain([api.row().icon, api.row().hint]), ['nc-rocket', 'Chosen'], 'and wears the one chosen for it');
+  api.row().run();
+  assert.deepEqual(plain(api.opened), [api.KEY], 'which opens the icon page on the field\u2019s own key');
+  api.set({ typeUri: api.TYPE, def: { key: 'ab12cd34' } });
+  assert.equal(api.row().run() && api.opened.at(-1), api.KEY, 'its definition on the type\u2019s page is the same field');
+  api.set(null, { key: 'r1' });
+  assert.equal(api.row().run() && api.opened.at(-1), api.KEY, 'and so is a row inside a text field\u2019s value');
+  api.set(null, { key: 'r2' });
+  assert.equal(api.row(), undefined, 'a row of the page itself is no field');
+  console.log('ok  Set field icon: offered on a choice field, a definition and a text field\u2019s row, all under the field\u2019s key (#606)');
+}
 async function runSetIconCheck() {
   const TYPE = 'tana:type:01j0type000000000000000000', DOC = 'tana:text:01j0doc000000000000000000';
   const api = vm.runInNewContext(`

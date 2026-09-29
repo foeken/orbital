@@ -26,7 +26,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // it looks, the agent, who sees it, its link and export, and last the destructive rows. Rows without an id carry a
 // `rank` from this list instead.
 // The rows about a field the caret is on (renderer/fields.js) come before the node's own: they are about what is focused.
-const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets',
+const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'setFieldIcon',
   'zoomIn', 'expand', 'collapse',
   'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status',
   'assign', 'assignTo', 'discussWith', 'addToChat',

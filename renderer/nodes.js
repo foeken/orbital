@@ -186,6 +186,7 @@ const LIB_ICONS = {
 const customIcons = new Map(); // 'nc-<label>' -> svg markup
 const typeGlyphs = new Map(); // type uri -> the icon name it is drawn with, so the picker knows what it has now
 const typeGlyph = (uri) => typeGlyphs.get(uri) || (String(uri).startsWith(SEARCH_ID) ? 'search' : 'type'); // how a type or a saved search is drawn wherever it is listed: its own icon, else the generic one
+const fieldGlyph = (key) => typeGlyphs.get(key) || 'field'; // a type's field ("<type uri>?attribute=<key>"): its own icon, else the generic one
 function registerIcons(list) {
   for (const icon of Array.isArray(list) ? list : []) {
     if (!icon || typeof icon.name !== 'string' || typeof icon.svg !== 'string') continue;
