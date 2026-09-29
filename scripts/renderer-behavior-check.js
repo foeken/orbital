@@ -3155,6 +3155,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
       ['tana:type:note', { definitions: [{ key: 'p', title: 'Priority', type: 'plain' }] }],
       ['tana:type:empty', { definitions: [{ key: 'stage', title: 'Stage', type: 'options', options: [{ label: 'Draft' }] }] }]]);
     const loaded = []; function loadRelated(uri) { loaded.push(uri); } // the definitions a page reads (renderer/rail.js)
+    // rows marked sensitive (renderer/nodes.js): Goal g1 and g5, the two Low rows
+    let sensitiveIds = new Set(['g1', 'g5']), sensitiveVisible = false;
+    ${functionSource('sensitiveHidden')}
+    ${functionSource('blurSensitive')}
     ${definitions}
     ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
@@ -3225,6 +3229,13 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   g4.fields = {};
   assert.equal(api.needsCleanup(pair), true, 'a held row that lost its No value choice offers Clean up, though both sections read No value');
   api.releaseHeld();
+  api.set('tasks', 'none', 'default');
+  api.list(undefined);
+  // A heading is a field's value: blurred while every row under it is sensitive, shown when one is not
+  api.set('tasks', PRIO, 'default');
+  api.list(goals);
+  const blurred = Object.fromEntries(plain(api.groupsOf(goals).map((g) => [g.id, !!api.groupHeadEl(g).childNodes.at(-1).dataset.sensitive])));
+  assert.deepEqual([blurred.Low, blurred.High, blurred['\u0000no value']], [true, false, false], 'a section of only sensitive rows blurs its heading; one with a row that is not keeps it');
   api.set('tasks', 'none', 'default');
   api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],

@@ -575,8 +575,12 @@ function groupHeadEl(g) {
   el.type = 'button'; el.className = 'ghead';
   el.dataset.group = g.id; // what a task dropped under it joins (renderer/drag.js groupAt)
   const chev = iconNode('chevronRight'); // the icon set's own chevron, turned a quarter down by CSS while the section is open
-  // a field's heading is one of its values, which demo mode masks on the rows too (subtextEl)
-  el.append(...(chev ? [chev] : []), document.createTextNode(isFieldKey(groupBy()) ? demoText(g.title, g.id) : g.title));
+  // a field's heading is one of its values, which demo mode masks on the rows too (subtextEl), and which is blurred
+  // while every row it comes from is (a row that is not shows the value anyway)
+  const field = isFieldKey(groupBy()), words = document.createElement('span');
+  words.textContent = field ? demoText(g.title, g.id) : g.title;
+  if (field && g.nodes.length && g.nodes.every((n) => sensitiveIds === null || sensitiveIds.has(n.id))) blurSensitive(words, ...g.nodes.map((n) => n.id));
+  el.append(...(chev ? [chev] : []), words);
   el.setAttribute('aria-expanded', g.collapsed ? 'false' : 'true');
   el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use
   el.onmousedown = (e) => e.preventDefault();

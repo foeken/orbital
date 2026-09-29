@@ -1970,6 +1970,12 @@ async function main() {
     const uris = (rows) => rows.find((r) => r.id === fielded).tags.map((t) => t.uri).filter(Boolean);
     assert.deepEqual([uris(cache.list().library), uris(cache.list().tasks)], [[typeB], [typeB]], 'a retype moves every cached row’s chip to the new type');
     assert.deepEqual((await rootsOf()).tags.map((t) => t.uri).filter(Boolean), [typeB], 'and the rows a reload builds carry it, so the old type’s value no longer counts');
+    // …and at once, before the new type's name is read: the old chip is gone from the cache when the change is told
+    const typeC = 'tana:type:' + ulid();
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: () => new Promise(() => {}) } } });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeC));
+    backend.onChange(fielded, { origin: 'remote' });
+    assert.deepEqual((await rootsOf()).tags.map((t) => t.uri).filter(Boolean), [], 'a reload during the type lookup no longer carries the former type');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
