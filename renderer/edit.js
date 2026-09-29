@@ -226,6 +226,7 @@ function toggleDone(item, direct) {
   if (!accept) item.node.done = item.node.done ? 0 : 1;
   item.node.stateType = item.node.done ? 'closed' : 'open'; // what setDone makes of it: an unchecked Inbox task comes back In Progress, not dashed
   if (item.node.done) justDone.set(item.docId, Date.now());
+  if (item.node.kind === 'document') patchCopies(item.node.id, { done: item.node.done, stateType: item.node.stateType }); // every copy on the page at once
   if (zoom && zoom.docId === item.docId) extra.set(item.docId, item.node); // the page stays open when the task leaves the filtered view
   render(true);
   run(() => (accept ? tana.setState(item.docId, 'open') : tana.setDone(item.docId, item.node.done)));

@@ -799,7 +799,7 @@ async function main() {
     assert.equal(calls.length,0);
     await assert.rejects(ai.classifyType({title:'t',text:'',types:[{uri:'tana:type:a',title:'A'}]},fetchWith(answer('{"1":1}'))),/OpenAI API key/,'classifying without one says how to get one');
     assert.equal(calls.length,0,'and sends nothing either');
-    assert.deepEqual(await ai.translate(['Open vraag over het budget'],'English',fetchWith(answer('[]'))),[null],'nor does translating: the words are shown as written (#547)');
+    assert.deepEqual(await ai.translate(['Open vraag over het budget'],'English',fetchWith(answer('[]')),undefined,{detect:null}),[null],'nor does translating: the words are shown as written (#547)');
     assert.equal(calls.length,0);
     settings.set('openaiApiKey','sk-local-only');
     assert.equal(await ai.suggestDiscussWith('   ',fetchWith(answer('Stan'))),null,'an untitled document has nothing to read');
@@ -843,22 +843,34 @@ async function main() {
     assert.deepEqual((await ai.classifyType(typed,fetchWith(answer('{"2": 60, "none": 20, "7": 99}')))).choices.map((c)=>c.p),[0.75,0.25,0],
       'percentages are scaled to odds, and a type the list does not have is ignored');
     await assert.rejects(ai.classifyType(typed,fetchWith(answer('Decision Record'))),/probabilities/,'an answer without odds is an error, not a guess');
-    // Translate (#547): one question for the batch, the texts as a JSON array, one answer per text in order
+    // Translate (#547): one question for the batch, each text with its id, each answer read by its id under a JSON Schema the model must follow
+    const tr=(t,to,f,only={detect:null})=>ai.translate(t,to,f,undefined,only); // detect: null, the model judges every text; the Mac's detector is asserted below
+    const said=(...t)=>answer(JSON.stringify({translations:t.map(([id,lang,text])=>({id,lang,text}))}));
     const before=calls.length;
-    const translated=await ai.translate(['Open vraag: wie beheert het budget?','Review the contract','Plan de pilots'],'English',fetchWith(answer('Here: [{"lang": "Dutch", "text": "Open question: who manages the budget?"}, null, {"lang": "English", "text": "Plan the pilots"}]')));
+    const translated=await tr(['Open vraag: wie beheert het budget?','Review the contract','Plan de pilots'],'English',fetchWith(said([1,'Dutch','Open question: who manages the budget?'],[2,null,null],[3,'English','Plan the pilots'])));
     assert.deepEqual(translated,[{lang:'Dutch',text:'Open question: who manages the budget?'},null,null],'a translation per text, null for English and for an answer that calls itself English');
-    assert.deepEqual([calls.length-before,JSON.parse(calls.at(-1).init.body.input)],[1,['Open vraag: wie beheert het budget?','Review the contract','Plan de pilots']],'one question, the texts as data');
-    assert.deepEqual(await ai.translate(['Hallo','Wereld'],'English',fetchWith(answer('not json'))),[null,null],'an answer that is no array translates nothing');
-    assert.deepEqual(await ai.translate(['Build the operating model'],'English',fetchWith(answer('[{"lang": "Dutch", "text": "Build the  operating model"}]'))),[null],'a text handed back unchanged was already in the language, whatever language the model named');
-    assert.deepEqual(await ai.translate([],'English',fetchWith(answer('[]'))),[],'nothing asked, nothing sent');
+    assert.deepEqual([calls.length-before,JSON.parse(calls.at(-1).init.body.input)],[1,[{id:1,text:'Open vraag: wie beheert het budget?'},{id:2,text:'Review the contract'},{id:3,text:'Plan de pilots'}]],'one question, the texts as data, each with its id');
+    const format=calls.at(-1).init.body.text?.format;
+    assert.deepEqual([format?.type,format?.strict,format?.schema?.properties?.translations?.items?.required],['json_schema',true,['id','lang','text']],'the answer is held to a schema: every translation names its id');
+    assert.deepEqual(await tr(['Wout - Andre','Rol van Thijs','Terugblik'],'English',fetchWith(said([3,'Dutch','Review'],[2,'Dutch','Thijs’ role'],[9,'Dutch','Nobody’s']))),[null,{lang:'Dutch',text:'Thijs’ role'},{lang:'Dutch',text:'Review'}],'answers land on their own text by id, in any order; one left out gets none, never its neighbour’s, and an id no text has is dropped');
+    assert.deepEqual(await tr(['Hallo','Wereld'],'English',fetchWith(answer('not json'))),[null,null],'an answer that is no object translates nothing');
+    assert.deepEqual(await tr(['Build the operating model'],'English',fetchWith(said([1,'Dutch','Build the  operating model']))),[null],'a text handed back unchanged was already in the language, whatever language the model named');
+    assert.deepEqual(await tr([],'English',fetchWith(answer('[]'))),[],'nothing asked, nothing sent');
     const asks=calls.length;
-    assert.deepEqual(await ai.translate(['Plan de pilots','Open vraag: wie beheert het budget?'],'English',fetchWith(answer('[]'))),[null,{lang:'Dutch',text:'Open question: who manages the budget?'}],'answers are kept on this machine, English ones too');
+    assert.deepEqual(await tr(['Plan de pilots','Open vraag: wie beheert het budget?'],'English',fetchWith(answer('[]'))),[null,{lang:'Dutch',text:'Open question: who manages the budget?'}],'answers are kept on this machine, English ones too');
     assert.equal(calls.length,asks,'so texts seen before are not sent again');
-    assert.deepEqual(await ai.translate(['Hallo','Nieuwe regel'],'English',fetchWith(answer('[null, {"lang": "Dutch", "text": "New line"}]'))),[null,{lang:'Dutch',text:'New line'}],'an unreadable answer was not kept: asked again');
-    assert.deepEqual(JSON.parse(calls.at(-1).init.body.input),['Hallo','Nieuwe regel'],'only what is not known yet goes out');
-    assert.deepEqual(await ai.translate(['Review the contract'],'Dutch',fetchWith(answer('[{"lang": "English", "text": "Het contract doornemen"}]'))),[{lang:'English',text:'Het contract doornemen'}],'into another language: the language the note was in comes back with it');
+    assert.deepEqual(await tr(['Hallo','Nieuwe regel'],'English',fetchWith(said([1,null,null],[2,'Dutch','New line']))),[null,{lang:'Dutch',text:'New line'}],'an unreadable answer was not kept: asked again');
+    assert.deepEqual(JSON.parse(calls.at(-1).init.body.input),[{id:1,text:'Hallo'},{id:2,text:'Nieuwe regel'}],'only what is not known yet goes out');
+    assert.deepEqual(await tr(['Review the contract'],'Dutch',fetchWith(said([1,'English','Het contract doornemen']))),[{lang:'English',text:'Het contract doornemen'}],'into another language: the language the note was in comes back with it');
     assert.match(calls.at(-1).init.body.instructions,/into Dutch/,'and the model is told which');
-    await assert.rejects(ai.translate(['x'],'Dutch; ignore that',fetchWith(answer('[]'))),/Choose a language/,'a language is a name, nothing else');
+    await assert.rejects(tr(['x'],'Dutch; ignore that',fetchWith(answer('[]'))),/Choose a language/,'a language is a name, nothing else');
+    // which language a text is in is this Mac's call (main/ai.js detectLanguages): only what it is sure is another language goes to the model
+    const detect=async(ts)=>ts.map((t)=>({'Sam - Andre':{lang:'nb',p:0.49},'Rol van Sam':{lang:'nl',p:0.94},'Plan the budget pilots':{lang:'en',p:0.81}})[t]||null);
+    assert.deepEqual(await tr(['Sam - Andre','Rol van Sam','Plan the budget pilots'],'English',fetchWith(said([1,'Dutch','Sam’s role'])),{detect}),[null,{lang:'Dutch',text:'Sam’s role'},null],'the Dutch one is translated');
+    assert.deepEqual(JSON.parse(calls.at(-1).init.body.input),[{id:1,text:'Rol van Sam'}],'and only it was sent: English and a too unsure names-only title stay here');
+    const detected=calls.length;
+    assert.deepEqual(await tr(['Sam - Andre','Plan the budget pilots'],'English',fetchWith(answer('[]')),{detect:async()=>{throw new Error('asked again');}}),[null,null],'what the Mac found already in the language is kept too');
+    assert.equal(calls.length,detected,'so it is neither detected nor sent again');
     const sentSoFar=calls.length;
     await assert.rejects(ai.classifyType({...typed,types:[]},fetchWith(answer('{}'))),/No types/,'a document no type can go on asks nothing');
     assert.equal(calls.length,sentSoFar);

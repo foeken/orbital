@@ -156,7 +156,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
 - **Rows arriving.** A row that arrives in a settled view glows once; a row that leaves flashes as it goes. A first
   paint is not an arrival (an empty `before` is a first paint, and so is a row added to a view that was empty), the
   zoomed branch clears `animView` so returning to a view is a wholesale replacement, and a change of more than
-  `BULK` (25) rows is not animated.
+  `BULK` (25) rows is not animated. A row whose words or state change while it stays (someone else's edit, a live update) is patched
+  in place without a flash: the blue tint it used to get was distracting.
 
 ## 5. Rows
 
@@ -596,6 +597,11 @@ window does: soonest first for Upcoming and Today, latest first otherwise); Grou
 Display chooses the facts a row shows. Each is kept per page key in the synced `groupBy`, `sortBy` and `display`
 preferences; a saved search keeps its own in its document. Group by Updated sorts rows into Last hour, Last day, Last
 week, Last month and Older.
+A saved search or a type’s page draws its rows twenty at a time (`capRows`, renderer/views.js): the first twenty in
+the order shown, sorted and grouped over the whole answer, then twenty more each time “Show 20 more” at its end comes within a
+screen of view (or is clicked). Only a drawn row asks for its metadata, translation and fields. The list itself is
+still one query: Tana’s list takes no sort and returns no next page, so fetching twenty at a time would draw the
+wrong twenty.
 
 - **Folding a section.** On any grouped page the heading is a `button.ghead` with `aria-expanded` and a disclosure
   triangle drawn from it in CSS. A click, or Enter/Space on it, folds that section alone; its rows leave
@@ -684,12 +690,15 @@ week, Last month and Older.
 
 - **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
   (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is
-  shown translated, on screen only. A page that does not read as that language as a whole (its title and plain rows:
-  another language's own small words outnumber the chosen one's, or there are none of anyone's to go by) is asked about in one question (`api.translate`, main/ai.js `translate`: everything a render wants, a whole page at once,
+  shown translated, on screen only. Which language a text is in is decided on this Mac, not by the model: Apple's
+  NaturalLanguage (main/ai.js `detectLanguages`, through osascript, about 0.3 s for a whole page and no tokens); only a
+  text it is at least 60% sure is in another language goes to the model, and the rest is kept as having nothing to
+  translate (a names-only title like "Martijn - Andre" is too unsure to send). A page (its title and plain rows, each
+  judged on its own) is asked about in one question (`api.translate`, main/ai.js `translate`: everything a render wants, a whole page at once,
   up to ~20k characters, with 90 s to answer; 50 rows measured at 24 s); it shows the
   translation and one grey line under the title, a sparkle and "Translated from Dutch · Show original", which switches
   the whole page to its own words and back. A page is a zoomed document or a zoomed block, and everything under it is
-  covered by that one line: its blocks and the documents in it, however deep, show no line of their own. In a list, a document whose title does not read as that language shows the
+  covered by that one line: its blocks and the documents in it, however deep, show no line of their own. In a list, a document whose title is in another language shows the
   translated title and "Translated from Dutch" as the first fact of its grey line; a click there switches that row.
   A row of the app's own that names a node (a Timeline meeting, "Kevin completed <task>", a notification's title: the
   one segment marked `content`) has only that name translated, the sentence around it kept, and says so the same way.
@@ -697,13 +706,13 @@ week, Last month and Older.
   and saves, the original; leaving it shows the translation again (an edited text is asked for, and lands in the row
   when the answer does, wherever the caret is by then). Turning it on or changing the language takes effect at once,
   in every pane. Only plain text is asked (a mention, a link or a mark would not survive), never a sensitive
-  node's words and nothing in demo mode; the model answers null for what is in the language already, and an answer that hands the text back unchanged counts as null
+  node's words; demo mode translates as well and masks the translated words like any other, so its "Translated from …" notices stay; the model answers null for what is in the language already, and an answer that hands the text back unchanged counts as null
   too, whatever language it names. Answers are kept
   on this machine under a SHA-256 of the language and the exact text (db.js `translations`), so a note seen before shows
   translated at once, in any pane or launch, and an edited text is a new key: asked again. An answer lasts a month from
   when it was last shown; one not shown for 30 days is asked again and is cleaned out on the next save or start (at
   most 5000 kept, least recently shown out first). While a question is out the page line (or a list row's first fact) says "Translating…" with the sparkle at
-  work, shown only after 0.4 s so an answer from the cache never flashes it (renderer/translate.js). A page is
+  work, shown only after 0.4 s and taking no room until then, so an answer from the cache or a text found already in the language never moves the row (renderer/translate.js, styles.css). A page is
   translated as a whole only when it has rows of its own; a title alone (a space listing documents) is left to its list. Measured 2026-09-28 through a
   ChatGPT sign-in: about 4.5 s for a first question, well under 1 ms once kept.
 
@@ -832,9 +841,9 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   | Tracking | Off the agent, every day pin removed, watched | unless you made it and it is someone else's |
   | Agent | the Assign to Agent prompt; nothing until it is sent | — |
   | My inbox, Mine, My completed, My later | Off the agent, every day pin removed, you as the only assignee, the status; a watch on a task you were not assigned is forgotten | a task you did not make |
-  | Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens | — |
+  | Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens, one in the Inbox is accepted (In Progress) | — |
   | Assigned by others | — | always: it is about who made it |
-  | Today's Tasks | Pinned to today unless it is on Today already | anything but a task |
+  | Today's Tasks | Pinned to today unless it is on Today already; one in the Inbox is accepted (In Progress), where its status may be changed (a read-only one is pinned only) | anything but a task |
 
   A drop in its own section writes nothing. A drop inside a task is offered only once that task is expanded. A task
   you cannot edit is refused before anything is written wherever the drop would change its assignees or status. While
@@ -1155,8 +1164,9 @@ structure; an unsandboxed `electron scripts/pdf-check.js --render` writes three 
   docs/CHATS.md). Cmd+K rows that carry Tana's words without being document rows are masked where they are built (the
   current meeting beside Pin to current meeting, Edit pins' meetings and spaces, Move to space, a meeting's location),
   as are a space audience's name, a Changes tooltip and an image's description; a type row's grey meta is masked, a
-  date is not. Pictures are never shown: an image is the grey box of a loading one, nothing is fetched, the full view
-  does not open. **Nothing is saved while it is on**: no text is editable, checkboxes are disabled, and `tana`
+  date is not. Pictures are never shown: an image is a grey box at the size the picture is drawn (the block's stored size, else the
+  picture's own read off it without drawing it, shrunk to the row's 360px or a cell's 240px), the privacy glyph in its middle (renderer/render.js `demoImageEl`; a 360px 3:1 box
+  until a size is known); the pixels are never drawn and the full view does not open. **Nothing is saved while it is on**: no text is editable, checkboxes are disabled, and `tana`
   (`readOnlyInDemo`, renderer/state.js) refuses every call in `DEMO_WRITES` with "Demo mode is on: nothing is saved to
   Tana", whatever asked; the day and week nodes are only looked up (`findOnly`). The switch reaches every window at
   once (the storage event) and main (`app:demoMode`), which then posts no notification banner. It is remembered on this
