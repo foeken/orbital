@@ -1459,7 +1459,7 @@ async function runVisibilityPickerCheck() {
 }
 
 async function runLinkPaletteCheck() {
-  // ⌘↩ / ⌥↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
+  // ⇧↩ / ⌘↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
   const open = vm.runInNewContext(`
     let linkCtx = null, palBusy = false, palMode = 'search', palEnter = null, palIndex = 0, palRows = [], opened = [], pending;
     const closePalette = () => {}, run = (fn) => (pending = fn()), runRow = (r) => opened.push(['plain', r.label]);
@@ -1475,7 +1475,7 @@ async function runLinkPaletteCheck() {
   open.set([{ label: 'Hit', opens: 'tana:text:hit' }], false);
   open.settleEnter(); await open.settle();
   open.chooseRow(false, false);
-  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⌘↩ opens Today beside, ⌥↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⇧↩ opens Today beside, ⌘↩ during a search opens its first hit as a tab, a plain Enter opens in place');
 
   const resultRows = functionSource('resultRows');
   const searchNow = functionSource('searchNow');

@@ -81,7 +81,7 @@ function chatProposalEl(n) {
   mid.className = 'chat-proposal-text'; mid.append(title, sub);
   el.append(addIcon(document.createElement('span'), (p.metadata && p.metadata.type === 'action' && 'sync') || p.icon || 'proposals'), mid); // an action is listed as a plain document: its own glyph
   if (p.state === 'pending') el.append(proposalButtonsEl(n, (node, approve) => answerChatProposal(node, approve, el))); // an action's approve reads "Send to Slite" (renderer/proposals.js)
-  // the card opens what was proposed, as its link did: here, ⌘ in a pane beside, ⌥ as a tab, ⇧ floating (palette.js elsewhere)
+  // the card opens what was proposed, as its link did: here, ⌘ as a tab, ⇧ in a pane beside, ⌥ floating (palette.js elsewhere)
   el.title = 'Open';
   el.onclick = (e) => {
     if (e.target.closest('.pbutton')) return;
