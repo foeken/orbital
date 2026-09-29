@@ -774,7 +774,7 @@ function nodeEl(node, docId, parent) {
   // the drag from exactly this default and preventDefault would quietly stop it from ever beginning. Ending an
   // edit is what reaching for another row means anyway, and the row being left flushes as it blurs.
   bullet.onmousedown = (e) => { if (!bullet.draggable) e.preventDefault(); };
-  // ⌘-click opens it in a pane beside this one, ⌥-click as a tab in this pane (renderer/palette.js openElsewhere)
+  // ⌘-click opens it in a pane beside this one, ⌥-click as a tab in this pane, ⇧-click floating (renderer/palette.js openElsewhere)
   if (!node.draft && opens) bullet.onclick = (e) => {
     const where = e && elsewhere(e), ref = reference || fullref;
     if (where && (!ref || node.reference?.uri)) return run(() => (ref ? openElsewhere(where, node.reference.uri) : openElsewhere(where, item.docId, item.node.kind === 'document' ? null : item.node.id)));
