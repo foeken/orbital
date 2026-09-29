@@ -1130,6 +1130,12 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
   background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-card);
 }
 .palette input { border: 0; outline: none; font: inherit; font-size: 17px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; }
+/* ⇧⌘K Set key (renderer/palette.js keyHint): quiet words at the field's right end, and typing stops short of them */
+.palette .card { position: relative; }
+.palette .keyhint { position: absolute; top: 17px; right: 20px; font-size: 13px; color: var(--muted); pointer-events: none; user-select: none; }
+.palette .keyhint[hidden] { display: none; }
+.palette .keyhint kbd, [data-theme="dark"] .palette .keyhint kbd { padding: 0 4px 0 0; background: none; color: inherit; }
+.palette:has(.keyhint:not([hidden])) input { padding-right: 116px; }
 /* Quick Add Task (task.html): the palette's card, with a line saying why the task could not be made */
 .palette .terror { padding: 10px 20px 0; font-size: 13px; color: #d0433a; }
 /* what the task will be and who it is for, under the field; a click or ⇥ there chooses someone else */

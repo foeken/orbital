@@ -2,7 +2,7 @@
 // Cmd+K commands and Cmd+S search, hidden items, creation, results, and the shortcut recorder.
 
 // ---- palette: Cmd+K commands (Views, Actions; documents are Cmd+S live search, api.search) ----
-const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList');
+const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList'), palKeyHint = $('paletteKeyHint');
 let palMode = 'cmd', palPage = {}, palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: { create, where }, applied when the rows land
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
@@ -1017,6 +1017,9 @@ function openTodayTaskSearch(node) {
   togglePalette('pinToday');
   todayPickerSearchNow();
 }
+// "⇧⌘K Set key" at the end of the field, while the highlighted command is one ⇧⌘K can record a key for (the keydown
+// handler's own test) and nowhere else: it never offers what the key would not do.
+function keyHint() { const r = palRows[palIndex]; palKeyHint.hidden = !(palMode === 'cmd' && r && r.id); }
 function renderPalette() {
   const q = palInput.value.trim();
   swapPanel(palList, palMode); // a mode changed while open slides its list across
@@ -1054,6 +1057,7 @@ function renderPalette() {
       if (palRows[i] !== r) return renderPalette(); // the rows changed under the drawn list (invalidateNode): draw them again first
       palList.querySelector('.row.active')?.classList.remove('active');
       row.classList.add('active'); palIndex = i;
+      keyHint();
     };
     els.push(row);
   });
@@ -1061,6 +1065,7 @@ function renderPalette() {
   // prompt, "Discuss with …", a meeting's time or place and a field turn what is typed into their row.
   if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node || r.note) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
+  keyHint();
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
@@ -1228,6 +1233,7 @@ function movePalIndex(step) {
   palIndex = nextPalIndex(palRows, palIndex, step);
   if (drawn.length !== palRows.length) return renderPalette();
   drawn.forEach((row, i) => row.classList.toggle('active', i === palIndex));
+  keyHint();
   drawn[palIndex].scrollIntoView({ block: 'nearest' });
 }
 // pages whose rows are built from what is typed, with nothing to fetch
