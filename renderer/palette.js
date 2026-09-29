@@ -294,7 +294,7 @@ function paletteRows(q, typed = q) {
       } });
   }
   // A task that already exists in Codex, linked by pasting its link (#143): the page below.
-  if (palDoc && tana.linkCodexTask && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ rank: 'codexLink', group: docGroup, icon: 'robot', label: 'Link Agent Task ...', keepOpen: true, run: () => openAgentLink(doc) }); }
+  if (palDoc && tana.linkCodexTask && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ rank: 'codexLink', group: docGroup, icon: 'robot', label: 'Link Codex task …', keepOpen: true, run: () => openAgentLink(doc) }); }
   // The way into the task the agent is handling, from the keyboard. Both halves have to hold: the node is assigned
   // now, and a task id is known for it. The status map alone was not enough — it is a snapshot, and an unassigned
   // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.
