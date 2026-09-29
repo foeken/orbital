@@ -7232,6 +7232,11 @@ async function runStagedSearchReloadCheck() {
   api.stage(retry); api.stage(retry); // 19, 20
   await api.answer(19, ['preview']); await api.answer(20, Promise.reject(new Error('unavailable')));
   assert.deepEqual([plain(api.rows(retry)), api.staged(retry), plain(api.errors())], [['preview'], true, []], 'a failed retry of a preview that already answered leaves it staged and quiet');
+  // A chat's reads during a burst of live updates: the one from mid-answer landing after the final one is dropped
+  const chat = 'tana:chat:01j0burst0000000000000000';
+  const midAnswer = api.reload(chat), final = api.reload(chat); // 21, 22
+  await api.answer(22, ['Thought for 12 seconds']); await final; await api.answer(21, ['Thinking...']); await midAnswer;
+  assert.deepEqual(plain(api.rows(chat)), ['Thought for 12 seconds'], 'an older read of any page answering last leaves the newer rows');
   console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
 

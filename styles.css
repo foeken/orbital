@@ -28,12 +28,13 @@ html { --nucleo-stroke-width: 1; }
   /* secondary text (meta, subtext, headings, hints, placeholders, done rows): the one grey for words, at WCAG AA —
      5.7:1 on white, 4.6:1 on a grey pill under the pointer. Icons keep their lighter greys (3:1 is theirs); disabled rows too. */
   --muted: #666;
+  --working-ink: #1b4a8f; /* an agent at work: the working badge's words, and the sweep over "Thinking..." in a chat */
   --chat-width: 860px; /* a chat's column, its message box and question card: lines the eye can follow (renderer/chat.js) */
   interpolate-size: allow-keywords; /* heights go to and from auto (a row arriving, a section closing) without measuring */
 }
 @media (prefers-reduced-motion: reduce) { :root { --dur-quick: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-flash: 0ms; --stagger: 0ms; --loader-wait: 0ms; } }
 [data-theme="dark"] { --flash-in: rgba(90, 190, 120, .2); --flash-out: rgba(240, 90, 80, .2); --flash-here: rgba(110, 168, 220, .22); }
-[data-theme="dark"] { --muted: #a0a5a8; } /* 6.8:1 on the page, 6:1 on menus and ⌘K, 5.6:1 on the grey pills, 4.6:1 on the active ⌘K row */
+[data-theme="dark"] { --muted: #a0a5a8; --working-ink: #9dc2f5; } /* muted: 6.8:1 on the page, 6:1 on menus and ⌘K, 5.6:1 on the grey pills, 4.6:1 on the active ⌘K row */
 /* A type's colour is Tana's `appearance.hue`, and it is an **OKLCH** hue, not an HSL one: the Organization type's
    232 draws as #58aad2 in Tana, which is oklch(0.7 0.1 232) — read as an HSL angle the same number lands 42° away
    and half as light (a navy #2b336f instead of that blue). So every hued rule below is oklch(L C var(--hue)), with
@@ -597,6 +598,13 @@ html.links .app { display: none; }
 button.chat-thought-head { cursor: pointer; }
 button.chat-thought-head::after { content: ''; width: 5px; height: 5px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; rotate: 45deg; transition: rotate var(--dur-quick) var(--ease-out); }
 button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translate: 0 -2px; }
+/* "Thinking..." while Tana is still at work (sdk/chat.js): the working badge's sweep, crossing the letters instead of a tag.
+   Its pass and pause (cbadge-sweep's stops) and its blue over the line's grey, clipped to the words so the line never
+   moves; the chevron keeps its own colour. It stops when the line says what it thought, and stands still under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .chat-thought.thinking .chat-thought-head { width: fit-content; background: linear-gradient(100deg, var(--muted) 40%, var(--working-ink) 50%, var(--muted) 60%) 100% 0 / 300% 100% no-repeat;
+    background-clip: text; -webkit-text-fill-color: transparent; animation: thinking-sweep calc(var(--dur-loop) * 2) ease-in-out infinite; }
+}
 .chat-sub { margin: 8px 0 0; font-size: 14px; }
 .chat-sub[hidden] { display: none; }
 /* a proposal in an answer (renderer/chat.js chatProposalEl): a card with the proposed thing's glyph and name, its kind
@@ -921,7 +929,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .cbadge.done.shine:not(.closed)::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 28%, var(--cbadge-sheen) 50%, transparent 72%); transform: translateX(-130%); animation: cbadge-sweep var(--dur-flash) var(--ease-out) var(--dur-quick) backwards; }
 /* one colour per state, and the label says the same thing in words (renderer/state.js AGENT_BADGE) */
 .cbadge.pending { background: #ececec; color: #5a5a5a; }
-.cbadge.working, .cbadge.waiting { background: #dde8fb; color: #1b4a8f; --cbadge-sheen: rgba(255, 255, 255, .9); }
+.cbadge.working, .cbadge.waiting { background: #dde8fb; color: var(--working-ink); --cbadge-sheen: rgba(255, 255, 255, .9); }
 .cbadge.done { background: #d9f0de; color: #17652f; }
 .cbadge.broken { background: #fbdede; color: #8f1b1b; }
 .cbadge.unavailable { background: #ececec; color: #6a6a6a; } /* the machine is away, not the task broken: grey, still */
@@ -937,6 +945,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .pbutton.reject:hover { background: rgba(0, 0, 0, .06); color: #555; } /* a trash can: the grey hover every row glyph has, no red */
 .pbutton:disabled { opacity: .35; cursor: default; }
 @keyframes cbadge-sweep { 0%, 18% { transform: translateX(-130%); } 72%, 100% { transform: translateX(130%); } }
+@keyframes thinking-sweep { 0%, 18% { background-position: 100% 0; } 72%, 100% { background-position: 0 0; } } /* the same pass, over a background three times the words' width */
 /* ==== Children, empty notes, group headings (renderer/render.js, views.js) ==== */
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children > .node.fullref > .line > .bullet { margin-right: 4px; } /* give the full-reference icon more room before its status or title */
@@ -1383,7 +1392,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .meta.pending { color: #454b4e; }
 [data-theme="dark"] .cbadge { --cbadge-sheen: rgba(200, 225, 255, .45); }
 [data-theme="dark"] .cbadge.pending { background: #33383a; color: #b6bbbd; }
-[data-theme="dark"] .cbadge.working, [data-theme="dark"] .cbadge.waiting { background: #1e3050; color: #9dc2f5; }
+[data-theme="dark"] .cbadge.working, [data-theme="dark"] .cbadge.waiting { background: #1e3050; }
 [data-theme="dark"] .cbadge.done { background: #1d3c27; color: #7fd396; }
 [data-theme="dark"] .cbadge.broken { background: #45201f; color: #f0a3a0; }
 [data-theme="dark"] .cbadge.unavailable { background: #33383a; color: #a8adaf; }

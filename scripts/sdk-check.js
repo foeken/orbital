@@ -6088,6 +6088,10 @@ async function main() {
     assert.deepEqual(rows[2].children.map((n) => n.block), ['numbered', 'heading3'], 'no thinking line without tool calls; deep headings read as the third level');
     assert.deepEqual(rows[2].children[1].segments, [{ text: 'deep ' }, { text: 'it', marks: { italic: true } }, { text: ' ' }, { text: 'gone', marks: { strike: true } }]);
     assert.equal(rows[3].children[0].text, 'Thought for 2 minutes');
+    assert.equal(rows[3].children[0].thinking, undefined, 'a finished line is still');
+    assert.equal(chat.chatRows([{ fromUserType: 'ai', toolCalls: [{ status: 'running' }] }])[0].children[0].thinking, true, 'a running call makes the line shimmer');
+    const between = chat.chatRows([{ id: 'str00001', fromUserType: 'ai', sentAt: 1, completedAt: 2, toolCalls: [{ status: 'completed' }] }], { streamingId: 'str00001' })[0].children[0];
+    assert.deepEqual([between.text, between.thinking], ['Thinking...', true], 'between calls, still streaming: thinking, as the web client says, not finished');
     const states = chat.chatRows([
       { fromUserType: 'ai', status: 'cancelled' },
       { fromUserType: 'ai', status: 'error', errorMessage: 'Provider failed' },
@@ -6099,6 +6103,7 @@ async function main() {
     assert.deepEqual(states.slice(0, 3).map((r) => r.children[0].text), ['Cancelled', 'Error: Provider failed', 'Limit exceeded']);
     const waiting = states[3];
     assert.deepEqual(waiting.children.map((r) => r.text), ['Waiting for your input'], 'the questions are no outline rows');
+    assert.equal(waiting.children[0].thinking, undefined, 'waiting on you is not thinking');
     assert.deepEqual(JSON.parse(JSON.stringify(waiting.chat.questions)), { messageId: 'ask00001', items: [{ id: 'q1', question: 'Choose a plan', multiSelect: true, options: [{ label: 'Basic', description: 'For a small team' }, { label: 'Pro' }] }] }, 'they go to the question card');
     const readOnly = (nodes) => nodes.every((n) => n.editable === false && readOnly(n.children || []));
     assert.ok(readOnly(states), 'status and pending-question rows are read-only');

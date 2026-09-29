@@ -104,7 +104,8 @@ function answerChatProposal(node, approve, el) {
 }
 function chatThoughtEl(part, subs, msgId, docId) {
   const el = document.createElement('div'), head = document.createElement(subs.length ? 'button' : 'div');
-  el.className = 'chat-note chat-thought'; head.className = 'chat-thought-head';
+  el.className = 'chat-note chat-thought' + (part.thinking ? ' thinking' : ''); head.className = 'chat-thought-head'; // thinking: its words shimmer (styles.css)
+  if (part.thinking) head.style.animationDelay = -Math.round(performance.now()) + 'ms'; // on the page's clock: every live update redraws the line, and the sweep carries on instead of starting over
   renderSegs(head, part.segments || [], docId);
   el.append(head);
   if (!subs.length) return el;

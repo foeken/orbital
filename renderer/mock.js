@@ -211,7 +211,7 @@ function mockApi() {
   const chatPart = (id, p) => { const [, bullet] = /^- (.*)$/.exec(p) || []; return { id, text: bullet ?? p, kind: 'block', editable: false, block: bullet ? 'bullet' : 'paragraph', segments: typeof p === 'string' ? [{ text: bullet ?? p }] : p, hasChildren: false, children: [] }; };
   const chatMsg = (mine, parts, minsAgo, notes = []) => {
     const id = 'm' + (++seq), who = mine ? 'Robin Vega' : 'Tana AI';
-    const children = [...notes.map((t, j) => ({ ...chatPart(id + '.t' + j, t), note: true, thought: /^Thought for/.test(t) })), ...parts.map((p, j) => (p && p.reference ? { id: id + '.a' + j, kind: 'block', type: 'reference', editable: false, reference: p.reference, hasChildren: false, children: [], ...(p.sub ? { sub: true } : {}) }
+    const children = [...notes.map((t, j) => ({ ...chatPart(id + '.t' + j, t), note: true, thought: /^Thought for|^Thinking/.test(t), ...(t === 'Thinking...' ? { thinking: true } : {}) })), ...parts.map((p, j) => (p && p.reference ? { id: id + '.a' + j, kind: 'block', type: 'reference', editable: false, reference: p.reference, hasChildren: false, children: [], ...(p.sub ? { sub: true } : {}) }
       : p && p.proposal ? { id: id + '.p' + j, kind: 'block', text: '', segments: [], editable: false, hasChildren: false, children: [], proposal: p.proposal } : chatPart(id + '.b' + j, p)))];
     return { id, text: who, kind: 'block', editable: false, segments: [{ text: who }], block: 'heading3', heading: 3, chat: { id, mine, author: mine ? 'tana:user-profile:robin' : 'ai', sentAt: Date.now() - minsAgo * 6e4 }, hasChildren: true, children };
   };
@@ -539,7 +539,10 @@ function mockApi() {
       (content[docId] ||= []).push(sent);
       emit(docId);
       if (opts.ai === false) return { messageId: sent.chat.id, responding: false }; // a message to the chat: nobody is asked
-      setTimeout(() => { content[docId].push(chatMsg(false, ['Mock answer to: ' + text], 0, ['Thought for 2 seconds'])); emit(docId); }, 1800);
+      // Tana thinks first (a call running, the answer still empty), then the answer takes its place
+      const reply = chatMsg(false, [], 0, ['Thinking...']); reply.chat.streaming = true;
+      setTimeout(() => { content[docId].push(reply); emit(docId); }, 300);
+      setTimeout(() => { content[docId].splice(content[docId].indexOf(reply), 1, chatMsg(false, ['Mock answer to: ' + text], 0, ['Thought for 4 seconds'])); emit(docId); }, 4000);
       return { messageId: sent.chat.id, responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
     },
     // @Codex (main/chatagents.js): the question is a message to the chat; the answer is local, here after two and a half seconds

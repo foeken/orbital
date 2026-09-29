@@ -434,6 +434,9 @@ async function reload(docId) {
   // A saved search's stored answer is its rows only while it still answers the stored filter (a Save since replaced
   // it) and no staged pills are on screen; then the newest such answer wins. lands() last: a refused answer claims nothing.
   if (search) { const now = storedFilter(docId); if ((asked && now && asked !== now) || searchRows.has(docId) || !lands(docId, seq)) return; landedPreview.delete(docId); }
+  // Any page: an older read answering after a newer one landed leaves the newer rows. A chat's live updates come in
+  // bursts and each read waits on its references, so the read from mid-answer could land last and leave "Thinking..."
+  else if (!lands(docId, seq)) return;
   kids.set(docId, syncUploads(docId, rows)); // uploads still running keep their placeholders
 }
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
