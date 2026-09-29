@@ -15,7 +15,7 @@ const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
-const { changesOf, dropSearchHeads, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
+const { changesOf, dropSearchHeads, fieldDefs, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
@@ -402,12 +402,15 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   send('outline:changed', null);
   return chosen;
 });
-// After each start: the fast AI picks a glyph for every titled type that has none (issue #250). In the background,
-// because the lists must not wait on a model, and quiet without a ChatGPT sign-in or an API key.
+// After each start: the fast AI picks a glyph for every titled type and field that has none (issues #250, #606). In the
+// background, because the lists must not wait on a model, and quiet without a ChatGPT sign-in or an API key.
 async function autoTypeIcons() {
   try {
     const types = (await typeList()).filter((t) => t.title.trim());
-    const added = await icons.fillTypeIcons(types, (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, app.getPath('userData')));
+    // a field goes out as "Type › Field": its name alone ("Status", "Owner") says little about what it holds
+    const fields = (await Promise.all(types.map(async (t) => (await fieldDefs(t.uri)).filter((d) => (d.title || '').trim())
+      .map((d) => ({ uri: t.uri + '?attribute=' + d.key, title: t.title + ' › ' + d.title }))))).flat();
+    const added = await icons.fillTypeIcons([...types, ...fields], (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, app.getPath('userData')));
     if (added) { await refresh({ after: true }); send('outline:changed', null); }
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
@@ -590,6 +593,7 @@ if (process.env.TANA_MAIN_TEST) {
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, savedDoc, closeFront, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
     nodePin, dropSearchHeads,
+    autoTypeIcons,
     assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
     accessContext, inboxCount, S,
     testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'inbox'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };

@@ -421,4 +421,4 @@ const ipc = {
   'search:preview': (_e, filter) => searchPreview(filter),
 };
 
-module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, summaryUri, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads, dropSearchHeads, ipc };
+module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldDefs, fieldsOf, summaryUri, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads, dropSearchHeads, ipc };

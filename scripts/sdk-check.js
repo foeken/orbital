@@ -37,7 +37,7 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: {}, BrowserWindow: function () {}, WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
+  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function () {}, WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } },
     clipboard: { items: [], read: async () => electron.clipboard.items } }; // items: what a check puts on it, as clipboard.read() hands them over
   const context = vm.createContext({
@@ -824,7 +824,7 @@ async function main() {
     // The boot icon pick (issue #250): every icon name and the type titles go out, and the answer maps back to uris.
     const picked=await ai.pickTypeIcons([{uri:'tana:type:a',title:'Meeting'},{uri:'tana:type:b',title:'Person'}],['calendar','user'],fetchWith(answer('Sure: {"1": " calendar ", "2": 7}')));
     assert.deepEqual(picked,{'tana:type:a':'calendar','tana:type:b':null},'a name is read per type number, trimmed, and anything else is no pick');
-    assert.deepEqual([calls.at(-1).init.body.input,calls.at(-1).init.body.instructions],['Icons: calendar, user\n\nType 1: Meeting\nType 2: Person',ai.ICON_INSTRUCTIONS],'the names and the titles are the input, and nothing else about a type');
+    assert.deepEqual([calls.at(-1).init.body.input,calls.at(-1).init.body.instructions],['Icons: calendar, user\n\n1: Meeting\n2: Person',ai.ICON_INSTRUCTIONS],'the names and the titles are the input, and nothing else about a type');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('This title does not name anyone to discuss it with, so there is nobody to suggest here.'))),null,'a sentence is the model explaining itself: not a name');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
@@ -1019,6 +1019,15 @@ async function main() {
       assert.ok(icons.typeIcons().some((i) => i.uri === FIELD && i.name === 'nc-rocket'), 'and the renderer is told it with the type glyphs');
       assert.throws(() => icons.setTypeIcon('tana:text:' + ulid() + '?attribute=ab12cd34', 'nc-rocket'), /set on a type/, 'only a type has fields');
       icons.setTypeIcon(FIELD, null);
+    }
+    { // the boot pick asks about fields too, as "Type › Field", and not about a type already chosen for (#606)
+      const typeDoc = new Document(TYPE);
+      typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }, { key: 'ab12cd34', title: ' ' }] }));
+      backend.testRuntime({ me: { userUri: 'tana:user-profile:' + ulid() }, client: { graph: { listNodes: async () => ({ nodes: [{ id: TYPE, title: 'Project' }] }) }, sync: { subscribe: async () => typeDoc } } });
+      const pick = backend.ai.pickTypeIcons, asked = [];
+      backend.ai.pickTypeIcons = async (missing) => { asked.push(...missing); return {}; };
+      try { await backend.autoTypeIcons(); } finally { backend.ai.pickTypeIcons = pick; }
+      assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ uri: TYPE + '?attribute=gcx3bvn5', title: 'Project › Fase' }], 'a titled field with no icon is asked about under its type\u2019s name; the type, chosen for, and an untitled field are not');
     }
     console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
     // The colour the same way: a hue of our own, or grey, kept beside the glyph in the settings; Tana's own hue on

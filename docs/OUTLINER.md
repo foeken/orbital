@@ -689,7 +689,8 @@ wrong twenty.
   `palFieldKey`). The same page and the same write, stored in `typeIcons` under the field's own key
   (`<type uri>?attribute=<key>`), so it belongs to the type and every document of it shows the field with that glyph:
   the field row under the title, the definition under Edit fields and the field's filter pill (`fieldGlyph`,
-  renderer/nodes.js). The boot AI pick leaves fields alone.
+  renderer/nodes.js). The boot AI pick fills fields as it fills types: every titled field with no choice yet goes to
+  the model as "Type › Field" in the same one call (`autoTypeIcons`, main.js), and **No icon** is kept the same way.
 - **Set colour** (`setHue`, on a type) is this app's own hue (0-360) or grey for the type, kept in the synced
   `typeHues` setting and leaving Tana's `appearance.hue` untouched (Tana has no grey). With no entry Tana's hue shows
   through. The picker is the palette: twelve named colours, each drawn with the type's glyph in that colour, the current

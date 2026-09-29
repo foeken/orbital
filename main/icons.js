@@ -76,7 +76,7 @@ function setTypeIcon(typeUri, name) {
   chosen = next;
   return name == null ? null : { uri: typeUri, ...row(icons().find((i) => i.n === (labelOf(name) || name))) };
 }
-// At boot (main.js autoTypeIcons): the types with no choice at all get the one `pick` (main/ai.js pickTypeIcons) names,
+// At boot (main.js autoTypeIcons): the types and fields with no choice at all get the one `pick` (main/ai.js pickTypeIcons) names,
 // in one write. A name outside the set is dropped, and so is a type chosen for while the model was answering.
 async function fillTypeIcons(types, pick) {
   const missing = types.filter((t) => !(t.uri in stored()));
