@@ -235,7 +235,6 @@ function motionBefore(root) {
   const nodes = [...root.querySelectorAll('.node[data-key]')];
   return {
     page: root.dataset.key + '|' + view,
-    bodies: new Map(nodes.map((el) => [el.dataset.key, el.dataset.body])),
     fieldsWaiting: new Set([...root.querySelectorAll('.inline-fields[hidden]')].map((el) => el.dataset.docId)),
     rects: performance.now() < glideUntil ? new Map(nodes.map((el) => [el.dataset.key, el.getBoundingClientRect()])) : null,
   };
@@ -259,12 +258,6 @@ function motionAfter(root, was) {
       const up = moved.get(el.parentElement && el.parentElement.closest('.node')) || [0, 0], x = dx - up[0], y = dy - up[1];
       if (Math.abs(x) > 1 || Math.abs(y) > 1) play(el, [{ transform: 'translate(' + x + 'px, ' + y + 'px)' }, { transform: 'none' }], { duration: MOTION.base, easing: MOTION.move });
     }
-  }
-  // Someone else's edit: a row whose words or state changed while your hands were elsewhere lights up once. Your own
-  // edits come with a key or a press just before them, so they never do. Many at once is the page landing (BULK).
-  if (!acted(3000)) {
-    const changed = nodes.filter((el) => { const was2 = was.bodies.get(el.dataset.key); return was2 != null && was2 !== el.dataset.body; });
-    if (changed.length <= BULK) for (const el of changed) flash(el, 'here');
   }
   // Inbox zero: the last rows of a view just left, and what is left is the note saying so.
   if (nodes.some((el) => el.classList.contains('leaving'))) rowsLeftAt = performance.now();

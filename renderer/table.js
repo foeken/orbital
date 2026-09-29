@@ -40,7 +40,7 @@ function tableEl(item) {
 function cellImage(b) {
   const img = document.createElement('img'), uri = b.image.uri, cached = images.get(uri);
   img.className = 'cellimg';
-  if (demoMode) { img.classList.add('demo'); return img; } // demo mode: a grey block where the picture is, nothing fetched
+  if (demoMode) return demoImageEl(b.image, 240, 'cellimg'); // demo mode: the picture's place with the privacy glyph, nothing fetched (renderer/render.js)
   if (b.image.alt) img.alt = img.title = b.image.alt;
   if (typeof cached === 'string') img.src = cached;
   else (cached || images.set(uri, tana.image(uri)).get(uri)).then((url) => { images.set(uri, url); img.src = url; }, (e) => { images.delete(uri); showError(e); });

@@ -495,7 +495,9 @@ function subtextOf(node, taskInfo) {
   const bits = [];
   if (node.subtext) bits.push(demoText(node.subtext, node.id)); // a line main wrote for the row: an upcoming meeting's time and people (main/timeline.js)
   if (node.proposal) bits.push(demoText(node.proposal.note, node.id)); // where it was proposed, first: it is why the row is on the Proposals page
-  if (node.timeline && node.timeline.note) bits.push(demoText(node.timeline.note, node.timeline.uri)); // Tana's words for an edit, or where a new task came from
+  // Tana's words for an edit, or where a new task came from; a meeting's is its length ("45 min"), the app's own words,
+  // kept in demo mode: masked word by word it read "1 red"
+  if (node.timeline && node.timeline.note) bits.push(['meeting', 'faint'].includes(node.timeline.tone) ? node.timeline.note : demoText(node.timeline.note, node.timeline.uri));
   const pinned = pinnedOn(node); if (pinned) bits.push(pinned);
   // ...unless the line already leads with it: who can see it names the space (peopleEl)
   if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space && !(audienceUris(taskInfo).length && !sensitiveHidden(node.id))) bits.push(demoText(taskInfo.audience.space, node.id));
@@ -536,6 +538,40 @@ function groupHeadEl(g) {
   el.onmousedown = (e) => e.preventDefault();
   // a page with sections of its own folds them itself (renderer/proposals.js); the rows close up or open out either way
   el.onclick = () => foldSection(el, () => (g.toggle ? g.toggle() : toggleGroup(g.id)), () => [...outline.querySelectorAll('.ghead')].find((h) => h.dataset.group === g.id));
+  return el;
+}
+// A saved search or a type's page draws its rows twenty at a time: the first twenty in the order shown, sorted and
+// grouped as the page is, then twenty more each time the end comes within a screen of view (the button below, watched
+// like the Timeline's). Only a drawn row asks for what it shows (its task meta, translation, fields), so a long search
+// no longer reads every row the moment it opens. The list itself stays one query: Tana's list takes no sort and hands
+// back no next page, and the page's sort and grouping are its own, over the whole answer, so twenty fetched at a time
+// would draw the wrong twenty.
+const SEARCH_STEP = 20;
+const searchShown = new Map(); // page id -> rows drawn, for as long as this page is open
+function capRows(id, list, groups) {
+  const cap = searchShown.get(id) || SEARCH_STEP;
+  if (list.length <= cap) return { list, groups, rest: 0 };
+  if (!groups) return { list: list.slice(0, cap), groups: null, rest: list.length - cap };
+  let left = cap; const kept = [];
+  for (const g of groups) {
+    if (left <= 0) break; // later sections come with their rows
+    if (g.collapsed) { kept.push(g); continue; }
+    const nodes = g.nodes.slice(0, left); left -= nodes.length;
+    kept.push(nodes.length === g.nodes.length ? g : { ...g, nodes, more: undefined });
+  }
+  return { list: kept.flatMap((g) => (g.collapsed ? [] : g.nodes)), groups: kept, rest: list.length - cap };
+}
+let searchMoreNext = null;
+const searchEnd = typeof IntersectionObserver === 'function'
+  ? new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting) && searchMoreNext) searchMoreNext(); }, { root: outline.parentElement, rootMargin: '0px 0px 100% 0px' }) : null;
+function searchMoreEl(id, rest) {
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'gmore search-more';
+  el.textContent = 'Show ' + Math.min(rest, SEARCH_STEP) + ' more';
+  el.onmousedown = (e) => e.preventDefault();
+  const more = () => { searchMoreNext = null; searchShown.set(id, (searchShown.get(id) || SEARCH_STEP) + SEARCH_STEP); renderSoon(true); };
+  el.onclick = more;
+  if (searchEnd) { searchEnd.disconnect(); searchMoreNext = more; searchEnd.observe(el); }
   return el;
 }
 // The tail of a trimmed section, one click away. A button like the heading rather than a row: no key, no bullet, and

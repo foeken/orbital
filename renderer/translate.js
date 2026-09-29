@@ -4,49 +4,28 @@
 // A page says so once, in a grey line under its title ("Translated from Dutch · Show original", switching the whole
 // page); a list row says it as the first fact of its grey line, where a click switches that row (renderer/render.js).
 // What is asked: plain text only (a mention, a link or a mark would not survive the round trip), never a sensitive
-// node's words, nothing in demo mode, and only what does not read as the chosen language — few of its small words: a
-// page as a whole (its title and rows), a list row by its title. Main batches the question to the model (main/ai.js
-// translate), which answers null for whatever is in that language after all. Main keeps every answer on this machine
-// (db.js translations), so a text seen before, in any pane or launch, comes back at once; this page keeps its own copy.
-// ponytail: the languages offered are the ones with small words below: add a line to offer another.
-const TRANSLATE_WORDS = {
-  English: 'the a an and or of to in on at for with from by is are was were be been it its this that these those we you i he she they our your my not no as if but so will can has have had do does did about after before into over than then there what who when how which all any some more new up out',
-  Dutch: 'de het een en of van voor met op in aan bij naar niet is zijn was waren dat die dit deze wie wat na als om te er ook maar we je ik hij zij ze ons onze mijn geen wel nog al wordt worden kan moet over tot uit door hoe waar',
-  German: 'der die das und oder ist sind war nicht mit für auf ein eine einen zu von den dem des im in auch sich es wir ich du sie er uns unser mein kein noch nach bei wird werden kann muss',
-  French: 'le la les des et ou est sont pour avec un une du de dans pas que qui sur au aux ce cette nous vous je il elle ils ne se plus par mais',
-  Spanish: 'el la los las y o es son para con un una del de en que por no se lo como pero su sus al nosotros yo tu este esta más',
-};
-const TRANSLATE_SETS = Object.fromEntries(Object.entries(TRANSLATE_WORDS).map(([lang, words]) => [lang, new Set(words.split(' '))]));
-const translateTo = () => (TRANSLATE_SETS[pref('translateTo', null)] ? pref('translateTo', null) : null); // null: off
+// node's words (demo mode translates, its words masked where drawn, so the notices still show): a page's title and
+// rows, a list row's title. Main decides what is in another language on this Mac (main/ai.js detectLanguages, Apple's
+// NaturalLanguage) and sends only that to the model, batched. Main keeps every answer on this machine (db.js
+// translations), so a text seen before, in any pane or launch, comes back at once; this page keeps its own copy.
+// The languages offered: main/ai.js LANG_CODES names each one's code.
+const TRANSLATE_LANGS = ['English', 'Dutch', 'German', 'French', 'Spanish'];
+const translateTo = () => (TRANSLATE_LANGS.includes(pref('translateTo', null)) ? pref('translateTo', null) : null); // null: off
 const translations = new Map(); // this page's copy: text -> { lang, text }, or null: already in the language, or not answered
 const translateAsked = new Set(), translateWaiting = new Set();
 const TRANSLATE_BUDGET = 20000; // characters per question (main/ai.js keeps 200 texts)
 const shownOriginal = new Set(); // a page's document id or a list row's id, switched back to its own words
 let translateTimer = null, translatePage = null; // the zoomed page to translate, set at the start of each render
 let translatingInto = null; // the language the answers above are in: another (chosen here or in another pane) starts over
-// Whether a text may be in another language: another language's small words outnumber the chosen one's, or there are
-// none of anyone's to go by (a bare title: the model judges, once, and main keeps its answer). Into English,
-// "Terugblik offsite Studio" and "Aanpassing maken aan Orbital" ask; "Plan the automated PR review pilots" does not: one
-// "the" and no other language's words, where counting only the chosen language's share asked about every short title.
-// ponytail: word lists, crude on short titles; a JEV model (millisecond language analysis) replaces this once OpenAI has a compliant one (#552).
 const translationPending = (text) => translateWaiting.has(text) || (translateAsked.has(text) && !translations.has(text));
-function readsOther(text) {
-  const words = String(text || '').toLowerCase().match(/\p{L}+/gu) || [], to = translateTo();
-  if (!to || words.length < 2) return false;
-  // only a language's own words count: "in", "of" and "over" are English and Dutch both, and say nothing
-  const others = Object.keys(TRANSLATE_SETS).filter((lang) => lang !== to), mine = TRANSLATE_SETS[to];
-  const own = words.filter((w) => mine.has(w) && !others.some((lang) => TRANSLATE_SETS[lang].has(w))).length;
-  const other = Math.max(...others.map((lang) => words.filter((w) => TRANSLATE_SETS[lang].has(w) && !mine.has(w)).length));
-  return other > own || (!own && !other);
-}
 const plainText = (segs) => (segs.length && segs.every((s) => Object.keys(s).every((k) => k === 'text')) ? segs.map((s) => s.text).join('') : '');
-const maySend = (id) => !!translateTo() && !demoMode && !!tana.translate && typeof id === 'string' && sensitiveIds !== null && !sensitiveIds.has(id); // unknown marks count as sensitive
+// demo mode translates too, so its notices show; every translated word is masked where it is drawn (renderSegs, demoText)
+const maySend = (id) => !!translateTo() && !!tana.translate && typeof id === 'string' && sensitiveIds !== null && !sensitiveIds.has(id); // unknown marks count as sensitive
 // The translation of a text, or null; asked once, batched with whatever else this render wants, when it may be sent
-// and does not read as the chosen language (or its page does not)
-function translationOf(text, id, pageOther) {
+function translationOf(text, id) {
   if (!text.trim() || !maySend(id)) return null;
   if (translations.has(text)) return translations.get(text);
-  if (!translateAsked.has(text) && (pageOther || readsOther(text))) { translateWaiting.add(text); clearTimeout(translateTimer); translateTimer = setTimeout(askTranslations, 50); }
+  if (!translateAsked.has(text)) { translateWaiting.add(text); clearTimeout(translateTimer); translateTimer = setTimeout(askTranslations, 50); }
   return null;
 }
 function askTranslations() {
@@ -75,12 +54,12 @@ function setTranslatePage(parent) {
   if (translateTo() !== translatingInto) { translatingInto = translateTo(); translations.clear(); translateAsked.clear(); translateWaiting.clear(); shownOriginal.clear(); }
   const page = parent && (parent.node.kind === 'document' || parent.node.kind === 'block') && !parent.node.draft && !appOwned(parent.docId) && !isChatPage(parent) && !isTypeDoc(parent.node);
   const texts = page && maySend(parent.docId) ? pageTexts(parent.docId, parent.node.text || '') : [];
-  translatePage = texts.length > 1 && readsOther(texts.join(' ')) ? parent.docId : null; // a page with rows of its own: a title alone (a space listing documents) is a list row's business
+  translatePage = texts.length > 1 ? parent.docId : null; // a page with rows of its own: a title alone (a space listing documents) is a list row's business; each row is judged on its own (main)
 }
 // A row's translation, { lang, text, original } or null: a block on a translated page, or a document's title in a list;
 // { pending: true } for a list row whose title is being asked about (its grey line says so)
 function rowTranslation(item, node) {
-  const t = translatableOf(item, node), found = t && translationOf(t.src, t.id, t.onPage);
+  const t = translatableOf(item, node), found = t && translationOf(t.src, t.id);
   return found ? { ...found, id: t.id, onPage: t.onPage, original: shownOriginal.has(t.id) } : t && !t.onPage && translationPending(t.src) ? { pending: true } : null;
 }
 // A row of the app's own that names a node in its one content segment (main/timeline.js: a meeting, "Kevin completed
@@ -105,7 +84,7 @@ function translatableOf(item, node) {
 // is being asked about, or null
 function pageTranslation(parent) {
   if (!parent || parent.docId !== translatePage) return null;
-  const texts = pageTexts(parent.docId, parent.node.text || ''), found = texts.map((t) => translationOf(t, parent.docId, true)), any = found.find(Boolean);
+  const texts = pageTexts(parent.docId, parent.node.text || ''), found = texts.map((t) => translationOf(t, parent.docId)), any = found.find(Boolean);
   return any ? { lang: any.lang, title: found[0], original: shownOriginal.has(parent.docId) } : texts.some(translationPending) ? { pending: true } : null;
 }
 function toggleOriginal(id) { if (!shownOriginal.delete(id)) shownOriginal.add(id); render(true); }
@@ -121,14 +100,14 @@ document.addEventListener('focusout', (e) => { const el = e.target; if (el.datas
 function paintTranslation(el) {
   const src = el.dataset.translate, id = el.dataset.translateId;
   if (!el.isConnected || el === document.activeElement || shownOriginal.has(id)) return;
-  const found = translationOf(src, id, el.dataset.translatePage === '1');
+  const found = translationOf(src, id);
   if (!found || el.textContent === found.text) return;
-  el.textContent = found.text; originalOf.set(el, () => { el.textContent = src; });
+  el.textContent = demoText(found.text, id); originalOf.set(el, () => { el.textContent = demoText(src, id); }); // masked in demo mode, like the row drawn around it
 }
 // a row's text or the page's title whose words are translated: what paintTranslation needs to keep it in step
-function markTranslatable(el, src, id, onPage) {
-  if (src == null) { delete el.dataset.translate; delete el.dataset.translateId; delete el.dataset.translatePage; return; }
-  el.dataset.translate = src; el.dataset.translateId = id; el.dataset.translatePage = onPage ? '1' : '';
+function markTranslatable(el, src, id) {
+  if (src == null) { delete el.dataset.translate; delete el.dataset.translateId; return; }
+  el.dataset.translate = src; el.dataset.translateId = id;
 }
 const sparkleEl = () => addIcon(document.createElement('span'), 'sparkle');
 // while the model is asked: the sparkle at work and "Translating…", shown only once it takes a moment (styles.css), so an
@@ -146,12 +125,12 @@ function drawTranslatedLine(page, docId) {
   line.replaceChildren(sparkleEl(), (page.original ? 'Original, in ' : 'Translated from ') + page.lang + ' · ', back);
 }
 // the first fact of a list row's grey line; a click switches the row
-function translatedFactEl(found, id) {
+function translatedFactEl(found, id, more) { // more: the grey line has facts after it
   const el = document.createElement('span'); el.className = 'translated';
-  if (found.pending) { el.classList.add('translating'); el.append(...translatingEls()); return el; }
+  if (found.pending) { el.classList.add('translating'); el.append(...translatingEls(), ...(more ? [' · '] : [])); return el; } // the separator hides with it until it shows (styles.css)
   el.setAttribute('role', 'button');
   el.title = found.original ? 'Show the translation' : 'Show the original';
-  el.append(sparkleEl(), (found.original ? 'Original, in ' : 'Translated from ') + found.lang);
+  el.append(sparkleEl(), (found.original ? 'Original, in ' : 'Translated from ') + found.lang, ...(more ? [' · '] : []));
   el.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); };
   el.onclick = (e) => { e.stopPropagation(); toggleOriginal(id); };
   return el;
@@ -159,7 +138,7 @@ function translatedFactEl(found, id) {
 // ---- Cmd+K "Auto-translate …" (Settings): off, or the language notes are shown in ----
 function translateRows(q) {
   const on = translateTo();
-  return [['Off', null], ...Object.keys(TRANSLATE_WORDS).map((lang) => ['Into ' + lang, lang])].filter(([label]) => fuzzyMatch(label, q))
+  return [['Off', null], ...TRANSLATE_LANGS.map((lang) => ['Into ' + lang, lang])].filter(([label]) => fuzzyMatch(label, q))
     .map(([label, lang]) => ({ group: 'Auto-translate', icon: lang ? 'sparkle' : 'none', label, hint: on === lang ? '✓' : '', run: () => setTranslateTo(lang) }));
 }
 function openTranslatePage() { openPage('translateTo', 'Translate notes into…', { rows: translateRows, back: BACK_TO_COMMANDS }); }

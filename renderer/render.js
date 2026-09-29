@@ -389,7 +389,7 @@ function renderOutline() {
     list = parent.node.draft ? [] : childrenOf(parent) || [];
     // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page
     // filters: an outline's rows are content you are editing, not a result set you are searching through.
-    let groups = null, row = (n) => childEl(n, parent);
+    let groups = null, row = (n) => childEl(n, parent), searchRest = 0;
     if (isSearchDoc(parent.node) || isTypeDoc(parent.node)) {
       row = rowEl;
       if (isSearchDoc(parent.node)) {
@@ -399,7 +399,8 @@ function renderOutline() {
       // a saved search is a list of results, so it narrows, sorts and groups exactly as a view does — same helper,
       // with the arrangement its own document stores rather than the one this browser remembers for a view
       const shown = pageRows(list, filterEl.value.trim().toLowerCase());
-      list = shown.list; groups = shown.groups; hidden = shown.hidden;
+      const capped = capRows(parent.docId, shown.list, shown.groups); // twenty at a time, more as the end comes into view (views.js)
+      list = capped.list; groups = capped.groups; hidden = shown.hidden; searchRest = capped.rest;
     } else if (parent.docId === PROPOSALS_PAGE) { // yours without a heading, then From others (renderer/proposals.js)
       groups = proposalGroups(list);
       list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
@@ -412,6 +413,7 @@ function renderOutline() {
     outline.replaceChildren(...(chat ? chatEls(list, parent.docId) : groups
       ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [row(n), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map(row)));
+    if (searchRest) outline.append(searchMoreEl(parent.docId, searchRest)); // the rest of a saved search or a type's page
     if (parent.docId === TIMELINE_PAGE && tana.timelinePages && kids.get(TIMELINE_PAGE) && !timelinePartial && timelinePages < TIMELINE_MAX_PAGES) outline.append(timelineOlderEl()); // three days a page: more as the end comes into view, once the first page is whole
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
@@ -460,9 +462,9 @@ function renderOutline() {
   const editable = !demoMode && parent && !isAtomic(parent.node) && !isReference(parent.node) && canEditText(parent); // demo text is never typed into, so a mask is never saved
   if (editable) titleEl.contentEditable = 'plaintext-only'; else titleEl.removeAttribute('contenteditable');
   titleEl.dataset.key = editable ? parent.key : '';
-  titleEl.textContent = englishTitle ? englishTitle.text : editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? demoText(parent.node.text, parent.node.id) : viewOf() ? viewOf().title : 'Tana';
+  titleEl.textContent = englishTitle ? demoText(englishTitle.text, parent.node.id) : editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? demoText(parent.node.text, parent.node.id) : viewOf() ? viewOf().title : 'Tana';
   originalOnFocus(titleEl, englishTitle && editable ? () => { titleEl.textContent = parent.node.text; } : null); // the caret going in finds the original title
-  markTranslatable(titleEl, page && !page.pending && editable ? parent.node.text : null, parent && parent.docId, true); // and leaving it, the translation again
+  markTranslatable(titleEl, page && !page.pending && editable ? parent.node.text : null, parent && parent.docId); // and leaving it, the translation again
   blurSensitive(titleEl, parent && parent.docId);
   const pageIcon = parent ? iconOf(parent.node) || nodeIcon(parent.node) : viewOf()?.icon; // nodeIcon: a chat or an agent known by its tag
   tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable, (pageIcon && iconNode(pageIcon)?.outerHTML) || '');
@@ -726,6 +728,37 @@ function openImage(node) {
   box.focus();
   Promise.resolve(images.get(uri) ?? tana.image(uri)).then((url) => { images.set(uri, url); img.src = url; }, (e) => { close(); showError(e); });
 }
+// Demo mode: where a picture is, at the size it is drawn (its own, shrunk to maxHeight as the img's CSS shrinks it, and
+// to the width there is), grey with the privacy glyph in the middle; its pixels are never drawn. The size is the block's
+// (displayWidth/displayHeight, set once someone resizes it); a block without one (an image Tana's AI made has none, nor
+// has its tana:image: document) has the picture loaded as a row would and its natural size read off an Image that is
+// never put on the page. Until then, or when it fails: a 360px-wide 3:1 box, the loading one's shape (styles.css
+// .demo-image). A row's image and a table cell's (renderer/table.js).
+// A picture's natural size, kept on this machine by its uri (localStorage; a width and a height say nothing about what is
+// in it): a block that stores none is then drawn at its size at once, on every render after the first measure and after
+// a reload, where it used to start as the fallback box and grow on each of a load's renders (#559).
+// ponytail: never pruned, a few bytes per picture ever shown; clear it if it ever matters
+const imageSizeKey = (uri) => 'imgsize:' + uri;
+function knownImageSize(image) {
+  if (image?.width > 0 && image?.height > 0) return [image.width, image.height];
+  const [w, h] = (image?.uri && localStorage.getItem(imageSizeKey(image.uri)) || '').split('x').map(Number);
+  return w > 0 && h > 0 ? [w, h] : null;
+}
+function rememberImageSize(uri, w, h) { if (uri && w > 0 && h > 0) try { localStorage.setItem(imageSizeKey(uri), w + 'x' + h); } catch { /* full: measured again next time */ } }
+function demoImageEl(image, maxHeight, cls = '') {
+  const el = document.createElement('span'), { uri } = image || {}, known = knownImageSize(image);
+  el.className = (cls + ' demo-image').trim();
+  const size = (w, h) => { el.style.width = Math.round(w * Math.min(1, maxHeight / h)) + 'px'; el.style.aspectRatio = w + ' / ' + h; };
+  if (known) size(...known);
+  else if (uri && tana.image) {
+    Promise.resolve(images.get(uri) || images.set(uri, tana.image(uri)).get(uri)).then((url) => {
+      images.set(uri, url);
+      const probe = new Image(); probe.onload = () => { rememberImageSize(uri, probe.naturalWidth, probe.naturalHeight); if (probe.naturalWidth && probe.naturalHeight) size(probe.naturalWidth, probe.naturalHeight); }; probe.src = url;
+    }, () => images.delete(uri));
+  }
+  const glyph = iconNode('hidden'); if (glyph) el.append(glyph);
+  return el;
+}
 function nodeEl(node, docId, parent) {
   const item = mkItem(docId, node, parent);
   const reference = isReference(node);
@@ -759,7 +792,6 @@ function nodeEl(node, docId, parent) {
   el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '') + (node.timeline?.upcoming ? ' tl-upcoming' : '') + (node.timeline?.recording ? ' tl-recording' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
-  el.dataset.body = [display.text, display.done ? 1 : 0, display.stateType || ''].join('\n'); // what an edit elsewhere would change (motionAfter)
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1;
   chev.onmousedown = (e) => e.preventDefault();
@@ -810,16 +842,17 @@ function nodeEl(node, docId, parent) {
   if (isImage(node)) { // focusable, not editable: keeps its place in texts() so Up/Down/Backspace work like any block
     text.classList.add('image'); text.tabIndex = -1;
     const img = document.createElement('img'), { uri, alt, width, height } = node.image;
-    if (demoMode) text.classList.add('loading', 'demo'); // demo mode: the picture's place as the grey box a loading one shows, never its pixels or its words
+    if (demoMode) text.classList.add('demo'); // demo mode: the picture's place at its own size with the privacy glyph on it (demoImageEl), never its pixels or its words
     else if (alt) img.alt = img.title = alt;
     else imageTitle(uri).then((t) => { if (t) img.alt = img.title = t; }); // Tana's AI title, once it has written one
     if (width && height) { img.width = width; img.height = height; }
+    else img.addEventListener('load', () => rememberImageSize(uri, img.naturalWidth, img.naturalHeight), { once: true }); // so demo mode knows its size (demoImageEl)
     const show = (url) => { images.set(uri, url); img.src = url; text.classList.remove('loading'); if (images.size > 200) images.delete(images.keys().next().value); }; // oldest out: main keeps the file cache
     const cached = images.get(uri);
     if (demoMode) { /* nothing fetched, nothing shown */ } else if (typeof cached === 'string') img.src = cached;
     else { text.classList.add('loading'); (cached || images.set(uri, tana.image(uri)).get(uri)).then(show, (e) => { images.delete(uri); showError(e); }); }
     img.onclick = (e) => { e.stopPropagation(); openImage(node); }; // the row is not text to put a caret in: a click is a look at the picture
-    text.append(img);
+    text.append(demoMode ? demoImageEl(node.image, 360) : img);
   } else if (node.upload) { // renderer/upload.js: a file on its way up; Esc cancels it
     text.classList.add('upload'); text.tabIndex = -1;
     text.textContent = demoText(node.text, node.id) + ' — Uploading…';
@@ -838,7 +871,7 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
     if (english) originalOnFocus(text, () => renderSegs(text, segsOf(node), display.id)); // the caret going in finds the original: that is what an edit saves
     const translatable = !reference && !fullref && translatableOf(item, node); // and leaving it, the translation again, once there is one
-    if (translatable && !namedSeg(node)) markTranslatable(text, translatable.src, translatable.id, translatable.onPage); // a named segment's row is drawn again instead: its words are more than the name
+    if (translatable && !namedSeg(node)) markTranslatable(text, translatable.src, translatable.id); // a named segment's row is drawn again instead: its words are more than the name
   }
   body.append(text);
   if (node.join && tana.openExternal && tana.nodeLink) body.append(timelineJoinEl(node)); // a meeting to come or under way, on the Timeline
@@ -861,8 +894,8 @@ function nodeEl(node, docId, parent) {
   }
   let sub = subtextEl(display, taskInfo, undefined, tableRow(parent));
   if (translated && !translated.onPage && !tableRow(parent)) { // a list row: said first in its grey line, and switched there
-    if (!sub) { sub = document.createElement('div'); sub.className = 'subtext'; }
-    sub.prepend(translatedFactEl(translated, translated.id || node.id), ...(sub.childNodes.length ? [' · '] : []));
+    if (!sub) { sub = document.createElement('div'); sub.className = 'subtext' + (translated.pending ? ' translating' : ''); } // a line only for the notice waits with it
+    sub.prepend(translatedFactEl(translated, translated.id || node.id, sub.childNodes.length > 0));
   }
   if (sub) body.append(sub);
   blurSensitive(body, docId, target && target.id);

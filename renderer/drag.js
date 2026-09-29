@@ -192,9 +192,12 @@ const GROUP_STATES = { 'My inbox': 'proposed', Mine: 'open', 'My completed': 'cl
 function groupDropWrites(target, t, me, today) {
   const mine = !!me && t.createdBy === me, assigned = t.assignees.includes(me);
   const unagent = t.agent ? [['agent', false]] : [], clear = [...unagent, ...t.dates.map((date) => ['unpin', date])];
+  // a task given a day is being worked on: one still in the Inbox is accepted (In Progress) as it lands, where you may
+  // change its status (writable false: it is pinned all the same, its status left alone)
+  const accept = t.stateType === 'proposed' && t.writable !== false ? [['state', 'open']] : [];
   // on Today already: pinned to it, or an open task pinned to a day before it (main/timeline.js ages completed ones out)
-  if (target === 'Today') return t.dates.includes(today) || (t.stateType !== 'closed' && t.dates.some((date) => date < today)) ? [] : [['pin', today]];
-  if (target === 'Pinned') return [...unagent, ...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : [])];
+  if (target === 'Today') return [...(t.dates.includes(today) || (t.stateType !== 'closed' && t.dates.some((date) => date < today)) ? [] : [['pin', today]]), ...accept];
+  if (target === 'Pinned') return [...unagent, ...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : accept)];
   if (target === 'Agent') return t.agent ? [] : [['agent', true]];
   if (!mine) return null; // every other group is about tasks you made
   if (target === 'Unassigned') return [...clear, ...(t.assignees.length ? [['assign', []]] : [])];

@@ -581,8 +581,8 @@ html.links .app { display: none; }
 .translated-line button { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .subtext .translated { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; cursor: pointer; } /* a list row's: its first fact, a click switches it */
 .subtext .translated:not(.translating):hover { text-decoration: underline; text-underline-offset: 2px; }
-.translating { animation: translating-late 0s .4s backwards; } /* only once it takes a moment: an answer from the cache never flashes it */
-@keyframes translating-late { from { visibility: hidden; } }
+.translating { animation: translating-late 0s .4s backwards; } /* only once it takes a moment: an answer from the cache or a text this Mac finds already in the language never shows it, nor takes its room */
+@keyframes translating-late { from { display: none; } }
 .fields .chat-context { grid-column: 1 / -1; } /* the whole width, not the glyph's column */
 .fields:has(> .chat-context:only-child) { border: 0; padding: 0; }
 .chat-context { margin: 0 0 28px; text-align: right; font-size: 14px; color: var(--muted); } /* who can see a chat, and its meeting (renderer/chat.js chatContextEl, #543) */
@@ -781,6 +781,9 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text.image { display: block; cursor: default; }
 .text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; cursor: zoom-in; }
 .text.image.loading img { visibility: hidden; }
+/* demo mode (renderer/render.js demoImageEl): a picture's place at its size, the privacy glyph on it */
+.demo-image { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: min(100%, 360px); max-width: 100%; aspect-ratio: 3 / 1; border-radius: 6px; background: #f1f1f1; color: #aeb1b5; }
+.demo-image svg { width: 28px; height: 28px; }
 .text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
 /* a picture on its way, and a file on its way up: the same shimmer and breath the loading skeleton has (Ambient) */
 @media (prefers-reduced-motion: no-preference) {
@@ -868,7 +871,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text.table table { border-collapse: collapse; margin: 4px 0; }
 .text.table th, .text.table td { border: 1px solid #dcdcdc; padding: 3px 8px; vertical-align: top; text-align: left; min-width: 48px; }
 .text.table .cellimg { display: block; max-width: 100%; max-height: 240px; margin-top: 4px; border-radius: 3px; cursor: zoom-in; }
-.text.table .cellimg.demo { width: 120px; height: 68px; background: #f1f1f1; cursor: default; } /* demo mode: where a picture is, not the picture */
+.text.table .cellimg.demo-image { max-height: 240px; cursor: default; }
 .text.table th { background: #f6f6f6; font-weight: 600; }
 .text.table .cell { outline: none; min-height: 1.4em; white-space: pre-wrap; cursor: text; }
 .text.table .more { color: var(--muted); }
@@ -1313,7 +1316,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
 @media (prefers-reduced-motion: no-preference) { [data-theme="dark"] .text.image.loading:not(.demo) { background-image: linear-gradient(90deg, #303436 0%, #3d4244 50%, #303436 100%); } }
-[data-theme="dark"] .text.table .cellimg.demo { background: #303436; }
+[data-theme="dark"] .demo-image { background: #303436; color: #6f7479; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] :is(.text, .fvalue) .mention { color: #8fc1e1; }
 [data-theme="dark"] :is(.text, .fvalue) .mention, [data-theme="dark"] :is(.text, .fvalue) .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */

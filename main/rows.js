@@ -185,11 +185,13 @@ function kindedRow(n, withDate) {
   return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType, hueOf(n), n.createTime);
 }
 
-// all org members, cached per S.session, by display name
+// all org members, cached per S.session, by display name; emails: the addresses their profile is known by (the graph
+// node's externalIds), so a calendar attendee with an address and no profile id is still known as the member
+const emailsOf = (n) => Object.entries(n.externalIds || {}).filter(([, kind]) => kind === 'email').map(([address]) => address.toLowerCase());
 function members() {
   if (!S.client) return Promise.resolve([]);
   S.membersLoaded ||= S.client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
-    .then(({ nodes }) => { nodes.forEach(rememberNodeHue); return nodes.map((n) => ({ ...toNode(graphRow(n)), me: n.id === S.me.userUri || undefined })).sort((a, b) => a.title.localeCompare(b.title)); }, (e) => { S.membersLoaded = null; throw e; });
+    .then(({ nodes }) => { nodes.forEach(rememberNodeHue); return nodes.map((n) => ({ ...toNode(graphRow(n)), emails: emailsOf(n), me: n.id === S.me.userUri || undefined })).sort((a, b) => a.title.localeCompare(b.title)); }, (e) => { S.membersLoaded = null; throw e; });
   return S.membersLoaded;
 }
 
