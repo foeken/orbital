@@ -3131,13 +3131,17 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const isTask = (n) => n.icon === 'task';
     const visibleTags = (n) => { const tags = n.tags || []; return isTask(n) && tags.some((t) => t.label !== 'task') ? tags.filter((t) => t.label !== 'task') : tags; };
     // a mixed list's rows carry field values of their own type (renderer/views.js pageFieldDefs), named by its definitions
+    // (Goal has a real choice called No value; Note's Priority is plain text; Stage's type has no values set anywhere)
     const viewOf = () => views.find((s) => s.id === view), relatedBy = new Map([
-      ['tana:type:goal', { definitions: [{ key: 'prio', title: 'Priority', type: 'options', options: [{ label: 'High' }, { label: 'Low' }] }, { key: 'note', title: 'Note', type: 'plain' }] }],
-      ['tana:type:bug', { definitions: [{ key: 'sev', title: 'Priority', type: 'options', options: [{ label: 'Urgent' }, { label: 'High' }] }] }]]);
+      ['tana:type:goal', { definitions: [{ key: 'prio', title: 'Priority', type: 'options', options: [{ label: 'High' }, { label: 'Low' }, { label: 'No value' }] }, { key: 'note', title: 'Note', type: 'plain' }] }],
+      ['tana:type:bug', { definitions: [{ key: 'sev', title: 'Priority', type: 'options', options: [{ label: 'Urgent' }, { label: 'High' }] }] }],
+      ['tana:type:note', { definitions: [{ key: 'p', title: 'Priority', type: 'plain' }] }],
+      ['tana:type:empty', { definitions: [{ key: 'stage', title: 'Stage', type: 'options', options: [{ label: 'Draft' }] }] }]]);
+    const loaded = []; function loadRelated(uri) { loaded.push(uri); } // the definitions a page reads (renderer/rail.js)
     ${definitions}
     ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
-       RESPONSIBILITY, groupList, list: (nodes) => { viewOf().nodes = nodes; },
+       RESPONSIBILITY, groupList, list: (nodes) => { viewOf().nodes = nodes; }, loaded: () => loaded,
        dragging: (on) => { taskDragging = on; },
        asked: () => asked,
        meta: (id, m) => taskMetaById.set(id, m),
@@ -3156,21 +3160,30 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 'd1', text: 'echo', icon: 'doc', tags: [{ label: 'doc' }] },
   ];
   const titles = (list, by) => plain(api.groupRows(list, by)).map((g) => [g.title, g.nodes.map((n) => n.id)]);
-  // The Tasks view lists several types and docs: the fields its rows carry are offered by name, one Priority over
-  // both types that have one, and a row without a value (a doc, a type without the field) is under No value.
+  // The Tasks view lists several types and docs: the choice fields of the types its rows are now are offered by name,
+  // one Priority over both types that have one as a choice, and a row without a value is under No value.
+  const tag = (t) => [{ label: t, uri: 'tana:type:' + t }];
   const PRIO = 'field?attribute=Priority', goals = [
-    { id: 'g1', tags: [], fields: { 'tana:type:goal?attribute=prio': ['Low'] } },
-    { id: 'g2', tags: [], fields: { 'tana:type:goal?attribute=prio': ['High'] } },
-    { id: 'g3', tags: [], fields: { 'tana:type:goal?attribute=note': ['x'] } },
-    { id: 'b1', tags: [], fields: { 'tana:type:bug?attribute=sev': ['Urgent'] } },
-    { id: 'b2', tags: [], fields: { 'tana:type:bug?attribute=sev': ['High'] } },
+    { id: 'g1', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio': ['Low'] } },
+    { id: 'g2', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio': ['High'] } },
+    { id: 'g3', tags: tag('goal'), fields: { 'tana:type:goal?attribute=note': ['x'] } },
+    { id: 'g4', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio': ['No value'] } }, // the real choice
+    { id: 'b1', tags: tag('bug'), fields: { 'tana:type:bug?attribute=sev': ['Urgent'] } },
+    { id: 'b2', tags: tag('bug'), fields: { 'tana:type:bug?attribute=sev': ['High'] } },
+    { id: 'r1', tags: tag('bug'), fields: { 'tana:type:goal?attribute=prio': ['Low'] } }, // a Goal retyped to Bug keeps its old value
+    { id: 'n1', tags: tag('note'), fields: { 'tana:type:note?attribute=p': ['whenever'] } }, // plain text, not a choice
+    { id: 'e1', tags: tag('empty') },
     rows[0], rows[4],
   ];
   api.list(goals);
-  assert.deepEqual(plain(api.groupList()).filter(([id]) => id.includes('?attribute=')), [[PRIO, 'Priority']],
-    'a list of several types offers the choice fields its rows carry, by name');
-  assert.deepEqual(titles(goals, PRIO), [['High', ['g2', 'b2']], ['Low', ['g1']], ['Urgent', ['b1']], ['No value', ['g3', 't1', 'd1']]],
-    'sections follow the choices type by type, one High for both, and a row without a value, a doc or another type, is under No value');
+  api.groupList();
+  assert.deepEqual(plain(api.loaded()), [], 'a mixed list reads no type definitions until they are wanted');
+  assert.deepEqual(plain(api.groupList(true)).filter(([id]) => id.includes('?attribute=')), [[PRIO, 'Priority'], ['field?attribute=Stage', 'Stage']],
+    'the Group menu reads them, and offers the choice fields of the types on the page, one with no values set included');
+  assert.deepEqual(plain(api.loaded()), ['tana:type:goal', 'tana:type:bug', 'tana:type:note', 'tana:type:empty'], 'one read per type the rows are');
+  assert.deepEqual(plain(api.groupRows(goals, PRIO)).map((g) => [g.id || g.title, g.nodes.map((n) => n.id)]),
+    [['High', ['g2', 'b2']], ['Low', ['g1']], ['No value', ['g4']], ['Urgent', ['b1']], ['\u0000no value', ['g3', 'r1', 'n1', 'e1', 't1', 'd1']]],
+    'sections follow the choices type by type, one High for both; a choice called No value is its own section, and the missing ones (no value, a value left from a former type, a plain-text Priority, a doc) sit apart');
   api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],
     'status groups follow the Status menu order; a row without a task state sits in No status');

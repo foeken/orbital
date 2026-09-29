@@ -23,6 +23,8 @@ const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[
 // ---- group by: plain headings over the rows the view already loaded, no extra query ----
 const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['responsibility', 'Responsibility'], ['updated', 'Updated'], ['type', 'Type']];
 const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type', field: 'No value' }; // responsibility has none: see below
+// A field's missing value is its own section, headed No value: an options field can have a choice called that too.
+const NO_FIELD = '\u0000no value';
 // Group by Responsibility: what a row is to you, from who made it (the graph's createdBy, on the row already) and who
 // it is assigned to. Made by you and yours to do, made by you and handed to someone else, made by you and waiting for
 // somebody to take it, and somebody else's task that landed on you. It is a view of your own work, so a row you are
@@ -82,7 +84,7 @@ const arranged = (k, what) => (VIEW_ARRANGEMENT[k] || {})[what];
 // Keyed by the page, not the view: a saved search carries its own sort and grouping, stored in the document beside
 // its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
 // A search's key is its document id, so the per-view defaults below simply do not match it.
-const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return groupList().some(([id]) => id === g) ? g : 'none'; };
+const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return groupList(isFieldKey(g)).some(([id]) => id === g) ? g : 'none'; };
 // On a type page the menu speaks the type: its options, link and member fields join it (sections per value, an
 // options field's in the order of its choices), Type goes (every row is one), and so do the task-only choices unless
 // the rows are tasks. Everywhere else it is GROUPS as it was.
@@ -90,25 +92,26 @@ const noTasks = () => onTypePage() && !(kids.get(zoom.docId) || []).some(isTask)
 const TASK_ONLY = ['status', 'assignee'];
 const isFieldKey = (key) => String(key).includes('?attribute=');
 // A saved search or the Library narrowed to one workspace type offers that type's fields the same way (fieldType).
-// Every other list (the Tasks view, the Library, a search over several types or with docs) offers the fields of the
-// types its rows carry values for, one per name: a Priority on two types is one grouping over both, its choices in
-// the order the types list them. A row without a value, a doc or a row of a type without the field, is under No value.
+// Every other list (the Tasks view, the Library, a search over several types or with docs) offers the choice fields
+// of the types its rows are now (their type chips, so a field left on a retyped document is not one), one per name: a
+// Priority on two types is one grouping over both, its choices in the order the types list them. A row without a
+// value, a doc or a row of a type without the field, is under No value. The definitions are read only once they are
+// wanted (load: the Group menu is open or a field grouping is chosen), so a mixed list alone reads nothing.
 const FIELD_BY_NAME = 'field?attribute='; // a field on a mixed list, keyed by its name (isFieldKey still holds)
-const namedFieldKeys = new Map(); // FIELD_BY_NAME + title -> the typed keys a row carries it under, as last listed
-function pageFieldDefs() {
+const namedFieldKeys = new Map(); // FIELD_BY_NAME + title -> Map(type uri -> the typed key), as last listed
+const rowTypes = (n) => (n.tags || []).map((t) => t && t.uri).filter(isTypeId);
+function pageFieldDefs(load = false) {
   const t = fieldType();
   if (t) return typeDefs();
   if (!listPage()) return [];
-  const types = new Set(pageDocs().flatMap((n) => Object.keys(n.fields || {}).map((k) => k.split('?attribute=')[0])));
   const named = new Map();
-  for (const uri of types) {
-    loadRelated(uri, true); // the definitions come with the lite read
-    for (const d of (relatedBy.get(uri) || {}).definitions || []) {
+  for (const uri of new Set(pageDocs().flatMap(rowTypes))) {
+    if (load) loadRelated(uri, true); // the definitions come with the lite read
+    for (const d of ((relatedBy.get(uri) || {}).definitions || []).filter((x) => GROUPABLE.includes(x.type))) {
       const title = d.title || 'Untitled field', key = FIELD_BY_NAME + title;
-      if (!named.has(key)) named.set(key, { title, type: d.type, group: key, keys: [], options: [] });
+      if (!named.has(key)) named.set(key, { title, type: d.type, group: key, keys: new Map(), options: [] });
       const f = named.get(key);
-      f.keys.push(uri + '?attribute=' + d.key);
-      if (GROUPABLE.includes(d.type)) f.type = d.type;
+      f.keys.set(uri, uri + '?attribute=' + d.key);
       for (const o of d.options || []) if (!f.options.some((x) => x.label === o.label)) f.options.push(o);
     }
   }
@@ -117,8 +120,8 @@ function pageFieldDefs() {
   return [...named.values()];
 }
 const GROUPABLE = ['options', 'link', 'member'];
-const groupList = () => {
-  const byField = pageFieldDefs().filter((d) => GROUPABLE.includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field']);
+const groupList = (load) => {
+  const byField = pageFieldDefs(load).filter((d) => GROUPABLE.includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field']);
   return onTypePage() ? [...GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))), ...byField] : [...GROUPS, ...byField];
 };
 const fieldOrder = (key) => ((pageFieldDefs().find((d) => fieldKey(d) === key) || {}).options || []).map((o) => o.label);
@@ -187,7 +190,8 @@ function groupKey(n, by) {
   // The same lazily read metadata grouping by assignee uses; null means the row has no section here and is left out.
   if (by === 'responsibility') return responsibilityOf(n);
   // ponytail: a field with several values is filed under the first, like the assignee grouping above
-  if (isFieldKey(by)) return (namedFieldKeys.get(by) || [by]).map((k) => ((n.fields || {})[k] || [])[0]).find(Boolean) || FALLBACK.field;
+  // a name over several types reads the key of the type the row is now; a value left from a former type is not its
+  if (isFieldKey(by)) { const named = namedFieldKeys.get(by), keys = named ? rowTypes(n).map((t) => named.get(t)) : [by]; return keys.map((k) => ((n.fields || {})[k] || [])[0]).find(Boolean) || NO_FIELD; }
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
@@ -200,11 +204,11 @@ function groupRows(list, by) {
   // grouped page takes its flat list from the sections, it leaves the keyboard order too.
   for (const n of list) { const k = groupKey(n, by); if (!k) continue; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
   const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : by === 'responsibility' ? RESPONSIBILITY : isFieldKey(by) ? fieldOrder(by) : []; // Updated: newest first
-  const last = isFieldKey(by) ? FALLBACK.field : FALLBACK[by];
+  const last = isFieldKey(by) ? NO_FIELD : FALLBACK[by];
   const rank = (t) => (t === last ? 2 : fixed.includes(t) ? 0 : 1);
   return [...buckets.keys()]
     .sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? fixed.indexOf(a) - fixed.indexOf(b) : a.localeCompare(b)))
-    .map((title) => ({ title, nodes: buckets.get(title) }));
+    .map((key) => (key === NO_FIELD ? { title: FALLBACK.field, id: NO_FIELD, nodes: buckets.get(key) } : { title: key, nodes: buckets.get(key) }));
 }
 function groupsOf(list) {
   const by = groupBy();
@@ -235,6 +239,7 @@ function keepDrafts(rows) {
 // uri the row already carries. Status, Updated and Responsibility headings are fixed words from the tables above —
 // their own key — and so are the fallbacks.
 function groupId(g, by) {
+  if (g.id) return g.id; // the missing field value (groupRows)
   const n = g.nodes[0];
   if (!n) return g.title;
   if (by === 'assignee') { const meta = taskMetaById.get(n.id); return (meta && meta.assignees[0]) || FALLBACK.assignee; }
