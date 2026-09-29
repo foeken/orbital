@@ -1031,7 +1031,10 @@ function searchDraft(item) {
   if (!Array.isArray(list)) return false;
   flush(item.key);
   const choice = creationChoices.find((c) => c.typeUri === preset.typeUri), type = (typeListCache || []).find((t) => t.uri === preset.typeUri);
-  const node = { ...draftDocNode('custom', { typeUri: preset.typeUri, icon: choice ? choice.icon : typeGlyph(preset.typeUri), tags: type ? [{ label: type.title, uri: type.uri, hue: type.hue }] : undefined }), preset: preset.fields };
+  // creationChoices fills only once Create new … has been opened; until then the row Enter was pressed on, one of
+  // this type, says whether its documents are tasks, so the draft has its box from the start
+  const icon = choice ? choice.icon : isTask(item.node) ? 'task' : typeGlyph(preset.typeUri);
+  const node = { ...draftDocNode('custom', { typeUri: preset.typeUri, icon, tags: type ? [{ label: type.title, uri: type.uri, hue: type.hue }] : undefined }), preset: preset.fields };
   list.splice(list.indexOf(item.node) + 1, 0, node);
   render(true);
   placeCaret(node.id, 0);

@@ -9259,6 +9259,29 @@ checks.push(function runSearchPresetCheck() {
   console.log('ok  a saved search of one type drafts its new rows with the values its filter asks for');
 });
 
+// Enter on a task row of such a search drafts a task, box and all, before Create new … has ever loaded the choices.
+checks.push(function runSearchDraftTaskCheck() {
+  const T = 'tana:type:01j0projecttask00000000000';
+  const api = vm.runInNewContext(`
+    const filters = new Map(), searchFilters = new Map(), kids = new Map(), typeGlyphs = new Map();
+    let creationChoices = [], typeListCache = null, draftSeq = 0;
+    const flush = () => {}, render = () => {}, placeCaret = () => {};
+    ${sourceLine('const SEARCH_ID =')}
+    ${sourceLine('const isSearchDoc =')}
+    ${sourceLine('const isTypeId =')}
+    ${sourceLine('const typeGlyph =')}
+    ${sourceLine('const isTask =')}
+    ${sourceBetween('function draftDocNode', '// a tag chip')}
+    ${sourceBetween('const EQUALS', '// Enter on a collapsed top-level document')}
+    const search = SEARCH_ID + '01j0mysearch000000000000000', row = { id: 'tana:text:t1', kind: 'document', icon: 'task' };
+    searchFilters.set(search, { filter: { types: ['${T}'] } }); kids.set(search, [row]);
+    searchDraft({ key: 'k', node: row, parent: { docId: search } });
+    kids.get(search)[1];
+  `);
+  assert.ok(api && api.icon === 'task' && api.done === 0, 'the draft below a task row is a task with an unticked box');
+  console.log('ok  a new row of a one-type saved search of tasks has its box from the start');
+});
+
 // Create new … names the node on a page of its own (#535): nothing to run until a name is typed, then Enter makes it with the
 // choice's options and opens it, once however often Enter is pressed.
 checks.push(async function runNamePageCheck() {
