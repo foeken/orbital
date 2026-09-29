@@ -88,6 +88,10 @@ function setFields(id, fields) {
   const value = fields ? JSON.stringify(fields) : null;
   return db.prepare('UPDATE nodes SET fields = ? WHERE id = ? AND fields IS NOT ?').run(value, id, value).changes;
 }
+// Its type chips and icon, the same everywhere too (a retype)
+function setTags(id, tags, icon) {
+  return db.prepare('UPDATE nodes SET tags = ?, icon = ? WHERE id = ?').run(JSON.stringify(tags || []), icon ?? null, id).changes;
+}
 
 // Returns how many rows were actually written: a refresh that found nothing new writes nothing.
 function replaceSection(section, rows) {
@@ -166,4 +170,4 @@ function saveTranslations(answers, now = Date.now()) { // [[key, { lang, text } 
   db.exec('DELETE FROM translations WHERE rowid NOT IN (SELECT rowid FROM translations ORDER BY usedAt DESC LIMIT 5000)');
 }
 
-module.exports = { open, translations, saveTranslations, list, get, remove, upsert, setRow, setFields, replaceSection, sensitiveIds, setSensitive, noteDeleted, unnoteDeleted, deletedList, setting, setSetting, settings, generation: () => generation };
+module.exports = { open, translations, saveTranslations, list, get, remove, upsert, setRow, setFields, setTags, replaceSection, sensitiveIds, setSensitive, noteDeleted, unnoteDeleted, deletedList, setting, setSetting, settings, generation: () => generation };

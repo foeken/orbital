@@ -938,6 +938,10 @@ function onChange(docId, info) {
     fieldSigs.set(docId, fsig);
     // and into every view's cached row: a view grouped by a field is sectioned by it after a reload or a restart too
     if (row && fieldsMoved) db.setFields(docId, fieldLines(doc));
+    // A retype leaves the old type's values on the document: the cached rows' chips say which type counts, so they
+    // follow it too (rowInfo rebuilds a row whose type moved on), or a reload would group it by its former type
+    // (written only while the document is still that type: an earlier retype's rebuild can land after a later one's)
+    if (row && (typeUriOf(row) || null) !== (n.entityTypeUri || null)) rowInfo(doc).then((node) => { if (readNode(doc).entityTypeUri === n.entityTypeUri) db.setTags(docId, node.tags, node.icon); }, report);
     notifyWatched(docId, doc, n, info).catch(report); // the signature is taken here and now; the audience it may need is not
     sendChanged(docId, { meta, fields: fieldsMoved }); // the renderer patches this one row from doc:info; the page that typed it knows it has it
     if (pinsChanged || restored) send('outline:changed', null);

@@ -1956,6 +1956,20 @@ async function main() {
     require('../sdk/fields').setFieldText(fieldedDoc, prio, '');
     backend.onChange(fielded, { origin: 'remote' });
     assert.equal((await rootsOf()).fields, undefined, 'a field cleared live is cleared there too');
+    // A retype keeps the former type's values on the document; the cached rows' chips follow the new type, so a
+    // reload does not group the row by its old type's field.
+    const typeA = prio.split('?')[0], typeB = 'tana:type:' + ulid();
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async (q) => ({ nodes: (q.nodeIds || []).map((id) => ({ id, title: id === typeB ? 'Bug' : 'Goal' })) }) } } });
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, 'High');
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeA));
+    backend.onChange(fielded, { origin: 'remote' });
+    for (const section of ['library', 'tasks']) cache.upsert({ ...cache.list()[section].find((r) => r.id === fielded), section, tags: [{ label: 'Goal', uri: typeA }] });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeB));
+    backend.onChange(fielded, { origin: 'remote' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const uris = (rows) => rows.find((r) => r.id === fielded).tags.map((t) => t.uri).filter(Boolean);
+    assert.deepEqual([uris(cache.list().library), uris(cache.list().tasks)], [[typeB], [typeB]], 'a retype moves every cached row’s chip to the new type');
+    assert.deepEqual((await rootsOf()).tags.map((t) => t.uri).filter(Boolean), [typeB], 'and the rows a reload builds carry it, so the old type’s value no longer counts');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
