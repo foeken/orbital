@@ -714,3 +714,7 @@ assert.match(source, /const outlinesOf = \(docId\) => \[\.\.\.kids\.keys\(\)\]\.
   'a document\u2019s outlines are its page and its fields');
 assert.match(source, /for \(const id of docId \? outlinesOf\(docId\) : \[\]\) await reload\(id\);/, 'undo re-reads all of them');
 assert.match(source, /for \(const id of outlinesOf\(docId\)\) work\.push\(reload\(id\)\);/, 'and so does a live update');
+// A ticked box is drawn by .check:checked's background; a dark-theme rule on every box that sets a background of its
+// own comes later with the same specificity and repaints ticked boxes as empty ones (#604).
+assert.doesNotMatch(styleSheet, /\[data-theme="dark"\] \.check(?![^{]*:not\(:checked\))[^{,]*\{[^}]*background/,
+  'a dark-theme checkbox rule that sets a background leaves ticked boxes alone');
