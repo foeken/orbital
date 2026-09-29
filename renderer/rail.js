@@ -62,13 +62,17 @@ const railClosed = new Set(pref('railClosed', []));
 // A document that changed is re-read the same way, but its payload stays on screen until the new one lands: adding
 // a row to a page is a change to that page, and dropping the cache made the whole sidebar blank and come back on
 // every edit. The mark is consumed when the fetch starts, so a render during that fetch does not ask again.
-function loadRelated(docId) {
+// lite: a row opened in a list, which draws its fields and nothing of the sidebar (main/related.js related, #579). A
+// lite answer on hand does for another lite read; the sidebar, asking for the whole, reads again over it.
+function loadRelated(docId, lite = false) {
   if (!connected || !tana.related || !isRealId(docId)) return;
+  const have = relatedBy.get(docId), upgrade = !lite && !!have && have.lite === true;
   const stale = relatedStale.delete(docId);
-  if (relatedBy.has(docId) && !stale) return;
+  if (relatedBy.has(docId) && !stale && !upgrade) return; // null: a read is out, and the render its answer asks for comes back here
+  const whole = !lite || (!!have && !have.lite); // a page read whole stays whole
   if (!relatedBy.has(docId)) relatedBy.set(docId, null); // nothing to show yet: this is the first read
   const since = releases;
-  tana.related(docId).then((data) => {
+  tana.related(docId, whole ? undefined : { lite: true }).then((data) => {
     relatedBy.set(docId, data);
     // it names a document main let go of while it was read: shown, and read again at the next draw (#406 review)
     if (releasedDocs.size && releasedSince(since, [docId, data && data.pinHub, ...railGroups(data).flatMap(([, rows]) => (rows || []).map((row) => row && row.id))])) relatedStale.add(docId);
@@ -85,7 +89,7 @@ function loadRelated(docId) {
 // sidebar this page has read: one it never read is read fresh when it is drawn (loadRelated), and every document a
 // view subscribes announces its first bootstrap as a change, which read the sidebars of ~94 documents per page at boot.
 // always: read it even so, for the page on screen whose first read may have failed (main's push, below).
-function refreshRelated(docId, always) { if (docId && (always || relatedBy.has(docId))) { relatedStale.add(docId); loadRelated(docId); } }
+function refreshRelated(docId, always) { if (docId && (always || relatedBy.has(docId))) { relatedStale.add(docId); loadRelated(docId, !always && relatedBy.get(docId)?.lite === true); } } // read again as it was read: a list row's fields stay fields
 // Kept live (main/related.js watchRelated): main follows the page the sidebar is drawn for, and says so when a mention
 // or a pin of it is added or taken away anywhere; the sidebar is then read again the way a pin re-reads it. Asked again
 // at the next render until main has taken it: before the connection there is nothing to watch on.

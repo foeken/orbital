@@ -2860,6 +2860,25 @@ async function runRailPinCheck() {
   await refresh.pin();
   assert.deepEqual(plain(refresh.state()), { calls: [['event', 'chosen']], keys: ['event', 'doc'], kept: true, renders: 1 },
     'pinning re-reads the hub and the open document without taking their sidebars down');
+  {
+    // A row opened in a list reads its fields only; the page on screen reads the whole sidebar over it; a change reads
+    // it again as it was read (renderer/rail.js loadRelated, #579)
+    const lite = vm.runInNewContext(`
+      let releases = 0; const releasedDocs = new Map(), releasedSince = () => false;
+      const relatedBy = new Map(), asked = [], relatedStale = new Set(), connected = true, isRealId = () => true, renderSoon = () => {};
+      const queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false, zoom = null, items = new Map();
+      const tana = { related: async (id, opts) => { asked.push(opts && opts.lite ? 'lite' : 'whole'); return opts && opts.lite ? { lite: true, fields: [] } : { fields: [], pinned: [] }; } };
+      ${functionSource('loadRelated')}
+      ${functionSource('refreshRelated')}
+      ({ loadRelated, refreshRelated, asked, kind: (id) => (relatedBy.get(id) || {}).lite ? 'lite' : 'whole' });
+    `);
+    const settle = () => new Promise((resolve) => setTimeout(resolve));
+    lite.loadRelated('row', true); await settle(); lite.loadRelated('row', true); await settle();
+    lite.refreshRelated('row'); await settle();
+    assert.deepEqual(plain(lite.asked), ['lite', 'lite'], 'a list row reads its fields once, and a change reads them again, no more');
+    lite.loadRelated('row'); await settle(); lite.loadRelated('row', true); await settle();
+    assert.deepEqual([plain(lite.asked), lite.kind('row')], [['lite', 'lite', 'whole'], 'whole'], 'the page on screen reads the whole sidebar over it, and it stays whole');
+  }
   assert.match(functionSource('closePalette'), /pinCtx = null/, 'closing the shared palette clears pin context');
 }
 

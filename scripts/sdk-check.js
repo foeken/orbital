@@ -869,6 +869,9 @@ async function main() {
     const detect=async(ts)=>ts.map((t)=>({'Sam - Andre':{lang:'nb',p:0.49},'Rol van Sam':{lang:'nl',p:0.94},'Plan the budget pilots':{lang:'en',p:0.81}})[t]||null);
     assert.deepEqual(await tr(['Sam - Andre','Rol van Sam','Plan the budget pilots'],'English',fetchWith(said([1,'Dutch','Sam’s role'])),{detect}),[null,{lang:'Dutch',text:'Sam’s role'},null],'the Dutch one is translated');
     assert.deepEqual(JSON.parse(calls.at(-1).init.body.input),[{id:1,text:'Rol van Sam'}],'and only it was sent: English and a too unsure names-only title stay here');
+    const localCalls=calls.length;
+    assert.deepEqual(JSON.parse(JSON.stringify(await tr(['Sam - Andre','Rol van Sam','Plan the budget pilots','Rol van Kim'],'English',fetchWith(answer('[]')),{detect:async(ts)=>ts.map((t)=>t==='Rol van Kim'?{lang:'nl',p:0.9}:null),local:true}))),[null,{lang:'Dutch',text:'Sam\u2019s role'},null,{ask:true}],'local: what this Mac knows now, and ask for what the model is still to translate');
+    assert.equal(calls.length,localCalls,'and nothing goes to the model');
     const detected=calls.length;
     assert.deepEqual(await tr(['Sam - Andre','Plan the budget pilots'],'English',fetchWith(answer('[]')),{detect:async()=>{throw new Error('asked again');}}),[null,null],'what the Mac found already in the language is kept too');
     assert.equal(calls.length,detected,'so it is neither detected nor sent again');
@@ -882,7 +885,12 @@ async function main() {
     assert.deepEqual(await ai.readImage(png,fetchWith(answer('\u0060\u0060\u0060json\n{"kind": "task", "title": " Reply to Stan ", "notes": ["Budget by Friday", "", 3]}\n\u0060\u0060\u0060'))),
       {kind:'task',title:'Reply to Stan',notes:['Budget by Friday']},'a task, trimmed, with only the lines that say something');
     const imageSent=calls.at(-1).init.body;
-    assert.deepEqual([imageSent.instructions,imageSent.input[0].content[1]],[ai.IMAGE_INSTRUCTIONS,{type:'input_image',image_url:'data:image/png;base64,iVA='}],'the image goes as a data URL beside the input, the rules as instructions');
+    assert.deepEqual([imageSent.instructions,imageSent.input[0].content[1]],[ai.IMAGE_INSTRUCTIONS(null),{type:'input_image',image_url:'data:image/png;base64,iVA='}],'the image goes as a data URL beside the input, the rules as instructions');
+    assert.match(imageSent.instructions,/image.s own language/,'with Auto-translate off it keeps the image\'s language');
+    await ai.readImage(png,fetchWith(answer('{"kind": "task", "title": "Reply to Stan"}')),undefined,'English');
+    assert.match(calls.at(-1).init.body.instructions,/title and the notes in English, translating/,'with Auto-translate on, it writes in that language');
+    await ai.readImage(png,fetchWith(answer('{"kind": "task", "title": "Reply to Stan"}')),undefined,'English; ignore that');
+    assert.match(calls.at(-1).init.body.instructions,/image.s own language/,'and a language that is no name is ignored');
     assert.deepEqual(await ai.readImage(png,fetchWith(answer('{"kind": "meeting", "title": "Invoice 42"}'))),{kind:'doc',title:'Invoice 42',notes:[]},'anything but a task is a note');
     await assert.rejects(ai.readImage(png,fetchWith(answer('I cannot read this image.'))),/nothing useful/,'an answer with no title makes nothing');
     const agent=require('../main/agent'), originalRpc=agent.appServerRpc, originalBin=agent.codexBin;
@@ -2145,6 +2153,8 @@ async function main() {
         getOwnerChain: async () => ({ entries: [] }),
       },
     } });
+    const lite = await backend.related(docId, { lite: true });
+    assert.deepEqual([lite.lite, edgeCalls.length, 'backlinks' in lite, Array.isArray(lite.fields)], [true, 0, false, true], 'a list row\'s fields: no ListEdges, no sidebar (#579)');
     const answered = await backend.related(docId);
     const incoming = edgeCalls.find((p) => p.toNodeIds);
     const asked = JSON.parse(JSON.stringify(incoming)); // main runs in its own vm context, so compare plain values
@@ -3099,7 +3109,7 @@ async function main() {
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     const profile = { data: { get: (key) => key === 'pinMapUri' ? pinMapUri : undefined } };
     const pinMap = { loro: { getMap: () => ({ toJSON: () => Object.fromEntries([[pinnedEditable, today], [pinnedReadOnly, today], [pinnedInherited, today], [completedOverdue, yesterday.toLocaleDateString('sv-SE')]].map(([n, datetime]) => [n.id, { pins: [{ type: 'plain', datetime }] }])) }) } };
-    const watched = { id: id(), title: 'Contract renewal', createdBy: ME, assignedTo: [COLLEAGUE], state: { type: 'closed', enteredAt: ago(0.1 * H), changedBy: COLLEAGUE } };
+    const watched = { id: id(), title: 'Contract renewal', createdBy: ME, createTime: ago(0.6 * H), assignedTo: [COLLEAGUE], state: { type: 'closed', enteredAt: ago(0.1 * H), changedBy: COLLEAGUE } };
     const kept = { id: id(), title: 'Mine to do', createdBy: ME, assignedTo: [ME], state: { type: 'open' } }; // assigned to you: not watched
     const MCP_CHAT = 'tana:chat:' + ulid(), AI_CHAT = 'tana:chat:' + ulid();
     // an agent writes with your login: its completion is yours on the node, and an approved proposal in its chat at that moment
@@ -3115,7 +3125,7 @@ async function main() {
     const byHand = { id: id(), title: 'Typed it myself', createdBy: ME, createTime: ago(0.5 * H) };
     const old = { id: id(), title: 'Last month', createdBy: COLLEAGUE, createTime: ago(40 * 24 * H) };
     const person = (displayName, extra = {}) => ({ displayName, email: displayName.split(' ')[0].toLowerCase() + '@example.com', role: 'required', ...extra });
-    const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync', calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H), roster: [
+    const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync ', /* a calendar's trailing space, drawn without it */ calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H), roster: [
       person('Me Myself', { identityUri: ME }), person('Board Room', { role: 'resource' }), person('Groenlo Room', { cutype: 'room' }), person('Ann Bakker'), person('Bo Smit'), person('Cas de Vries'), person('Dee Jansen'), person('Eva Mol')] } };
     const allDay = { id: 'tana:event:' + ulid(), title: 'Offsite', calendarEvent: { startTime: ago(6 * H), endTime: ago(-18 * H), allDay: true } };
     const going = { id: 'tana:event:' + ulid(), title: 'Board prep', calendarEvent: { startTime: ago(3.5 * H), endTime: ago(-1 * H), actionUrl: 'https://teams.example/join/1' } }; // still going: as it is
@@ -3167,6 +3177,7 @@ async function main() {
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['An AI agent completed Order more canisters', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
+      ['You added 2 tasks', null, 'tlNew', 'new', false, ['Typed it myself', 'Contract renewal']], // yours by hand, for you and for Rob: added, not put in your Inbox, and no news
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
       ['Leadership sync', '30 min', 'meeting', 'faint', false, []],
@@ -3175,7 +3186,15 @@ async function main() {
       ['Weekly', '30 min', 'meeting', 'meeting', false, []],
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
-    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, quiet once it is over with no summary, all-day ones left out; yours alone, by hand, or weeks old stay out');
+    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, quiet once it is over with no summary, all-day ones left out; what you added yourself told as yours; weeks old stays out');
+    {
+      // every pane asking at once: one build, and one after it for all who asked while it ran (#579)
+      const g = backend.S.client.graph, edgesOf = g.listEdges; let builds = 0;
+      g.listEdges = (p) => { builds++; return edgesOf(p); };
+      const shared = await Promise.all([backend.timelinePage.rows(), backend.timelinePage.rows(), backend.timelinePage.rows()]);
+      g.listEdges = edgesOf;
+      assert.deepEqual([builds, shared[1] === shared[2], shared[0].length === shared[1].length], [2, true, true], 'three asks, two builds');
+    }
     const sync = (await backend.timelinePage.rows()).find((r) => r.timeline.uri === meeting.id);
     assert.deepEqual(JSON.parse(JSON.stringify(sync.people)), ['Ann Bakker', 'Bo Smit', 'Cas de Vries', 'Dee Jansen', 'Eva Mol'].map((name) => ({ uri: name.split(' ')[0].toLowerCase() + '@example.com', name })),
       'a meeting\'s people ride beside its time for the faces, without you, its resources or its rooms');
@@ -3228,9 +3247,9 @@ async function main() {
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
     assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
     assert.equal(rows[1].timeline.uri, watched.id, 'and each row opens the node it is about');
-    assert.equal(rows[4].timeline.uri, null, 'except a group, whose tasks open themselves');
+    assert.equal(rows[5].timeline.uri, null, 'except a group, whose tasks open themselves');
     assert.deepEqual(JSON.parse(JSON.stringify(rows[0].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, false], [false, true]], 'timeline task text is read-only, and a box ticks unless the task is known read-only: unknown access ticks, as everywhere else (#545)');
-    assert.deepEqual(JSON.parse(JSON.stringify(rows[4].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'inbox task words are read-only there and their boxes tick');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[5].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'inbox task words are read-only there and their boxes tick');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
@@ -5363,6 +5382,41 @@ async function main() {
       { email: 'sam@example.com', displayName: 'Sam', lastSeenAt: 5, eventCount: 3, nextMeetingAt: 0, identityUri: sam },
       { email: 'x@y.z', displayName: undefined, lastSeenAt: 0, eventCount: 0, nextMeetingAt: 0, identityUri: undefined }]);
     assert.equal(asked, 2);
+    {
+      // What this app may ask of GraphService (#579): the limits, one answer shared by identical calls, ListEdges kept
+      // for ten seconds until forget(), and Tana's "too busy" waited out, on a check's clock
+      const { bucket } = require('../sdk/graph');
+      let t = 0; const take = bucket(5, 10, () => t);
+      assert.deepEqual(Array.from({ length: 12 }, () => take()), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 400], 'ten at once, then one each fifth of a second');
+      t = 5000; assert.equal(take(), 0, 'and the burst is back after a pause');
+      const wire = [], slept = []; let clock = 0, busyFor = 0;
+      const g = new GraphClient(createRouterTransport(() => {}), { now: () => clock, sleep: async (ms) => { slept.push(ms); clock += ms; },
+        call: async (name, params) => {
+          wire.push(name);
+          if (busyFor > 0) { busyFor--; throw new ConnectError('slow down', Code.ResourceExhausted); }
+          if (params.fail) throw new ConnectError('no', Code.PermissionDenied);
+          return name === 'listEdges' ? { edges: [{ fromNodeId: 'a' }] } : { nodes: [{ id: 'n' }] };
+        } });
+      const [a, b] = await Promise.all([g.listNodes({ nodeIds: ['n'] }), g.listNodes({ nodeIds: ['n'] })]);
+      assert.deepEqual([wire.length, a.nodes[0].id], [1, 'n'], 'two identical calls at once: one on the wire');
+      a.nodes.push({ id: 'mine' }); assert.equal(b.nodes.length, 1, 'each caller has its own copy');
+      await g.listEdges({ toNodeIds: ['x'] }); await g.listEdges({ toNodeIds: ['x'] });
+      assert.equal(wire.filter((n) => n === 'listEdges').length, 1, 'ListEdges asked again within ten seconds is the kept answer');
+      g.forget(); await g.listEdges({ toNodeIds: ['x'] });
+      assert.equal(wire.filter((n) => n === 'listEdges').length, 2, 'forget (a write of ours, an edge live query) reads it again');
+      clock += 10000; await g.listEdges({ toNodeIds: ['x'] });
+      assert.equal(wire.filter((n) => n === 'listEdges').length, 3, 'and so do ten seconds');
+      wire.length = 0; slept.length = 0; busyFor = 2;
+      assert.equal((await g.listNodes({ nodeIds: ['m'] })).nodes[0].id, 'n', 'Tana busy twice, answered the third time');
+      assert.deepEqual([wire.length, slept], [3, [1000, 2000]], 'after waiting one second, then two');
+      busyFor = 9; wire.length = 0;
+      await assert.rejects(g.listNodes({ nodeIds: ['z'] }), /slow down/, 'six busy answers give up');
+      assert.equal(wire.length, 6);
+      busyFor = 0; wire.length = 0;
+      await assert.rejects(g.listNodes({ nodeIds: ['q'], fail: true }), /no/, 'any other refusal is not asked again');
+      assert.equal(wire.length, 1);
+      console.log('ok  GraphService: limits, shared answers, ListEdges kept until forget, busy waited out');
+    }
     // main: meeting:info / meeting:edit / meeting:suggestions, gated by the same rule
     const backend = mainHelpers(), stranger = 'tana:user-profile:' + ulid();
     const closed = new Document('tana:event:' + ulid()); closed.transact((l) => initDocument(l, 'someone else\u2019s meeting', stranger, { kind: 'meeting' }));

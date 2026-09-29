@@ -2,7 +2,7 @@
 const db = require('../db');
 const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
-const { createTanaClient } = require('../sdk');
+const { createTanaClient, takeCalls } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
@@ -242,13 +242,22 @@ function stop() {
   if (!S.client) return;
   const previous = S.client; S.client = null; subscribed.clear(); undoStack.length = 0; redoStack.length = 0; previous.sync.removeAllListeners(); previous.close().catch(() => {});
 }
+// Once a minute, what this app asked of Tana in it, by method, appended to tana-calls.log in the app's data folder:
+// the evidence for what Orbital costs Tana's servers (#579). A quiet minute writes nothing.
+let callLog = false;
+function logCalls() {
+  const counts = takeCalls(), names = Object.keys(counts).sort();
+  if (names.length && S.userData) require('node:fs').appendFile(path.join(S.userData, 'tana-calls.log'), new Date().toISOString() + ' ' + names.map((n) => n + '=' + counts[n]).join(' ') + '\n', () => {});
+  setTimeout(logCalls, 60000).unref?.();
+}
 async function start() {
   let read;
   settingsRead = new Promise((resolve) => { read = resolve; });
   stop();
+  if (!callLog) { callLog = true; setTimeout(logCalls, 60000); }
   S.me = await S.session.info();
   const peer = peerIdentity({ file: path.join(S.userData, 'peer.json'), userExternalId: S.me.userExternalId });
-  S.client = createTanaClient({ getAccessToken: (o) => S.session.getAccessToken(o), orgId: S.me.orgId, ...peer, logger: console });
+  S.client = createTanaClient({ getAccessToken: (o) => S.session.getAccessToken(o), orgId: S.me.orgId, ...peer, logger: console, userAgent: 'Orbital/' + require('../package.json').version });
   listFilter(S.client);
   S.client.sync.on('connected', () => setStatus({ connected: true, error: null }));
   S.client.sync.on('disconnected', () => setStatus({ connected: false }));

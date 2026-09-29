@@ -938,7 +938,7 @@ function nodeEl(node, docId, parent) {
       fields.dataset.docId = childHost.docId;
       renderFields(childHost, true, fields);
       wrap.append(fields);
-      loadRelated(childHost.docId);
+      loadRelated(childHost.docId, true); // its fields: the sidebar's pins and backlinks are the page's, not a row's
     }
     const c = childrenOf(childHost);
     if (c == null) { ensureLoaded(childHost); wrap.classList.add('loading'); wrap.append('Loading…'); }
