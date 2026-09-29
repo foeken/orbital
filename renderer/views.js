@@ -84,7 +84,11 @@ const arranged = (k, what) => (VIEW_ARRANGEMENT[k] || {})[what];
 // Keyed by the page, not the view: a saved search carries its own sort and grouping, stored in the document beside
 // its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
 // A search's key is its document id, so the per-view defaults below simply do not match it.
-const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return groupList(isFieldKey(g)).some(([id]) => id === g) ? g : 'none'; };
+// A field chosen by name on a mixed list stays chosen while no row offers it (an empty search, definitions still
+// being read): its rows are simply all under No value, and a saved search is not changed behind your back.
+const keptByName = (g) => String(g).startsWith(FIELD_BY_NAME) && !fieldType() && listPage();
+const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'), offered = groupList(isFieldKey(g)).some(([id]) => id === g); return offered || keptByName(g) ? g : 'none'; };
+const groupLabel = () => { const g = groupBy(); return (groupList().find(([id]) => id === g) || [g, String(g).slice(FIELD_BY_NAME.length)])[1]; };
 // On a type page the menu speaks the type: its options, link and member fields join it (sections per value, an
 // options field's in the order of its choices), Type goes (every row is one), and so do the task-only choices unless
 // the rows are tasks. Everywhere else it is GROUPS as it was.
@@ -98,7 +102,7 @@ const isFieldKey = (key) => String(key).includes('?attribute=');
 // value, a doc or a row of a type without the field, is under No value. The definitions are read only once they are
 // wanted (load: the Group menu is open or a field grouping is chosen), so a mixed list alone reads nothing.
 const FIELD_BY_NAME = 'field?attribute='; // a field on a mixed list, keyed by its name (isFieldKey still holds)
-const namedFieldKeys = new Map(); // FIELD_BY_NAME + title -> Map(type uri -> the typed key), as last listed
+const namedFieldKeys = new Map(); // FIELD_BY_NAME + title -> Map(type uri -> its typed keys of that name), as last listed
 const rowTypes = (n) => (n.tags || []).map((t) => t && t.uri).filter(isTypeId);
 function pageFieldDefs(load = false) {
   const t = fieldType();
@@ -111,7 +115,7 @@ function pageFieldDefs(load = false) {
       const title = d.title || 'Untitled field', key = FIELD_BY_NAME + title;
       if (!named.has(key)) named.set(key, { title, type: d.type, group: key, keys: new Map(), options: [] });
       const f = named.get(key);
-      f.keys.set(uri, uri + '?attribute=' + d.key);
+      f.keys.set(uri, [...(f.keys.get(uri) || []), uri + '?attribute=' + d.key]); // a type may name two fields alike
       for (const o of d.options || []) if (!f.options.some((x) => x.label === o.label)) f.options.push(o);
     }
   }
@@ -191,7 +195,7 @@ function groupKey(n, by) {
   if (by === 'responsibility') return responsibilityOf(n);
   // ponytail: a field with several values is filed under the first, like the assignee grouping above
   // a name over several types reads the key of the type the row is now; a value left from a former type is not its
-  if (isFieldKey(by)) { const named = namedFieldKeys.get(by), keys = named ? rowTypes(n).map((t) => named.get(t)) : [by]; return keys.map((k) => ((n.fields || {})[k] || [])[0]).find(Boolean) || NO_FIELD; }
+  if (isFieldKey(by)) { const named = namedFieldKeys.get(by), keys = named ? rowTypes(n).flatMap((t) => named.get(t) || []) : [by]; return keys.map((k) => ((n.fields || {})[k] || [])[0]).find(Boolean) || NO_FIELD; }
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,

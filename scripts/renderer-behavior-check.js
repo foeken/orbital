@@ -2942,6 +2942,23 @@ async function runRailPinCheck() {
     lite.loadRelated('row'); await settle(); lite.loadRelated('row', true); await settle();
     assert.deepEqual([plain(lite.asked), lite.kind('row')], [['lite', 'lite', 'whole'], 'whole'], 'the page on screen reads the whole sidebar over it, and it stays whole');
   }
+  {
+    // A type's definitions are Group choices on a mixed list: ⌘K, open when they arrive, drops its folded choices and redraws
+    const late = vm.runInNewContext(`
+      let releases = 0, redrawn = 0; const releasedDocs = new Map(), releasedSince = () => false;
+      const relatedBy = new Map(), relatedStale = new Set(), connected = true, isRealId = () => true, renderSoon = () => {};
+      const queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false, zoom = null, items = new Map();
+      const palette = { hidden: false }, subCache = new Map([['Group by', []]]), renderPalette = () => { redrawn++; };
+      const tana = { related: async (id) => (id === 'tana:type:goal' ? { lite: true, definitions: [{ key: 'prio', type: 'options' }] } : { lite: true, fields: [] }) };
+      ${functionSource('loadRelated')}
+      ({ loadRelated, state: () => ({ cached: subCache.size, redrawn }) });
+    `);
+    const settle = () => new Promise((resolve) => setTimeout(resolve));
+    late.loadRelated('row', true); await settle();
+    assert.deepEqual(plain(late.state()), { cached: 1, redrawn: 0 }, 'a row’s fields leave an open ⌘K alone');
+    late.loadRelated('tana:type:goal', true); await settle();
+    assert.deepEqual(plain(late.state()), { cached: 0, redrawn: 1 }, 'a type’s definitions arriving while ⌘K is open drop its folded choices and redraw it');
+  }
   assert.match(functionSource('closePalette'), /pinCtx = null/, 'closing the shared palette clears pin context');
 }
 
@@ -3133,7 +3150,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     // a mixed list's rows carry field values of their own type (renderer/views.js pageFieldDefs), named by its definitions
     // (Goal has a real choice called No value; Note's Priority is plain text; Stage's type has no values set anywhere)
     const viewOf = () => views.find((s) => s.id === view), relatedBy = new Map([
-      ['tana:type:goal', { definitions: [{ key: 'prio', title: 'Priority', type: 'options', options: [{ label: 'High' }, { label: 'Low' }, { label: 'No value' }] }, { key: 'note', title: 'Note', type: 'plain' }] }],
+      ['tana:type:goal', { definitions: [{ key: 'prio', title: 'Priority', type: 'options', options: [{ label: 'High' }, { label: 'Low' }, { label: 'No value' }] }, { key: 'note', title: 'Note', type: 'plain' }, { key: 'prio2', title: 'Priority', type: 'options', options: [{ label: 'Low' }] }] }],
       ['tana:type:bug', { definitions: [{ key: 'sev', title: 'Priority', type: 'options', options: [{ label: 'Urgent' }, { label: 'High' }] }] }],
       ['tana:type:note', { definitions: [{ key: 'p', title: 'Priority', type: 'plain' }] }],
       ['tana:type:empty', { definitions: [{ key: 'stage', title: 'Stage', type: 'options', options: [{ label: 'Draft' }] }] }]]);
@@ -3168,6 +3185,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 'g2', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio': ['High'] } },
     { id: 'g3', tags: tag('goal'), fields: { 'tana:type:goal?attribute=note': ['x'] } },
     { id: 'g4', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio': ['No value'] } }, // the real choice
+    { id: 'g5', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio2': ['Low'] } }, // Goal's second field called Priority
     { id: 'b1', tags: tag('bug'), fields: { 'tana:type:bug?attribute=sev': ['Urgent'] } },
     { id: 'b2', tags: tag('bug'), fields: { 'tana:type:bug?attribute=sev': ['High'] } },
     { id: 'r1', tags: tag('bug'), fields: { 'tana:type:goal?attribute=prio': ['Low'] } }, // a Goal retyped to Bug keeps its old value
@@ -3182,8 +3200,15 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'the Group menu reads them, and offers the choice fields of the types on the page, one with no values set included');
   assert.deepEqual(plain(api.loaded()), ['tana:type:goal', 'tana:type:bug', 'tana:type:note', 'tana:type:empty'], 'one read per type the rows are');
   assert.deepEqual(plain(api.groupRows(goals, PRIO)).map((g) => [g.id || g.title, g.nodes.map((n) => n.id)]),
-    [['High', ['g2', 'b2']], ['Low', ['g1']], ['No value', ['g4']], ['Urgent', ['b1']], ['\u0000no value', ['g3', 'r1', 'n1', 'e1', 't1', 'd1']]],
-    'sections follow the choices type by type, one High for both; a choice called No value is its own section, and the missing ones (no value, a value left from a former type, a plain-text Priority, a doc) sit apart');
+    [['High', ['g2', 'b2']], ['Low', ['g1', 'g5']], ['No value', ['g4']], ['Urgent', ['b1']], ['\u0000no value', ['g3', 'r1', 'n1', 'e1', 't1', 'd1']]],
+    'sections follow the choices type by type, one High for both, either of two fields a type names alike; a choice called No value is its own section, and the missing ones (no value, a value left from a former type, a plain-text Priority, a doc) sit apart');
+  // Chosen by name, it stays chosen on a page where no row offers it: all under No value, the pill still naming it.
+  api.set('tasks', PRIO, 'default');
+  api.list([rows[4]]);
+  assert.equal(api.prefs().group, PRIO, 'a grouping by field name is kept while no row on the page has that field');
+  assert.equal(plain(api.pillDefs()).find((d) => d.id === 'group').value, 'Priority', 'and the Group pill still says which');
+  assert.deepEqual(titles([rows[4]], PRIO), [['No value', ['d1']]], 'its rows are under No value');
+  api.set('tasks', 'none', 'default');
   api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],
     'status groups follow the Status menu order; a row without a task state sits in No status');
