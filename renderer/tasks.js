@@ -146,6 +146,7 @@ function iconEl(name, label, tag = 'span') {
 function audienceIcon(summary, node) {
   const label = summary.audience.label + (summary.hiddenFrom ? ' — not visible to ' + summary.hiddenFrom : '');
   const icon = iconEl(summary.audience.icon, label);
+  icon.className += ' audience'; // who can see it: never faint (styles.css, row icons)
   if (summary.hiddenFrom) icon.classList.add('hiddenfrom');
   if (node && canEditNode(node) && isRealId(node.id) && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
   return icon;

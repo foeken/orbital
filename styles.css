@@ -560,9 +560,10 @@ html.links .app { display: none; }
 /* Row icons, one rule: the small glyphs a row carries (its facts' icons: assignee, audience, bell, pin; the Join glyph;
    the meeting link) are faint on the rows you are not on and in full on the one under the pointer or with the caret,
    fading between the two (at once under reduced motion). No background on hover: only the glyph's own colour moves.
-   A warning (assigned to someone who cannot see it) stays in full everywhere: it is there to be seen. */
+   Who can see a row (.audience, its visibility icon) and a warning (assigned to someone who cannot see it) stay in
+   full everywhere: they are there to be seen. */
 .line :is(.ticon, .tl-join, .meeting-link) { opacity: .45; transition: opacity var(--dur-base) var(--ease-out), color var(--dur-quick) var(--ease-out); }
-.line:is(:hover, :focus-within) :is(.ticon, .tl-join, .meeting-link), .line .ticon.hiddenfrom { opacity: 1; }
+.line:is(:hover, :focus-within) :is(.ticon, .tl-join, .meeting-link), .line .ticon:is(.audience, .hiddenfrom) { opacity: 1; }
 :is(.tl-join, .meeting-link):hover { color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
 .node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
