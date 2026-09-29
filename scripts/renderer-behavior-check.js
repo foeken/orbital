@@ -141,6 +141,8 @@ const withShims = (src) => {
   if (/\baudienceShown\(/.test(src)) src = (/let zoom\b/.test(src) ? '' : 'globalThis.zoom ??= null;\n') + (/const TIMELINE_PAGE =/.test(src) ? '' : "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n") + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
   if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
+  // the fields a mixed list's rows carry (renderer/views.js pageFieldDefs): a harness that is not about them lists none
+  if (/\bfunction pageFieldDefs\(/.test(src)) src = (/const listPage =/.test(src) ? '' : 'globalThis.listPage ??= () => false;\n') + (/const viewOf =/.test(src) ? '' : 'globalThis.viewOf ??= () => null;\n') + (/\bconst kids =/.test(src) ? '' : 'globalThis.kids ??= new Map();\n') + (/const relatedBy =/.test(src) ? '' : 'globalThis.relatedBy ??= new Map();\n') + (/function loadRelated\(/.test(src) ? '' : 'globalThis.loadRelated ??= () => {};\n') + src;
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
   if (/\bonRowBlank\(/.test(src) && !/const onRowBlank =/.test(src)) src = sourceBetween('const onRowBlank =', '// `texts()`') + '\n' + src;
   // a type's or a saved search's own glyph (renderer/nodes.js iconOf): a harness that draws neither only needs the names
@@ -3128,10 +3130,12 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const collapsedGroups = new Set(pref('collapsedGroups', []));
     const isTask = (n) => n.icon === 'task';
     const visibleTags = (n) => { const tags = n.tags || []; return isTask(n) && tags.some((t) => t.label !== 'task') ? tags.filter((t) => t.label !== 'task') : tags; };
+    // a mixed list's rows carry field values of their own type (renderer/views.js pageFieldDefs), named by its definitions
+    const viewOf = () => views.find((s) => s.id === view), relatedBy = new Map([['tana:type:goal', { definitions: [{ key: 'prio', title: 'Priority', type: 'options', options: [{ label: 'High' }, { label: 'Low' }] }, { key: 'note', title: 'Note', type: 'plain' }] }]]);
     ${definitions}
     ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
-       RESPONSIBILITY,
+       RESPONSIBILITY, groupList, list: (nodes) => { viewOf().nodes = nodes; },
        dragging: (on) => { taskDragging = on; },
        asked: () => asked,
        meta: (id, m) => taskMetaById.set(id, m),
@@ -3150,6 +3154,19 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 'd1', text: 'echo', icon: 'doc', tags: [{ label: 'doc' }] },
   ];
   const titles = (list, by) => plain(api.groupRows(list, by)).map((g) => [g.title, g.nodes.map((n) => n.id)]);
+  // The Tasks view lists several types: the fields its rows carry are offered, and a row without one is under No value.
+  const PRIO = 'tana:type:goal?attribute=prio', goals = [
+    { id: 'g1', tags: [{ label: 'Goal', uri: 'tana:type:goal' }], fields: { [PRIO]: ['Low'] } },
+    { id: 'g2', tags: [{ label: 'Goal', uri: 'tana:type:goal' }], fields: { [PRIO]: ['High'] } },
+    { id: 'g3', tags: [{ label: 'Goal', uri: 'tana:type:goal' }], fields: { 'tana:type:goal?attribute=note': ['x'] } },
+    rows[0],
+  ];
+  api.list(goals);
+  assert.deepEqual(plain(api.groupList()).filter(([id]) => id.includes('?attribute=')), [[PRIO, 'Priority']],
+    'a list of several types offers the choice fields its rows carry, by name');
+  assert.deepEqual(titles(goals, PRIO), [['High', ['g2']], ['Low', ['g1']], ['No value', ['g3', 't1']]],
+    'sections follow the field’s choices, and a row without a value, or of another type, is under No value');
+  api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],
     'status groups follow the Status menu order; a row without a task state sits in No status');
   assert.deepEqual(titles(rows.filter((r) => r.stateType !== 'proposed'), 'status').map(([title]) => title), ['In Progress', 'Completed', 'Later', 'No status'],

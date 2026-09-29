@@ -22,7 +22,7 @@ const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.fil
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
 // ---- group by: plain headings over the rows the view already loaded, no extra query ----
 const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['responsibility', 'Responsibility'], ['updated', 'Updated'], ['type', 'Type']];
-const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type' }; // responsibility has none: see below
+const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type', field: 'No value' }; // responsibility has none: see below
 // Group by Responsibility: what a row is to you, from who made it (the graph's createdBy, on the row already) and who
 // it is assigned to. Made by you and yours to do, made by you and handed to someone else, made by you and waiting for
 // somebody to take it, and somebody else's task that landed on you. It is a view of your own work, so a row you are
@@ -90,13 +90,24 @@ const noTasks = () => onTypePage() && !(kids.get(zoom.docId) || []).some(isTask)
 const TASK_ONLY = ['status', 'assignee'];
 const isFieldKey = (key) => String(key).includes('?attribute=');
 // A saved search or the Library narrowed to one workspace type offers that type's fields the same way (fieldType).
+// Every other list (the Tasks view, the Library, a search over several types) offers the fields of the types its
+// rows carry values for; a row of another type, or without a value, is under No value. Two types name theirs.
+function pageFieldDefs() {
+  const t = fieldType();
+  if (t) return typeDefs();
+  if (!listPage()) return [];
+  const types = new Map(); // type uri -> its title, from the row's own chip
+  for (const n of pageDocs()) for (const k of Object.keys(n.fields || {})) {
+    const uri = k.split('?attribute=')[0];
+    if (!types.has(uri)) types.set(uri, ((n.tags || []).find((x) => x && x.uri === uri) || {}).label || '');
+  }
+  return [...types].flatMap(([uri, label]) => { loadRelated(uri); return ((relatedBy.get(uri) || {}).definitions || []).map((d) => ({ ...d, typeUri: uri, typeLabel: types.size > 1 ? label : '' })); });
+}
 const groupList = () => {
-  if (!fieldType()) return GROUPS;
-  const byField = typeDefs().filter((d) => ['options', 'link', 'member'].includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field']);
+  const byField = pageFieldDefs().filter((d) => ['options', 'link', 'member'].includes(d.type)).map((d) => [fieldKey(d), (d.title || 'Untitled field') + (d.typeLabel ? ' (' + d.typeLabel + ')' : '')]);
   return onTypePage() ? [...GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))), ...byField] : [...GROUPS, ...byField];
 };
-const fieldOrder = (key) => ((typeDefs().find((d) => fieldKey(d) === key) || {}).options || []).map((o) => o.label);
-const fieldFallback = (key) => 'No ' + ((groupList().find(([k]) => k === key) || [])[1] || 'value');
+const fieldOrder = (key) => ((pageFieldDefs().find((d) => fieldKey(d) === key) || {}).options || []).map((o) => o.label);
 // Responsibility is about your tasks, and leaves out every row that is not yours: with no tasks in the filter (only
 // Risk picked in the Type pill, #139) it would hide the other people's risks, so such a list is not sectioned and the
 // Group menu does not offer it. The choice is kept: ticking Tasks again brings the sections back.
@@ -136,7 +147,8 @@ function needsCleanup(list) {
 // The rows the page in front of you shows before sorting and grouping, as renderOutline lists them (the text filter
 // applied): a view's own rows, or the ones a saved search's query returned. Clean up is about the list on screen, so
 // on a search page this must not answer with the view waiting behind it.
-const shownDocs = () => { const docs = (onSearchPage() || onTypePage() ? kids.get(zoom.docId) : (viewOf() || {}).nodes) || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
+const pageDocs = () => (onSearchPage() || onTypePage() ? kids.get(zoom.docId) : (viewOf() || {}).nodes) || [];
+const shownDocs = () => { const docs = pageDocs(), q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
 // Forced, like setDisplay: choosing an arrangement is an explicit action whose whole point is to redraw, so it must
 // not be deferred because a caret happens to sit in an editable title — which on a saved search page it often does,
 // since the title is renameable and there is no draft row to take the focus.
@@ -161,7 +173,7 @@ function groupKey(n, by) {
   // The same lazily read metadata grouping by assignee uses; null means the row has no section here and is left out.
   if (by === 'responsibility') return responsibilityOf(n);
   // ponytail: a field with several values is filed under the first, like the assignee grouping above
-  if (isFieldKey(by)) return ((n.fields || {})[by] || [])[0] || fieldFallback(by);
+  if (isFieldKey(by)) return ((n.fields || {})[by] || [])[0] || FALLBACK.field;
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
@@ -174,7 +186,7 @@ function groupRows(list, by) {
   // grouped page takes its flat list from the sections, it leaves the keyboard order too.
   for (const n of list) { const k = groupKey(n, by); if (!k) continue; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
   const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : by === 'responsibility' ? RESPONSIBILITY : isFieldKey(by) ? fieldOrder(by) : []; // Updated: newest first
-  const last = isFieldKey(by) ? fieldFallback(by) : FALLBACK[by];
+  const last = isFieldKey(by) ? FALLBACK.field : FALLBACK[by];
   const rank = (t) => (t === last ? 2 : fixed.includes(t) ? 0 : 1);
   return [...buckets.keys()]
     .sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? fixed.indexOf(a) - fixed.indexOf(b) : a.localeCompare(b)))
@@ -297,7 +309,7 @@ const fieldType = () => {
   return t && t.length === 1 && isTypeId(t[0]) && listPage() ? t[0] : null;
 };
 const typeDefs = () => { const t = fieldType(); if (t) loadRelated(t, true); return (t && (relatedBy.get(t) || {}).definitions) || []; }; // a type's definitions come with the lite read
-const fieldKey = (def) => fieldType() + '?attribute=' + def.key;
+const fieldKey = (def) => (def.typeUri || fieldType()) + '?attribute=' + def.key;
 const PILL_FIELDS = ['options', 'link', 'member', 'date'];
 const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
 const displayKeys = () => {
