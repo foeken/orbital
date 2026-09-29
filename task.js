@@ -12,7 +12,7 @@ if (new URLSearchParams(location.search).get('theme') === 'dark') document.docum
 const taskCard = document.getElementById('task'), taskField = document.getElementById('taskTitle');
 const taskList = document.getElementById('taskTypes'), taskError = document.getElementById('taskError'), taskPicks = document.getElementById('taskPicks');
 const TASK_GLYPHS = window.ICONS || {}; // icons.js: our own markup
-let taskTypes = [{ uri: null, title: 'Task' }], taskAt = 0, taskBusy = false;
+let taskTypes = [{ uri: null, title: 'Task' }], taskAt = 0, taskBusy = false, clipImage = false; // clipImage: the clipboard holds an image (main.js clipboard:hasImage)
 let taskMode = 'title', taskTitle = '', people = [], peopleAt = 0, assignee = null; // null: you, the creator
 const closeTask = (result = {}) => { if (taskApi && taskApi.closeOverlay) taskApi.closeOverlay(result); };
 const errorText = (e) => String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
@@ -46,8 +46,11 @@ function draw() {
     taskList.replaceChildren(group('Assign to'), ...list.map((p, i) => rowEl('member', p.me ? p.title + ' (me)' : p.title, i === peopleAt, null, () => { peopleAt = i; pickPerson(); })));
     return;
   }
-  taskList.hidden = taskTypes.length < 2; // plain Task alone is no choice
-  taskList.replaceChildren(group('Type'), ...taskTypes.map((type, i) => rowEl('task', type.title, i === taskAt, type.hue, () => { taskAt = i; createTask(); })));
+  // an image on the clipboard: its row takes ↩ while no title is typed (the page that opened this processes it, as Cmd+K's row does)
+  const image = clipImage && !taskField.value.trim();
+  taskList.hidden = taskTypes.length < 2 && !clipImage; // plain Task alone is no choice
+  taskList.replaceChildren(...(taskTypes.length > 1 ? [group('Type'), ...taskTypes.map((type, i) => rowEl('task', type.title, i === taskAt && !image, type.hue, () => { taskAt = i; createTask(); }))] : []),
+    ...(clipImage ? [group('Clipboard'), rowEl('imageSparkle', 'Process image from clipboard', image, null, () => closeTask({ image: true }))] : []));
 }
 // "Assign to…": the field filters the members, and the title waits to come back
 function toPeople() {
@@ -89,7 +92,7 @@ taskField.addEventListener('keydown', (e) => {
   if (mod && e.key === 'k') closeTask({ palette: true });
   else if (e.key === 'Escape') { if (people_) toTitle(); else closeTask(); }
   else if (e.key === 'Tab') { if (people_) toTitle(); else toPeople(); }
-  else if (e.key === 'Enter') { if (people_) pickPerson(); else createTask(); }
+  else if (e.key === 'Enter') { if (people_) pickPerson(); else if (clipImage && !taskField.value.trim()) closeTask({ image: true }); else createTask(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && size > 1) {
     const step = e.key === 'ArrowDown' ? 1 : size - 1;
     if (people_) peopleAt = (peopleAt + step) % size; else taskAt = (taskAt + step) % size;
@@ -98,11 +101,12 @@ taskField.addEventListener('keydown', (e) => {
   else return;
   e.preventDefault();
 });
-taskField.addEventListener('input', () => { if (taskMode === 'people') { peopleAt = 0; draw(); } });
+taskField.addEventListener('input', () => { if (taskMode === 'people') peopleAt = 0; draw(); }); // in the title: typing moves ↩ from the image row to the type
 taskPicks.onmousedown = (e) => e.preventDefault();
 taskPicks.onclick = toPeople;
 taskCard.addEventListener('mousedown', (e) => { if (e.target === taskCard) closeTask(); }); // the scrim, as with the palette
 if (taskApi && taskApi.taskTypes) taskApi.taskTypes().then((list) => { taskTypes = [taskTypes[0], ...(Array.isArray(list) ? list : [])]; draw(); }, () => {}); // no types: plain Task, no list
+if (taskApi && taskApi.clipboardHasImage) taskApi.clipboardHasImage().then((has) => { clipImage = has === true; draw(); }, () => {});
 // you first, then everyone else by name (main/rows.js members sorts them)
 if (taskApi && taskApi.members) taskApi.members().then((list) => { people = (Array.isArray(list) ? list : []).filter((p) => p && p.id).sort((a, b) => (b.me ? 1 : 0) - (a.me ? 1 : 0)); if (taskMode === 'people') draw(); }, () => {});
 draw();

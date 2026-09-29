@@ -38,7 +38,8 @@ function mainHelpers(childProcess) {
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
   const electron = { app: {}, BrowserWindow: function () {}, WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
-    shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } } };
+    shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } },
+    clipboard: { items: [], read: async () => electron.clipboard.items } }; // items: what a check puts on it, as clipboard.read() hands them over
   const context = vm.createContext({
     Buffer, console, URL, // URL is a global in Electron's main process
     setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: () => {}, // no refresh/network timers in offline main helpers
@@ -6413,6 +6414,14 @@ async function main() {
     assert.equal(await backend.undo(), d.id);
     assert.equal(outline.readTable(d, 't0000000').rowCount, 2, 'which undo takes away');
     console.log('ok  tables: rows x cells, spans and widths, cell text written into the first paragraph, rows and columns added, moved and deleted, images and carets in cells');
+  }
+  {
+    // Process image from clipboard: Chromium's image/png, or macOS's own PNG type, all a copied image file offers (main.js clipboardPng)
+    const backend = mainHelpers(), has = async (...types) => { backend.electron.clipboard.items = [{ types, getType: async () => new Blob([]) }]; return backend.handlers.get('clipboard:hasImage')(); };
+    assert.equal(await has('image/png'), true, 'a copied bitmap');
+    assert.equal(await has('text/uri-list', 'electron application/osclipboard;format="Apple PNG pasteboard type"'), true, 'a copied image file (Finder, CleanShot): no image/png, the PNG under macOS\'s own type');
+    assert.equal(await has('text/plain'), false, 'no image, no row');
+    console.log('ok  clipboard image: a copied bitmap or a copied image file');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

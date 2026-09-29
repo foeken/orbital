@@ -174,6 +174,7 @@ const withShims = (src) => {
   if (/\bpromptEditor\b/.test(src) && !/function promptEditor\(/.test(src)) src = 'globalThis.promptEditor ??= () => {};\n' + src;
   // Opening or closing a page lays the page over both halves of a split (issue #409); runCoverCheck slices the real one.
   if (/\bcoverWindow\(/.test(src) && !/function coverWindow\(/.test(src)) src = 'globalThis.coverWindow ??= () => {};\n' + src;
+  if (/\banchorPalette\(/.test(src) && !/function anchorPalette\(/.test(src)) src = 'globalThis.anchorPalette ??= () => {};\n' + src;
   if (/\brefreshChatGPTStatus\(/.test(src) && !/function refreshChatGPTStatus\(/.test(src)) src = 'globalThis.refreshChatGPTStatus ??= () => {};\n' + src;
   // Anything that asks the backend checks the connection first: a launch draws the page it is reopening before the
   // sync client exists (renderer/edit.js). A slice that is not about that gets a connected app.

@@ -546,7 +546,7 @@ html.links .app { display: none; }
    meeting's gold, a type's hue — so the page stays monochrome */
 .node.tl > .children .bullet.icon svg, .node.tl > .children .bullet.icon:hover svg { color: #8e9297; }
 /* Join (renderer/timeline.js): the Tana glyph after a meeting's title, in the page's grey until it is pointed at */
-.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 4px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -3px; cursor: pointer; }
+.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 0; padding: 0; /* the glyph sits 4px from the title: the button's own room around it */ border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -3px; cursor: pointer; }
 .tl-join svg { width: 16px; height: 16px; }
 .tl-join:hover { background: #ececec; color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
@@ -581,7 +581,7 @@ html.links .app { display: none; }
 .chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
 .chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 13px; background: var(--chat-mine); color: var(--chat-mine-text); }
 .bubble > * + * { margin-top: 8px; }
-.translated-line { display: flex; align-items: center; gap: 6px; margin: 2px 0 10px; font-size: 14px; color: var(--muted); } /* a page shown in English (renderer/translate.js) */
+.translated-line { display: flex; align-items: center; gap: 6px; margin: 8px 0 10px; font-size: 14px; color: var(--muted); } /* a page shown in English (renderer/translate.js) */
 .translated-line[hidden] { display: none; }
 .translated-line svg, .subtext .translated svg { width: 13px; height: 13px; flex: none; }
 .translated-line button { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }

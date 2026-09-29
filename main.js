@@ -530,16 +530,22 @@ ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCa
 // (shell.js) { bytes, filename, mimeType }, or from Cmd+K the clipboard's { clipboard: true } or an image row's { uri }.
 async function imageToProcess(file) {
   if (file?.clipboard) {
-    // Electron 45's clipboard is the async W3C one: Chromium offers any image on it as image/png.
-    const item = (await clipboard.read()).find((i) => i.types.includes('image/png'));
-    if (!item) throw new Error('The clipboard holds no image');
-    return { bytes: Buffer.from(await (await item.getType('image/png')).arrayBuffer()), filename: 'Clipboard image.png', mimeType: 'image/png' };
+    const found = await clipboardPng();
+    if (!found) throw new Error('The clipboard holds no image');
+    return { bytes: Buffer.from(await (await found.item.getType(found.type)).arrayBuffer()), filename: 'Clipboard image.png', mimeType: 'image/png' };
   }
   if (typeof file?.uri !== 'string') return file;
   const [, mimeType, base64] = /^data:([^;,]+);base64,(.*)$/s.exec(await require('./main/images').image(file.uri)) || [];
   return { bytes: Buffer.from(base64 || '', 'base64'), filename: 'image', mimeType };
 }
-ipcMain.handle('clipboard:hasImage', () => clipboard.has('image/png')); // Cmd+K's Process image from clipboard
+// Electron 45's clipboard is the async W3C one. Chromium offers a copied bitmap as image/png, but a copied image file
+// (Finder, CleanShot) only under macOS's own PNG type, next to its file url: has('image/png') said no to those.
+const CLIPBOARD_PNG = ['image/png', 'electron application/osclipboard;format="Apple PNG pasteboard type"'];
+async function clipboardPng() {
+  for (const item of await clipboard.read()) { const type = CLIPBOARD_PNG.find((t) => item.types.includes(t)); if (type) return { item, type }; }
+  return null;
+}
+ipcMain.handle('clipboard:hasImage', async () => !!(await clipboardPng())); // Cmd+K's and Quick Add's Process image from clipboard
 ipcMain.handle('ai:processImage', async (_e, source) => {
   const file = await imageToProcess(source);
   const read = await ai.readImage(file, globalThis.fetch, app.getPath('userData'));
