@@ -314,7 +314,7 @@ Mouse: a click on the bullet zooms into the row, on the chevron toggles it, on t
 Selecting text in a row shows a floating toolbar of marks and block styles (renderer/toolbar.js); the style menu
 greys Text out for a child rather than offering a row that errors. "/" at the start of an empty row opens the "/"
 menu (`slashRows`): the block types with Checklist after the lists (the checkbox ⌘↩ gives, #602), Divider, Table and
-Image (also found by picture, photo, upload), then Create Doc, Task and the rest of what Create new … offers, workspace
+Image (also found by picture, photo, upload), then Doc, Task and the rest of what Create new … offers, workspace
 types under their own heading. Task (`taskFromSlash`, #602) asks the task's name on a page of its own and the row
 becomes a reference to the new task, as Tana's own "/" Task embeds one; Escape goes back to the menu. Choosing one
 of the others opens a page that asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens
