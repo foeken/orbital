@@ -656,9 +656,10 @@ function insertChild(document, id, text) {
 // Rows from parsed markdown (a paste, main/documents.js pasteMarkdown): blocks [{ block, segments, depth?, checked? }].
 // The first continues the row the caret is in, after `before`; the rest follow it as rows of their own, a deeper depth
 // as a child of the row above (beside it where that row cannot own children: a heading, a quote, code, a divider),
-// and `after`, what stood behind the caret, ends the last one. A paragraph is whatever kind a new row there is, so
-// pasted lines in a list stay list rows, though without a checkbox unless `checked` says so; an empty row takes the
-// first block's kind. One transaction, one undo step.
+// and `after`, what stood behind the caret, ends the last one. A paragraph takes the kind of the row pasted into:
+// pasted lines in a list or quote stay list or quote rows (without a checkbox unless `checked` says so), and in
+// prose they are plain text again after a pasted list, where insertAfter would carry the list on. An empty row takes
+// the first block's kind. One transaction, one undo step.
 // Returns the row and offset the caret goes to: the end of what was pasted.
 function insertBlocks(document, id, before, after, blocks) {
   if (!blocks.length || blocks[0].block === 'divider') blocks = [{ block: 'paragraph', segments: [] }, ...blocks];
@@ -673,6 +674,7 @@ function insertBlocks(document, id, before, after, blocks) {
   const plain = (segs) => segs.map((s) => (s.mention ? s.mention.label : s.text)).join('');
   let last = null;
   document.transact(() => {
+    const plainKind = ['bullet', 'numbered', 'quote'].includes(blockType(must(document, id).block)) ? null : 'paragraph';
     const [first, ...rest] = blocks;
     if (!before.length && !after.length) kind(id, first);
     last = { id, segments: [...before, ...first.segments] };
@@ -686,7 +688,7 @@ function insertBlocks(document, id, before, after, blocks) {
       else try { tail = insertChild(document, stack[d - 1], ''); } catch { d -= 1; tail = insertAfter(document, stack[d], ''); }
       stack.length = d; stack.push(tail);
       if (b.block === 'divider') continue;
-      kind(tail, b);
+      kind(tail, b.block === 'paragraph' && plainKind ? { ...b, block: plainKind } : b);
       setText(document, tail, b.segments);
       last = { id: tail, segments: b.segments };
     }

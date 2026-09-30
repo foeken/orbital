@@ -1592,7 +1592,12 @@ async function main() {
     // Only a line that says "[ ]" or "[x]" gets a box, and a blank line separates rows without making one.
     const task=outline.insertAfter(d,row,'');
     await backend.handlers.get('block:pasteMarkdown')(null,DOC,task,[],[],'- [x] task\n\nplain');
-    assert.deepEqual(flat(outline.readOutline(d)).slice(1).map(r=>r.slice(1)),[['bullet',1,[{text:'task'}]],['bullet',null,[{text:'plain'}]]],'a plain line after a ticked item is a row without a box, and the blank line between them makes no row');
+    assert.deepEqual(flat(outline.readOutline(d)).slice(1).map(r=>r.slice(1)),[['bullet',1,[{text:'task'}]],['paragraph',null,[{text:'plain'}]]],'a plain line after a pasted list is plain text again, without a box, and the blank line between them makes no row');
+    await backend.undo();
+    // Pasted into a list row, plain lines stay list rows.
+    outline.setBlockType(d,task,'numbered');
+    await backend.handlers.get('block:pasteMarkdown')(null,DOC,task,[],[],'a\nb');
+    assert.deepEqual(flat(outline.readOutline(d)).slice(1).map(r=>r[1]),['numbered','numbered'],'plain lines pasted into a numbered row are numbered rows');
     await backend.undo(); outline.remove(d,task);
     // Into an empty child row: it takes the first block's kind, and a row nested under a heading, which cannot own
     // children, lands beside it.

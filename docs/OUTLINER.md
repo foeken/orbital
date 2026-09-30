@@ -316,7 +316,9 @@ link (`typedMark`, `markTyped`), and the caret stays just past the marked words,
 one line, a line marker or an inline mark (`looksMarkdown`) goes to main in one call (`api.pasteMarkdown`,
 sdk/content.js `insertBlocks`): a row per line with words (a blank line only separates), headings, bullets and
 numbered items nested by their indentation, "- [ ]" and "- [x]" checkboxes (and no other line gets one), quotes,
-fenced code, dividers, the inline marks, and [label](tana:…) as a mention. "- " and "* " typed at the start of a
+fenced code, dividers, the inline marks, and [label](tana:…) as a mention. Plain lines take the kind of the row pasted
+into: in a list or quote they stay list or quote rows, in prose they are plain text, a plain line after a pasted list
+included. "- " and "* " typed at the start of a
 numbered row make it a bullet, as "1. " makes a bullet numbered. The
 first line continues the row at the caret, what stood after the caret ends the last line, and one undo takes it all
 back. A plain line, a draft row and a code block paste as text.
