@@ -3357,7 +3357,7 @@ async function main() {
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['An AI agent completed Order more canisters', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
-      ['You added 2 tasks', null, 'tlNew', 'new', false, ['Typed it myself', 'Contract renewal']], // yours by hand, for you and for Rob: added, not put in your Inbox, and no news
+      ['You added a task', null, 'tlNew', 'new', false, ['Typed it myself']], // yours by hand: added, not put in your Inbox, and no news; the one for Rob is not yours, so not listed
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
       ['Leadership sync', '30 min', 'meeting', 'faint', false, []],

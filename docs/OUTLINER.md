@@ -1080,9 +1080,10 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
     start once started, with their length and others on the grey line ("45 min · …", four names then an ellipsis);
     all-day and future ones stay out; one over with no summary is drawn quiet (`faint`); the summary is Tana's own on
     the event (`calendarEvent.tagline`/`.summary`), part of the live signature. A live query over your meetings to the
-    end of today (`watchMeetings`) re-reads the page when one is added, gone, renamed or moved. The tasks you add yourself,
-    for you or for someone else, are one such line too, "You added 2 tasks" (no "to your Inbox": a task made by hand is
-    In Progress or someone else's), never marked new. Changes only you made and anything older than the page's days stay out.
+    end of today (`watchMeetings`) re-reads the page when one is added, gone, renamed or moved. The tasks you add yourself
+    for yourself are one such line too, "You added 2 tasks" (no "to your Inbox": a task made by hand is usually In
+    Progress already), never marked new; a task you add for someone else is not listed as added (only tasks assigned to
+    you are), though what they do with it still shows. Changes only you made and anything older than the page's days stay out.
   - A blue dot marks what came after your last visit; opening an entry goes to its node. The page opens on today and
     the two days before, and reads three days further back when its end comes within a screen (an
     IntersectionObserver on "Show three more days", which also works pressed and reads "Loading…"), up to 120 pages

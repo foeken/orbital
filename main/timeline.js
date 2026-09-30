@@ -20,7 +20,8 @@
 // Tana has written a word about it), older ones from summaries that say which state they went to. New Inbox tasks
 // matter less than both, so a run of them from one source on one day is one quiet row with the tasks listed under it
 // ("An AI agent added 3 tasks to your Inbox"), each a task row of its own that opens as one. The tasks you added
-// yourself, for you or for someone else, are one such row too ("You added 2 tasks"), never marked new.
+// yourself for yourself are one such row too ("You added 2 tasks"), never marked new; the ones you added for someone
+// else stay out, since only tasks assigned to you are listed as added (#649).
 const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates, todayNode } = require('./pins');
@@ -186,8 +187,6 @@ async function rows(progress) {
       sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] })]); // newest first: the ones added in the window are among them
     const who = whoOf(names), events = [];
     const nodes = new Map(made.filter((n) => !(n.assignedTo || []).includes(me)).map((n) => [n.id, n]));
-    // the tasks you added for someone else (or no one) in the window, as "You added a task"; yours for yourself come from inbox()
-    for (const n of nodes.values()) if (Date.parse(n.createTime || '') > since) events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor: 'You', icon: 'tlNew', tone: 'new', node: n });
     const chosen = [...notifyWatchedIds()].filter((id) => !nodes.has(id));
     if (chosen.length) for (const n of (await graph.listNodes({ nodeIds: chosen, limit: chosen.length })).nodes) nodes.set(n.id, n);
     for (const id of silenced) nodes.delete(id);
