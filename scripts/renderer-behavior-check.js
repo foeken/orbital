@@ -3239,6 +3239,21 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual([blurred.Low, blurred.High, blurred['\u0000no value']], [true, false, false], 'a section of only sensitive rows blurs its heading; one with a row that is not keeps it');
   assert.equal(api.groupHeadEl({ id: '\u0000no value', title: 'No value', nodes: [goals[0]] }).childNodes.at(-1).dataset.sensitive, undefined, 'No value is the app’s words, never blurred');
   api.set('tasks', 'none', 'default');
+  // #617: the Tasks view lists several types, and the fields of the types on the page get filter pills; two of one
+  // name on different types say which type each is, and a value picked is the typed field's filter
+  const fieldPills = () => api.pillDefs().filter((d) => d.id.startsWith('field:'));
+  assert.deepEqual(plain(fieldPills().map((d) => d.label)), ['Priority (goal)', 'Priority (goal)', 'Priority (bug)', 'Stage'], 'a mixed list gives the choice fields of the types on its page a pill each');
+  fieldPills().find((d) => d.label === 'Priority (bug)').rows().find((r) => r.label === 'Urgent').run();
+  assert.deepEqual(plain(api.savedPatch()), { fields: { 'tana:type:bug?attribute=sev': { textMatches: [{ value: 'Urgent' }] } } }, 'and picking a value filters by that type’s field');
+  // narrowed to Urgent the page holds only bugs, and the pill that narrowed it stays to change or clear it
+  api.list([goals.find((n) => n.id === 'b1')]);
+  assert.deepEqual(plain(fieldPills().map((d) => [d.label, d.value])), [['Priority', 'Urgent']], 'the filtered field keeps its pill while its type is all the page shows');
+  api.stage({ types: ['tasks'], states: ['open'], assignee: 'me', fields: { 'tana:type:empty?attribute=stage': { textMatches: [{ value: 'Draft' }] } } });
+  assert.deepEqual(plain(fieldPills().map((d) => [d.label, d.value])), [['Priority', 'Any'], ['Stage', 'Draft']], 'and a field filtered on a type with no row on the page gets one too');
+  api.stage({ types: ['tana:type:bug', 'tana:type:goal'], states: ['open'], assignee: 'me', fields: { 'tana:type:empty?attribute=stage': { textMatches: [{ value: 'Draft' }] } } });
+  assert.deepEqual(plain(fieldPills().map((d) => d.label)), ['Priority'], 'but not one of a type the Type pill leaves out, which the query drops too');
+  api.stage({ types: ['tasks'], states: ['open'], assignee: 'me' });
+  api.list(goals);
   api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],
     'status groups follow the Status menu order; a row without a task state sits in No status');

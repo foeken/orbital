@@ -4333,12 +4333,19 @@ async function main() {
     assert.deepEqual(searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters, { [STATUS]: { textMatches: [{ value: 'On track', mode: 'MODE_EQUALS' }, { value: 'Unknown', mode: 'MODE_EQUALS' }] } },
       'the pills reach the graph as one field with its labels ORed');
     assert.deepEqual(searchQueryToFilter({ entityTypeUris: [RISK] }, ME).types, [RISK], 'and reads it back into the pill');
-    // The Library and a saved search narrowed to that one type get its field pills too: the view asks for them, a
-    // saved query keeps them both ways, and beside another type (or a kind) they apply to nothing.
+    // The Library and a saved search narrowed to that one type get its field pills too: the view asks for them and a
+    // saved query keeps them both ways. A mixed list (#617) keeps them as well, its pills being the fields of the types
+    // on the page; a list naming workspace types keeps only theirs, so a field of a type it no longer names is dropped.
     assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, ...fielded }, ME).attributeFilters, searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters);
     assert.deepEqual(searchQueryToFilter(filterToSearchQuery(fielded, ME), ME).fields, fielded.fields);
-    assert.equal(viewParams({ ...fielded, types: [RISK, 'tasks'] }, ME).attributeFilters, undefined);
-    assert.equal(filterToSearchQuery({ ...fielded, types: [RISK, 'tana:type:01m1e3nthqj48b8drqb1fmma9e'] }, ME).attributes, undefined);
+    const OTHER_TYPE = 'tana:type:01m1e3nthqj48b8drqb1fmma9e';
+    const GRAPH_STATUS = { [STATUS]: { textMatches: [{ value: 'On track', mode: 'MODE_EQUALS' }, { value: 'Unknown', mode: 'MODE_EQUALS' }] } };
+    assert.deepEqual(viewParams({ ...fielded, types: ['tasks'] }, ME).attributeFilters, GRAPH_STATUS, 'Tasks with a field of a type on the page narrows to it');
+    assert.deepEqual(viewParams({ ...fielded, types: null }, ME).attributeFilters, GRAPH_STATUS, 'and so does the Library of any type');
+    assert.deepEqual(viewParams({ ...fielded, types: [RISK, 'tasks'] }, ME).attributeFilters, GRAPH_STATUS);
+    assert.deepEqual(filterToSearchQuery({ ...fielded, types: [RISK, OTHER_TYPE] }, ME).attributes, fielded.fields, 'two types named: the field of one of them counts');
+    assert.equal(filterToSearchQuery({ ...fielded, types: [OTHER_TYPE] }, ME).attributes, undefined, 'a field of a type the list no longer names does not');
+    assert.deepEqual(searchQueryToFilter(filterToSearchQuery({ ...fielded, types: ['tasks'] }, ME), ME).fields, fielded.fields, 'a saved search over Tasks keeps its field filter both ways');
     // #148: the live query that re-reads an open saved search covers what it lists: kinds, type, state and assignee
     // carried over, text and owners dropped (a live query cannot say them), newest change first.
     assert.deepEqual(liveTrigger(searchQueryParams({ types: ['text'], entityTypeUris: [RISK], stateTypes: ['open'], assignedToViewer: true, textQuery: 'db', ownerUris: ['tana:space:01jspace000000000000000000'] }, ME)),

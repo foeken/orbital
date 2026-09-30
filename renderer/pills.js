@@ -33,18 +33,25 @@ function pillDefs() {
     { label: 'Any time', reset: true, checked: !f.window, run: () => save({ window: null }) },
     ...WHEN.map(([v, l]) => ({ label: l, checked: f.window === v, run: () => save({ window: v }) })),
   ] });
-  // One workspace type (a type's page, or a search or view picking that type alone): its fields get pills.
-  const ft = fieldType();
-  if (ft) {
-    const pills = typeDefs().map((def) => fieldPill(def, f, save)).filter(Boolean);
-    defs.push(...pills);
-    // A filter on a field that no longer gets a pill (retyped, removed, lost its link targets) keeps one to clear it
-    // with, or the page would stay narrowed by something nobody can see. Only once the definitions are in.
-    if ((relatedBy.get(ft) || {}).definitions) for (const key of Object.keys(f.fields || {})) {
-      if (pills.some((p) => fieldKey({ key: p.id.slice(6) }) === key)) continue;
-      const title = (typeDefs().find((d) => fieldKey(d) === key) || {}).title || 'Removed field';
-      defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: fieldGlyph(key), value: 'Filtered', rows: () => [{ label: 'Any', reset: true, checked: false, run: () => putField(f, save, key, null) }] });
-    }
+  // Fields get pills: one workspace type's (a type's page, or a search or view picking that type alone), or on a mixed
+  // list (Tasks, the Library, a search over several types, #617) those of the types on the page and of any it is
+  // filtered by, when the query counts that filter (sdk/query.js typeFields: a list naming workspace types counts only
+  // theirs). Two fields of one name on different types say which type each is.
+  const typeUris = listPage() ? pageTypes() : [], keyOf = (k) => k.split('?attribute=')[0], namedTypes = (f.types || []).filter(isTypeId);
+  for (const uri of Object.keys(f.fields || {}).map(keyOf)) if (listPage() && !typeUris.includes(uri) && (!namedTypes.length || namedTypes.includes(uri))) typeUris.push(uri);
+  const defsOf = (uri) => { loadRelated(uri, true); return (relatedBy.get(uri) || {}).definitions; }; // with the lite read
+  const ofTypes = typeUris.flatMap((uri) => (defsOf(uri) || []).map((d) => ({ ...d, group: uri + '?attribute=' + d.key, typeUri: uri })));
+  const titled = (d) => d.title || 'Untitled field', twice = (d) => ofTypes.filter((x) => PILL_FIELDS.includes(x.type) && titled(x) === titled(d)).length > 1;
+  const typeLabel = (uri) => (pageDocs().flatMap((n) => n.tags || []).find((t) => t && t.uri === uri) || (typeListCache || []).find((t) => t.uri === uri) || {}).label || '…';
+  const pills = ofTypes.map((d) => fieldPill(twice(d) ? { ...d, title: titled(d) + ' (' + typeLabel(d.typeUri) + ')' } : d, f, save)).filter(Boolean);
+  defs.push(...pills);
+  // A filter on a field that no longer gets a pill (retyped, removed, lost its link targets) keeps one to clear it
+  // with, or the page would stay narrowed by something nobody can see. Only once that type's definitions are in.
+  for (const key of Object.keys(f.fields || {})) {
+    const known = typeUris.includes(keyOf(key)) && defsOf(keyOf(key));
+    if (!known || pills.some((p) => p.field === key)) continue;
+    const title = (ofTypes.find((d) => d.group === key) || {}).title || 'Removed field';
+    defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: fieldGlyph(key), value: 'Filtered', rows: () => [{ label: 'Any', reset: true, checked: false, run: () => putField(f, save, key, null) }] });
   }
   if (tasksInFilter(f)) {
     defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
@@ -116,7 +123,7 @@ function fieldPill(def, f, save) {
   const key = fieldKey(def), now = (f.fields || {})[key] || {}, title = def.title || 'Untitled field';
   const put = (value) => putField(f, save, key, value);
   // a link or member field can point at hundreds of nodes, so its menu says it can be searched (menuEl)
-  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: fieldGlyph(key), search: def.type === 'link' || def.type === 'member' };
+  const pill = { id: 'field:' + def.key, field: key, label: title, command: 'Filter by ' + title, icon: fieldGlyph(key), search: def.type === 'link' || def.type === 'member' };
   if (def.type === 'date') {
     const preset = now.date && now.date.preset;
     return { ...pill, value: (DATE_PRESETS.find(([p]) => p === preset) || [])[1] || 'Any', rows: () => [

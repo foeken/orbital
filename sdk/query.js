@@ -136,12 +136,15 @@ function validViewFilter(f) {
       && Object.entries(f.fields).every(([k, v]) => FIELD_KEY.test(k) && !!v && typeof v === 'object' && !Array.isArray(v))));
 }
 const FIELD_KEY = /^tana:type:[0-9a-z]{26}\?attribute=[0-9a-z]+$/;
-// A filter's field values count only while it lists one workspace type alone, the one they belong to: beside another
-// type or a kind they would silently drop every row of those, and no pill would show why.
+// A filter's field values narrow the list to the rows that have them, wherever each field has a pill to show it
+// (renderer/pills.js): a list of one or more workspace types keeps only those types' fields (one of a type it no
+// longer names is stale), and a list of kinds or of anything (Tasks, the Library) keeps any, since its pills are the
+// fields of the types on the page. The graph applies them without a type named (verified live 2026-09-30: Tasks with
+// Project = Orbital, 5 of 397, all Project Task).
 function typeFields(f) {
-  const { kinds, typeUris } = splitTypes(f.types);
-  if (kinds.length || typeUris.length !== 1 || !f.fields) return null;
-  const own = Object.fromEntries(Object.entries(f.fields).filter(([k]) => k.startsWith(typeUris[0] + '?attribute=')));
+  if (!f.fields) return null;
+  const { typeUris } = splitTypes(f.types);
+  const own = Object.fromEntries(Object.entries(f.fields).filter(([k]) => !typeUris.length || typeUris.includes(k.split('?attribute=')[0])));
   return Object.keys(own).length ? own : null;
 }
 
@@ -342,7 +345,8 @@ function searchQueryToFilter(query, me) {
   };
   const stored = q.attributes && typeof q.attributes === 'object' && !Array.isArray(q.attributes) ? q.attributes : {};
   const fields = Object.fromEntries(Object.entries(stored).filter(([k, v]) => FIELD_KEY.test(k) && !!v && typeof v === 'object' && !Array.isArray(v)));
-  if (!kinds.length && typeFields({ types: typed, fields })) f.fields = typeFields({ types: typed, fields });
+  const kept = typeFields({ types: typed, fields });
+  if (kept) f.fields = kept;
   // assignedToViewer and an assignedTo that happens to be the signed-in user mean the same thing to a pill ("You"),
   // so both come back as 'me' — writing it out again as assignedToViewer, which is what the viewer-relative pill means.
   if (q.assignedToViewer === true || (me && assigned.includes(me))) f.assignee = 'me';
