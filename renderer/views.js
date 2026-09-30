@@ -113,7 +113,15 @@ const FIELD_BY_NAME = 'field?attribute='; // a field on a mixed list, keyed by i
 const fieldName = (key) => (String(key).startsWith(FIELD_BY_NAME) ? String(key).slice(FIELD_BY_NAME.length) : null);
 const rowTypes = (n) => (n.tags || []).map((t) => t && t.uri).filter(isTypeId);
 // a type's choice fields of this name (a type may name two alike); every one if no name is given
-const choicesNamed = (uri, name = null) => ((relatedBy.get(uri) || {}).definitions || []).filter((d) => GROUPABLE.includes(d.type) && (name === null || (d.title || 'Untitled field') === name));
+// a type's fields of this name (a type may name two alike), every one if no name is given; `kinds` keeps those types of field
+const fieldsNamed = (uri, name = null, kinds = null) => ((relatedBy.get(uri) || {}).definitions || []).filter((d) => (!kinds || kinds.includes(d.type)) && (name === null || (d.title || 'Untitled field') === name));
+const choicesNamed = (uri, name = null) => fieldsNamed(uri, name, GROUPABLE);
+// A row's values of a field: a typed key is the row's own, one kept by name reads the keys of the types the row is now,
+// so a value left from a former type is not its. `kinds` limits a name to those types of field (Group's choice fields).
+const fieldValuesOf = (n, key, kinds = null) => {
+  const name = fieldName(key), keys = name === null ? [key] : rowTypes(n).flatMap((t) => fieldsNamed(t, name, kinds).map((d) => t + '?attribute=' + d.key));
+  return keys.map((k) => (n.fields || {})[k]).find((v) => v && v.length) || [];
+};
 const pageTypes = () => [...new Set(fieldType() ? [fieldType()] : pageDocs().flatMap(rowTypes))];
 function pageFieldDefs(load = false) {
   const t = fieldType();
@@ -122,9 +130,10 @@ function pageFieldDefs(load = false) {
   const named = new Map();
   for (const uri of pageTypes()) {
     if (load) loadRelated(uri, true); // the definitions come with the lite read
-    for (const d of choicesNamed(uri)) {
+    for (const d of fieldsNamed(uri)) { // every field: Group keeps the choice ones, Sort and Display take them all (#624)
       const title = d.title || 'Untitled field', key = FIELD_BY_NAME + title;
-      if (!named.has(key)) named.set(key, { title, type: d.type, group: key });
+      const had = named.get(key); // one name, two kinds of field: the choice one decides, so Group still offers it
+      if (!had || (!GROUPABLE.includes(had.type) && GROUPABLE.includes(d.type))) named.set(key, { title, type: d.type, group: key });
     }
   }
   return [...named.values()];
@@ -210,7 +219,7 @@ function groupKey(n, by) {
   if (by === 'responsibility') return responsibilityOf(n);
   // ponytail: a field with several values is filed under the first, like the assignee grouping above
   // a field by name reads the keys of the type the row is now; a value left from a former type is not its
-  if (isFieldKey(by)) { const name = fieldName(by), keys = name === null ? [by] : rowTypes(n).flatMap((t) => choicesNamed(t, name).map((d) => t + '?attribute=' + d.key)); return keys.map((k) => ((n.fields || {})[k] || [])[0]).find(Boolean) || NO_FIELD; }
+  if (isFieldKey(by)) return fieldValuesOf(n, by, GROUPABLE)[0] || NO_FIELD;
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
@@ -307,7 +316,8 @@ function showAllTracking(id) { trackingShown.add(collapseKey(id)); render(true);
 const SORTS = [['default', 'Default'], ['status', 'Status'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title'], ['meeting', 'Meeting time']];
 // Meeting time only where meetings are all there is: nothing else has a start to sort on.
 const meetingSort = () => onlyMeetings(filters.get(pillKey()));
-const sortList = () => SORTS.filter(([id]) => (id !== 'status' || !noTasks()) && (id !== 'meeting' || meetingSort()));
+// The fields of the page's types can be sorted on too (#624), after the built-in orders; load: the Sort menu is open
+const sortList = (load = false) => [...SORTS.filter(([id]) => (id !== 'status' || !noTasks()) && (id !== 'meeting' || meetingSort())), ...pageFieldDefs(load).map((d) => [fieldKey(d), d.title || 'Untitled field'])];
 // Status sorts by the workflow rather than by the word: Inbox, In Progress, Completed, Later — the order the Status
 // menu and the Status grouping already run in, so the rank is that table's own index. A row with no task state has
 // nothing to rank and keeps its place at the end, like any other row missing the field it is sorted on.
@@ -318,14 +328,23 @@ const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first
 const soonestFirst = () => ['upcoming', 'today'].includes((filters.get(pillKey()) || {}).window);
 // Every page, saved searches included, keeps the order its query returned until the user says otherwise; Library's
 // starting arrangement above (newest change first) is the one exception.
-const sortBy = () => { const k = pillKey(), s = sortPref[k] ?? arranged(k, 'sort'); return SORTS.some(([id]) => id === s) && (s !== 'meeting' || meetingSort()) ? s : 'default'; };
+// a field stays chosen on any list, like a field grouping (groupOf): rows without it sort last
+const sortBy = () => { const k = pillKey(), s = sortPref[k] ?? arranged(k, 'sort'); return (SORTS.some(([id]) => id === s) && (s !== 'meeting' || meetingSort())) || (isFieldKey(s) && listPage()) ? s : 'default'; };
+const sortLabel = () => { const s = sortBy(); return (sortList().find(([id]) => id === s) || [])[1] || fieldName(s) || '…'; };
+// A field sorts by its first value: a date by its day (a row has the words Tana shows, "Jul 17, 2026"), anything else
+// as words with its numbers read as numbers, so an Impact of 10 comes after 9.
+const fieldSortKey = (key) => {
+  const dated = (pageFieldDefs().find((d) => fieldKey(d) === key) || {}).type === 'date';
+  return (n) => { const v = fieldValuesOf(n, key)[0], t = dated && v ? Date.parse(v) : NaN; return Number.isNaN(t) ? v : new Date(t).toISOString(); };
+};
 function setSortBy(id) { armGlide(); sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(true); }
 function sortRows(list) {
-  const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id) || (id === 'meeting' && !soonestFirst());
+  const id = sortBy(), key = SORT_KEY[id] || (isFieldKey(id) ? fieldSortKey(id) : null), desc = NEWEST_FIRST.has(id) || (id === 'meeting' && !soonestFirst());
+  const numeric = isFieldKey(id) ? { numeric: true } : undefined;
   const sorted = !key ? list : [...list].sort((a, b) => { // no key: Default, the order the view produced
     const x = key(a), y = key(b);
     if (!x || !y) return x ? -1 : y ? 1 : 0; // a row without the field sorts last, in the order it came in
-    return desc ? String(y).localeCompare(String(x)) : String(x).localeCompare(String(y));
+    return desc ? String(y).localeCompare(String(x), undefined, numeric) : String(x).localeCompare(String(y), undefined, numeric);
   });
   // held: every row keeps the place it had when a box was clicked; a row that arrived since goes first, in its own order
   const at = (n) => (held.order.has(n.id) ? held.order.get(n.id) : -1);
@@ -350,7 +369,8 @@ const fieldType = () => {
 const typeDefs = () => { const t = fieldType(); if (t) loadRelated(t, true); return (t && (relatedBy.get(t) || {}).definitions) || []; }; // a type's definitions come with the lite read
 const fieldKey = (def) => def.group || fieldType() + '?attribute=' + def.key;
 const PILL_FIELDS = ['options', 'link', 'member', 'date'];
-const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
+// the page's fields first (a type's own, or the fields of the types on a mixed list, by name: #624), then the row's own facts
+const displayList = () => [...pageFieldDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
 const displayKeys = () => {
   // The Timeline has no Display pill, and pillKey() there is the last list view's: it wore that view's choice (the
   // Library's Updated and no boxes). It shows each task's box and assignee; its own lines say when.
@@ -359,18 +379,19 @@ const displayKeys = () => {
   // a field the type no longer defines (or another type's, once the Type pill moved) is dropped: the menu cannot offer
   // it, so nothing could turn it off. Until the definitions are in, the page's own type's keys are kept as they are.
   const t = fieldType(), defs = t && (relatedBy.get(t) || {}).definitions;
-  if (Array.isArray(chosen)) return chosen.filter((k) => !isFieldKey(k) || (defs ? defs.some((d) => fieldKey(d) === k) : !!t && k.startsWith(t + '?')));
+  // A field kept by name stays on any list, as a field grouping does; a row without it just shows nothing for it.
+  if (Array.isArray(chosen)) return chosen.filter((k) => !isFieldKey(k) || (fieldName(k) !== null ? listPage() : defs ? defs.some((d) => fieldKey(d) === k) : !!t && k.startsWith(t + '?')));
   return onTypePage() ? [...typeDefs().filter((d) => PILL_FIELDS.includes(d.type)).map(fieldKey), 'updated'] : DISPLAY_DEFAULT;
 };
 const displayOn = (id) => displayKeys().includes(id);
 function setDisplay(id) {
   const on = displayKeys(), next = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];
-  displayPref[pillKey()] = displayList().map(([key]) => key).filter((key) => next.includes(key)); // stored in the menu's order
+  displayPref[pillKey()] = displayList().map(([key]) => key).filter((key) => next.includes(key)); // stored in displayList's order: fields first, as the columns run
   persistPref('display', displayPref);
   render(true); // every row is built differently now, and rowSig carries the choice so none is reused
 }
 // The values of the fields Display shows, in the menu's order: the row carries them from the graph (main/rows.js).
-const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);
+const shownFieldValues = (node) => displayKeys().filter(isFieldKey).flatMap((k) => fieldValuesOf(node, k));
 // The grey line under a title: those values, then subtextOf's words, one · between each, as a saved search's rows read. A render and a late metadata patch
 // (renderer/tasks.js) both build it here, so the row keeps its shape when its metadata lands. `sub` is refilled in place.
 // asTable: a row of the page's own list while it is a table (tableRow); what an expanded row shows under it stays an outline
@@ -449,7 +470,7 @@ function tableCells(node, info, sub) {
     else {
       // plain text, as every other column is; the cell's ellipsis cuts it and the tooltip has the rest — asked at the
       // hover, since the sensitive switch only toggles the blur (blurSensitive), and a hidden row's tooltip says nothing
-      cell.textContent = ((node.fields && node.fields[k]) || []).map((v) => demoText(v, node.id)).join(', ');
+      cell.textContent = fieldValuesOf(node, k).map((v) => demoText(v, node.id)).join(', ');
       cell.onmouseenter = () => { cell.title = isRealId(node.id) && sensitiveHidden(node.id) ? '' : cell.textContent; };
     }
     const open = cellPicker(node, k);
