@@ -296,6 +296,7 @@ function atSavedView(v) {
   let p = null;
   const as = typeof window !== 'undefined' && window.api && window.api.savedAs ? ':' + window.api.savedAs : SIDE; // a page given another id than the view's (main.js adoptLayout)
   try { p = JSON.parse(v.keys['place' + as] || 'null'); } catch { /* not a place */ }
+  if (p && (p.today || p.week)) return !!zoom && datePlace({ docId: zoom.docId, nodeId: zoom.nodeId, title: (docOf(zoom.docId) || {}).text }) === (p.today ? 'today' : 'week');
   return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === v.keys['view' + as]);
 }
 // the Work View as installed ('workView' its layout) or as updated from Save view, which is judged by its own keys

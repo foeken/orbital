@@ -4932,6 +4932,7 @@ async function runRestorePlaceCheck() {
       removeItem: (key) => storage.delete(key),
     };
     const extra = new Map(), summaries = [];
+    let today = '', thisWeek = ''; const localDate = () => today, weekTitle = () => thisWeek; // renderer/segments.js, pinned per case
     const allDocs = () => docs;
     const docOf = (id) => docs.find((d) => d.id === id) || extra.get(id) || null; // what rememberPlace reads the title and glyph off
     const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: n.icon });
@@ -4941,7 +4942,8 @@ async function runRestorePlaceCheck() {
     // check empties the event loop and exits silently rather than failing.
     let asked = 0, added = [];
     const addSearch = (n) => added.push(n.id);
-    const tana = { myTasks: () => { asked++; return Promise.resolve({ id: 'tana:search:mine', text: 'My Tasks' }); }, node: () => { fetches++;
+    const tana = { myTasks: () => { asked++; return Promise.resolve({ id: 'tana:search:mine', text: 'My Tasks' }); },
+      todayNode: () => Promise.resolve('tana:text:today'), weekNode: () => Promise.resolve('tana:text:week'), node: () => { fetches++;
       if (nodeMode === 'fail') return Promise.reject(new Error('no longer readable'));
       if (nodeMode === 'park') return new Promise((resolve) => { nodeResolve = () => resolve({ title: 'Fetched' }); });
       return Promise.resolve({ title: 'Fetched' }); } };
@@ -4954,6 +4956,8 @@ async function runRestorePlaceCheck() {
       remember: (z) => { zoom = z; rememberPlace(); return storage.has('place') ? storage.get('place') : null; },
       store: (value) => { storage.set('place', value); savedPlace = readStoredPlace(); }, // left by the last session, read at load
       firstRight: () => { savedPlace = { myTasks: true }; }, // renderer/edit.js: a first launch's right half
+      concept: (c) => { savedPlace = { [c]: true }; }, // a saved view's Today or This week (renderer/palette.js saveView)
+      datePlace: (p, day, week) => { today = day; thisWeek = week; return datePlace(p); },
       myTasks: () => ({ asked, added: [...added], id: myTasksId }),
       seedPlace: () => { ${seed[0]} },
       clear: () => { storage.delete('place'); savedPlace = readStoredPlace(); },
@@ -5022,6 +5026,19 @@ async function runRestorePlaceCheck() {
     'then opens the search main found or made, listed in Cmd+K at once');
   await api.start();
   assert.equal(api.myTasks().asked, 1, 'once per launch');
+
+  // A saved view's Today and This week open on the day and week it is opened in, whatever node they were saved on (#639)
+  for (const [c, id] of [['today', 'tana:text:today'], ['week', 'tana:text:week']]) {
+    api.reset(); api.seed([]); api.concept(c);
+    await api.start();
+    assert.equal(api.state().docId, id, c + ' in a saved view opens the node main has for it now');
+  }
+  assert.deepEqual(plain([
+    api.datePlace({ docId: 'tana:text:d', title: '2026-09-30' }, '2026-09-30', 'Week 40 (2026)'),
+    api.datePlace({ docId: 'tana:text:w', title: 'Week 40 (2026)' }, '2026-09-30', 'Week 40 (2026)'),
+    api.datePlace({ docId: 'tana:text:d', title: '2026-09-29' }, '2026-09-30', 'Week 40 (2026)'),
+    api.datePlace({ docId: 'tana:text:d', nodeId: 'n1', title: '2026-09-30' }, '2026-09-30', 'Week 40 (2026)'),
+  ]), ['today', 'week', null, null], 'a view saves the current day and week node as Today and This week; another day, or a node inside one, stays itself');
 
   api.reset(); api.seed([{ id: 'tana:text:a' }]);
   api.store(JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }));

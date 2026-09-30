@@ -528,6 +528,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   in the synced `savedViews` preference. Save view… names the current one, or updates a saved view listed under
   it (narrowed by what is typed; its name and id kept, so Home and a recorded key still find it); choosing a row writes the places back and hands main the layout (`window:setLayout`), which saves it and reloads
   the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
+  A page on today's node or this week's is saved as that (`{ today: true }`, `{ week: true }`, renderer/edit.js `datePlace`) and opens on
+  the day and week the view is opened in, the node found or made then as Cmd+K Today and This week do (issue #639).
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
   key. **Help**: Help, Check for updates (the app menu's Check for Updates…, whose dialogs answer), and About Orbital: a page with the website and the licence as links, the big dependencies
