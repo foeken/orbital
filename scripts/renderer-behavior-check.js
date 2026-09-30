@@ -8413,6 +8413,16 @@ async function runDeletedNodeCheck() {
   api.clear();
   await api.elsewhere('right', canvas);
   assert.deepEqual(plain(api.state().asked), ['canvas ' + canvas], 'and so does ⌘/⇧/⌥ on it: no pane of its own');
+  // A click on a canvas row's title opens it, as a type row's does, unless that title can be typed in.
+  const clickOpens = vm.runInNewContext(`
+    const tableRow = () => false, zoomable = () => true;
+    const canEditText = (item) => !!item.node.renamable;
+    ${sourceLine('const opensOnClick =')}
+    opensOnClick;
+  `);
+  assert.equal(clickOpens({ docId: canvas, node: { id: canvas } }), true, 'a canvas title opens its window on a click');
+  assert.equal(clickOpens({ docId: canvas, node: { id: canvas, renamable: true } }), false, 'one whose title can be typed in takes the caret instead');
+  assert.equal(clickOpens({ docId: live, node: { id: live } }), false, 'and a document still takes the caret');
 
   // 3. The Back stack walks past the pages that have gone since.
   api.clear();

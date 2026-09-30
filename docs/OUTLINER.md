@@ -425,7 +425,8 @@ Cmd+K leads with a Selection group for it (§8).
   main.js `canvas:open`): a window on Tana's own page for it (`doc:link`), in the `persist:tana` session, with
   everything but tldraw's `.tl-container` hidden once the board is there. The page that asked stays where it was; the
   same canvas again brings its window forward. ⌘/⇧/⌥ on a canvas (`openElsewhere`) opens that window too rather than a
-  pane, and signing out closes every canvas window.
+  pane, and signing out closes every canvas window. A canvas row's title cannot be typed in, so a click on it (or Enter)
+  opens the window as a type row's does (`opensOnClick`), in a list, the Library and search alike.
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
   to does nothing: Home is the whole window, which one pane's Back does not replace (issue #444).
   When the page on screen is deleted or archived (here, in another pane or in Tana), the pane goes back to the page
