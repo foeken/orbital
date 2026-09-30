@@ -126,26 +126,29 @@ struct Composer: View {
                 Text("Asking Tana from here comes next.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).transition(.opacity)
             }
-            HStack(alignment: .bottom, spacing: 10) {
-                TextField("Ask Tana", text: $text, axis: .vertical).lineLimit(1...5).padding(.vertical, 7)
-                Button {
-                    withAnimation { notYet = true }
-                    Task { try? await Task.sleep(for: .seconds(4)); withAnimation { notYet = false } }
-                } label: {
-                    // the Codex app's send: a grey circle while there is nothing to send, solid once there is
-                    Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                        .foregroundStyle(empty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color(.systemBackground)))
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(empty ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.primary)))
+            // The words set the capsule's height (a line of body text and 12 pt above and below it: 46 pt), and the send
+            // button sits in its bottom-right corner, 6 pt from the edge on three sides whatever the text field measures
+            TextField("Ask Tana", text: $text, axis: .vertical).lineLimit(1...5)
+                .padding(.leading, 18)
+                .padding(.trailing, 52)
+                .padding(.vertical, 12)
+                .overlay(alignment: .bottomTrailing) {
+                    Button {
+                        withAnimation { notYet = true }
+                        Task { try? await Task.sleep(for: .seconds(4)); withAnimation { notYet = false } }
+                    } label: {
+                        // the Codex app's send: a grey circle while there is nothing to send, solid once there is
+                        Image(systemName: "arrow.up").font(.body.weight(.semibold))
+                            .foregroundStyle(empty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color(.systemBackground)))
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(empty ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.primary)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(empty)
+                    .accessibilityLabel("Ask Tana")
+                    .padding(6)
                 }
-                .buttonStyle(.plain)
-                .disabled(empty)
-                .accessibilityLabel("Ask Tana")
-            }
-            .padding(.leading, 18)
-            .padding(.trailing, 6)
-            .padding(.vertical, 6)
-            .glassEffect(.regular.interactive(), in: .capsule)
+                .glassEffect(.regular.interactive(), in: .capsule)
         }
         .padding(.horizontal, 36) // inset as the Codex app's composer is, not edge to edge
         .padding(.bottom, 4)
