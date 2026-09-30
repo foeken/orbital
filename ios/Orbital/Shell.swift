@@ -147,7 +147,7 @@ struct Composer: View {
             .padding(.vertical, 6)
             .glassEffect(.regular.interactive(), in: .capsule)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 36) // inset as the Codex app's composer is, not edge to edge
         .padding(.bottom, 4)
     }
 }
