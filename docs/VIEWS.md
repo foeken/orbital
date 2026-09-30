@@ -173,11 +173,18 @@ lists that type's instances too, so it gets the same field pills, field grouping
 cells (`fieldType` in renderer/views.js). Display keeps the page's own starting choice rather than the type page's.
 The field filter is part of the filter (`fields`): the Library sends it as `attributeFilters` (`viewParams`), a saved
 search stores it as the query's `attributes` and reads it back on load (`searchQueryToFilter`), so Save keeps it and
-changing it marks the search unsaved. Field values only apply while that one type is the whole Type selection
-(`typeFields` in sdk/query.js), and any change of the Type pill clears them.
+changing it marks the search unsaved. Any change of the Type pill clears them.
 In such a saved search, Enter at the end of a row drafts a new row of that type below it (renderer/render.js
 `searchDraft`, issue #537), created with every field the filter pins to one value: a link or a person, or one option.
 A field it leaves open, a choice of several or a date range is left for you.
+
+**A mixed list** (Tasks, the Library, a saved search over several types, #617) gives the fields of the types on its
+page filter pills as well, and of a type a field filter names while none of its rows is on screen; two fields of one
+name on different types say which type each is. The filter is the typed field, so choosing a value narrows the list
+to that type's rows with it: the graph applies it without a type named (verified live 2026-09-30: Tasks with
+Project = Orbital, 5 of 397, all Project Task). A list naming workspace types counts only their fields (`typeFields`
+in sdk/query.js), and shows pills only for those. The definitions come through the lite read a type page uses, one per
+type on the page.
 
 **Outliner or Table.** Every page with pills — a view, a saved search, a type's page — can be drawn as a table: the
 switch at the top right of the header, or ⌘K Switch to table / Switch to outliner (one row, id `tableView`, so a

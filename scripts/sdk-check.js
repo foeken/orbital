@@ -1941,6 +1941,55 @@ async function main() {
     resetDoc.reset(); backend.onChange(reset, { origin: 'remote' });
     resetDoc.applyRemote([snapshot]); backend.onChange(reset, { origin: 'remote' });
     assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a reset that discards the edit discards its time');
+    // A live edit to a field reaches every view's cached row (a view grouped by it reads them after a reload or a
+    // restart), and a cleared field clears them.
+    const fielded = 'tana:text:' + ulid(), fieldedDoc = new Document(fielded), prio = 'tana:type:' + ulid() + '?attribute=prio';
+    fieldedDoc.transact((l) => initDocument(l, 'Fielded', ME, {}));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    for (const section of ['library', 'tasks']) cache.upsert({ id: fielded, section, title: 'Fielded', sortKey: '1', updatedAt: '1', fields: { [prio]: ['Low'] } });
+    backend.onChange(fielded, { origin: 'remote' }); // bootstrap: no field set on the document, so the cached value goes
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, 'High');
+    backend.onChange(fielded, { origin: 'remote' });
+    const rootsOf = async () => (await backend.handlers.get('outline:roots')()).find((v) => v.id === 'library').nodes.find((r) => r.id === fielded);
+    assert.deepEqual([cache.list().library, cache.list().tasks].map((rows) => rows.find((r) => r.id === fielded).fields), [{ [prio]: ['High'] }, { [prio]: ['High'] }], 'a field set live is in every view’s cached row');
+    assert.deepEqual((await rootsOf()).fields, { [prio]: ['High'] }, 'and in the rows a reload builds from the cache');
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, '');
+    backend.onChange(fielded, { origin: 'remote' });
+    assert.equal((await rootsOf()).fields, undefined, 'a field cleared live is cleared there too');
+    // A retype keeps the former type's values on the document; the cached rows' chips follow the new type, so a
+    // reload does not group the row by its old type's field.
+    const typeA = prio.split('?')[0], typeB = 'tana:type:' + ulid();
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async (q) => ({ nodes: (q.nodeIds || []).map((id) => ({ id, title: id === typeB ? 'Bug' : 'Goal' })) }) } } });
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, 'High');
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeA));
+    backend.onChange(fielded, { origin: 'remote' });
+    for (const section of ['library', 'tasks']) cache.upsert({ ...cache.list()[section].find((r) => r.id === fielded), section, tags: [{ label: 'Goal', uri: typeA }] });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeB));
+    backend.onChange(fielded, { origin: 'remote' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const uris = (rows) => rows.find((r) => r.id === fielded).tags.map((t) => t.uri).filter(Boolean);
+    assert.deepEqual([uris(cache.list().library), uris(cache.list().tasks)], [[typeB], [typeB]], 'a retype moves every cached row’s chip to the new type');
+    assert.deepEqual((await rootsOf()).tags.map((t) => t.uri).filter(Boolean), [typeB], 'and the rows a reload builds carry it, so the old type’s value no longer counts');
+    // …and at once, before the new type's name is read: the old chip is gone from the cache when the change is told
+    const typeC = 'tana:type:' + ulid();
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: () => new Promise(() => {}) } } });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeC));
+    backend.onChange(fielded, { origin: 'remote' });
+    assert.deepEqual((await rootsOf()).tags.map((t) => t.uri).filter(Boolean), [], 'a reload during the type lookup no longer carries the former type');
+    // To a type whose name is known: the new chip and the row's own icon at once, not the one the cache had
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async (q) => ({ nodes: (q.nodeIds || []).map((id) => ({ id, title: 'Bug' })) }) } } });
+    for (const section of ['library', 'tasks']) cache.upsert({ ...cache.list()[section].find((r) => r.id === fielded), section, icon: 'stale-glyph', tags: [{ label: 'Goal', uri: typeA }] });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeB));
+    backend.onChange(fielded, { origin: 'remote' });
+    const typedNow = await rootsOf();
+    assert.deepEqual([typedNow.icon, typedNow.tags.map((t) => t.uri).filter(Boolean)], ['type', [typeB]], 'typed to typed: the new type’s chip and icon, at once');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal((await rootsOf()).icon, 'type', 'and the rebuild that follows keeps them');
+    // To no type at all: a plain document again, with its doc chip and icon
+    fieldedDoc.transact((l) => l.getMap('data').delete('entityTypeUri'));
+    backend.onChange(fielded, { origin: 'remote' });
+    const untyped = await rootsOf();
+    assert.deepEqual([untyped.icon, untyped.tags.map((t) => t.label), untyped.tags.some((t) => t.uri)], ['doc', ['doc'], false], 'typed to untyped: a plain document, doc chip and icon');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
@@ -4284,12 +4333,19 @@ async function main() {
     assert.deepEqual(searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters, { [STATUS]: { textMatches: [{ value: 'On track', mode: 'MODE_EQUALS' }, { value: 'Unknown', mode: 'MODE_EQUALS' }] } },
       'the pills reach the graph as one field with its labels ORed');
     assert.deepEqual(searchQueryToFilter({ entityTypeUris: [RISK] }, ME).types, [RISK], 'and reads it back into the pill');
-    // The Library and a saved search narrowed to that one type get its field pills too: the view asks for them, a
-    // saved query keeps them both ways, and beside another type (or a kind) they apply to nothing.
+    // The Library and a saved search narrowed to that one type get its field pills too: the view asks for them and a
+    // saved query keeps them both ways. A mixed list (#617) keeps them as well, its pills being the fields of the types
+    // on the page; a list naming workspace types keeps only theirs, so a field of a type it no longer names is dropped.
     assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, ...fielded }, ME).attributeFilters, searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters);
     assert.deepEqual(searchQueryToFilter(filterToSearchQuery(fielded, ME), ME).fields, fielded.fields);
-    assert.equal(viewParams({ ...fielded, types: [RISK, 'tasks'] }, ME).attributeFilters, undefined);
-    assert.equal(filterToSearchQuery({ ...fielded, types: [RISK, 'tana:type:01m1e3nthqj48b8drqb1fmma9e'] }, ME).attributes, undefined);
+    const OTHER_TYPE = 'tana:type:01m1e3nthqj48b8drqb1fmma9e';
+    const GRAPH_STATUS = { [STATUS]: { textMatches: [{ value: 'On track', mode: 'MODE_EQUALS' }, { value: 'Unknown', mode: 'MODE_EQUALS' }] } };
+    assert.deepEqual(viewParams({ ...fielded, types: ['tasks'] }, ME).attributeFilters, GRAPH_STATUS, 'Tasks with a field of a type on the page narrows to it');
+    assert.deepEqual(viewParams({ ...fielded, types: null }, ME).attributeFilters, GRAPH_STATUS, 'and so does the Library of any type');
+    assert.deepEqual(viewParams({ ...fielded, types: [RISK, 'tasks'] }, ME).attributeFilters, GRAPH_STATUS);
+    assert.deepEqual(filterToSearchQuery({ ...fielded, types: [RISK, OTHER_TYPE] }, ME).attributes, fielded.fields, 'two types named: the field of one of them counts');
+    assert.equal(filterToSearchQuery({ ...fielded, types: [OTHER_TYPE] }, ME).attributes, undefined, 'a field of a type the list no longer names does not');
+    assert.deepEqual(searchQueryToFilter(filterToSearchQuery({ ...fielded, types: ['tasks'] }, ME), ME).fields, fielded.fields, 'a saved search over Tasks keeps its field filter both ways');
     // #148: the live query that re-reads an open saved search covers what it lists: kinds, type, state and assignee
     // carried over, text and owners dropped (a live query cannot say them), newest change first.
     assert.deepEqual(liveTrigger(searchQueryParams({ types: ['text'], entityTypeUris: [RISK], stateTypes: ['open'], assignedToViewer: true, textQuery: 'db', ownerUris: ['tana:space:01jspace000000000000000000'] }, ME)),
