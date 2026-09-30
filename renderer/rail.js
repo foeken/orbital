@@ -244,7 +244,7 @@ function railPinAction(pinHub, docId) {
 function renderRail(parent) {
   const docId = parent && parent.node.kind === 'document' && !parent.node.draft && !String(parent.docId).startsWith(SEARCH_ID) ? parent.docId : null;
   // a page is no Graph pane, but its fields under the title come with the same read (api.related): still asked for here
-  if (!LINKS) { railEl.hidden = true; if (docId) loadRelated(docId); drawLinksBtn(docId); return tellDoc(docId); }
+  if (!LINKS) { railEl.hidden = true; if (docId) loadRelated(docId); drawMeetingBtn(docId); drawLinksBtn(docId); return tellDoc(docId); }
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
   railEl.hidden = false;
@@ -298,3 +298,19 @@ function drawLinksBtn(docId = linksDoc) {
 }
 linksBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
 linksBtn.onclick = () => runAction('railToggle');
+// The meeting the page belongs to (#630): a task Tana's AI filed under it, a note written in it. Left of the Graph
+// switch, in the words of the meeting glyph on a task's row (renderer/meeting.js meetingLinkEl), and a click opens the
+// meeting, which forwards to its write-up. main names it with the page's read (main/related.js), never on the write-up.
+const meetingBtn = $('navMeeting');
+function drawMeetingBtn(docId) {
+  const m = docId && isRealId(docId) ? (relatedBy.get(docId) || {}).meeting : null;
+  meetingBtn.hidden = !m;
+  if (!m) return;
+  const day = m.start ? new Date(m.start).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+  const label = 'From ' + (m.title ? demoText(m.title, m.id) : 'a meeting') + (day ? ' · ' + day : '');
+  meetingBtn.title = label; meetingBtn.setAttribute('aria-label', label); // icon only, so the name comes from here
+  meetingBtn.dataset.meeting = m.id;
+  if (!meetingBtn.childNodes.length) addIcon(meetingBtn, 'meeting');
+}
+meetingBtn.onmousedown = (e) => e.preventDefault();
+meetingBtn.onclick = () => { const id = meetingBtn.dataset.meeting; if (id && !meetingBtn.hidden) run(() => goTo(id)); };

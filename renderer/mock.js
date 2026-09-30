@@ -349,7 +349,7 @@ function mockApi() {
       const doc = all.find((d) => d.id === docId);
       // anything that is not a meeting still has backlinks: one mock document mentions it
       const mentions = all.filter((d) => d.icon === 'doc' && d.id !== docId).slice(0, 1).map(info);
-      if (!doc || doc.icon !== 'meeting') return { fields: mockFields(docId), definitions: mockDefs[docId] && structuredClone(mockDefs[docId]), pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
+      if (!doc || doc.icon !== 'meeting') return { ...(docId === 'mockdoc1' ? { meeting: { id: 'mockmeeting0', title: 'Studio LT weekly', start: new Date().toISOString() } } : {}), fields: mockFields(docId), definitions: mockDefs[docId] && structuredClone(mockDefs[docId]), pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
       const pick = (n) => n && info(n);
       return {
         summary: 'Mock meeting summary for ' + doc.text,
