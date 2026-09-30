@@ -12,9 +12,16 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scene
 
     var body: some View {
+        let signingIn = engine.phase == .signedOut
         ZStack {
-            // the engine's web view has to be in a window to keep running; nobody sees it
-            WebHost(web: engine.web).frame(width: 1, height: 1).opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+            // one web view in one place: Tana's sign-in while signed out, hidden behind the app once the engine runs
+            VStack(spacing: 0) {
+                if signingIn { Text("Sign in to Tana").font(.headline).padding(.vertical, 12) }
+                WebHost(web: engine.web).ignoresSafeArea(edges: .bottom)
+            }
+            .opacity(signingIn ? 1 : 0)
+            .allowsHitTesting(signingIn)
+            .accessibilityHidden(!signingIn)
             switch engine.phase {
             case .starting:
                 ProgressView("Connecting to Tana…")
@@ -27,12 +34,7 @@ struct ContentView: View {
                     Button("Try again") { engine.start() }.buttonStyle(.borderedProminent)
                 }
             case .signedOut:
-                NavigationStack {
-                    SignInView { engine.start() }
-                        .ignoresSafeArea(edges: .bottom)
-                        .navigationTitle("Sign in to Tana")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
+                EmptyView()
             case .ready:
                 TimelineScreen(engine: engine)
             }
@@ -40,4 +42,3 @@ struct ContentView: View {
         .onChange(of: scene) { if scene == .active { Task { await engine.refresh() } } }
     }
 }
-
