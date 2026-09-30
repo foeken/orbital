@@ -63,11 +63,8 @@ struct TimelineScreen: View {
         List {
             if !today.isEmpty {
                 Heading(title: "Today's tasks")
-                // a checklist, not stops on the rail: the boxes keep the markers' column so the words line up, with no line
-                ForEach(today) { task in
-                    RailRow(time: "", rail: false) { TaskBox(task: task, engine: engine) } content: { TaskWords(row: task, done: engine.state(of: task) == "closed") }
-                        .onTapGesture { open(task.id) }
-                }
+                // a checklist, not stops on the rail: the tasks in one rounded group above the timeline
+                TodayGroup(tasks: today, engine: engine, open: open)
             }
             if !upcoming.isEmpty || free != nil {
                 Heading(title: "Coming up")
@@ -131,6 +128,35 @@ struct TimelineScreen: View {
 }
 
 // The rail's geometry: the time column, the marker's column, and where the line runs (through the markers' middle)
+// Today's tasks as one rounded group, off the rail: each task its box and its words, a hairline between them that
+// starts where the words do. The box ticks it off, the words open it.
+struct TodayGroup: View {
+    let tasks: [Row]
+    let engine: Engine
+    let open: (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    TaskBox(task: task, engine: engine)
+                    Button { open(task.id) } label: {
+                        TaskWords(row: task, done: engine.state(of: task) == "closed").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                if index < tasks.count - 1 { Divider().padding(.leading, 16 + 20 + 12) }
+            }
+        }
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+}
+
 // A section's heading: a row of its own between two stretches of rail, its words in the middle of the gap. Not a
 // sticky List header, whose extra space above sat the words low and whose pinned band cut the top bar off.
 struct Heading: View {
@@ -201,8 +227,9 @@ struct Entry: View {
                     .padding(.top, 14)
                 }
             }
+            .padding(.trailing, row.unread == true ? 18 : 0) // the new dot's own room: a full-width sentence ran under it
             .overlay(alignment: .topTrailing) {
-                if row.unread == true { Circle().fill(.blue).frame(width: 8, height: 8).offset(y: 6).accessibilityLabel("New") }
+                if row.unread == true { Circle().fill(.blue).frame(width: 8, height: 8).offset(y: 7).accessibilityLabel("New") }
             }
         }
         .onTapGesture { if let uri = row.timeline?.uri { open(uri) } }
@@ -211,9 +238,9 @@ struct Entry: View {
     }
 }
 
-// A task's box, drawn as the desktop's (styles.css .check): a grey rounded square, green with a white tick once done,
-// a dashed outline for an Inbox task (its first tap accepts it). A tap ticks it off or back on (Engine.toggle, the
-// desktop's rule), with the success haptic; the words beside it open the task.
+// A task's mark: a grey ring, Orbital's green with a white tick once done, a dashed ring for an Inbox task (its first
+// tap accepts it), as iPhone to-do lists have them, in the desktop's green. A tap ticks it off or back on
+// (Engine.toggle, the desktop's rule), with the success haptic; the words beside it open the task.
 struct TaskBox: View {
     let task: Row
     let engine: Engine
@@ -221,7 +248,7 @@ struct TaskBox: View {
     var body: some View {
         let state = engine.state(of: task)
         Button { Task { await engine.toggle(task) } } label: {
-            CheckBox(state: state)
+            CheckCircle(state: state)
                 .padding(10).contentShape(Rectangle()).padding(-10) // a finger-sized target around a text-sized box
         }
         .buttonStyle(.plain)
@@ -234,20 +261,22 @@ struct TaskBox: View {
     }
 }
 
-struct CheckBox: View {
+// The round mark: a grey ring, Orbital's green with a white tick once done, a dashed ring for an Inbox task
+struct CheckCircle: View {
     let state: String
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 5.5, style: .continuous)
         ZStack {
             if state == "proposed" {
-                shape.strokeBorder(Color.pair(0xc8c8c8, 0x5d6467), style: StrokeStyle(lineWidth: 1.2, dash: [2.6, 2.4]))
+                Circle().strokeBorder(Color.pair(0xb0b0b0, 0x6a7073), style: StrokeStyle(lineWidth: 1.5, dash: [2.6, 2.4]))
+            } else if state == "closed" {
+                Circle().fill(Color.pair(0x6fae82, 0x5b976c))
+                Tick().stroke(.white, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)).padding(1).transition(.scale)
             } else {
-                shape.fill(state == "closed" ? Color.pair(0x6fae82, 0x5b976c) : Color.pair(0xe4e4e4, 0x3a3e40))
+                Circle().strokeBorder(Color.pair(0xb0b0b0, 0x6a7073), lineWidth: 1.5)
             }
-            if state == "closed" { Tick().stroke(.white, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)).transition(.scale) }
         }
-        .frame(width: 20, height: 20)
+        .frame(width: 22, height: 22)
     }
 }
 

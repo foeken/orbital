@@ -16,16 +16,16 @@ struct SettingsView: View {
                 Section {
                     LabeledContent { Text(engine.email ?? "Tana") } label: { Row(glyph: "member", title: "Account") }
                     NavigationLink { SignInLog(lines: engine.log) } label: { Row(glyph: "info", title: "Sign-in details") }
-                    Button(role: .destructive) {
+                    Button {
                         dismiss()
                         Task { await engine.signOut() }
-                    } label: { Row(glyph: "tana", title: "Sign out of Tana", leaving: true) }
+                    } label: { Row(glyph: "tana", title: "Sign out of Tana") }
                 } header: { Header("Tana") }
                 Section {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
                         if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "sparkle", title: "Plan") } }
-                        Button(role: .destructive) { ChatGPT.forget(); self.chatgpt = nil } label: { Row(glyph: "chatgpt", title: "Sign out of ChatGPT", leaving: true) }
+                        Button { ChatGPT.forget(); self.chatgpt = nil } label: { Row(glyph: "chatgpt", title: "Sign out of ChatGPT") }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
                     }
@@ -53,14 +53,13 @@ struct SettingsView: View {
         }
     }
 
-    // a row's glyph and words in the text colour, all red on a sign-out (red means leaving), as the ChatGPT app has them
+    // a row's glyph and words in the text colour, a sign-out too: red on it was too much, and a destructive role paints it red
     struct Row: View {
         let glyph: String
         let title: String
-        var leaving = false
         var body: some View {
             Label { Text(title) } icon: { Image("Glyphs/" + glyph).resizable().frame(width: 22, height: 22) }
-                .foregroundStyle(leaving ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+                .foregroundStyle(.primary)
         }
     }
 

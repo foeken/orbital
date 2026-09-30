@@ -216,6 +216,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             json.replaceSubrange(match.range, with: match.1 == "ms" ? String(Int(at.timeIntervalSince1970 * 1000)) : "\"" + at.ISO8601Format(.iso8601.year().month().day().time(includingFractionalSeconds: true)) + "\"")
         }
         rows = (try? JSONDecoder().decode([Row].self, from: Data(json.utf8))) ?? []
+        // -history: the day's entries only, so a shot of them needs no scrolling
+        if CommandLine.arguments.contains("-history") { rows.removeAll { $0.timeline?.today == true || $0.timeline?.upcoming == true || $0.timeline?.free != nil } }
         phase = .ready
     }
 

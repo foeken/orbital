@@ -11,6 +11,7 @@ struct Shell: View {
     @State private var menu = false
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
     @State private var searching = false
+    @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let width: CGFloat = 300
 
@@ -41,25 +42,35 @@ struct Shell: View {
             }
             // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
             .mask { RoundedRectangle(cornerRadius: menu ? 44 : 0, style: .continuous).ignoresSafeArea() }
-            // pushed aside, the page is a card of clear Liquid Glass over its content, as the ChatGPT app's is; a tap closes it
+            // pushed aside, the page is a card with a hairline edge, as the ChatGPT app's is; a tap closes it. (A sheet
+            // of glass over it was too much: the bar's own glass buttons became glass on glass.)
             .overlay {
                 if menu {
-                    RoundedRectangle(cornerRadius: 44, style: .continuous).fill(.clear)
-                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 44, style: .continuous))
+                    RoundedRectangle(cornerRadius: 44, style: .continuous).strokeBorder(Color(.separator), lineWidth: 1)
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
                         .onTapGesture { show(false) }
                         .accessibilityHidden(true)
                 }
             }
-            .shadow(color: .black.opacity(menu ? 0.3 : 0), radius: 24)
-            .offset(x: menu ? width : 0)
-            .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { drag in
-                guard abs(drag.translation.height) < 60 else { return }
-                if drag.translation.width > 80 { show(true) } else if drag.translation.width < -80 { show(false) }
-            })
+            .shadow(color: .black.opacity(menu ? 0.25 : 0), radius: 24)
+            .offset(x: min(width, max(0, (menu ? width : 0) + drag)))
         }
         .background(Color(.systemBackground))
+        // A sideways swipe anywhere, the menu included: the page follows the finger and settles open or shut, as the
+        // ChatGPT app's does. Only a swipe that is more sideways than up or down counts, so the Timeline still scrolls.
+        .simultaneousGesture(DragGesture(minimumDistance: 20)
+            .onChanged { g in
+                guard abs(g.translation.width) > abs(g.translation.height) else { return }
+                drag = g.translation.width
+            }
+            .onEnded { g in
+                let moved = abs(g.translation.width) > abs(g.translation.height) ? g.predictedEndTranslation.width : 0
+                withAnimation(reduceMotion ? nil : .snappy) {
+                    if moved > width / 3 { menu = true } else if moved < -width / 3 { menu = false }
+                    drag = 0
+                }
+            })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
         .sheet(isPresented: $searching) { SearchSheet(engine: engine) }
     }
