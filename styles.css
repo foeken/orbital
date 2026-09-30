@@ -173,15 +173,19 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .fields .fvalues .node.block:not(.t-bullet):not(.t-numbered) > .line > .bullet::before { visibility: hidden; }
 /* A field that holds choices or links (renderer/fields.js): one focusable line of chips, no editor. A label the type
    no longer offers is greyed and struck, a link to the wrong type carries a small warning mark. */
-.fields .fchoice { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; border-radius: 4px; cursor: default; margin-left: 10px; }
-/* A text value's words start after its row's 16px gutter; a chip's start 6px into the chip. The 10px above puts the
-   two in one column, and the hint, which has no chip around it, takes the other 6. */
+.fields .fchoice { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; border-radius: 4px; cursor: default; margin-left: 16px; }
+/* One column for every value: a text value's words start after its row's 16px gutter, and so does a line of people,
+   links or faces, which carry no chip around them (a person is a mention, as anywhere else). An options chip keeps
+   its 6px of padding outside the column, so its words land in it too; a hint that starts the line has no chip either,
+   and one after a value keeps its 6px of air. */
+.fields .fchoice:has(> .fchip:not(.fref):first-child) { margin-left: 10px; }
 .fields .fchoice > .fhint { margin-left: 6px; }
+.fields .fchoice > .fhint:first-child { margin-left: 0; }
 .fields .fchoice:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 .fields .fchip { padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); line-height: 20px; }
 .fields .fchip.fref { padding: 0; background: none; } /* a link field's value is a reference, drawn as every reference is */
 .fields .fchip.fref + .fchip.fref { margin-left: 8px; }
-.fields .fattendees > .fvalue { margin-left: 10px; } /* in line with the values of the fields around it (.fchoice's margin) */
+.fields .fattendees > .fvalue { margin-left: 16px; } /* in line with the values of the fields around it (.fchoice's margin) */
 .fields .fchip.gone { color: var(--muted); text-decoration: line-through; }
 .fields .fchip.wrong::after { content: ' ⚠'; color: #c8841c; }
 .fields .fhint, .fields .fkind { color: var(--muted); line-height: 22px; }
