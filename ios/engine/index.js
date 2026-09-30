@@ -62,14 +62,14 @@ const listRow = (n) => ({ id: n.id, title: secret().has(n.id) ? PRIVATE : n.titl
 // reveal it; the phone has no reveal, so it never shows those words: a title reads Private, an entry about one says only
 // that a private item changed, and zooming into one shows nothing of it.
 const PRIVATE = 'Private';
-// Nothing is shown before this account's settings document has been read once, since only it says what is sensitive:
-// the first read is waited for, and without it the content calls fail rather than show everything. After that each
-// call reads it again in the background and goes on with the last answer.
+// Every content call reads this account's settings document first, since only it says what is sensitive: a node marked
+// on the Mac a moment ago is never shown once from an older list. After the first time that is a local read (the
+// document stays live in the engine, so it is as current as the sync stream). Before the settings were ever read the
+// content calls fail rather than show everything; after, a read that fails (offline) goes on with the last list.
 async function settled() {
-  const fresh = within('settings document', settings.hydrate());
-  if (settings.get('settingsRead')) return void fresh.catch(() => {});
-  await fresh.catch(() => { throw new Error('Could not read your Orbital settings yet, so nothing is shown. Pull to try again.'); });
-  settings.set('settingsRead', true); // this account's own mirror (stand-ins.js ns), never synced
+  const read = await within('settings document', settings.hydrate()).then(() => true, () => false);
+  if (read) return void settings.set('settingsRead', true); // this account's own mirror (stand-ins.js ns), never synced
+  if (!settings.get('settingsRead')) throw new Error('Could not read your Orbital settings yet, so nothing is shown. Pull to try again.');
 }
 const secret = () => new Set(Array.isArray(settings.get('sensitive')) ? settings.get('sensitive') : []);
 // A mention of one or a link to one reads Private too, and a reference to one (a chat's attachment, an embed) is named so.
