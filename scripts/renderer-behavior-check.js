@@ -50,6 +50,9 @@ const withShims = (src) => {
   if (/\bdemo(Mode|Text|Segments|PersonName|WordCount|Meta)\b/.test(src) && !/let demoMode =/.test(src)) src = 'globalThis.demoMode ??= false; globalThis.demoText ??= (value) => value; globalThis.demoSegments ??= (segs) => segs; globalThis.demoPersonName ??= (id) => id; globalThis.demoWordCount ??= () => 2; globalThis.demoMeta ??= (node, meta) => meta;\n' + src;
   // a row knows whether it is drawn in a field from the id it is addressed with (renderer/nodes.js)
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
+  // a field is drawn with its own glyph when one was chosen (renderer/nodes.js fieldGlyph): none in a harness
+  if (/\bfieldGlyph\(/.test(src) && !/const fieldGlyph =/.test(src)) src = "globalThis.fieldGlyph ??= () => 'field';\n" + src;
+  if (/\bpatchFieldGlyphs\(/.test(src) && !/function patchFieldGlyphs\(/.test(src)) src = 'globalThis.patchFieldGlyphs ??= () => {};\n' + src;
   // a date mention's day (renderer/segments.js): the real one, since chips and clicks both ask it
   if (/\bdayOfUri\(/.test(src) && !/const dayOfUri =/.test(src)) src = sourceLine('const dayOfUri').replace('const dayOfUri =', 'globalThis.dayOfUri ??=') + '\n' + src;
   // how many rows changing at once is a new list rather than an edit (renderer/motion.js): the real number
@@ -2341,6 +2344,8 @@ function runInlineFieldsCheck() {
     const kids = new Map(), loaded = [], built = [];
     let fieldsDeferred = false;
     const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false, tana = {}; // not a task, no metadata: neither Assigned to nor Visible to
+    const typeGlyphs = new Map(), drawn = [], addIcon = (el, icon) => { drawn.push(icon); return el; }; // which glyph each field row is drawn with
+    ${sourceLine('const fieldGlyph =')}
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
     const ensureLoaded = (host) => loaded.push(host.docId);
     const renderSegs = (el, segments) => { el.textContent = segments.map(s => s.text).join(''); };
@@ -2348,12 +2353,16 @@ function runInlineFieldsCheck() {
     const childEl = (node, host) => { built.push({ id: host.docId, editable: host.node.editable }); const el = makeEl('div'); el.textContent = node.text; return el; };
     ${functionSource('renderFields')}
     const parent = { docId: 'doc', node: { kind: 'document', editable: true } };
-    ({ draw: () => renderFields(parent, true, inline), state: () => ({ text: inline.textContent, page: page.textContent, loaded, built }),
+    ({ draw: () => renderFields(parent, true, inline), state: () => ({ text: inline.textContent, page: page.textContent, loaded, built }), drawn, typeGlyphs,
        ready: () => kids.set('doc|tana:type:test?attribute=who', [{ text: 'Updated value' }]),
        readonly: () => { parent.node.editable = false; } });
   `);
   api.draw();
   assert.equal(api.state().text, 'Discuss withRob Schuurman', 'inline fields show their labels and cached values while loading');
+  assert.equal(api.drawn.at(-1), 'field', 'a field with no glyph of its own is drawn with the generic one');
+  api.typeGlyphs.set('tana:type:test?attribute=who', 'nc-rocket'); api.draw();
+  assert.equal(api.drawn.at(-1), 'nc-rocket', 'and with the one chosen for it once there is one (#606)');
+  api.typeGlyphs.clear();
   assert.equal(api.state().page, '', 'drawing inline fields leaves the zoomed page fields untouched');
   assert.equal(api.state().loaded[0], 'doc|tana:type:test?attribute=who', 'field editing uses the existing document-field address');
   api.ready(); api.readonly(); api.draw();
@@ -2680,7 +2689,7 @@ function makeSlashHarness() {
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Task', 'Create Project'],
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Doc', 'Task', 'Project'],
     'the "/" menu offers every block type, a checklist, a divider, a table, an image and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
   assert.equal(listing.rows('task')[0].label, 'Task', '"/task" finds the task row first');
@@ -2731,7 +2740,7 @@ async function runSlashMenuCheck() {
     'Table takes the place of the empty "/" row and puts the caret in its first cell');
 
   const create = makeSlashHarness();
-  create.rows('').find((row) => row.label === 'Create Project').run();
+  create.rows('').find((row) => row.label === 'Project').run();
   assert.deepEqual(plain(create.calls()), [['setText', 'doc', 'block', []], ['startCreation', 'custom', 'Project']],
     'a create choice clears the "/" and starts the ordinary creation flow');
 }
@@ -7577,7 +7586,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -8083,6 +8092,60 @@ async function runClassifyTypeCheck() {
 // is main's (main/icons.js) — what is checked here is that the row is offered to a type and nothing else, that the
 // page draws what main answers and registers those glyphs so the rows can show them, that the type it already wears
 // is ticked and can be taken off, and that choosing is one call.
+async function runSetFieldIconCheck() {
+  const api = vm.runInNewContext(`
+    const TYPE = 'tana:type:01j0type000000000000000000', KEY = TYPE + '?attribute=ab12cd34';
+    let palField = null, palReturn = null; const palDoc = null, palette = { hidden: false }, zoom = null, opened = [];
+    const tableView = () => false, fieldType = () => null, shownDocs = () => [], onTypePage = () => false, focused = () => null;
+    const tana = { searchIcons() {}, setTypeIcon() {} }, typeGlyphs = new Map();
+    const items = new Map([['r1', { docId: 'tana:text:01j0doc000000000000000000|' + KEY }], ['r2', { docId: 'tana:text:01j0doc000000000000000000' }]]);
+    const openIconPalette = (doc) => opened.push(doc.id);
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('fieldRows')}
+    ${functionSource('palFieldKey')}
+    const row = () => fieldRows('Current node').find((r) => r.id === 'setFieldIcon');
+    ({ KEY, TYPE, row, opened, typeGlyphs, set: (f, r) => { palField = f; palReturn = r; } })`, {});
+  api.set({ field: { key: api.KEY, type: 'options' }, editable: false });
+  assert.deepEqual(plain([api.row().label, api.row().icon, api.row().hint]), ['Set field icon', 'field', 'The generic glyph'], 'a choice field offers the row under the generic glyph');
+  api.typeGlyphs.set(api.KEY, 'nc-rocket');
+  assert.deepEqual(plain([api.row().icon, api.row().hint]), ['nc-rocket', 'Chosen'], 'and wears the one chosen for it');
+  api.row().run();
+  assert.deepEqual(plain(api.opened), [api.KEY], 'which opens the icon page on the field\u2019s own key');
+  api.set({ typeUri: api.TYPE, def: { key: 'ab12cd34' } });
+  assert.equal(api.row().run() && api.opened.at(-1), api.KEY, 'its definition on the type\u2019s page is the same field');
+  api.set(null, { key: 'r1' });
+  assert.equal(api.row().run() && api.opened.at(-1), api.KEY, 'and so is a row inside a text field\u2019s value');
+  api.set(null, { key: 'r2' });
+  assert.equal(api.row(), undefined, 'a row of the page itself is no field');
+  // The other two places a field is drawn: its definition on the type's page, and its filter pill.
+  const draw = vm.runInNewContext(`
+    ${FAKE_DOM}
+    const TYPE = 'tana:type:01j0type000000000000000000', KEY = TYPE + '?attribute=ab12cd34', typeGlyphs = new Map();
+    const addIcon = (el, icon) => { el.dataset.icon = icon; return el; }, fieldCtxs = new Map(), togglePalette = () => {}, choiceKey = () => {};
+    const PILL_FIELDS = ['options', 'link', 'member', 'date'], DATE_PRESETS = [], fieldType = () => TYPE, putField = () => {};
+    ${sourceLine('const FIELD_KINDS =')}
+    ${sourceLine('const kindName =')}
+    ${sourceLine('const fieldKey =')}
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('definitionEl')}
+    ${functionSource('fieldPill')}
+    const def = { key: 'ab12cd34', title: 'Due', type: 'date' };
+    ({ KEY, typeGlyphs, definition: () => definitionEl({ docId: TYPE }, def).childNodes[0].dataset, pill: () => fieldPill(def, {}, () => {}).icon })`, {});
+  assert.deepEqual(plain([draw.definition().icon, draw.definition().field, draw.pill()]), ['field', draw.KEY, 'field'], 'a definition and a pill with no glyph of their own draw the generic one, the definition marked with its field');
+  draw.typeGlyphs.set(draw.KEY, 'nc-flask');
+  assert.deepEqual(plain([draw.definition().icon, draw.pill()]), ['nc-flask', 'nc-flask'], 'and both wear the one chosen for the field');
+  // A choice redraws the field's glyphs in place, since the render that would waits while the caret is in its value.
+  const patched = vm.runInNewContext(`
+    const KEY = 'tana:type:01j0type000000000000000000?attribute=ab12cd34', typeGlyphs = new Map([[KEY, 'nc-rocket']]), asked = [];
+    const el = { childNodes: ['old'], replaceChildren() { this.childNodes = []; } }, CSS = { escape: (s) => s };
+    const document = { querySelectorAll: (sel) => { asked.push(sel); return sel === '.ricon[data-field="' + KEY + '"]' ? [el] : []; } };
+    const addIcon = (target, icon) => { target.childNodes.push(icon); return target; };
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('patchFieldGlyphs')}
+    patchFieldGlyphs(KEY); ({ nodes: el.childNodes, asked })`, {});
+  assert.deepEqual(plain(patched.nodes), ['nc-rocket'], 'a chosen glyph replaces the old one on the rows already drawn');
+  console.log('ok  Set field icon: offered on a choice field, a definition and a text field\u2019s row, all under the field\u2019s key (#606)');
+}
 async function runSetIconCheck() {
   const TYPE = 'tana:type:01j0type000000000000000000', DOC = 'tana:text:01j0doc000000000000000000';
   const api = vm.runInNewContext(`

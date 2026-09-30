@@ -314,7 +314,7 @@ Mouse: a click on the bullet zooms into the row, on the chevron toggles it, on t
 Selecting text in a row shows a floating toolbar of marks and block styles (renderer/toolbar.js); the style menu
 greys Text out for a child rather than offering a row that errors. "/" at the start of an empty row opens the "/"
 menu (`slashRows`): the block types with Checklist after the lists (the checkbox ⌘↩ gives, #602), Divider, Table and
-Image (also found by picture, photo, upload), then Create Doc, Task and the rest of what Create new … offers, workspace
+Image (also found by picture, photo, upload), then Doc, Task and the rest of what Create new … offers, workspace
 types under their own heading. Task (`taskFromSlash`, #602) asks the task's name on a page of its own and the row
 becomes a reference to the new task, as Tana's own "/" Task embeds one; Escape goes back to the menu. Choosing one
 of the others opens a page that asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens
@@ -478,7 +478,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   Add to chat …);
   a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
-  it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set colour, Mark as
+  it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
   sensitive); the agent (Assign to Agent, Go to Codex task, Link Codex task …, Open in Codex); Edit visibility, Add participants … (Edit
   visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
@@ -692,6 +692,13 @@ wrong twenty.
   (`autoTypeIcons` in main.js, `pickTypeIcons` in main/ai.js, `icons.fillTypeIcons` keeping only names in the set); a
   pick is stored like a choice and asked once, **No icon** is stored as `null` and left alone, and without a sign-in
   or key nothing is asked. A failure is logged, never shown.
+- **Set field icon** (`setFieldIcon`, #606) is Set icon for one field of a type, offered with the caret on the field:
+  a choice value, a row of a text or date value, or its definition on the type's page (renderer/fields.js
+  `palFieldKey`). The same page and the same write, stored in `typeIcons` under the field's own key
+  (`<type uri>?attribute=<key>`), so it belongs to the type and every document of it shows the field with that glyph:
+  the field row under the title, the definition under Edit fields and the field's filter pill (`fieldGlyph`,
+  renderer/nodes.js). The boot AI pick fills fields as it fills types: every titled field with no choice yet goes to
+  the model as "Type › Field" in the same one call (`autoTypeIcons`, main.js), and **No icon** is kept the same way.
 - **Set colour** (`setHue`, on a type) is this app's own hue (0-360) or grey for the type, kept in the synced
   `typeHues` setting and leaving Tana's `appearance.hue` untouched (Tana has no grey). With no entry Tana's hue shows
   through. The picker is the palette: twelve named colours, each drawn with the type's glyph in that colour, the current

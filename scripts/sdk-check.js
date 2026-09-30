@@ -37,7 +37,7 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: {}, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
+  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } },
     clipboard: { items: [], read: async () => electron.clipboard.items } }; // items: what a check puts on it, as clipboard.read() hands them over
   const context = vm.createContext({
@@ -824,7 +824,7 @@ async function main() {
     // The boot icon pick (issue #250): every icon name and the type titles go out, and the answer maps back to uris.
     const picked=await ai.pickTypeIcons([{uri:'tana:type:a',title:'Meeting'},{uri:'tana:type:b',title:'Person'}],['calendar','user'],fetchWith(answer('Sure: {"1": " calendar ", "2": 7}')));
     assert.deepEqual(picked,{'tana:type:a':'calendar','tana:type:b':null},'a name is read per type number, trimmed, and anything else is no pick');
-    assert.deepEqual([calls.at(-1).init.body.input,calls.at(-1).init.body.instructions],['Icons: calendar, user\n\nType 1: Meeting\nType 2: Person',ai.ICON_INSTRUCTIONS],'the names and the titles are the input, and nothing else about a type');
+    assert.deepEqual([calls.at(-1).init.body.input,calls.at(-1).init.body.instructions],['Icons: calendar, user\n\n1: Meeting\n2: Person',ai.ICON_INSTRUCTIONS],'the names and the titles are the input, and nothing else about a type');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('This title does not name anyone to discuss it with, so there is nobody to suggest here.'))),null,'a sentence is the model explaining itself: not a name');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
@@ -1012,6 +1012,27 @@ async function main() {
       assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'nc-rocket', 'and its row is drawn with it');
       icons.setTypeIcon(SEARCH, null);
       assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'search', 'No icon puts the search glyph back');
+    }
+    { // and a type's field, under its own key, sent with the rest of the glyphs (#606)
+      const FIELD = TYPE + '?attribute=ab12cd34';
+      assert.equal(icons.setTypeIcon(FIELD, 'nc-rocket').name, 'nc-rocket', 'a field takes an icon');
+      assert.ok(icons.typeIcons().some((i) => i.uri === FIELD && i.name === 'nc-rocket'), 'and the renderer is told it with the type glyphs');
+      assert.throws(() => icons.setTypeIcon('tana:text:' + ulid() + '?attribute=ab12cd34', 'nc-rocket'), /set on a type/, 'only a type has fields');
+      icons.setTypeIcon(FIELD, null);
+    }
+    { // the boot pick asks about fields too, as "Type › Field", and not about a type already chosen for (#606)
+      const typeDoc = new Document(TYPE);
+      typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }, { key: 'ab12cd34', title: ' ' }] }));
+      let listed = 0;
+      backend.testRuntime({ me: { userUri: 'tana:user-profile:' + ulid() }, client: { graph: { listNodes: async (p) => { if ((p.nodeTypes || [])[0] !== 'type') return { nodes: [] }; listed++; return { nodes: [{ id: TYPE, title: 'Project' }] }; } }, sync: { subscribe: async (id) => { if (id !== TYPE) throw new Error('unavailable'); return typeDoc; }, getDocument: () => null } } });
+      const pick = backend.ai.pickTypeIcons, status = backend.ai.chatgptStatus, asked = [];
+      backend.ai.pickTypeIcons = async (missing) => { asked.push(...missing); return {}; };
+      backend.ai.chatgptStatus = async () => ({ signedIn: false }); // the real one starts a Codex app-server
+      await backend.autoTypeIcons();
+      assert.deepEqual([asked.length, listed], [0, 0], 'without a sign-in or a key nothing is asked, and no type is listed or read');
+      const get = backend.settings.get; backend.settings.get = (key) => (key === 'openaiApiKey' ? 'sk-test' : get(key)); // a key, and nothing else about the settings changed
+      try { await backend.autoTypeIcons(); } finally { backend.ai.pickTypeIcons = pick; backend.ai.chatgptStatus = status; backend.settings.get = get; }
+      assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ uri: TYPE + '?attribute=gcx3bvn5', title: 'Project › Fase' }], 'a titled field with no icon is asked about under its type\u2019s name; the type, chosen for, and an untitled field are not');
     }
     console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
     // The colour the same way: a hue of our own, or grey, kept beside the glyph in the settings; Tana's own hue on
