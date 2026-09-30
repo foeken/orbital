@@ -6836,6 +6836,8 @@ async function runHomeCheck() {
   api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ week: true }), view: 'library' } }]);
   api.go({ docId: 'tana:text:week', nodeId: null });
   assert.equal(api.at(), true, 'a This week pane is Home on this week\u2019s node');
+  api.titles({ 'tana:text:today': '2026-09-30', 'tana:text:yesterday': '2026-09-29', 'tana:text:week': ' week 40 (2026) ' });
+  assert.equal(api.at(), true, 'whatever its case and spaces, as main finds your week node by it');
   api.day('2026-10-01');
   assert.equal(api.at(), true, 'past midnight in the same week, This week is still Home');
   api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ today: true }), view: 'library' } }]);

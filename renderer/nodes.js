@@ -296,8 +296,9 @@ function atSavedView(v) {
   let p = null;
   const as = typeof window !== 'undefined' && window.api && window.api.savedAs ? ':' + window.api.savedAs : SIDE; // a page given another id than the view's (main.js adoptLayout)
   try { p = JSON.parse(v.keys['place' + as] || 'null'); } catch { /* not a place */ }
-  // a saved view's Today or This week (#639): the page of that title now. By title, as this is only the Home mark, drawn on every render
-  if (p && (p.today || p.week)) return !!zoom && !zoom.nodeId && (docOf(zoom.docId) || {}).text === (p.today ? localDate() : weekTitle());
+  // a saved view's Today or This week (#639): the page of that title now, matched as main/pins.js ownNode does. By title,
+  // as this is only the Home mark drawn on every render: ids would need a cache kept right across midnight and renames
+  if (p && (p.today || p.week)) return !!zoom && !zoom.nodeId && String((docOf(zoom.docId) || {}).text || '').trim().toLowerCase() === (p.today ? localDate() : weekTitle().toLowerCase());
   return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === v.keys['view' + as]);
 }
 // the Work View as installed ('workView' its layout) or as updated from Save view, which is judged by its own keys
