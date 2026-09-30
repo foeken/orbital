@@ -941,6 +941,9 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
    document, the gap from a paragraph to the row after it is 1.42x the pitch between two list rows, which at our
    30px row is 12px more. Margins collapse, so a paragraph in front of a heading still takes the heading's. */
 .node.t-paragraph { margin-bottom: 12px; }
+/* A full reference carries its grey facts line, so the plain row after it would read as part of it at a list row's
+   pitch: a little air in between (#645). A paragraph reference already has more, and the margins collapse into it. */
+.node.fullref + .node:not(.fullref) { margin-top: 8px; }
 #outline > .node:first-child, .children > .node:first-child { margin-top: 0; }
 .selected { background: #e8f1fb; } /* the whole node: a selected parent takes its children with it, so they show as selected too */
 .selected .line { border-radius: 0; }
