@@ -278,10 +278,11 @@ function tellTitle(title, renamable, icon = '') {
   const saveSearch = !LINKS && !zoom && authed && !!tana.createSearch && pillsApply();
   const link = !LINKS && !!zoom && !String(zoom.docId).startsWith('orbital:'); // a node of Tana's, not an app page: Copy link on its tab (shell.js, #542)
   const refresh = !LINKS && refreshable; // a saved search that can be asked again: Refresh on its tab (renderer/pills.js offerRefresh)
-  const told = title + '\n' + renamable + '\n' + icon + '\n' + saveSearch + '\n' + link + '\n' + refresh;
+  const remove = !LINKS && onSearchPage(); // a saved search: Delete on its tab, the page's ⇧⌘⌫ (shell.js, #615)
+  const told = title + '\n' + renamable + '\n' + icon + '\n' + saveSearch + '\n' + link + '\n' + refresh + '\n' + remove;
   if (told === toldTitle || !window.frameElement) return;
   toldTitle = told; toldIcon = icon;
-  window.parent.postMessage({ orbital: 'title', title, renamable, icon, saveSearch, link, refresh }, '*');
+  window.parent.postMessage({ orbital: 'title', title, renamable, icon, saveSearch, link, refresh, remove }, '*');
 }
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
 // title fills the line the browser wraps them onto a line of their own, where they read as a second title rather

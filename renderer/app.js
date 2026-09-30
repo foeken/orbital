@@ -85,6 +85,7 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id); // a key pressed in the Graph pane
   else if (e.data?.orbital === 'rename') renameTitle(); // Rename on the tab (shell.js)
   else if (e.data?.orbital === 'refresh') refreshSearch(); // Refresh in the pane's menu (shell.js)
+  else if (e.data?.orbital === 'remove' && onSearchPage()) removeZoomedBlock(); // Delete on a saved search's tab (shell.js, #615)
   else if (e.data?.orbital === 'copyLink' && zoom) run(async () => copyText(await tana.nodeLink(zoom.docId), 'Link copied')); // Copy link on the tab: the page's node, whatever row has the caret (#542)
   else if (e.data?.orbital === 'processImage') processImage(e.data.file); // an image dropped on Create new (shell.js)
   else if (e.data?.orbital === 'compose' && typeof e.data.docId === 'string' && Array.isArray(e.data.segs) && e.data.doc) composeInto(e.data.docId, e.data.segs, e.data.doc); // ⌘K Add to chat, from this pane or another (renderer/chat.js)
