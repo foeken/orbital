@@ -108,7 +108,9 @@ failure afterwards would leave a local commit and tag to undo:
 Then it bumps the version, packages the arm64 bundle with the hardened runtime, notarizes and staples
 it, validates the staple, prints the verdict Gatekeeper will give on someone else's Mac, zips the
 bundle with `ditto` (which preserves both the signature and the ticket), pushes the commit and tag,
-and publishes the zip to `foeken/orbital-releases` — override with `ORBITAL_RELEASES_REPO`.
+and publishes the zip to `foeken/orbital-releases` — override with `ORBITAL_RELEASES_REPO`. The
+release notes are then written by hand and posted in **#orbital** on Slack; the script prints that
+reminder last.
 Signing every nested file takes a few minutes; let it finish, and never run two packager builds at
 once, because the packager clears a shared temporary tree at startup and the second run breaks the
 first in a way that looks like a signing bug.

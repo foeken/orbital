@@ -10,11 +10,15 @@ let meetingList = null, pinMeetingDoc = null; // the meeting picker: loadList's 
 let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
-// where: ⌘↩ / ⌥↩ open a row that opens a place in a pane beside or a tab (`opens` an id, or a function finding one).
+// where: ⌘↩ / ⇧↩ / ⌥↩ (or the same click, openRow) open a row that opens a place in a tab, a pane beside or a floating
+// pane (`opens` an id, or a function finding one).
 function chooseRow(create, where) {
   // the four pages whose rows main finds (the input listener below): an Enter there waits for the answer to what was typed
   if (palBusy && (palMode === 'spaces' || palMode === 'search' || palMode === 'pinToday' || palMode === 'setIcon')) { palEnter = { create, where }; return; }
   const r = create && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex];
+  openRow(r, where);
+}
+function openRow(r, where) {
   if (r && where && !linkCtx && r.opens && !r.disabled) { closePalette(); run(async () => openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens)); }
   else if (r) runRow(r);
 }
@@ -26,7 +30,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // it looks, the agent, who sees it, its link and export, and last the destructive rows. Rows without an id carry a
 // `rank` from this list instead.
 // The rows about a field the caret is on (renderer/fields.js) come before the node's own: they are about what is focused.
-const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets',
+const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'setFieldIcon',
   'zoomIn', 'expand', 'collapse',
   'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status',
   'assign', 'assignTo', 'discussWith', 'addToChat',
@@ -905,6 +909,7 @@ function applyIcon(doc, name) {
   run(async () => {
     const chosen = await tana.setTypeIcon(doc.id, name);
     if (chosen) { registerIcons([chosen]); typeGlyphs.set(doc.id, chosen.name); } else typeGlyphs.delete(doc.id);
+    patchFieldGlyphs(doc.id); // a field's glyph shows now, even with the caret in its value
     closePalette();
   });
 }
@@ -1058,7 +1063,7 @@ function renderPalette() {
     if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
     if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = demoMeta(r.node, r.hint); blurSensitive(h, r.node && r.node.id); row.append(h); }
     row.onmousedown = (e) => e.preventDefault();
-    row.onclick = () => runRow(r);
+    row.onclick = (e) => openRow(r, elsewhere(e)); // ⌘/⇧/⌥-click opens it where ⌘↩/⇧↩/⌥↩ would
     // the pointer moves the one highlight, as ↑/↓ do (and past the same rows): a pointer that only rests there does not
     row.onmousemove = () => {
       if (palIndex === i || (r.disabled && !r.id)) return;
@@ -1144,10 +1149,13 @@ const PANE_ROWS = [['otherPane', 'Next pane', 'panel.next', 'otherPane'], ['prev
   ['zoomBack', 'Zoom back', 'navigation.back', 'back'], ['zoomForward', 'Zoom forward', 'navigation.forward', 'forward'],
   ['closePane', 'Close pane', 'view.close', 'closePane']];
 const shellRun = (command) => { if (window.frameElement) window.parent.postMessage({ orbital: 'run', command }, '*'); };
-// Opening a place somewhere other than this page (issue #443): ⌘ a pane beside this one (as ⌘N opens one), ⌥ a tab in
-// this pane. Main gives the new page its id, and it opens on the place stored under that id (shell.js open, edit.js).
-const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'right' : e.altKey ? 'tab' : null);
+// Opening a place somewhere other than this page (issues #443, #608), as is common elsewhere: ⌘ a tab in this pane (a
+// browser's, Obsidian's), ⇧ a pane beside this one (Roam's and Logseq's sidebar), ⌥ a floating pane (no convention; the
+// key left). Main gives the new page its id, and it opens on the place stored under that id (shell.js open, edit.js).
+// A ⌘- or ⇧-click on a row's line still selects: only its bullet, a chat's links and cards reach here with those.
+const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'tab' : e.shiftKey ? 'right' : e.altKey ? 'float' : null);
 async function openElsewhere(where, docId, nodeId = null) {
+  if (opensCanvas(docId)) return; // ⌘/⇧/⌥ on a canvas: its own window, as a plain click (renderer/edit.js, #611)
   if (inOtherPane(placeKey(docId, nodeId))) return; // already on screen in another pane: that pane takes the keys (#533)
   const d = docOf(docId) || {};
   await tana.splitWindow(where, { view, place: JSON.stringify({ docId, nodeId, title: d.text ?? d.title, icon: d.icon }) });
@@ -1263,7 +1271,7 @@ palInput.addEventListener('keydown', (e) => {
   if (palPage.keys && palPage.keys(e)) { e.preventDefault(); e.stopPropagation(); } // a page's own keys (Edit choices: ⌘⌫, ⇧⌘↑/↓)
   else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (linkCtx) linkCtx.typed = palInput.value; backPalette(); } // what was typed into an "@" search goes on after the "@" (toolbar.js cancelLink)
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); }
-  else if (e.key === 'Enter') { // ⌘↩ / ⌥↩ on a row that opens a place: in a pane beside, or a tab in this one (while linking, ⌘↩ creates)
+  else if (e.key === 'Enter') { // ⌘↩ / ⇧↩ / ⌥↩ on a row that opens a place: a tab in this pane, a pane beside, or floating (while linking, ⌘↩ creates)
     e.preventDefault(); e.stopPropagation();
     chooseRow(mod, !linkCtx && elsewhere(e));
   }

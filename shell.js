@@ -12,6 +12,7 @@ const renamable = new Set(); // the pages whose title can be typed in (renderer/
 const linkable = new Set(); // the pages showing a node of Tana's: Copy link on their tab (#542)
 const refreshable = new Set(); // the saved searches that can be asked again: Refresh on their tab (renderer/pills.js offerRefresh)
 const saveable = new Set(); // the views whose pills can be kept as a saved search (the Library): Save as new search on their tab (#538)
+const removable = new Set(); // the saved searches: Delete on their tab (renderer/render.js tellTitle, #615)
 const tabIcons = new Map(); // page id -> the glyph its page told (renderer/render.js tellTitle), our own markup
 // the header buttons drawn per page (drawNav below), and with one page the window header's slot for them; up here
 // because sync() runs at load and clears the slot when the page count crosses one
@@ -36,6 +37,7 @@ const types = (tabs) => ({ page: { title: 'Orbital', tabbar: tabs ? 'always' : '
       ...(renamable.has(view.id) ? [{ id: 'rename', label: 'Rename', run: () => rename(view.id) }] : []),
       ...(linkable.has(view.id) ? [{ id: 'copyLink', label: 'Copy link', run: () => { focusPage(view.id); windowOf(frameOf(view.id))?.postMessage({ orbital: 'copyLink' }, '*'); } }] : []), // focused first: the clipboard wants the page in front
       ...(saveable.has(view.id) ? [{ id: 'saveSearch', label: 'Save as new search', run: () => { focusPage(view.id); windowOf(frameOf(view.id))?.postMessage({ orbital: 'action', id: 'saveSearch' }, '*'); } }] : [])]; // Cmd+K's row, in that page
+    if (removable.has(view.id)) items.push({ id: 'remove', label: 'Delete', run: () => { focusPage(view.id); windowOf(frameOf(view.id))?.postMessage({ orbital: 'remove' }, '*'); } }); // last: destructive; Tana decides, ⌘Z restores
     return items.length ? [...items, 'separator'] : [];
   },
   iframe: (view) => ({ src: 'index.html?side=' + encodeURIComponent(view.params.side) + (view.params.links ? '&links=1' : ''), title: 'Orbital' }) } });
@@ -133,7 +135,7 @@ function guard() {
 const drawTabIcons = () => { for (const s of ws.surfaces()) { const g = tabIcons.get(s.view.id) || ''; if (s.icon.dataset.glyph !== g) { s.icon.dataset.glyph = g; s.icon.innerHTML = g; } } };
 ws.on('surfaces', drawTabIcons);
 ws.on('close', (view) => {
-  guarded.delete(view.id); renamable.delete(view.id); refreshable.delete(view.id); saveable.delete(view.id); linkable.delete(view.id); tabIcons.delete(view.id); docs.delete(view.id); places.delete(view.id);
+  guarded.delete(view.id); renamable.delete(view.id); refreshable.delete(view.id); saveable.delete(view.id); removable.delete(view.id); linkable.delete(view.id); tabIcons.delete(view.id); docs.delete(view.id); places.delete(view.id);
   if (followed === view.id) { followed = null; follow(); }
   requestAnimationFrame(() => { if (document.activeElement?.tagName !== 'IFRAME') windowOf(frameOf(ws.getSnapshot().focusedView))?.focus(); });
 });
@@ -330,6 +332,7 @@ addEventListener('message', (e) => {
     if (e.data.saveSearch === true) saveable.add(id); else saveable.delete(id);
     if (e.data.link === true) linkable.add(id); else linkable.delete(id);
     if (e.data.refresh === true) refreshable.add(id); else refreshable.delete(id);
+    if (e.data.remove === true) removable.add(id); else removable.delete(id);
     tabIcons.set(id, typeof e.data.icon === 'string' ? e.data.icon : ''); drawTabIcons();
   }
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));

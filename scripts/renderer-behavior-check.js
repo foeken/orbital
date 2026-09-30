@@ -50,6 +50,9 @@ const withShims = (src) => {
   if (/\bdemo(Mode|Text|Segments|PersonName|WordCount|Meta)\b/.test(src) && !/let demoMode =/.test(src)) src = 'globalThis.demoMode ??= false; globalThis.demoText ??= (value) => value; globalThis.demoSegments ??= (segs) => segs; globalThis.demoPersonName ??= (id) => id; globalThis.demoWordCount ??= () => 2; globalThis.demoMeta ??= (node, meta) => meta;\n' + src;
   // a row knows whether it is drawn in a field from the id it is addressed with (renderer/nodes.js)
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
+  // a field is drawn with its own glyph when one was chosen (renderer/nodes.js fieldGlyph): none in a harness
+  if (/\bfieldGlyph\(/.test(src) && !/const fieldGlyph =/.test(src)) src = "globalThis.fieldGlyph ??= () => 'field';\n" + src;
+  if (/\bpatchFieldGlyphs\(/.test(src) && !/function patchFieldGlyphs\(/.test(src)) src = 'globalThis.patchFieldGlyphs ??= () => {};\n' + src;
   // a date mention's day (renderer/segments.js): the real one, since chips and clicks both ask it
   if (/\bdayOfUri\(/.test(src) && !/const dayOfUri =/.test(src)) src = sourceLine('const dayOfUri').replace('const dayOfUri =', 'globalThis.dayOfUri ??=') + '\n' + src;
   // how many rows changing at once is a new list rather than an edit (renderer/motion.js): the real number
@@ -138,6 +141,8 @@ const withShims = (src) => {
   if (/\baudienceShown\(/.test(src)) src = (/let zoom\b/.test(src) ? '' : 'globalThis.zoom ??= null;\n') + (/const TIMELINE_PAGE =/.test(src) ? '' : "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n") + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
   if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
+  // the fields a mixed list's rows carry (renderer/views.js pageFieldDefs): a harness that is not about them lists none
+  if (/\bfunction pageFieldDefs\(/.test(src)) src = (/const listPage =/.test(src) ? '' : 'globalThis.listPage ??= () => false;\n') + (/const viewOf =/.test(src) ? '' : 'globalThis.viewOf ??= () => null;\n') + (/\bconst kids =/.test(src) ? '' : 'globalThis.kids ??= new Map();\n') + (/const relatedBy =/.test(src) ? '' : 'globalThis.relatedBy ??= new Map();\n') + (/function loadRelated\(/.test(src) ? '' : 'globalThis.loadRelated ??= () => {};\n') + src;
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
   if (/\bonRowBlank\(/.test(src) && !/const onRowBlank =/.test(src)) src = sourceBetween('const onRowBlank =', '// `texts()`') + '\n' + src;
   // a type's or a saved search's own glyph (renderer/nodes.js iconOf): a harness that draws neither only needs the names
@@ -1464,12 +1469,13 @@ async function runVisibilityPickerCheck() {
 }
 
 async function runLinkPaletteCheck() {
-  // ⌘↩ / ⌥↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
+  // ⇧↩ / ⌘↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
   const open = vm.runInNewContext(`
     let linkCtx = null, palBusy = false, palMode = 'search', palEnter = null, palIndex = 0, palRows = [], opened = [], pending;
     const closePalette = () => {}, run = (fn) => (pending = fn()), runRow = (r) => opened.push(['plain', r.label]);
     const openElsewhere = (where, id) => opened.push([where, id]);
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ({ opened, set: (rows, busy) => { palRows = rows; palBusy = busy; }, chooseRow, settleEnter, settle: () => pending });
   `);
@@ -1480,7 +1486,11 @@ async function runLinkPaletteCheck() {
   open.set([{ label: 'Hit', opens: 'tana:text:hit' }], false);
   open.settleEnter(); await open.settle();
   open.chooseRow(false, false);
-  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⌘↩ opens Today beside, ⌥↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⇧↩ opens Today beside, ⌘↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+  // the modifiers every key and click opens elsewhere with (#608): ⌘ a tab, ⇧ a pane beside, ⌥ floating, ⌘ winning
+  const elsewhere = vm.runInNewContext(source.match(/^const elsewhere = [^\n]+;$/m)[0].replace('const elsewhere = ', ''));
+  const mods = (m) => ({ metaKey: m.includes('⌘'), ctrlKey: false, shiftKey: m.includes('⇧'), altKey: m.includes('⌥') });
+  assert.deepEqual(['⌘', '⇧', '⌥', '', '⌘⇧', '⇧⌥'].map((m) => elsewhere(mods(m))), ['tab', 'right', 'float', null, 'tab', 'right'], '⌘ opens a tab, ⇧ a pane beside, ⌥ a floating pane, nothing in place');
 
   const resultRows = functionSource('resultRows');
   const searchNow = functionSource('searchNow');
@@ -1504,6 +1514,7 @@ async function runLinkPaletteCheck() {
     const showError = (error) => { throw error; };
     const runRow = (row) => row.run();
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ${resultRows}
     ${functionSource('titleHits')}
@@ -2335,6 +2346,8 @@ function runInlineFieldsCheck() {
     const kids = new Map(), loaded = [], built = [];
     let fieldsDeferred = false;
     const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false, tana = {}; // not a task, no metadata: neither Assigned to nor Visible to
+    const typeGlyphs = new Map(), drawn = [], addIcon = (el, icon) => { drawn.push(icon); return el; }; // which glyph each field row is drawn with
+    ${sourceLine('const fieldGlyph =')}
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
     const ensureLoaded = (host) => loaded.push(host.docId);
     const renderSegs = (el, segments) => { el.textContent = segments.map(s => s.text).join(''); };
@@ -2342,12 +2355,16 @@ function runInlineFieldsCheck() {
     const childEl = (node, host) => { built.push({ id: host.docId, editable: host.node.editable }); const el = makeEl('div'); el.textContent = node.text; return el; };
     ${functionSource('renderFields')}
     const parent = { docId: 'doc', node: { kind: 'document', editable: true } };
-    ({ draw: () => renderFields(parent, true, inline), state: () => ({ text: inline.textContent, page: page.textContent, loaded, built }),
+    ({ draw: () => renderFields(parent, true, inline), state: () => ({ text: inline.textContent, page: page.textContent, loaded, built }), drawn, typeGlyphs,
        ready: () => kids.set('doc|tana:type:test?attribute=who', [{ text: 'Updated value' }]),
        readonly: () => { parent.node.editable = false; } });
   `);
   api.draw();
   assert.equal(api.state().text, 'Discuss withRob Schuurman', 'inline fields show their labels and cached values while loading');
+  assert.equal(api.drawn.at(-1), 'field', 'a field with no glyph of its own is drawn with the generic one');
+  api.typeGlyphs.set('tana:type:test?attribute=who', 'nc-rocket'); api.draw();
+  assert.equal(api.drawn.at(-1), 'nc-rocket', 'and with the one chosen for it once there is one (#606)');
+  api.typeGlyphs.clear();
   assert.equal(api.state().page, '', 'drawing inline fields leaves the zoomed page fields untouched');
   assert.equal(api.state().loaded[0], 'doc|tana:type:test?attribute=who', 'field editing uses the existing document-field address');
   api.ready(); api.readonly(); api.draw();
@@ -2674,7 +2691,7 @@ function makeSlashHarness() {
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Task', 'Create Project'],
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Doc', 'Task', 'Project'],
     'the "/" menu offers every block type, a checklist, a divider, a table, an image and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
   assert.equal(listing.rows('task')[0].label, 'Task', '"/task" finds the task row first');
@@ -2725,7 +2742,7 @@ async function runSlashMenuCheck() {
     'Table takes the place of the empty "/" row and puts the caret in its first cell');
 
   const create = makeSlashHarness();
-  create.rows('').find((row) => row.label === 'Create Project').run();
+  create.rows('').find((row) => row.label === 'Project').run();
   assert.deepEqual(plain(create.calls()), [['setText', 'doc', 'block', []], ['startCreation', 'custom', 'Project']],
     'a create choice clears the "/" and starts the ordinary creation flow');
 }
@@ -2925,6 +2942,23 @@ async function runRailPinCheck() {
     lite.loadRelated('row'); await settle(); lite.loadRelated('row', true); await settle();
     assert.deepEqual([plain(lite.asked), lite.kind('row')], [['lite', 'lite', 'whole'], 'whole'], 'the page on screen reads the whole sidebar over it, and it stays whole');
   }
+  {
+    // A type's definitions are Group choices on a mixed list: ⌘K, open when they arrive, drops its folded choices and redraws
+    const late = vm.runInNewContext(`
+      let releases = 0, redrawn = 0; const releasedDocs = new Map(), releasedSince = () => false;
+      const relatedBy = new Map(), relatedStale = new Set(), connected = true, isRealId = () => true, renderSoon = () => {};
+      const queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false, zoom = null, items = new Map();
+      const palette = { hidden: false }, subCache = new Map([['Group by', []]]), renderPalette = () => { redrawn++; };
+      const tana = { related: async (id) => (id === 'tana:type:goal' ? { lite: true, definitions: [{ key: 'prio', type: 'options' }] } : { lite: true, fields: [] }) };
+      ${functionSource('loadRelated')}
+      ({ loadRelated, state: () => ({ cached: subCache.size, redrawn }) });
+    `);
+    const settle = () => new Promise((resolve) => setTimeout(resolve));
+    late.loadRelated('row', true); await settle();
+    assert.deepEqual(plain(late.state()), { cached: 1, redrawn: 0 }, 'a row’s fields leave an open ⌘K alone');
+    late.loadRelated('tana:type:goal', true); await settle();
+    assert.deepEqual(plain(late.state()), { cached: 0, redrawn: 1 }, 'a type’s definitions arriving while ⌘K is open drop its folded choices and redraw it');
+  }
   assert.match(functionSource('closePalette'), /pinCtx = null/, 'closing the shared palette clears pin context');
 }
 
@@ -3113,10 +3147,22 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const collapsedGroups = new Set(pref('collapsedGroups', []));
     const isTask = (n) => n.icon === 'task';
     const visibleTags = (n) => { const tags = n.tags || []; return isTask(n) && tags.some((t) => t.label !== 'task') ? tags.filter((t) => t.label !== 'task') : tags; };
+    // a mixed list's rows carry field values of their own type (renderer/views.js pageFieldDefs), named by its definitions
+    // (Goal has a real choice called No value; Note's Priority is plain text; Stage's type has no values set anywhere)
+    const viewOf = () => views.find((s) => s.id === view), relatedBy = new Map([
+      ['tana:type:goal', { definitions: [{ key: 'prio', title: 'Priority', type: 'options', options: [{ label: 'High' }, { label: 'Low' }, { label: 'No value' }] }, { key: 'note', title: 'Note', type: 'plain' }, { key: 'prio2', title: 'Priority', type: 'options', options: [{ label: 'Low' }] }] }],
+      ['tana:type:bug', { definitions: [{ key: 'sev', title: 'Priority', type: 'options', options: [{ label: 'Urgent' }, { label: 'High' }] }] }],
+      ['tana:type:note', { definitions: [{ key: 'p', title: 'Priority', type: 'plain' }] }],
+      ['tana:type:empty', { definitions: [{ key: 'stage', title: 'Stage', type: 'options', options: [{ label: 'Draft' }] }] }]]);
+    const loaded = []; function loadRelated(uri) { loaded.push(uri); } // the definitions a page reads (renderer/rail.js)
+    // rows marked sensitive (renderer/nodes.js): Goal g1 and g5, the two Low rows
+    let sensitiveIds = new Set(['g1', 'g5']), sensitiveVisible = false;
+    ${functionSource('sensitiveHidden')}
+    ${functionSource('blurSensitive')}
     ${definitions}
     ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
-       RESPONSIBILITY,
+       RESPONSIBILITY, groupList, list: (nodes) => { viewOf().nodes = nodes; }, loaded: () => loaded,
        dragging: (on) => { taskDragging = on; },
        asked: () => asked,
        meta: (id, m) => taskMetaById.set(id, m),
@@ -3135,6 +3181,80 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 'd1', text: 'echo', icon: 'doc', tags: [{ label: 'doc' }] },
   ];
   const titles = (list, by) => plain(api.groupRows(list, by)).map((g) => [g.title, g.nodes.map((n) => n.id)]);
+  // The Tasks view lists several types and docs: the choice fields of the types its rows are now are offered by name,
+  // one Priority over both types that have one as a choice, and a row without a value is under No value.
+  const tag = (t) => [{ label: t, uri: 'tana:type:' + t }];
+  const PRIO = 'field?attribute=Priority', goals = [
+    { id: 'g1', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio': ['Low'] } },
+    { id: 'g2', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio': ['High'] } },
+    { id: 'g3', tags: tag('goal'), fields: { 'tana:type:goal?attribute=note': ['x'] } },
+    { id: 'g4', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio': ['No value'] } }, // the real choice
+    { id: 'g5', tags: tag('goal'), fields: { 'tana:type:goal?attribute=prio2': ['Low'] } }, // Goal's second field called Priority
+    { id: 'b1', tags: tag('bug'), fields: { 'tana:type:bug?attribute=sev': ['Urgent'] } },
+    { id: 'b2', tags: tag('bug'), fields: { 'tana:type:bug?attribute=sev': ['High'] } },
+    { id: 'r1', tags: tag('bug'), fields: { 'tana:type:goal?attribute=prio': ['Low'] } }, // a Goal retyped to Bug keeps its old value
+    { id: 'n1', tags: tag('note'), fields: { 'tana:type:note?attribute=p': ['whenever'] } }, // plain text, not a choice
+    { id: 'e1', tags: tag('empty') },
+    rows[0], rows[4],
+  ];
+  api.list(goals);
+  api.groupList();
+  assert.deepEqual(plain(api.loaded()), [], 'a mixed list reads no type definitions until they are wanted');
+  assert.deepEqual(plain(api.groupList(true)).filter(([id]) => id.includes('?attribute=')), [[PRIO, 'Priority'], ['field?attribute=Stage', 'Stage']],
+    'the Group menu reads them, and offers the choice fields of the types on the page, one with no values set included');
+  assert.deepEqual(plain(api.loaded()), ['tana:type:goal', 'tana:type:bug', 'tana:type:note', 'tana:type:empty'], 'one read per type the rows are');
+  assert.deepEqual(plain(api.groupRows(goals, PRIO)).map((g) => [g.id || g.title, g.nodes.map((n) => n.id)]),
+    [['High', ['g2', 'b2']], ['Low', ['g1', 'g5']], ['No value', ['g4']], ['Urgent', ['b1']], ['\u0000no value', ['g3', 'r1', 'n1', 'e1', 't1', 'd1']]],
+    'sections follow the choices type by type, one High for both, either of two fields a type names alike; a choice called No value is its own section, and the missing ones (no value, a value left from a former type, a plain-text Priority, a doc) sit apart');
+  // Chosen by name, it stays chosen on a page where no row offers it: all under No value, the pill still naming it.
+  api.set('tasks', PRIO, 'default');
+  api.list([rows[4]]);
+  assert.equal(api.prefs().group, PRIO, 'a grouping by field name is kept while no row on the page has that field');
+  assert.equal(plain(api.pillDefs()).find((d) => d.id === 'group').value, 'Priority', 'and the Group pill still says which');
+  assert.deepEqual(titles([rows[4]], PRIO), [['No value', ['d1']]], 'its rows are under No value');
+  // …and when the page is narrowed to one type that has it: the name stays, read on that type's fields
+  api.stage({ types: ['tana:type:goal'], states: null, assignee: 'anyone' });
+  const onlyGoals = goals.filter((n) => n.id.startsWith('g'));
+  api.list(onlyGoals);
+  assert.equal(api.prefs().group, PRIO, 'a grouping by field name survives narrowing the page to one type');
+  assert.equal(api.pillDefs().find((d) => d.id === 'group').rows().filter((r) => r.checked).map((r) => r.label).join(), 'Priority', 'and the Group menu ticks it there');
+  assert.deepEqual(plain(api.groupsOf(onlyGoals)).map((g) => [g.id, g.nodes.map((n) => n.id)]),
+    [['High', ['g2']], ['Low', ['g1', 'g5']], ['No value', ['g4']], ['\u0000no value', ['g3']]], 'and still sections that type’s rows by the field of that name');
+  // Clean up tells the real No value choice from the missing value, though their headings read the same
+  api.stage({ types: ['tasks'], states: ['open'], assignee: 'me' });
+  const g4 = { ...goals.find((n) => n.id === 'g4') }, pair = [goals[0], g4]; // Low, and the one No value choice: no row is missing a value
+  api.list(pair);
+  api.releaseHeld();
+  api.holdRow(g4);
+  assert.equal(api.needsCleanup(pair), false, 'nothing to clean up while the row is where it belongs');
+  g4.fields = {};
+  assert.equal(api.needsCleanup(pair), true, 'a held row that lost its No value choice offers Clean up, though both sections read No value');
+  api.releaseHeld();
+  api.set('tasks', 'none', 'default');
+  api.list(undefined);
+  // A heading is a field's value: blurred while every row under it is sensitive, shown when one is not
+  api.set('tasks', PRIO, 'default');
+  api.list(goals);
+  const blurred = Object.fromEntries(plain(api.groupsOf(goals).map((g) => [g.id, !!api.groupHeadEl(g).childNodes.at(-1).dataset.sensitive])));
+  assert.deepEqual([blurred.Low, blurred.High, blurred['\u0000no value']], [true, false, false], 'a section of only sensitive rows blurs its heading; one with a row that is not keeps it');
+  assert.equal(api.groupHeadEl({ id: '\u0000no value', title: 'No value', nodes: [goals[0]] }).childNodes.at(-1).dataset.sensitive, undefined, 'No value is the app’s words, never blurred');
+  api.set('tasks', 'none', 'default');
+  // #617: the Tasks view lists several types, and the fields of the types on the page get filter pills; two of one
+  // name on different types say which type each is, and a value picked is the typed field's filter
+  const fieldPills = () => api.pillDefs().filter((d) => d.id.startsWith('field:'));
+  assert.deepEqual(plain(fieldPills().map((d) => d.label)), ['Priority (goal)', 'Priority (goal)', 'Priority (bug)', 'Stage'], 'a mixed list gives the choice fields of the types on its page a pill each');
+  fieldPills().find((d) => d.label === 'Priority (bug)').rows().find((r) => r.label === 'Urgent').run();
+  assert.deepEqual(plain(api.savedPatch()), { fields: { 'tana:type:bug?attribute=sev': { textMatches: [{ value: 'Urgent' }] } } }, 'and picking a value filters by that type’s field');
+  // narrowed to Urgent the page holds only bugs, and the pill that narrowed it stays to change or clear it
+  api.list([goals.find((n) => n.id === 'b1')]);
+  assert.deepEqual(plain(fieldPills().map((d) => [d.label, d.value])), [['Priority', 'Urgent']], 'the filtered field keeps its pill while its type is all the page shows');
+  api.stage({ types: ['tasks'], states: ['open'], assignee: 'me', fields: { 'tana:type:empty?attribute=stage': { textMatches: [{ value: 'Draft' }] } } });
+  assert.deepEqual(plain(fieldPills().map((d) => [d.label, d.value])), [['Priority', 'Any'], ['Stage', 'Draft']], 'and a field filtered on a type with no row on the page gets one too');
+  api.stage({ types: ['tana:type:bug', 'tana:type:goal'], states: ['open'], assignee: 'me', fields: { 'tana:type:empty?attribute=stage': { textMatches: [{ value: 'Draft' }] } } });
+  assert.deepEqual(plain(fieldPills().map((d) => d.label)), ['Priority'], 'but not one of a type the Type pill leaves out, which the query drops too');
+  api.stage({ types: ['tasks'], states: ['open'], assignee: 'me' });
+  api.list(goals);
+  api.list(undefined);
   assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],
     'status groups follow the Status menu order; a row without a task state sits in No status');
   assert.deepEqual(titles(rows.filter((r) => r.stateType !== 'proposed'), 'status').map(([title]) => title), ['In Progress', 'Completed', 'Later', 'No status'],
@@ -5714,6 +5834,40 @@ function runPopSoundCheck() {
   assert.equal(started.length, 4, 'a tick with no press before it still pops');
 }
 
+function runSearchTabDeleteCheck() {
+  // Delete on a saved search's tab (#615) crosses three places: the page tells the shell with its title, the shell's
+  // menu offers Delete for that page only, and the page deletes when asked only while it is a saved search.
+  const page = (onSearch) => vm.runInNewContext(`
+    const posted = [], deleted = [];
+    const LINKS = false, authed = true, tana = {}, refreshable = false, zoom = { docId: 'tana:search:01exampleq0000000000000000' };
+    const pillsApply = () => false, iconNode = () => null, onSearchPage = () => ${onSearch};
+    const removeZoomedBlock = () => deleted.push(zoom.docId);
+    let toldTitle = null, toldIcon = '', handler;
+    const window = { frameElement: {}, parent: { postMessage: (m) => posted.push(m) }, addEventListener: (_t, fn) => { handler = fn; } };
+    ${sourceBetween('function tellTitle(', '// A task row carries')}
+    ${sourceBetween("window.addEventListener('message', (e) => {", "titleEl.addEventListener('blur'")}
+    ({ tell: () => { tellTitle('Sample', true); return posted.at(-1); }, ask: () => { handler({ source: window.parent, data: { orbital: 'remove' } }); return [...deleted]; } });
+  `, {});
+  const search = page(true), other = page(false);
+  assert.equal(search.tell().remove, true, 'a saved search tells the shell it can be deleted from its tab');
+  assert.equal(other.tell().remove, false, 'any other page does not');
+  assert.deepEqual(plain(search.ask()), ['tana:search:01exampleq0000000000000000'], 'Delete on the tab deletes the saved search on screen');
+  assert.deepEqual(plain(other.ask()), [], 'and nothing on a page that is no longer a saved search');
+  // shell.js is an ES module outside the renderer's scope: its menu builder is sliced from the file and run on its own
+  const shell = fs.readFileSync(require.resolve('../shell.js'), 'utf8');
+  assert.match(shell, /if \(e\.data\.remove === true\) removable\.add\(id\); else removable\.delete\(id\);/, 'the shell keeps what the title said');
+  const menuSrc = shell.slice(shell.indexOf('  menu: (view) => {'), shell.indexOf('\n  iframe:'));
+  const menu = vm.runInNewContext(`
+    const posted = [], refreshable = new Set(), renamable = new Set(), linkable = new Set(), saveable = new Set(), removable = new Set(['s']);
+    const frameOf = (id) => id, focusPage = () => {}, windowOf = (id) => ({ postMessage: (m) => posted.push([id, m]) }), rename = () => {};
+    const t = { ${menuSrc} };
+    ({ ids: (id) => t.menu({ id }).map((i) => i.id || i), press: (id) => { t.menu({ id }).find((i) => i.id === 'remove').run(); return posted; } });
+  `, {});
+  assert.deepEqual(plain(menu.ids('s')), ['remove', 'separator'], 'a saved search tab offers Delete');
+  assert.deepEqual(plain(menu.ids('p')), [], 'another tab does not');
+  assert.deepEqual(plain(menu.press('s')), [['s', { orbital: 'remove' }]], 'and pressing it asks that page');
+}
+
 function runRefreshSpinCheck() {
   // Refresh is the pane menu's (shell.js): offering it retells the title, and the menu's press asks the search again
   const api = vm.runInNewContext(`
@@ -7603,7 +7757,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -8109,6 +8263,60 @@ async function runClassifyTypeCheck() {
 // is main's (main/icons.js) — what is checked here is that the row is offered to a type and nothing else, that the
 // page draws what main answers and registers those glyphs so the rows can show them, that the type it already wears
 // is ticked and can be taken off, and that choosing is one call.
+async function runSetFieldIconCheck() {
+  const api = vm.runInNewContext(`
+    const TYPE = 'tana:type:01j0type000000000000000000', KEY = TYPE + '?attribute=ab12cd34';
+    let palField = null, palReturn = null; const palDoc = null, palette = { hidden: false }, zoom = null, opened = [];
+    const tableView = () => false, fieldType = () => null, shownDocs = () => [], onTypePage = () => false, focused = () => null;
+    const tana = { searchIcons() {}, setTypeIcon() {} }, typeGlyphs = new Map();
+    const items = new Map([['r1', { docId: 'tana:text:01j0doc000000000000000000|' + KEY }], ['r2', { docId: 'tana:text:01j0doc000000000000000000' }]]);
+    const openIconPalette = (doc) => opened.push(doc.id);
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('fieldRows')}
+    ${functionSource('palFieldKey')}
+    const row = () => fieldRows('Current node').find((r) => r.id === 'setFieldIcon');
+    ({ KEY, TYPE, row, opened, typeGlyphs, set: (f, r) => { palField = f; palReturn = r; } })`, {});
+  api.set({ field: { key: api.KEY, type: 'options' }, editable: false });
+  assert.deepEqual(plain([api.row().label, api.row().icon, api.row().hint]), ['Set field icon', 'field', 'The generic glyph'], 'a choice field offers the row under the generic glyph');
+  api.typeGlyphs.set(api.KEY, 'nc-rocket');
+  assert.deepEqual(plain([api.row().icon, api.row().hint]), ['nc-rocket', 'Chosen'], 'and wears the one chosen for it');
+  api.row().run();
+  assert.deepEqual(plain(api.opened), [api.KEY], 'which opens the icon page on the field\u2019s own key');
+  api.set({ typeUri: api.TYPE, def: { key: 'ab12cd34' } });
+  assert.equal(api.row().run() && api.opened.at(-1), api.KEY, 'its definition on the type\u2019s page is the same field');
+  api.set(null, { key: 'r1' });
+  assert.equal(api.row().run() && api.opened.at(-1), api.KEY, 'and so is a row inside a text field\u2019s value');
+  api.set(null, { key: 'r2' });
+  assert.equal(api.row(), undefined, 'a row of the page itself is no field');
+  // The other two places a field is drawn: its definition on the type's page, and its filter pill.
+  const draw = vm.runInNewContext(`
+    ${FAKE_DOM}
+    const TYPE = 'tana:type:01j0type000000000000000000', KEY = TYPE + '?attribute=ab12cd34', typeGlyphs = new Map();
+    const addIcon = (el, icon) => { el.dataset.icon = icon; return el; }, fieldCtxs = new Map(), togglePalette = () => {}, choiceKey = () => {};
+    const PILL_FIELDS = ['options', 'link', 'member', 'date'], DATE_PRESETS = [], fieldType = () => TYPE, putField = () => {};
+    ${sourceLine('const FIELD_KINDS =')}
+    ${sourceLine('const kindName =')}
+    ${sourceLine('const fieldKey =')}
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('definitionEl')}
+    ${functionSource('fieldPill')}
+    const def = { key: 'ab12cd34', title: 'Due', type: 'date' };
+    ({ KEY, typeGlyphs, definition: () => definitionEl({ docId: TYPE }, def).childNodes[0].dataset, pill: () => fieldPill(def, {}, () => {}).icon })`, {});
+  assert.deepEqual(plain([draw.definition().icon, draw.definition().field, draw.pill()]), ['field', draw.KEY, 'field'], 'a definition and a pill with no glyph of their own draw the generic one, the definition marked with its field');
+  draw.typeGlyphs.set(draw.KEY, 'nc-flask');
+  assert.deepEqual(plain([draw.definition().icon, draw.pill()]), ['nc-flask', 'nc-flask'], 'and both wear the one chosen for the field');
+  // A choice redraws the field's glyphs in place, since the render that would waits while the caret is in its value.
+  const patched = vm.runInNewContext(`
+    const KEY = 'tana:type:01j0type000000000000000000?attribute=ab12cd34', typeGlyphs = new Map([[KEY, 'nc-rocket']]), asked = [];
+    const el = { childNodes: ['old'], replaceChildren() { this.childNodes = []; } }, CSS = { escape: (s) => s };
+    const document = { querySelectorAll: (sel) => { asked.push(sel); return sel === '.ricon[data-field="' + KEY + '"]' ? [el] : []; } };
+    const addIcon = (target, icon) => { target.childNodes.push(icon); return target; };
+    ${sourceLine('const fieldGlyph =')}
+    ${functionSource('patchFieldGlyphs')}
+    patchFieldGlyphs(KEY); ({ nodes: el.childNodes, asked })`, {});
+  assert.deepEqual(plain(patched.nodes), ['nc-rocket'], 'a chosen glyph replaces the old one on the rows already drawn');
+  console.log('ok  Set field icon: offered on a choice field, a definition and a text field\u2019s row, all under the field\u2019s key (#606)');
+}
 async function runSetIconCheck() {
   const TYPE = 'tana:type:01j0type000000000000000000', DOC = 'tana:text:01j0doc000000000000000000';
   const api = vm.runInNewContext(`
@@ -8156,6 +8364,7 @@ async function runSetIconCheck() {
     ${functionSource('applyIcon')}
     ${functionSource('backPalette')}
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ({ row: () => paletteRows('').find((r) => r.id === 'setIcon'),
        node: (next) => { palDoc = next; },
@@ -8376,8 +8585,12 @@ async function runDeletedNodeCheck() {
     const tana = {
       node: async (uri) => { asked.push('node ' + uri); return { id: uri, title: 'still here' }; },
       taskMeta: async (id) => { asked.push('taskMeta ' + id); throw new Error('Node has been deleted'); },
+      openCanvas: async (id) => { asked.push('canvas ' + id); },
+      splitWindow: async (where) => { asked.push('split ' + where); },
     };
     const showError = (e) => errors.push(String((e && e.message) || e));
+    const run = (fn) => fn();
+    const inOtherPane = () => false, placeKey = (id) => id;
     const render = () => { renders++; }, renderSoon = () => { renders++; }, patchMeta = () => {}, renderPalette = () => {};
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {}, recordRecent = () => {};
     const LINKS = false; // a page of its own, not the Graph pane (renderer/state.js)
@@ -8385,13 +8598,16 @@ async function runDeletedNodeCheck() {
     const atHome = () => false, goHome = () => { view = 'home'; };
     const setTimeout = () => 0;
     ${sourceBetween('const isRealId = (id)', '// ---- Home ----')}
+    ${sourceLine('const opensCanvas =')}
     ${functionSource('openDoc')}
+    ${functionSource('openElsewhere')}
     ${functionSource('goTo')}
     ${functionSource('loadTaskMeta')}
     ${sourceBetween('const navBack = [], navForward = []', '// The same two moves as a pair of buttons')}
     ({
       state: () => ({ zoom: zoom && zoom.docId, view, errors: [...errors], asked: [...asked], gone: [...deletedIds] }),
       openDoc: (id) => openDoc(id),
+      elsewhere: (where, id) => openElsewhere(where, id),
       goTo: (uri) => goTo(uri),
       meta: (id) => loadTaskMeta(id),
       note: (id, message) => noteGone(id, new Error(message)),
@@ -8422,6 +8638,25 @@ async function runDeletedNodeCheck() {
   api.clear();
   await api.goTo(live);
   assert.equal(api.state().zoom, live, 'a node that is still there opens as it always did');
+  // A canvas never opens as a page here: it goes to a window of its own, drawn by Tana (main.js canvas:open, #611).
+  api.clear();
+  const canvas = 'tana:canvas:01canvasnode00000000000000';
+  await api.goTo(canvas);
+  assert.equal(api.state().zoom, live, 'a canvas leaves the page where it was');
+  assert.deepEqual(plain(api.state().asked), ['node ' + canvas, 'canvas ' + canvas], 'and asks main for its window');
+  api.clear();
+  await api.elsewhere('right', canvas);
+  assert.deepEqual(plain(api.state().asked), ['canvas ' + canvas], 'and so does ⌘/⇧/⌥ on it: no pane of its own');
+  // A click on a canvas row's title opens it, as a type row's does, unless that title can be typed in.
+  const clickOpens = vm.runInNewContext(`
+    const tableRow = () => false, zoomable = () => true;
+    const canEditText = (item) => !!item.node.renamable;
+    ${sourceLine('const opensOnClick =')}
+    opensOnClick;
+  `);
+  assert.equal(clickOpens({ docId: canvas, node: { id: canvas } }), true, 'a canvas title opens its window on a click');
+  assert.equal(clickOpens({ docId: canvas, node: { id: canvas, renamable: true } }), false, 'one whose title can be typed in takes the caret instead');
+  assert.equal(clickOpens({ docId: live, node: { id: live } }), false, 'and a document still takes the caret');
 
   // 3. The Back stack walks past the pages that have gone since.
   api.clear();

@@ -37,7 +37,7 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: {}, BrowserWindow: function () {}, WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
+  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } },
     clipboard: { items: [], read: async () => electron.clipboard.items } }; // items: what a check puts on it, as clipboard.read() hands them over
   const context = vm.createContext({
@@ -824,7 +824,7 @@ async function main() {
     // The boot icon pick (issue #250): every icon name and the type titles go out, and the answer maps back to uris.
     const picked=await ai.pickTypeIcons([{uri:'tana:type:a',title:'Meeting'},{uri:'tana:type:b',title:'Person'}],['calendar','user'],fetchWith(answer('Sure: {"1": " calendar ", "2": 7}')));
     assert.deepEqual(picked,{'tana:type:a':'calendar','tana:type:b':null},'a name is read per type number, trimmed, and anything else is no pick');
-    assert.deepEqual([calls.at(-1).init.body.input,calls.at(-1).init.body.instructions],['Icons: calendar, user\n\nType 1: Meeting\nType 2: Person',ai.ICON_INSTRUCTIONS],'the names and the titles are the input, and nothing else about a type');
+    assert.deepEqual([calls.at(-1).init.body.input,calls.at(-1).init.body.instructions],['Icons: calendar, user\n\n1: Meeting\n2: Person',ai.ICON_INSTRUCTIONS],'the names and the titles are the input, and nothing else about a type');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('This title does not name anyone to discuss it with, so there is nobody to suggest here.'))),null,'a sentence is the model explaining itself: not a name');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
@@ -1012,6 +1012,27 @@ async function main() {
       assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'nc-rocket', 'and its row is drawn with it');
       icons.setTypeIcon(SEARCH, null);
       assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'search', 'No icon puts the search glyph back');
+    }
+    { // and a type's field, under its own key, sent with the rest of the glyphs (#606)
+      const FIELD = TYPE + '?attribute=ab12cd34';
+      assert.equal(icons.setTypeIcon(FIELD, 'nc-rocket').name, 'nc-rocket', 'a field takes an icon');
+      assert.ok(icons.typeIcons().some((i) => i.uri === FIELD && i.name === 'nc-rocket'), 'and the renderer is told it with the type glyphs');
+      assert.throws(() => icons.setTypeIcon('tana:text:' + ulid() + '?attribute=ab12cd34', 'nc-rocket'), /set on a type/, 'only a type has fields');
+      icons.setTypeIcon(FIELD, null);
+    }
+    { // the boot pick asks about fields too, as "Type › Field", and not about a type already chosen for (#606)
+      const typeDoc = new Document(TYPE);
+      typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }, { key: 'ab12cd34', title: ' ' }] }));
+      let listed = 0;
+      backend.testRuntime({ me: { userUri: 'tana:user-profile:' + ulid() }, client: { graph: { listNodes: async (p) => { if ((p.nodeTypes || [])[0] !== 'type') return { nodes: [] }; listed++; return { nodes: [{ id: TYPE, title: 'Project' }] }; } }, sync: { subscribe: async (id) => { if (id !== TYPE) throw new Error('unavailable'); return typeDoc; }, getDocument: () => null } } });
+      const pick = backend.ai.pickTypeIcons, status = backend.ai.chatgptStatus, asked = [];
+      backend.ai.pickTypeIcons = async (missing) => { asked.push(...missing); return {}; };
+      backend.ai.chatgptStatus = async () => ({ signedIn: false }); // the real one starts a Codex app-server
+      await backend.autoTypeIcons();
+      assert.deepEqual([asked.length, listed], [0, 0], 'without a sign-in or a key nothing is asked, and no type is listed or read');
+      const get = backend.settings.get; backend.settings.get = (key) => (key === 'openaiApiKey' ? 'sk-test' : get(key)); // a key, and nothing else about the settings changed
+      try { await backend.autoTypeIcons(); } finally { backend.ai.pickTypeIcons = pick; backend.ai.chatgptStatus = status; backend.settings.get = get; }
+      assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ uri: TYPE + '?attribute=gcx3bvn5', title: 'Project › Fase' }], 'a titled field with no icon is asked about under its type\u2019s name; the type, chosen for, and an untitled field are not');
     }
     console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
     // The colour the same way: a hue of our own, or grey, kept beside the glyph in the settings; Tana's own hue on
@@ -1245,6 +1266,29 @@ async function main() {
     const link = (kind) => backend.handlers.get('doc:link')(null, 'tana:' + kind + ':01m2nrv0v6qj2brghq04t8wv87');
     assert.deepEqual(['text', 'type', 'user-profile', 'event', 'space', 'chat'].map((k) => link(k).split('/')[5]), ['l', 't', 'u', 'e', 's', 'l'], 'a type opens its type page, not the document route');
     assert.equal(link('type'), 'https://home.tana.inc/o/01ks7rqsrqjn7vwyjhx75r6jg0/t/tana%3Atype%3A01m2nrv0v6qj2brghq04t8wv87');
+    // A canvas opens in a window of its own, on the page Tana opens for it and in the Tana session (issue #611).
+    const canvas = 'tana:canvas:01m2nrv0v6qj2brghq04t8wv87', openCanvas = backend.handlers.get('canvas:open'), made = backend.electron.windows;
+    await openCanvas(null, canvas);
+    const [cw] = made;
+    assert.equal(cw.url, link('canvas'), 'on the page Tana itself opens for it');
+    assert.equal(cw.options.webPreferences.partition, 'persist:tana', 'signed in with the session Orbital already has');
+    assert.match(cw.options.webPreferences.preload, /canvas-preload\.js$/, 'with a preload of its own, never the one that hands a page window.api');
+    assert.ok(!/Electron/.test(cw.userAgent), 'not taken for Tana\'s desktop app');
+    cw.webContents.handlers['dom-ready']();
+    assert.match(cw.webContents.css[0], /body:has\(\.tl-container\) \*/, 'with everything but the board hidden, once the board is there');
+    assert.equal(cw.openHandler({ url: 'https://example.com/' }).action, 'deny', 'no Tana pop-up window of its own');
+    assert.equal(backend.opened.at(-1), 'https://example.com/', 'a link out of it goes to the browser');
+    await openCanvas(null, canvas);
+    assert.deepEqual([made.length, cw.focused], [1, 1], 'opening it again brings that window forward');
+    cw.webContents.handlers['window:closed']();
+    await openCanvas(null, canvas);
+    assert.equal(made.length, 2, 'and a closed one opens anew');
+    await assert.rejects(async () => openCanvas(null, 'tana:text:01m2nrv0v6qj2brghq04t8wv87'), /Not a canvas/, 'nothing but a canvas opens there');
+    backend.testRuntime({ me: { orgDocUri: 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0' }, session: { logout: async () => {} } });
+    await backend.handlers.get('sync:logout')();
+    assert.ok(made.at(-1).isDestroyed(), 'signing out closes every open canvas window, so no board outlives its session');
+    await openCanvas(null, canvas);
+    assert.equal(made.length, 3, 'and the canvas opens anew after the next sign-in');
     // It is app plumbing rather than a note, so no list or search offers it.
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: doc.id, title: settings.TITLE, updateTime: '2026-09-20T10:00:00Z' }, { id: 'tana:text:' + ulid(), title: 'A real note', updateTime: '2026-09-20T10:00:00Z' }] }) } } });
     const rows = await backend.handlers.get('view:list')(null, 'library', { types: ['docs'], states: null, assignee: 'anyone' });
@@ -1944,6 +1988,55 @@ async function main() {
     resetDoc.reset(); backend.onChange(reset, { origin: 'remote' });
     resetDoc.applyRemote([snapshot]); backend.onChange(reset, { origin: 'remote' });
     assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a reset that discards the edit discards its time');
+    // A live edit to a field reaches every view's cached row (a view grouped by it reads them after a reload or a
+    // restart), and a cleared field clears them.
+    const fielded = 'tana:text:' + ulid(), fieldedDoc = new Document(fielded), prio = 'tana:type:' + ulid() + '?attribute=prio';
+    fieldedDoc.transact((l) => initDocument(l, 'Fielded', ME, {}));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    for (const section of ['library', 'tasks']) cache.upsert({ id: fielded, section, title: 'Fielded', sortKey: '1', updatedAt: '1', fields: { [prio]: ['Low'] } });
+    backend.onChange(fielded, { origin: 'remote' }); // bootstrap: no field set on the document, so the cached value goes
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, 'High');
+    backend.onChange(fielded, { origin: 'remote' });
+    const rootsOf = async () => (await backend.handlers.get('outline:roots')()).find((v) => v.id === 'library').nodes.find((r) => r.id === fielded);
+    assert.deepEqual([cache.list().library, cache.list().tasks].map((rows) => rows.find((r) => r.id === fielded).fields), [{ [prio]: ['High'] }, { [prio]: ['High'] }], 'a field set live is in every view’s cached row');
+    assert.deepEqual((await rootsOf()).fields, { [prio]: ['High'] }, 'and in the rows a reload builds from the cache');
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, '');
+    backend.onChange(fielded, { origin: 'remote' });
+    assert.equal((await rootsOf()).fields, undefined, 'a field cleared live is cleared there too');
+    // A retype keeps the former type's values on the document; the cached rows' chips follow the new type, so a
+    // reload does not group the row by its old type's field.
+    const typeA = prio.split('?')[0], typeB = 'tana:type:' + ulid();
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async (q) => ({ nodes: (q.nodeIds || []).map((id) => ({ id, title: id === typeB ? 'Bug' : 'Goal' })) }) } } });
+    require('../sdk/fields').setFieldText(fieldedDoc, prio, 'High');
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeA));
+    backend.onChange(fielded, { origin: 'remote' });
+    for (const section of ['library', 'tasks']) cache.upsert({ ...cache.list()[section].find((r) => r.id === fielded), section, tags: [{ label: 'Goal', uri: typeA }] });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeB));
+    backend.onChange(fielded, { origin: 'remote' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const uris = (rows) => rows.find((r) => r.id === fielded).tags.map((t) => t.uri).filter(Boolean);
+    assert.deepEqual([uris(cache.list().library), uris(cache.list().tasks)], [[typeB], [typeB]], 'a retype moves every cached row’s chip to the new type');
+    assert.deepEqual((await rootsOf()).tags.map((t) => t.uri).filter(Boolean), [typeB], 'and the rows a reload builds carry it, so the old type’s value no longer counts');
+    // …and at once, before the new type's name is read: the old chip is gone from the cache when the change is told
+    const typeC = 'tana:type:' + ulid();
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: () => new Promise(() => {}) } } });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeC));
+    backend.onChange(fielded, { origin: 'remote' });
+    assert.deepEqual((await rootsOf()).tags.map((t) => t.uri).filter(Boolean), [], 'a reload during the type lookup no longer carries the former type');
+    // To a type whose name is known: the new chip and the row's own icon at once, not the one the cache had
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => fieldedDoc, getDocument: () => fieldedDoc }, graph: { listNodes: async (q) => ({ nodes: (q.nodeIds || []).map((id) => ({ id, title: 'Bug' })) }) } } });
+    for (const section of ['library', 'tasks']) cache.upsert({ ...cache.list()[section].find((r) => r.id === fielded), section, icon: 'stale-glyph', tags: [{ label: 'Goal', uri: typeA }] });
+    fieldedDoc.transact((l) => l.getMap('data').set('entityTypeUri', typeB));
+    backend.onChange(fielded, { origin: 'remote' });
+    const typedNow = await rootsOf();
+    assert.deepEqual([typedNow.icon, typedNow.tags.map((t) => t.uri).filter(Boolean)], ['type', [typeB]], 'typed to typed: the new type’s chip and icon, at once');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal((await rootsOf()).icon, 'type', 'and the rebuild that follows keeps them');
+    // To no type at all: a plain document again, with its doc chip and icon
+    fieldedDoc.transact((l) => l.getMap('data').delete('entityTypeUri'));
+    backend.onChange(fielded, { origin: 'remote' });
+    const untyped = await rootsOf();
+    assert.deepEqual([untyped.icon, untyped.tags.map((t) => t.label), untyped.tags.some((t) => t.uri)], ['doc', ['doc'], false], 'typed to untyped: a plain document, doc chip and icon');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
@@ -4287,12 +4380,19 @@ async function main() {
     assert.deepEqual(searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters, { [STATUS]: { textMatches: [{ value: 'On track', mode: 'MODE_EQUALS' }, { value: 'Unknown', mode: 'MODE_EQUALS' }] } },
       'the pills reach the graph as one field with its labels ORed');
     assert.deepEqual(searchQueryToFilter({ entityTypeUris: [RISK] }, ME).types, [RISK], 'and reads it back into the pill');
-    // The Library and a saved search narrowed to that one type get its field pills too: the view asks for them, a
-    // saved query keeps them both ways, and beside another type (or a kind) they apply to nothing.
+    // The Library and a saved search narrowed to that one type get its field pills too: the view asks for them and a
+    // saved query keeps them both ways. A mixed list (#617) keeps them as well, its pills being the fields of the types
+    // on the page; a list naming workspace types keeps only theirs, so a field of a type it no longer names is dropped.
     assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, ...fielded }, ME).attributeFilters, searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters);
     assert.deepEqual(searchQueryToFilter(filterToSearchQuery(fielded, ME), ME).fields, fielded.fields);
-    assert.equal(viewParams({ ...fielded, types: [RISK, 'tasks'] }, ME).attributeFilters, undefined);
-    assert.equal(filterToSearchQuery({ ...fielded, types: [RISK, 'tana:type:01m1e3nthqj48b8drqb1fmma9e'] }, ME).attributes, undefined);
+    const OTHER_TYPE = 'tana:type:01m1e3nthqj48b8drqb1fmma9e';
+    const GRAPH_STATUS = { [STATUS]: { textMatches: [{ value: 'On track', mode: 'MODE_EQUALS' }, { value: 'Unknown', mode: 'MODE_EQUALS' }] } };
+    assert.deepEqual(viewParams({ ...fielded, types: ['tasks'] }, ME).attributeFilters, GRAPH_STATUS, 'Tasks with a field of a type on the page narrows to it');
+    assert.deepEqual(viewParams({ ...fielded, types: null }, ME).attributeFilters, GRAPH_STATUS, 'and so does the Library of any type');
+    assert.deepEqual(viewParams({ ...fielded, types: [RISK, 'tasks'] }, ME).attributeFilters, GRAPH_STATUS);
+    assert.deepEqual(filterToSearchQuery({ ...fielded, types: [RISK, OTHER_TYPE] }, ME).attributes, fielded.fields, 'two types named: the field of one of them counts');
+    assert.equal(filterToSearchQuery({ ...fielded, types: [OTHER_TYPE] }, ME).attributes, undefined, 'a field of a type the list no longer names does not');
+    assert.deepEqual(searchQueryToFilter(filterToSearchQuery({ ...fielded, types: ['tasks'] }, ME), ME).fields, fielded.fields, 'a saved search over Tasks keeps its field filter both ways');
     // #148: the live query that re-reads an open saved search covers what it lists: kinds, type, state and assignee
     // carried over, text and owners dropped (a live query cannot say them), newest change first.
     assert.deepEqual(liveTrigger(searchQueryParams({ types: ['text'], entityTypeUris: [RISK], stateTypes: ['open'], assignedToViewer: true, textQuery: 'db', ownerUris: ['tana:space:01jspace000000000000000000'] }, ME)),

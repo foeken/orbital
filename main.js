@@ -3,7 +3,7 @@
 // views, pins, images, and each one's ipc table); this file owns the window, the menu, the boot sequence and the
 // registering of those tables, plus the test hook that scripts/sdk-check.js and the CLI use to drive the same
 // modules without a window.
-const { app, BaseWindow, Menu, Notification, WebContentsView, clipboard, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BaseWindow, BrowserWindow, Menu, Notification, WebContentsView, clipboard, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -14,8 +14,8 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
-const { changesOf, dropSearchHeads, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
+const { webLink, accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { changesOf, dropSearchHeads, fieldDefs, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
@@ -402,12 +402,18 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   send('outline:changed', null);
   return chosen;
 });
-// After each start: the fast AI picks a glyph for every titled type that has none (issue #250). In the background,
-// because the lists must not wait on a model, and quiet without a ChatGPT sign-in or an API key.
+// After each start: the fast AI picks a glyph for every titled type and field that has none (issues #250, #606). In the
+// background, because the lists must not wait on a model, and quiet without a ChatGPT sign-in or an API key.
 async function autoTypeIcons() {
   try {
+    const userData = app.getPath('userData');
+    if (!settings.get('openaiApiKey') && !(await ai.chatgptStatus(userData, false)).signedIn) return; // nobody to ask: read no type documents either
     const types = (await typeList()).filter((t) => t.title.trim());
-    const added = await icons.fillTypeIcons(types, (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, app.getPath('userData')));
+    // a field goes out as "Type › Field": its name alone ("Status", "Owner") says little about what it holds. One type
+    // at a time, each read released by the on-demand sweep like any other (main/related.js fieldDefs).
+    const fields = [];
+    for (const t of types) for (const d of await fieldDefs(t.uri)) if ((d.title || '').trim()) fields.push({ uri: t.uri + '?attribute=' + d.key, title: t.title + ' › ' + d.title });
+    const added = await icons.fillTypeIcons([...types, ...fields], (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, userData));
     if (added) { await refresh({ after: true }); send('outline:changed', null); }
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
@@ -561,6 +567,27 @@ ipcMain.handle('shell:open', (_e, url) => {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened');
   return shell.openExternal(url);
 });
+// A canvas is a tldraw board, and tldraw needs a licence Orbital does not have, so Tana's own page draws it: a window of
+// its own on the Tana session, with everything but the board (tldraw's .tl-container) hidden (issue #611). The hiding
+// waits for the board, so a login page or an error still shows. One window per canvas; opening it again brings it forward.
+const CANVAS_CSS = `body:has(.tl-container) * { visibility: hidden !important; }
+body:has(.tl-container) :is(.tl-container, .tl-container *, [data-radix-popper-content-wrapper], [data-radix-popper-content-wrapper] *) { visibility: visible !important; }
+.tl-container { position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; }
+:has(.tl-container) { transform: none !important; contain: none !important; filter: none !important; }`;
+const canvasWindows = new Map(); // canvas id -> its window
+ipcMain.handle('canvas:open', (_e, id) => {
+  if (!/^tana:canvas:[0-9a-z]{26}$/.test(String(id))) throw new Error('Not a canvas');
+  const open = canvasWindows.get(id);
+  if (open && !open.isDestroyed()) return open.focus();
+  const url = webLink(id);
+  const win = new BrowserWindow({ width: 1200, height: 800, webPreferences: { partition: 'persist:tana', preload: path.join(__dirname, 'canvas-preload.js'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  win.webContents.setUserAgent(win.webContents.getUserAgent().replace(/ (Electron|tana-tasks)\/\S+/g, '')); // as the login window: Tana reads an Electron agent as its own desktop app
+  win.webContents.on('dom-ready', () => win.webContents.insertCSS(CANVAS_CSS));
+  win.webContents.setWindowOpenHandler(({ url: to }) => { if (/^https?:\/\//i.test(to)) shell.openExternal(to); return { action: 'deny' }; });
+  win.on('closed', () => canvasWindows.delete(id));
+  canvasWindows.set(id, win);
+  win.loadURL(url);
+});
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());
@@ -579,6 +606,7 @@ ipcMain.handle('sync:login', async () => {
 // ⌘K Log out of Tana: the stream closed and the session's cookies cleared, so every window shows the login. Signed out
 // first: the pages hear it before the reads the closing stream fails, and say nothing of those (renderer/nodes.js showError).
 ipcMain.handle('sync:logout', async () => {
+  for (const w of canvasWindows.values()) if (!w.isDestroyed()) w.destroy(); // a board stays on screen after its cookies go (#611)
   setStatus({ authenticated: false, connected: false, syncing: false, error: null });
   relayout();
   stop();
@@ -590,6 +618,7 @@ if (process.env.TANA_MAIN_TEST) {
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, savedDoc, closeFront, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
     nodePin, dropSearchHeads,
+    autoTypeIcons,
     assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
     accessContext, inboxCount, S,
     testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'inbox'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };

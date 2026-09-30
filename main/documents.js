@@ -552,11 +552,12 @@ async function createDocument(title, opts = {}) {
 
 // A row's field values, read off the document on every change like its title and state: the cached row carries the
 // ones its search saw, which a table cell (renderer/views.js) would otherwise show until the next refresh.
-async function info(doc) {
+function fieldLines(doc) {
   const values = {};
   for (const f of fields.readFields(doc)) { const lines = f.text.split('\n').filter((l) => l.trim()); if (lines.length) values[f.key] = lines; }
-  return { ...(await rowInfo(doc)), fields: Object.keys(values).length ? values : undefined }; // undefined too: a cleared field clears the row's
+  return Object.keys(values).length ? values : undefined; // undefined too: a cleared field clears the row's
 }
+async function info(doc) { return { ...(await rowInfo(doc)), fields: fieldLines(doc) }; }
 // Node shape for any subscribed document: cached row when listed, else derived from the Loro data map.
 async function rowInfo(doc) {
   const n = readNode(doc), row = db.get(doc.id);
@@ -570,13 +571,17 @@ async function rowInfo(doc) {
   // whose type has moved on is therefore rebuilt from the document below rather than patched.
   if (row && (typeUriOf(row) || null) === (n.entityTypeUri || null)) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, meta: ev || row.meta });
   await resolveHue(doc.id); // cached rows already carry the hue the refresh learned from the graph
+  await resolveTypes([n.entityTypeUri]);
+  return builtRow(doc, n);
+}
+// The row a document makes of itself, with what is known now: a type whose name is not read yet has no chip.
+function builtRow(doc, n) {
   // No updatedAt of our own: toNode falls back to nodeMeta — the graph's updateTime, or the time onChange saw an edit.
   // A current time here made a row jump to the top of a list sorted by last update whenever it was merely read —
   // expanding it subscribes it, and the bootstrap comes back as a change the renderer patches every copy of the row with.
   if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', undefined, hueOf(n)));
   if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', undefined, hueOf(n)));
   const isEvent = n.type === 'event' || doc.id.startsWith('tana:event:');
-  await resolveTypes([n.entityTypeUri]);
   if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', undefined, n.entityTypeUri, hueOf(n)));
   return toNode({
     id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
@@ -935,6 +940,18 @@ function onChange(docId, info) {
     // which re-reads the page's fields and keeps the rest.
     const fsig = JSON.stringify(n.attributes ?? null), fieldsMoved = fieldSigs.get(docId) !== fsig; // unseen: says so, like meta
     fieldSigs.set(docId, fsig);
+    // and into every view's cached row: a view grouped by a field is sectioned by it after a reload or a restart too
+    if (row && fieldsMoved) db.setFields(docId, fieldLines(doc));
+    // A retype leaves the old type's values on the document, and the cached rows' chips say which type counts, so
+    // they follow it or a reload would group the row by its former type. The rebuild starts while the cache still
+    // holds the former type (rowInfo decides on the cached row before it waits), the row as it can be built now goes
+    // in at once, before anyone is told, and the rebuilt one once the type's name is read: only while the document is
+    // still that type, as a later retype's may land first.
+    if (row && (typeUriOf(row) || null) !== (n.entityTypeUri || null)) {
+      rowInfo(doc).then((node) => { if (readNode(doc).entityTypeUri === n.entityTypeUri) db.setTags(docId, node.tags, node.icon); }, report);
+      const now = builtRow(doc, n);
+      db.setTags(docId, now.tags, now.icon);
+    }
     notifyWatched(docId, doc, n, info).catch(report); // the signature is taken here and now; the audience it may need is not
     sendChanged(docId, { meta, fields: fieldsMoved }); // the renderer patches this one row from doc:info; the page that typed it knows it has it
     if (pinsChanged || restored) send('outline:changed', null);
@@ -1212,6 +1229,13 @@ const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = 
 // per kind (its link resolver beside JP.type.url, shared bundle of 2026-09-23): a type, a person, a meeting and a space
 // have pages of their own, and /l/ — every other document — shows a type as raw JSON (issue #88).
 const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
+function webLink(id) {
+  // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
+  const org = (S.me && S.me.orgDocUri || '').split(':').pop();
+  if (!org) throw new Error(NOT_CONNECTED);
+  if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
+  return 'https://home.tana.inc/o/' + org + '/' + (LINK_ROUTES[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id);
+}
 // What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
 const ipc = {
   'doc:info': (_e, id, patch) => op(id, info, { patch: patch === true }),
@@ -1324,13 +1348,7 @@ const ipc = {
   'sensitive:list': () => sensitiveIds(), // the synced setting sensitive:set writes; db's table is only its migration source
   // "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
   'doc:discussWith': (_e, id, who) => discussWith(id, who),
-  'doc:link': (_e, id) => {
-    // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
-    const org = (S.me && S.me.orgDocUri || '').split(':').pop();
-    if (!org) throw new Error(NOT_CONNECTED);
-    if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
-    return 'https://home.tana.inc/o/' + org + '/' + (LINK_ROUTES[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id);
-  },
+  'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { webLink, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

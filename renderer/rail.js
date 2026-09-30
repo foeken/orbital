@@ -83,6 +83,9 @@ function loadRelated(docId, lite = false) {
     if (page && (editingRow() || selectionFrozen)) { renderFields(page); renderRail(page); }
     // Expansion can leave the caret on the parent row; show its newly loaded fields without waiting for blur.
     renderSoon(!selectionFrozen && !!queryRow('.inline-fields[hidden][data-doc-id="' + CSS.escape(docId) + '"]'));
+    // a type's definitions are Group choices on a mixed list (renderer/views.js pageFieldDefs): an open ⌘K asked for
+    // them before they were in, and keeps its folded choices, so it is told to ask again
+    if (data && data.definitions && !palette.hidden) { subCache.clear(); renderPalette(); }
   }, () => { if (!relatedBy.get(docId)) relatedBy.delete(docId); });
 }
 // This document's relations have moved on (an edit, a pin): read them again without taking the sidebar down. Only a
