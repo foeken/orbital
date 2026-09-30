@@ -222,7 +222,7 @@ struct Composer: View {
                         Task {
                             do { let warning = try await send(words); withAnimation { failure = warning } }
                             catch {
-                                if text.isEmpty { text = words } // what was typed since stays; the unsent words come back only to an empty box
+                                text = text.isEmpty ? words : words + "\n\n" + text // the unsent words come back, ahead of anything typed since
                                 withAnimation { failure = error.localizedDescription }
                             }
                             sending = false

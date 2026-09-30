@@ -17,6 +17,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var pages = 1
     var email: String? // the Tana account signed in, for Settings
     var states: [String: String] = [:] // task id -> the stateType ticked here, until a read of Tana agrees with it
+    @ObservationIgnored private var ticked: [String: Date] = [:] // task id -> when it was ticked here
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value (#658). A line is
     // added only when it differs from the one before, so the screen is redrawn only when something moved.
     var log: [String] = []
@@ -244,6 +245,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func toggle(_ task: Row) async {
         let before = state(of: task)
         states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
+        ticked[task.id] = .now
         guard !Self.isSample else { return } // the sample writes nothing
         do {
             states[task.id] = try await call("return await orbital.toggle(id)", ["id": task.id]) as String
@@ -257,8 +259,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
     }
 
-    // the boxes ticked here that Tana now shows as ticked go back to reading Tana
-    private func settle(_ rows: [Row]) { states = states.filter { id, state in Self.stateType(id, in: rows) != state } }
+    // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
+    // minute on (Tana refused it later than toggle waits for, or someone changed it back): the graph can trail a write by
+    // seconds, never by that long. One that is not in the rows read keeps its tick.
+    private func settle(_ rows: [Row]) {
+        states = states.filter { id, state in
+            guard let read = Self.stateType(id, in: rows) else { return true }
+            return read != state && Date.now.timeIntervalSince(ticked[id] ?? .distantPast) < 30
+        }
+        ticked = ticked.filter { states[$0.key] != nil }
+    }
 
     private static func stateType(_ id: String, in rows: [Row]) -> String? {
         for row in rows {
