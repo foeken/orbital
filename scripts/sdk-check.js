@@ -1023,10 +1023,15 @@ async function main() {
     { // the boot pick asks about fields too, as "Type › Field", and not about a type already chosen for (#606)
       const typeDoc = new Document(TYPE);
       typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }, { key: 'ab12cd34', title: ' ' }] }));
-      backend.testRuntime({ me: { userUri: 'tana:user-profile:' + ulid() }, client: { graph: { listNodes: async () => ({ nodes: [{ id: TYPE, title: 'Project' }] }) }, sync: { subscribe: async () => typeDoc } } });
-      const pick = backend.ai.pickTypeIcons, asked = [];
+      let listed = 0;
+      backend.testRuntime({ me: { userUri: 'tana:user-profile:' + ulid() }, client: { graph: { listNodes: async (p) => { if ((p.nodeTypes || [])[0] !== 'type') return { nodes: [] }; listed++; return { nodes: [{ id: TYPE, title: 'Project' }] }; } }, sync: { subscribe: async (id) => { if (id !== TYPE) throw new Error('unavailable'); return typeDoc; }, getDocument: () => null } } });
+      const pick = backend.ai.pickTypeIcons, status = backend.ai.chatgptStatus, asked = [];
       backend.ai.pickTypeIcons = async (missing) => { asked.push(...missing); return {}; };
-      try { await backend.autoTypeIcons(); } finally { backend.ai.pickTypeIcons = pick; }
+      backend.ai.chatgptStatus = async () => ({ signedIn: false }); // the real one starts a Codex app-server
+      await backend.autoTypeIcons();
+      assert.deepEqual([asked.length, listed], [0, 0], 'without a sign-in or a key nothing is asked, and no type is listed or read');
+      const get = backend.settings.get; backend.settings.get = (key) => (key === 'openaiApiKey' ? 'sk-test' : get(key)); // a key, and nothing else about the settings changed
+      try { await backend.autoTypeIcons(); } finally { backend.ai.pickTypeIcons = pick; backend.ai.chatgptStatus = status; backend.settings.get = get; }
       assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ uri: TYPE + '?attribute=gcx3bvn5', title: 'Project › Fase' }], 'a titled field with no icon is asked about under its type\u2019s name; the type, chosen for, and an untitled field are not');
     }
     console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');

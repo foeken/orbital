@@ -406,11 +406,14 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
 // background, because the lists must not wait on a model, and quiet without a ChatGPT sign-in or an API key.
 async function autoTypeIcons() {
   try {
+    const userData = app.getPath('userData');
+    if (!settings.get('openaiApiKey') && !(await ai.chatgptStatus(userData, false)).signedIn) return; // nobody to ask: read no type documents either
     const types = (await typeList()).filter((t) => t.title.trim());
-    // a field goes out as "Type › Field": its name alone ("Status", "Owner") says little about what it holds
-    const fields = (await Promise.all(types.map(async (t) => (await fieldDefs(t.uri)).filter((d) => (d.title || '').trim())
-      .map((d) => ({ uri: t.uri + '?attribute=' + d.key, title: t.title + ' › ' + d.title }))))).flat();
-    const added = await icons.fillTypeIcons([...types, ...fields], (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, app.getPath('userData')));
+    // a field goes out as "Type › Field": its name alone ("Status", "Owner") says little about what it holds. One type
+    // at a time, each read released by the on-demand sweep like any other (main/related.js fieldDefs).
+    const fields = [];
+    for (const t of types) for (const d of await fieldDefs(t.uri)) if ((d.title || '').trim()) fields.push({ uri: t.uri + '?attribute=' + d.key, title: t.title + ' › ' + d.title });
+    const added = await icons.fillTypeIcons([...types, ...fields], (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, userData));
     if (added) { await refresh({ after: true }); send('outline:changed', null); }
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
