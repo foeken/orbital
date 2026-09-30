@@ -272,7 +272,7 @@ function slashRows(q) {
   // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new …" list
   const choices = creationChoices.some((c) => c.kind === 'doc') ? creationChoices : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...creationChoices];
   for (const choice of choices) rows.push(choice.kind === 'task' ? { // "/" Task: made here and referenced in the row (taskFromSlash)
-    group: 'Create', icon: choice.icon, label: 'Task', hint: choice.selectable ? 'New task, referenced here' : choice.reason || 'Unavailable', disabled: !choice.selectable,
+    group: 'Create', icon: choice.icon, label: 'Task', hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
     run: () => taskFromSlash(choice),
   } : {
     group: choice.kind === 'custom' ? 'Workspace types' : 'Create', icon: choice.icon,
