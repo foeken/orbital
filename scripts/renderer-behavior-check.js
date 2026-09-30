@@ -9799,6 +9799,10 @@ checks.push(async function runHiddenFromFixCheck() {
   await Promise.resolve();
   assert.deepEqual(plain(api.calls), [[DOC, { rule: 'people', participants: [{ uri: SAM, role: 'viewer' }, { uri: PETER, role: 'editor' }] }]],
     'Fix this adds the shut-out assignee as an editor and keeps everyone else at their role (you are the sharer, not a participant)');
+  // a pill on the page shares with its own person only (#622)
+  api.calls.length = 0; api.taskMetaById.set(DOC, { ...own([{ uri: ME, type: 'user', role: 'admin' }]), hiddenFrom: [PETER, SAM] }); api.accessById.set(DOC, { rules: ['people'] }); // a share forgets what it knew of the page's access
+  api.fix(DOC)(SAM); await Promise.resolve();
+  assert.deepEqual(plain(api.calls), [[DOC, { rule: 'people', participants: [{ uri: SAM, role: 'editor' }] }]], 'a pill shares the page with that one person');
   api.taskMetaById.set('tana:text:inherit', { restricted: undefined, hiddenFrom: [PETER], participants: [] }); api.accessById.set('tana:text:inherit', { rules: ['me', 'people', 'inherit'] });
   assert.equal(api.fix('tana:text:inherit'), null, 'an audience taken from where the page lives is not narrowed to fix it');
   api.taskMetaById.set('tana:text:ro', own([{ uri: ME, type: 'user', role: 'editor' }])); api.accessById.set('tana:text:ro', { rules: [] });

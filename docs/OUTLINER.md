@@ -186,8 +186,9 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   audience, bell, pin: `.ticon`), the Timeline's Join glyph and the meeting link — are drawn at .45 opacity, and in full
   on the row under the pointer or with the caret, fading between the two (styles.css). None of them gets a background
   on hover, only its own colour darkens. The visibility icon (`.audience`) and a warning (assigned to someone who cannot see it,
-  `.hiddenfrom`) stay in full. That warning is the audience glyph in red, followed in the subtext by "Not visible to …"
-  in red, as the page's Visible to field says it (`peopleEl`, issue #622).
+  `.hiddenfrom`) stay in full. That warning is "Not visible to …" in the subtext after who can see the row, in a soft
+  rose rather than the error red, the audience glyph left grey beside it (`peopleEl`, issue #622); where the row shows
+  only the glyph, the glyph itself takes the rose.
 - **A task's box is its state** (#243). A task in the Inbox (`proposed`) draws a dashed box; In Progress a grey box;
   completed a green tick, with the title struck through and grey, and a short pop (`popSound`, renderer/motion.js;
   a checkbox block pops too, unchecking is silent; it sounds as the mouse button goes down on a box the
@@ -1296,7 +1297,7 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   under the title, and Open in Tana, Join call and Edit pins are Cmd+K rows under Current node. **Assigned to** (a task) is a mention per
   person, drawn as a person in any other field is (no chip), or "Unassigned", and opens the assignee picker; **Visible to** (any document with a known audience) is the
   audience's glyph with a bubble per person as a list row's subtext has them, "Everyone" or the space's name for those audiences, you as a mention for a private page, one person as a mention drawn as Assigned to draws one (or the audience's words where it names
-  nobody), "Anyone with the link" when Tana's link sharing is on, "Not visible to …" in red for an assignee it shuts out (with a **Fix this** link that shares the page with them as editors, where the page's own people are its audience and you may change them, issue #622), and opens the visibility picker, on a meeting's
+  nobody), "Anyone with the link" when Tana's link sharing is on, each assignee it shuts out as a dashed "+ Name" pill after who can see it, in a soft rose with the lock left grey — a click shares the page with that person as an editor where the page's own people are its audience and you may change them, and otherwise the pill only says so (`fghost`, issue #622) — and opens the visibility picker, on a meeting's
   write-up the event's; a sensitive page, a chat and a saved search have none. Both open on a click, Enter or Space (renderer/fields.js
   `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a
   Graph pane beside it.

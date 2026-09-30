@@ -402,7 +402,8 @@ html.links .app { display: none; }
 .rail .rrow.rmeta.fixed { cursor: default; }
 .rail .rrow.rmeta.fixed:hover { background: none; }
 /* Assigned to someone who cannot see it (renderer/tasks.js, rail.js): crimson */
-.meta .hiddenfrom, .subtext .hiddenfrom, .fields .ricon.hiddenfrom, .fields .fwarn { color: #dc143c; }
+/* Assigned to someone who cannot see it (#622): a soft rose, not the error red — it asks for a share, nothing broke */
+.meta .hiddenfrom, .subtext .hiddenfrom { color: #b35068; }
 /* a history entry: the kind of change as a glyph, then what it is about with "who · when" under it. It opens
    nothing, so it does not answer the pointer the way the rows that do. */
 .rail .rrow.rchange { align-items: flex-start; cursor: default; }
@@ -851,7 +852,10 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .node.fullref > .children { border-left-style: dashed; }
 .node.fullref.done > .line .text { color: var(--muted); text-decoration: line-through; }
 :is(.text, .fvalue) .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.fields .ffix { margin-left: 8px; padding: 0; border: 0; background: none; font: inherit; line-height: 22px; color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; } /* "Fix this" (#622): a link, so blue */
+.fields .fghost { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 8px; border: 1px dashed #e3b7c1; border-radius: 11px; background: none; font: inherit; font-size: 14px; line-height: 20px; color: #b35068; cursor: default; } /* who the page shuts out, among who can see it (#622) */
+.fields button.fghost { padding-left: 6px; cursor: pointer; }
+.fields button.fghost:hover { background: #fbf0f2; }
+.fields .fghost b { font-weight: 500; }
 /* a reference that knows what it points at draws its icon in front, in the link's own colour; the underline is
    moved onto the label so it runs under the words rather than under the icon */
 :is(.text, .fvalue) .mention:has(svg) { text-decoration: none; }
@@ -1369,7 +1373,8 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .demo-image { background: #303436; color: #6f7479; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] :is(.text, .fvalue) .mention { color: #8fc1e1; }
-[data-theme="dark"] .fields .ffix { color: #8fc1e1; }
+[data-theme="dark"] .fields .fghost { border-color: #5e3a44; color: #de8499; }
+[data-theme="dark"] .fields button.fghost:hover { background: #33242a; }
 [data-theme="dark"] :is(.text, .fvalue) .mention, [data-theme="dark"] :is(.text, .fvalue) .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */
 [data-theme="dark"] :is(.text, .fvalue) .mention:hover { color: #b5ddf4; }
 [data-theme="dark"] :is(.text, .fvalue) .mention.hue, [data-theme="dark"] :is(.text, .fvalue) .mention.hue .mlabel { color: oklch(0.8 0.1 var(--hue)); text-decoration-color: oklch(0.45 0.06 var(--hue)); }
@@ -1426,7 +1431,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .rail .rrow .rtitle { color: #e6e8e9; }
 [data-theme="dark"] .rail .rrow.done .rtitle { color: var(--muted); }
 [data-theme="dark"] .rail .rrow.rmeta .rtitle { color: #a8adaf; }
-[data-theme="dark"] .meta .hiddenfrom, [data-theme="dark"] .subtext .hiddenfrom, [data-theme="dark"] .fields .ricon.hiddenfrom, [data-theme="dark"] .fields .fwarn { color: #f0506e; }
+[data-theme="dark"] .meta .hiddenfrom, [data-theme="dark"] .subtext .hiddenfrom { color: #de8499; }
 [data-theme="dark"] .fields { border-color: #3a3f41; }
 [data-theme="dark"] .fields .field, [data-theme="dark"] .fields .fvalue { color: #e6e8e9; }
 [data-theme="dark"] .fields .flabel, [data-theme="dark"] .fields .ricon { color: var(--muted); }
