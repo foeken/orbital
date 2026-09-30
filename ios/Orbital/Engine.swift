@@ -38,6 +38,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         web.customUserAgent = Self.safari
         web.isInspectable = true
         web.navigationDelegate = self
+        if CommandLine.arguments.contains("-sample") { showSample(); return }
         Task {
             await SavedSession.restore(into: web.configuration.websiteDataStore.httpCookieStore)
             start()
@@ -45,6 +46,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     func start() {
+        guard !CommandLine.arguments.contains("-sample") else { return }
         watch?.cancel()
         phase = .starting
         note("loading the session page")
@@ -132,7 +134,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     func refresh() async {
-        guard phase == .ready, !loading else { return }
+        guard phase == .ready, !loading, !CommandLine.arguments.contains("-sample") else { return }
         loading = true
         defer { loading = false }
         do {
@@ -151,6 +153,18 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func more() async {
         pages += 1
         await refresh()
+    }
+
+    // Launched with -sample: timeline-sample.json in place of Tana, for screenshots of the design. Invented content only;
+    // its times are minutes from now ("{{min:-40}}", "{{ms:+44}}") so the page always reads as today's.
+    private func showSample() {
+        guard let url = Bundle.main.url(forResource: "timeline-sample", withExtension: "json"), var json = try? String(contentsOf: url, encoding: .utf8) else { return }
+        for match in json.matches(of: /"\{\{(min|ms):([+-]?\d+)\}\}"/).reversed() {
+            let at = Date.now.addingTimeInterval(Double(match.2)! * 60)
+            json.replaceSubrange(match.range, with: match.1 == "ms" ? String(Int(at.timeIntervalSince1970 * 1000)) : "\"" + at.ISO8601Format(.iso8601.year().month().day().time(includingFractionalSeconds: true)) + "\"")
+        }
+        rows = (try? JSONDecoder().decode([Row].self, from: Data(json.utf8))) ?? []
+        phase = .ready
     }
 
     func link(_ id: String) async -> URL? {
