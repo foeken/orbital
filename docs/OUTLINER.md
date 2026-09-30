@@ -1239,7 +1239,7 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
 The page on screen has its presence room open (renderer/presence.js follows the zoom after every render;
 main/presence.js keeps one counted room per document over sdk/presence.js). Lists show no presence.
 
-- **Others.** Avatars beside the title, and each person's caret drawn where Tana draws it: a thin line in their colour
+- **Others.** Each person's caret drawn where Tana draws it: a thin line in their colour
   (from their user hash) between the characters it is on, their full name on it, below the caret when the row is too
   near the top. The position is read from the entry's Loro cursor (`content.cursorOffset`), which stays right as text is
   typed, so an edit redraws the carets without a presence message; the block offset (`content.charOffset`, ProseMirror

@@ -57,8 +57,8 @@ them, and the header and the tab bars read as one band with no line under the he
 thin and bright (1.5px, #450). Radius and shadow belong to floating surfaces only: the palette card, menus, the
 chat composer (#446). Measure spacing: a divider sits centred between the sections it separates (#190, #208).
 
-**Show people as faces.** Initial bubbles and a count say who can see something (#461), and avatars say who is
-here (presence). Words come after faces.
+**Show people as faces.** Initial bubbles and a count say who can see something (#461), and a named caret on
+the row says who else is here and where (presence). Words come after faces.
 
 **Hold at every width, in both themes.** Every design must work in a narrow pane (about 560px) as well as a full
 window. Nothing important may live only in chrome that a narrow pane drops; a narrow pane once showed no
@@ -99,8 +99,8 @@ The loader plays on launch and Reload only (#223). Delight is for the moments th
 squashes the box, draws the tick and strikes the title, in the app's own green (row 318). Something live pulses
 softly (the recording dot, row 29, #456). Nothing loops without a reason, and reduced motion stills it all.
 
-**Private stays private, and errors stay out of the way.** Sensitive nodes blur, and every launch starts hidden
-(row 166). Read-only looks read-only. A failed action is a toast that fades; the line under the title is only
+**Private stays private, and errors stay out of the way.** Sensitive nodes blur until the eye shows them,
+and this Mac remembers that choice without passing it to another machine (row 166, docs/OUTLINER.md §17). Read-only looks read-only. A failed action is a toast that fades; the line under the title is only
 for the session (#247).
 
 **Guide in the app's own words.** An empty page says what would fill it and how to start (#356). The first screen
