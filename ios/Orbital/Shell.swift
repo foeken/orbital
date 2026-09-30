@@ -43,15 +43,17 @@ struct Shell: View {
             // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
             .mask { RoundedRectangle(cornerRadius: menu ? 44 : 0, style: .continuous).ignoresSafeArea() }
             // pushed aside, the page is a card with a hairline edge, as the ChatGPT app's is; a tap closes it. (A sheet
-            // of glass over it was too much: the bar's own glass buttons became glass on glass.)
+            // of glass over it was too much: the bar's own glass buttons became glass on glass.) Always there and only
+            // shown or hidden: added and removed, it faded out where it had been while the page slid home, a second edge
+            // lagging behind the first.
             .overlay {
-                if menu {
-                    RoundedRectangle(cornerRadius: 44, style: .continuous).strokeBorder(Color(.separator), lineWidth: 1)
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture { show(false) }
-                        .accessibilityHidden(true)
-                }
+                RoundedRectangle(cornerRadius: 44, style: .continuous).strokeBorder(Color(.separator), lineWidth: 1)
+                    .ignoresSafeArea()
+                    .opacity(menu ? 1 : 0)
+                    .contentShape(Rectangle())
+                    .onTapGesture { show(false) }
+                    .allowsHitTesting(menu)
+                    .accessibilityHidden(true)
             }
             .shadow(color: .black.opacity(menu ? 0.25 : 0), radius: 24)
             .offset(x: min(width, max(0, (menu ? width : 0) + drag)))
@@ -66,18 +68,27 @@ struct Shell: View {
             }
             .onEnded { g in
                 let moved = abs(g.translation.width) > abs(g.translation.height) ? g.predictedEndTranslation.width : 0
-                withAnimation(reduceMotion ? nil : .snappy) {
+                withAnimation(reduceMotion ? nil : Self.move) {
                     if moved > width / 3 { menu = true } else if moved < -width / 3 { menu = false }
                     drag = 0
                 }
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
+        .task {
+            // -menudemo: open the menu and close it again, for filming the move
+            guard CommandLine.arguments.contains("-menudemo") else { return }
+            try? await Task.sleep(for: .seconds(2)); show(true)
+            try? await Task.sleep(for: .seconds(2)); show(false)
+        }
         .sheet(isPresented: $searching) { SearchSheet(engine: engine) }
     }
 
     private func show(_ open: Bool) {
-        withAnimation(reduceMotion ? nil : .snappy) { menu = open }
+        withAnimation(reduceMotion ? nil : Self.move) { menu = open }
     }
+
+    // the menu's one move, quicker than SwiftUI's default half second
+    static let move = Animation.snappy(duration: 0.3)
 }
 
 // The side menu: the app's name with search beside it, its pages, and settings at the foot
