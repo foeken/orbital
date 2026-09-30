@@ -133,6 +133,11 @@ function mockApi() {
   const mockDefs = { 'tana:type:mock0': [
     { key: 'lvl00001', title: 'Level', type: 'options', options: [{ label: 'High' }, { label: 'Medium' }, { label: 'Low' }] },
     { key: 'src00001', title: 'Sources', type: 'link', cardinality: 'multiple', to: [{ uri: 'tana:type:mock1', name: 'Decision Record' }] },
+    // enough fields that the bar folds the idle ones behind "…" (#624)
+    { key: 'imp00001', title: 'Impact', type: 'options', options: [{ label: '1' }, { label: '2' }, { label: '3' }, { label: '4' }] },
+    { key: 'lik00001', title: 'Likelihood', type: 'options', options: [{ label: 'Rare' }, { label: 'Likely' }, { label: 'Certain' }] },
+    { key: 'rev00001', title: 'Review date', type: 'date' },
+    { key: 'own00001', title: 'Owner', type: 'member' },
   ] };
   const mockFields = (docId) => (docId === 'mockdoc1' ? [{ key: FIELD_KEY, label: 'Discuss with', text: 'Stan Engbers', segments: [{ text: 'Stan Engbers' }] },
     ...mockDefs['tana:type:mock0'].map((d) => ({ key: 'tana:type:mock0?attribute=' + d.key, label: d.title, text: '', lines: [], type: d.type, cardinality: d.cardinality, options: d.options, to: d.to }))] : []);
@@ -349,7 +354,7 @@ function mockApi() {
       const doc = all.find((d) => d.id === docId);
       // anything that is not a meeting still has backlinks: one mock document mentions it
       const mentions = all.filter((d) => d.icon === 'doc' && d.id !== docId).slice(0, 1).map(info);
-      if (!doc || doc.icon !== 'meeting') return { fields: mockFields(docId), definitions: mockDefs[docId] && structuredClone(mockDefs[docId]), pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
+      if (!doc || doc.icon !== 'meeting') return { ...(docId === 'mockdoc1' ? { meeting: { id: 'mockmeeting0', title: 'Studio LT weekly', start: new Date().toISOString() } } : {}), fields: mockFields(docId), definitions: mockDefs[docId] && structuredClone(mockDefs[docId]), pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
       const pick = (n) => n && info(n);
       return {
         summary: 'Mock meeting summary for ' + doc.text,

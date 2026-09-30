@@ -81,14 +81,19 @@ function pillDefs() {
     { label: 'Any visibility', reset: true, checked: !f.audience, run: () => save({ audience: null }) },
     { label: 'Everyone', icon: 'users', checked: f.audience === 'everyone', run: () => save({ audience: 'everyone' }) },
   ] });
+  // How many rows the query asks for (#626). Not on a type page, whose pills keep only its fields (setTypeF): it asks for 1,000.
+  if (!onTypePage()) defs.push({ id: 'limit', label: 'Limit', command: 'Limit results', icon: 'outline', value: rowLimit(f.limit).toLocaleString('en'), rows: () => LIMITS.map((v) => ({ label: v.toLocaleString('en'), checked: rowLimit(f.limit) === v, run: () => save({ limit: v }) })) });
   // A view keeps them in the browser; a saved search stores them in its document, so the arrangement travels with
   // the search and is what it opens on next time.
-  defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => sortList().map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
-  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: groupLabel(), rows: () => groupList(true, true).filter(([id]) => id !== 'responsibility' || tasksInFilter(f)).map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
+  // Sort, Group and Display each list the page's fields under a heading of their own, and each can be searched (#624)
+  defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: sortLabel(), search: true, find: 'Search sorts…', rows: () => fieldSection(sortList(true), ([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
+  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: groupLabel(), search: true, find: 'Search groupings…', rows: () => fieldSection(groupList(true, true).filter(([id]) => id !== 'responsibility' || tasksInFilter(f)), ([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   // what each row shows of itself; multi-select, so the menu stays open to tick more, like the type and status lists
   // the first two it shows and an ellipsis for the rest, so ticking more does not stretch the pill across the bar
   const shown = displayList().filter(([id]) => displayOn(id)).map(([, label]) => label);
-  defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: shown.slice(0, 2).join(', ') + (shown.length > 2 ? ', …' : '') || 'Nothing', rows: () => displayList().map(([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) })) });
+  // the row's own facts first in the menu, then the fields; what is shown keeps displayList's order (setDisplay)
+  const byKind = (list) => [...list.filter(([id]) => !isFieldKey(id)), ...list.filter(([id]) => isFieldKey(id))];
+  defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: shown.slice(0, 2).join(', ') + (shown.length > 2 ? ', …' : '') || 'Nothing', search: true, find: 'Search what rows show…', rows: () => (pageFieldDefs(true), fieldSection(byKind(displayList()), ([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) }))) });
   return defs;
 }
 // One pill per field with a closed set of values, filtering in Tana's own terms (sdk/query.js attributeFilters,
@@ -123,7 +128,7 @@ function fieldPill(def, f, save) {
   const key = fieldKey(def), now = (f.fields || {})[key] || {}, title = def.title || 'Untitled field';
   const put = (value) => putField(f, save, key, value);
   // a link or member field can point at hundreds of nodes, so its menu says it can be searched (menuEl)
-  const pill = { id: 'field:' + def.key, field: key, label: title, command: 'Filter by ' + title, icon: fieldGlyph(key), search: def.type === 'link' || def.type === 'member' };
+  const pill = { id: 'field:' + def.key, field: key, set: !!(f.fields || {})[key], label: title, command: 'Filter by ' + title, icon: fieldGlyph(key), search: def.type === 'link' || def.type === 'member' };
   if (def.type === 'date') {
     const preset = now.date && now.date.preset;
     return { ...pill, value: (DATE_PRESETS.find(([p]) => p === preset) || [])[1] || 'Any', rows: () => [
@@ -141,6 +146,33 @@ function fieldPill(def, f, save) {
       put(next && (byLabel ? { textMatches: next.map((value) => ({ value })) } : { refs: next }));
     } })),
   ] };
+}
+// A menu's choices with the type's fields under a small heading of their own, where the first one starts (#624)
+function fieldSection(list, rowOf) {
+  const rows = list.map(rowOf), at = list.findIndex(([id]) => isFieldKey(id));
+  if (at >= 0) rows.splice(at, 0, { head: 'Type fields' });
+  return rows;
+}
+// Past FIELD_PILLS field pills, the ones not filtering anything fold into an Add filter pill whose menu adds one to the bar
+// and opens it (#624): the bar keeps the fields you filter by and the ones you asked for. Cmd+K still lists every
+// field (pillDefs), so this is only about the bar. What was asked for is kept for the session, per page.
+const FIELD_PILLS = 4;
+const askedFields = new Map(); // pillKey -> Set of field pill ids added from "…"
+let pillFocus = null; // a pill that should take the focus on the next draw: the one "…" just added
+function foldFields(defs) {
+  const fields = defs.filter((d) => d.field), asked = askedFields.get(pillKey()) || new Set();
+  if (fields.length <= FIELD_PILLS) return defs;
+  const folded = fields.filter((d) => !d.set && !asked.has(d.id) && !(menu && menu.id === d.id));
+  if (!folded.length) return defs;
+  // the filter glyph with a plus: it adds a filter on a field, it never makes a field; the tooltip names what is behind it
+  const names = folded.map((d) => d.label), shown = names.slice(0, 3).join(', ') + (names.length > 3 ? ' and ' + (names.length - 3) + ' more' : '');
+  const more = { id: 'morefields', icon: 'filterPlus', label: 'Add filter', title: 'Filter by another field: ' + shown, search: true, find: 'Search fields…', rows: () => [{ head: 'Type fields' }, ...folded.map((d) => ({ label: d.label, icon: d.icon, run: () => {
+    askedFields.set(pillKey(), asked.add(d.id));
+    menu = { id: d.id, index: 0 }; pillFocus = d.id; // straight into its choices, as a click on it would
+  } }))] };
+  const out = defs.filter((d) => !folded.includes(d)), last = out.findLastIndex((d) => d.field);
+  out.splice(last >= 0 ? last + 1 : defs.indexOf(folded[0]), 0, more);
+  return out;
 }
 const pillsApply = () => filters.has(pillKey());
 const pillName = (def) => def.label || def.id[0].toUpperCase() + def.id.slice(1);
@@ -194,7 +226,7 @@ function renderPills(show) {
   // rather than assembling itself in front of you.
   const arriving = pillsPressed && (box.hidden || box.classList.contains('out'));
   box.classList.remove('out');
-  const defs = show ? pillDefs() : [];
+  const defs = show ? foldFields(pillDefs()) : [];
   box.hidden = !defs.length;
   const focusedId = box.contains(document.activeElement) && document.activeElement.closest('.pill') ? document.activeElement.closest('.pill').dataset.id : null;
   if (menu && !defs.some((d) => d.id === menu.id)) menu = null;
@@ -204,6 +236,7 @@ function renderPills(show) {
     if (d.toggle) pill.setAttribute('aria-pressed', String(!!d.active));
     addIcon(pill, d.icon);
     if (d.label) pill.append(d.label);
+    if (d.title) { pill.title = d.title; pill.setAttribute('aria-label', d.title); }
     if (d.value) { const b = document.createElement('b'); b.textContent = d.value; pill.append(b); }
     pill.onmousedown = (e) => { if (e.target.closest('.menu')) e.preventDefault(); }; // menu clicks keep the pill focused
     pill.onclick = (e) => { if (d.toggle) d.toggle(); else if (!e.target.closest('.menu')) { menu = menu && menu.id === d.id ? null : { id: d.id, index: 0 }; renderPills(true); pill.focus(); } };
@@ -222,7 +255,8 @@ function renderPills(show) {
   [...box.children].forEach((el, i) => { el.style.setProperty('--i', i); if (arriving) el.classList.add('in'); });
   if (arriving && !box.hidden) unfoldPills(box);
   if (oldMenu || menu) menuMotion(oldMenu, box.querySelector('.pill > .menu:not(.out)'), oldMenu && [...box.children].find((p) => p.dataset.id === oldMenu.dataset.for));
-  const again = focusedId && box.querySelector('.pill[data-id="' + focusedId + '"]');
+  const again = (pillFocus || focusedId) && box.querySelector('.pill[data-id="' + (pillFocus || focusedId) + '"]');
+  pillFocus = null;
   if (again) again.focus();
   const open = box.querySelector('.menu:not(.out)'); // stop before the window edge; the rows scroll inside (not a menu on its way out)
   if (open) open.style.maxHeight = Math.min(360, innerHeight - open.getBoundingClientRect().top - 12) + 'px';
@@ -397,7 +431,7 @@ function menuEl(d) {
     const s = document.createElement('div'); s.className = 'msearch' + (typed ? '' : ' empty');
     const i = document.createElement('span'); i.className = 'micon'; addIcon(i, 'search');
     const c = document.createElement('span'); c.className = 'mcaret';
-    s.append(i, typed, c, typed ? '' : 'Search ' + (d.label || 'options') + '…'); el.append(s);
+    s.append(i, typed, c, typed ? '' : d.find || 'Search ' + (d.label || 'options') + '…'); el.append(s);
   } else if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
   const pick = rows.filter((r) => r.label); // navigable rows
   if (d.loading || (d.search && typed && !pick.length)) { const n = document.createElement('div'); n.className = 'mhead'; n.textContent = d.loading ? 'Loading…' : 'No matches'; el.append(n); }

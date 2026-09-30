@@ -129,8 +129,12 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   takes a click there as a window drag and the backdrop never hears the click that closes it).
 - **Buttons at the top right** (`.navbtns`, one flex row anchored to the right edge of `.titlebar`, so they stay put as
   the rows under the title come and go): Back and Forward, the sensitive toggle, the pills toggle, the Outliner/Table
-  switch, Clean up and the Graph switch on a page with a document (a page among others closes from its tab, Panes
+  switch, Clean up, the page's meeting and the Graph switch on a page with a document (a page among others closes from its tab, Panes
   below; the links are a pane, §18). A button that
+  The meeting button (`navMeeting`, renderer/rail.js `drawMeetingBtn`, issue #630) is there when the page belongs to a
+  meeting — a task Tana's AI filed under it, a note written in it — and never on the meeting's own write-up: main names
+  it with the page's read (main/related.js `meeting`), its tooltip reads as the meeting glyph on a task's row does
+  ("From Studio LT weekly · Wed 30 Sep"), and a click opens the meeting, which forwards to its write-up.
   does not apply is gone rather than empty, and the others move up to the edge. Back and Forward run `navigate(-1)` and
   `navigate(1)`, the history ⌘[ and ⌘] walk; `renderNav()` runs after `noteNavigation()` on every render, disables
   them when the move does nothing and puts the current combo in the tooltip. Every header button with a Cmd+K row
@@ -154,6 +158,10 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   Escape clears and hides it, and while it has text it stays visible. A page with no rows and no filter says
   "Nothing here yet". A pill's menu stops above the window's edge and scrolls inside, and the keyboard keeps its
   active option in view; a toggle carries `aria-pressed`.
+  More than four field pills fold the ones filtering nothing behind an **Add filter** pill (the filter glyph with a plus; its tooltip names the folded fields) (`foldFields`, renderer/pills.js,
+  issue #624): its menu lists them under "Type fields" with a search line, and picking one puts its pill back on the
+  bar, open, for the rest of the session. A field that filters something always keeps its pill, and Cmd+K lists every
+  field either way.
 - **Loading.** On a launch or a Reload only (`booted`), while the first page has no rows yet, the page builds itself
   after a 300 ms wait (renderer/loading.js): the header and title, then rows of small outlined glyphs and rounded text
   bars growing in one by one, a highlight sweeping through each, fading toward the bottom; slow on the Timeline, 2.2
@@ -653,10 +661,15 @@ Pins are stored as [PINNING.md](PINNING.md) describes; this is what the outliner
 
 Sort, Group and Display are pills on every page with pills ([VIEWS.md](VIEWS.md)): Sort Default, Status, Updated,
 Created, Title, and Meeting time where meetings are the only kind (the event's start, running the way the When pill's
-window does: soonest first for Upcoming and Today, latest first otherwise); Group None, Status, Assignee, Responsibility, Updated, Type (and a type's fields on a one-type page);
+window does: soonest first for Upcoming and Today, latest first otherwise); Group None, Status, Assignee, Responsibility, Updated, Type;
 Display chooses the facts a row shows. Each is kept per page key in the synced `groupBy`, `sortBy` and `display`
 preferences; a saved search keeps its own in its document. Group by Updated sorts rows into Last hour, Last day, Last
 week, Last month and Older.
+Each also offers the page's fields (issue #624): a one-type page its type's own, a mixed list those of the types on
+it, one per name as Group has them (`pageFieldDefs`), under a small "Type fields" heading (`fieldSection`); Group
+only the ones with a closed set of values. Sort on a field goes by its first value: a date by its day, anything else
+as words with numbers read as numbers (`fieldSortKey`), rows without a value last. All three menus have a search
+line, as a link field's has; typing narrows them.
 A saved search or a type’s page draws its rows twenty at a time (`capRows`, renderer/views.js): the first twenty in
 the order shown, sorted and grouped over the whole answer, then twenty more each time “Show 20 more” at its end comes within a
 screen of view (or is clicked). Only a drawn row asks for its metadata, translation and fields. The list itself is

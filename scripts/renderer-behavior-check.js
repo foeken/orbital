@@ -3503,7 +3503,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'letting Completed in offers the window, defaulting to 7 days the first time it is asked for');
   assert.deepEqual(plain(completedPill().rows().map((r) => [r.label, !!r.checked])), [['3 days', false], ['7 days', true], ['30 days', false], ['All', false]],
     'the choices are the four the rule knows, with the active one ticked and no way to turn completed tasks off here');
-  assert.deepEqual(plain(api.pillDefs().map((d) => d.id)), ['status', 'completed', 'assigned', 'audience', 'sort', 'group', 'display'],
+  assert.deepEqual(plain(api.pillDefs().map((d) => d.id)), ['status', 'completed', 'assigned', 'audience', 'limit', 'sort', 'group', 'display'],
     'and it sits with the filters, right after the Status pill it belongs to');
   completedPill().rows().find((r) => r.label === '30 days').run();
   assert.deepEqual(plain(api.savedPatch()), { completedWithin: 30 }, 'choosing one writes the window and touches nothing else about the filter');
@@ -3996,6 +3996,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(plain(api.commands('tasks')), [
     ['pill:status', 'Filter by status', 'In Progress', 'filter'], ['pill:assigned', 'Filter by assignee', 'Anyone', 'filter'],
     ['pill:audience', 'Filter by visibility', 'Any', 'filter'],
+    ['pill:limit', 'Limit results', '200', 'outline'],
     ['pill:sort', 'Sort by', 'Default', 'sort'], ['pill:group', 'Group by', 'None', 'group'],
     ['pill:display', 'Display', 'Status, Assigned, …', 'field'],
     ['cleanup', 'Clean up', 'Nothing to clean up', 'cleanup'], // always listed, off until a row is held in place
@@ -4011,9 +4012,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.equal(api.pick('Assignee').group, 'assignee', 'Group uses the same shared action too');
   // A kind page is that kind: Tasks, Meetings, Chats and People do not offer a type to pick, so the page cannot be
   // turned into a different one; the Library picks its kinds, and so does the Inbox, which is a state, not a kind.
-  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:audience', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
+  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:audience', 'pill:limit', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
     'Library includes its Type filter plus the other applicable pills');
-  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:audience', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
+  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:audience', 'pill:limit', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
     'the Inbox is a state rather than a kind, so it still picks types');
   // Clean up is the header pill as a command row, always listed and greyed out while there is nothing to clean up,
   // running the same action under a fixed id when there is — so a shortcut can be recorded for it beforehand.
@@ -4812,7 +4813,7 @@ function runRailToggleCheck() {
   // Only the Graph pane draws the rail; every other page hides it and tells the shell its document instead.
   // It still reads the document's related data: the fields under its title come with that read, and without it a page
   // opened with no Graph pane beside it showed no fields at all.
-  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; if \(docId\) loadRelated\(docId\); drawLinksBtn\(docId\); return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail, still reads what its fields need, offers its Graph switch and names its document');
+  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; if \(docId\) loadRelated\(docId\); drawMeetingBtn\(docId\); drawLinksBtn\(docId\); return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail, still reads what its fields need, offers its Graph switch and names its document');
   // and no outline key of the page (⇧⌘⌫ above all) reaches the hidden page in the Graph pane: its branch comes before them (#463 review)
   assert.match(source, /else if \(!palette\.hidden\) return;\n(?:\s*\/\/[^\n]*\n)*\s*else if \(LINKS\) \{ if \(hotkey && runAction\(hotkey\)\) e\.preventDefault\(\); \}\n[^]*?removeZoomedBlock\(\)/, 'in the Graph pane only its forwarded keys run, never the outline\'s');
   // Anywhere else the Graph pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
@@ -4889,7 +4890,7 @@ function runSearchPillsCheck() {
   assert.equal(api.applies(), true, 'so they apply there at all');
   // A saved search is never a kind page: choosing what it lists is the whole point of it. Sort and Group are view
   // layout, and the page a search draws neither sorts nor groups, so offering them would offer something that does nothing.
-  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned', 'audience', 'sort', 'group', 'display'], 'a saved search offers the query pills and the arrangement ones, which it stores in its own document');
+  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned', 'audience', 'limit', 'sort', 'group', 'display'], 'a saved search offers the query pills and the arrangement ones, which it stores in its own document');
   api.loaded();
   assert.equal(api.dirty(), false, 'freshly loaded from the document, there is nothing to save');
   assert.deepEqual(plain(api.edit({ states: ['open'] })), { types: ['tasks'], states: ['open'], assignee: 'me', text: '' },
@@ -9776,6 +9777,41 @@ checks.push(async function runMarkdownCheck() {
   api.item.node.block = 'code';
   assert.equal(await api.paste('- a\n- b'), false, 'a code block takes a paste as its text');
   console.log('ok  markdown in the editor: typed marks and line markers, and pastes read as markdown');
+});
+// Field pills (#624): past four, the ones filtering nothing fold into "…", whose rows add a pill and open it; the menus
+// put the type's fields under their own heading; a field sorts by its value, dates by their day and numbers as numbers.
+checks.push(function runFieldPillsCheck() {
+  const api = vm.runInNewContext(`
+    let menu = null; const pillKey = () => 'library';
+    ${sourceLine('const isFieldKey')}
+    ${sourceBetween("// A menu's choices with the type's fields", 'const pillsApply')}
+    let id = 'default', held = null, lastOrder = null;
+    const sortBy = () => id, soonestFirst = () => false, statusRank = () => undefined, fieldKey = (d) => d.group, fieldValuesOf = (n) => n.v || [];
+    const pageFieldDefs = () => [{ group: 'field?attribute=Review date', type: 'date' }, { group: 'field?attribute=Impact', type: 'options' }];
+    ${sourceLine('const SORT_KEY')}
+    ${sourceLine('const NEWEST_FIRST')}
+    ${sourceBetween('const fieldSortKey', 'function setSortBy(')}
+    ${functionSource('sortRows')}
+    ({ foldFields, fieldSection, menu: () => menu, focus: () => pillFocus, sort: (by, rows) => { id = by; return sortRows(rows).map((n) => n.id); } });
+  `);
+  const pill = (i, set = false) => ({ id: 'field:' + i, field: 'type?attribute=' + i, set, label: 'Field ' + i });
+  const ids = (defs) => plain(defs.map((d) => d.id));
+  const few = [{ id: 'type' }, pill(1), pill(2), pill(3), pill(4), { id: 'sort' }];
+  assert.deepEqual(ids(api.foldFields(few)), ids(few), 'four field pills or fewer all stay on the bar');
+  const many = [{ id: 'type' }, pill(1), pill(2, true), pill(3), pill(4), pill(5), pill(6), { id: 'status' }, { id: 'sort' }];
+  const folded = api.foldFields(many);
+  assert.deepEqual(ids(folded), ['type', 'field:2', 'morefields', 'status', 'sort'], 'past four, only the field filtering something stays, with "…" after it');
+  const rows = folded[2].rows();
+  assert.deepEqual(plain(rows.map((r) => r.head || r.label)), ['Type fields', 'Field 1', 'Field 3', 'Field 4', 'Field 5', 'Field 6'], '"…" offers the folded fields under their heading');
+  rows[2].run();
+  assert.deepEqual(plain([api.menu(), api.focus()]), [{ id: 'field:3', index: 0 }, 'field:3'], 'picking one opens its menu and moves the focus to it');
+  assert.deepEqual(ids(api.foldFields(many)), ['type', 'field:2', 'field:3', 'morefields', 'status', 'sort'], 'and it stays on the bar in its own place');
+  assert.deepEqual(plain(api.fieldSection([['default', 'Default'], ['title', 'Title'], ['field?attribute=Impact', 'Impact']], ([, label]) => ({ label })).map((r) => r.head || r.label)),
+    ['Default', 'Title', 'Type fields', 'Impact'], 'Sort, Group and Display head the fields with a small section of their own');
+  const dated = [{ id: 'mid', v: ['Jul 17, 2026'] }, { id: 'none' }, { id: 'early', v: ['Nov 14, 2025'] }, { id: 'late', v: ['Sep 4, 2026'] }]; // alphabetically: Jul, Nov, Sep
+  assert.deepEqual(plain(api.sort('field?attribute=Review date', dated)), ['early', 'mid', 'late', 'none'], 'a date field sorts by its day, earliest first, rows without one last');
+  assert.deepEqual(plain(api.sort('field?attribute=Impact', [{ id: 'ten', v: ['10'] }, { id: 'nine', v: ['9'] }, { id: 'one', v: ['1'] }])), ['one', 'nine', 'ten'], 'and numbers as numbers');
+  console.log('ok  field pills: past four the idle ones fold behind "…", fields under their own heading in the menus, sorted by value (#624)');
 });
 // "Fix this" beside "Not visible to …" (#622): offered only where the page's own people are its audience and you may
 // share it, and it shares with the shut-out assignees as editors, everyone already there kept at their role.
