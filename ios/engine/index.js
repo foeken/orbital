@@ -16,7 +16,8 @@ const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/
 // tana-session.js without Electron: the page's own cookies, one lookup at a time, a minute before expiry as Tana does
 let last = null, expiresAt = 0, inFlight = null;
 function fetchSession(refresh) {
-  inFlight ||= fetch('/api/auth/session' + (refresh ? '?refresh=true' : ''), { credentials: 'include', headers: { accept: 'application/json' } })
+  // no-store: Tana sends this with no cache headers, and a signed-out answer from before signing in must never be reused
+  inFlight ||= fetch('/api/auth/session' + (refresh ? '?refresh=true' : ''), { credentials: 'include', cache: 'no-store', headers: { accept: 'application/json' } })
     .then(async (res) => {
       if (!res.ok && res.status !== 401 && res.status !== 403) throw new Error('GET /api/auth/session failed: HTTP ' + res.status);
       const json = await res.json().catch(() => ({}));

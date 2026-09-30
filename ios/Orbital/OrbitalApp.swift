@@ -18,6 +18,9 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 if signingIn { Text("Sign in to Tana").font(.headline).padding(.vertical, 12) }
                 WebHost(web: engine.web).ignoresSafeArea(edges: .bottom)
+                if signingIn, let diagnosis = engine.diagnosis {
+                    Text(diagnosis).font(.caption2).foregroundStyle(.secondary).lineLimit(3).padding(8).frame(maxWidth: .infinity).background(.bar)
+                }
             }
             .opacity(signingIn ? 1 : 0)
             .allowsHitTesting(signingIn)

@@ -14,6 +14,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var loading = false
     var error: String?
     var pages = 1
+    var diagnosis: String? // while signing in: what the app sees of Tana's session, names only (#658)
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
@@ -44,7 +45,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func start() {
         watch?.cancel()
         phase = .starting
-        web.load(URLRequest(url: Self.session))
+        web.load(URLRequest(url: Self.session, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))
     }
 
     // engine.js says 'ready' once it is loaded on the session page
@@ -84,11 +85,20 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         watch = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                guard phase == .signedOut, web.url?.host == "home.tana.inc" else { continue }
-                let signedIn = try? await web.callAsyncJavaScript(
-                    "const r = await fetch('/api/auth/session', { credentials: 'include' }); return (await r.json()).authenticated === true",
-                    contentWorld: .page) as? Bool
-                if signedIn == true, !Task.isCancelled {
+                guard phase == .signedOut else { continue }
+                let cookies = await web.configuration.websiteDataStore.httpCookieStore.allCookies().filter { $0.domain.hasSuffix("tana.inc") }.map(\.name).sorted()
+                let host = web.url?.host ?? "none"
+                guard host == "home.tana.inc" else { diagnosis = "\(host) · cookies: \(cookies.joined(separator: ", "))"; continue }
+                var answer = "no answer"
+                do {
+                    answer = try await web.callAsyncJavaScript(
+                        "const r = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' }); const j = await r.json().catch(() => ({})); return r.status + ' ' + (j.authenticated === true ? 'signed in' : 'signed out')",
+                        contentWorld: .page) as? String ?? answer
+                } catch {
+                    answer = Self.message(error)
+                }
+                diagnosis = "\(host)\(web.url?.path ?? "") · session \(answer) · cookies: \(cookies.joined(separator: ", "))"
+                if answer.hasSuffix(" signed in"), !Task.isCancelled {
                     justSignedIn = true
                     start()
                     return
