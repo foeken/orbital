@@ -9,6 +9,7 @@ struct OrbitalApp: App {
 
 struct ContentView: View {
     @State private var engine = Engine()
+    @State private var details = false
     @Environment(\.scenePhase) private var scene
 
     var body: some View {
@@ -16,11 +17,11 @@ struct ContentView: View {
         ZStack {
             // one web view in one place: Tana's sign-in while signed out, hidden behind the app once the engine runs
             VStack(spacing: 0) {
-                if signingIn { Text("Sign in to Tana").font(.headline).padding(.vertical, 12) }
-                WebHost(web: engine.web).ignoresSafeArea(edges: .bottom)
-                if signingIn, let diagnosis = engine.diagnosis {
-                    Text(diagnosis).font(.caption2).foregroundStyle(.secondary).lineLimit(3).padding(8).frame(maxWidth: .infinity).background(.bar)
+                if signingIn {
+                    Text("Sign in to Tana").font(.headline).padding(.vertical, 12).frame(maxWidth: .infinity)
+                        .overlay(alignment: .trailing) { Button("Details") { details = true }.font(.subheadline).padding(.trailing) }
                 }
+                WebHost(web: engine.web).ignoresSafeArea(edges: .bottom)
             }
             .opacity(signingIn ? 1 : 0)
             .allowsHitTesting(signingIn)
@@ -35,6 +36,7 @@ struct ContentView: View {
                     Text(message)
                 } actions: {
                     Button("Try again") { engine.start() }.buttonStyle(.borderedProminent)
+                    Button("Details") { details = true }
                 }
             case .signedOut:
                 EmptyView()
@@ -42,6 +44,24 @@ struct ContentView: View {
                 TimelineScreen(engine: engine)
             }
         }
+        .sheet(isPresented: $details) { SignInLog(lines: engine.log) }
         .onChange(of: scene) { if scene == .active { Task { await engine.refresh() } } }
+    }
+}
+
+// What sign-in did, to copy or share when it goes wrong (#658)
+struct SignInLog: View {
+    let lines: [String]
+    var body: some View {
+        let text = lines.joined(separator: "\n")
+        NavigationStack {
+            ScrollView {
+                Text(text.isEmpty ? "Nothing yet." : text).font(.footnote.monospaced()).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding()
+            }
+            .navigationTitle("Sign-in details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ShareLink(item: text) }
+        }
     }
 }

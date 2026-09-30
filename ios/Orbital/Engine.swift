@@ -14,7 +14,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var loading = false
     var error: String?
     var pages = 1
-    var diagnosis: String? // while signing in: what the app sees of Tana's session, names only (#658)
+    // What sign-in and the session did, newest last, for Details: cookie names only, never a value (#658). A line is
+    // added only when it differs from the one before, so the screen is redrawn only when something moved.
+    var log: [String] = []
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
@@ -45,7 +47,14 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func start() {
         watch?.cancel()
         phase = .starting
+        note("loading the session page")
         web.load(URLRequest(url: Self.session, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))
+    }
+
+    func note(_ line: String) {
+        guard log.last?.dropFirst(9) != line[...] else { return }
+        log.append(Date.now.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits)) + " " + line)
+        if log.count > 100 { log.removeFirst() }
     }
 
     // engine.js says 'ready' once it is loaded on the session page
@@ -55,13 +64,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        note("load failed: \(error.localizedDescription)")
         guard phase != .signedOut else { return } // Tana's own pages handle their own errors
         phase = .failed(error.localizedDescription)
     }
 
     private func connect() async {
         do {
-            if try await web.callAsyncJavaScript("return await orbital.connect()", contentWorld: .page) as? Bool == true {
+            let ok = try await web.callAsyncJavaScript("return await orbital.connect()", contentWorld: .page) as? Bool == true
+            note("engine: session " + ((try? await web.callAsyncJavaScript("return orbital.why()", contentWorld: .page) as? String) ?? "?"))
+            if ok {
                 justSignedIn = false
                 phase = .ready
                 await refresh()
@@ -73,6 +85,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 signIn()
             }
         } catch {
+            note("engine failed: \(Self.message(error))")
             phase = .failed(Self.message(error))
         }
     }
@@ -81,6 +94,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // desktop's login window does (tana-session.js login)
     private func signIn() {
         phase = .signedOut
+        note("showing Tana's sign-in")
         web.load(URLRequest(url: Self.home))
         watch = Task {
             while !Task.isCancelled {
@@ -88,16 +102,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 guard phase == .signedOut else { continue }
                 let cookies = await web.configuration.websiteDataStore.httpCookieStore.allCookies().filter { $0.domain.hasSuffix("tana.inc") }.map(\.name).sorted()
                 let host = web.url?.host ?? "none"
-                guard host == "home.tana.inc" else { diagnosis = "\(host) · cookies: \(cookies.joined(separator: ", "))"; continue }
+                guard host == "home.tana.inc" else { note("\(host) · cookies: \(cookies.joined(separator: ", "))"); continue }
                 var answer = "no answer"
                 do {
                     answer = try await web.callAsyncJavaScript(
-                        "const r = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' }); const j = await r.json().catch(() => ({})); return r.status + ' ' + (j.authenticated === true ? 'signed in' : 'signed out')",
+                        "const r = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' }); const j = await r.json().catch(() => ({})); return r.status + ' ' + (j.authenticated === true ? 'signed in' : 'signed out' + (j.reason ? ' (' + j.reason + ')' : ''))",
                         contentWorld: .page) as? String ?? answer
                 } catch {
                     answer = Self.message(error)
                 }
-                diagnosis = "\(host)\(web.url?.path ?? "") · session \(answer) · cookies: \(cookies.joined(separator: ", "))"
+                note("\(host)\(web.url?.path ?? "") · session \(answer) · cookies: \(cookies.joined(separator: ", "))")
                 if answer.hasSuffix(" signed in"), !Task.isCancelled {
                     justSignedIn = true
                     start()
@@ -118,6 +132,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
             let message = Self.message(error)
+            note("timeline failed: \(message)")
             if message.contains("not authenticated") { signIn() } // the session ran out: sign in again
             self.error = message
         }
