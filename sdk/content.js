@@ -653,6 +653,52 @@ function insertChild(document, id, text) {
   return out;
 }
 
+// Rows from parsed markdown (a paste, main/documents.js pasteMarkdown): blocks [{ block, segments, depth?, checked? }].
+// The first continues the row the caret is in, after `before`; the rest follow it as rows of their own, a deeper depth
+// as a child of the row above (beside it where that row cannot own children: a heading, a quote, code, a divider),
+// and `after`, what stood behind the caret, ends the last one. A paragraph takes the kind of the row pasted into:
+// pasted lines in a list or quote stay list or quote rows (without a checkbox unless `checked` says so), and in
+// prose they are plain text again after a pasted list, where insertAfter would carry the list on. An empty row takes
+// the first block's kind. One transaction, one undo step.
+// Returns the row and offset the caret goes to: the end of what was pasted.
+function insertBlocks(document, id, before, after, blocks) {
+  if (!blocks.length || blocks[0].block === 'divider') blocks = [{ block: 'paragraph', segments: [] }, ...blocks];
+  const kind = (rowId, b, want = b.block === 'paragraph' ? null : b.block) => {
+    if (want && blockType(must(document, rowId).block) !== want) setBlockType(document, rowId, want);
+    // a row has a checkbox when its markdown says so, not because the row above had one (insertAfter's rule), so a
+    // plain line after "- [x] task" is a row without one
+    const f = must(document, rowId), a = f.item && f.item.get('attributes');
+    if (typeof b.checked === 'boolean') (f.item || wrap(f.block)).get('attributes').set('checked', b.checked);
+    else if (a && a.get('checked') !== undefined) a.delete('checked');
+  };
+  const plain = (segs) => segs.map((s) => (s.mention ? s.mention.label : s.text)).join('');
+  let last = null;
+  document.transact(() => {
+    const plainKind = ['bullet', 'numbered', 'quote'].includes(blockType(must(document, id).block)) ? null : 'paragraph';
+    const [first, ...rest] = blocks;
+    if (!before.length && !after.length) kind(id, first);
+    last = { id, segments: [...before, ...first.segments] };
+    setText(document, id, last.segments);
+    const stack = [id]; // stack[d]: the last row written at depth d
+    let tail = id;
+    for (const b of rest) {
+      let d = Math.min(b.depth || 0, b.block === 'divider' ? stack.length - 1 : stack.length);
+      if (b.block === 'divider') tail = insertDivider(document, stack[d]);
+      else if (d < stack.length) tail = insertAfter(document, stack[d], '');
+      else try { tail = insertChild(document, stack[d - 1], ''); } catch { d -= 1; tail = insertAfter(document, stack[d], ''); }
+      stack.length = d; stack.push(tail);
+      if (b.block === 'divider') continue;
+      kind(tail, b, b.block === 'paragraph' ? plainKind : b.block);
+      setText(document, tail, b.segments);
+      last = { id: tail, segments: b.segments };
+    }
+    if (!after.length) return;
+    if (tail !== last.id) last = { id: insertAfter(document, tail, ''), segments: [] }; // behind a pasted divider
+    setText(document, last.id, [...last.segments, ...after]);
+  });
+  return { id: last.id, offset: plain(last.segments).length };
+}
+
 function removeUnit(unit) {
   const l = unit.parent();
   l.delete(indexOf(l, unit), 1);
@@ -1045,4 +1091,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertTable, insertAfter, insertBefore, insertChild, insertMention, split, join, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertTable, insertAfter, insertBefore, insertChild, insertMention, insertBlocks, split, join, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

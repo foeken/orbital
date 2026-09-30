@@ -622,7 +622,7 @@ assert.match(styleSheet, /\.fields \.fvalues \.node\.block:not\(\.t-bullet\):not
   'and a plain row in a field shows no marker in any state, hover and collapsed included');
 assert.doesNotMatch(source, /function fieldLine\(/, 'and there is no second line editor left beside it');
 // "- " is one rule for rows and, now, for the field rows that are the same code (renderer/segments.js).
-assert.match(source, /const startsList = \(before\) => before === '- ';/, 'the list shortcut is the dash *and* the space, in one place');
+assert.match(source, /const startsList = \(before\) => before === '- ' \|\| before === '\* ';/, 'the list shortcut is the dash (or markdown\'s star) *and* the space, in one place');
 assert.match(source, /const listRest = \(segs, offset\) => splitSegs\(segs, offset \|\| 0\)\[1\];/, 'and so does what the line keeps when the marker goes');
 // Tab at the start of a plain line is the same gesture as "- ", and ⇧Tab there is the same as Backspace: the
 // marker comes off when there is nothing left to outdent into. Anywhere else Tab is the indent it always was.

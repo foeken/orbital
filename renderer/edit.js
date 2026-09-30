@@ -37,6 +37,22 @@ function insertAtCaret(el, str) {
   if (caretOffset(el) == null) setCaret(el, el.textContent.length);
   document.execCommand('insertText', false, str); // keeps mention anchors intact and fires 'input'
 }
+// Pasted markdown (#598, looksMarkdown): main writes the rows and marks it describes in one undo step, replacing the
+// selection, and the caret lands where the pasted text ends. A plain line pastes the browser's way, and so does a
+// draft row (no Tana id yet) and a code block, whose text is its content.
+function pasteMarkdown(item, el, text) {
+  if (!looksMarkdown(text) || item.node.draft || blockTypeOf(item.node) === 'code' || !tana.pasteMarkdown) return false;
+  const off = caretOffset(el), range = getSelection().isCollapsed ? (off == null ? null : [off, off]) : selectionOffsets(el);
+  if (!range) return false;
+  const [before, rest] = splitSegs(readSegs(el), range[0]), after = splitSegs(rest, range[1] - range[0])[1];
+  dropPending(item.key); // the paste writes the whole row, what was typed before it included
+  run(async () => {
+    const at = await tana.pasteMarkdown(item.docId, item.node.id, before, after, text);
+    await reload(item.docId); render(true);
+    placeCaret(item.docId + '/' + at.id, at.offset);
+  });
+  return true;
+}
 
 // ---- structural operations ----
 async function splitNode(item, el, off) {

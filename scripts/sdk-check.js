@@ -509,18 +509,25 @@ async function main() {
     assert.equal(chat.icon,'chat');assert.ok(chat.id.startsWith('tana:chat:'));
     const chatData=readNode(docs.get(chat.id));assert.deepEqual(chatData.messages,[]);assert.deepEqual(chatData.participantUris,[]);
     assert.equal(docs.get(chat.id).content.get('nodeName'),undefined,'chat has no invented outline');
+    assert.ok(choices.options.some(o=>o.kind==='canvas'&&o.icon==='canvas'&&o.selectable),'Create new offers a canvas (#620)');
+    const canvas=await backend.createDocument('Board',{kind:'canvas'});
+    assert.ok(canvas.id.startsWith('tana:canvas:'));assert.equal(canvas.icon,'canvas');
+    const canvasData=readNode(docs.get(canvas.id));
+    assert.deepEqual(Object.keys(canvasData).filter(k=>k!=='id').sort(),['createdAt','participants','restricted','sharedPinDates','title','type'],'a canvas holds what Tana\'s own create writes, and no outline or attributes');
+    assert.equal(canvasData.type,'canvas');assert.equal(docs.get(canvas.id).content.get('nodeName'),undefined);
+    await assert.rejects(backend.createDocument('Typed board',{kind:'canvas',typeUri:textType.id}),/kind custom/,'a canvas takes no type');
     const typed=await backend.createDocument('New project',{kind:'custom',typeUri:textType.id});
     assert.equal(readNode(docs.get(typed.id)).entityTypeUri,textType.id);
     assert.equal(readNode(docs.get(typed.id)).ownerUri,space.id);assert.equal(readNode(docs.get(typed.id)).restricted,true);
     const event=await backend.createDocument('Working session',{kind:'custom',typeUri:eventType.id});
     assert.ok(event.id.startsWith('tana:event:'));assert.equal(readNode(docs.get(event.id)).entityTypeUri,eventType.id);
-    assert.equal(readNode(docs.get(event.id)).origin,'tana');assert.equal(created.length,4);
+    assert.equal(readNode(docs.get(event.id)).origin,'tana');assert.equal(created.length,5);
     // A saved search is created from a query, never from a bare title. Both directions are refused, and neither
     // leaves a half-made document behind: a search born with an empty query map would be unopenable, since
     // searchChildren reads that as unreadable and fails closed.
     await assert.rejects(backend.createDocument('No query',{kind:'search'}),/needs a query/);
     await assert.rejects(backend.createDocument('Not a search',{kind:'doc',query:{types:['text']}}),/Only a saved search carries a query/);
-    assert.equal(created.length,4,'a refused search creates nothing');
+    assert.equal(created.length,5,'a refused search creates nothing');
     const search=await backend.createDocument('My Tasks',{kind:'search',query:{types:['text'],assignedToViewer:true}});
     assert.ok(search.id.startsWith('tana:search:'),'a saved search gets its own id kind');
     const searchDoc=docs.get(search.id);
@@ -528,11 +535,11 @@ async function main() {
     assert.deepEqual(searchDoc.loro.getMap('query').toJSON().types,['text'],'the query survives the real create path, not just initDocument');
     assert.equal(searchDoc.loro.getMap('query').toJSON().assignedToViewer,true);
     assert.equal(readNode(searchDoc).sharedPinDates,undefined,'and it still carries none of the fields a real one lacks');
-    assert.equal(created.length,5);
+    assert.equal(created.length,6);
     // "Save this query as a search" goes through main, not the renderer: the renderer sends a view id, main
     // translates the filter it already owns. An unknown view must be refused by viewFilter before anything exists.
     await assert.rejects(backend.searchCreate('nope'),/unknown view/);
-    assert.equal(created.length,5,'a bad view id creates nothing');
+    assert.equal(created.length,6,'a bad view id creates nothing');
     const fromLibrary=await backend.searchCreate('library');
     assert.ok(fromLibrary.id.startsWith('tana:search:'));
     const libQuery=docs.get(fromLibrary.id).loro.getMap('query').toJSON();
@@ -555,11 +562,11 @@ async function main() {
     assert.equal(backend.searchTitle('library',{text:'  dpa  '}),'Library — "dpa"');
     const named=await backend.searchCreate('library','Quarterly review');
     assert.equal(readNode(docs.get(named.id)).title,'Quarterly review','an explicit title beats the derived one');
-    assert.equal(created.length,7);
+    assert.equal(created.length,8);
     space.transact(l=>l.getMap('data').get('participants').get(ME).set('role','viewer'));
     await assert.rejects(backend.createDocument('Blocked',{kind:'custom',typeUri:textType.id}),/permission/);
     await assert.rejects(backend.createDocument('Invalid',{kind:'custom',typeUri:unknownType.id}),/Unsupported type target/);
-    assert.equal(created.length,7,'invalid scope/types do not create partial documents'); // 7: three legitimate saved searches are created above
+    assert.equal(created.length,8,'invalid scope/types do not create partial documents'); // 8: a canvas and three legitimate saved searches are created above
     console.log('ok  creation chooser: native chats, actual typed docs/events, home-space validation and unsaved blank drafts');
   }
   // Setting a document's type (Cmd+K "Set type"), by Tana's own two rules (their shared bundle, read 2026-09-20):
@@ -1603,6 +1610,53 @@ async function main() {
     assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','Elsewhere','B','C'],'a document dropped into an outline lands as a reference to it');
     await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C'],'in one step');
     console.log('ok  removeMany/moveMany/indentMany/moveTo IPC bridges each record exactly one undo step');
+  }
+  {
+    // Pasted markdown (#598): Tana's own blocks and marks, nesting by indentation, the words around the caret kept,
+    // and one undo step for the lot.
+    const backend=mainHelpers(), d=new Document(DOC);
+    d.transact(l=>initDocument(l,'paste',ME)); const plainJson=(v)=>JSON.parse(JSON.stringify(v));
+    const row=outline.readOutline(d)[0].id; outline.setText(d,row,'Before after');
+    backend.testRuntime({me:{userUri:ME},client:{sync:{subscribe:async()=>d,getDocument:()=>d}}});
+    const SAM='tana:user-profile:01examplem0000000000000000';
+    const md=['**Bold** start','# Heading','- one','  - [x] two','    - three','- [ ] four','1. first','> quoted','---','```','code *here*','```','see [Tana](https://tana.inc) with [Sam]('+SAM+') *now*','last'].join('\n');
+    const at=await backend.handlers.get('block:pasteMarkdown')(null,DOC,row,[{text:'Before '}],[{text:' after'}],md);
+    const flat=(ns,depth=0)=>ns.flatMap(n=>[[depth,n.block,n.done??null,plainJson(n.segments)],...flat(n.children||[],depth+1)]);
+    assert.deepEqual(flat(outline.readOutline(d)),[
+      [0,'paragraph',null,[{text:'Before '},{text:'Bold',marks:{bold:true}},{text:' start'}]],
+      [0,'heading1',null,[{text:'Heading'}]],
+      [0,'bullet',null,[{text:'one'}]],
+      [1,'bullet',1,[{text:'two'}]],
+      [2,'bullet',null,[{text:'three'}]],
+      [0,'bullet',0,[{text:'four'}]],
+      [0,'numbered',null,[{text:'first'}]],
+      [0,'quote',null,[{text:'quoted'}]],
+      [0,'divider',null,[]],
+      [0,'code',null,[{text:'code *here*'}]],
+      [0,'paragraph',null,[{text:'see '},{text:'Tana',marks:{link:'https://tana.inc'}},{text:' with '},{mention:{label:'Sam',uri:SAM}},{text:' '},{text:'now',marks:{italic:true}}]],
+      [0,'paragraph',null,[{text:'last after'}]],
+    ],'every line a row of its own kind, checkboxes only where the markdown has them, nesting from indentation, inline marks and mentions native');
+    const last=outline.readOutline(d).at(-1);
+    assert.deepEqual(plainJson(at),{id:last.id,offset:4},'the caret goes where the pasted text ends, before what stood after it');
+    await backend.undo();
+    assert.deepEqual(flat(outline.readOutline(d)),[[0,'paragraph',null,[{text:'Before after'}]]],'one undo takes the whole paste back');
+    // Only a line that says "[ ]" or "[x]" gets a box, and a blank line separates rows without making one.
+    const task=outline.insertAfter(d,row,'');
+    await backend.handlers.get('block:pasteMarkdown')(null,DOC,task,[],[],'- [x] task\n\nplain');
+    assert.deepEqual(flat(outline.readOutline(d)).slice(1).map(r=>r.slice(1)),[['bullet',1,[{text:'task'}]],['paragraph',null,[{text:'plain'}]]],'a plain line after a pasted list is plain text again, without a box, and the blank line between them makes no row');
+    await backend.undo();
+    // Pasted into a list row, plain lines stay list rows.
+    outline.setBlockType(d,task,'numbered');
+    await backend.handlers.get('block:pasteMarkdown')(null,DOC,task,[],[],'a\nb');
+    assert.deepEqual(flat(outline.readOutline(d)).slice(1).map(r=>r[1]),['numbered','numbered'],'plain lines pasted into a numbered row are numbered rows');
+    await backend.undo(); outline.remove(d,task);
+    // Into an empty child row: it takes the first block's kind, and a row nested under a heading, which cannot own
+    // children, lands beside it.
+    outline.setBlockType(d,row,'bullet'); const child=outline.insertChild(d,row,'');
+    await backend.handlers.get('block:pasteMarkdown')(null,DOC,child,[],[],'## Sub\n  - under');
+    assert.deepEqual(flat(outline.readOutline(d)).map(r=>r.slice(0,2)),[[0,'bullet'],[1,'heading2'],[1,'bullet']],'an empty row becomes the heading, and what would nest under it follows it');
+    await assert.rejects(backend.handlers.get('block:pasteMarkdown')(null,DOC,row,'x',[],'# no'),/markdown and the row/,'the renderer is outside input: the row around the caret must be segments');
+    console.log('ok  pasted markdown becomes native rows and marks, in one undo step');
   }
   {
     const backend=mainHelpers(), docs=new Map();

@@ -219,11 +219,12 @@ function unbullet(item) {
 // so it is dropped and whatever else the row holds stays — typing it in front of a line that is already written
 // bullets that line. It has to be typed there: a dash further in, a pasted list and a sentence containing one all
 // arrive without the caret sitting just past a leading dash (startsList, renderer/segments.js). A code block is
-// content, not prose: "- " there stays "- ".
+// content, not prose: "- " there stays "- ". A numbered row takes it too and becomes a bullet, the way "1. " turns a
+// bullet numbered (restyle); a bullet row types it as text.
 function rebullet(item, el, indent = false) {
   if (!item || item.node.kind !== 'block' || item.node.draft || !tana.setBlockType || !canEditItem(item)) return false;
   const type = blockTypeOf(item.node);
-  if (type === 'code' || ['bullet', 'numbered'].includes(type)) return false;
+  if (type === 'code' || type === 'bullet') return false;
   const { docId, node, key } = item;
   dropPending(key); // the "- " is never written: the pending save for it goes with it
   const rest = el ? listRest(readSegs(el), caretOffset(el)) : []; // everything but the marker just typed
@@ -242,11 +243,49 @@ function rebullet(item, el, indent = false) {
 // row above into a parent.
 function bulletOrIndent(item, el) {
   if (!item || item.node.kind !== 'block') return false;
+  if (['bullet', 'numbered'].includes(blockTypeOf(item.node))) return false; // a list row: Tab is the indent it always was
   const siblings = childrenOf(item.parent) || [];
   const above = siblings[siblings.indexOf(item.node) - 1];
   const under = !!above && ['bullet', 'numbered'].includes(blockTypeOf(above));
   if (under) open.set(keyFor(item.docId, above), true); // it is about to have a child: show it
   return rebullet(item, el, under);
+}
+// The rest of markdown's line starts (#598, lineMarker), typed at the very start of a row the way "- " is: "# " to
+// "### " a heading, "1. " numbered, "> " a quote, "```" code, "[] " a checkbox, and "---" on a row with nothing
+// else a divider after it, as "/" Divider makes one. The marker is the command, so it goes and the rest of the row
+// stays. A code block keeps what is typed in it, and a row already of that kind keeps the marker as text.
+function restyle(item, el) {
+  const type = lineMarker(el.textContent.slice(0, caretOffset(el) ?? 0));
+  if (!type || item.node.draft || !canEditItem(item) || !tana.setBlockType || !tana.toggleCheckbox || !tana.insertDivider) return false;
+  const { docId, node, key } = item, now = blockTypeOf(node), rest = listRest(readSegs(el), caretOffset(el));
+  if (now === 'code' || now === type || (type === 'todo' && node.done != null) || (type === 'divider' && (rest.length || hasKids(item)))) return false;
+  dropPending(key);
+  node.segments = rest; node.text = plainOf(rest);
+  run(async () => {
+    await tana.setText(docId, node.id, rest.length ? saveValue(rest) : []);
+    if (type === 'todo') await tana.toggleCheckbox(docId, node.id);
+    else if (type === 'divider') await tana.insertDivider(docId, node.id);
+    else await tana.setBlockType(docId, node.id, type);
+    await reload(docId); render(true); placeCaret(key, 0);
+  });
+  return true;
+}
+// Inline markdown as it is typed (#598, typedMark): the mark replaces its delimiters the moment the closing one lands.
+// The caret goes just past the marked words and outside them, in a caret anchor readSegs drops, so what is typed next
+// is plain, as Tana's marks do not extend (sdk/content.js MARKS). Saved like any other keystroke.
+function markTyped(item, el) {
+  const off = caretOffset(el), next = off == null || item.node.draft || blockTypeOf(item.node) === 'code' ? null : typedMark(readSegs(el), off);
+  if (!next) return false;
+  item.node.text = plainOf(next.segs); item.node.segments = next.segs;
+  renderSegs(el, next.segs);
+  let [at] = textPoint(el, next.caret);
+  while (at !== el && at.parentNode !== el) at = at.parentNode;
+  const anchor = document.createTextNode(CARET_ANCHOR), r = document.createRange();
+  if (at === el) el.append(anchor); else at.after(anchor);
+  r.setStart(anchor, 1); r.collapse(true);
+  getSelection().removeAllRanges(); getSelection().addRange(r);
+  scheduleSave(item, next.segs);
+  return true;
 }
 function linkSelection() { // the @ button runs the same linking flow as typing "@" over a selection
   const ctx = toolCtx, item = toolItem(), el = ctx && textEl(ctx.key);
@@ -270,7 +309,8 @@ function slashRows(q) {
     run: () => (type === 'image' ? pickImages() : runSlashBlock(type)),
   }));
   // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new …" list
-  const choices = creationChoices.some((c) => c.kind === 'doc') ? creationChoices : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...creationChoices];
+  const made = creationChoices.filter((c) => c.kind !== 'canvas'); // a canvas has no page to draft here: ⌘K makes one (#620)
+  const choices = made.some((c) => c.kind === 'doc') ? made : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...made];
   for (const choice of choices) rows.push(choice.kind === 'task' ? { // "/" Task: made here and referenced in the row (taskFromSlash)
     group: 'Create', icon: choice.icon, label: 'Task', hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
     run: () => taskFromSlash(choice),

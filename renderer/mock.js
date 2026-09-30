@@ -510,8 +510,10 @@ function mockApi() {
       { id: 'task', kind: 'task', title: 'Task', icon: 'task', selectable: true },
       { id: 'meeting', kind: 'meeting', title: 'Meeting', icon: 'meeting', selectable: true },
       { id: 'chat', kind: 'chat', title: 'Chat', icon: 'chat', selectable: true },
+      { id: 'canvas', kind: 'canvas', title: 'Canvas', icon: 'canvas', selectable: true },
       { id: 'tana:type:mockproject', kind: 'custom', typeUri: 'tana:type:mockproject', title: 'Project', icon: 'doc', hue: 268, selectable: true },
     ], complete: true }),
+    openCanvas: async () => {}, // main.js canvas:open: a window of Tana's own, which the mock has none of
     createDocument: async (title, { kind = 'doc', typeUri } = {}) => {
       const nativeKind = kind === 'custom' ? 'doc' : kind;
       const n = { id: 'mocknew' + (++seq), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };

@@ -163,6 +163,7 @@ onRows('input', (e) => {
   if (row && !e.isComposing && !isReference(item.node) && referenceTarget(item.node) && row.classList.contains('fullref') !== chip) render(true);
   if (item.node.kind === 'block' && el.textContent === '/' && palette.hidden) openSlash(item); // "/" alone in a node is the command menu
   else if (item.node.kind === 'block' && startsList(el.textContent.slice(0, caretOffset(el) ?? 0))) rebullet(item, el); // "- " at the start of a row starts a list there
+  else if (item.node.kind === 'block' && !restyle(item, el) && e.inputType === 'insertText') markTyped(item, el); // the other markdown line starts, then **bold** and the rest as they close (#598)
 });
 // A pasted Tana node link becomes the reference Tana itself inserts, not the url: the clipboard holds one node link,
 // the row is a real block, and the title is read before anything is written, so a link to something unreadable
@@ -189,7 +190,7 @@ onRows('paste', (e) => {
     return;
   }
   const uri = tanaNodeUri(e.clipboardData.getData('text/plain'));
-  if (!uri) return;
+  if (!uri) { if (pasteMarkdown(item, el, e.clipboardData.getData('text/plain'))) e.preventDefault(); return; }
   const off = caretOffset(el);
   const range = getSelection().isCollapsed ? (off == null ? null : [off, off]) : selectionOffsets(el);
   if (!range) return;

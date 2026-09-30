@@ -34,21 +34,28 @@ const plain = (segs) => segs.map((s) => ('mention' in s ? s.mention.label : s.te
 
 // Markdown source -> outline blocks. Headings, bullets/numbered items, quotes, fenced code and dividers are the
 // block types the outliner already has; consecutive plain lines are one paragraph.
-// ponytail: indentation is dropped, so nested bullets flatten to one level; build a tree here if it ever matters.
+// A list item carries its depth among the items above it (indentation of any width), which a paste nests by
+// (content.insertBlocks); chat rows stay flat.
 function blocks(text) {
   const out = [];
-  let para = null, code = null;
+  let para = null, code = null, indents = [];
   const flush = () => { if (para) out.push({ block: 'paragraph', text: para.join('\n') }); para = null; };
   for (const line of String(text || '').split('\n')) {
     if (code) { if (/^\s*```/.test(line)) { out.push({ block: 'code', text: code.join('\n'), verbatim: true }); code = null; } else code.push(line); continue; }
-    if (/^\s*```/.test(line)) { flush(); code = []; continue; }
+    if (/^\s*```/.test(line)) { flush(); code = []; indents = []; continue; }
     const t = line.trim();
     if (!t) { flush(); continue; }
+    const item = t.match(/^(?:([-*+])|\d+[.)])\s+(.*)$/);
+    if (!item) indents = [];
     if (/^(-{3,}|_{3,}|\*{3,})$/.test(t)) { flush(); out.push({ block: 'divider', text: '' }); continue; }
     const heading = t.match(/^(#{1,6})\s+(.*)$/); // the outliner draws three levels; deeper ones read as the third
     if (heading) { const level = Math.min(heading[1].length, 3); flush(); out.push({ block: 'heading' + level, heading: level, text: heading[2] }); continue; }
-    const item = t.match(/^(?:([-*+])|\d+[.)])\s+(.*)$/);
-    if (item) { flush(); out.push({ block: item[1] ? 'bullet' : 'numbered', text: item[2] }); continue; }
+    if (item) {
+      const indent = line.match(/^\s*/)[0].replace(/\t/g, '    ').length;
+      while (indents.length && indent <= indents.at(-1)) indents.pop();
+      flush(); out.push({ block: item[1] ? 'bullet' : 'numbered', text: item[2], depth: indents.length }); indents.push(indent);
+      continue;
+    }
     const quote = t.match(/^>\s?(.*)$/);
     if (quote) { flush(); out.push({ block: 'quote', text: quote[1] }); continue; }
     (para ||= []).push(t);
