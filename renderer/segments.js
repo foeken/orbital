@@ -5,8 +5,6 @@
 // marks = { bold, italic, strike, code, link: href } on one text run: exactly the shape api.setText takes back.
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const localDate = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // local YYYY-MM-DD, N days on (1 = tomorrow)
-// this week's node's title, "Week 38 (2026)" (ISO week), as main/pins.js weekTitle makes it
-const weekTitle = () => { const d = new Date(), t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7)); return 'Week ' + Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7) + ' (' + t.getUTCFullYear() + ')'; };
 // A date mention (sdk/dates.js): tana:plaindate:YYYY-MM-DD, or tana:zoneddate:… with a time and a zone. dayOfUri is
 // its day, the page its chip opens; dayUri and dayLabel are what "@" writes: a plaindate, labelled the way Tana does.
 const dayOfUri = (uri) => (/^tana:(?:plaindate|zoneddate):(\d{4}-\d{2}-\d{2})/.exec(uri || '') || [])[1];

@@ -21,6 +21,7 @@ function showStatus(s) {
   // list of up to a thousand rows and the subscriptions that go with it, and on one connection the second used to
   // go first. Any later reconnect finds the place already spent, so this is boot order only.
   if (connected && !wasConnected && tana.myTasks) tana.myTasks(true).then((n) => { myTasksId = n && n.id; }, () => {}); // found, never made: renderer/nodes.js atWorkView
+  if (connected && !wasConnected) findDateNodes(); // the Home check's Today and This week (renderer/nodes.js)
   if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadWorkspaceTypes(); loadPinned(true); restorePlace().finally(() => { placed = true; loadView(); renderSoon(); helpOnce(); }); } // the types too: a key recorded on a Cmd+K type row finds it before Cmd+K opens; the tour opens over the page it came back to
   $('loginBox').hidden = !state.showLogin;
   $('pagehead').hidden = state.showLogin; // signed out, the login is the page: no view title above it

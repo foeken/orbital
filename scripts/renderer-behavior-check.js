@@ -4932,7 +4932,7 @@ async function runRestorePlaceCheck() {
       removeItem: (key) => storage.delete(key),
     };
     const extra = new Map(), summaries = [];
-    let today = '', thisWeek = ''; const localDate = () => today, weekTitle = () => thisWeek; // renderer/segments.js, pinned per case
+    let dateIds = {}; // renderer/nodes.js: what restorePlace records a Today or This week as
     const allDocs = () => docs;
     const docOf = (id) => docs.find((d) => d.id === id) || extra.get(id) || null; // what rememberPlace reads the title and glyph off
     const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: n.icon });
@@ -4957,7 +4957,7 @@ async function runRestorePlaceCheck() {
       store: (value) => { storage.set('place', value); savedPlace = readStoredPlace(); }, // left by the last session, read at load
       firstRight: () => { savedPlace = { myTasks: true }; }, // renderer/edit.js: a first launch's right half
       concept: (c) => { savedPlace = { [c]: true }; }, // a saved view's Today or This week (renderer/palette.js saveView)
-      datePlace: (p, day, week) => { today = day; thisWeek = week; return datePlace(p); },
+      dateIds: () => ({ ...dateIds }),
       myTasks: () => ({ asked, added: [...added], id: myTasksId }),
       seedPlace: () => { ${seed[0]} },
       clear: () => { storage.delete('place'); savedPlace = readStoredPlace(); },
@@ -5033,12 +5033,7 @@ async function runRestorePlaceCheck() {
     await api.start();
     assert.equal(api.state().docId, id, c + ' in a saved view opens the node main has for it now');
   }
-  assert.deepEqual(plain([
-    api.datePlace({ docId: 'tana:text:d', title: '2026-09-30' }, '2026-09-30', 'Week 40 (2026)'),
-    api.datePlace({ docId: 'tana:text:w', title: 'Week 40 (2026)' }, '2026-09-30', 'Week 40 (2026)'),
-    api.datePlace({ docId: 'tana:text:d', title: '2026-09-29' }, '2026-09-30', 'Week 40 (2026)'),
-    api.datePlace({ docId: 'tana:text:d', nodeId: 'n1', title: '2026-09-30' }, '2026-09-30', 'Week 40 (2026)'),
-  ]), ['today', 'week', null, null], 'a view saves the current day and week node as Today and This week; another day, or a node inside one, stays itself');
+  assert.deepEqual(plain(api.dateIds()), { today: 'tana:text:today', week: 'tana:text:week' }, 'and remembers them, so the Home check knows the pane is on them');
 
   api.reset(); api.seed([{ id: 'tana:text:a' }]);
   api.store(JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }));
@@ -6685,6 +6680,32 @@ function runRailChangesCheck() {
 
 // ---- Home: the Library or a saved search, as the anchor a zoomed page crumbs back to and where Back lands ----
 // Stored as the target's own id, so a rename in Tana shows through and a deletion is something the app can see.
+// Save view keeps a page on your day or week node as Today or This week, known by id; every other place stays as it is (#639)
+async function runSaveViewDatesCheck() {
+  const api = vm.runInNewContext(`
+    const stored = {
+      view: 'library', place: JSON.stringify({ docId: 'tana:text:today', nodeId: null, title: '2026-09-30' }),
+      'view:2': 'library', 'place:2': JSON.stringify({ docId: 'tana:text:week', nodeId: null, title: 'Week 40 (2026)' }),
+      'view:3': 'library', 'place:3': JSON.stringify({ docId: 'tana:text:theirs', nodeId: null, title: '2026-09-30' }),
+      'view:4': 'library', 'place:4': JSON.stringify({ docId: 'tana:text:today', nodeId: 'n1', title: '2026-09-30' }),
+    };
+    const localStorage = { getItem: (k) => (k in stored ? stored[k] : null) };
+    const layout = { views: { a: { type: 'page', params: { side: '' } }, b: { type: 'page', params: { side: '2' } }, c: { type: 'page', params: { side: '3' } }, d: { type: 'page', params: { side: '4' } } } };
+    const tana = { windowLayout: () => Promise.resolve(layout), todayNode: (offset, findOnly) => (offset === 0 && findOnly ? Promise.resolve('tana:text:today') : Promise.reject(new Error('made'))),
+      weekNode: (findOnly) => (findOnly ? Promise.resolve('tana:text:week') : Promise.reject(new Error('made'))) };
+    let saved = [];
+    const savedViews = () => saved, setPref = (k, v) => { saved = v; }, showNote = () => {};
+    ${sourceBetween('let dateIds = {};', '// In a saved view')}
+    ${functionSource('saveView')}
+    ({ save: async () => { await saveView('Mine'); return saved[0].keys; } });
+  `, { Promise, JSON, Object, String, Error });
+  assert.deepEqual(plain(await api.save()), {
+    view: 'library', place: JSON.stringify({ today: true }), 'view:2': 'library', 'place:2': JSON.stringify({ week: true }),
+    'view:3': 'library', 'place:3': JSON.stringify({ docId: 'tana:text:theirs', nodeId: null, title: '2026-09-30' }),
+    'view:4': 'library', 'place:4': JSON.stringify({ docId: 'tana:text:today', nodeId: 'n1', title: '2026-09-30' }),
+  }, 'your day and week nodes are saved as Today and This week, found and never made; a same-titled document of someone else and a node inside the day keep their ids');
+  console.log('ok  Save view: a page on your day or week node is kept as Today or This week');
+}
 async function runHomeCheck() {
   const homeInit = source.match(/let home = pref\('home', 'workView'\);/)[0];
   const seed = source.match(/if \(!savedPlace\) savedPlace = SIDE [^\n]*/)[0];
@@ -6723,6 +6744,7 @@ async function runHomeCheck() {
       drop: (id) => { searches = searches.filter((s) => s.id !== id); repairHome(); },
       go: (place) => { zoom = place; }, view: (id) => { view = id; zoom = null; },
       home: () => goHome(), opened: () => opened && opened.keys,
+      dates: (ids) => { dateIds = ids; },
       back: () => navigate(-1), push: (place) => { navBack.push(place); navHere = { view, zoom, key: 'here' }; },
       seed: (place) => { savedPlace = place; ${seed} return savedPlace; },
     });
@@ -6797,6 +6819,19 @@ async function runHomeCheck() {
   assert.equal(api.at(), true, 'a page on the place Home keeps for it is Home');
   api.go({ docId: SEARCH, nodeId: null });
   assert.equal(api.at(), false, 'and anywhere else it is not');
+  // A Home with Today in it is Home on your day node as it is now: not another day, a node inside it, or someone else's
+  api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ today: true }), view: 'library' } }]);
+  api.dates({ today: 'tana:text:today', week: 'tana:text:week' });
+  api.go({ docId: 'tana:text:today', nodeId: null });
+  assert.equal(api.at(), true, 'a Today pane is Home on the day node you have today');
+  for (const [place, why] of [[{ docId: 'tana:text:yesterday', nodeId: null }, 'an older day'], [{ docId: 'tana:text:today', nodeId: 'n1' }, 'a node inside it'], [{ docId: 'tana:text:week', nodeId: null }, 'this week']]) {
+    api.go(place);
+    assert.equal(api.at(), false, 'a Today pane is not Home on ' + why);
+  }
+  api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ week: true }), view: 'library' } }]);
+  api.go({ docId: 'tana:text:week', nodeId: null });
+  assert.equal(api.at(), true, 'a This week pane is Home on this week\u2019s node');
+  api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ docId: OTHER, nodeId: null }), view: 'library' } }]);
   api.home();
   assert.deepEqual(plain(api.went()), ['view Home'], 'going Home opens the window it keeps');
   api.views([]);
@@ -7776,7 +7811,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

@@ -346,7 +346,7 @@ async function cachedBootMetadataCheck() {
       return outcome === 'fail' ? Promise.reject(new Error('not connected')) : Promise.resolve({ assignees: [] });
     } };
     const palette = { hidden: true }, palDoc = null, outline = {};
-    const $ = () => ({}), showError = () => {}, loadView = () => {}, renderSoon = () => {}, loadSearches = () => {}, loadWorkspaceTypes = () => {}, loadPinned = () => {}, restorePlace = async () => {}, helpOnce = () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, renderSoon = () => {}, loadSearches = () => {}, loadWorkspaceTypes = () => {}, loadPinned = () => {}, restorePlace = async () => {}, helpOnce = () => {}, findDateNodes = () => {};
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const isGone = () => false, noteGone = () => false; // the deleted-node set is exercised in renderer-behavior-check
     const render = () => { renders++; };
@@ -383,7 +383,7 @@ async function searchesReconnectCheck() {
     const repairHome = () => {}; // the Home repair has its own check; this one is about the reconnect edge
     const taskMetaFailed = new Map();
     const outline = {}, palette = { hidden: true };
-    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {}, loadWorkspaceTypes = () => {}, loadPinned = () => {}, restorePlace = async () => {}, helpOnce = () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {}, loadWorkspaceTypes = () => {}, loadPinned = () => {}, restorePlace = async () => {}, helpOnce = () => {}, findDateNodes = () => {};
     const tana = { searches: () => { attempts++; return Promise.resolve([{ id: 'tana:search:x' }]); } };
     ${functionSource('authView')}
     ${functionSource('showStatus')}

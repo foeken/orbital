@@ -1179,11 +1179,12 @@ async function saveView(name, id) { // id: kept under that id (Set as Home), els
   const doc = await tana.windowLayout(), keys = {};
   if (doc) delete doc.navigation; // Trellis's zoom is how you were looking, not the view: a view opens with every pane shown
   const ids = doc ? Object.values(doc.views || {}).filter((v) => v && v.type === 'page').map((v) => String((v.params && v.params.side) || '')) : [''];
+  await findDateNodes();
   for (const id of ids) for (const key of ['view', 'place']) {
     const name = key + (id ? ':' + id : ''), value = localStorage.getItem(name);
     let date = null;
     if (key === 'place') try { date = datePlace(JSON.parse(value)); } catch { /* not a place */ }
-    keys[name] = date ? JSON.stringify({ [date]: true }) : value; // Today and This week as such (renderer/edit.js datePlace)
+    keys[name] = date ? JSON.stringify({ [date]: true }) : value; // Today and This week as such (renderer/nodes.js datePlace)
   }
   const old = savedViews().find((v) => (id ? v.id === id : v.name === name)), keep = id || (old && old.id);
   setPref('savedViews', [...savedViews().filter((v) => v !== old), { ...(keep ? { id: keep } : {}), name, doc, keys }]);

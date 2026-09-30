@@ -290,13 +290,24 @@ const homeName = () => { const s = homeSearch(); return s ? s.text || s.title ||
 // In the Work View a half is Home on its own page: the Timeline on the left, My Tasks on the right: the search the
 // synced setting names (renderer/app.js asks once connected), so a rename keeps it; until then the search of that title
 let myTasksId = null;
+// Your day and week nodes as they are now, found and never made: a place on one is Today or This week in a saved view
+// ({ today: true }, { week: true }), which reopens on the day and week it is opened in (#639). By id: they are your own
+// documents (main/pins.js ownNode), and a colleague's with the same title is not one.
+// ponytail: asked on connect, Save view and a view's restore only, so past midnight Home knows yesterday's node until one of those
+let dateIds = {};
+async function findDateNodes() {
+  const find = (p) => Promise.resolve(p).catch(() => null);
+  const [today, week] = await Promise.all([find(tana.todayNode && tana.todayNode(0, true)), find(tana.weekNode && tana.weekNode(true))]);
+  return (dateIds = { today, week });
+}
+const datePlace = (p) => (p && p.docId && !p.nodeId ? (p.docId === dateIds.today ? 'today' : p.docId === dateIds.week ? 'week' : null) : null);
 const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).startsWith(SEARCH_ID) && (myTasksId ? zoom.docId === myTasksId : /^my tasks$/i.test(String((docOf(zoom.docId) || {}).text || '').trim())) : zoom.docId === TIMELINE_PAGE);
 // In a saved view a page is Home on the place that view keeps for it ('place', 'place:2', …; {} is its view)
 function atSavedView(v) {
   let p = null;
   const as = typeof window !== 'undefined' && window.api && window.api.savedAs ? ':' + window.api.savedAs : SIDE; // a page given another id than the view's (main.js adoptLayout)
   try { p = JSON.parse(v.keys['place' + as] || 'null'); } catch { /* not a place */ }
-  if (p && (p.today || p.week)) return !!zoom && datePlace({ docId: zoom.docId, nodeId: zoom.nodeId, title: (docOf(zoom.docId) || {}).text }) === (p.today ? 'today' : 'week');
+  if (p && (p.today || p.week)) return datePlace(zoom) === (p.today ? 'today' : 'week');
   return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === v.keys['view' + as]);
 }
 // the Work View as installed ('workView' its layout) or as updated from Save view, which is judged by its own keys

@@ -379,9 +379,6 @@ function rememberPlace() {
   localStorage.setItem('place' + SIDE, place);
   if (tana.rememberPlace) tana.rememberPlace(view, place); // a copy beside the layout: Chromium has lost localStorage whole (#636)
 }
-// A place on today's or this week's node is that concept in a saved view ({ today: true }, { week: true }): the view
-// reopens on the day and week it is opened, not the ones it was saved on (#639). Known by the title the place stores.
-const datePlace = (p) => (p && p.docId && !p.nodeId ? (p.title === localDate() ? 'today' : p.title === weekTitle() ? 'week' : null) : null);
 function noteNavigation() {
   tellPlace();
   const here = navPlace();
@@ -488,7 +485,7 @@ async function restorePlace() {
     if (zoom) return; // somewhere else already
     try {
       if (saved.myTasks) { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; myTasksId = n.id; } // the id for the Home check (renderer/nodes.js), a search just made included
-      else saved = { docId: await (saved.today ? tana.todayNode() : tana.weekNode()), nodeId: null };
+      else { const c = saved.today ? 'today' : 'week'; saved = { docId: await (c === 'today' ? tana.todayNode() : tana.weekNode()), nodeId: null }; dateIds[c] = saved.docId; } // renderer/nodes.js datePlace
     } catch { return; } // the view it is on is the fallback
     if (zoom) return;
   }
