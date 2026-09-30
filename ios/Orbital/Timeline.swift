@@ -88,6 +88,7 @@ struct TimelineScreen: View {
             }
         }
         .listStyle(.plain)
+        .scrollDismissesKeyboard(.interactively) // scrolling the Timeline tucks the composer's keyboard away
         .refreshable { await engine.refresh() }
         .overlay {
             if engine.rows.isEmpty {

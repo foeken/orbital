@@ -116,42 +116,49 @@ struct SideMenu: View {
 // The composer, as the Codex app has it: what you type becomes a new chat with Tana. Sending comes next, so for now it
 // says so for a moment rather than doing nothing.
 struct Composer: View {
-    @State private var text = ""
+    @State private var text = CommandLine.arguments.contains("-typing") ? "Can you move the offsite to Thursday?" : "" // -typing: the open card, for design shots
     @State private var notYet = false
+    @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let empty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // Codex's composer: a capsule at rest, a card while you type in it (the words on top, send in its corner)
+        let open = focused || !empty
         VStack(spacing: 6) {
             if notYet {
                 Text("Asking Tana from here comes next.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).transition(.opacity)
             }
-            // The words set the capsule's height (a line of body text and 12 pt above and below it: 46 pt), and the send
-            // button sits in its bottom-right corner, 6 pt from the edge on three sides whatever the text field measures
-            TextField("Ask Tana", text: $text, axis: .vertical).lineLimit(1...5)
+            // The words set the height: at rest a line of body text with 12 pt above and below it (46 pt, a capsule with
+            // this radius), open the words with room under them for the send button's row. The button sits in the
+            // bottom-right corner, the same distance from the edge on both sides whatever the text field measures.
+            TextField("Ask Tana", text: $text, axis: .vertical).lineLimit(1...6).focused($focused)
                 .padding(.leading, 18)
-                .padding(.trailing, 52)
-                .padding(.vertical, 12)
+                .padding(.trailing, open ? 18 : 52)
+                .padding(.top, open ? 16 : 12)
+                .padding(.bottom, open ? 60 : 12)
                 .overlay(alignment: .bottomTrailing) {
                     Button {
                         withAnimation { notYet = true }
                         Task { try? await Task.sleep(for: .seconds(4)); withAnimation { notYet = false } }
                     } label: {
-                        // the Codex app's send: a grey circle while there is nothing to send, solid once there is
+                        // the Codex app's send: a grey circle while there is nothing to send, blue once there is
                         Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                            .foregroundStyle(empty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color(.systemBackground)))
+                            .foregroundStyle(empty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.white))
                             .frame(width: 34, height: 34)
-                            .background(Circle().fill(empty ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.primary)))
+                            .background(Circle().fill(empty ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.blue)))
                     }
                     .buttonStyle(.plain)
                     .disabled(empty)
                     .accessibilityLabel("Ask Tana")
-                    .padding(6)
+                    .padding(open ? 10 : 6)
                 }
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
         }
-        .padding(.horizontal, 36) // inset as the Codex app's composer is, not edge to edge
+        .padding(.horizontal, open ? 14 : 36) // inset as the Codex app's composer is at rest; wider while you type, as its card is
         .padding(.bottom, 4)
+        .animation(reduceMotion ? nil : .snappy, value: open)
     }
 }
 
