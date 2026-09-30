@@ -49,7 +49,7 @@ struct ContentView: View {
     }
 }
 
-// What sign-in did, to copy or share when it goes wrong (#658); shown in a sheet or pushed from Settings
+// What sign-in did, to copy or share when it goes wrong (#658), from the sign-in screen's Details
 struct SignInLog: View {
     let lines: [String]
     var body: some View {

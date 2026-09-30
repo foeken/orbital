@@ -36,6 +36,9 @@ function sha256(bytes) {
   return out;
 }
 const bytes = (n) => crypto.getRandomValues(new Uint8Array(n));
+let people = null; // members(), once asked
+// the nodes whose watch choice is on (true) or off (false); required here, not at the top, since main/settings.js needs ../db, which is this file
+const chosen = (on) => new Set(Object.entries(require('../../main/settings').get('notify') || {}).filter(([, v]) => v === on).map(([id]) => id));
 
 module.exports = {
   issues,
@@ -53,7 +56,6 @@ module.exports = {
     } };
     return hash;
   },
-  // ../db
   // ../db, for main/timeline.js and main/settings.js: the page's own storage in place of SQLite
   setting: (key) => JSON.parse(localStorage.getItem('orbital:' + key) ?? 'null') ?? undefined,
   setSetting: (key, value) => (value === undefined ? localStorage.removeItem('orbital:' + key) : localStorage.setItem('orbital:' + key, JSON.stringify(value))),
@@ -76,7 +78,9 @@ module.exports = {
     const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
     return allDayFlag === true || !!(e && midnight && (e - s) % 864e5 === 0);
   },
-  members: () => S.client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 }).then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: n.title }))),
+  // the workspace's people, asked once per session (a chat on screen is read every two seconds); asked again after a failure
+  members: () => (people ||= S.client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
+    .then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: n.title })), (e) => { people = null; throw e; })),
   // ./views inboxFrom
   inboxFrom(me, creator, chat, names) {
     if (creator && creator !== me) return 'From ' + (names.get(creator) || 'someone else');
@@ -88,8 +92,8 @@ module.exports = {
   announcedEdits: () => [],
   // the watch choices (settings key notify: node → true watched, false silenced), as main/documents.js reads them; the
   // settings document is read once the phone has hydrated it (index.js timeline)
-  notifyWatchedIds: () => new Set(Object.entries(require('../../main/settings').get('notify') || {}).filter(([, on]) => on === true).map(([id]) => id)),
-  notifySilencedIds: () => new Set(Object.entries(require('../../main/settings').get('notify') || {}).filter(([, on]) => on === false).map(([id]) => id)),
+  notifyWatchedIds: () => chosen(true),
+  notifySilencedIds: () => chosen(false),
   document: (id) => within('reading ' + id, S.client.sync.subscribe(id)),
   // ./pins: main/pins.js pinnedDates, and todayNode(0, true), which finds today's node and never makes it
   pinnedDates: () => within('date pins', pins.datePins(S.client.sync, S.me.userUri)).catch(() => ({})),

@@ -25,6 +25,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     static let session = URL(string: "https://home.tana.inc/api/auth/session")!
     static let home = URL(string: "https://home.tana.inc")!
+    // -sample: invented content in place of Tana (timeline-sample.json, pages-sample.json), for design shots; writes nothing
+    static let isSample = CommandLine.arguments.contains("-sample")
     // Google and others refuse sign-in in a web view that does not say it is Safari
     static let safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
@@ -40,7 +42,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         web.customUserAgent = Self.safari
         web.isInspectable = true
         web.navigationDelegate = self
-        if CommandLine.arguments.contains("-sample") { showSample(); return }
+        if Self.isSample { showSample(); return }
         Task {
             await SavedSession.restore(into: web.configuration.websiteDataStore.httpCookieStore)
             start()
@@ -48,7 +50,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     func start() {
-        guard !CommandLine.arguments.contains("-sample") else { return }
+        guard !Self.isSample else { return }
         watch?.cancel()
         phase = .starting
         note("loading the session page")
@@ -108,6 +110,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Tana's own sign-in in this web view; signed in is what Tana's session says, asked every two seconds as the
     // desktop's login window does (tana-session.js login)
     private func signIn() {
+        watch?.cancel() // a session that ran out mid-refresh comes here with the last watch perhaps still going
         phase = .signedOut
         note("showing Tana's sign-in")
         web.load(URLRequest(url: Self.home))
@@ -137,21 +140,18 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     func refresh() async {
-        guard phase == .ready, !loading, !CommandLine.arguments.contains("-sample") else { return }
+        guard phase == .ready, !loading, !Self.isSample else { return }
         loading = true
         defer { loading = false }
         do {
-            let json = try await web.callAsyncJavaScript("return await orbital.timeline(pages)", arguments: ["pages": pages], contentWorld: .page) as? String ?? "[]"
-            rows = try JSONDecoder().decode([Row].self, from: Data(json.utf8))
+            rows = try await call("return await orbital.timeline(pages)", ["pages": pages])
             error = nil
-            states = states.filter { id, state in Self.stateType(id, in: rows) != state } // Tana has caught up with these
+            settle(rows)
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
-            let message = Self.message(error)
-            note("timeline failed: \(message)")
-            if message.contains("not authenticated") { signIn() } // the session ran out: sign in again
-            self.error = message
+            if error.localizedDescription.contains("not authenticated") { signIn() } // the session ran out: sign in again
+            self.error = error.localizedDescription
         }
     }
 
@@ -164,7 +164,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func signOut() async {
         let store = web.configuration.websiteDataStore.httpCookieStore
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
-        Keychain.delete("tana-cookies")
+        SavedSession.forget()
         rows = []; states = [:]; email = nil; pages = 1
         note("signed out")
         start()
@@ -177,20 +177,22 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // A node zoomed into (orbital.open): its title, its kind and what it holds
-    struct Page: Decodable { let id: String; let title: String; let kind: String; let rows: [Row] }
+    struct Page: Decodable { let title: String; let kind: String; let rows: [Row] }
     func open(_ id: String) async throws -> Page {
         if let s = Self.sample { if let page = s.pages[id] { return page }; throw Failure(errorDescription: "Not in the sample") }
-        return try await call("return await orbital.open(id)", ["id": id])
+        let page: Page = try await call("return await orbital.open(id)", ["id": id])
+        settle(page.rows) // a search's tasks ticked here, once Tana agrees
+        return page
     }
 
     // Ask Tana (orbital.ask): a new chat with what you typed as its first message; answers the chat's id
     func ask(_ text: String) async throws -> String {
-        if Self.sample != nil { return "tana:chat:000000000000000000000000c1" }
+        if Self.isSample { return "tana:chat:000000000000000000000000c1" }
         return try await call("return JSON.stringify(await orbital.ask(text))", ["text": text])
     }
     // a follow-up in a chat (orbital.send)
     func send(_ text: String, to id: String) async throws {
-        if Self.sample != nil { return }
+        if Self.isSample { return }
         let _: String = try await call("return JSON.stringify(await orbital.send(id, text))", ["id": id, "text": text])
     }
 
@@ -200,14 +202,14 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             let json = try await web.callAsyncJavaScript(js, arguments: arguments, contentWorld: .page) as? String ?? "null"
             return try JSONDecoder().decode(T.self, from: Data(json.utf8))
         } catch {
-            note("\(js.split(separator: "(").first ?? "") failed: \(Self.message(error))")
+            note("\(js.firstMatch(of: /orbital\.(\w+)/)?.1 ?? "engine") failed: \(Self.message(error))")
             throw Failure(errorDescription: Self.message(error))
         }
     }
 
     // -sample: pages-sample.json in place of Tana for these pages, invented content only
     private struct Sample: Decodable { let searches: [Row]; let pages: [String: Page] }
-    private static let sample: Sample? = CommandLine.arguments.contains("-sample")
+    private static let sample: Sample? = isSample
         ? Bundle.main.url(forResource: "pages-sample", withExtension: "json").flatMap { try? JSONDecoder().decode(Sample.self, from: Data(contentsOf: $0)) } : nil
 
     // A task's box: drawn in its new state at once, written by engine.js (orbital.toggle, the desktop's rule), and put
@@ -216,21 +218,21 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func toggle(_ task: Row) async {
         let before = state(of: task)
         states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
-        guard !CommandLine.arguments.contains("-sample") else { return } // the sample writes nothing
+        guard !Self.isSample else { return } // the sample writes nothing
         do {
-            if let written = try await web.callAsyncJavaScript("return await orbital.toggle(id)", arguments: ["id": task.id], contentWorld: .page) as? String {
-                states[task.id] = written
-            }
+            states[task.id] = try await call("return await orbital.toggle(id)", ["id": task.id]) as String
         } catch {
             states[task.id] = before
-            note("ticking off failed: \(Self.message(error))")
-            self.error = Self.message(error)
+            self.error = error.localizedDescription
         }
     }
 
     func state(of task: Row) -> String {
         states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
     }
+
+    // the boxes ticked here that Tana now shows as ticked go back to reading Tana
+    private func settle(_ rows: [Row]) { states = states.filter { id, state in Self.stateType(id, in: rows) != state } }
 
     private static func stateType(_ id: String, in rows: [Row]) -> String? {
         for row in rows {
@@ -254,11 +256,6 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         phase = .ready
     }
 
-    func link(_ id: String) async -> URL? {
-        let s = try? await web.callAsyncJavaScript("return orbital.link(id)", arguments: ["id": id], contentWorld: .page) as? String
-        return s.flatMap(URL.init(string:))
-    }
-
     // what engine.js threw, rather than WebKit's "A JavaScript exception occurred"
     private static func message(_ error: Error) -> String {
         (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription
@@ -270,15 +267,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 // has none, so a session Tana rotated since is never overwritten by an older one.
 @MainActor
 enum SavedSession {
+    private static let account = "tana-cookies"
     private static func isTana(_ c: HTTPCookie) -> Bool { c.domain.hasSuffix("tana.inc") }
 
     static func save(from store: WKHTTPCookieStore) async {
-        if let data = encode(await store.allCookies().filter(isTana)) { Keychain.save(data, "tana-cookies") }
+        if let data = encode(await store.allCookies().filter(isTana)) { Keychain.save(data, account) }
     }
+    static func forget() { Keychain.delete(account) }
 
     static func restore(into store: WKHTTPCookieStore) async {
         guard !(await store.allCookies()).contains(where: { isTana($0) && $0.name == "__session" }) else { return }
-        guard let data = Keychain.load("tana-cookies") else { return }
+        guard let data = Keychain.load(account) else { return }
         for cookie in decode(data) { await store.setCookie(cookie) }
     }
 

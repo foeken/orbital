@@ -1,7 +1,7 @@
 import SwiftUI
 
-// One row as the desktop renderer gets it: of the Timeline (main/timeline.js), Notifications (main/inbox.js), a list or
-// saved search (ios/engine/index.js listRow), an outline (sdk/content.js) or a chat (sdk/chat.js); only what this draws.
+// One row as the desktop renderer gets it: of the Timeline (main/timeline.js), a saved search or a meeting's documents
+// (ios/engine/index.js listRow), an outline (sdk/content.js) or a chat (sdk/chat.js); only what this draws.
 struct Row: Decodable, Identifiable {
     let id: String
     let text: String?
@@ -18,7 +18,6 @@ struct Row: Decodable, Identifiable {
     let people: [Person]?
     let children: [Row]?
     let timeline: Info?
-    let notification: Note?
     let reference: Ref?
     let heading: Int?
     let block: String?
@@ -31,7 +30,6 @@ struct Row: Decodable, Identifiable {
     struct Segment: Decodable { let text: String?; let marks: Marks?; let mention: Ref? }
     struct Marks: Decodable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
     struct Ref: Decodable { let uri: String; let label: String? }
-    struct Note: Decodable { let sourceUri: String? }
     struct Chat: Decodable { let mine: Bool?; let status: Bool?; let streaming: Bool? }
     struct Person: Decodable { let name: String }
     struct Free: Decodable { let from: Double; let until: Double }
@@ -53,12 +51,12 @@ struct Row: Decodable, Identifiable {
     }
     var words: String { [title, text, reference?.label].compactMap { $0 }.first { !$0.isEmpty } ?? "" }
     var tone: String? { timeline?.tone }
-    // the node a tap on this row zooms into: what it refers to, what the notification is about, or the row itself when
-    // it is a node (an outline block's own id is not)
-    var target: String? { reference?.uri ?? notification?.sourceUri ?? (id.hasPrefix("tana:") ? id : nil) }
+    // the node a tap on this row zooms into: what it refers to, or the row itself when it is a node (an outline block's
+    // own id is not)
+    var target: String? { reference?.uri ?? (id.hasPrefix("tana:") ? id : nil) }
 
-    // The words with their marks. A mention and a link to a node are links to orbital:<id>, which the shell zooms into
-    // (Shell.zoom); any other link opens as it would anywhere.
+    // The words with their marks. A mention and a link to a node are links to orbital:<id>, which the shell zooms into;
+    // any other link opens as it would anywhere.
     var styled: AttributedString {
         let list = segments.flatMap { $0.isEmpty ? nil : $0 } ?? [Segment(text: words, marks: nil, mention: nil)]
         return list.reduce(into: AttributedString()) { out, s in
@@ -75,13 +73,17 @@ struct Row: Decodable, Identifiable {
     static func zoom(_ id: String) -> URL? { URL(string: "orbital:" + id) }
 }
 
+// Zooming into a node from anywhere: the shell's openURL pushes an orbital:<id> link (Shell)
+extension OpenURLAction {
+    func zoom(_ id: String?) { if let url = id.flatMap(Row.zoom) { callAsFunction(url) } }
+}
+
 // The Timeline as the desktop draws it (styles.css .node.tl): the time on the left, a marker on a thin rail that runs
 // the length of the page, what happened to the right. Today's tasks and Coming up sit on the same rail above the days,
 // each only when it has something in it. Colour only where it means something (orbital-design, Grey unless colour
 // means something): Orbital's green for done, blue for new and for a meeting under way.
 struct TimelineScreen: View {
     let engine: Engine
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
         List {
@@ -90,7 +92,7 @@ struct TimelineScreen: View {
                 RailRow(time: "Now", railTop: 24) { Marker(icon: "todayTasks", tone: "new", now: false) } content: {
                     VStack(alignment: .leading, spacing: 0) {
                         Text("Today's Tasks")
-                        TaskList(tasks: today, engine: engine, open: open)
+                        TaskList(tasks: today, engine: engine)
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -98,11 +100,11 @@ struct TimelineScreen: View {
             if !upcoming.isEmpty || free != nil {
                 Heading(title: "Coming up")
                 if let free { FreeLine(free: free, time: today.isEmpty ? "Now" : "") }
-                ForEach(upcoming) { Meeting(row: $0, open: open) }
+                ForEach(upcoming) { Meeting(row: $0) }
             }
             ForEach(days, id: \.0) { title, rows in
                 Heading(title: title)
-                ForEach(rows) { Entry(row: $0, engine: engine, open: open) }
+                ForEach(rows) { Entry(row: $0, engine: engine) }
             }
             if !days.isEmpty {
                 Button { Task { await engine.more() } } label: {
@@ -149,10 +151,6 @@ struct TimelineScreen: View {
         if cal.isDateInToday(d) { return "Today" }
         if cal.isDateInYesterday(d) { return "Yesterday" }
         return d.formatted(.dateTime.weekday(.wide).day().month(.wide))
-    }
-
-    private func open(_ id: String) {
-        if let url = Row.zoom(id) { openURL(url) }
     }
 }
 
@@ -205,7 +203,7 @@ struct RailRow<Dot: View, Content: View>: View {
 struct Entry: View {
     let row: Row
     let engine: Engine
-    let open: (String) -> Void
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         let quiet = row.tone == "faint"
@@ -218,15 +216,16 @@ struct Entry: View {
                     Text($0).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
                 }
                 if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
-                if let tasks = row.children, !tasks.isEmpty { TaskList(tasks: tasks, engine: engine, open: open) }
+                if let tasks = row.children, !tasks.isEmpty { TaskList(tasks: tasks, engine: engine) }
             }
             .padding(.trailing, row.unread == true ? 18 : 0) // the new dot's own room: a full-width sentence ran under it
             .overlay(alignment: .topTrailing) {
                 if row.unread == true { Circle().fill(.blue).frame(width: 8, height: 8).offset(y: 7).accessibilityLabel("New") }
             }
         }
-        .onTapGesture { if let uri = row.timeline?.uri { open(uri) } }
-        .accessibilityElement(children: .combine)
+        .onTapGesture { openURL.zoom(row.timeline?.uri) }
+        // one element to VoiceOver, unless it lists tasks, whose boxes have to stay reachable
+        .accessibilityElement(children: row.children?.isEmpty == false ? .contain : .combine)
         .accessibilityAddTraits(row.timeline?.uri != nil ? .isButton : [])
     }
 }
@@ -245,7 +244,7 @@ struct TaskBox: View {
         }
         .buttonStyle(.plain)
         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 } // centred on the first line, as the markers are
-        .sensoryFeedback(.success, trigger: state) { _, now in now == "closed" }
+        .sensoryFeedback(.success, trigger: engine.states[task.id]) { _, now in now == "closed" } // your own tick, not a change read from Tana
         .animation(.snappy, value: state)
         .accessibilityLabel(task.words)
         .accessibilityValue(state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed")
@@ -258,14 +257,14 @@ struct TaskBox: View {
 struct TaskList: View {
     let tasks: [Row]
     let engine: Engine
-    let open: (String) -> Void
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ForEach(tasks) { task in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     TaskBox(task: task, engine: engine)
-                    Button { open(task.id) } label: { TaskWords(row: task, done: engine.state(of: task) == "closed").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
+                    Button { openURL.zoom(task.id) } label: { TaskWords(row: task, done: engine.state(of: task) == "closed").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
                         .buttonStyle(.plain)
                 }
             }
@@ -319,7 +318,7 @@ struct TaskWords: View {
 // A meeting still to come today: when on the left, its name, until when, and who else is on it as faces
 struct Meeting: View {
     let row: Row
-    let open: (String) -> Void
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         let start = row.start.flatMap(Row.parse)
@@ -332,7 +331,7 @@ struct Meeting: View {
                 if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
             }
         }
-        .onTapGesture { open(row.id) }
+        .onTapGesture { openURL.zoom(row.id) }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
     }

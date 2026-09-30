@@ -12,21 +12,22 @@ enum Glyph {
         default: "doc"
         }
     }
+    // the glyph for a node by its id's kind (tana:<kind>:<ulid>)
+    static func of(uri: String) -> String { of(uri.split(separator: ":").dropFirst().first.map(String.init)) }
 }
 
-// One node in a list: its glyph (or a task's box), its words, when, and the blue dot while it is unread
+// One node in a list: a task's box or its kind's glyph, its words, and when it last changed
 struct ListRow: View {
     let row: Row
     let engine: Engine
-    var glyph: String?
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            if glyph == nil && row.stateType != nil {
+            if row.stateType != nil {
                 TaskBox(task: row, engine: engine)
             } else {
-                Image("Glyphs/" + (glyph ?? Glyph.of(row.icon))).resizable().frame(width: 20, height: 20).foregroundStyle(.secondary)
+                Image("Glyphs/" + Glyph.of(row.icon)).resizable().frame(width: 20, height: 20).foregroundStyle(.secondary)
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 }
             }
             VStack(alignment: .leading, spacing: 3) {
@@ -36,11 +37,10 @@ struct ListRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if row.unread == true { Circle().fill(.blue).frame(width: 8, height: 8).accessibilityLabel("Unread") }
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .onTapGesture { if let id = row.target, let url = Row.zoom(id) { openURL(url) } }
+        .onTapGesture { openURL.zoom(row.target) }
         .accessibilityAddTraits(row.target != nil ? .isButton : [])
     }
 }
@@ -61,14 +61,17 @@ struct NodeScreen: View {
                 switch page.kind {
                 case "chat":
                     ChatView(rows: page.rows)
-                        .safeAreaInset(edge: .bottom) { Composer(prompt: "Follow up") { try await engine.send($0, to: id); self.page = try await engine.open(id) } }
+                        // sent is sent: the read after it is the next poll's job, so a failed read never offers to send it twice
+                        .safeAreaInset(edge: .bottom) { Composer(prompt: "Follow up") { try await engine.send($0, to: id); await load() } }
                 case "search", "event":
                     List(page.rows) { ListRow(row: $0, engine: engine) }
                         .listStyle(.plain)
+                        .refreshable { await load() }
                         .overlay { if page.rows.isEmpty { ContentUnavailableView(page.kind == "event" ? "No notes yet" : "Nothing found", image: "Glyphs/" + Glyph.of(page.kind)) } }
                 default:
                     List(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth) }
                         .listStyle(.plain)
+                        .refreshable { await load() }
                         .overlay { if page.rows.isEmpty { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } }
                 }
             } else if let error {
@@ -81,15 +84,20 @@ struct NodeScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {
             guard engine.phase == .ready else { return }
-            do { page = try await engine.open(id) } catch { self.error = error.localizedDescription }
+            await load()
             // A chat is read again every two seconds while it is on screen, so Tana's answer shows as it is written: the
             // document is live in the engine, so this is a local read, not a request.
             // ponytail: polled; have the engine call back on the chat's changes if this ever costs.
             while page?.kind == "chat", !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                if let fresh = try? await engine.open(id) { page = fresh }
+                await load()
             }
         }
+    }
+
+    // A read keeps what is on screen when it fails, and says why only while there is nothing to show
+    private func load() async {
+        do { page = try await engine.open(id); error = nil } catch { self.error = error.localizedDescription }
     }
 
     // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
@@ -109,7 +117,7 @@ struct OutlineRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             if row.heading == nil {
                 if let ref = row.reference {
-                    Image("Glyphs/" + Glyph.of(ref.uri.split(separator: ":").dropFirst().first.map(String.init))).resizable().frame(width: 18, height: 18).foregroundStyle(.secondary)
+                    Image("Glyphs/" + Glyph.of(uri: ref.uri)).resizable().frame(width: 18, height: 18).foregroundStyle(.secondary)
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3.5 }
                 } else {
                     Circle().fill(.tertiary).frame(width: 6, height: 6).frame(width: 18)
@@ -127,7 +135,7 @@ struct OutlineRow: View {
         .padding(.top, row.heading != nil ? 10 : 0)
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
-        .onTapGesture { if let uri = row.reference?.uri, let url = Row.zoom(uri) { openURL(url) } }
+        .onTapGesture { openURL.zoom(row.reference?.uri) }
     }
 }
 
@@ -183,8 +191,8 @@ struct ChatBlock: View {
         if row.note == true {
             Text(row.words).font(.subheadline).foregroundStyle(.secondary)
         } else if let ref = row.reference {
-            Button { if let url = Row.zoom(ref.uri) { openURL(url) } } label: {
-                Label { Text(row.words).lineLimit(1) } icon: { Image("Glyphs/" + Glyph.of(ref.uri.split(separator: ":").dropFirst().first.map(String.init))).resizable().frame(width: 18, height: 18) }
+            Button { openURL.zoom(ref.uri) } label: {
+                Label { Text(row.words).lineLimit(1) } icon: { Image("Glyphs/" + Glyph.of(uri: ref.uri)).resizable().frame(width: 18, height: 18) }
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(.fill.tertiary, in: Capsule())
             }

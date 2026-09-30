@@ -14,7 +14,6 @@ import { S, isSpace, iso } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { issues, members, within } from './stand-ins';
-import loro from 'loro-crdt/package.json';
 import NUCLEO from 'nucleo-ui';
 
 const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; } };
@@ -54,14 +53,17 @@ function storageId() {
 // A graph node as a list row (ios/Orbital/Timeline.swift Row): its words, its kind for the glyph, its state for a box
 const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
 const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
-// A reference with no label of its own is named by the graph, as main/documents.js resolveReferences does
+// A reference with no label of its own is named by the graph, as main/documents.js resolveReferences does; each name is
+// asked once, since a chat on screen is read again every two seconds
+const names = new Map();
 async function titled(rows) {
   const refs = [], walk = (list) => list.forEach((r) => { if (r.reference && !r.reference.label) refs.push(r); walk(r.children || []); });
   walk(rows);
-  const ids = [...new Set(refs.map((r) => r.reference.uri))];
-  if (!ids.length) return rows;
-  const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: ids, limit: ids.length }).catch(() => ({}));
-  const names = new Map(nodes.map((n) => [n.id, n.title]));
+  const ids = [...new Set(refs.map((r) => r.reference.uri))].filter((id) => !names.has(id));
+  if (ids.length) {
+    const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: ids, limit: ids.length }).catch(() => ({}));
+    for (const n of nodes) names.set(n.id, n.title);
+  }
   for (const r of refs) r.reference.label = names.get(r.reference.uri) || 'Unavailable reference';
   return rows;
 }
@@ -85,7 +87,9 @@ async function say(id, text) {
   const name = (await members().catch(() => [])).find((m) => m.id === me)?.title || user.email;
   let messageId;
   doc.transact((loro) => { messageId = addMessage(loro, { text, byUri: me, senderName: name }); });
-  await triggerReply({ chatUri: id, messageId, ownerUri: doc.data.get('ownerUri'), getAccessToken });
+  // The message is in the chat either way: Tana not taking it up is told (the Details log), not a failed send, or the
+  // composer would offer to send it again (main/documents.js askReply answers it the same way)
+  await triggerReply({ chatUri: id, messageId, ownerUri: doc.data.get('ownerUri'), getAccessToken }).catch((e) => issues.push('Tana did not answer: ' + (e && e.message || e)));
   return id;
 }
 
@@ -133,20 +137,17 @@ window.orbital = {
     if (!settingsRead) { await fresh; settingsRead = true; }
     return JSON.stringify(await timeline.rows());
   },
-  // main/documents.js webLink: a node's page on home.tana.inc, under the org document's ulid
-  link: (id) => 'https://home.tana.inc/o/' + String(last && last.orgDocUri || '').split(':').pop() + '/' + ({ type: 't', 'user-profile': 'u', event: 'e', space: 's' }[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id),
   // A task's box, as the desktop's does it (renderer/edit.js toggleDone, main/documents.js doc:setDone and mutTasks): an
   // Inbox task is accepted first (In Progress), a finished one is reopened, anything else is completed. Answers the state
   // written; refuses what is not a task or is read-only to you.
   async toggle(id) {
-    const doc = await S.client.sync.subscribe(id), n = readNode(doc);
+    const doc = await within('opening ' + id, S.client.sync.subscribe(id)), n = readNode(doc);
     if (!STATE_TYPES.includes(n.stateType)) throw new Error('Only a task can be ticked off');
     if (editable(n, S.me.userUri) === false) throw new Error('This task is read-only to you');
     const next = n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed';
     setState(doc, next, S.me.userUri);
-    return next;
+    return JSON.stringify(next);
   },
-  loro: loro.version,
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
   email: () => (last && last.user && last.user.email) || null,
   // Zooming into a node: what it holds, as the desktop's page for it shows. A chat is its conversation (sdk/chat.js,

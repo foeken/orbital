@@ -1,7 +1,8 @@
 import SwiftUI
 
 // The app's frame, after the Codex and ChatGPT apps: a side menu behind the page (the Timeline, your saved searches and
-// settings), the page with the menu button and its title, and a composer at the bottom that starts a chat with Tana. The bars are the system's, so they are Liquid Glass with nothing of ours drawn over them.
+// settings), the page with the menu button and its title, and a composer at the bottom that starts a chat with Tana.
+// The bars are the system's, so they are Liquid Glass with nothing of ours drawn over them.
 struct Shell: View {
     let engine: Engine
     // The menu's pages: the Timeline, and each saved search (its id and title) under it
@@ -72,12 +73,13 @@ struct Shell: View {
             path.append(String(url.absoluteString.dropFirst("orbital:".count)))
             return .handled
         })
-        .task(id: engine.phase) {
-            guard engine.phase == .ready, let found = try? await engine.searches() else { return }
-            searches = found.map { .search($0.id, $0.words) }
-            icons = Dictionary(uniqueKeysWithValues: found.compactMap { row in
-                row.glyph.flatMap { Data(base64Encoded: $0) }.flatMap { UIImage(data: $0, scale: 3) }.map { (row.id, $0) }
-            })
+        .task(id: engine.phase) { await loadSearches() }
+        // However it opens (the button, a swipe): the composer's keyboard goes, and the saved searches are read again, so
+        // one pinned or given an icon on the Mac since shows up
+        .onChange(of: menu) {
+            guard menu else { return }
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            Task { await loadSearches() }
         }
         // A sideways swipe anywhere, the menu included: the page follows the finger and settles open or shut, as the
         // ChatGPT app's does. Only a swipe that is more sideways than up or down counts, so the Timeline still scrolls.
@@ -89,7 +91,7 @@ struct Shell: View {
             .onEnded { g in
                 let moved = path.isEmpty && abs(g.translation.width) > abs(g.translation.height) ? g.predictedEndTranslation.width : 0
                 withAnimation(reduceMotion ? nil : Self.move) {
-                    if moved > width / 3 { menu = true; UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) } else if moved < -width / 3 { menu = false }
+                    if moved > width / 3 { menu = true } else if moved < -width / 3 { menu = false }
                     drag = 0
                 }
             })
@@ -106,8 +108,16 @@ struct Shell: View {
     }
 
     private func show(_ open: Bool) {
-        if open { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) } // the composer's keyboard goes
         withAnimation(reduceMotion ? nil : Self.move) { menu = open }
+    }
+
+    // your saved searches for the menu, with the icons they were given in Orbital; the last list stays when a read fails
+    private func loadSearches() async {
+        guard engine.phase == .ready, let found = try? await engine.searches() else { return }
+        searches = found.map { .search($0.id, $0.words) }
+        icons = Dictionary(found.compactMap { row in
+            row.glyph.flatMap { Data(base64Encoded: $0) }.flatMap { UIImage(data: $0, scale: 3) }.map { (row.id, $0) }
+        }, uniquingKeysWith: { first, _ in first })
     }
 
     // the menu's one move, quicker than SwiftUI's default half second
@@ -125,11 +135,11 @@ struct SideMenu: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Orbital").font(.title2.bold())
-                .frame(minHeight: 46) // the height the search button gave the line, so the pages stay where they were
+                .frame(minHeight: 46) // level with the page's menu button beside it
                 .padding(.leading, 14)
-            .padding(.bottom, 12)
+                .padding(.bottom, 12)
             item(.timeline)
-            // your saved searches, those pinned to your sidebar first, as the ChatGPT app lists chats under its pages
+            // Your saved searches, those pinned to your sidebar first, as the ChatGPT app lists chats under its pages.
             // They run to the foot of the screen and scroll under the settings button, fading out behind it rather than
             // stopping at a hard line above it.
             if !searches.isEmpty {
@@ -152,24 +162,24 @@ struct SideMenu: View {
     }
 
     private func item(_ item: Shell.Page) -> some View {
-                Button { page = item; close() } label: {
-                    HStack(spacing: 14) {
-                        // a saved search by the icon you gave it in Orbital (Set icon), else the search glyph
-                        Group {
-                            if case .search(let id, _) = item, let icon = icons[id] { Image(uiImage: icon).renderingMode(.template).resizable() }
-                            else { Image("Glyphs/" + item.glyph).resizable() }
-                        }
-                        .frame(width: 22, height: 22)
-                        Text(item.title).fontWeight(.medium).lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(page == item ? AnyShapeStyle(.fill.secondary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .contentShape(Rectangle())
+        Button { page = item; close() } label: {
+            HStack(spacing: 14) {
+                // a saved search by the icon you gave it in Orbital (Set icon), else the search glyph
+                Group {
+                    if case .search(let id, _) = item, let icon = icons[id] { Image(uiImage: icon).renderingMode(.template).resizable() }
+                    else { Image("Glyphs/" + item.glyph).resizable() }
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(page == item ? .isSelected : [])
+                .frame(width: 22, height: 22)
+                Text(item.title).fontWeight(.medium).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(page == item ? AnyShapeStyle(.fill.secondary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(page == item ? .isSelected : [])
     }
 }
 
