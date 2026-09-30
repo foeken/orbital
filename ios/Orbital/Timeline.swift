@@ -32,7 +32,7 @@ struct Row: Decodable, Identifiable {
     struct Marks: Decodable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
     struct Ref: Decodable { let uri: String; let label: String? }
     struct Note: Decodable { let sourceUri: String? }
-    struct Chat: Decodable { let mine: Bool?; let status: Bool? }
+    struct Chat: Decodable { let mine: Bool?; let status: Bool?; let streaming: Bool? }
     struct Person: Decodable { let name: String }
     struct Free: Decodable { let from: Double; let until: Double }
     struct Info: Decodable {

@@ -190,6 +190,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         return try await call("return await orbital.open(id)", ["id": id])
     }
 
+    // Ask Tana (orbital.ask): a new chat with what you typed as its first message; answers the chat's id
+    func ask(_ text: String) async throws -> String {
+        if Self.sample != nil { return "tana:chat:000000000000000000000000c1" }
+        return try await call("return JSON.stringify(await orbital.ask(text))", ["text": text])
+    }
+    // a follow-up in a chat (orbital.send)
+    func send(_ text: String, to id: String) async throws {
+        if Self.sample != nil { return }
+        let _: String = try await call("return JSON.stringify(await orbital.send(id, text))", ["id": id, "text": text])
+    }
+
     // This phone's push token into Orbital's settings document (orbital.registerPush), so the Mac sends it its banners
     func registerPush(_ token: String, environment: String) async {
         guard phase == .ready, !CommandLine.arguments.contains("-sample") else { return }

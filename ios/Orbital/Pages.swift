@@ -88,7 +88,9 @@ struct NodeScreen: View {
         Group {
             if let page {
                 switch page.kind {
-                case "chat": ChatView(rows: page.rows)
+                case "chat":
+                    ChatView(rows: page.rows)
+                        .safeAreaInset(edge: .bottom) { Composer(prompt: "Follow up") { try await engine.send($0, to: id); self.page = try await engine.open(id) } }
                 case "search", "event":
                     List(page.rows) { ListRow(row: $0, engine: engine) }
                         .listStyle(.plain)
@@ -109,6 +111,13 @@ struct NodeScreen: View {
         .task(id: engine.phase) {
             guard engine.phase == .ready else { return }
             do { page = try await engine.open(id) } catch { self.error = error.localizedDescription }
+            // A chat is read again every two seconds while it is on screen, so Tana's answer shows as it is written: the
+            // document is live in the engine, so this is a local read, not a request.
+            // ponytail: polled; have the engine call back on the chat's changes if this ever costs.
+            while page?.kind == "chat", !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                if let fresh = try? await engine.open(id) { page = fresh }
+            }
         }
     }
 
@@ -188,6 +197,7 @@ struct Message: View {
                     if let meta = row.meta { Text(meta).font(.subheadline).foregroundStyle(.secondary) }
                 }
                 ForEach(row.children ?? []) { ChatBlock(row: $0) }
+                if row.chat?.streaming == true && (row.children ?? []).isEmpty { ProgressView().controlSize(.small) } // Tana has started, no words yet
             }
         }
     }

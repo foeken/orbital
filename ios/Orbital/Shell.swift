@@ -66,7 +66,7 @@ struct Shell: View {
                         Button { searching = true } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("Search")
                     }
                 }
-                .safeAreaInset(edge: .bottom) { Composer() }
+                .safeAreaInset(edge: .bottom) { Composer { path.append(try await engine.ask($0)) } } // a new chat, opened as it starts
             }
             // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
             .mask { RoundedRectangle(cornerRadius: menu ? 44 : 0, style: .continuous).ignoresSafeArea() }
@@ -196,11 +196,14 @@ struct SideMenu: View {
     }
 }
 
-// The composer, as the Codex app has it: what you type becomes a new chat with Tana. Sending comes next, so for now it
-// says so for a moment rather than doing nothing.
+// The composer, as the Codex app has it: what you type goes to Tana, as a new chat from the page (Shell) or a follow-up
+// in a chat (ChatView). The words go the moment it is sent, and come back with the reason if Tana refuses them.
 struct Composer: View {
+    var prompt = "Ask Tana"
+    let send: (String) async throws -> Void
     @State private var text = CommandLine.arguments.contains("-typing") ? "Can you move the offsite to Thursday?" : "" // -typing: the open card, for design shots
-    @State private var notYet = false
+    @State private var failure: String?
+    @State private var sending = false
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -209,22 +212,26 @@ struct Composer: View {
         // Codex's composer: a capsule at rest, a card while you type in it (the words on top, send in its corner)
         let open = focused || !empty
         VStack(spacing: 6) {
-            if notYet {
-                Text("Asking Tana from here comes next.")
-                    .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).transition(.opacity)
+            if let failure {
+                Text(failure).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).transition(.opacity)
             }
             // The words set the height: at rest a line of body text with 12 pt above and below it (46 pt, a capsule with
             // this radius), open the words with room under them for the send button's row. The button sits in the
             // bottom-right corner, the same distance from the edge on both sides whatever the text field measures.
-            TextField("Ask Tana", text: $text, axis: .vertical).lineLimit(1...6).focused($focused)
+            TextField(prompt, text: $text, axis: .vertical).lineLimit(1...6).focused($focused)
                 .padding(.leading, 18)
                 .padding(.trailing, open ? 18 : 52)
                 .padding(.top, open ? 16 : 12)
                 .padding(.bottom, open ? 60 : 12)
                 .overlay(alignment: .bottomTrailing) {
                     Button {
-                        withAnimation { notYet = true }
-                        Task { try? await Task.sleep(for: .seconds(4)); withAnimation { notYet = false } }
+                        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        text = ""; focused = false; sending = true
+                        Task {
+                            do { try await send(words); withAnimation { failure = nil } }
+                            catch { text = words; withAnimation { failure = error.localizedDescription } }
+                            sending = false
+                        }
                     } label: {
                         // the Codex app's send: a grey circle while there is nothing to send, blue once there is
                         Image(systemName: "arrow.up").font(.body.weight(.semibold))
@@ -233,8 +240,8 @@ struct Composer: View {
                             .background(Circle().fill(empty ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.blue)))
                     }
                     .buttonStyle(.plain)
-                    .disabled(empty)
-                    .accessibilityLabel("Ask Tana")
+                    .disabled(empty || sending)
+                    .accessibilityLabel(prompt)
                     .padding(open ? 10 : 6)
                 }
                 .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
