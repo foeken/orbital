@@ -236,7 +236,7 @@ function definitionEl(parent, def) {
   const key = parent.docId + '|def|' + def.key, ctx = { typeUri: parent.docId, key, def };
   fieldCtxs.set(key, ctx);
   const row = document.createElement('div'); row.className = 'field';
-  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'field');
+  const icon = document.createElement('span'); icon.className = 'ricon'; icon.dataset.field = parent.docId + '?attribute=' + def.key; addIcon(icon, fieldGlyph(icon.dataset.field));
   const label = document.createElement('span'); label.className = 'flabel fdef-title'; label.textContent = def.title || def.key;
   const values = document.createElement('div'); values.className = 'fvalues';
   const el = document.createElement('div'); el.className = 'fvalue fchoice fdef'; el.tabIndex = 0; el.dataset.key = key;
@@ -283,11 +283,27 @@ function fieldRows(group) {
     rows.push({ id: 'fieldChoices', group, icon: 'options', label: 'Edit choices …', hint: type === 'options' ? (def.options || []).length + ' choices' : 'Options fields only', disabled: type !== 'options', keepOpen: true, run: () => openChoicesPage(ctx) });
     rows.push({ id: 'fieldTargets', group, icon: 'type', label: 'Link to types …', hint: type === 'link' ? (def.to || []).map((t) => t.name || t.title).filter(Boolean).join(', ') || 'Any type' : 'Link fields only', disabled: type !== 'link', keepOpen: true, run: () => openTargetsPage(ctx) });
   }
+  // what the field is drawn with on every page and pill: a glyph kept beside the type's (Set icon, main/icons.js)
+  const iconKey = palFieldKey();
+  if (iconKey && tana.searchIcons && tana.setTypeIcon) rows.push({ id: 'setFieldIcon', group, icon: fieldGlyph(iconKey), label: 'Set field icon',
+    hint: typeGlyphs.has(iconKey) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette({ id: iconKey }) });
   // on a type (its row, or one of the fields it defines): one more field
   const typeUri = ctx && ctx.def ? ctx.typeUri : palDoc && /^tana:type:/.test(palDoc.id) ? palDoc.id : null;
   if (typeUri && tana.addField) rows.push({ id: 'addField', group, icon: 'createNew', label: 'Add field …', keepOpen: true, run: () => openFieldPage({ typeUri }, addFieldRows, 'Name the field', openCommandPalette) });
   if (onTypePage() && typeUri === zoom.docId) rows.push({ id: 'editFields', group, icon: 'field', label: editingType === typeUri ? 'Done editing fields' : 'Edit fields', run: () => { editingType = editingType === typeUri ? null : typeUri; render(true); } });
   return rows;
+}
+// The field ⌘K was opened on, as "<type uri>?attribute=<key>": a choice field, a definition on a type's page, or a
+// row of a text or date field's value (those rows are the outline's, so palField misses them).
+function palFieldKey() {
+  if (palField) return palField.def ? palField.typeUri + '?attribute=' + palField.def.key : palField.field.key;
+  const at = palette.hidden ? focused() : palReturn, item = at && at.key && items.get(at.key);
+  return item && inField(item.docId) ? item.docId.split('|')[1] : null;
+}
+// A glyph just chosen for a field, on every row of this page that draws that field. The render that would redraw them
+// waits while the caret is in a field's value, and Set field icon hands the caret straight back there.
+function patchFieldGlyphs(key) {
+  for (const el of document.querySelectorAll('.ricon[data-field="' + CSS.escape(key) + '"]')) { el.replaceChildren(); addIcon(el, fieldGlyph(key)); }
 }
 function kindRows(q) {
   const ctx = fieldCtx, def = ctx.def, now = def.type || '';

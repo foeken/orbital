@@ -621,7 +621,7 @@ function renderFields(parent, force = false, el = $('fields')) {
   if (chatLine) el.append(chatLine);
   for (const field of fields) {
     const row = document.createElement('div'); row.className = 'field';
-    const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'field');
+    const icon = document.createElement('span'); icon.className = 'ricon'; icon.dataset.field = field.key; addIcon(icon, fieldGlyph(field.key)); // data-field: patchFieldGlyphs finds it
     row.append(icon);
     // the type names its fields; an unreadable type leaves the value to speak for itself
     if (field.label) { const label = document.createElement('span'); label.className = 'flabel'; label.textContent = field.label; row.append(label); }

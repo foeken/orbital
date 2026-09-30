@@ -1,7 +1,8 @@
 'use strict';
 // The icon a type or a saved search is drawn with (a search's since #521). Tana has nowhere to keep an icon — `appearance` holds an image uri and a hue and
 // nothing else (docs/sdk/05-gotchas.md) — and an SVG does not belong in somebody else's CRDT, so the choice is kept
-// here, app-local, the way sensitive marks and agent assignments are: one setting, type uri -> Nucleo label.
+// here, app-local, the way sensitive marks and agent assignments are: one setting, type uri -> Nucleo label. A type's
+// field is kept in the same setting under its own key ("<type uri>?attribute=<key>"), since the field belongs to the type.
 // What is stored is a name, never markup: the glyph itself comes from the set built into the app.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -63,7 +64,7 @@ const typeIcons = () => Object.entries(stored())
 // document of that type follows it. The generic glyph is kept as a null entry rather than no entry: it is a choice
 // too, and fillTypeIcons only picks for types nobody has chosen for.
 function setTypeIcon(typeUri, name) {
-  if (typeof typeUri !== 'string' || !/^tana:(type|search):[0-9a-z]{26}$/.test(typeUri)) throw new Error('Icons are set on a type or a saved search');
+  if (typeof typeUri !== 'string' || !/^tana:(type:[0-9a-z]{26}(\?attribute=[0-9a-z]{8})?|search:[0-9a-z]{26})$/.test(typeUri)) throw new Error('Icons are set on a type, a field or a saved search');
   const next = { ...stored() };
   if (name == null) next[typeUri] = null;
   else {
@@ -75,7 +76,7 @@ function setTypeIcon(typeUri, name) {
   chosen = next;
   return name == null ? null : { uri: typeUri, ...row(icons().find((i) => i.n === (labelOf(name) || name))) };
 }
-// At boot (main.js autoTypeIcons): the types with no choice at all get the one `pick` (main/ai.js pickTypeIcons) names,
+// At boot (main.js autoTypeIcons): the types and fields with no choice at all get the one `pick` (main/ai.js pickTypeIcons) names,
 // in one write. A name outside the set is dropped, and so is a type chosen for while the model was answering.
 async function fillTypeIcons(types, pick) {
   const missing = types.filter((t) => !(t.uri in stored()));
