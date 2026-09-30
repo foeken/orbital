@@ -29,6 +29,51 @@
    "id": "tana:search:0000000000000000000000000s5",
    "title": "Risks",
    "icon": "search"
+  },
+  {
+   "id": "tana:search:issues00000000000000000000",
+   "title": "Issues",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:visiblelater00000000000000",
+   "title": "Visible later",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:waitingonothers00000000000",
+   "title": "Waiting on others",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:readinglist000000000000000",
+   "title": "Reading list",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:decisions00000000000000000",
+   "title": "Decisions",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:hiringpipeline000000000000",
+   "title": "Hiring pipeline",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:boardprep00000000000000000",
+   "title": "Board prep",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:travel00000000000000000000",
+   "title": "Travel",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:budget20270000000000000000",
+   "title": "Budget 2027",
+   "icon": "search"
   }
  ],
  "pages": {

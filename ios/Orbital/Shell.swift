@@ -89,7 +89,7 @@ struct Shell: View {
             .onEnded { g in
                 let moved = path.isEmpty && abs(g.translation.width) > abs(g.translation.height) ? g.predictedEndTranslation.width : 0
                 withAnimation(reduceMotion ? nil : Self.move) {
-                    if moved > width / 3 { menu = true } else if moved < -width / 3 { menu = false }
+                    if moved > width / 3 { menu = true; UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) } else if moved < -width / 3 { menu = false }
                     drag = 0
                 }
             })
@@ -106,6 +106,7 @@ struct Shell: View {
     }
 
     private func show(_ open: Bool) {
+        if open { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) } // the composer's keyboard goes
         withAnimation(reduceMotion ? nil : Self.move) { menu = open }
     }
 
@@ -129,19 +130,25 @@ struct SideMenu: View {
             .padding(.bottom, 12)
             item(.timeline)
             // your saved searches, those pinned to your sidebar first, as the ChatGPT app lists chats under its pages
+            // They run to the foot of the screen and scroll under the settings button, fading out behind it rather than
+            // stopping at a hard line above it.
             if !searches.isEmpty {
                 Divider().padding(.horizontal, 14).padding(.vertical, 12)
-                ScrollView { VStack(spacing: 4) { ForEach(searches, id: \.self) { item($0) } } }.scrollBounceBehavior(.basedOnSize)
+                ScrollView { VStack(spacing: 4) { ForEach(searches, id: \.self) { item($0) } }.padding(.bottom, 96) }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .mask { VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 90) } }
+                    .ignoresSafeArea(.container, edges: .bottom) // down to the screen's edge, under the home indicator
             }
-            Spacer()
-            HStack {
-                Spacer()
-                Button(action: settings) { Image(systemName: "gearshape").font(.title3).frame(width: 30, height: 30) }
-                    .buttonStyle(.glass).buttonBorderShape(.circle).accessibilityLabel("Settings")
-            }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        .overlay(alignment: .bottomTrailing) {
+            Button(action: settings) { Image(systemName: "gearshape").font(.title3).frame(width: 30, height: 30) }
+                .buttonStyle(.glass).buttonBorderShape(.circle).accessibilityLabel("Settings")
+                .padding(.horizontal, 12).padding(.bottom, 8)
+        }
+        .ignoresSafeArea(.keyboard) // the composer's keyboard does not squeeze the menu
     }
 
     private func item(_ item: Shell.Page) -> some View {
