@@ -600,6 +600,7 @@ ipcMain.handle('sync:login', async () => {
 // ⌘K Log out of Tana: the stream closed and the session's cookies cleared, so every window shows the login. Signed out
 // first: the pages hear it before the reads the closing stream fails, and say nothing of those (renderer/nodes.js showError).
 ipcMain.handle('sync:logout', async () => {
+  for (const w of canvasWindows.values()) if (!w.isDestroyed()) w.destroy(); // a board stays on screen after its cookies go (#611)
   setStatus({ authenticated: false, connected: false, syncing: false, error: null });
   relayout();
   stop();

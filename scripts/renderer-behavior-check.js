@@ -8352,9 +8352,11 @@ async function runDeletedNodeCheck() {
       node: async (uri) => { asked.push('node ' + uri); return { id: uri, title: 'still here' }; },
       taskMeta: async (id) => { asked.push('taskMeta ' + id); throw new Error('Node has been deleted'); },
       openCanvas: async (id) => { asked.push('canvas ' + id); },
+      splitWindow: async (where) => { asked.push('split ' + where); },
     };
     const showError = (e) => errors.push(String((e && e.message) || e));
     const run = (fn) => fn();
+    const inOtherPane = () => false, placeKey = (id) => id;
     const render = () => { renders++; }, renderSoon = () => { renders++; }, patchMeta = () => {}, renderPalette = () => {};
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {}, recordRecent = () => {};
     const LINKS = false; // a page of its own, not the Graph pane (renderer/state.js)
@@ -8364,12 +8366,14 @@ async function runDeletedNodeCheck() {
     ${sourceBetween('const isRealId = (id)', '// ---- Home ----')}
     ${sourceLine('const opensCanvas =')}
     ${functionSource('openDoc')}
+    ${functionSource('openElsewhere')}
     ${functionSource('goTo')}
     ${functionSource('loadTaskMeta')}
     ${sourceBetween('const navBack = [], navForward = []', '// The same two moves as a pair of buttons')}
     ({
       state: () => ({ zoom: zoom && zoom.docId, view, errors: [...errors], asked: [...asked], gone: [...deletedIds] }),
       openDoc: (id) => openDoc(id),
+      elsewhere: (where, id) => openElsewhere(where, id),
       goTo: (uri) => goTo(uri),
       meta: (id) => loadTaskMeta(id),
       note: (id, message) => noteGone(id, new Error(message)),
@@ -8406,6 +8410,9 @@ async function runDeletedNodeCheck() {
   await api.goTo(canvas);
   assert.equal(api.state().zoom, live, 'a canvas leaves the page where it was');
   assert.deepEqual(plain(api.state().asked), ['node ' + canvas, 'canvas ' + canvas], 'and asks main for its window');
+  api.clear();
+  await api.elsewhere('right', canvas);
+  assert.deepEqual(plain(api.state().asked), ['canvas ' + canvas], 'and so does ⌘/⇧/⌥ on it: no pane of its own');
 
   // 3. The Back stack walks past the pages that have gone since.
   api.clear();
