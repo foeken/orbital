@@ -63,8 +63,9 @@ struct TimelineScreen: View {
         List {
             if !today.isEmpty {
                 Heading(title: "Today's tasks")
+                // a checklist, not stops on the rail: the boxes keep the markers' column so the words line up, with no line
                 ForEach(today) { task in
-                    RailRow(time: "") { TaskBox(task: task, engine: engine) } content: { TaskWords(row: task, done: engine.state(of: task) == "closed") }
+                    RailRow(time: "", rail: false) { TaskBox(task: task, engine: engine) } content: { TaskWords(row: task, done: engine.state(of: task) == "closed") }
                         .onTapGesture { open(task.id) }
                 }
             }
@@ -154,6 +155,7 @@ enum Rail {
 // next and the rail reads as one line down the section; rows carry no separators.
 struct RailRow<Dot: View, Content: View>: View {
     let time: String
+    var rail = true
     @ViewBuilder let marker: Dot
     @ViewBuilder let content: Content
 
@@ -167,7 +169,7 @@ struct RailRow<Dot: View, Content: View>: View {
         .contentShape(Rectangle())
         .listRowInsets(EdgeInsets(top: 0, leading: Rail.inset, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
-        .listRowBackground(HStack(spacing: 0) { Color.clear.frame(width: Rail.inset + Rail.line); Color(.separator).frame(width: 1); Spacer(minLength: 0) })
+        .listRowBackground(HStack(spacing: 0) { Color.clear.frame(width: Rail.inset + Rail.line); Color(.separator).frame(width: 1).opacity(rail ? 1 : 0); Spacer(minLength: 0) })
     }
 }
 
@@ -208,9 +210,9 @@ struct Entry: View {
     }
 }
 
-// A task's box: a tap ticks it off or back on (Engine.toggle, the desktop's rule). An Inbox task's box is dashed, as on
-// the desktop, since its first tap accepts it; a finished one is Orbital's green, with the success haptic. The words
-// beside it open the task.
+// A task's box, drawn as the desktop's (styles.css .check): a grey rounded square, green with a white tick once done,
+// a dashed outline for an Inbox task (its first tap accepts it). A tap ticks it off or back on (Engine.toggle, the
+// desktop's rule), with the success haptic; the words beside it open the task.
 struct TaskBox: View {
     let task: Row
     let engine: Engine
@@ -218,17 +220,45 @@ struct TaskBox: View {
     var body: some View {
         let state = engine.state(of: task)
         Button { Task { await engine.toggle(task) } } label: {
-            Image(systemName: state == "closed" ? "checkmark.circle.fill" : state == "proposed" ? "circle.dashed" : "circle")
-                .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(state == "closed" ? AnyShapeStyle(Color.done) : AnyShapeStyle(.tertiary))
-                .background(Circle().fill(Color(.systemBackground)).padding(-2))
-                .padding(8).contentShape(Rectangle()).padding(-8) // a finger-sized target around a text-sized box
+            CheckBox(state: state)
+                .padding(10).contentShape(Rectangle()).padding(-10) // a finger-sized target around a text-sized box
         }
         .buttonStyle(.plain)
+        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 } // centred on the first line, as the markers are
         .sensoryFeedback(.success, trigger: state) { _, now in now == "closed" }
+        .animation(.snappy, value: state)
         .accessibilityLabel(task.words)
         .accessibilityValue(state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed")
         .accessibilityHint("Ticks the task off, or back on")
+    }
+}
+
+struct CheckBox: View {
+    let state: String
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+        ZStack {
+            if state == "proposed" {
+                shape.strokeBorder(Color.pair(0xc8c8c8, 0x5d6467), style: StrokeStyle(lineWidth: 1.2, dash: [2.6, 2.4]))
+            } else {
+                shape.fill(state == "closed" ? Color.pair(0x6fae82, 0x5b976c) : Color.pair(0xe4e4e4, 0x3a3e40))
+            }
+            if state == "closed" { Tick().stroke(.white, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)).transition(.scale) }
+        }
+        .frame(width: 20, height: 20)
+    }
+}
+
+// the desktop's tick (M4 8.7 l3.3 3.3 6.9-6.9 in an 18 box), drawn to whatever box it is given
+struct Tick: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = rect.width / 18
+        var p = Path()
+        p.move(to: CGPoint(x: 4 * s, y: 8.7 * s))
+        p.addLine(to: CGPoint(x: 7.3 * s, y: 12 * s))
+        p.addLine(to: CGPoint(x: 14.2 * s, y: 5.1 * s))
+        return p
     }
 }
 
@@ -313,7 +343,14 @@ struct Faces: View {
 }
 
 // Orbital's green for finished work (styles.css .tl-done), the same on every task box
-extension Color { static let done = Color(red: 0x5a / 255, green: 0x96 / 255, blue: 0x70 / 255) }
+extension Color {
+    static let done = Color(red: 0x5a / 255, green: 0x96 / 255, blue: 0x70 / 255)
+    // one of the desktop's light colours and its dark twin (styles.css and its [data-theme="dark"] rules)
+    static func pair(_ light: UInt32, _ dark: UInt32) -> Color {
+        let rgb = { (v: UInt32) in UIColor(red: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1) }
+        return Color(UIColor { $0.userInterfaceStyle == .dark ? rgb(dark) : rgb(light) })
+    }
+}
 
 // The marker in the gutter, as the desktop's rail draws it (main/timeline.js ICON, styles.css .tl-*): the Nucleo glyphs
 // of icons.js (scripts/build-ios-glyphs.js) in one grey (#217). Finished work is a green disc with a white check, a new
