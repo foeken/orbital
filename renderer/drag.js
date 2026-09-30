@@ -77,10 +77,11 @@ function dropDepth(host, above, below, x) {
 // another document, a read-only row, or a list this row cannot join.
 // files: image files from the Finder rather than a row (renderer/upload.js). They land behind a row only, since an
 // image is never a row's first child and api.insertImage has no "first row" place.
-function dropPlan(x, y, files = false) {
-  const src = files ? null : items.get(dragKey), host = src || files ? dropHost(x, y) : null;
+// foreign: nodes dragged from another pane (foreignDrag): references, whose uris are read only at the drop.
+function dropPlan(x, y, files = false, foreign = false) {
+  const src = files || foreign ? null : items.get(dragKey), host = src || files || foreign ? dropHost(x, y) : null;
   if (!host) return null;
-  const ref = src && dragRef(src);
+  const ref = foreign ? { uri: null } : src && dragRef(src);
   const dragged = nodeElOf(dragKey);
   // A draft row is not in the document yet (nothing can land behind a row the write cannot name), and a row on its
   // way out is not a place either. The gap above a draft tail is the end of the outline, which is where a drop
@@ -140,21 +141,26 @@ function sameSpot(src, plan) {
 // The write, and putting the outline back together around it: the row it left may have been its parent's last
 // child, and the row it landed in opens, so the node is where it was put rather than hidden inside a closed one.
 async function applyDrop(key, plan) {
-  const src = items.get(key);
-  if (!src || (!plan.ref && sameSpot(src, plan))) return; // a reference is never a no-op: it is a new row either way
+  const src = items.get(key), refs = plan.refs || (plan.ref ? [plan.ref] : null);
+  if (!refs && (!src || sameSpot(src, plan))) return; // a reference is never a no-op: it is a new row either way
   armGlide(); // the rows around the drop make room and close up rather than jumping
   await run(async () => {
-    if (plan.ref) await tana.insertMention(plan.docId, plan.ref.uri, plan.ref.label, plan.parentId, plan.afterId);
+    // each lands in the same place, so the last goes first and they read in the order they were dragged
+    if (refs) for (const r of [...refs].reverse()) await tana.insertMention(plan.docId, r.uri, r.label, plan.parentId, plan.afterId);
     else {
       await tana.moveTo(src.docId, src.node.id, plan.docId, plan.parentId, plan.afterId);
       await reload(src.docId);
     }
-    if (plan.ref || plan.docId !== src.docId) await reload(plan.docId);
+    if (refs || plan.docId !== src.docId) await reload(plan.docId);
   });
   if (plan.parentId) open.set(plan.parent.key, true);
-  if (!plan.ref) closeIfEmpty(src.parent);
+  if (!refs) closeIfEmpty(src.parent);
   render(true);
 }
+// A document row (a task in My Tasks, say) dragged from another pane: its page is another renderer, so only the
+// dataTransfer crosses, and what lands here is a reference to each node in it, as a drag inside this pane makes.
+const foreignDrag = (e) => !dragKey && e.dataTransfer.types.includes(NODES_DRAG_TYPE) && e.dataTransfer.effectAllowed === 'link';
+const foreignRefs = (segs, docId) => segs.filter((s) => s.length === 1 && s[0].mention && isRealId(s[0].mention.uri) && s[0].mention.uri !== dragBase(docId)).map((s) => s[0].mention);
 function endDrag() {
   for (const el of eachRow('.node.dragging')) el.classList.remove('dragging');
   dragKey = null;
@@ -318,7 +324,7 @@ document.addEventListener('dragover', (e) => {
   if (task) setTaskDragging(true);
   // ponytail: every dragover measures every row on screen; a page of a few hundred rows is one cheap layout read.
   // If a very long page ever drags heavily, take the rects at dragstart and add the scroll delta.
-  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null;
+  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : foreignDrag(e) ? dropPlan(e.clientX, e.clientY, false, true) : null;
   const meeting = !plan && (dragKey ? pinIds(dragSegs(items.get(dragKey))).length > 0 : nodes) ? meetingAt(e.clientX, e.clientY) : null;
   const group = !plan && !meeting && task ? groupAt(e.clientX, e.clientY) : null;
   showDrop(plan);
@@ -337,12 +343,15 @@ document.addEventListener('drop', (e) => {
     return;
   }
   const raw = e.dataTransfer.getData(TASK_DRAG_TYPE), rows = e.dataTransfer.getData(NODES_DRAG_TYPE);
-  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null, meeting = !plan && rows ? meetingAt(e.clientX, e.clientY) : null;
+  if (e.defaultPrevented) return endDrag(); // a chat's composer took it
+  const foreign = foreignDrag(e), plan = dragKey ? dropPlan(e.clientX, e.clientY) : foreign ? dropPlan(e.clientX, e.clientY, false, true) : null;
+  const meeting = !plan && rows ? meetingAt(e.clientX, e.clientY) : null;
   const group = !plan && !meeting && raw ? groupAt(e.clientX, e.clientY) : null, key = dragKey;
-  if (!dragKey && !raw && !meeting) return endDrag(); // rows from the other pane dropped on no meeting: a chat's composer takes them itself
+  if (!dragKey && !raw && !meeting && !plan) return endDrag();
   e.preventDefault();
   endDrag();
-  if (plan) applyDrop(key, plan);
+  if (plan && foreign) { const refs = foreignRefs(JSON.parse(rows), plan.docId); if (refs.length) applyDrop(null, { ...plan, refs }); }
+  else if (plan) applyDrop(key, plan);
   else if (meeting) dropOnMeeting(meeting, JSON.parse(rows));
   else if (group) dropOnGroup(JSON.parse(raw), group.id);
 });

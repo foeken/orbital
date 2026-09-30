@@ -860,7 +860,7 @@ function nodeEl(node, docId, parent) {
     line.append(check);
   }
   const body = document.createElement('div'); body.className = 'body'; // text + meta + chips; only .text is editable
-  const translated = rowTranslation(item, node); // renderer/translate.js
+  const translated = rowTranslation(item, display); // renderer/translate.js; a reference as its node is in a list
   const text = document.createElement('span');
   text.className = 'text';
   if (isImage(node)) { // focusable, not editable: keeps its place in texts() so Up/Down/Backspace work like any block
@@ -887,15 +887,16 @@ function nodeEl(node, docId, parent) {
     text.classList.add('table'); text.tabIndex = -1;
     text.append(tableEl(item));
   } else {
-    const english = !pending.has(item.key) && !reference && !fullref && translated && !translated.pending && !translated.original && caretBefore?.key !== item.key ? translated : null; // shown translated (renderer/translate.js), never while typed in, as the title
+    const english = !pending.has(item.key) && translated && !translated.pending && !translated.original && caretBefore?.key !== item.key ? translated : null; // shown translated (renderer/translate.js), never while typed in, as the title
     if (!demoMode && !clickOpens && canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
-    const own = node.timeline?.free ? timelineFreeSegs(node.timeline.free) : segsOf(node), segs = english ? translatedSegs(node, english.text) : pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : own;
+    const shown = (label) => (reference ? [{ text: label }] : fullref ? [{ mention: { uri: node.reference.uri, label } }] : null); // a translated reference keeps its chip
+    const own = shown(referenceLabel(node)) || (node.timeline?.free ? timelineFreeSegs(node.timeline.free) : segsOf(node)), segs = pending.has(item.key) ? pending.get(item.key).segs : english ? shown(english.text) || translatedSegs(node, english.text) : own;
     renderSegs(text, segs, display.id);
     text.classList.toggle('chiponly', chipOnly(text));
-    if (english) originalOnFocus(text, () => renderSegs(text, segsOf(node), display.id)); // the caret going in finds the original: that is what an edit saves
-    const translatable = !reference && !fullref && translatableOf(item, node); // and leaving it, the translation again, once there is one
+    if (english) originalOnFocus(text, () => renderSegs(text, own, display.id)); // the caret going in finds the original: that is what an edit saves
+    const translatable = !fullref && translatableOf(item, display); // and leaving it, the translation again, once there is one (a chip is drawn again instead)
     if (translatable && !namedSeg(node)) markTranslatable(text, translatable.src, translatable.id); // a named segment's row is drawn again instead: its words are more than the name
   }
   body.append(text);
