@@ -165,6 +165,8 @@ function peopleEl(summary, node) {
   const el = document.createElement('span'); el.className = 'people';
   const word = summary.audience.word; // everyone and only you: a word, not the whole organization or your own face
   el.append(audienceIcon(summary, node), ...(word ? [word] : facesEls(uris, summary.peopleCount || uris.length)));
+  // assigned to someone who cannot see it: said in words after who can, as the page's Visible to field says it (#622)
+  if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'hiddenfrom'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
   return el;
 }
 // A bubble each for the first four people, then the rest: "+n" up to nine people, "and n others" past that. The list

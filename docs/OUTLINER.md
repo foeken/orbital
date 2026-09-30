@@ -186,7 +186,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   audience, bell, pin: `.ticon`), the Timeline's Join glyph and the meeting link — are drawn at .45 opacity, and in full
   on the row under the pointer or with the caret, fading between the two (styles.css). None of them gets a background
   on hover, only its own colour darkens. The visibility icon (`.audience`) and a warning (assigned to someone who cannot see it,
-  `.hiddenfrom`) stay in full.
+  `.hiddenfrom`) stay in full. That warning is the audience glyph in red, followed in the subtext by "Not visible to …"
+  in red, as the page's Visible to field says it (`peopleEl`, issue #622).
 - **A task's box is its state** (#243). A task in the Inbox (`proposed`) draws a dashed box; In Progress a grey box;
   completed a green tick, with the title struck through and grey, and a short pop (`popSound`, renderer/motion.js;
   a checkbox block pops too, unchecking is silent; it sounds as the mouse button goes down on a box the
