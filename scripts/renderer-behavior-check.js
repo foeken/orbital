@@ -8351,8 +8351,12 @@ async function runDeletedNodeCheck() {
     const tana = {
       node: async (uri) => { asked.push('node ' + uri); return { id: uri, title: 'still here' }; },
       taskMeta: async (id) => { asked.push('taskMeta ' + id); throw new Error('Node has been deleted'); },
+      openCanvas: async (id) => { asked.push('canvas ' + id); },
+      splitWindow: async (where) => { asked.push('split ' + where); },
     };
     const showError = (e) => errors.push(String((e && e.message) || e));
+    const run = (fn) => fn();
+    const inOtherPane = () => false, placeKey = (id) => id;
     const render = () => { renders++; }, renderSoon = () => { renders++; }, patchMeta = () => {}, renderPalette = () => {};
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {}, recordRecent = () => {};
     const LINKS = false; // a page of its own, not the Graph pane (renderer/state.js)
@@ -8360,13 +8364,16 @@ async function runDeletedNodeCheck() {
     const atHome = () => false, goHome = () => { view = 'home'; };
     const setTimeout = () => 0;
     ${sourceBetween('const isRealId = (id)', '// ---- Home ----')}
+    ${sourceLine('const opensCanvas =')}
     ${functionSource('openDoc')}
+    ${functionSource('openElsewhere')}
     ${functionSource('goTo')}
     ${functionSource('loadTaskMeta')}
     ${sourceBetween('const navBack = [], navForward = []', '// The same two moves as a pair of buttons')}
     ({
       state: () => ({ zoom: zoom && zoom.docId, view, errors: [...errors], asked: [...asked], gone: [...deletedIds] }),
       openDoc: (id) => openDoc(id),
+      elsewhere: (where, id) => openElsewhere(where, id),
       goTo: (uri) => goTo(uri),
       meta: (id) => loadTaskMeta(id),
       note: (id, message) => noteGone(id, new Error(message)),
@@ -8397,6 +8404,25 @@ async function runDeletedNodeCheck() {
   api.clear();
   await api.goTo(live);
   assert.equal(api.state().zoom, live, 'a node that is still there opens as it always did');
+  // A canvas never opens as a page here: it goes to a window of its own, drawn by Tana (main.js canvas:open, #611).
+  api.clear();
+  const canvas = 'tana:canvas:01canvasnode00000000000000';
+  await api.goTo(canvas);
+  assert.equal(api.state().zoom, live, 'a canvas leaves the page where it was');
+  assert.deepEqual(plain(api.state().asked), ['node ' + canvas, 'canvas ' + canvas], 'and asks main for its window');
+  api.clear();
+  await api.elsewhere('right', canvas);
+  assert.deepEqual(plain(api.state().asked), ['canvas ' + canvas], 'and so does ⌘/⇧/⌥ on it: no pane of its own');
+  // A click on a canvas row's title opens it, as a type row's does, unless that title can be typed in.
+  const clickOpens = vm.runInNewContext(`
+    const tableRow = () => false, zoomable = () => true;
+    const canEditText = (item) => !!item.node.renamable;
+    ${sourceLine('const opensOnClick =')}
+    opensOnClick;
+  `);
+  assert.equal(clickOpens({ docId: canvas, node: { id: canvas } }), true, 'a canvas title opens its window on a click');
+  assert.equal(clickOpens({ docId: canvas, node: { id: canvas, renamable: true } }), false, 'one whose title can be typed in takes the caret instead');
+  assert.equal(clickOpens({ docId: live, node: { id: live } }), false, 'and a document still takes the caret');
 
   // 3. The Back stack walks past the pages that have gone since.
   api.clear();

@@ -420,6 +420,13 @@ Cmd+K leads with a Selection group for it (§8).
 - **A meeting opens at its write-up.** An event has no content of its own, so zooming one forwards to the document it
   owns whose title is the event's tagline (`api.summaryUri`, `writeUpOf` in sdk/events.js), from every route; the write-up is
   never repeated in the sidebar ([MEETINGS.md](MEETINGS.md)).
+- **A canvas opens in a window of its own** (issue #611). A canvas is a tldraw board with no outline, and tldraw needs a
+  licence Orbital does not have, so `openDoc` and `zoomTo` hand a `tana:canvas:` id to main (`api.openCanvas`,
+  main.js `canvas:open`): a window on Tana's own page for it (`doc:link`), in the `persist:tana` session, with
+  everything but tldraw's `.tl-container` hidden once the board is there. The page that asked stays where it was; the
+  same canvas again brings its window forward. ⌘/⇧/⌥ on a canvas (`openElsewhere`) opens that window too rather than a
+  pane, and signing out closes every canvas window. A canvas row's title cannot be typed in, so a click on it (or Enter)
+  opens the window as a type row's does (`opensOnClick`), in a list, the Library and search alike.
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
   to does nothing: Home is the whole window, which one pane's Back does not replace (issue #444).
   When the page on screen is deleted or archived (here, in another pane or in Tana), the pane goes back to the page

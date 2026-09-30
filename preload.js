@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('api', {
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
+  openCanvas: (docId) => ipcRenderer.invoke('canvas:open', docId), // a canvas in a window of its own, drawn by Tana's page (main.js, #611)
   notifyState: (docId) => ipcRenderer.invoke('notify:state', docId), // { on, default, explicit }: is this node watched for changes
   setNotify: (docId, on) => ipcRenderer.invoke('notify:set', docId, on), // true/false to choose; null forgets the choice
   // Tana's notifications inbox (main/inbox.js). Its rows are children('orbital:notifications'); each write resolves to

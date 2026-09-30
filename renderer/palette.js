@@ -1154,6 +1154,7 @@ const shellRun = (command) => { if (window.frameElement) window.parent.postMessa
 // A ⌘- or ⇧-click on a row's line still selects: only its bullet, a chat's links and cards reach here with those.
 const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'tab' : e.shiftKey ? 'right' : e.altKey ? 'float' : null);
 async function openElsewhere(where, docId, nodeId = null) {
+  if (opensCanvas(docId)) return; // ⌘/⇧/⌥ on a canvas: its own window, as a plain click (renderer/edit.js, #611)
   if (inOtherPane(placeKey(docId, nodeId))) return; // already on screen in another pane: that pane takes the keys (#533)
   const d = docOf(docId) || {};
   await tana.splitWindow(where, { view, place: JSON.stringify({ docId, nodeId, title: d.text ?? d.title, icon: d.icon }) });

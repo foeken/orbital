@@ -244,6 +244,7 @@ async function inheritCheckbox(parent, nodeId) {
   await reload(parent.docId);
 }
 function zoomTo(item) {
+  if (opensCanvas(item.docId)) return;
   if (inOtherPane(placeKey(item.docId, item.node.kind === 'document' ? null : item.node.id))) return;
   flushAll(); dropDrafts(); caretOnOpen = true;
   if (item.node.kind === 'document') recordRecent(item.node);
@@ -308,6 +309,7 @@ function openDoc(docId, from) {
   // mention, a notification, a meeting's write-up redirect — so this is where a deleted node is refused. Opening one
   // put an empty page on screen whose every read came back "Node has been deleted", once per metadata retry.
   if (isGone(docId)) return showError(new Error('That node has been deleted'));
+  if (opensCanvas(docId)) return;
   if (inOtherPane(placeKey(docId))) return;
   flushAll(); dropDrafts(); caretOnOpen = true;
   const s = from ? null : sectionOf(docId);
@@ -317,6 +319,8 @@ function openDoc(docId, from) {
   turnPage('in', () => { zoom = { docId, nodeId: null, from }; render(true); });
   followSummary(docId);
 }
+// A canvas has no outline and Orbital cannot draw one: it opens in a window of its own, on Tana's page (main.js canvas:open, #611).
+const opensCanvas = (docId) => /^tana:canvas:/.test(String(docId)) && !!tana.openCanvas && (run(() => tana.openCanvas(docId)), true);
 // An event has no content of its own, so a meeting opens at its write-up. Every zoom passes through here, so the
 // redirect behaves the same from a list row, search, the rail, a pin, a breadcrumb or a link.
 function followSummary(docId) {
