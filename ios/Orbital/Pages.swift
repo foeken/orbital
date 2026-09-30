@@ -66,7 +66,7 @@ struct NodeScreen: View {
                 case "chat":
                     ChatView(rows: page.rows)
                         // sent is sent: the read after it is the next poll's job, so a failed read never offers to send it twice
-                        .safeAreaInset(edge: .bottom) { Composer(prompt: "Follow up") { try await engine.send($0, to: id); await load() } }
+                        .safeAreaInset(edge: .bottom) { Composer(prompt: "Follow up") { let sent = try await engine.send($0, to: id); await load(); return sent.warning } }
                 case "search", "event":
                     List(page.rows) { ListRow(row: $0, engine: engine) }
                         .listStyle(.plain)

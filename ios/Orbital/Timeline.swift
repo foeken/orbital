@@ -106,7 +106,8 @@ struct TimelineScreen: View {
                 Heading(title: title)
                 ForEach(rows) { Entry(row: $0, engine: engine) }
             }
-            if !days.isEmpty {
+            // always, as the desktop has it: a quiet three days must not hide the days before them
+            if !engine.rows.isEmpty {
                 Button { Task { await engine.more() } } label: {
                     Text(engine.loading ? "Loading…" : "Show three more days").frame(maxWidth: .infinity)
                 }

@@ -1,3 +1,4 @@
+import Security
 import SwiftUI
 import WebKit
 
@@ -200,15 +201,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         return page
     }
 
-    // Ask Tana (orbital.ask): a new chat with what you typed as its first message; answers the chat's id
-    func ask(_ text: String) async throws -> String {
-        if Self.isSample { return "tana:chat:000000000000000000000000c1" }
-        return try await call("return JSON.stringify(await orbital.ask(text))", ["text": text])
+    // A message written into a chat: which chat, and a warning when Tana did not take it up (it is sent all the same)
+    struct Sent: Decodable { let id: String; let warning: String? }
+    // Ask Tana (orbital.ask): a new chat with what you typed as its first message
+    func ask(_ text: String) async throws -> Sent {
+        if Self.isSample { return Sent(id: "tana:chat:000000000000000000000000c1", warning: nil) }
+        return try await call("return await orbital.ask(text)", ["text": text])
     }
     // a follow-up in a chat (orbital.send)
-    func send(_ text: String, to id: String) async throws {
-        if Self.isSample { return }
-        let _: String = try await call("return JSON.stringify(await orbital.send(id, text))", ["id": id, "text": text])
+    func send(_ text: String, to id: String) async throws -> Sent {
+        if Self.isSample { return Sent(id: id, warning: nil) }
+        return try await call("return await orbital.send(id, text)", ["id": id, "text": text])
     }
 
     struct Failure: LocalizedError { let errorDescription: String? }

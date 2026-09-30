@@ -43,7 +43,7 @@ struct Shell: View {
                         Button { show(true) } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Menu")
                     }
                 }
-                .safeAreaInset(edge: .bottom) { Composer { path.append(try await engine.ask($0)) } } // a new chat, opened as it starts
+                .safeAreaInset(edge: .bottom) { Composer { let sent = try await engine.ask($0); path.append(sent.id); return sent.warning } } // a new chat, opened as it starts
             }
             .accessibilityHidden(menu) // with the menu open, VoiceOver reads the menu, not the page pushed aside
             // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
@@ -185,10 +185,11 @@ struct SideMenu: View {
 }
 
 // The composer, as the Codex app has it: what you type goes to Tana, as a new chat from the page (Shell) or a follow-up
-// in a chat (ChatView). The words go the moment it is sent, and come back with the reason if Tana refuses them.
+// in a chat (ChatView). The words go the moment it is sent, and come back with the reason if Tana refuses them; a
+// message sent that Tana did not answer stays sent, with the warning send hands back shown under the box.
 struct Composer: View {
     var prompt = "Ask Tana"
-    let send: (String) async throws -> Void
+    let send: (String) async throws -> String?
     @State private var text = CommandLine.arguments.contains("-typing") ? "Can you move the offsite to Thursday?" : "" // -typing: the open card, for design shots
     @State private var failure: String?
     @State private var sending = false
@@ -216,7 +217,7 @@ struct Composer: View {
                         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
                         text = ""; focused = false; sending = true
                         Task {
-                            do { try await send(words); withAnimation { failure = nil } }
+                            do { let warning = try await send(words); withAnimation { failure = warning } }
                             catch { text = words; withAnimation { failure = error.localizedDescription } }
                             sending = false
                         }
