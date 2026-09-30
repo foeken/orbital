@@ -1,6 +1,7 @@
 import SwiftUI
 
-// One row of the Timeline page as main/timeline.js pageOf builds it for the desktop renderer; only what this draws.
+// One row as the desktop renderer gets it: of the Timeline (main/timeline.js), Notifications (main/inbox.js), a list or
+// saved search (ios/engine/index.js listRow), an outline (sdk/content.js) or a chat (sdk/chat.js); only what this draws.
 struct Row: Decodable, Identifiable {
     let id: String
     let text: String?
@@ -17,9 +18,21 @@ struct Row: Decodable, Identifiable {
     let people: [Person]?
     let children: [Row]?
     let timeline: Info?
+    let notification: Note?
+    let reference: Ref?
+    let heading: Int?
+    let block: String?
+    let type: String?
+    let meta: String?
+    let note: Bool?
+    let pinned: Bool?
+    let chat: Chat?
 
-    struct Segment: Decodable { let text: String; let marks: Marks? }
-    struct Marks: Decodable { let bold: Bool?; let strike: Bool? }
+    struct Segment: Decodable { let text: String?; let marks: Marks?; let mention: Ref? }
+    struct Marks: Decodable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
+    struct Ref: Decodable { let uri: String; let label: String? }
+    struct Note: Decodable { let sourceUri: String? }
+    struct Chat: Decodable { let mine: Bool?; let status: Bool? }
     struct Person: Decodable { let name: String }
     struct Free: Decodable { let from: Double; let until: Double }
     struct Info: Decodable {
@@ -38,17 +51,28 @@ struct Row: Decodable, Identifiable {
     static func parse(_ s: String) -> Date? {
         (try? Date(s, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true))) ?? (try? Date(s, strategy: .iso8601))
     }
-    var words: String { title ?? text ?? "" }
+    var words: String { [title, text, reference?.label].compactMap { $0 }.first { !$0.isEmpty } ?? "" }
     var tone: String? { timeline?.tone }
+    // the node a tap on this row zooms into: what it refers to, what the notification is about, or the row itself when
+    // it is a node (an outline block's own id is not)
+    var target: String? { reference?.uri ?? notification?.sourceUri ?? (id.hasPrefix("tana:") ? id : nil) }
 
+    // The words with their marks. A mention and a link to a node are links to orbital:<id>, which the shell zooms into
+    // (Shell.zoom); any other link opens as it would anywhere.
     var styled: AttributedString {
-        (segments ?? [Segment(text: words, marks: nil)]).reduce(into: AttributedString()) { out, s in
-            var a = AttributedString(s.text)
+        let list = segments.flatMap { $0.isEmpty ? nil : $0 } ?? [Segment(text: words, marks: nil, mention: nil)]
+        return list.reduce(into: AttributedString()) { out, s in
+            var a = AttributedString(s.text ?? s.mention?.label ?? "")
+            if let m = s.mention { a.link = Self.zoom(m.uri) }
             if s.marks?.bold == true { a.inlinePresentationIntent = .stronglyEmphasized }
+            if s.marks?.italic == true { a.inlinePresentationIntent = (a.inlinePresentationIntent ?? []).union(.emphasized) }
+            if s.marks?.code == true { a.inlinePresentationIntent = (a.inlinePresentationIntent ?? []).union(.code) }
             if s.marks?.strike == true { a.strikethroughStyle = .single; a.foregroundColor = .secondary }
+            if let href = s.marks?.link { a.link = href.hasPrefix("tana:") ? Self.zoom(href) : URL(string: href) }
             out += a
         }
     }
+    static func zoom(_ id: String) -> URL? { URL(string: "orbital:" + id) }
 }
 
 // The Timeline as the desktop draws it (styles.css .node.tl): the time on the left, a marker on a thin rail that runs
@@ -128,7 +152,7 @@ struct TimelineScreen: View {
     }
 
     private func open(_ id: String) {
-        Task { if let url = await engine.link(id) { openURL(url) } }
+        if let url = Row.zoom(id) { openURL(url) }
     }
 }
 
@@ -404,4 +428,6 @@ struct Marker: View {
         }
     }
 }
+
+
 

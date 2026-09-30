@@ -5,9 +5,32 @@ import SwiftUI
 // a new Codex thread (#665). The bars are the system's, so they are Liquid Glass with nothing of ours drawn over them.
 struct Shell: View {
     let engine: Engine
-    enum Page: String { case timeline = "Timeline", searches = "Searches" }
+    // The menu's pages, and a saved search pinned to your sidebar (its id and title), which the menu lists under them
+    enum Page: Hashable {
+        case timeline, notifications, chats, searches, search(String, String)
+        var title: String {
+            switch self {
+            case .timeline: "Timeline"
+            case .notifications: "Notifications"
+            case .chats: "Chats"
+            case .searches: "Searches"
+            case .search(_, let title): title
+            }
+        }
+        var glyph: String {
+            switch self {
+            case .timeline: "timelineMenu"
+            case .notifications: "notifyMenu"
+            case .chats: "discussMenu"
+            case .searches: "libraryMenu"
+            case .search: "searchMenu"
+            }
+        }
+    }
 
     @State private var page = Page.timeline
+    @State private var path: [String] = [] // the nodes zoomed into from the page, as a push each
+    @State private var pinned: [Page] = []
     @State private var menu = false
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
     @State private var searching = false
@@ -18,18 +41,21 @@ struct Shell: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            SideMenu(page: $page, close: { show(false) }, search: { show(false); searching = true }, settings: { settings = true })
+            SideMenu(page: $page, pinned: pinned, close: { path = []; show(false) }, search: { show(false); searching = true }, settings: { settings = true })
                 .frame(width: width)
                 .accessibilityHidden(!menu)
-            NavigationStack {
+            NavigationStack(path: $path) {
                 Group {
                     switch page {
                     case .timeline: TimelineScreen(engine: engine)
-                    case .searches:
-                        ContentUnavailableView("Saved searches", image: "Glyphs/library", description: Text("The searches you pin in Orbital will be here."))
+                    case .notifications: ListScreen(engine: engine, name: "notifications")
+                    case .chats: ListScreen(engine: engine, name: "chats")
+                    case .searches: ListScreen(engine: engine, name: "searches")
+                    case .search(let id, _): NodeScreen(engine: engine, id: id, titled: false).id(id)
                     }
                 }
-                .navigationTitle(page.rawValue)
+                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0) }
+                .navigationTitle(page.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -63,15 +89,26 @@ struct Shell: View {
             .offset(x: min(width, max(0, (menu ? width : 0) + drag)))
         }
         .background(Color(.systemBackground))
+        // A mention, a reference or a row anywhere zooms into its node: an orbital:<id> link (Row.zoom) is pushed here
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "orbital" else { return .systemAction }
+            searching = false
+            path.append(String(url.absoluteString.dropFirst("orbital:".count)))
+            return .handled
+        })
+        .task(id: engine.phase) {
+            guard engine.phase == .ready, let searches = try? await engine.list("searches") else { return }
+            pinned = searches.filter { $0.pinned == true }.map { .search($0.id, $0.words) }
+        }
         // A sideways swipe anywhere, the menu included: the page follows the finger and settles open or shut, as the
         // ChatGPT app's does. Only a swipe that is more sideways than up or down counts, so the Timeline still scrolls.
         .simultaneousGesture(DragGesture(minimumDistance: 20)
             .onChanged { g in
-                guard abs(g.translation.width) > abs(g.translation.height) else { return }
+                guard path.isEmpty, abs(g.translation.width) > abs(g.translation.height) else { return }
                 drag = g.translation.width
             }
             .onEnded { g in
-                let moved = abs(g.translation.width) > abs(g.translation.height) ? g.predictedEndTranslation.width : 0
+                let moved = path.isEmpty && abs(g.translation.width) > abs(g.translation.height) ? g.predictedEndTranslation.width : 0
                 withAnimation(reduceMotion ? nil : Self.move) {
                     if moved > width / 3 { menu = true } else if moved < -width / 3 { menu = false }
                     drag = 0
@@ -79,8 +116,12 @@ struct Shell: View {
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
         .task {
+            // -page notifications|chats|searches and -zoom <id>: a page or a node open at launch, for design shots
+            let args = CommandLine.arguments, after = { (flag: String) in args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
+            if let name = after("-page") { page = ["notifications": .notifications, "chats": .chats, "searches": .searches][name] ?? .timeline }
+            if let id = after("-zoom") { path = [id] }
             // -menudemo: open the menu and close it again, for filming the move
-            guard CommandLine.arguments.contains("-menudemo") else { return }
+            guard args.contains("-menudemo") else { return }
             try? await Task.sleep(for: .seconds(2)); show(true)
             try? await Task.sleep(for: .seconds(2)); show(false)
         }
@@ -98,6 +139,7 @@ struct Shell: View {
 // The side menu: the app's name with search beside it, its pages, and settings at the foot
 struct SideMenu: View {
     @Binding var page: Shell.Page
+    let pinned: [Shell.Page]
     let close: () -> Void
     let search: () -> Void
     let settings: () -> Void
@@ -112,20 +154,11 @@ struct SideMenu: View {
             }
             .padding(.leading, 14)
             .padding(.bottom, 12)
-            ForEach([Shell.Page.timeline, .searches], id: \.self) { item in
-                Button { page = item; close() } label: {
-                    HStack(spacing: 14) {
-                        Image(item == .timeline ? "Glyphs/timelineMenu" : "Glyphs/libraryMenu").resizable().frame(width: 22, height: 22)
-                        Text(item.rawValue).fontWeight(.medium)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(page == item ? AnyShapeStyle(.fill.secondary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(page == item ? .isSelected : [])
+            ForEach([Shell.Page.timeline, .notifications, .chats, .searches], id: \.self) { item($0) }
+            // the saved searches pinned to your sidebar, as the ChatGPT app lists recent chats under its pages
+            if !pinned.isEmpty {
+                Divider().padding(.horizontal, 14).padding(.vertical, 12)
+                ScrollView { VStack(spacing: 4) { ForEach(pinned, id: \.self) { item($0) } } }.scrollBounceBehavior(.basedOnSize)
             }
             Spacer()
             HStack {
@@ -136,6 +169,22 @@ struct SideMenu: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private func item(_ item: Shell.Page) -> some View {
+                Button { page = item; close() } label: {
+                    HStack(spacing: 14) {
+                        Image("Glyphs/" + item.glyph).resizable().frame(width: 22, height: 22)
+                        Text(item.title).fontWeight(.medium).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(page == item ? AnyShapeStyle(.fill.secondary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(page == item ? .isSelected : [])
     }
 }
 
@@ -188,11 +237,11 @@ struct Composer: View {
     }
 }
 
-// Search over Tana from the top bar or the menu: Tana's own text search, newest change first; a result opens in Tana
+// Search over Tana from the top bar or the menu: Tana's own text search, newest change first; a result zooms into it
 struct SearchSheet: View {
     let engine: Engine
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
+    @Environment(\.openURL) private var openURL // the shell's: a result zooms into its node, and the sheet goes
     @State private var text = ""
     @State private var found: [Engine.Found] = []
     @State private var asked = ""
@@ -200,7 +249,7 @@ struct SearchSheet: View {
     var body: some View {
         NavigationStack {
             List(found) { item in
-                Button { Task { if let url = await engine.link(item.id) { openURL(url) } } } label: {
+                Button { if let url = Row.zoom(item.id) { openURL(url) } } label: {
                     HStack(spacing: 12) {
                         Image("Glyphs/" + Self.glyph(item)).resizable().frame(width: 20, height: 20).foregroundStyle(.secondary)
                         Text(item.title).foregroundStyle(.primary).lineLimit(2)
@@ -223,14 +272,8 @@ struct SearchSheet: View {
     }
 
     // the desktop's glyph for a kind (main/rows.js): a task by its state, a meeting by its calendar
-    static func glyph(_ item: Engine.Found) -> String {
-        switch item.kind {
-        case "event": "calendar"
-        case "space": "space"
-        case "user-profile": "member"
-        case "chat": "discuss"
-        default: item.state != nil ? "task" : "doc"
-        }
-    }
+    static func glyph(_ item: Engine.Found) -> String { item.kind == "text" && item.state != nil ? "task" : Glyph.of(item.kind) }
 }
+
+
 

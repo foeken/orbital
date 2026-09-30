@@ -5,10 +5,15 @@
 // ./stand-ins.js, chosen at bundle time (build.js).
 // An ES module so the bundle runs it (Bun leaves a CommonJS entry of an iife bundle wrapped and never called).
 import { createTanaClient } from '../../sdk';
-import { STATE_TYPES, editable, readNode, setState } from '../../sdk/node';
-import { S } from '../../main/state';
+import { STATE_TYPES, editable, readNode, readSearch, rowLimit, setState } from '../../sdk/node';
+import { readOutline } from '../../sdk/content';
+import { chatRows } from '../../sdk/chat';
+import { listSidebar } from '../../sdk/pins';
+import { completedInWindow, searchQueryParams } from '../../sdk/query';
+import { S, isSpace, iso } from '../../main/state';
 import timeline from '../../main/timeline';
-import { issues } from './stand-ins';
+import notifications from '../../main/inbox';
+import { issues, members, within } from './stand-ins';
 import loro from 'loro-crdt/package.json';
 
 const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; } };
@@ -43,6 +48,31 @@ function storageId() {
   let id = localStorage.getItem('orbital:storageId');
   if (!id) localStorage.setItem('orbital:storageId', id = crypto.randomUUID());
   return id;
+}
+
+// A graph node as a list row (ios/Orbital/Timeline.swift Row): its words, its kind for the glyph, its state for a box
+const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
+const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
+// A reference with no label of its own is named by the graph, as main/documents.js resolveReferences does
+async function titled(rows) {
+  const refs = [], walk = (list) => list.forEach((r) => { if (r.reference && !r.reference.label) refs.push(r); walk(r.children || []); });
+  walk(rows);
+  const ids = [...new Set(refs.map((r) => r.reference.uri))];
+  if (!ids.length) return rows;
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: ids, limit: ids.length }).catch(() => ({}));
+  const names = new Map(nodes.map((n) => [n.id, n.title]));
+  for (const r of refs) r.reference.label = names.get(r.reference.uri) || 'Unavailable reference';
+  return rows;
+}
+// A saved search's rows: its stored query asked as main/related.js searchRows asks it
+// ponytail: view.audience 'everyone' is not narrowed here (main/related.js everyoneOnly); add it if a search uses it.
+async function searchRows(doc) {
+  const { query, view } = readSearch(doc);
+  if (!query || !Object.keys(query).length) throw new Error('This saved search has no readable query');
+  const scoped = (query.ownerUris || []).some((u) => typeof u === 'string' && isSpace(u));
+  const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
+  const { nodes = [] } = await S.client.graph.listNodes(searchQueryParams(query, S.me.userUri, rowLimit(view.limit), undefined, spaces));
+  return nodes.filter((n) => completedInWindow(n, view.completedWithin)).map(listRow);
 }
 
 window.orbital = {
@@ -84,6 +114,32 @@ window.orbital = {
     const { nodes = [] } = await S.client.graph.listNodes({ textQuery: text, limit: 40, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
     return JSON.stringify(nodes.map((n) => ({ id: n.id, title: n.title || 'Untitled', kind: n.id.split(':')[1], state: (n.state && n.state.type) || null })));
   },
+  // Zooming into a node: what it holds, as the desktop's page for it shows. A chat is its conversation (sdk/chat.js,
+  // docs/CHATS.md), a saved search its results, a meeting the documents it owns (its write-up, its outcomes), anything
+  // else its outline (sdk/content.js).
+  async open(id) {
+    const kind = id.split(':')[1], doc = await within('opening ' + id, S.client.sync.subscribe(id)), n = readNode(doc);
+    let rows;
+    if (kind === 'chat') {
+      const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), messages = doc.data.get('messages');
+      rows = chatRows(messages ? messages.toJSON() : [], { authorName: (uri) => names.get(uri), me: S.me.userUri });
+    } else if (kind === 'search') rows = await searchRows(doc);
+    else if (kind === 'event') rows = (await S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest })).nodes.map(listRow);
+    else rows = readOutline(doc);
+    return JSON.stringify({ id, title: n.title || 'Untitled', kind, rows: await titled(rows) });
+  },
+  // The Notifications page's rows, as the desktop's (main/inbox.js)
+  notifications: async () => JSON.stringify(await within('notifications', notifications.rows())),
+  // Your chats with Tana, newest first: those with no owner, as the desktop's chat list starts
+  chats: async () => JSON.stringify((await S.client.graph.listNodes({ nodeTypes: ['chat'], limit: 60, sortOptions: newest })).nodes.map(listRow)),
+  // Every saved search you can see, the ones pinned to your sidebar first in their order there (pinned: true)
+  async searches() {
+    const [pinned, { nodes = [] }] = await Promise.all([within('sidebar pins', listSidebar(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 200, sortOptions: newest })]);
+    const at = (n) => (pinned.includes(n.id) ? pinned.indexOf(n.id) : 1e6);
+    return JSON.stringify(nodes.sort((a, b) => at(a) - at(b)).map((n) => ({ ...listRow(n), pinned: pinned.includes(n.id) })));
+  },
   issues: () => issues.splice(0), // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 window.webkit?.messageHandlers?.orbital?.postMessage('ready');
+
+

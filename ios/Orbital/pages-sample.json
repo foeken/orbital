@@ -1,0 +1,422 @@
+{
+ "notifications": [
+  {
+   "id": "n1",
+   "segments": [
+    {
+     "text": "Priya Shah",
+     "marks": {
+      "bold": true
+     }
+    },
+    {
+     "text": " assigned you "
+    },
+    {
+     "text": "Draft the Q4 hiring plan",
+     "marks": {
+      "bold": true
+     }
+    }
+   ],
+   "unread": true,
+   "createdAt": "2026-09-30T12:40:00Z",
+   "notification": {
+    "sourceUri": "tana:text:0000000000000000000000000a"
+   }
+  },
+  {
+   "id": "n2",
+   "segments": [
+    {
+     "text": "Sam Lee",
+     "marks": {
+      "bold": true
+     }
+    },
+    {
+     "text": " mentioned you in "
+    },
+    {
+     "text": "Offsite planning",
+     "marks": {
+      "bold": true
+     }
+    },
+    {
+     "text": ". Can you check the venue list?"
+    }
+   ],
+   "unread": true,
+   "createdAt": "2026-09-30T10:05:00Z",
+   "notification": {
+    "sourceUri": "tana:text:00000000000000000000000d01"
+   }
+  },
+  {
+   "id": "n3",
+   "segments": [
+    {
+     "text": "Jordan Park",
+     "marks": {
+      "bold": true
+     }
+    },
+    {
+     "text": " completed "
+    },
+    {
+     "text": "Send the offsite agenda",
+     "marks": {
+      "bold": true
+     }
+    }
+   ],
+   "unread": false,
+   "createdAt": "2026-09-29T16:20:00Z",
+   "notification": {
+    "sourceUri": "tana:text:0000000000000000000000000b"
+   }
+  },
+  {
+   "id": "n4",
+   "segments": [
+    {
+     "text": "Alex Kim",
+     "marks": {
+      "bold": true
+     }
+    },
+    {
+     "text": " shared "
+    },
+    {
+     "text": "Design review",
+     "marks": {
+      "bold": true
+     }
+    },
+    {
+     "text": " with you"
+    }
+   ],
+   "unread": false,
+   "createdAt": "2026-09-28T09:00:00Z",
+   "notification": {
+    "sourceUri": "tana:event:0000000000000000000000000d"
+   }
+  }
+ ],
+ "chats": [
+  {
+   "id": "tana:chat:000000000000000000000000c1",
+   "title": "Summarise this week’s meetings",
+   "icon": "chat",
+   "createdAt": "2026-09-30T11:10:00Z"
+  },
+  {
+   "id": "tana:chat:000000000000000000000000c2",
+   "title": "Draft the offsite invite",
+   "icon": "chat",
+   "createdAt": "2026-09-29T15:30:00Z"
+  },
+  {
+   "id": "tana:chat:000000000000000000000000c3",
+   "title": "Which tasks are overdue?",
+   "icon": "chat",
+   "createdAt": "2026-09-26T08:45:00Z"
+  }
+ ],
+ "searches": [
+  {
+   "id": "tana:search:0000000000000000000000000s1",
+   "title": "My open tasks",
+   "icon": "search",
+   "pinned": true,
+   "createdAt": "2026-09-30T08:00:00Z"
+  },
+  {
+   "id": "tana:search:0000000000000000000000000s2",
+   "title": "Hiring",
+   "icon": "search",
+   "pinned": true,
+   "createdAt": "2026-09-25T08:00:00Z"
+  },
+  {
+   "id": "tana:search:0000000000000000000000000s3",
+   "title": "Meetings this week",
+   "icon": "search",
+   "createdAt": "2026-09-20T08:00:00Z"
+  }
+ ],
+ "pages": {
+  "tana:text:00000000000000000000000d01": {
+   "id": "tana:text:00000000000000000000000d01",
+   "title": "Offsite planning",
+   "kind": "text",
+   "rows": [
+    {
+     "id": "b1",
+     "heading": 2,
+     "segments": [
+      {
+       "text": "Goals"
+      }
+     ]
+    },
+    {
+     "id": "b2",
+     "segments": [
+      {
+       "text": "Agree the "
+      },
+      {
+       "text": "Q4 priorities",
+       "marks": {
+        "bold": true
+       }
+      },
+      {
+       "text": " as one team"
+      }
+     ],
+     "children": [
+      {
+       "id": "b3",
+       "segments": [
+        {
+         "text": "Each lead brings three"
+        }
+       ]
+      },
+      {
+       "id": "b4",
+       "segments": [
+        {
+         "text": "Owner: "
+        },
+        {
+         "mention": {
+          "label": "Priya Shah",
+          "uri": "tana:user-profile:000000000000000000000000p1"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "b5",
+     "segments": [
+      {
+       "text": "Leave room for a long walk"
+      }
+     ]
+    },
+    {
+     "id": "b6",
+     "heading": 2,
+     "segments": [
+      {
+       "text": "Venues"
+      }
+     ]
+    },
+    {
+     "id": "b7",
+     "segments": [
+      {
+       "text": "@Sam Lee can you check the venue list?"
+      }
+     ]
+    },
+    {
+     "id": "b8",
+     "type": "reference",
+     "segments": [],
+     "reference": {
+      "uri": "tana:text:0000000000000000000000000b",
+      "label": "Send the offsite agenda"
+     }
+    }
+   ]
+  },
+  "tana:chat:000000000000000000000000c1": {
+   "id": "tana:chat:000000000000000000000000c1",
+   "title": "Summarise this week’s meetings",
+   "kind": "chat",
+   "rows": [
+    {
+     "id": "m0",
+     "text": "You",
+     "chat": {
+      "mine": true
+     },
+     "children": [
+      {
+       "id": "m0.b0",
+       "block": "paragraph",
+       "segments": [
+        {
+         "text": "Summarise this week’s meetings for me, and list what I promised."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "m1",
+     "text": "Tana AI",
+     "meta": "11:10",
+     "chat": {},
+     "children": [
+      {
+       "id": "m1.t",
+       "note": true,
+       "text": "Thought for 6 seconds"
+      },
+      {
+       "id": "m1.b0",
+       "block": "paragraph",
+       "segments": [
+        {
+         "text": "You had "
+        },
+        {
+         "text": "four meetings",
+         "marks": {
+          "bold": true
+         }
+        },
+        {
+         "text": " this week. The main threads:"
+        }
+       ]
+      },
+      {
+       "id": "m1.b1",
+       "block": "bullet",
+       "segments": [
+        {
+         "text": "The offsite moves to Thursday; "
+        },
+        {
+         "text": "Priya Shah",
+         "marks": {
+          "link": "tana:user-profile:000000000000000000000000p1"
+         }
+        },
+        {
+         "text": " books the venue."
+        }
+       ]
+      },
+      {
+       "id": "m1.b2",
+       "block": "bullet",
+       "segments": [
+        {
+         "text": "Hiring: two roles open, the plan is due Friday."
+        }
+       ]
+      },
+      {
+       "id": "m1.b3",
+       "block": "paragraph",
+       "segments": [
+        {
+         "text": "You promised to draft the hiring plan."
+        }
+       ]
+      },
+      {
+       "id": "m1.a0",
+       "type": "reference",
+       "segments": [],
+       "reference": {
+        "uri": "tana:text:0000000000000000000000000a",
+        "label": "Draft the Q4 hiring plan"
+       }
+      }
+     ]
+    },
+    {
+     "id": "m2",
+     "text": "You",
+     "chat": {
+      "mine": true
+     },
+     "children": [
+      {
+       "id": "m2.b0",
+       "block": "paragraph",
+       "segments": [
+        {
+         "text": "Thanks! Put the plan on today."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "m3",
+     "text": "Tana AI",
+     "meta": "11:12",
+     "chat": {},
+     "children": [
+      {
+       "id": "m3.b0",
+       "block": "paragraph",
+       "segments": [
+        {
+         "text": "Done, it is pinned to today."
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "tana:search:0000000000000000000000000s1": {
+   "id": "tana:search:0000000000000000000000000s1",
+   "title": "My open tasks",
+   "kind": "search",
+   "rows": [
+    {
+     "id": "tana:text:0000000000000000000000000a",
+     "title": "Draft the Q4 hiring plan",
+     "icon": "text",
+     "stateType": "open",
+     "createdAt": "2026-09-30T12:40:00Z"
+    },
+    {
+     "id": "tana:text:0000000000000000000000000e",
+     "title": "Book the offsite venue",
+     "icon": "text",
+     "stateType": "proposed",
+     "createdAt": "2026-09-30T09:40:00Z"
+    },
+    {
+     "id": "tana:text:0000000000000000000000000f",
+     "title": "Reply to the design crit",
+     "icon": "text",
+     "stateType": "open",
+     "createdAt": "2026-09-28T14:00:00Z"
+    }
+   ]
+  },
+  "tana:event:0000000000000000000000000d": {
+   "id": "tana:event:0000000000000000000000000d",
+   "title": "Design review",
+   "kind": "event",
+   "rows": [
+    {
+     "id": "tana:text:00000000000000000000000d01",
+     "title": "Offsite planning",
+     "icon": "text",
+     "createdAt": "2026-09-30T10:05:00Z"
+    }
+   ]
+  }
+ }
+}

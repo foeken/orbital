@@ -177,6 +177,35 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         return (try? JSONDecoder().decode([Found].self, from: Data(json.utf8))) ?? []
     }
 
+    // Notifications, Chats and Searches (ios/engine/index.js orbital.notifications, .chats, .searches)
+    func list(_ name: String) async throws -> [Row] {
+        if let s = Self.sample { return name == "notifications" ? s.notifications : name == "chats" ? s.chats : s.searches }
+        return try await call("return await orbital[name]()", ["name": name])
+    }
+
+    // A node zoomed into (orbital.open): its title, its kind and what it holds
+    struct Page: Decodable { let id: String; let title: String; let kind: String; let rows: [Row] }
+    func open(_ id: String) async throws -> Page {
+        if let s = Self.sample { if let page = s.pages[id] { return page }; throw Failure(errorDescription: "Not in the sample") }
+        return try await call("return await orbital.open(id)", ["id": id])
+    }
+
+    struct Failure: LocalizedError { let errorDescription: String? }
+    private func call<T: Decodable>(_ js: String, _ arguments: [String: Any]) async throws -> T {
+        do {
+            let json = try await web.callAsyncJavaScript(js, arguments: arguments, contentWorld: .page) as? String ?? "null"
+            return try JSONDecoder().decode(T.self, from: Data(json.utf8))
+        } catch {
+            note("\(js.split(separator: "(").first ?? "") failed: \(Self.message(error))")
+            throw Failure(errorDescription: Self.message(error))
+        }
+    }
+
+    // -sample: pages-sample.json in place of Tana for these pages, invented content only
+    private struct Sample: Decodable { let notifications: [Row]; let chats: [Row]; let searches: [Row]; let pages: [String: Page] }
+    private static let sample: Sample? = CommandLine.arguments.contains("-sample")
+        ? Bundle.main.url(forResource: "pages-sample", withExtension: "json").flatMap { try? JSONDecoder().decode(Sample.self, from: Data(contentsOf: $0)) } : nil
+
     // A task's box: drawn in its new state at once, written by engine.js (orbital.toggle, the desktop's rule), and put
     // back with the reason in Details if Tana refuses. The row stays where it is (orbital-design: never move things
     // under the user); the next read confirms it.
@@ -289,3 +318,4 @@ struct WebHost: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView { web }
     func updateUIView(_ view: WKWebView, context: Context) {}
 }
+
