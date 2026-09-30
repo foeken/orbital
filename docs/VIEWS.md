@@ -54,8 +54,14 @@ picks another grouping, sort or set of facts for it.
 
 ## 3. One query
 
-One `graph.listNodes` call per fetch, built by `viewParams(filter, meUri, limit = 1000)`:
+One `graph.listNodes` call per fetch, built by `viewParams(filter, meUri, limit)`:
 
+- `limit` is the filter's own (issue #626): one of 50, 100, 200, 500 and 1,000 (`ROW_LIMITS`, sdk/node.js), 200 when
+  it names none, chosen with the Limit pill. Tana sorts before it cuts, so the limit keeps the most recently changed
+  rows (a list of meetings: the nearest), and Sort and Group work on those. A cut answer says so under the rows
+  ("Showing the 200 most recently changed · raise Limit to see more"). A saved search stores its limit in its `view`
+  map beside the window and asks for it when it opens; a type page, whose pills keep only its fields, asks for 1,000,
+  and so do the app's own lookups through `searchPreview` (skills, chats, link targets).
 - `nodeTypes` = the selected kinds mapped (`tasks`/`docs` → `text`, `meetings` → `event`,
   `people` → `user-profile`, `spaces` → `space`, the rest are their own node type). `types: null` =
   every listable node type except `user-profile` and `space`, listed explicitly (never `nodeTypes: []`,
@@ -78,7 +84,7 @@ One `graph.listNodes` call per fetch, built by `viewParams(filter, meUri, limit 
 - `docs` selected without `tasks`: text nodes that carry a state are dropped after the query (today's rule).
 
 Accepted change: "any type" is now one query rather than one per kind, so a busy graph fills the
-first 1000 rows by recency across kinds instead of per kind. Fewer requests, same cap, and the
+first rows by recency across kinds instead of per kind, up to the limit. Fewer requests, same cap, and the
 truncation note the Library already shows still tells the user when there is more.
 
 ## 4. Rows, cache, refresh

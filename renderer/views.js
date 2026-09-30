@@ -9,6 +9,10 @@ const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Comp
 // The rule itself is sdk/query.js (the task's own state.enteredAt, applied to what the query answers); here it is
 // only the vocabulary the pill speaks.
 const COMPLETED = [[3, '3 days'], [7, '7 days'], [30, '30 days'], ['all', 'All']];
+// How many rows a view or a saved search asks for (#626), as sdk/node.js ROW_LIMITS: Tana sorts by last change before it
+// cuts, so a limit keeps the most recently changed, and Sort and Group work on those.
+const LIMITS = [50, 100, 200, 500, 1000];
+const rowLimit = (limit) => (LIMITS.includes(limit) ? limit : 200);
 const completedWindow = (f) => (COMPLETED.some(([v]) => v === (f || {}).completedWithin) ? f.completedWithin : 7);
 const showsCompleted = (f) => !!f && (!f.states || f.states.includes('closed'));
 // When meetings take place, while meetings are the only kind listed (#492): Tana's four presets, applied by sdk/query.js.

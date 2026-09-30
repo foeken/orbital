@@ -2481,11 +2481,12 @@ async function main() {
       l.getMap('query').setContainer('types', new LoroList()).push('text');
       l.getMap('query').setContainer('stateTypes', new LoroList()).push('closed');
     });
+    const asked = []; // the limit each graph read asked for
     const fresh = { id: 'tana:text:' + ulid(), title: 'Done yesterday', state: { type: 'closed', enteredAt: ago(1) } };
     const older = { id: 'tana:text:' + ulid(), title: 'Done three weeks ago', state: { type: 'closed', enteredAt: ago(21) } };
     backend.testRuntime({ me: { userUri: ME }, win: null, client: {
       sync: { subscribe: async () => searchDoc },
-      graph: { listNodes: async () => ({ nodes: [fresh, older] }) },
+      graph: { listNodes: async (p) => { asked.push(p.limit); return { nodes: [fresh, older] }; } },
     } });
     const opened = async () => (await backend.handlers.get('outline:children')(null, searchId)).map((n) => n.title);
     assert.deepEqual(await opened(), ['Done yesterday'], 'a search with no window stored opens on the same 7 days a view does');
@@ -2502,7 +2503,14 @@ async function main() {
     assert.equal(searchDoc.loro.getMap('view').toJSON().audience, 'everyone', 'Visible to everyone is kept beside the query, like the window (#253)');
     assert.equal(searchDoc.loro.getMap('query').toJSON().visibility, 'open', 'while the query says Tana\'s nearest, Open, so Tana lists the superset');
     assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.audience, 'everyone', 'and the pill reads it back');
-    console.log('ok  a saved search stores and reapplies its own completed window, beside the query rather than inside it');
+    // The Limit (#626) is kept the same way: beside the query, read back by the pills, asked for when the search opens.
+    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.limit, 200, 'a search with no limit stored reads as the default 200');
+    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 3, limit: 500 }, 'updated', 'status', ['status']);
+    assert.deepEqual([searchDoc.loro.getMap('view').toJSON().limit, searchDoc.loro.getMap('query').toJSON().limit], [500, undefined], 'saving writes the limit beside the query, not into Tana\'s vocabulary');
+    asked.length = 0; await opened();
+    assert.equal(asked.at(-1), 500, 'opening the search asks Tana for that many');
+    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.limit, 500, 'and the pill reads it back');
+    console.log('ok  a saved search stores and reapplies its own completed window and limit, beside the query rather than inside it');
   }
 
   // Visible to everyone (#253): the graph's restricted: false is Tana's "Open" (the node's own flag only), so the
@@ -4340,19 +4348,21 @@ async function main() {
     // Every preset uses the same view query (docs/VIEWS.md section 3).
     const UPD = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
     const COUNT = 'LIST_NODES_MODE_WITH_COUNT';
-    assert.deepEqual(viewParams(VIEW_PRESETS.inbox, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], stateTypes: ['proposed'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.inbox, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], stateTypes: ['proposed'], limit: 200, sortOptions: UPD, mode: COUNT });
+    // A view asks for its Limit (#626), 200 unless it names one of ROW_LIMITS; anything else is no filter at all.
+    assert.deepEqual([viewParams({ ...VIEW_PRESETS.inbox, limit: 500 }, ME).limit, validViewFilter({ limit: 1000 }), validViewFilter({ limit: 250 }), validViewFilter({ limit: '200' })], [500, true, false, false], 'a view asks for its limit, and only one of the offered ones');
     // Tasks is no longer a preset, but the query it asked for is still one a filter can name, so what that shape
     // sends the graph still matters.
-    assert.deepEqual(viewParams({ types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me' }, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'not_now'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
-    assert.deepEqual(viewParams(VIEW_PRESETS.library, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams({ types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me' }, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'not_now'], assignedTo: [ME], limit: 200, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.library, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 200, sortOptions: UPD, mode: COUNT });
     // Meetings, Chats and People are no longer presets, but they are still kinds a filter can name, so what they ask
     // the graph for still matters: a saved search aimed at them must reach it the same way those pages used to.
-    assert.deepEqual(viewParams({ types: ['chats'] }, ME), { nodeTypes: ['chat'], limit: 1000, sortOptions: UPD, mode: COUNT });
-    assert.deepEqual(viewParams({ types: ['people'] }, ME), { nodeTypes: ['user-profile'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams({ types: ['chats'] }, ME), { nodeTypes: ['chat'], limit: 200, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams({ types: ['people'] }, ME), { nodeTypes: ['user-profile'], limit: 200, sortOptions: UPD, mode: COUNT });
     const localDay = (offset) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + offset); return d; };
     const BY_START = (direction) => [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_' + direction }];
     assert.deepEqual(viewParams({ types: ['meetings'], participant: 'me', window: 'week' }, ME), {
-      nodeTypes: ['event'], limit: 1000, hasParticipantUris: [ME], eventStartTimeMin: localDay(-7).toISOString(),
+      nodeTypes: ['event'], limit: 200, hasParticipantUris: [ME], eventStartTimeMin: localDay(-7).toISOString(),
       eventStartTimeMax: localDay(7).toISOString(), sortOptions: BY_START('DESCENDING'), mode: COUNT,
     }, 'the meeting picker: a week either side of today');
     // the When pill (#492): Tana's presets, soonest first only for what is still to come
@@ -4377,7 +4387,7 @@ async function main() {
     // #139: a workspace type in the Type pill. Every kind it can be, its uri as entityTypes, and none of the Library's
     // saved task filters: a risk has no state, so "every state" would have listed none of them.
     const RISK = 'tana:type:01m1e3nthqj48b8drqb1fmma9d';
-    assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, types: [RISK], assignee: 'me' }, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], entityTypes: [RISK], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, types: [RISK], assignee: 'me' }, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], entityTypes: [RISK], limit: 200, sortOptions: UPD, mode: COUNT });
     assert.equal(validViewFilter({ types: ['tana:type:nope'] }), false, 'only a real type uri joins the kinds');
     assert.deepEqual(filterToSearchQuery({ ...VIEW_PRESETS.library, types: [RISK] }, ME), { entityTypeUris: [RISK] }, 'a saved search stores it the way Tana does, without the task filters');
     // A type page's field pills (#type-page): Tana's stored attributes, run as the attributeFilters verified live on Goal.
@@ -4427,7 +4437,7 @@ async function main() {
     assert.equal(completedInWindow({ state: { type: 'closed' } }, 'all', now), true, 'while All has no clock to fail: it keeps every completed task');
     assert.deepEqual([3, 7, 30, 'all', 14, '7', true, null].map((w) => validViewFilter({ completedWithin: w })), [true, true, true, true, false, false, false, false],
       'only the four the pill offers are a valid filter value');
-    assert.equal(viewParams({ types: ['tasks'], states: ['closed'], completedWithin: 7 }, ME).limit, 1000, 'and the window asks the graph for nothing: there is no request field for it');
+    assert.equal(viewParams({ types: ['tasks'], states: ['closed'], completedWithin: 7 }, ME).limit, 200, 'and the window asks the graph for nothing: there is no request field for it');
     assert.throws(() => viewParams({ types: ['nope'] }, ME), /invalid view filter/);
     // Unticking the last kind must not become an unconstrained query: the graph would answer with images, calls and
     // transcripts, which no view can render and which wedged the app when it tried.

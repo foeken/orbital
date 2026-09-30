@@ -5,7 +5,7 @@ const { peerIdentity } = require('../tana-session');
 const { createTanaClient, takeCalls } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
-const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
+const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView, rowLimit } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { codexIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe } = require('./documents');
@@ -189,7 +189,7 @@ async function searchCreate(id, title) {
   const filter = viewFilter(id); // throws on an unknown view before anything is created
   const query = filterToSearchQuery(filter, S.me && S.me.userUri);
   const name = typeof title === 'string' && title.trim() ? title.trim() : searchTitle(id, filter);
-  return createDocument(name, { kind: 'search', query, view: { completedWithin: filter.completedWithin, audience: filter.audience } });
+  return createDocument(name, { kind: 'search', query, view: { completedWithin: filter.completedWithin, audience: filter.audience, limit: filter.limit } });
 }
 // My Tasks, the right half of the Work View (renderer/timeline.js): the search the synced setting 'myTasks' names, so a
 // rename in Tana keeps it and two machines share it; without one, your own saved search of that name (the oldest, so
@@ -539,7 +539,7 @@ const ipc = {
     return {
       // the completed window is the app's own, so it is stored beside the query and handed back as part of the filter
       // the pills edit; absent, it reads as the default the pill shows the first time Completed is asked for
-      filter: { ...searchQueryToFilter(query, S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin), audience: arrangement.audience === 'everyone' ? 'everyone' : null },
+      filter: { ...searchQueryToFilter(query, S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin), audience: arrangement.audience === 'everyone' ? 'everyone' : null, limit: rowLimit(arrangement.limit) },
       sort: searchSort(arrangement.sortBy),
       group: arrangement.groupBy,
       // Tana's record of key -> { shown, order } (or the comma-joined string earlier builds wrote)
@@ -550,7 +550,7 @@ const ipc = {
     if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
     return mut(id, (doc) => {
       setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri));
-      setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin, audience: filter.audience }); // saved together: one press, one state of the page
+      setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin, audience: filter.audience, limit: filter.limit }); // saved together: one press, one state of the page
     });
   },
   // Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).

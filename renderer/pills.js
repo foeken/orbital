@@ -81,6 +81,8 @@ function pillDefs() {
     { label: 'Any visibility', reset: true, checked: !f.audience, run: () => save({ audience: null }) },
     { label: 'Everyone', icon: 'users', checked: f.audience === 'everyone', run: () => save({ audience: 'everyone' }) },
   ] });
+  // How many rows the query asks for (#626). Not on a type page, whose pills keep only its fields (setTypeF): it asks for 1,000.
+  if (!onTypePage()) defs.push({ id: 'limit', label: 'Limit', command: 'Limit results', icon: 'outline', value: rowLimit(f.limit).toLocaleString('en'), rows: () => LIMITS.map((v) => ({ label: v.toLocaleString('en'), checked: rowLimit(f.limit) === v, run: () => save({ limit: v }) })) });
   // A view keeps them in the browser; a saved search stores them in its document, so the arrangement travels with
   // the search and is what it opens on next time.
   defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => sortList().map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
