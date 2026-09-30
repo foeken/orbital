@@ -37,11 +37,14 @@ function sha256(bytes) {
 }
 const bytes = (n) => crypto.getRandomValues(new Uint8Array(n));
 let people = null; // members(), once asked
+// the settings mirror's key prefix: the account and org signed in (storageId, the device's own, stays outside it)
+const ns = () => 'orbital:' + (S.me ? S.me.userUri + '@' + S.me.orgId : 'none') + ':';
 // the nodes whose watch choice is on (true) or off (false); required here, not at the top, since main/settings.js needs ../db, which is this file
 const chosen = (on) => new Set(Object.entries(require('../../main/settings').get('notify') || {}).filter(([, v]) => v === on).map(([id]) => id));
 
 module.exports = {
   issues,
+  forget: () => { people = null; }, // another account: its own people
   within,
   sha256,
   // node:crypto, as the SDK files in the bundle use it
@@ -56,18 +59,20 @@ module.exports = {
     } };
     return hash;
   },
-  // ../db, for main/timeline.js and main/settings.js: the page's own storage in place of SQLite
-  setting: (key) => JSON.parse(localStorage.getItem('orbital:' + key) ?? 'null') ?? undefined,
-  setSetting: (key, value) => (value === undefined ? localStorage.removeItem('orbital:' + key) : localStorage.setItem('orbital:' + key, JSON.stringify(value))),
+  // ../db, for main/timeline.js and main/settings.js: the page's own storage in place of SQLite, one mirror per account
+  // (ns), so a second account signed in on this phone never hydrates, or pushes up, the first one's settings. A new
+  // account is a new generation: main/settings.js drops what it knew.
+  setting: (key) => JSON.parse(localStorage.getItem(ns() + key) ?? 'null') ?? undefined,
+  setSetting: (key, value) => (value === undefined ? localStorage.removeItem(ns() + key) : localStorage.setItem(ns() + key, JSON.stringify(value))),
   settings() {
-    const out = {};
+    const out = {}, prefix = ns();
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key.startsWith('orbital:')) try { out[key.slice(8)] = JSON.parse(localStorage.getItem(key)); } catch { /* not a setting (storageId) */ }
+      if (key.startsWith(prefix)) try { out[key.slice(prefix.length)] = JSON.parse(localStorage.getItem(key)); } catch { /* unreadable: unset */ }
     }
     return out;
   },
-  generation: () => 1,
+  generation: () => ns(),
   // ./rows: a task under a row needs its id, words and state (ios/Orbital/Timeline.swift)
   graphRow: (n) => ({ id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: (n.state && n.state.type) === 'closed', stateType: n.state && n.state.type }),
   toNode: (row) => row,

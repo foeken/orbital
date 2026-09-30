@@ -14,7 +14,7 @@ import { canWrite, everyoneOnly } from '../../sdk/access';
 import { S, isSpace, iso } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
-import { issues, members, within } from './stand-ins';
+import { forget, issues, members, within } from './stand-ins';
 import NUCLEO from 'nucleo-ui';
 
 const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; } };
@@ -62,14 +62,27 @@ const listRow = (n) => ({ id: n.id, title: secret().has(n.id) ? PRIVATE : n.titl
 // reveal it; the phone has no reveal, so it never shows those words: a title reads Private, an entry about one says only
 // that a private item changed, and zooming into one shows nothing of it.
 const PRIVATE = 'Private';
+// Nothing is shown before this account's settings document has been read once, since only it says what is sensitive:
+// the first read is waited for, and without it the content calls fail rather than show everything. After that each
+// call reads it again in the background and goes on with the last answer.
+async function settled() {
+  const fresh = within('settings document', settings.hydrate());
+  if (settings.get('settingsRead')) return void fresh.catch(() => {});
+  await fresh.catch(() => { throw new Error('Could not read your Orbital settings yet, so nothing is shown. Pull to try again.'); });
+  settings.set('settingsRead', true); // this account's own mirror (stand-ins.js ns), never synced
+}
 const secret = () => new Set(Array.isArray(settings.get('sensitive')) ? settings.get('sensitive') : []);
+// A mention of one or a link to one reads Private too, and a reference to one (a chat's attachment, an embed) is named so.
 function redact(rows, hidden = secret()) {
   if (!hidden.size) return rows;
-  return rows.map((r) => {
+  const scrub = (segs) => segs && segs.map((g) => (g.mention && hidden.has(g.mention.uri) ? { ...g, mention: { ...g.mention, label: PRIVATE } }
+    : g.marks && hidden.has(g.marks.link) ? { ...g, text: PRIVATE } : g));
+  return rows.map((row) => {
+    const r = { ...row, segments: scrub(row.segments), ...(row.reference && hidden.has(row.reference.uri) ? { reference: { ...row.reference, label: PRIVATE }, text: PRIVATE } : {}) };
     const children = r.children && redact(r.children, hidden);
     if (!hidden.has(r.id) && !hidden.has(r.timeline && r.timeline.uri)) return { ...r, children };
-    const words = r.timeline && !r.timeline.today ? 'A private item changed' : PRIVATE;
-    return { ...r, title: words, text: words, segments: [{ text: words }], children, subtext: null, people: [],
+    const said = r.timeline && !r.timeline.today ? 'A private item changed' : PRIVATE;
+    return { ...r, title: said, text: said, segments: [{ text: said }], children, subtext: null, people: [],
       ...(r.timeline ? { timeline: { ...r.timeline, note: null, change: null, detail: null } } : {}) };
   });
 }
@@ -78,13 +91,13 @@ function redact(rows, hidden = secret()) {
 // the desktop lets its on-demand reads go (main/documents.js onDemand): a subscription holds the whole document, and a
 // chat can be megabytes. One the page already held for something else (the Timeline's) is left alone.
 const KEEP = 12, kept = [];
-async function hold(id) {
-  const had = !!S.client.sync.getDocument(id), doc = await within('opening ' + id, S.client.sync.subscribe(id));
-  const at = kept.indexOf(id);
+// init makes a new document (sdk/sync.js subscribe); it is counted before the wait, so one that times out is still let go.
+async function hold(id, init) {
+  const had = !!S.client.sync.getDocument(id), at = kept.indexOf(id);
   if (at >= 0) kept.splice(at, 1);
   if (at >= 0 || !had) kept.push(id); // newest last; one held for something else is never ours to let go
   while (kept.length > KEEP) S.client.sync.unsubscribe(kept.shift()).catch(() => {}); // drains queued writes first
-  return doc;
+  return within('opening ' + id, S.client.sync.subscribe(id, init));
 }
 // A reference with no label of its own is named by the graph, as main/documents.js resolveReferences does; each name is
 // asked once, since a chat on screen is read again every two seconds
@@ -116,17 +129,20 @@ async function searchRows(doc) {
 // Someone else's chat is checked first, with the desktop's rule (canWriteDoc: sdk/access canWrite), so a chat you can
 // only read never keeps a message that did not reach Tana. Answers { id, warning }: the warning when Tana did not take
 // the message up, which is sent all the same.
-async function say(id, text, fresh = false) {
+async function say(id, text) {
   const doc = await hold(id);
-  if (!fresh && (doc.writeDenied || !(await writable(doc)))) throw new Error('You can read this chat but not write in it');
-  const me = S.me.userUri, user = S.me.user || {};
-  const name = (await members().catch(() => [])).find((m) => m.id === me)?.title || user.email;
+  if (doc.writeDenied || !(await writable(doc))) throw new Error('You can read this chat but not write in it');
+  const words = await message(text);
   let messageId;
-  doc.transact((loro) => { messageId = addMessage(loro, { text, byUri: me, senderName: name }); });
-  // The message is in the chat either way: Tana not taking it up is a warning under the composer, not a failed send, or
-  // the composer would offer to send it again (main/documents.js askReply answers it the same way)
-  const warning = await triggerReply({ chatUri: id, messageId, ownerUri: doc.data.get('ownerUri'), getAccessToken })
-    .then(() => null, (e) => 'Sent, but Tana did not answer: ' + (e && e.message || e));
+  doc.transact((loro) => { messageId = addMessage(loro, words); });
+  return answered(id, messageId, doc.data.get('ownerUri'));
+}
+// a message as addMessage takes it: its words, and who sent it by uri and by name
+const message = async (text) => ({ text, byUri: S.me.userUri, senderName: (await members().catch(() => [])).find((m) => m.id === S.me.userUri)?.title || (S.me.user || {}).email });
+// The message is in the chat either way: Tana not taking it up is a warning under the composer, not a failed send, or
+// the composer would offer to send it again (main/documents.js askReply answers it the same way)
+async function answered(id, messageId, ownerUri) {
+  const warning = await triggerReply({ chatUri: id, messageId, ownerUri, getAccessToken }).then(() => null, (e) => 'Sent, but Tana did not answer: ' + (e && e.message || e));
   return JSON.stringify({ id, warning });
 }
 // main/documents.js accessContext and canWriteDoc: write access to a document, from its participants and owners
@@ -136,11 +152,11 @@ async function writable(doc) {
   return canWrite(readNode(doc), S.me.userUri, ctx).catch(() => false);
 }
 
-let settingsRead = false;
 // no session, or another one: the old client's stream is closed rather than left reconnecting
 function drop() {
   if (S.client) S.client.close().catch(() => {});
   S.client = S.me = null;
+  settings.reset(); forget(); names.clear(); kept.length = 0; // what the last account's session knew
 }
 
 // The icon a saved search was given with Set icon (the settings document's typeIcons, main/icons.js: search uri → Nucleo
@@ -183,9 +199,7 @@ window.orbital = {
   // the Timeline page, three days per page, as the rows the desktop renderer gets
   async timeline(pages = 1) {
     timeline.setPages(pages);
-    // the watch choices, from the settings document: waited for on the first read only, read in the background after that
-    const fresh = within('settings document', settings.hydrate()).catch(() => {});
-    if (!settingsRead) { await fresh; settingsRead = true; }
+    await settled(); // the watch choices and what is sensitive
     return JSON.stringify(redact(await timeline.rows()));
   },
   // A task's box, as the desktop's does it (renderer/edit.js toggleDone, main/documents.js doc:setDone and mutTasks): an
@@ -215,6 +229,7 @@ window.orbital = {
   // docs/CHATS.md), a saved search its results, a meeting the documents it owns (its write-up, its outcomes), anything
   // else its outline (sdk/content.js).
   async open(id) {
+    await settled();
     const kind = id.split(':')[1], doc = await hold(id), n = readNode(doc);
     if (secret().has(id)) return JSON.stringify({ title: PRIVATE, kind, rows: [], private: true });
     let rows;
@@ -228,21 +243,26 @@ window.orbital = {
   },
   // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
   // answer (main/documents.js newChat), with what you typed as its first message. Answers the chat's id.
+  // The message is written with the chat, in one go: a chat that is slow to reach Tana still arrives with its message,
+  // never empty, and the composer is told it is saved rather than offered to send it again.
   async ask(text) {
-    const id = 'tana:chat:' + ulid();
-    await within('new chat', S.client.sync.subscribe(id, (loro) => {
+    const id = 'tana:chat:' + ulid(), words = await message(text);
+    let messageId;
+    const doc = await hold(id, (loro) => {
       initDocument(loro, 'New chat', S.me.userUri, { kind: 'chat' });
       loro.getMap('data').delete('title');
       loro.getMap('data').set('titleAutoGenerated', true);
-    }));
-    return say(id, text, true);
+      messageId = addMessage(loro, words);
+    }).catch((e) => ({ failed: e }));
+    if (doc.failed) return JSON.stringify({ id, warning: 'Saved, but Tana could not be reached yet: ' + (doc.failed.message || doc.failed) });
+    return answered(id, messageId, doc.data.get('ownerUri'));
   },
   send: (id, text) => say(id, text), // a follow-up in a chat
   // Every saved search you can see, the ones pinned to your sidebar first in their order there, each with its icon (glyph)
   async searches() {
     const [pinned, { nodes = [] }] = await Promise.all([within('sidebar pins', listSidebar(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 200, sortOptions: newest })]);
     const at = (n) => (pinned.includes(n.id) ? pinned.indexOf(n.id) : 1e6);
-    await within('settings document', settings.hydrate()).catch(() => {}); // the icons; the last known ones when it does not answer
+    await settled(); // the icons and what is sensitive
     const chosen = settings.get('typeIcons') || {};
     return JSON.stringify(await Promise.all(nodes.sort((a, b) => at(a) - at(b)).map(async (n) => ({ ...listRow(n), glyph: await iconPng(chosen[n.id]).catch(() => null) }))));
   },
