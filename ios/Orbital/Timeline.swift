@@ -260,7 +260,7 @@ struct TaskList: View {
     let open: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             ForEach(tasks) { task in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     TaskBox(task: task, engine: engine)
@@ -269,8 +269,9 @@ struct TaskList: View {
                 }
             }
         }
-        .padding(.top, 14)
-        .padding(.bottom, 10)
+        // as much room above the list as under it: under it the entry's own 14 pt and the next one's 14 pt come on top of this
+        .padding(.top, 30)
+        .padding(.bottom, 6)
     }
 }
 
