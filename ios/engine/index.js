@@ -127,11 +127,6 @@ window.orbital = {
   loro: loro.version,
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
   email: () => (last && last.user && last.user.email) || null,
-  // Search in the app's top bar: Tana's own text search over everything you can see, newest change first
-  async search(text) {
-    const { nodes = [] } = await S.client.graph.listNodes({ textQuery: text, limit: 40, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
-    return JSON.stringify(nodes.map((n) => ({ id: n.id, title: n.title || 'Untitled', kind: n.id.split(':')[1], state: (n.state && n.state.type) || null })));
-  },
   // Zooming into a node: what it holds, as the desktop's page for it shows. A chat is its conversation (sdk/chat.js,
   // docs/CHATS.md), a saved search its results, a meeting the documents it owns (its write-up, its outcomes), anything
   // else its outline (sdk/content.js).

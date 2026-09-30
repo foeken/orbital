@@ -1,8 +1,7 @@
 import SwiftUI
 
-// The app's frame, after the Codex and ChatGPT apps: a side menu behind the page (the Timeline and your saved searches,
-// search and settings), the page with its title between the menu and search buttons, and a composer at the bottom that will start
-// a new Codex thread (#665). The bars are the system's, so they are Liquid Glass with nothing of ours drawn over them.
+// The app's frame, after the Codex and ChatGPT apps: a side menu behind the page (the Timeline, your saved searches and
+// settings), the page with the menu button and its title, and a composer at the bottom that starts a chat with Tana. The bars are the system's, so they are Liquid Glass with nothing of ours drawn over them.
 struct Shell: View {
     let engine: Engine
     // The menu's pages: the Timeline, and each saved search (its id and title) under it
@@ -17,7 +16,6 @@ struct Shell: View {
     @State private var searches: [Page] = []
     @State private var menu = false
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
-    @State private var searching = false
     @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
@@ -26,7 +24,7 @@ struct Shell: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            SideMenu(page: $page, searches: searches, close: { path = []; show(false) }, search: { show(false); searching = true }, settings: { settings = true })
+            SideMenu(page: $page, searches: searches, close: { path = []; show(false) }, settings: { settings = true })
                 .frame(width: width)
                 .accessibilityHidden(!menu)
             NavigationStack(path: $path) {
@@ -42,9 +40,6 @@ struct Shell: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { show(true) } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Menu")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { searching = true } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("Search")
                     }
                 }
                 .safeAreaInset(edge: .bottom) { Composer { path.append(try await engine.ask($0)) } } // a new chat, opened as it starts
@@ -74,7 +69,6 @@ struct Shell: View {
         // A mention, a reference or a row anywhere zooms into its node: an orbital:<id> link (Row.zoom) is pushed here
         .environment(\.openURL, OpenURLAction { url in
             guard url.scheme == "orbital" else { return .systemAction }
-            searching = false
             path.append(String(url.absoluteString.dropFirst("orbital:".count)))
             return .handled
         })
@@ -106,11 +100,10 @@ struct Shell: View {
             try? await Task.sleep(for: .seconds(2)); show(true)
             try? await Task.sleep(for: .seconds(2)); show(false)
         }
-        .sheet(isPresented: $searching) { SearchSheet(engine: engine) }
         // a tapped push opens its node over the Timeline, whatever was on screen
         .task(id: pushes.opened) {
             guard let id = pushes.opened else { return }
-            settings = false; searching = false; page = .timeline; show(false)
+            settings = false; page = .timeline; show(false)
             path = [id]
             pushes.opened = nil
         }
@@ -124,23 +117,18 @@ struct Shell: View {
     static let move = Animation.snappy(duration: 0.3)
 }
 
-// The side menu: the app's name with search beside it, its pages, and settings at the foot
+// The side menu: the app's name, its pages, and settings at the foot
 struct SideMenu: View {
     @Binding var page: Shell.Page
     let searches: [Shell.Page]
     let close: () -> Void
-    let search: () -> Void
     let settings: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Orbital").font(.title2.bold())
-                Spacer()
-                Button(action: search) { Image(systemName: "magnifyingglass").font(.title3).frame(width: 30, height: 30) }
-                    .buttonStyle(.glass).buttonBorderShape(.circle).accessibilityLabel("Search")
-            }
-            .padding(.leading, 14)
+            Text("Orbital").font(.title2.bold())
+                .frame(minHeight: 46) // the height the search button gave the line, so the pages stay where they were
+                .padding(.leading, 14)
             .padding(.bottom, 12)
             item(.timeline)
             // your saved searches, those pinned to your sidebar first, as the ChatGPT app lists chats under its pages
@@ -230,42 +218,4 @@ struct Composer: View {
         .padding(.bottom, 4)
         .animation(reduceMotion ? nil : .snappy, value: open)
     }
-}
-
-// Search over Tana from the top bar or the menu: Tana's own text search, newest change first; a result zooms into it
-struct SearchSheet: View {
-    let engine: Engine
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL // the shell's: a result zooms into its node, and the sheet goes
-    @State private var text = ""
-    @State private var found: [Engine.Found] = []
-    @State private var asked = ""
-
-    var body: some View {
-        NavigationStack {
-            List(found) { item in
-                Button { if let url = Row.zoom(item.id) { openURL(url) } } label: {
-                    HStack(spacing: 12) {
-                        Image("Glyphs/" + Self.glyph(item)).resizable().frame(width: 20, height: 20).foregroundStyle(.secondary)
-                        Text(item.title).foregroundStyle(.primary).lineLimit(2)
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .overlay { if found.isEmpty && !asked.isEmpty { ContentUnavailableView.search(text: asked) } }
-            .searchable(text: $text, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Tana")
-            .task(id: text) {
-                try? await Task.sleep(for: .milliseconds(300)) // a pause in typing, not every letter
-                guard !Task.isCancelled else { return }
-                found = await engine.search(text)
-                asked = text.trimmingCharacters(in: .whitespaces)
-            }
-            .navigationTitle("Search")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-        }
-    }
-
-    // the desktop's glyph for a kind (main/rows.js): a task by its state, a meeting by its calendar
-    static func glyph(_ item: Engine.Found) -> String { item.kind == "text" && item.state != nil ? "task" : Glyph.of(item.kind) }
 }

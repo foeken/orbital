@@ -14,17 +14,15 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent { Text(engine.email ?? "Tana") } label: { Row(glyph: "tana", title: "Account") }
-                    Button {
+                    Account(glyph: "tana", email: engine.email ?? "Tana") {
                         dismiss()
                         Task { await engine.signOut() }
-                    } label: { SignOut(title: "Sign out of Tana") }
+                    }
                 } header: { Header("Tana") }
                 Section {
                     if let chatgpt {
-                        LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
+                        Account(glyph: "chatgpt", email: chatgpt.email ?? "ChatGPT") { ChatGPT.forget(); self.chatgpt = nil }
                         if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
-                        Button { ChatGPT.forget(); self.chatgpt = nil } label: { SignOut(title: "Sign out of ChatGPT") }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
                     }
@@ -62,10 +60,22 @@ struct SettingsView: View {
         }
     }
 
-    // a sign-out: its words alone, at the right edge, in the text colour (red and a glyph were too much)
-    struct SignOut: View {
-        let title: String
-        var body: some View { Text(title).foregroundStyle(.primary).frame(maxWidth: .infinity, alignment: .trailing) }
+    // An account: its service's mark, and the email with the pop-up chevrons the ChatGPT app's Appearance row has; a tap
+    // opens a menu with Sign Out, so signing out is one deliberate step and takes no row of its own
+    struct Account: View {
+        let glyph: String
+        let email: String
+        let signOut: () -> Void
+        var body: some View {
+            Menu {
+                Button(action: signOut) { Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") }
+            } label: {
+                LabeledContent {
+                    HStack(spacing: 5) { Text(email).lineLimit(1); Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.medium)) }
+                        .foregroundStyle(.secondary)
+                } label: { Row(glyph: glyph, title: "Account") }
+            }
+        }
     }
 
     // the ChatGPT app's group headings: its own words at a readable size, grey, not upper case

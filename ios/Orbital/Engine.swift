@@ -170,13 +170,6 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         start()
     }
 
-    struct Found: Decodable, Identifiable { let id: String; let title: String; let kind: String; let state: String? }
-    func search(_ text: String) async -> [Found] {
-        guard phase == .ready, !text.trimmingCharacters(in: .whitespaces).isEmpty,
-              let json = try? await web.callAsyncJavaScript("return await orbital.search(text)", arguments: ["text": text], contentWorld: .page) as? String else { return [] }
-        return (try? JSONDecoder().decode([Found].self, from: Data(json.utf8))) ?? []
-    }
-
     // Your saved searches, those pinned to your sidebar first (orbital.searches)
     func searches() async throws -> [Row] {
         if let s = Self.sample { return s.searches }
