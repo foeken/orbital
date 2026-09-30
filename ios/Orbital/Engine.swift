@@ -141,6 +141,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             let json = try await web.callAsyncJavaScript("return await orbital.timeline(pages)", arguments: ["pages": pages], contentWorld: .page) as? String ?? "[]"
             rows = try JSONDecoder().decode([Row].self, from: Data(json.utf8))
             error = nil
+            for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
             let message = Self.message(error)

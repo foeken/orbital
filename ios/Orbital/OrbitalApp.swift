@@ -41,7 +41,7 @@ struct ContentView: View {
             case .signedOut:
                 EmptyView()
             case .ready:
-                TimelineScreen(engine: engine)
+                Tabs(engine: engine)
             }
         }
         .sheet(isPresented: $details) { SignInLog(lines: engine.log) }
@@ -49,6 +49,30 @@ struct ContentView: View {
     }
 }
 
+// The bottom bar: the system TabView, which is Liquid Glass on iOS 26 and later with nothing of ours drawn over it, and
+// shrinks out of the way on scroll. The Timeline first; saved searches and search are placeholders until #662.
+struct Tabs: View {
+    let engine: Engine
+
+    var body: some View {
+        TabView {
+            Tab("Timeline", image: "Glyphs/timeline") { TimelineScreen(engine: engine) }
+            Tab("Searches", image: "Glyphs/library") {
+                NavigationStack {
+                    ContentUnavailableView("Saved searches", image: "Glyphs/library", description: Text("The searches you pin in Orbital will be here, each as a tab you can choose."))
+                        .navigationTitle("Searches")
+                }
+            }
+            Tab(role: .search) {
+                NavigationStack {
+                    ContentUnavailableView("Search", systemImage: "magnifyingglass", description: Text("Searching Tana from here comes next."))
+                        .navigationTitle("Search")
+                }
+            }
+        }
+        .tabBarMinimizeBehavior(.onScrollDown)
+    }
+}
 // What sign-in did, to copy or share when it goes wrong (#658)
 struct SignInLog: View {
     let lines: [String]

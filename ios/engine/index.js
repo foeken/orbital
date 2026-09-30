@@ -4,12 +4,10 @@
 // rows this hands back (ios/Orbital/Engine.swift). What main/timeline.js needs of the desktop is stood in for by
 // ./stand-ins.js, chosen at bundle time (build.js).
 // An ES module so the bundle runs it (Bun leaves a CommonJS entry of an iife bundle wrapped and never called).
-import { createTransport } from '../../sdk/transport';
-import { GraphClient } from '../../sdk/graph';
-import { HistoryClient } from '../../sdk/history';
+import { createTanaClient } from '../../sdk';
 import { S } from '../../main/state';
 import timeline from '../../main/timeline';
-import { sync } from './stand-ins';
+import { issues } from './stand-ins';
 import loro from 'loro-crdt/package.json';
 
 const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; } };
@@ -34,13 +32,29 @@ async function getAccessToken({ refresh = false } = {}) {
   return last.accessToken;
 }
 
+// sdk/sync.js derivePeerId, asynchronous here: a page has no synchronous sha256
+async function peerId(user) {
+  const hash = new DataView(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(user.trim().toLowerCase()))).getBigUint64(0) >> 16n;
+  return ((hash << 16n) | BigInt(Math.floor(Math.random() * 32768))).toString(10);
+}
+// peer.json's storageId (tana-session.js peerIdentity), kept in the page's own storage
+function storageId() {
+  let id = localStorage.getItem('orbital:storageId');
+  if (!id) localStorage.setItem('orbital:storageId', id = crypto.randomUUID());
+  return id;
+}
+
 window.orbital = {
   // true once signed in and connected; false when this web view has no Tana session
   async connect() {
     if (!(await fetchSession(false))) { S.client = S.me = null; return false; }
-    S.me = { userUri: 'tana:user-profile:' + (last.userExternalId || claims(last.accessToken)['urn:tana:user:id']), user: last.user };
-    const transport = createTransport({ getAccessToken, clientName: 'orbital-ios' });
-    S.client ||= { graph: new GraphClient(transport), history: new HistoryClient(transport), sync };
+    const c = claims(last.accessToken), user = last.userExternalId || c['urn:tana:user:id'];
+    S.me = { userUri: 'tana:user-profile:' + user, user: last.user, orgId: c.org_id || last.organizationId, orgDocUri: last.orgDocUri };
+    if (!S.client) {
+      // the whole client, sync stream included: a same-origin fetch stream here, as Tana's own client runs it
+      S.client = createTanaClient({ getAccessToken, orgId: S.me.orgId, peerId: await peerId(user), storageId: storageId(), clientName: 'orbital-ios' });
+      S.client.sync.connect().catch((e) => issues.push('sync: ' + (e && e.message || e)));
+    }
     return true;
   },
   // the Timeline page, three days per page, as the rows the desktop renderer gets
@@ -52,5 +66,6 @@ window.orbital = {
   link: (id) => 'https://home.tana.inc/o/' + String(last && last.orgDocUri || '').split(':').pop() + '/' + ({ type: 't', 'user-profile': 'u', event: 'e', space: 's' }[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id),
   loro: loro.version,
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
+  issues: () => issues.splice(0), // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 window.webkit?.messageHandlers?.orbital?.postMessage('ready');

@@ -32,7 +32,11 @@ struct Row: Decodable, Identifiable {
         let free: Free?
     }
 
-    var date: Date { createdAt.flatMap { try? Date($0, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)) } ?? .now }
+    var date: Date { createdAt.flatMap(Self.parse) ?? .now }
+    // Tana's times, with or without fractional seconds ("2026-09-30T13:00:00Z", "…:00.000Z")
+    static func parse(_ s: String) -> Date? {
+        (try? Date(s, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true))) ?? (try? Date(s, strategy: .iso8601))
+    }
     var words: String { title ?? text ?? "" }
     var tone: String? { timeline?.tone }
 
@@ -46,10 +50,10 @@ struct Row: Decodable, Identifiable {
     }
 }
 
-// The Timeline as an outline, the way Reminders lists: a marker in a fixed gutter, the sentence, its grey lines under it,
-// the time on the right, hairlines that start where the words do. Today's Tasks and Coming up sit above the days, each
-// only when it has something in it. Colour only where it means something (docs: orbital-design, Grey unless colour means
-// something): green for done, blue for new and for a meeting under way.
+// The Timeline as the desktop draws it (styles.css .node.tl): the time on the left, a marker on a thin rail that runs
+// the length of the page, what happened to the right. Today's tasks and Coming up sit on the same rail above the days,
+// each only when it has something in it. Colour only where it means something (orbital-design, Grey unless colour
+// means something): Orbital's green for done, blue for new and for a meeting under way.
 struct TimelineScreen: View {
     let engine: Engine
     @Environment(\.openURL) private var openURL
@@ -58,7 +62,12 @@ struct TimelineScreen: View {
         NavigationStack {
             List {
                 if !today.isEmpty {
-                    Section("Today's tasks") { ForEach(today) { TaskRow(row: $0, open: open) } }
+                    Section("Today's tasks") {
+                        ForEach(today) { task in
+                            RailRow(time: "") { TaskBox(done: task.done == true) } content: { TaskWords(row: task) }
+                                .onTapGesture { open(task.id) }
+                        }
+                    }
                 }
                 if !upcoming.isEmpty || free != nil {
                     Section("Coming up") {
@@ -122,6 +131,36 @@ struct TimelineScreen: View {
     }
 }
 
+// The rail's geometry: the time column, the marker's column, and where the line runs (through the markers' middle)
+enum Rail {
+    static let inset: CGFloat = 12
+    static let time: CGFloat = 42
+    static let marker: CGFloat = 24
+    static let gap: CGFloat = 10
+    static let line = time + gap + marker / 2 - 0.5
+}
+
+// One stop on the rail. The line is the row's background, which fills the whole row, so each row's piece meets the
+// next and the rail reads as one line down the section; rows carry no separators.
+struct RailRow<Dot: View, Content: View>: View {
+    let time: String
+    @ViewBuilder let marker: Dot
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Rail.gap) {
+            Text(time).font(.footnote).monospacedDigit().foregroundStyle(.secondary).frame(width: Rail.time, alignment: .trailing)
+            marker.frame(width: Rail.marker)
+            content.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .listRowInsets(EdgeInsets(top: 0, leading: Rail.inset, bottom: 0, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(HStack(spacing: 0) { Color.clear.frame(width: Rail.inset + Rail.line); Color(.separator).frame(width: 1); Spacer(minLength: 0) })
+    }
+}
+
 // What happened: the sentence with its verb in bold, Tana's words about it under that, faces for a meeting, the tasks
 // an Inbox line brought. A meeting with no write-up is drawn quiet (#214); a new one carries the blue dot.
 struct Entry: View {
@@ -130,73 +169,70 @@ struct Entry: View {
 
     var body: some View {
         let quiet = row.tone == "faint"
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        RailRow(time: row.date.formatted(.dateTime.hour().minute())) {
             Marker(icon: row.icon, tone: row.tone, now: row.join != nil)
+        } content: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.styled).foregroundStyle(quiet ? .secondary : .primary)
                 ForEach([row.timeline?.note, row.timeline?.change, row.timeline?.detail].compactMap { $0 }, id: \.self) {
                     Text($0).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
                 }
                 if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
-                ForEach(row.children ?? []) { child in TaskRow(row: child, open: open).padding(.top, 4) }
+                ForEach(row.children ?? []) { child in
+                    Button { open(child.id) } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) { TaskBox(done: child.done == true); TaskWords(row: child) }.contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
             }
-            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 6) {
-                Text(row.date, format: .dateTime.hour().minute()).font(.footnote).monospacedDigit().foregroundStyle(.secondary)
-                if row.unread == true { Circle().fill(.blue).frame(width: 8, height: 8).accessibilityLabel("New") }
+            .overlay(alignment: .topTrailing) {
+                if row.unread == true { Circle().fill(.blue).frame(width: 8, height: 8).offset(y: 6).accessibilityLabel("New") }
             }
         }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
         .onTapGesture { if let uri = row.timeline?.uri { open(uri) } }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(row.timeline?.uri != nil ? .isButton : [])
     }
 }
 
-// A task: its box and its words, struck and grey once done. The box is for ticking off, which comes with the sync
-// stream (#660); read-only until then.
-struct TaskRow: View {
-    let row: Row
-    let open: (String) -> Void
-
+// A task's box: Orbital's green once done. Ticking it off comes with writes over the sync stream (#660); read-only now.
+struct TaskBox: View {
+    let done: Bool
     var body: some View {
-        let done = row.done == true
-        Button { open(row.id) } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(done ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
-                    .frame(width: 22)
-                Text(row.words).strikethrough(done).foregroundStyle(done ? .secondary : .primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(row.words + (done ? ", completed" : ""))
+        Image(systemName: done ? "checkmark.circle.fill" : "circle")
+            .foregroundStyle(done ? AnyShapeStyle(Color.done) : AnyShapeStyle(.tertiary))
+            .background(Circle().fill(Color(.systemBackground)).padding(-2))
+            .accessibilityHidden(true)
     }
 }
 
-// A meeting still to come today: its name, when, and who else is on it as faces
+// A task's words, struck and grey once done
+struct TaskWords: View {
+    let row: Row
+    var body: some View {
+        let done = row.done == true
+        Text(row.words).strikethrough(done).foregroundStyle(done ? .secondary : .primary)
+            .accessibilityLabel(row.words + (done ? ", completed" : ""))
+    }
+}
+
+// A meeting still to come today: when on the left, its name, until when, and who else is on it as faces
 struct Meeting: View {
     let row: Row
     let open: (String) -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        let start = row.start.flatMap(Row.parse)
+        RailRow(time: start?.formatted(.dateTime.hour().minute()) ?? "") {
             Marker(icon: "meeting", tone: nil, now: false)
+        } content: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.words)
+                if let until = row.subtext?.split(separator: "–").last { Text("until " + until).font(.subheadline).foregroundStyle(.secondary) }
                 if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
             }
-            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-            Spacer(minLength: 8)
-            Text(row.subtext ?? "").font(.footnote).monospacedDigit().foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
         .onTapGesture { open(row.id) }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
@@ -208,13 +244,8 @@ struct FreeLine: View {
     let free: Row.Free
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 15)) { context in
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Marker(icon: "free", tone: nil, now: false)
-                Text(Self.text(free, now: context.date)).foregroundStyle(.secondary)
-                    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-            }
-            .padding(.vertical, 4)
+        RailRow(time: "Now") { Marker(icon: "free", tone: "new", now: false) } content: {
+            TimelineView(.periodic(from: .now, by: 15)) { context in Text(Self.text(free, now: context.date)).foregroundStyle(.secondary) }
         }
     }
 
@@ -257,34 +288,37 @@ struct Faces: View {
     }
 }
 
-// The marker in the gutter (main/timeline.js ICON), one grey shade like the desktop's rail (#217): green only for done,
-// blue for a meeting under way. Orbital's own glyphs replace these SF Symbols in #661.
+// Orbital's green for finished work (styles.css .tl-done), the same on every task box
+extension Color { static let done = Color(red: 0x5a / 255, green: 0x96 / 255, blue: 0x70 / 255) }
+
+// The marker in the gutter, as the desktop's rail draws it (main/timeline.js ICON, styles.css .tl-*): the Nucleo glyphs
+// of icons.js (scripts/build-ios-glyphs.js) in one grey (#217). Finished work is a green disc with a white check, a new
+// task and a meeting with no write-up are quieter, and a meeting under way is blue.
 struct Marker: View {
     let icon: String?
     let tone: String?
     let now: Bool
 
     var body: some View {
-        Image(systemName: symbol)
-            .symbolRenderingMode(.monochrome)
-            .foregroundStyle(tone == "done" ? AnyShapeStyle(.green) : now ? AnyShapeStyle(.blue) : AnyShapeStyle(.secondary))
-            .frame(width: 22)
-            .accessibilityHidden(true)
+        Group {
+            if tone == "done" {
+                Image("Glyphs/applyDone").resizable().frame(width: 12, height: 12).foregroundStyle(.white)
+                    .frame(width: 20, height: 20).background(Circle().fill(Color.done))
+            } else {
+                Image("Glyphs/" + glyph).resizable().frame(width: 20, height: 20)
+                    .foregroundStyle(now ? AnyShapeStyle(.blue) : tone == "new" || tone == "faint" ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary))
+                    .background(Circle().fill(Color(.systemBackground)).padding(-2)) // the rail passes behind the glyph, as on the desktop
+            }
+        }
+        .frame(width: 22)
+        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 } // centred on the first line's lower-case letters
+        .accessibilityHidden(true)
     }
 
-    private var symbol: String {
+    private var glyph: String {
         switch icon {
-        case "apply": "checkmark.circle.fill"
-        case "tlAccepted": "arrow.forward.circle"
-        case "tlLater": "moon"
-        case "tlInbox": "tray"
-        case "updated": "pencil"
-        case "robot": "cpu"
-        case "tana": "sparkles"
-        case "tlNew": "plus.circle"
-        case "meeting": "calendar"
-        case "free": "cup.and.saucer"
-        default: "circle"
+        case "tlAccepted", "tlLater", "tlInbox", "tlNew", "updated", "robot", "tana", "free", "todayTasks": icon!
+        default: "calendar" // a meeting (the desktop draws its type's glyph, calendar)
         }
     }
 }
