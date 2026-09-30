@@ -1,5 +1,8 @@
 # Writing a chapter of the Orbital manual
 
+Updating the manual for a PR (which chapter owns a feature, the steps, the capture gotchas) is the orbital-manual
+skill: .agents/skills/orbital-manual/SKILL.md. This file is the reference for the building blocks.
+
 The manual is static HTML in manual/, opened from Cmd+K → Help → Open Manual in a window of its own (main.js
 manual:open). It ships in the app; manual/scenes/ (this folder: the capture runner, the scene files, this guide) does not.
 

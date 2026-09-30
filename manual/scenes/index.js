@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 'use strict';
-// manual/search-index.js from the chapters' headings (what ⌘K in the manual searches), and a coverage report: every
-// Cmd+K row label in renderer/ that no chapter mentions. Run after editing a chapter:
+// manual/search-index.js from the chapters' headings (what ⌘K in the manual searches). With --coverage it also reports
+// every Cmd+K row label in renderer/ that no chapter mentions, links to a page or anchor that is not there, pictures a
+// page names that are missing in a theme, and pictures no page uses; it exits 1 on a broken link or a missing picture.
+// Run after editing a chapter:
 //   node manual/scenes/index.js [--coverage]
 const fs = require('fs'), path = require('path');
 const dir = path.resolve(__dirname, '..'), root = path.resolve(dir, '..');
@@ -34,5 +36,21 @@ if (process.argv.includes('--coverage')) {
   }
   const missing = [...labels].filter((l) => !all.includes(l.toLowerCase()));
   console.log(missing.length + ' of ' + labels.size + ' Cmd+K labels not mentioned:\n' + missing.join('\n'));
+  // links and pictures
+  const pages = fs.readdirSync(dir).filter((f) => f.endsWith('.html')), media = new Set(fs.readdirSync(path.join(dir, 'media'))), used = new Set(['app-icon.png']), broken = [];
+  for (const f of pages) {
+    const html = fs.readFileSync(path.join(dir, f), 'utf8');
+    for (const [, file, anchor] of html.matchAll(/<a\b[^>]*href="([^"#:]*)(?:#([^"]*))?"/g)) {
+      const to = file || f;
+      if (!pages.includes(to)) broken.push(f + ': no page ' + to);
+      else if (anchor && !index.some((e) => e.c + '.html' === to && e.id === anchor) && !fs.readFileSync(path.join(dir, to), 'utf8').includes('id="' + anchor + '"')) broken.push(f + ': no #' + anchor + ' in ' + to);
+    }
+    for (const [tag, name] of [...html.matchAll(/<(img|video)[^>]*data-m="([^"]+)"/g)].map((m) => [m[1], m[2]])) for (const theme of ['light', 'dark']) {
+      const pic = name + '-' + theme + (tag === 'video' ? '.mp4' : '.webp'); used.add(pic);
+      if (!media.has(pic)) broken.push(f + ': no media/' + pic);
+    }
+  }
+  const unused = [...media].filter((m) => !used.has(m));
+  console.log((broken.length ? 'broken:\n' + broken.join('\n') : 'no broken links or missing pictures') + '\n' + (unused.length ? 'unused pictures: ' + unused.join(' ') : 'no unused pictures'));
+  if (broken.length) process.exitCode = 1;
 }
-
