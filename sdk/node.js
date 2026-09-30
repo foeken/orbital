@@ -5,6 +5,10 @@ const { LoroMap, LoroList, LoroMovableList } = require('loro-crdt');
 
 const STATE_TYPES = ['proposed', 'open', 'closed', 'not_now'];
 const COMPLETED_WINDOWS = [3, 7, 30, 'all']; // days a completed task stays listed (sdk/query.js completedInWindow)
+// How many rows a view or a saved search asks for (#626): Tana sorts before it cuts, so a limit keeps the most recently
+// changed (a list of meetings: the nearest ones, sdk/query.js viewParams). Unset or stale reads as the default.
+const ROW_LIMITS = [50, 100, 200, 500, 1000];
+const rowLimit = (limit) => (ROW_LIMITS.includes(limit) ? limit : 200);
 const B32 = '0123456789abcdefghjkmnpqrstvwxyz'; // Crockford base32, lowercase as in Tana ids
 const USER_URI = /^tana:user-profile:[0-9a-z]{26}$/;
 // Audience classification only: a guest profile is an external person with an explicit participant grant, never me.
@@ -351,6 +355,8 @@ function writeSearchView(loro, view = {}) {
   } else if (v.get('display') !== undefined) v.delete('display');
   if (COMPLETED_WINDOWS.includes(view.completedWithin)) v.set('completedWithin', view.completedWithin);
   else if (v.get('completedWithin') !== undefined) v.delete('completedWithin');
+  if (ROW_LIMITS.includes(view.limit)) v.set('limit', view.limit);
+  else if (v.get('limit') !== undefined) v.delete('limit');
   // audience, for the same reason: Tana's query can only say "Open", which is more than everyone (sdk/query.js)
   if (view.audience === 'everyone') v.set('audience', 'everyone');
   else if (v.get('audience') !== undefined) v.delete('audience');
@@ -406,4 +412,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, workflowStates, setArchived, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, readSearch, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };
+module.exports = { readNode, editable, setTitle, setState, workflowStates, setArchived, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, readSearch, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS, ROW_LIMITS, rowLimit };

@@ -5,7 +5,7 @@ const { dateUri, isDateUri } = require('../sdk/dates');
 const { openEdgeQuery, openLiveQuery, EDGE_TYPES } = require('../sdk/livequery');
 const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { everyoneOnly } = require('../sdk/access');
-const { readSearch } = require('../sdk/node');
+const { readSearch, rowLimit } = require('../sdk/node');
 const { callOf, writeUpOf } = require('../sdk/events');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, pageKey, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveMeetings, resolveTypes, toNode } = require('./rows');
@@ -37,7 +37,7 @@ async function searchChildren(id, page = 'main') {
   // unreadable, not that the user saved an unconstrained search — and searchQueryParams({}) would otherwise fall
   // back to "every listable kind", silently showing the wrong rows as if they were this search's results.
   if (!query || !Object.keys(query).length) throw new Error('this saved search has no readable query');
-  const nodes = await searchRows(query, view, 1000); // a view's 1,000, as its preview asks: My Tasks lists every task and groups afterwards
+  const nodes = await searchRows(query, view, rowLimit(view.limit)); // its own limit, stored beside the query (#626): 200 unless it says otherwise
   // A view keeps the head of its list live (views.js), which is what makes a change someone else makes show up in
   // it. These rows are listed the same way and were not subscribed at all, so a saved search only ever showed what
   // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
@@ -48,7 +48,7 @@ async function searchChildren(id, page = 'main') {
   // renderer/nodes.js). A newer read that failed decides nothing, so an older one that answered still keeps its rows live.
   // And only for what the search asks now: an older read that answered after a Save asked what came before. That is
   // the query and the two view settings searchRows narrows the answer by (completed window, audience).
-  const asks = (q, v) => JSON.stringify([q, (v || {}).completedWithin, (v || {}).audience]);
+  const asks = (q, v) => JSON.stringify([q, (v || {}).completedWithin, (v || {}).audience, rowLimit((v || {}).limit)]);
   const same = await op(id, readSearch).then((now) => asks(now.query, now.view) === asks(query, view), () => false);
   if (same && seq > (headRead.get(read) || 0)) {
     headRead.set(read, seq);
@@ -78,7 +78,8 @@ async function searchPreview(filter) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   if (!validViewFilter(filter)) throw new Error('invalid view filter');
   // A type page is this too (renderer/nodes.js reload), a whole list rather than a preview: it gets a view's 1000 rows.
-  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri), filter, 1000); // as the saved page will show it
+  // a filter that names a limit (a saved search's pills) gets it; the app's own lists (skills, chats, link targets) keep 1,000
+  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri), filter, filter.limit || 1000); // as the saved page will show it
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // The one runner behind both: a stored query's rows, completed ones outside the window dropped. A search scoped to a

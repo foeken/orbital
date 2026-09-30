@@ -2,7 +2,7 @@
 // Search queries with #filters (docs/OUTLINER.md §8, Cmd+S search): "sam #task" -> text 'sam', tags ['task'].
 // #task = documents with a task state, #meeting = events, #member = user profiles, #<Type> = documents of that type
 // (title match, case-insensitive).
-const { STATE_TYPES, COMPLETED_WINDOWS } = require('./node');
+const { STATE_TYPES, COMPLETED_WINDOWS, ROW_LIMITS, rowLimit } = require('./node');
 
 const SORT = [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }];
 const UPDATE_DESC = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
@@ -90,7 +90,7 @@ function assigneeParams(assignee, me) {
 // audience: 'everyone' lists what everyone in the org can see (#253). The graph can only ask Tana's "Open" (restricted:
 // false, which includes whatever a restricted space or meeting holds), so that is the query and access.js
 // everyoneOnly narrows the answer, the way completedWithin is applied after the query.
-const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin', 'fields', 'audience']);
+const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin', 'fields', 'audience', 'limit']);
 const USER = /^tana:user-profile:[0-9a-z]{26}$/;
 // A filter's types may also name the workspace's own types (`tana:type:` uris, #139): every Risk, say. They are sent as
 // entityTypes, which the graph ORs among themselves and ANDs with the kinds (verified live 2026-09-25: Risk 18 +
@@ -129,6 +129,7 @@ function validViewFilter(f) {
     && (f.participant === undefined || f.participant === null || f.participant === 'me')
     && (f.window === undefined || f.window === null || f.window === 'week' || MEETING_WINDOWS.includes(f.window))
     && (f.completedWithin === undefined || COMPLETED_WINDOWS.includes(f.completedWithin))
+    && (f.limit === undefined || ROW_LIMITS.includes(f.limit))
     && (f.audience === undefined || f.audience === null || f.audience === 'everyone')
     // a type page's field pills: Tana's own stored attributes ({ refs, textMatches, date } per field key), which
     // filterToSearchQuery passes on and attributeFilters cleans the way Tana does
@@ -148,7 +149,7 @@ function typeFields(f) {
   return Object.keys(own).length ? own : null;
 }
 
-function viewParams(f, me, limit = 1000) {
+function viewParams(f, me, limit = rowLimit(f && f.limit)) {
   if (!validViewFilter(f)) throw new Error('invalid view filter');
   // No kinds selected is "any kind we list", never an unconstrained query: nodeTypes: [] is no filter at all to the
   // graph, which answers with images, calls and transcripts that no view can render.

@@ -507,8 +507,16 @@ function renderOutline() {
   showHide(filterRow, !((!!parent && !isSearchDoc(parent.node) && !isTypeDoc(parent.node)) || !(filterShown || filterEl.value))); // it opens and closes in place (renderer/motion.js)
   filterRow.classList.toggle('empty', !filterEl.value);
   // a type page asks for 1,000 rows (main/related.js searchPreview), so a full answer is one that may have been cut
-  const cut = parent ? onTypePage() && (kids.get(zoom.docId) || []).length >= 1000 : truncated.has(view);
-  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', cut ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
+  // Cut at the page's limit (#626): a view knows (main counts what Tana holds), a saved search is taken to be cut when it
+  // answered that many, and a type page asks for 1,000. Tana ranks before it cuts: by last change, unless the list is
+  // meetings (by start) or a search over workspace types (by title, sdk/query.js searchQueryParams).
+  // ponytail: a saved search's completed window drops rows after the cut, so one cut that way can read as whole; carry
+  // main's truncated flag with its rows if that matters.
+  const pf = filters.get(pillKey()) || {}, limit = onTypePage() ? 1000 : rowLimit(pf.limit);
+  const cut = parent ? (onTypePage() || onSearchPage()) && (kids.get(zoom.docId) || []).length >= limit : truncated.has(view);
+  const recent = !onTypePage() && !onlyMeetings(pf) && !(onSearchPage() && (pf.types || []).some(isTypeId));
+  const cutLine = 'Showing the ' + (recent ? limit.toLocaleString('en') + ' most recently changed' : 'first ' + limit.toLocaleString('en') + ' results') + (onTypePage() ? '' : ' · raise Limit to see more');
+  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', cut ? cutLine : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = asking || (!parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected)));
   // Only the first page builds itself (renderer/loading.js); one opened later, or a reconnect, waits blank for its
