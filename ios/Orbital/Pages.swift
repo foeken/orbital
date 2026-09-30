@@ -17,7 +17,8 @@ enum Glyph {
     static func of(uri: String) -> String { of(kind(of: uri)) }
 }
 
-// One node in a list: a task's box or its kind's glyph, its words, and when it last changed
+// One node in a list: a task's box or its kind's glyph, then its words and when it last changed as the button that opens
+// it. The box is its own button beside it, so ticking a task never opens it too (TaskList has them the same way).
 struct ListRow: View {
     let row: Row
     let engine: Engine
@@ -31,20 +32,19 @@ struct ListRow: View {
                 Image("Glyphs/" + Glyph.of(row.icon)).resizable().frame(width: 20, height: 20).foregroundStyle(.secondary)
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 }
             }
-            VStack(alignment: .leading, spacing: 3) {
-                if row.stateType != nil { TaskWords(row: row, done: engine.state(of: row) == "closed") } else { Text(row.styled) }
-                if let at = row.createdAt.flatMap(Row.parse) {
-                    Text(at, format: .relative(presentation: .named)).font(.subheadline).foregroundStyle(.secondary)
+            Button { openURL.zoom(row.target) } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    if row.stateType != nil { TaskWords(row: row, done: engine.state(of: row) == "closed") } else { Text(row.styled) }
+                    if let at = row.createdAt.flatMap(Row.parse) {
+                        Text(at, format: .relative(presentation: .named)).font(.subheadline).foregroundStyle(.secondary)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 6)
-        .contentShape(Rectangle())
-        .onTapGesture { openURL.zoom(row.target) }
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(row.target != nil ? .isButton : [])
-        .accessibilityAction { openURL.zoom(row.target) }
     }
 }
 

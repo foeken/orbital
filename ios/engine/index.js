@@ -9,9 +9,9 @@ import { STATE_TYPES, editable, initDocument, readNode, readSearch, rowLimit, se
 import { readOutline } from '../../sdk/content';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { listSidebar } from '../../sdk/pins';
-import { completedInWindow, searchQueryParams } from '../../sdk/query';
+import { addMeetingChats, completedInWindow, searchQueryParams } from '../../sdk/query';
 import { canWrite, everyoneOnly } from '../../sdk/access';
-import { S, isSpace, iso } from '../../main/state';
+import { S, isSpace, iso, visibleGraphNodes } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
@@ -192,6 +192,13 @@ window.orbital = {
     if (!S.client) {
       // the whole client, sync stream included: a same-origin fetch stream here, as Tana's own client runs it
       S.client = createTanaClient({ getAccessToken, orgId: S.me.orgId, peerId: await peerId(user), storageId: storageId(), clientName: 'orbital-ios' });
+      // every list as the desktop's (main/views.js listFilter): no deleted nodes, not the Orbital settings document, and
+      // meeting chats in any list of chats (sdk/query.js addMeetingChats); a lookup by id answers as it is
+      const list = S.client.graph.listNodes.bind(S.client.graph);
+      S.client.graph.listNodes = addMeetingChats(async (params) => {
+        const result = await list(params), app = new Set(settings.appDocIds());
+        return { ...result, nodes: visibleGraphNodes(result.nodes).filter((n) => params.nodeIds || !app.has(n.id)) };
+      });
       S.client.sync.connect().catch((e) => issues.push('sync: ' + (e && e.message || e)));
     }
     return true;
@@ -261,7 +268,7 @@ window.orbital = {
   send: (id, text) => say(id, text), // a follow-up in a chat
   // Every saved search you can see, the ones pinned to your sidebar first in their order there, each with its icon (glyph)
   async searches() {
-    const [pinned, { nodes = [] }] = await Promise.all([within('sidebar pins', listSidebar(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 200, sortOptions: newest })]);
+    const [pinned, { nodes = [] }] = await Promise.all([within('sidebar pins', listSidebar(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 1000, sortOptions: newest })]);
     const at = (n) => (pinned.includes(n.id) ? pinned.indexOf(n.id) : 1e6);
     await settled(); // the icons and what is sensitive
     const chosen = settings.get('typeIcons') || {};

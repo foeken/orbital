@@ -119,6 +119,12 @@ struct TimelineScreen: View {
         .listStyle(.plain)
         .scrollDismissesKeyboard(.interactively) // scrolling the Timeline tucks the composer's keyboard away
         .refreshable { await engine.refresh() }
+        // the free time ends when the next meeting starts: read the page again then, so neither stays on screen past it
+        .task(id: free?.until) {
+            guard let until = free?.until else { return }
+            try? await Task.sleep(for: .seconds(max(1, until / 1000 - Date.now.timeIntervalSince1970)))
+            if !Task.isCancelled { await engine.refresh() }
+        }
         .overlay {
             if engine.rows.isEmpty {
                 if engine.loading { ProgressView() }
