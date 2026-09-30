@@ -663,8 +663,8 @@ function insertChild(document, id, text) {
 // Returns the row and offset the caret goes to: the end of what was pasted.
 function insertBlocks(document, id, before, after, blocks) {
   if (!blocks.length || blocks[0].block === 'divider') blocks = [{ block: 'paragraph', segments: [] }, ...blocks];
-  const kind = (rowId, b) => {
-    if (b.block !== 'paragraph' && blockType(must(document, rowId).block) !== b.block) setBlockType(document, rowId, b.block);
+  const kind = (rowId, b, want = b.block === 'paragraph' ? null : b.block) => {
+    if (want && blockType(must(document, rowId).block) !== want) setBlockType(document, rowId, want);
     // a row has a checkbox when its markdown says so, not because the row above had one (insertAfter's rule), so a
     // plain line after "- [x] task" is a row without one
     const f = must(document, rowId), a = f.item && f.item.get('attributes');
@@ -688,7 +688,7 @@ function insertBlocks(document, id, before, after, blocks) {
       else try { tail = insertChild(document, stack[d - 1], ''); } catch { d -= 1; tail = insertAfter(document, stack[d], ''); }
       stack.length = d; stack.push(tail);
       if (b.block === 'divider') continue;
-      kind(tail, b.block === 'paragraph' && plainKind ? { ...b, block: plainKind } : b);
+      kind(tail, b, b.block === 'paragraph' ? plainKind : b.block);
       setText(document, tail, b.segments);
       last = { id: tail, segments: b.segments };
     }
