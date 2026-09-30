@@ -276,7 +276,7 @@ function slashRows(q) {
     run: () => taskFromSlash(choice),
   } : {
     group: choice.kind === 'custom' ? 'Workspace types' : 'Create', icon: choice.icon,
-    label: 'Create ' + choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
+    label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
     run: () => createFromSlash(choice),
   });
   if (palBusy) rows.push({ group: 'Create', label: 'Loading choices…', disabled: true });

@@ -2680,7 +2680,7 @@ function makeSlashHarness() {
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Task', 'Create Project'],
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Doc', 'Task', 'Project'],
     'the "/" menu offers every block type, a checklist, a divider, a table, an image and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
   assert.equal(listing.rows('task')[0].label, 'Task', '"/task" finds the task row first');
@@ -2731,7 +2731,7 @@ async function runSlashMenuCheck() {
     'Table takes the place of the empty "/" row and puts the caret in its first cell');
 
   const create = makeSlashHarness();
-  create.rows('').find((row) => row.label === 'Create Project').run();
+  create.rows('').find((row) => row.label === 'Project').run();
   assert.deepEqual(plain(create.calls()), [['setText', 'doc', 'block', []], ['startCreation', 'custom', 'Project']],
     'a create choice clears the "/" and starts the ordinary creation flow');
 }
