@@ -489,6 +489,17 @@ const commands = {
   unpin: () => setPin(false),
 };
 
+// push-test ["words"]: a test banner to every phone in the settings document (main/push.js, #663), the way a banner
+// on this Mac would go. Prints the phones and how many Apple accepted.
+commands['push-test'] = async () => {
+  backend(await connect());
+  require('../db').open(':memory:'); // an empty mirror: hydrate then finds the document by title and pushes nothing of this machine's up
+  await client.sync.connect();
+  const settings = require('../main/settings'), push = require('../main/push');
+  await settings.hydrate();
+  out(push.devices().map(([key, d]) => key.slice(5, 13) + '…\t' + d.environment + '\t' + (d.name || '')).join('\n') || 'no phones in the settings document');
+  out('sent ' + await push.send({ docId: 'orbital:push-test', title: 'Orbital', body: positional[0] || 'A test from your Mac' }));
+};
 // suggestions [--limit 10]: read-only, the people GraphService.ListAttendeeSuggestions offers for a meeting.
 commands.suggestions = async () => {
   await connect();
@@ -1151,6 +1162,7 @@ commands.boot = async () => {
 const USAGE = [
   'usage: node scripts/platform-cli.js <command>   (not ./node_modules/.bin/electron: docs/ELECTRON-SANDBOX.md)',
   '  session    login | whoami',
+  '  push       push-test ["words"]   (a test banner to the phones in the settings document)',
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
   '             meetings [--days 7] | chatlist [--limit 200] | proposals [--limit 500] [--detail] | get <id> [--raw] | outline <id> | rawdoc <id> [--containers 1] | workflow <type|task id> |',
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates] |',
