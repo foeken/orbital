@@ -14,35 +14,6 @@ enum Glyph {
     }
 }
 
-// Notifications, Chats and Searches: a list each, as the desktop's pages have them (ios/engine/index.js), a row zooming
-// into its node. Read-only, except a task's box.
-struct ListScreen: View {
-    let engine: Engine
-    let name: String // notifications, chats or searches
-
-    @State private var rows: [Row]?
-    @State private var error: String?
-
-    var body: some View {
-        List(rows ?? []) { ListRow(row: $0, engine: engine, glyph: name == "notifications" ? "notify" : nil) }
-            .listStyle(.plain)
-            .overlay {
-                if rows == nil && error == nil { ProgressView() }
-                else if let error, rows?.isEmpty ?? true { ContentUnavailableView("Didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
-                else if rows?.isEmpty == true { ContentUnavailableView(Self.empty[name] ?? "Nothing here", image: "Glyphs/" + (name == "notifications" ? "notify" : name == "chats" ? "discuss" : "search")) }
-            }
-            .refreshable { await load() }
-            .task(id: engine.phase) { await load() }
-    }
-
-    private static let empty = ["notifications": "No notifications", "chats": "No chats yet", "searches": "No saved searches"]
-
-    private func load() async {
-        guard engine.phase == .ready else { return }
-        do { rows = try await engine.list(name); error = nil } catch { self.error = error.localizedDescription }
-    }
-}
-
 // One node in a list: its glyph (or a task's box), its words, when, and the blue dot while it is unread
 struct ListRow: View {
     let row: Row

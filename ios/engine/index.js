@@ -12,7 +12,6 @@ import { listSidebar } from '../../sdk/pins';
 import { completedInWindow, searchQueryParams } from '../../sdk/query';
 import { S, isSpace, iso } from '../../main/state';
 import timeline from '../../main/timeline';
-import notifications from '../../main/inbox';
 import settings from '../../main/settings';
 import { issues, members, within } from './stand-ins';
 import loro from 'loro-crdt/package.json';
@@ -159,15 +158,11 @@ window.orbital = {
     return say(id, text);
   },
   send: (id, text) => say(id, text), // a follow-up in a chat
-  // The Notifications page's rows, as the desktop's (main/inbox.js)
-  notifications: async () => JSON.stringify(await within('notifications', notifications.rows())),
-  // Your chats with Tana, newest first: those with no owner, as the desktop's chat list starts
-  chats: async () => JSON.stringify((await S.client.graph.listNodes({ nodeTypes: ['chat'], limit: 60, sortOptions: newest })).nodes.map(listRow)),
-  // Every saved search you can see, the ones pinned to your sidebar first in their order there (pinned: true)
+  // Every saved search you can see, the ones pinned to your sidebar first in their order there
   async searches() {
     const [pinned, { nodes = [] }] = await Promise.all([within('sidebar pins', listSidebar(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 200, sortOptions: newest })]);
     const at = (n) => (pinned.includes(n.id) ? pinned.indexOf(n.id) : 1e6);
-    return JSON.stringify(nodes.sort((a, b) => at(a) - at(b)).map((n) => ({ ...listRow(n), pinned: pinned.includes(n.id) })));
+    return JSON.stringify(nodes.sort((a, b) => at(a) - at(b)).map(listRow));
   },
   // This phone asks for the Mac's banners (#663): its APNs device token written into Orbital's settings document, where
   // every Mac running Orbital reads it (main/push.js). main/settings.js finds the document as a Mac does.

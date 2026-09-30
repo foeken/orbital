@@ -25,7 +25,6 @@ struct Row: Decodable, Identifiable {
     let type: String?
     let meta: String?
     let note: Bool?
-    let pinned: Bool?
     let chat: Chat?
 
     struct Segment: Decodable { let text: String?; let marks: Marks?; let mention: Ref? }

@@ -1,5 +1,5 @@
 'use strict';
-// What main/timeline.js, main/inbox.js and main/settings.js ask of the desktop, for the phone (ios/engine/build.js maps each require here). Today's pins
+// What main/timeline.js and main/settings.js ask of the desktop, for the phone (ios/engine/build.js maps each require here). Today's pins
 // and today's node are read over the sync stream with the SDK's own code, as main/pins.js reads them; the watch choices
 // come from the settings document (main/settings.js); live queries and call state still answer empty. The banner edits never reach the phone:
 // they are kept on the Mac that announced them.
@@ -70,7 +70,6 @@ module.exports = {
   graphRow: (n) => ({ id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: (n.state && n.state.type) === 'closed', stateType: n.state && n.state.type }),
   toNode: (row) => row,
   rememberNodeHue() {},
-  resolveTypes: async () => {}, // main/inbox.js: a retitled type keeps the title its notification was written with
   hm: (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }, // sdk/chat.js hm
   isAllDay(start, end, allDayFlag) { // main/rows.js isAllDay
     const s = new Date(start), e = end ? new Date(end) : null;

@@ -177,10 +177,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         return (try? JSONDecoder().decode([Found].self, from: Data(json.utf8))) ?? []
     }
 
-    // Notifications, Chats and Searches (ios/engine/index.js orbital.notifications, .chats, .searches)
-    func list(_ name: String) async throws -> [Row] {
-        if let s = Self.sample { return name == "notifications" ? s.notifications : name == "chats" ? s.chats : s.searches }
-        return try await call("return await orbital[name]()", ["name": name])
+    // Your saved searches, those pinned to your sidebar first (orbital.searches)
+    func searches() async throws -> [Row] {
+        if let s = Self.sample { return s.searches }
+        return try await call("return await orbital.searches()", [:])
     }
 
     // A node zoomed into (orbital.open): its title, its kind and what it holds
@@ -220,7 +220,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // -sample: pages-sample.json in place of Tana for these pages, invented content only
-    private struct Sample: Decodable { let notifications: [Row]; let chats: [Row]; let searches: [Row]; let pages: [String: Page] }
+    private struct Sample: Decodable { let searches: [Row]; let pages: [String: Page] }
     private static let sample: Sample? = CommandLine.arguments.contains("-sample")
         ? Bundle.main.url(forResource: "pages-sample", withExtension: "json").flatMap { try? JSONDecoder().decode(Sample.self, from: Data(contentsOf: $0)) } : nil
 

@@ -1,132 +1,4 @@
 {
- "notifications": [
-  {
-   "id": "n1",
-   "segments": [
-    {
-     "text": "Priya Shah",
-     "marks": {
-      "bold": true
-     }
-    },
-    {
-     "text": " assigned you "
-    },
-    {
-     "text": "Draft the Q4 hiring plan",
-     "marks": {
-      "bold": true
-     }
-    }
-   ],
-   "unread": true,
-   "createdAt": "2026-09-30T12:40:00Z",
-   "notification": {
-    "sourceUri": "tana:text:0000000000000000000000000a"
-   }
-  },
-  {
-   "id": "n2",
-   "segments": [
-    {
-     "text": "Sam Lee",
-     "marks": {
-      "bold": true
-     }
-    },
-    {
-     "text": " mentioned you in "
-    },
-    {
-     "text": "Offsite planning",
-     "marks": {
-      "bold": true
-     }
-    },
-    {
-     "text": ". Can you check the venue list?"
-    }
-   ],
-   "unread": true,
-   "createdAt": "2026-09-30T10:05:00Z",
-   "notification": {
-    "sourceUri": "tana:text:00000000000000000000000d01"
-   }
-  },
-  {
-   "id": "n3",
-   "segments": [
-    {
-     "text": "Jordan Park",
-     "marks": {
-      "bold": true
-     }
-    },
-    {
-     "text": " completed "
-    },
-    {
-     "text": "Send the offsite agenda",
-     "marks": {
-      "bold": true
-     }
-    }
-   ],
-   "unread": false,
-   "createdAt": "2026-09-29T16:20:00Z",
-   "notification": {
-    "sourceUri": "tana:text:0000000000000000000000000b"
-   }
-  },
-  {
-   "id": "n4",
-   "segments": [
-    {
-     "text": "Alex Kim",
-     "marks": {
-      "bold": true
-     }
-    },
-    {
-     "text": " shared "
-    },
-    {
-     "text": "Design review",
-     "marks": {
-      "bold": true
-     }
-    },
-    {
-     "text": " with you"
-    }
-   ],
-   "unread": false,
-   "createdAt": "2026-09-28T09:00:00Z",
-   "notification": {
-    "sourceUri": "tana:event:0000000000000000000000000d"
-   }
-  }
- ],
- "chats": [
-  {
-   "id": "tana:chat:000000000000000000000000c1",
-   "title": "Summarise this week’s meetings",
-   "icon": "chat",
-   "createdAt": "2026-09-30T11:10:00Z"
-  },
-  {
-   "id": "tana:chat:000000000000000000000000c2",
-   "title": "Draft the offsite invite",
-   "icon": "chat",
-   "createdAt": "2026-09-29T15:30:00Z"
-  },
-  {
-   "id": "tana:chat:000000000000000000000000c3",
-   "title": "Which tasks are overdue?",
-   "icon": "chat",
-   "createdAt": "2026-09-26T08:45:00Z"
-  }
- ],
  "searches": [
   {
    "id": "tana:search:0000000000000000000000000s1",
@@ -146,7 +18,18 @@
    "id": "tana:search:0000000000000000000000000s3",
    "title": "Meetings this week",
    "icon": "search",
-   "createdAt": "2026-09-20T08:00:00Z"
+   "createdAt": "2026-09-20T08:00:00Z",
+   "pinned": false
+  },
+  {
+   "id": "tana:search:0000000000000000000000000s4",
+   "title": "Goals",
+   "icon": "search"
+  },
+  {
+   "id": "tana:search:0000000000000000000000000s5",
+   "title": "Risks",
+   "icon": "search"
   }
  ],
  "pages": {

@@ -1,36 +1,20 @@
 import SwiftUI
 
-// The app's frame, after the Codex and ChatGPT apps: a side menu behind the page (Timeline and Searches, search and
-// settings), the page with its title between the menu and search buttons, and a composer at the bottom that will start
+// The app's frame, after the Codex and ChatGPT apps: a side menu behind the page (the Timeline and your saved searches,
+// search and settings), the page with its title between the menu and search buttons, and a composer at the bottom that will start
 // a new Codex thread (#665). The bars are the system's, so they are Liquid Glass with nothing of ours drawn over them.
 struct Shell: View {
     let engine: Engine
-    // The menu's pages, and a saved search pinned to your sidebar (its id and title), which the menu lists under them
+    // The menu's pages: the Timeline, and each saved search (its id and title) under it
     enum Page: Hashable {
-        case timeline, notifications, chats, searches, search(String, String)
-        var title: String {
-            switch self {
-            case .timeline: "Timeline"
-            case .notifications: "Notifications"
-            case .chats: "Chats"
-            case .searches: "Searches"
-            case .search(_, let title): title
-            }
-        }
-        var glyph: String {
-            switch self {
-            case .timeline: "timelineMenu"
-            case .notifications: "notifyMenu"
-            case .chats: "discussMenu"
-            case .searches: "libraryMenu"
-            case .search: "searchMenu"
-            }
-        }
+        case timeline, search(String, String)
+        var title: String { if case .search(_, let title) = self { title } else { "Timeline" } }
+        var glyph: String { self == .timeline ? "timelineMenu" : "searchMenu" }
     }
 
     @State private var page = Page.timeline
     @State private var path: [String] = [] // the nodes zoomed into from the page, as a push each
-    @State private var pinned: [Page] = []
+    @State private var searches: [Page] = []
     @State private var menu = false
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
     @State private var searching = false
@@ -42,16 +26,13 @@ struct Shell: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            SideMenu(page: $page, pinned: pinned, close: { path = []; show(false) }, search: { show(false); searching = true }, settings: { settings = true })
+            SideMenu(page: $page, searches: searches, close: { path = []; show(false) }, search: { show(false); searching = true }, settings: { settings = true })
                 .frame(width: width)
                 .accessibilityHidden(!menu)
             NavigationStack(path: $path) {
                 Group {
                     switch page {
                     case .timeline: TimelineScreen(engine: engine)
-                    case .notifications: ListScreen(engine: engine, name: "notifications")
-                    case .chats: ListScreen(engine: engine, name: "chats")
-                    case .searches: ListScreen(engine: engine, name: "searches")
                     case .search(let id, _): NodeScreen(engine: engine, id: id, titled: false).id(id)
                     }
                 }
@@ -98,8 +79,8 @@ struct Shell: View {
             return .handled
         })
         .task(id: engine.phase) {
-            guard engine.phase == .ready, let searches = try? await engine.list("searches") else { return }
-            pinned = searches.filter { $0.pinned == true }.map { .search($0.id, $0.words) }
+            guard engine.phase == .ready, let found = try? await engine.searches() else { return }
+            searches = found.map { .search($0.id, $0.words) }
         }
         // A sideways swipe anywhere, the menu included: the page follows the finger and settles open or shut, as the
         // ChatGPT app's does. Only a swipe that is more sideways than up or down counts, so the Timeline still scrolls.
@@ -117,10 +98,9 @@ struct Shell: View {
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
         .task {
-            // -page notifications|chats|searches and -zoom <id>: a page or a node open at launch, for design shots
-            let args = CommandLine.arguments, after = { (flag: String) in args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
-            if let name = after("-page") { page = ["notifications": .notifications, "chats": .chats, "searches": .searches][name] ?? .timeline }
-            if let id = after("-zoom") { path = [id] }
+            // -zoom <id>: a node open at launch, for design shots
+            let args = CommandLine.arguments
+            if let i = args.firstIndex(of: "-zoom"), i + 1 < args.count { path = [args[i + 1]] }
             // -menudemo: open the menu and close it again, for filming the move
             guard args.contains("-menudemo") else { return }
             try? await Task.sleep(for: .seconds(2)); show(true)
@@ -147,7 +127,7 @@ struct Shell: View {
 // The side menu: the app's name with search beside it, its pages, and settings at the foot
 struct SideMenu: View {
     @Binding var page: Shell.Page
-    let pinned: [Shell.Page]
+    let searches: [Shell.Page]
     let close: () -> Void
     let search: () -> Void
     let settings: () -> Void
@@ -162,11 +142,11 @@ struct SideMenu: View {
             }
             .padding(.leading, 14)
             .padding(.bottom, 12)
-            ForEach([Shell.Page.timeline, .notifications, .chats, .searches], id: \.self) { item($0) }
-            // the saved searches pinned to your sidebar, as the ChatGPT app lists recent chats under its pages
-            if !pinned.isEmpty {
+            item(.timeline)
+            // your saved searches, those pinned to your sidebar first, as the ChatGPT app lists chats under its pages
+            if !searches.isEmpty {
                 Divider().padding(.horizontal, 14).padding(.vertical, 12)
-                ScrollView { VStack(spacing: 4) { ForEach(pinned, id: \.self) { item($0) } } }.scrollBounceBehavior(.basedOnSize)
+                ScrollView { VStack(spacing: 4) { ForEach(searches, id: \.self) { item($0) } } }.scrollBounceBehavior(.basedOnSize)
             }
             Spacer()
             HStack {

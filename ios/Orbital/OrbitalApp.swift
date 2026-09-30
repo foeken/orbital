@@ -91,7 +91,7 @@ struct ContentView: View {
         .sheet(isPresented: $details) { NavigationStack { SignInLog(lines: engine.log) } }
         .onChange(of: scene) { if scene == .active { Task { await engine.refresh() } } }
         // once signed in: ask for notifications, and write this phone's token into the settings document when Apple gives it
-        .task(id: engine.phase == .ready) { if engine.phase == .ready { await pushes.ask() } }
+        .task(id: engine.phase == .ready) { if engine.phase == .ready, !CommandLine.arguments.contains("-sample") { await pushes.ask() } } // the sample registers nothing
         .task(id: [engine.phase == .ready ? "ready" : "", pushes.token ?? ""]) {
             if engine.phase == .ready, let token = pushes.token { await engine.registerPush(token, environment: Pushes.environment) }
         }
