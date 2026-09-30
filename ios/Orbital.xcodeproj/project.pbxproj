@@ -7,11 +7,11 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		A10000000000000000000001 /* OrbitalTimeline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OrbitalTimeline.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000001 /* Orbital.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orbital.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A10000000000000000000002 /* OrbitalTimeline */ = {isa = PBXFileSystemSynchronizedRootGroup; path = OrbitalTimeline; sourceTree = "<group>"; };
+		A10000000000000000000002 /* Orbital */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Orbital; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -19,14 +19,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A10000000000000000000004 = {isa = PBXGroup; children = (A10000000000000000000002 /* OrbitalTimeline */, A10000000000000000000005 /* Products */); sourceTree = "<group>"; };
-		A10000000000000000000005 /* Products */ = {isa = PBXGroup; children = (A10000000000000000000001 /* OrbitalTimeline.app */); name = Products; sourceTree = "<group>"; };
+		A10000000000000000000004 = {isa = PBXGroup; children = (A10000000000000000000002 /* Orbital */, A10000000000000000000005 /* Products */); sourceTree = "<group>"; };
+		A10000000000000000000005 /* Products */ = {isa = PBXGroup; children = (A10000000000000000000001 /* Orbital.app */); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A10000000000000000000006 /* OrbitalTimeline */ = {
+		A10000000000000000000006 /* Orbital */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A10000000000000000000011 /* Build configuration list for PBXNativeTarget "OrbitalTimeline" */;
+			buildConfigurationList = A10000000000000000000011 /* Build configuration list for PBXNativeTarget "Orbital" */;
 			buildPhases = (
 				A10000000000000000000007 /* Sources */,
 				A10000000000000000000003 /* Frameworks */,
@@ -35,10 +35,10 @@
 			);
 			buildRules = ();
 			dependencies = ();
-			fileSystemSynchronizedGroups = (A10000000000000000000002 /* OrbitalTimeline */);
-			name = OrbitalTimeline;
-			productName = OrbitalTimeline;
-			productReference = A10000000000000000000001 /* OrbitalTimeline.app */;
+			fileSystemSynchronizedGroups = (A10000000000000000000002 /* Orbital */);
+			name = Orbital;
+			productName = Orbital;
+			productReference = A10000000000000000000001 /* Orbital.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -52,7 +52,7 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = { A10000000000000000000006 = { CreatedOnToolsVersion = 26.0; }; };
 			};
-			buildConfigurationList = A10000000000000000000012 /* Build configuration list for PBXProject "OrbitalTimeline" */;
+			buildConfigurationList = A10000000000000000000012 /* Build configuration list for PBXProject "Orbital" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (en, Base);
@@ -62,7 +62,7 @@
 			productRefGroup = A10000000000000000000005 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (A10000000000000000000006 /* OrbitalTimeline */);
+			targets = (A10000000000000000000006 /* Orbital */);
 		};
 /* End PBXProject section */
 
@@ -121,6 +121,7 @@
 		A10000000000000000000015 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Orbital.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6DA7MK99T2;
@@ -132,7 +133,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = dev.foeken.orbital.timeline;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreetje.orbital;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -142,6 +143,7 @@
 		A10000000000000000000016 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Orbital.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6DA7MK99T2;
@@ -153,7 +155,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = dev.foeken.orbital.timeline;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreetje.orbital;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -163,13 +165,13 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A10000000000000000000011 /* Build configuration list for PBXNativeTarget "OrbitalTimeline" */ = {
+		A10000000000000000000011 /* Build configuration list for PBXNativeTarget "Orbital" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (A10000000000000000000015 /* Debug */, A10000000000000000000016 /* Release */);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A10000000000000000000012 /* Build configuration list for PBXProject "OrbitalTimeline" */ = {
+		A10000000000000000000012 /* Build configuration list for PBXProject "Orbital" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (A10000000000000000000013 /* Debug */, A10000000000000000000014 /* Release */);
 			defaultConfigurationIsVisible = 0;

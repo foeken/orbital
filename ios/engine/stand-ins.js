@@ -17,7 +17,7 @@ module.exports = {
   // ../db
   setting: (key) => JSON.parse(localStorage.getItem('orbital:' + key) ?? 'null'),
   setSetting: (key, value) => localStorage.setItem('orbital:' + key, JSON.stringify(value)),
-  // ./rows: a task under a row needs its id, words and state (ios/OrbitalTimeline/Timeline.swift)
+  // ./rows: a task under a row needs its id, words and state (ios/Orbital/Timeline.swift)
   graphRow: (n) => ({ id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: (n.state && n.state.type) === 'closed' }),
   toNode: (row) => row,
   rememberNodeHue() {},

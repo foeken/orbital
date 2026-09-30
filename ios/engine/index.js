@@ -1,7 +1,7 @@
 // The phone's engine (issue #658): Orbital's own SDK and main/timeline.js, run in the app's hidden web view on the page
 // https://home.tana.inc/api/auth/session. That page is Tana's origin, so every call is same-origin with the web view's
 // login cookies (no CORS, no bridge), and it is a JSON document without a CSP, so Loro's WASM runs. SwiftUI draws the
-// rows this hands back (ios/OrbitalTimeline/Engine.swift). What main/timeline.js needs of the desktop is stood in for by
+// rows this hands back (ios/Orbital/Engine.swift). What main/timeline.js needs of the desktop is stood in for by
 // ./stand-ins.js, chosen at bundle time (build.js).
 // An ES module so the bundle runs it (Bun leaves a CommonJS entry of an iife bundle wrapped and never called).
 import { createTransport } from '../../sdk/transport';

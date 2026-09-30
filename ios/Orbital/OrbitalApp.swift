@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct OrbitalTimelineApp: App {
+struct OrbitalApp: App {
     var body: some Scene {
         WindowGroup { ContentView() }
     }
