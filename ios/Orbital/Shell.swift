@@ -14,6 +14,7 @@ struct Shell: View {
 
     @State private var page = Page.timeline
     @State private var path: [String] = [] // the nodes zoomed into from the page, as a push each
+    @State private var notes: [String: String] = [:] // chat id -> what its first message's send had to say, for the chat's own composer
     @State private var searches: [Page] = []
     @State private var icons: [String: UIImage] = [:] // saved search id -> the icon it was given in Orbital
     @State private var menu = false
@@ -35,7 +36,7 @@ struct Shell: View {
                     case .search(let id, _): NodeScreen(engine: engine, id: id, titled: false).id(id)
                     }
                 }
-                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0) }
+                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0, note: notes[$0]) }
                 .navigationTitle(page.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -43,7 +44,7 @@ struct Shell: View {
                         Button { show(true) } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Menu")
                     }
                 }
-                .safeAreaInset(edge: .bottom) { Composer { let sent = try await engine.ask($0); path.append(sent.id); return sent.warning } } // a new chat, opened as it starts
+                .safeAreaInset(edge: .bottom) { Composer { let sent = try await engine.ask($0); notes[sent.id] = sent.warning; path.append(sent.id); return nil } } // a new chat, opened as it starts, its warning shown there
             }
             .accessibilityHidden(menu) // with the menu open, VoiceOver reads the menu, not the page pushed aside
             // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
@@ -189,9 +190,11 @@ struct SideMenu: View {
 // message sent that Tana did not answer stays sent, with the warning send hands back shown under the box.
 struct Composer: View {
     var prompt = "Ask Tana"
+    var note: String? // a line to start with (NodeScreen: what the send that opened this chat said)
     let send: (String) async throws -> String?
     @State private var text = CommandLine.arguments.contains("-typing") ? "Can you move the offsite to Thursday?" : "" // -typing: the open card, for design shots
     @State private var failure: String?
+    @State private var noted = false
     @State private var sending = false
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -239,6 +242,7 @@ struct Composer: View {
         .padding(.bottom, focused ? 14 : 4) // clear of the keyboard while you type, as the Codex app's card is
         .animation(reduceMotion ? nil : .snappy, value: open)
         .animation(reduceMotion ? nil : .snappy, value: focused)
+        .onAppear { if !noted { failure = note; noted = true } }
         .task { if CommandLine.arguments.contains("-typing") { try? await Task.sleep(for: .seconds(1)); focused = true } } // -typing: with the keyboard up
     }
 }

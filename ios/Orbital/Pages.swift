@@ -12,8 +12,9 @@ enum Glyph {
         default: "doc"
         }
     }
-    // the glyph for a node by its id's kind (tana:<kind>:<ulid>)
-    static func of(uri: String) -> String { of(uri.split(separator: ":").dropFirst().first.map(String.init)) }
+    // a node's kind from its id (tana:<kind>:<ulid>), and the glyph for it
+    static func kind(of uri: String) -> String? { uri.split(separator: ":").dropFirst().first.map(String.init) }
+    static func of(uri: String) -> String { of(kind(of: uri)) }
 }
 
 // One node in a list: a task's box or its kind's glyph, its words, and when it last changed
@@ -53,6 +54,7 @@ struct NodeScreen: View {
     let engine: Engine
     let id: String
     var titled = true // false when the page is the menu's own and the shell names it
+    var note: String? // what the composer that started this chat had to say (Shell: Tana did not answer, or saved for later)
 
     @State private var page: Engine.Page?
     @State private var error: String?
@@ -66,7 +68,7 @@ struct NodeScreen: View {
                 case "chat":
                     ChatView(rows: page.rows)
                         // sent is sent: the read after it is the next poll's job, so a failed read never offers to send it twice
-                        .safeAreaInset(edge: .bottom) { Composer(prompt: "Follow up") { let sent = try await engine.send($0, to: id); await load(); return sent.warning } }
+                        .safeAreaInset(edge: .bottom) { Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); await load(); return sent.warning } }
                 case "search", "event":
                     List(page.rows) { ListRow(row: $0, engine: engine) }
                         .listStyle(.plain)
@@ -79,7 +81,13 @@ struct NodeScreen: View {
                         .overlay { if page.rows.isEmpty { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } }
                 }
             } else if let error {
-                ContentUnavailableView("Didn't open", systemImage: "exclamationmark.triangle", description: Text(error))
+                ContentUnavailableView {
+                    Label("Didn't open", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Try again") { Task { await load() } }
+                }
             } else {
                 ProgressView()
             }
@@ -90,9 +98,10 @@ struct NodeScreen: View {
             guard engine.phase == .ready else { return }
             await load()
             // A chat is read again every two seconds while it is on screen, so Tana's answer shows as it is written: the
-            // document is live in the engine, so this is a local read, not a request.
+            // document is live in the engine, so this is a local read, not a request. One that did not open yet (a chat
+            // just started, still on its way to Tana) keeps being tried the same way.
             // ponytail: polled; have the engine call back on the chat's changes if this ever costs.
-            while page?.kind == "chat", !Task.isCancelled {
+            while (page?.kind ?? Glyph.kind(of: id)) == "chat", !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 await load()
             }
