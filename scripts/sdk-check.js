@@ -509,18 +509,25 @@ async function main() {
     assert.equal(chat.icon,'chat');assert.ok(chat.id.startsWith('tana:chat:'));
     const chatData=readNode(docs.get(chat.id));assert.deepEqual(chatData.messages,[]);assert.deepEqual(chatData.participantUris,[]);
     assert.equal(docs.get(chat.id).content.get('nodeName'),undefined,'chat has no invented outline');
+    assert.ok(choices.options.some(o=>o.kind==='canvas'&&o.icon==='canvas'&&o.selectable),'Create new offers a canvas (#620)');
+    const canvas=await backend.createDocument('Board',{kind:'canvas'});
+    assert.ok(canvas.id.startsWith('tana:canvas:'));assert.equal(canvas.icon,'canvas');
+    const canvasData=readNode(docs.get(canvas.id));
+    assert.deepEqual(Object.keys(canvasData).filter(k=>k!=='id').sort(),['createdAt','participants','restricted','sharedPinDates','title','type'],'a canvas holds what Tana\'s own create writes, and no outline or attributes');
+    assert.equal(canvasData.type,'canvas');assert.equal(docs.get(canvas.id).content.get('nodeName'),undefined);
+    await assert.rejects(backend.createDocument('Typed board',{kind:'canvas',typeUri:textType.id}),/kind custom/,'a canvas takes no type');
     const typed=await backend.createDocument('New project',{kind:'custom',typeUri:textType.id});
     assert.equal(readNode(docs.get(typed.id)).entityTypeUri,textType.id);
     assert.equal(readNode(docs.get(typed.id)).ownerUri,space.id);assert.equal(readNode(docs.get(typed.id)).restricted,true);
     const event=await backend.createDocument('Working session',{kind:'custom',typeUri:eventType.id});
     assert.ok(event.id.startsWith('tana:event:'));assert.equal(readNode(docs.get(event.id)).entityTypeUri,eventType.id);
-    assert.equal(readNode(docs.get(event.id)).origin,'tana');assert.equal(created.length,4);
+    assert.equal(readNode(docs.get(event.id)).origin,'tana');assert.equal(created.length,5);
     // A saved search is created from a query, never from a bare title. Both directions are refused, and neither
     // leaves a half-made document behind: a search born with an empty query map would be unopenable, since
     // searchChildren reads that as unreadable and fails closed.
     await assert.rejects(backend.createDocument('No query',{kind:'search'}),/needs a query/);
     await assert.rejects(backend.createDocument('Not a search',{kind:'doc',query:{types:['text']}}),/Only a saved search carries a query/);
-    assert.equal(created.length,4,'a refused search creates nothing');
+    assert.equal(created.length,5,'a refused search creates nothing');
     const search=await backend.createDocument('My Tasks',{kind:'search',query:{types:['text'],assignedToViewer:true}});
     assert.ok(search.id.startsWith('tana:search:'),'a saved search gets its own id kind');
     const searchDoc=docs.get(search.id);
@@ -528,11 +535,11 @@ async function main() {
     assert.deepEqual(searchDoc.loro.getMap('query').toJSON().types,['text'],'the query survives the real create path, not just initDocument');
     assert.equal(searchDoc.loro.getMap('query').toJSON().assignedToViewer,true);
     assert.equal(readNode(searchDoc).sharedPinDates,undefined,'and it still carries none of the fields a real one lacks');
-    assert.equal(created.length,5);
+    assert.equal(created.length,6);
     // "Save this query as a search" goes through main, not the renderer: the renderer sends a view id, main
     // translates the filter it already owns. An unknown view must be refused by viewFilter before anything exists.
     await assert.rejects(backend.searchCreate('nope'),/unknown view/);
-    assert.equal(created.length,5,'a bad view id creates nothing');
+    assert.equal(created.length,6,'a bad view id creates nothing');
     const fromLibrary=await backend.searchCreate('library');
     assert.ok(fromLibrary.id.startsWith('tana:search:'));
     const libQuery=docs.get(fromLibrary.id).loro.getMap('query').toJSON();
@@ -555,11 +562,11 @@ async function main() {
     assert.equal(backend.searchTitle('library',{text:'  dpa  '}),'Library — "dpa"');
     const named=await backend.searchCreate('library','Quarterly review');
     assert.equal(readNode(docs.get(named.id)).title,'Quarterly review','an explicit title beats the derived one');
-    assert.equal(created.length,7);
+    assert.equal(created.length,8);
     space.transact(l=>l.getMap('data').get('participants').get(ME).set('role','viewer'));
     await assert.rejects(backend.createDocument('Blocked',{kind:'custom',typeUri:textType.id}),/permission/);
     await assert.rejects(backend.createDocument('Invalid',{kind:'custom',typeUri:unknownType.id}),/Unsupported type target/);
-    assert.equal(created.length,7,'invalid scope/types do not create partial documents'); // 7: three legitimate saved searches are created above
+    assert.equal(created.length,8,'invalid scope/types do not create partial documents'); // 8: a canvas and three legitimate saved searches are created above
     console.log('ok  creation chooser: native chats, actual typed docs/events, home-space validation and unsaved blank drafts');
   }
   // Setting a document's type (Cmd+K "Set type"), by Tana's own two rules (their shared bundle, read 2026-09-20):

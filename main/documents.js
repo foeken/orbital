@@ -280,7 +280,7 @@ async function creationOptions() {
   // A saved search is created empty and then narrowed with the pills, unlike the other kinds, which are created from
   // a title alone. writeSearchQuery materialises every key, so the empty query is still a readable one — a search
   // born without it would be refused by searchChildren for the rest of its life.
-  const options = [{id:'doc',kind:'doc',title:'Doc',icon:'doc',selectable:true},{id:'task',kind:'task',title:'Task',icon:'task',selectable:true},{id:'meeting',kind:'meeting',title:'Meeting',icon:'meeting',selectable:true},{id:'chat',kind:'chat',title:'Chat',icon:'chat',selectable:true},{id:'search',kind:'search',title:'Search',icon:'search',selectable:true}];
+  const options = [{id:'doc',kind:'doc',title:'Doc',icon:'doc',selectable:true},{id:'task',kind:'task',title:'Task',icon:'task',selectable:true},{id:'meeting',kind:'meeting',title:'Meeting',icon:'meeting',selectable:true},{id:'chat',kind:'chat',title:'Chat',icon:'chat',selectable:true},{id:'search',kind:'search',title:'Search',icon:'search',selectable:true},{id:'canvas',kind:'canvas',title:'Canvas',icon:'canvas',selectable:true}];
   const types = await Promise.all(result.nodes.map(async n => {
     rememberType(n);
     // the chooser shows a type the way its documents render: the type's own hue and its app-local icon

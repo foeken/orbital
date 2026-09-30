@@ -357,6 +357,8 @@ function paletteRows(q, typed = q) {
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
+  // ⌘K New canvas (#620): named as Tana names one ("Canvas Sep 30, 2026, 2:05 PM") and opened in its window (#611)
+  if (tana.createDocument && tana.openCanvas) rows.push({ id: 'newCanvas', group: 'Actions', icon: 'canvas', label: 'New canvas', hint: 'A board, drawn by Tana', run: () => run(async () => { const now = new Date(); opensCanvas((await tana.createDocument('Canvas ' + now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }), { kind: 'canvas' })).id); }) });
   if (tana.newChat && tana.inviteToChat) rows.push({ id: 'newChatWith', group: 'Actions', icon: 'chat', label: 'New chat with …', hint: 'Someone from the workspace', keepOpen: true, run: () => openNewChatWith() }); // renderer/chat.js
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
