@@ -210,6 +210,7 @@ function mockApi() {
   const cell = (text, header) => ({ id: 'cell' + (++seq), header: !!header, colspan: 1, rowspan: 1, colwidth: null, paragraph: 'cp' + seq, segments: text ? [{ text }] : [], text, blocks: [] });
   const grid = [[cell('Owner', true), cell('Status', true)], [cell('Robin'), cell('Open')], [cell('Sam'), cell('')]];
   content.mocknl0 = Object.keys(DUTCH).slice(1, 4).map((t) => block(t)); // the Dutch note's rows
+  content.mockdoc0.splice(4, 0, block([{ mention: { label: dutch.text, uri: dutch.id } }])); // a full reference to it: translated as its list row is
   content.mockdoc0.push({ id: 'tbl' + (++seq), kind: 'block', block: 'paragraph', type: 'table', editable: false, text: '', table: { id: 'tbl' + seq, rows: grid, rowCount: 3, columnCount: 2 }, hasChildren: false, children: [] });
   // the values of the mock's options and link fields, one line each; the second link points at a type the field does not list
   content['mockdoc1|tana:type:mock0?attribute=lvl00001'] = [block('Medium'), block('Urgent')];
