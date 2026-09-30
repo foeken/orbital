@@ -24,7 +24,7 @@ struct SettingsView: View {
                 Section {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
-                        if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "sparkle", title: "Plan") } }
+                        if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
                         Button { ChatGPT.forget(); self.chatgpt = nil } label: { Row(glyph: "chatgpt", title: "Sign out of ChatGPT") }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
