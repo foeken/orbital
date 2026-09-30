@@ -4,7 +4,12 @@
 // Trellis panes — on the renderer's mock data, in headless Chromium over the DevTools protocol, the way the design
 // skill's shoot.js draws it. A scene file exports shots; a shot plays its steps in the window and ends in a still, or,
 // with video: true, is recorded while its steps play, with a cursor and the keys pressed drawn over it.
-//   node manual/scenes/run.js manual/scenes/<chapter>.js [--only a,b] [--themes light,dark] [--out dir]
+//   node manual/scenes/run.js manual/scenes/<chapter>.js [more.js …] [--only a,b] [--themes light,dark] [--force] [--out dir]
+// Incremental: manifest.json (committed) keeps a hash of every shot as it was last recorded, and a shot whose definition
+// is unchanged and whose file exists is skipped. --force records them anyway (after a change to how the app looks);
+// --adopt records the current definitions as done without drawing anything (after editing a scene's comments, say).
+// A still whose bytes come out the same is not rewritten, and every page runs on a fixed clock (--now, local time), so
+// recording again changes only what really changed. Pass several scene files to record them in one Chromium.
 // A shot with url: 'manual/<chapter>.html' draws that page of the manual instead of the app (to check a chapter):
 // full: true takes the whole page, scrolled through once so everything that fades in has.
 // Runs outside the sandbox (a loopback port, Chromium); clips need ffmpeg. Not packaged (package.json --ignore).
@@ -26,10 +31,29 @@ const http = require('http'), fs = require('fs'), path = require('path'), os = r
 
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k), v = process.argv[i + 1]; return i < 0 ? d : v === undefined || v.startsWith('--') ? true : v; };
 const root = path.resolve(__dirname, '../..'), media = path.resolve(String(arg('out', path.join(root, 'manual/media'))));
-const file = process.argv[2] && path.resolve(process.argv[2]);
-if (!file || !fs.existsSync(file)) { console.error('usage: node manual/scenes/run.js manual/scenes/<chapter>.js [--only a,b] [--themes light,dark]'); process.exit(1); }
+const VALUED = /^--(only|themes|out|now)$/;
+const files = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !(i > 0 && VALUED.test(all[i - 1])))
+  .map((f) => path.resolve(f)).filter((f) => !/[\\/](run|index|kit)\.js$/.test(f));
+if (!files.length || files.some((f) => !fs.existsSync(f))) { console.error('usage: node manual/scenes/run.js manual/scenes/<chapter>.js [more.js …] [--only a,b] [--themes light,dark] [--force] [--adopt]'); process.exit(1); }
 const only = arg('only', '') ? String(arg('only')).split(',') : null, themes = String(arg('themes', 'light,dark')).split(',');
-const shots = require(file).filter((s) => !only || only.includes(s.name));
+// a shot with url is a check of a manual page: drawn only when named with --only, and never into media/
+const shots = files.flatMap((f) => require(f)).filter((s) => (only ? only.includes(s.name) : !s.url));
+// what was recorded, by output: the hash of the shot's definition (RECIPE: bump when the runner changes how pictures look)
+const RECIPE = 1, MANIFEST = path.join(__dirname, 'manifest.json'), tracked = media === path.join(root, 'manual/media');
+const manifest = fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, 'utf8')) : {};
+const hashOf = (shot) => require('crypto').createHash('sha1').update(RECIPE + JSON.stringify(shot)).digest('hex').slice(0, 12);
+const saveManifest = () => fs.writeFileSync(MANIFEST, JSON.stringify(Object.fromEntries(Object.entries(manifest).sort()), null, 1) + '\n');
+const outOf = (shot, theme) => path.join(shot.url && tracked ? path.join(os.tmpdir(), 'manual-check') : media, shot.name + '-' + theme + (shot.video ? '.mp4' : '.webp'));
+const done = (shot, theme) => tracked && !shot.url && manifest[shot.name + '-' + theme] === hashOf(shot) && fs.existsSync(outOf(shot, theme));
+if (arg('adopt', false)) {
+  let n = 0; for (const shot of shots) for (const theme of themes) if (tracked && !shot.url && fs.existsSync(outOf(shot, theme))) { manifest[shot.name + '-' + theme] = hashOf(shot); n++; }
+  saveManifest(); console.log('adopted ' + n + ' pictures as recorded'); process.exit(0);
+}
+const todo = arg('force', false) ? shots.length * themes.length : shots.reduce((n, s) => n + themes.filter((t) => !done(s, t)).length, 0);
+if (!todo) { console.log('nothing to record: every shot is as it was recorded (--force to record anyway)'); process.exit(0); }
+// the pages' clock: a fixed moment that runs on from there, so times, "in 45 minutes" and meeting slots do not drift
+const NOW = Date.parse(String(arg('now', '2026-09-30T11:40:00')));
+const CLOCK = '(() => { const R = Date, off = ' + NOW + ' - R.now(); class D extends R { constructor(...a) { if (a.length) super(...a); else super(R.now() + off); } static now() { return R.now() + off; } } window.Date = D; })()';
 const cache = path.join(os.homedir(), 'Library/Caches/ms-playwright');
 const chrome = process.env.CHROME || (fs.existsSync(cache) && fs.readdirSync(cache).filter((d) => d.startsWith('chromium_headless_shell-')).sort().reverse()
   .map((d) => path.join(cache, d, 'chrome-headless-shell-mac-arm64/chrome-headless-shell')).find((f) => fs.existsSync(f)));
@@ -88,6 +112,7 @@ function parseKey(combo) {
 
 (async () => {
   fs.mkdirSync(media, { recursive: true });
+  fs.mkdirSync(path.join(os.tmpdir(), 'manual-check'), { recursive: true });
   const server = http.createServer((q, s) => { const f = decodeURIComponent(q.url.split('?')[0]); fs.readFile(path.join(root, f), (e, d) => {
     s.writeHead(e ? 404 : 200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' }); s.end(e ? '' : d);
   }); }).listen(0, '127.0.0.1');
@@ -178,8 +203,13 @@ function parseKey(combo) {
     };
     await send('Page.enable');
     await send('Page.setBypassCSP', { enabled: true }); // the pages' CSP forbids the evals the steps run through
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: CLOCK }); // every frame, before its scripts
+    let skipped = 0;
+    // a still whose bytes are the same as before is left alone, so git sees only what changed
+    const writeStill = (out, data) => { const buf = Buffer.from(data, 'base64'); if (!fs.existsSync(out) || !fs.readFileSync(out).equals(buf)) fs.writeFileSync(out, buf); else console.log('unchanged', path.relative(root, out)); };
     for (const shot of shots) for (const theme of themes) {
-      const out = path.join(media, shot.name + '-' + theme + (shot.video ? '.mp4' : '.webp'));
+      const out = outOf(shot, theme);
+      if (!arg('force', false) && done(shot, theme)) { skipped++; continue; }
       try {
         const [w, h] = String(shot.size || '1280x800').split('x').map(Number), panes = shot.graph ? 2 : shot.panes || 1;
         await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: DPR, mobile: false });
@@ -213,7 +243,7 @@ function parseKey(combo) {
           await sleep(shot.settle ?? 500);
           const [x, y, cw, chh] = await region(shot.clip, w, h);
           const { data } = await send('Page.captureScreenshot', { format: 'webp', quality: 90, clip: { x, y, width: cw, height: chh, scale: 1 } });
-          fs.writeFileSync(out, Buffer.from(data, 'base64'));
+          writeStill(out, data);
         } else {
           video = true;
           const [x, y, cw, chh] = await region(shot.clip, w, h);
@@ -235,8 +265,10 @@ function parseKey(combo) {
           if (process.env.SCENE_KEEP) console.log('frames in', dir); else fs.rmSync(dir, { recursive: true, force: true });
         }
         console.log(path.relative(root, out), Math.round(fs.statSync(out).size / 1024) + ' KB');
+        if (tracked) { manifest[shot.name + '-' + theme] = hashOf(shot); saveManifest(); }
       } catch (e) { failed++; console.error('FAILED ' + shot.name + '-' + theme + ': ' + (e.message || e)); }
     }
+    if (skipped) console.log(skipped + ' already recorded, skipped (--force to record them anyway)');
     ws.close();
   } finally { ch.kill(); server.close(); }
   process.exit(failed ? 1 : 0);

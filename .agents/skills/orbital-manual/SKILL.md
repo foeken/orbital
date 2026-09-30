@@ -50,16 +50,19 @@ Which chapter owns a feature:
 1. Find the chapter (table above) and the section; `rg -n "<the Cmd+K label>" manual/*.html` finds every mention.
 2. Change the words: what it is for, the exact Cmd+K row label (verbatim from `label: '…'`, including a trailing " …"),
    the key, what you see. Update the chapter's key table and `manual/keys.html` when a key moved.
-3. Change or add the shot in `manual/scenes/<id>.js` and re-record only it, outside the sandbox:
-   `node manual/scenes/run.js manual/scenes/<id>.js --only <shot> --themes light` while iterating, then both themes.
+3. Change or add the shot in `manual/scenes/<id>.js` (build it from `manual/scenes/kit.js`) and record, outside the
+   sandbox: `node manual/scenes/run.js manual/scenes/<id>.js` records only the shots whose definition changed or whose
+   file is missing; `--only <shot> --themes light` while iterating. A change to how the app looks that leaves the
+   shot's definition alone needs `--only <shot> --force` on the shots that show it (`rg` the scene files for its row or
+   selector). Commit `manual/scenes/manifest.json` with the pictures.
 4. Look at every picture you made (a clip: `ffmpeg -ss 2 -i f.mp4 -frames:v 1 /tmp/f.png`). Redo a bad crop, an empty
    page, a palette saying "No results", clipped text.
 5. If the mock lacks what the feature needs, add it to `renderer/mock.js` (small, additive, fictional), then
    `node --check renderer/mock.js`.
 6. `node manual/scenes/index.js --coverage`: rebuilds the search index; it must report no broken links or missing
    pictures, no unused pictures, and your feature's labels must not be in the "not mentioned" list.
-7. Check the page as a reader sees it: a shot `{ name: 'x', url: 'manual/<id>.html', full: true, size: '1440x900' }` with
-   `--out /tmp/check`, both themes.
+7. Check the page as a reader sees it: the chapter's `<id>-page` shot (`{ name, url: 'manual/<id>.html', full: true,
+   size: '1440x900' }`) with `--only <id>-page`, drawn into `$TMPDIR/manual-check`, both themes.
 8. `npm run lint` and `npm run check` (on Node 22, as CI; see Checks). Say in the PR what the manual gained.
 
 A removed feature: delete its words, its shots from the scene file and its pictures (the audit lists unused ones).
@@ -106,6 +109,28 @@ cursor, a ripple on clicks and keycaps for each key.
   (renderer/palette.js, the "No results" condition): pick with arrows in clips until it is fixed.
 - Data a picture shows is fictional and should look lived-in: the mock's Timeline "Now" block, meetings starting a few
   minutes after the capture, a meeting write-up with Key takeaways, a Dutch note, faces on meetings. Keep it that way.
+
+## Regenerating cheaply
+
+Nothing is drawn twice without a reason, and the tricks are kept, not rediscovered:
+
+- **The pictures are kept** in `manual/media/` and **the recipes** in `manual/scenes/*.js`; both are committed. Never
+  regenerate the whole manual for one change: record the shots the change touches.
+- **`manual/scenes/manifest.json`** holds a hash of every shot's definition as last recorded. The runner skips a shot
+  whose hash matches and whose file exists, so `node manual/scenes/run.js manual/scenes/*.js` records exactly what
+  changed (and says "nothing to record" otherwise). `--force` records anyway; `--adopt` marks the current definitions
+  as recorded without drawing (after a comment-only edit). Bump `RECIPE` in run.js only when the runner changes how
+  every picture looks.
+- **Repeatable renders**: every page runs on a fixed clock (`--now`, default 2026-09-30 11:40 local), so Timeline times,
+  "no meetings for 45 more minutes" and meeting slots come out the same each time, and a still whose bytes are
+  unchanged is not rewritten. A clip is always re-encoded when recorded, so record clips only when they changed.
+- **Shared steps** are in `manual/scenes/kit.js`: `open`, `settle`, `palette`/`onlyPalette`/`NARROW`, `real()`/`REAL` (mock
+  ids read as tana: ids), `seedTaskMeta`, `seedFields`, `live()` with `layout`/`panel`/`page` (panes that really open),
+  `helpTour`, `quickAdd`, `overlay`, `dropOnCreate`, `translate`. Add a trick there the second time a scene needs it.
+- **Checks of a whole manual page** (a shot with `url`) run only when named with `--only` and are written to
+  `$TMPDIR/manual-check`, never into media.
+- Every recorded clip adds its bytes to git history for good. If the repository grows heavy from re-recorded media,
+  move `manual/media` to Git LFS rather than recording less.
 
 ## Checks
 

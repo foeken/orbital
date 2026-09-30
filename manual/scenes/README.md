@@ -1,7 +1,8 @@
 # Writing a chapter of the Orbital manual
 
-Updating the manual for a PR (which chapter owns a feature, the steps, the capture gotchas) is the orbital-manual
-skill: .agents/skills/orbital-manual/SKILL.md. This file is the reference for the building blocks.
+Updating the manual for a PR (which chapter owns a feature, the steps, the capture gotchas, recording only what
+changed) is the orbital-manual skill: .agents/skills/orbital-manual/SKILL.md. This file is the reference for the
+building blocks; manual/scenes/kit.js has the steps scenes share, and manifest.json what has been recorded.
 
 The manual is static HTML in manual/, opened from Cmd+K → Help → Open Manual in a window of its own (main.js
 manual:open). It ships in the app; manual/scenes/ (this folder: the capture runner, the scene files, this guide) does not.
@@ -107,8 +108,9 @@ Pictures:
   what happens. Aim below 500 KB per clip; stills below 250 KB.
 - Always both themes (the default). Look at every picture you make (view the image) before using it.
 
-Check your chapter: a shot { name: '<id>-page', url: 'manual/<id>.html', full: true, size: '1440x900' } run with
---out /tmp/manual-check draws the whole page; look at it in both themes, and fix what looks wrong.
+Check your chapter: a shot { name: '<id>-page', url: 'manual/<id>.html', full: true, size: '1440x900' } in your scene
+file, run with --only <id>-page, draws the whole page into $TMPDIR/manual-check (never into media); look at it in both
+themes, and fix what looks wrong.
 
 Do not run git (the lead commits), do not edit other chapters, manual.css or manual.js. When done, report: the features you
 covered (by section), the media you made, anything you could not capture and why, and any mock or shared change you made.
