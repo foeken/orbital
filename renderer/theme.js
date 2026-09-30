@@ -2,8 +2,10 @@
 // Theme preference: light, dark or follow macOS; applied before anything else renders.
 
 // theme preference (renderer/prefs.js "theme"): 'light' | 'dark' | 'system'; 'system' follows the macOS appearance
-// (api.systemTheme / api.onSystemTheme). It follows you between machines like the rest of the preferences.
-let themePref = ['dark', 'system'].includes(pref('theme')) ? pref('theme') : 'light';
+// (api.systemTheme / api.onSystemTheme). It follows you between machines like the rest of the preferences. Until a
+// theme is chosen it is 'system' (#632): a fresh install looks like the Mac around it, and Cmd+K's Toggle dark mode pins one.
+const themeChoice = (value) => (['light', 'dark', 'system'].includes(value) ? value : 'system');
+let themePref = themeChoice(pref('theme'));
 let theme = themePref === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : themePref; // no flash before api.systemTheme answers
 function applyTheme(next) {
   theme = next === 'dark' ? 'dark' : 'light';

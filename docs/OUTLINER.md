@@ -524,7 +524,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   in the synced `savedViews` preference. Save view… names the current one, or updates a saved view listed under
   it (narrowed by what is typed; its name and id kept, so Home and a recorded key still find it); choosing a row writes the places back and hands main the layout (`window:setLayout`), which saves it and reloads
   the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
-- **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode, Edit hidden items,
+- **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
   key. **Help**: Help, Check for updates (the app menu's Check for Updates…, whose dialogs answer), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is

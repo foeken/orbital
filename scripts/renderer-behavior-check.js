@@ -7442,6 +7442,7 @@ function runPrefsStoreCheck() {
 // follow. A page left with the old filter drew stale pills and wrote that filter back over the new one with its next pill.
 async function runSettingsElsewhereCheck() {
   const api = vm.runInNewContext(`
+    ${sourceLine('const themeChoice')}
     let handler = null, home = null, themePref = 'light', sensitiveLoading = null, mcpHidden = false, codexLoading = null, zoom = null, view = 'library';
     let listed = 0, codexReads = 0, stateReads = 0, stored = {}, codexIds = new Set(), marks = [], hosts = {};
     const agentTaskHosts = new Map();
@@ -9813,6 +9814,12 @@ checks.push(function runFieldPillsCheck() {
   assert.deepEqual(plain(api.sort('field?attribute=Review date', dated)), ['early', 'mid', 'late', 'none'], 'a date field sorts by its day, earliest first, rows without one last');
   assert.deepEqual(plain(api.sort('field?attribute=Impact', [{ id: 'ten', v: ['10'] }, { id: 'nine', v: ['9'] }, { id: 'one', v: ['1'] }])), ['one', 'nine', 'ten'], 'and numbers as numbers');
   console.log('ok  field pills: past four the idle ones fold behind "…", fields under their own heading in the menus, sorted by value (#624)');
+});
+// With no theme chosen Orbital follows macOS (#632); a chosen light or dark stays chosen.
+checks.push(function runThemeDefaultCheck() {
+  const themeChoice = vm.runInNewContext(sourceLine('const themeChoice') + '\nthemeChoice');
+  assert.deepEqual([undefined, null, 'sepia', 'system', 'light', 'dark'].map(themeChoice), ['system', 'system', 'system', 'system', 'light', 'dark'], 'no choice follows the system; light and dark stay what was chosen');
+  console.log('ok  theme: follows macOS until one is chosen (#632)');
 });
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
