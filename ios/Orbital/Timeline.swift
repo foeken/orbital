@@ -10,6 +10,7 @@ struct Row: Decodable, Identifiable {
     let createdAt: String?
     let unread: Bool?
     let done: Bool?
+    let stateType: String?
     let subtext: String?
     let start: String?
     let join: String?
@@ -64,7 +65,7 @@ struct TimelineScreen: View {
                 if !today.isEmpty {
                     Section("Today's tasks") {
                         ForEach(today) { task in
-                            RailRow(time: "") { TaskBox(done: task.done == true) } content: { TaskWords(row: task) }
+                            RailRow(time: "") { TaskBox(task: task, engine: engine) } content: { TaskWords(row: task, done: engine.state(of: task) == "closed") }
                                 .onTapGesture { open(task.id) }
                         }
                     }
@@ -76,7 +77,7 @@ struct TimelineScreen: View {
                     }
                 }
                 ForEach(days, id: \.0) { title, rows in
-                    Section(title) { ForEach(rows) { Entry(row: $0, open: open) } }
+                    Section(title) { ForEach(rows) { Entry(row: $0, engine: engine, open: open) } }
                 }
                 if !days.isEmpty {
                     Button { Task { await engine.more() } } label: {
@@ -165,6 +166,7 @@ struct RailRow<Dot: View, Content: View>: View {
 // an Inbox line brought. A meeting with no write-up is drawn quiet (#214); a new one carries the blue dot.
 struct Entry: View {
     let row: Row
+    let engine: Engine
     let open: (String) -> Void
 
     var body: some View {
@@ -179,10 +181,11 @@ struct Entry: View {
                 }
                 if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
                 ForEach(row.children ?? []) { child in
-                    Button { open(child.id) } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) { TaskBox(done: child.done == true); TaskWords(row: child) }.contentShape(Rectangle())
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        TaskBox(task: child, engine: engine)
+                        Button { open(child.id) } label: { TaskWords(row: child, done: engine.state(of: child) == "closed").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
+                            .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                     .padding(.top, 4)
                 }
             }
@@ -196,24 +199,36 @@ struct Entry: View {
     }
 }
 
-// A task's box: Orbital's green once done. Ticking it off comes with writes over the sync stream (#660); read-only now.
+// A task's box: a tap ticks it off or back on (Engine.toggle, the desktop's rule). An Inbox task's box is dashed, as on
+// the desktop, since its first tap accepts it; a finished one is Orbital's green, with the success haptic. The words
+// beside it open the task.
 struct TaskBox: View {
-    let done: Bool
+    let task: Row
+    let engine: Engine
+
     var body: some View {
-        Image(systemName: done ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(done ? AnyShapeStyle(Color.done) : AnyShapeStyle(.tertiary))
-            .background(Circle().fill(Color(.systemBackground)).padding(-2))
-            .accessibilityHidden(true)
+        let state = engine.state(of: task)
+        Button { Task { await engine.toggle(task) } } label: {
+            Image(systemName: state == "closed" ? "checkmark.circle.fill" : state == "proposed" ? "circle.dashed" : "circle")
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(state == "closed" ? AnyShapeStyle(Color.done) : AnyShapeStyle(.tertiary))
+                .background(Circle().fill(Color(.systemBackground)).padding(-2))
+                .padding(8).contentShape(Rectangle()).padding(-8) // a finger-sized target around a text-sized box
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.success, trigger: state) { _, now in now == "closed" }
+        .accessibilityLabel(task.words)
+        .accessibilityValue(state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed")
+        .accessibilityHint("Ticks the task off, or back on")
     }
 }
 
 // A task's words, struck and grey once done
 struct TaskWords: View {
     let row: Row
+    let done: Bool
     var body: some View {
-        let done = row.done == true
         Text(row.words).strikethrough(done).foregroundStyle(done ? .secondary : .primary)
-            .accessibilityLabel(row.words + (done ? ", completed" : ""))
     }
 }
 

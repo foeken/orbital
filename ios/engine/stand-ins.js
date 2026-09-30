@@ -24,7 +24,7 @@ module.exports = {
   setting: (key) => JSON.parse(localStorage.getItem('orbital:' + key) ?? 'null'),
   setSetting: (key, value) => localStorage.setItem('orbital:' + key, JSON.stringify(value)),
   // ./rows: a task under a row needs its id, words and state (ios/Orbital/Timeline.swift)
-  graphRow: (n) => ({ id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: (n.state && n.state.type) === 'closed' }),
+  graphRow: (n) => ({ id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: (n.state && n.state.type) === 'closed', stateType: n.state && n.state.type }),
   toNode: (row) => row,
   rememberNodeHue() {},
   hm: (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }, // sdk/chat.js hm

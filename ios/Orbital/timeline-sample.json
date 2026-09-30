@@ -16,17 +16,20 @@
    {
     "id": "tana:text:0000000000000000000000000a",
     "title": "Draft the Q4 hiring plan",
-    "done": false
+    "done": false,
+    "stateType": "open"
    },
    {
     "id": "tana:text:0000000000000000000000000b",
     "title": "Send the offsite agenda",
-    "done": false
+    "done": false,
+    "stateType": "open"
    },
    {
     "id": "tana:text:0000000000000000000000000c",
     "title": "Review the design crit notes",
-    "done": true
+    "done": true,
+    "stateType": "closed"
    }
   ]
  },
@@ -117,12 +120,14 @@
    {
     "id": "tana:text:0000000000000000000000000f",
     "title": "Upgrade the build agents before 24 November",
-    "done": false
+    "done": false,
+    "stateType": "open"
    },
    {
     "id": "tana:text:0000000000000000000000000g",
     "title": "Rotate the staging API keys",
-    "done": false
+    "done": false,
+    "stateType": "proposed"
    }
   ]
  },
@@ -280,7 +285,8 @@
    {
     "id": "tana:text:0000000000000000000000000m",
     "title": "Follow up on the vendor contract",
-    "done": false
+    "done": false,
+    "stateType": "open"
    }
   ]
  },

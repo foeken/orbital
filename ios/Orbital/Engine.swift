@@ -14,6 +14,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var loading = false
     var error: String?
     var pages = 1
+    var states: [String: String] = [:] // task id -> the stateType ticked here, until a read of Tana agrees with it
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value (#658). A line is
     // added only when it differs from the one before, so the screen is redrawn only when something moved.
     var log: [String] = []
@@ -141,6 +142,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             let json = try await web.callAsyncJavaScript("return await orbital.timeline(pages)", arguments: ["pages": pages], contentWorld: .page) as? String ?? "[]"
             rows = try JSONDecoder().decode([Row].self, from: Data(json.utf8))
             error = nil
+            states = states.filter { id, state in Self.stateType(id, in: rows) != state } // Tana has caught up with these
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
@@ -154,6 +156,36 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func more() async {
         pages += 1
         await refresh()
+    }
+
+    // A task's box: drawn in its new state at once, written by engine.js (orbital.toggle, the desktop's rule), and put
+    // back with the reason in Details if Tana refuses. The row stays where it is (orbital-design: never move things
+    // under the user); the next read confirms it.
+    func toggle(_ task: Row) async {
+        let before = state(of: task)
+        states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
+        guard !CommandLine.arguments.contains("-sample") else { return } // the sample writes nothing
+        do {
+            if let written = try await web.callAsyncJavaScript("return await orbital.toggle(id)", arguments: ["id": task.id], contentWorld: .page) as? String {
+                states[task.id] = written
+            }
+        } catch {
+            states[task.id] = before
+            note("ticking off failed: \(Self.message(error))")
+            self.error = Self.message(error)
+        }
+    }
+
+    func state(of task: Row) -> String {
+        states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
+    }
+
+    private static func stateType(_ id: String, in rows: [Row]) -> String? {
+        for row in rows {
+            if row.id == id { return row.stateType }
+            if let found = stateType(id, in: row.children ?? []) { return found }
+        }
+        return nil
     }
 
     // Launched with -sample: timeline-sample.json in place of Tana, for screenshots of the design. Invented content only;

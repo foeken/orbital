@@ -5,6 +5,7 @@
 // ./stand-ins.js, chosen at bundle time (build.js).
 // An ES module so the bundle runs it (Bun leaves a CommonJS entry of an iife bundle wrapped and never called).
 import { createTanaClient } from '../../sdk';
+import { STATE_TYPES, editable, readNode, setState } from '../../sdk/node';
 import { S } from '../../main/state';
 import timeline from '../../main/timeline';
 import { issues } from './stand-ins';
@@ -64,6 +65,17 @@ window.orbital = {
   },
   // main/documents.js webLink: a node's page on home.tana.inc, under the org document's ulid
   link: (id) => 'https://home.tana.inc/o/' + String(last && last.orgDocUri || '').split(':').pop() + '/' + ({ type: 't', 'user-profile': 'u', event: 'e', space: 's' }[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id),
+  // A task's box, as the desktop's does it (renderer/edit.js toggleDone, main/documents.js doc:setDone and mutTasks): an
+  // Inbox task is accepted first (In Progress), a finished one is reopened, anything else is completed. Answers the state
+  // written; refuses what is not a task or is read-only to you.
+  async toggle(id) {
+    const doc = await S.client.sync.subscribe(id), n = readNode(doc);
+    if (!STATE_TYPES.includes(n.stateType)) throw new Error('Only a task can be ticked off');
+    if (editable(n, S.me.userUri) === false) throw new Error('This task is read-only to you');
+    const next = n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed';
+    setState(doc, next, S.me.userUri);
+    return next;
+  },
   loro: loro.version,
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
   issues: () => issues.splice(0), // what went wrong since last asked (a part of the page that could not be read), for the log
