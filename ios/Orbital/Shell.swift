@@ -13,6 +13,7 @@ struct Shell: View {
     @State private var searching = false
     @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     private let width: CGFloat = 300
 
     var body: some View {
@@ -47,7 +48,10 @@ struct Shell: View {
             // shown or hidden: added and removed, it faded out where it had been while the page slid home, a second edge
             // lagging behind the first.
             .overlay {
-                RoundedRectangle(cornerRadius: 44, style: .continuous).strokeBorder(Color(.separator), lineWidth: 1)
+                // a faint grey over the card in dark mode, so it reads as a sheet lifted off the black menu, as the
+                // ChatGPT app's does; in light mode the shadow does that
+                RoundedRectangle(cornerRadius: 44, style: .continuous).fill(Color.pair(0x000000, 0xffffff).opacity(scheme == .dark ? 0.08 : 0))
+                    .overlay { RoundedRectangle(cornerRadius: 44, style: .continuous).strokeBorder(Color(.separator), lineWidth: 1) }
                     .ignoresSafeArea()
                     .opacity(menu ? 1 : 0)
                     .contentShape(Rectangle())
@@ -229,3 +233,4 @@ struct SearchSheet: View {
         }
     }
 }
+
