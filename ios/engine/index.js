@@ -15,6 +15,7 @@ import { S, isSpace, iso, visibleGraphNodes } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
+import { PRIVATE, redact as scrub } from './redact';
 import NUCLEO from 'nucleo-ui';
 
 const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; } };
@@ -58,10 +59,7 @@ function storageId() {
 const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
 const listRow = (n) => ({ id: n.id, title: secret().has(n.id) ? PRIVATE : n.title || 'Untitled', icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
 
-// What you marked sensitive in Orbital (the settings document's sensitive: node ids) is blurred on the desktop until you
-// reveal it; the phone has no reveal, so it never shows those words: a title reads Private, an entry about one says only
-// that a private item changed, and zooming into one shows nothing of it.
-const PRIVATE = 'Private';
+// What you marked sensitive in Orbital (the settings document's sensitive: node ids) never shows on the phone (redact.js).
 // Every content call reads this account's settings document first, since only it says what is sensitive: a node marked
 // on the Mac a moment ago is never shown once from an older list. After the first time that is a local read (the
 // document stays live in the engine, so it is as current as the sync stream). Before the settings were ever read the
@@ -73,20 +71,7 @@ async function settled() {
   if (!settings.get('settingsRead')) throw new Error('Could not read your Orbital settings yet, so nothing is shown. Pull to try again.');
 }
 const secret = () => new Set(Array.isArray(settings.get('sensitive')) ? settings.get('sensitive') : []);
-// A mention of one or a link to one reads Private too, and a reference to one (a chat's attachment, an embed) is named so.
-function redact(rows, hidden = secret()) {
-  if (!hidden.size) return rows;
-  const scrub = (segs) => segs && segs.map((g) => (g.mention && hidden.has(g.mention.uri) ? { ...g, mention: { ...g.mention, label: PRIVATE } }
-    : g.marks && hidden.has(g.marks.link) ? { ...g, text: PRIVATE } : g));
-  return rows.map((row) => {
-    const r = { ...row, segments: scrub(row.segments), ...(row.reference && hidden.has(row.reference.uri) ? { reference: { ...row.reference, label: PRIVATE }, text: PRIVATE } : {}) };
-    const children = r.children && redact(r.children, hidden);
-    if (!hidden.has(r.id) && !hidden.has(r.timeline && r.timeline.uri)) return { ...r, children };
-    const said = r.timeline && !r.timeline.today ? 'A private item changed' : PRIVATE;
-    return { ...r, title: said, text: said, segments: [{ text: said }], children, subtext: null, people: [],
-      ...(r.timeline ? { timeline: { ...r.timeline, note: null, change: null, detail: null } } : {}) };
-  });
-}
+const redact = (rows) => scrub(rows, secret());
 
 // The documents this page opened or ticked (open, toggle) are let go of once they are no longer among the last few, as
 // the desktop lets its on-demand reads go (main/documents.js onDemand): a subscription holds the whole document, and a
@@ -149,7 +134,8 @@ async function answered(id, messageId, ownerUri) {
 // main/documents.js accessContext and canWriteDoc: write access to a document, from its participants and owners
 async function writable(doc) {
   const c = claims(await getAccessToken());
-  const ctx = { sync: S.client.sync, graph: S.client.graph, orgDocUri: S.me.orgDocUri, orgAdmin: c.org_id === S.me.orgId && ['admin', 'owner'].includes(c.role) };
+  // the owners and the org it reads go through hold, so they are let go of like every other document read here
+  const ctx = { sync: { subscribe: (uri) => hold(uri) }, graph: S.client.graph, orgDocUri: S.me.orgDocUri, orgAdmin: c.org_id === S.me.orgId && ['admin', 'owner'].includes(c.role) };
   return canWrite(readNode(doc), S.me.userUri, ctx).catch(() => false);
 }
 

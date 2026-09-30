@@ -14,10 +14,33 @@ for (const text of ['', 'abc', 'system:tana', 'x'.repeat(55), 'y'.repeat(56), 'z
 assert.deepStrictEqual([...standIns.createHash('sha256').update('abc').digest()], [...crypto.createHash('sha256').update('abc').digest()]);
 assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
 
-// The bundle itself, when Bun is here to build it (CI has none): built as the Xcode phase builds it, then run in a vm
+// What is sensitive never crosses the bridge (ios/engine/redact.js): the node's own title, a Timeline entry about it
+// (its sentence and Tana's words), a task under another entry, a mention of it, a link to it and a reference to it;
+// everything else as it was.
+{
+  const { redact, PRIVATE } = require('../ios/engine/redact.js');
+  const S = 'tana:text:secret', rows = redact([
+    { id: S, title: 'Salary review', text: 'Salary review', segments: [{ text: 'Salary review' }] },
+    { id: 'e1', timeline: { uri: S, note: 'Raised to 90k', change: 'Edited', detail: 'x' }, segments: [{ text: 'Sam edited Salary review' }], people: [{ name: 'Sam' }] },
+    { id: 'e2', timeline: { uri: 'tana:text:open' }, segments: [{ text: 'An AI agent added a task' }], children: [{ id: S, title: 'Salary review' }, { id: 'tana:text:ok', title: 'Book the venue' }] },
+    { id: 'b1', segments: [{ text: 'See ' }, { mention: { uri: S, label: 'Salary review' } }, { text: 'Salary review', marks: { link: S } }, { mention: { uri: 'tana:text:ok', label: 'Venue' } }] },
+    { id: 'm0.a0', type: 'reference', text: 'Salary review', segments: [], reference: { uri: S, label: 'Salary review' } },
+    { id: 'today', timeline: { today: true }, segments: [{ text: "Today's Tasks" }], children: [{ id: 'p', children: [{ id: S, title: 'Salary review' }] }] },
+  ], new Set([S]));
+  assert.strictEqual(rows[0].title, PRIVATE);
+  assert.deepStrictEqual(rows[1].segments, [{ text: 'A private item changed' }]);
+  assert.deepStrictEqual([rows[1].timeline.note, rows[1].timeline.change, rows[1].timeline.detail, rows[1].people.length], [null, null, null, 0]);
+  assert.deepStrictEqual(rows[2].children.map((c) => c.title), [PRIVATE, 'Book the venue'], 'only the sensitive task under an entry');
+  assert.deepStrictEqual(rows[3].segments.map((g) => g.text || g.mention.label), ['See ', PRIVATE, PRIVATE, 'Venue']);
+  assert.deepStrictEqual([rows[4].reference.label, rows[4].text], [PRIVATE, PRIVATE]);
+  assert.strictEqual(rows[5].children[0].children[0].title, PRIVATE, 'nested rows too');
+  assert.ok(!JSON.stringify(rows).includes('Salary') && !JSON.stringify(rows).includes('90k'), 'no word of it anywhere');
+}
+
+// The bundle itself, built with Bun: built as the Xcode phase builds it, then run in a vm
 // made to look like the session page, with a fake Tana that signs in and answers every call empty. It must say ready,
 // connect with a bearer token, and answer the Timeline in the desktop's row shape. Its 8 s give-ups (stand-ins.js within)
-// are made immediate, since this fake never opens the sync stream. Locally it is skipped without Bun; CI installs it.
+// are made immediate, since this fake never opens the sync stream. CI installs Bun; locally it is skipped without it.
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm');
 const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSync(b, ['--version']).status === 0);
@@ -66,6 +89,10 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.ok(Array.isArray(today.children) && typeof today.createdAt === 'string' && today.segments[0].text === "Today's Tasks");
   assert.ok(page.calls.some((c) => c.includes('GraphService/ListNodes')), 'the Timeline asks the graph');
   assert.strictEqual(page.orbital.email(), 'a@b.c');
+  // a sensitive node is answered Private without being fetched
+  const hidden = boot(new Map([['orbital:tana:user-profile:u1@org_1:settingsRead', 'true'], ['orbital:tana:user-profile:u1@org_1:sensitive', JSON.stringify(['tana:text:secret'])]]));
+  await hidden.orbital.connect();
+  assert.deepStrictEqual(JSON.parse(await hidden.orbital.open('tana:text:secret')), { title: 'Private', kind: 'text', rows: [], private: true });
   fs.rmSync(out, { force: true });
   console.log('ios engine check ok');
   process.exit(0); // the fake sync stream keeps retrying
