@@ -23,8 +23,6 @@ const CHAPTERS = [
   ['keys', 'Keyboard reference'],
 ];
 const here = (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '');
-// served from the web at /manual (orbital.md), the chapters' relative links need the folder's trailing slash
-if (/^https?:$/.test(location.protocol) && /\/manual$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);
 const asked = new URLSearchParams(location.search).get('theme');
 try { if (asked) localStorage.setItem('manualTheme', asked); } catch { /* storage off: the theme still applies to this page */ }
 let manualTheme = asked || (() => { try { return localStorage.getItem('manualTheme'); } catch { return null; } })() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');

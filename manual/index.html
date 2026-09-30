@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'self' 'sha256-AQZkkZV3P64lrFC+jaU6WTfmDOwntlNYEQJKqhlmMU8='">
 <title>Orbital manual</title>
+<!-- served at /manual on the web (orbital.md): add the folder's slash before anything relative loads -->
+<script>if (/^https?:$/.test(location.protocol) && /\/manual$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);</script>
 <link rel="stylesheet" href="manual.css">
 <script src="search-index.js"></script>
 <script src="manual.js"></script>
