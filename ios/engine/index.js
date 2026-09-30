@@ -67,7 +67,8 @@ const PRIVATE = 'Private';
 // document stays live in the engine, so it is as current as the sync stream). Before the settings were ever read the
 // content calls fail rather than show everything; after, a read that fails (offline) goes on with the last list.
 async function settled() {
-  const read = await within('settings document', settings.hydrate()).then(() => true, () => false);
+  // hydrate also answers (false) when the document could not be opened at all: only a known settings document counts
+  const read = await within('settings document', settings.hydrate()).then(() => !!settings.settingsDocId(), () => false);
   if (read) return void settings.set('settingsRead', true); // this account's own mirror (stand-ins.js ns), never synced
   if (!settings.get('settingsRead')) throw new Error('Could not read your Orbital settings yet, so nothing is shown. Pull to try again.');
 }
