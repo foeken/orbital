@@ -374,7 +374,11 @@ function placeJSON() { // what rememberPlace stores, and what a pane or window o
   if (zoom && isPlaceId(zoom.docId)) return JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined });
   return '{}'; // the view itself (view + SIDE holds which one)
 }
-function rememberPlace() { localStorage.setItem('place' + SIDE, placeJSON()); }
+function rememberPlace() {
+  const place = placeJSON();
+  localStorage.setItem('place' + SIDE, place);
+  if (tana.rememberPlace) tana.rememberPlace(view, place); // a copy beside the layout: Chromium has lost localStorage whole (#636)
+}
 function noteNavigation() {
   tellPlace();
   const here = navPlace();

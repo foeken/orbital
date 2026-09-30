@@ -1981,7 +1981,7 @@ function runHistoryCheck() {
     const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', TIMELINE_PAGE = 'orbital:timeline';
     let notificationLeaves = 0;
     const markAllNotificationsRead = () => { notificationLeaves++; };
-    const localStorage = { setItem() {}, removeItem() {} };
+    const localStorage = { setItem() {}, removeItem() {} }, tana = {};
     ${sourceBetween('const isRealId =', '\n')}
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {};
     const kids = new Map(), searchRows = new Map(), refreshed = [], previews = [];

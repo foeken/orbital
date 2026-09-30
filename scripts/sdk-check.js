@@ -1194,6 +1194,9 @@ async function main() {
     assert.deepEqual(toShell.splice(0), [['open', { id: '4', where: 'tab', from: '', focus: true }]]);
     assert.deepEqual(ask('window:getSide', thirdPage), { side: '3', start: { view: 'library', place: '{}' } }, 'a new page gets its start with its id');
     assert.deepEqual(ask('window:getSide', thirdPage), { side: '3' }, 'once');
+    // where a page is goes beside the layout too, and comes back when it loads again: Chromium has lost localStorage whole (#636)
+    ask('page:place', thirdPage, 'library', '{"docId":"tana:text:x"}');
+    assert.deepEqual(ask('window:getSide', thirdPage), { side: '3', saved: { view: 'library', place: '{"docId":"tana:text:x"}' } }, 'a page loading again gets its stored place');
     assert.notEqual(backend.S.pane && backend.S.pane.frame, thirdPage, 'only the page asked for last takes the keys');
     const fourth = frame('fourth', '4');
     assert.deepEqual(ask('window:getSide', fourth), { side: '4', start: { view: null, place: null } }, 'a page opened with no start keeps nothing of a closed page with its id');
