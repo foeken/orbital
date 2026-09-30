@@ -69,6 +69,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         phase = .failed(error.localizedDescription)
     }
 
+    // home.tana.inc claims every path for Tana's own app (its apple-app-site-association: "NOT /view/*", "*"), so a
+    // plain .allow let iOS hand Tana's sign-in callback to that app and cut this load off ("Frame load interrupted"):
+    // the __session cookie never landed and the Tana app opened instead (#658). WebKit's allow-without-trying-app-link
+    // (WKNavigationActionPolicyAllow + 2, as Firefox for iOS uses it) keeps every page in this web view.
+    private static let allowHere = WKNavigationActionPolicy(rawValue: WKNavigationActionPolicy.allow.rawValue + 2) ?? .allow
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
+        Self.allowHere
+    }
+
     private func connect() async {
         do {
             let ok = try await web.callAsyncJavaScript("return await orbital.connect()", contentWorld: .page) as? Bool == true
