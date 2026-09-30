@@ -1467,12 +1467,13 @@ async function runVisibilityPickerCheck() {
 }
 
 async function runLinkPaletteCheck() {
-  // ⌘↩ / ⌥↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
+  // ⇧↩ / ⌘↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
   const open = vm.runInNewContext(`
     let linkCtx = null, palBusy = false, palMode = 'search', palEnter = null, palIndex = 0, palRows = [], opened = [], pending;
     const closePalette = () => {}, run = (fn) => (pending = fn()), runRow = (r) => opened.push(['plain', r.label]);
     const openElsewhere = (where, id) => opened.push([where, id]);
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ({ opened, set: (rows, busy) => { palRows = rows; palBusy = busy; }, chooseRow, settleEnter, settle: () => pending });
   `);
@@ -1483,7 +1484,11 @@ async function runLinkPaletteCheck() {
   open.set([{ label: 'Hit', opens: 'tana:text:hit' }], false);
   open.settleEnter(); await open.settle();
   open.chooseRow(false, false);
-  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⌘↩ opens Today beside, ⌥↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⇧↩ opens Today beside, ⌘↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+  // the modifiers every key and click opens elsewhere with (#608): ⌘ a tab, ⇧ a pane beside, ⌥ floating, ⌘ winning
+  const elsewhere = vm.runInNewContext(source.match(/^const elsewhere = [^\n]+;$/m)[0].replace('const elsewhere = ', ''));
+  const mods = (m) => ({ metaKey: m.includes('⌘'), ctrlKey: false, shiftKey: m.includes('⇧'), altKey: m.includes('⌥') });
+  assert.deepEqual(['⌘', '⇧', '⌥', '', '⌘⇧', '⇧⌥'].map((m) => elsewhere(mods(m))), ['tab', 'right', 'float', null, 'tab', 'right'], '⌘ opens a tab, ⇧ a pane beside, ⌥ a floating pane, nothing in place');
 
   const resultRows = functionSource('resultRows');
   const searchNow = functionSource('searchNow');
@@ -1507,6 +1512,7 @@ async function runLinkPaletteCheck() {
     const showError = (error) => { throw error; };
     const runRow = (row) => row.run();
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ${resultRows}
     ${functionSource('titleHits')}
@@ -2683,7 +2689,7 @@ function makeSlashHarness() {
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Task', 'Create Project'],
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Checklist', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Doc', 'Task', 'Project'],
     'the "/" menu offers every block type, a checklist, a divider, a table, an image and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
   assert.equal(listing.rows('task')[0].label, 'Task', '"/task" finds the task row first');
@@ -2734,7 +2740,7 @@ async function runSlashMenuCheck() {
     'Table takes the place of the empty "/" row and puts the caret in its first cell');
 
   const create = makeSlashHarness();
-  create.rows('').find((row) => row.label === 'Create Project').run();
+  create.rows('').find((row) => row.label === 'Project').run();
   assert.deepEqual(plain(create.calls()), [['setText', 'doc', 'block', []], ['startCreation', 'custom', 'Project']],
     'a create choice clears the "/" and starts the ordinary creation flow');
 }
@@ -8187,6 +8193,7 @@ async function runSetIconCheck() {
     ${functionSource('applyIcon')}
     ${functionSource('backPalette')}
     ${functionSource('chooseRow')}
+    ${functionSource('openRow')}
     ${functionSource('settleEnter')}
     ({ row: () => paletteRows('').find((r) => r.id === 'setIcon'),
        node: (next) => { palDoc = next; },
@@ -8407,8 +8414,12 @@ async function runDeletedNodeCheck() {
     const tana = {
       node: async (uri) => { asked.push('node ' + uri); return { id: uri, title: 'still here' }; },
       taskMeta: async (id) => { asked.push('taskMeta ' + id); throw new Error('Node has been deleted'); },
+      openCanvas: async (id) => { asked.push('canvas ' + id); },
+      splitWindow: async (where) => { asked.push('split ' + where); },
     };
     const showError = (e) => errors.push(String((e && e.message) || e));
+    const run = (fn) => fn();
+    const inOtherPane = () => false, placeKey = (id) => id;
     const render = () => { renders++; }, renderSoon = () => { renders++; }, patchMeta = () => {}, renderPalette = () => {};
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {}, recordRecent = () => {};
     const LINKS = false; // a page of its own, not the Graph pane (renderer/state.js)
@@ -8416,13 +8427,16 @@ async function runDeletedNodeCheck() {
     const atHome = () => false, goHome = () => { view = 'home'; };
     const setTimeout = () => 0;
     ${sourceBetween('const isRealId = (id)', '// ---- Home ----')}
+    ${sourceLine('const opensCanvas =')}
     ${functionSource('openDoc')}
+    ${functionSource('openElsewhere')}
     ${functionSource('goTo')}
     ${functionSource('loadTaskMeta')}
     ${sourceBetween('const navBack = [], navForward = []', '// The same two moves as a pair of buttons')}
     ({
       state: () => ({ zoom: zoom && zoom.docId, view, errors: [...errors], asked: [...asked], gone: [...deletedIds] }),
       openDoc: (id) => openDoc(id),
+      elsewhere: (where, id) => openElsewhere(where, id),
       goTo: (uri) => goTo(uri),
       meta: (id) => loadTaskMeta(id),
       note: (id, message) => noteGone(id, new Error(message)),
@@ -8453,6 +8467,25 @@ async function runDeletedNodeCheck() {
   api.clear();
   await api.goTo(live);
   assert.equal(api.state().zoom, live, 'a node that is still there opens as it always did');
+  // A canvas never opens as a page here: it goes to a window of its own, drawn by Tana (main.js canvas:open, #611).
+  api.clear();
+  const canvas = 'tana:canvas:01canvasnode00000000000000';
+  await api.goTo(canvas);
+  assert.equal(api.state().zoom, live, 'a canvas leaves the page where it was');
+  assert.deepEqual(plain(api.state().asked), ['node ' + canvas, 'canvas ' + canvas], 'and asks main for its window');
+  api.clear();
+  await api.elsewhere('right', canvas);
+  assert.deepEqual(plain(api.state().asked), ['canvas ' + canvas], 'and so does ⌘/⇧/⌥ on it: no pane of its own');
+  // A click on a canvas row's title opens it, as a type row's does, unless that title can be typed in.
+  const clickOpens = vm.runInNewContext(`
+    const tableRow = () => false, zoomable = () => true;
+    const canEditText = (item) => !!item.node.renamable;
+    ${sourceLine('const opensOnClick =')}
+    opensOnClick;
+  `);
+  assert.equal(clickOpens({ docId: canvas, node: { id: canvas } }), true, 'a canvas title opens its window on a click');
+  assert.equal(clickOpens({ docId: canvas, node: { id: canvas, renamable: true } }), false, 'one whose title can be typed in takes the caret instead');
+  assert.equal(clickOpens({ docId: live, node: { id: live } }), false, 'and a document still takes the caret');
 
   // 3. The Back stack walks past the pages that have gone since.
   api.clear();

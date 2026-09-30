@@ -274,8 +274,8 @@ onRows('click', (e) => {
     else if (!e.metaKey && !e.shiftKey) run(() => (url.dataset.href.startsWith('tana:') ? goToLink(url.dataset.href) : tana.openExternal(url.dataset.href)));
   }
 });
-// A link to a node opened somewhere else (issue #443): ⌥ as a tab, anywhere; ⌘ in a pane beside, except on a row's
-// line, where a ⌘-click selects the row (mousedown above). A chat has no rows, so there ⌘ opens too.
+// A link to a node opened somewhere else (issue #443): ⌥ floating, anywhere; ⌘ as a tab and ⇧ in a pane beside, except
+// on a row's line, where a ⌘- or ⇧-click selects (mousedown above). A chat has no rows, so there ⌘ and ⇧ open too.
 const linkElsewhere = (e, link) => (e.altKey || !link.closest('.line') ? elsewhere(e) : null);
 // A link mark whose href is a node: the new id opens directly; an old outliner id ("tana:IAFYBzLWyNMw", written by
 // the importer as a link) is found through the "Outliner ID: …" line the importer leaves in the imported note, and

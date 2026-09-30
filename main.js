@@ -3,7 +3,7 @@
 // views, pins, images, and each one's ipc table); this file owns the window, the menu, the boot sequence and the
 // registering of those tables, plus the test hook that scripts/sdk-check.js and the CLI use to drive the same
 // modules without a window.
-const { app, BaseWindow, Menu, Notification, WebContentsView, clipboard, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BaseWindow, BrowserWindow, Menu, Notification, WebContentsView, clipboard, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -14,7 +14,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { webLink, accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, fieldDefs, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
@@ -567,6 +567,27 @@ ipcMain.handle('shell:open', (_e, url) => {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened');
   return shell.openExternal(url);
 });
+// A canvas is a tldraw board, and tldraw needs a licence Orbital does not have, so Tana's own page draws it: a window of
+// its own on the Tana session, with everything but the board (tldraw's .tl-container) hidden (issue #611). The hiding
+// waits for the board, so a login page or an error still shows. One window per canvas; opening it again brings it forward.
+const CANVAS_CSS = `body:has(.tl-container) * { visibility: hidden !important; }
+body:has(.tl-container) :is(.tl-container, .tl-container *, [data-radix-popper-content-wrapper], [data-radix-popper-content-wrapper] *) { visibility: visible !important; }
+.tl-container { position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; }
+:has(.tl-container) { transform: none !important; contain: none !important; filter: none !important; }`;
+const canvasWindows = new Map(); // canvas id -> its window
+ipcMain.handle('canvas:open', (_e, id) => {
+  if (!/^tana:canvas:[0-9a-z]{26}$/.test(String(id))) throw new Error('Not a canvas');
+  const open = canvasWindows.get(id);
+  if (open && !open.isDestroyed()) return open.focus();
+  const url = webLink(id);
+  const win = new BrowserWindow({ width: 1200, height: 800, webPreferences: { partition: 'persist:tana', preload: path.join(__dirname, 'canvas-preload.js'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  win.webContents.setUserAgent(win.webContents.getUserAgent().replace(/ (Electron|tana-tasks)\/\S+/g, '')); // as the login window: Tana reads an Electron agent as its own desktop app
+  win.webContents.on('dom-ready', () => win.webContents.insertCSS(CANVAS_CSS));
+  win.webContents.setWindowOpenHandler(({ url: to }) => { if (/^https?:\/\//i.test(to)) shell.openExternal(to); return { action: 'deny' }; });
+  win.on('closed', () => canvasWindows.delete(id));
+  canvasWindows.set(id, win);
+  win.loadURL(url);
+});
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());
@@ -585,6 +606,7 @@ ipcMain.handle('sync:login', async () => {
 // ⌘K Log out of Tana: the stream closed and the session's cookies cleared, so every window shows the login. Signed out
 // first: the pages hear it before the reads the closing stream fails, and say nothing of those (renderer/nodes.js showError).
 ipcMain.handle('sync:logout', async () => {
+  for (const w of canvasWindows.values()) if (!w.isDestroyed()) w.destroy(); // a board stays on screen after its cookies go (#611)
   setStatus({ authenticated: false, connected: false, syncing: false, error: null });
   relayout();
   stop();

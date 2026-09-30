@@ -1200,6 +1200,13 @@ const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = 
 // per kind (its link resolver beside JP.type.url, shared bundle of 2026-09-23): a type, a person, a meeting and a space
 // have pages of their own, and /l/ — every other document — shows a type as raw JSON (issue #88).
 const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
+function webLink(id) {
+  // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
+  const org = (S.me && S.me.orgDocUri || '').split(':').pop();
+  if (!org) throw new Error(NOT_CONNECTED);
+  if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
+  return 'https://home.tana.inc/o/' + org + '/' + (LINK_ROUTES[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id);
+}
 // What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
 const ipc = {
   'doc:info': (_e, id, patch) => op(id, info, { patch: patch === true }),
@@ -1311,13 +1318,7 @@ const ipc = {
   'sensitive:list': () => sensitiveIds(), // the synced setting sensitive:set writes; db's table is only its migration source
   // "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
   'doc:discussWith': (_e, id, who) => discussWith(id, who),
-  'doc:link': (_e, id) => {
-    // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
-    const org = (S.me && S.me.orgDocUri || '').split(':').pop();
-    if (!org) throw new Error(NOT_CONNECTED);
-    if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
-    return 'https://home.tana.inc/o/' + org + '/' + (LINK_ROUTES[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id);
-  },
+  'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { webLink, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

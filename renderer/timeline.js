@@ -7,7 +7,7 @@
 const TIMELINE_PAGE = 'orbital:timeline';
 extra.set(TIMELINE_PAGE, { id: TIMELINE_PAGE, text: 'Timeline', title: 'Timeline', kind: 'document', icon: 'timeline', editable: false, hasChildren: true, appPage: true });
 // An entry with no uri ("An AI agent added 6 tasks to your Inbox") is a heading for the rows under it: not clickable
-function openTimeline(node, where = null) { // where: 'right' or 'tab' for a ⌘- or ⌥-click (renderer/palette.js elsewhere)
+function openTimeline(node, where = null) { // where: 'tab' or 'float' for a ⌘- or ⌥-click (renderer/palette.js elsewhere)
   const uri = node.timeline && node.timeline.uri;
   if (!uri) return;
   if (zoomable({ id: uri })) { if (where) run(() => openElsewhere(where, uri)); else goTo(uri); }
