@@ -428,6 +428,3 @@ struct Marker: View {
         }
     }
 }
-
-
-

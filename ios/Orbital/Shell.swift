@@ -37,6 +37,7 @@ struct Shell: View {
     @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
+    @Environment(Pushes.self) private var pushes
     private let width: CGFloat = 300
 
     var body: some View {
@@ -126,6 +127,13 @@ struct Shell: View {
             try? await Task.sleep(for: .seconds(2)); show(false)
         }
         .sheet(isPresented: $searching) { SearchSheet(engine: engine) }
+        // a tapped push opens its node over the Timeline, whatever was on screen
+        .task(id: pushes.opened) {
+            guard let id = pushes.opened else { return }
+            settings = false; searching = false; page = .timeline; show(false)
+            path = [id]
+            pushes.opened = nil
+        }
     }
 
     private func show(_ open: Bool) {
@@ -274,6 +282,3 @@ struct SearchSheet: View {
     // the desktop's glyph for a kind (main/rows.js): a task by its state, a meeting by its calendar
     static func glyph(_ item: Engine.Found) -> String { item.kind == "text" && item.state != nil ? "task" : Glyph.of(item.kind) }
 }
-
-
-

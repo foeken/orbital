@@ -23,6 +23,7 @@ const proposalsPage = require('./main/proposals');
 const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
+const push = require('./main/push');
 const meetings = require('./main/meetings');
 const presence = require('./main/presence');
 
@@ -680,6 +681,9 @@ if (process.env.TANA_MAIN_TEST) {
         wc.on('did-frame-finish-load', loaded);
       });
       note.show();
+      // and on each phone that asked (main/push.js, #663): the same words, but a sensitive node's title stays on this Mac
+      const secret = sensitiveIds().includes(docId);
+      push.send({ docId, title: secret ? 'Orbital' : title, subtitle: secret ? undefined : subtitle, body: secret ? 'A private item changed' : body, collapse: id, silent: kind === 'summary' }).catch(report);
     };
     S.userData = app.getPath('userData');
     db.open(path.join(S.userData, 'tasks.sqlite'));

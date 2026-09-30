@@ -39,7 +39,8 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // choice about your own content, so it follows you, while the key that pays for it stays put. Neither has UI yet —
 // unset means the defaults in main/ai.js.
 // myTasks is which saved search the Work View's right half is (main/views.js myTasks), by id so a rename keeps it.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^myTasks$/, /^pref:/];
+// push:<token> is a phone that asked for the banners (main/push.js): written by the phone, read by every Mac.
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^myTasks$/, /^pref:/, /^push:/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets

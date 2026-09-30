@@ -13,6 +13,7 @@ import { completedInWindow, searchQueryParams } from '../../sdk/query';
 import { S, isSpace, iso } from '../../main/state';
 import timeline from '../../main/timeline';
 import notifications from '../../main/inbox';
+import settings from '../../main/settings';
 import { issues, members, within } from './stand-ins';
 import loro from 'loro-crdt/package.json';
 
@@ -138,8 +139,15 @@ window.orbital = {
     const at = (n) => (pinned.includes(n.id) ? pinned.indexOf(n.id) : 1e6);
     return JSON.stringify(nodes.sort((a, b) => at(a) - at(b)).map((n) => ({ ...listRow(n), pinned: pinned.includes(n.id) })));
   },
+  // This phone asks for the Mac's banners (#663): its APNs device token written into Orbital's settings document, where
+  // every Mac running Orbital reads it (main/push.js). main/settings.js finds the document as a Mac does.
+  async registerPush(token, environment, name) {
+    await within('settings document', settings.hydrate());
+    const key = 'push:' + token, was = settings.get(key);
+    if (!was || was.environment !== environment || was.name !== name) settings.set(key, { environment, name, at: Date.now() });
+    await settings.flush();
+    return settings.settingsDocId();
+  },
   issues: () => issues.splice(0), // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 window.webkit?.messageHandlers?.orbital?.postMessage('ready');
-
-

@@ -1,5 +1,5 @@
 'use strict';
-// What main/timeline.js and main/inbox.js ask of the desktop, for the phone (ios/engine/build.js maps each require here). Today's pins
+// What main/timeline.js, main/inbox.js and main/settings.js ask of the desktop, for the phone (ios/engine/build.js maps each require here). Today's pins
 // and today's node are read over the sync stream with the SDK's own code, as main/pins.js reads them; the watch choices
 // in the settings document, live queries and call state still answer empty. The banner edits never reach the phone:
 // they are kept on the Mac that announced them.
@@ -54,8 +54,18 @@ module.exports = {
     return hash;
   },
   // ../db
-  setting: (key) => JSON.parse(localStorage.getItem('orbital:' + key) ?? 'null'),
-  setSetting: (key, value) => localStorage.setItem('orbital:' + key, JSON.stringify(value)),
+  // ../db, for main/timeline.js and main/settings.js: the page's own storage in place of SQLite
+  setting: (key) => JSON.parse(localStorage.getItem('orbital:' + key) ?? 'null') ?? undefined,
+  setSetting: (key, value) => (value === undefined ? localStorage.removeItem('orbital:' + key) : localStorage.setItem('orbital:' + key, JSON.stringify(value))),
+  settings() {
+    const out = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.startsWith('orbital:')) try { out[key.slice(8)] = JSON.parse(localStorage.getItem(key)); } catch { /* not a setting (storageId) */ }
+    }
+    return out;
+  },
+  generation: () => 1,
   // ./rows: a task under a row needs its id, words and state (ios/Orbital/Timeline.swift)
   graphRow: (n) => ({ id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: (n.state && n.state.type) === 'closed', stateType: n.state && n.state.type }),
   toNode: (row) => row,
@@ -94,6 +104,3 @@ module.exports = {
   callState: () => ({ recordings: [], offTheRecord: false }),
   callSessions: () => ({ sessions: [] }),
 };
-
-
-
