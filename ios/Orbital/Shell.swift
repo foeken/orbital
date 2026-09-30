@@ -9,7 +9,7 @@ struct Shell: View {
 
     @State private var page = Page.timeline
     @State private var menu = false
-    @State private var settings = false
+    @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
     @State private var searching = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let width: CGFloat = 300

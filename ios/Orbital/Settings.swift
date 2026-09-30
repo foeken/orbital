@@ -2,7 +2,8 @@ import CryptoKit
 import SwiftUI
 import WebKit
 
-// Settings, opened from the side menu: the Tana account, ChatGPT, and the app's version
+// Settings, opened from the side menu, laid out as the ChatGPT app's: no title, a close button top right, rounded groups
+// under grey headings, each row a line glyph, its words and its value in grey
 struct SettingsView: View {
     let engine: Engine
     @Environment(\.dismiss) private var dismiss
@@ -12,34 +13,37 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Tana") {
-                    LabeledContent("Signed in as", value: engine.email ?? "Tana")
-                    NavigationLink("Sign-in details") { SignInLog(lines: engine.log) }
-                    Button("Sign out of Tana", role: .destructive) {
+                Section {
+                    LabeledContent { Text(engine.email ?? "Tana") } label: { Row(glyph: "member", title: "Account") }
+                    NavigationLink { SignInLog(lines: engine.log) } label: { Row(glyph: "info", title: "Sign-in details") }
+                    Button(role: .destructive) {
                         dismiss()
                         Task { await engine.signOut() }
-                    }
-                }
+                    } label: { Row(glyph: "tana", title: "Sign out of Tana", leaving: true) }
+                } header: { Header("Tana") }
                 Section {
                     if let chatgpt {
-                        LabeledContent("Account", value: chatgpt.email ?? "ChatGPT")
-                        if let plan = chatgpt.plan { LabeledContent("Plan", value: plan.capitalized) }
-                        Button("Sign out of ChatGPT", role: .destructive) { ChatGPT.forget(); self.chatgpt = nil }
+                        LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
+                        if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "sparkle", title: "Plan") } }
+                        Button(role: .destructive) { ChatGPT.forget(); self.chatgpt = nil } label: { Row(glyph: "chatgpt", title: "Sign out of ChatGPT", leaving: true) }
                     } else {
-                        Button("Sign in with ChatGPT") { signingIn = true }
+                        Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
                     }
                 } header: {
-                    Text("ChatGPT")
+                    Header("ChatGPT")
                 } footer: {
                     Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone.")
                 }
                 Section {
-                    LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
+                    LabeledContent { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") } label: { Row(glyph: "info", title: "Version") }
+                } header: { Header("Orbital") }
+            }
+            .tint(.primary) // the rows in the text colour, not the accent blue, as the ChatGPT app has them
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Close")
                 }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $signingIn) {
                 ChatGPTSignIn { account in
                     chatgpt = account
@@ -47,6 +51,25 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    // a row's glyph and words in the text colour, all red on a sign-out (red means leaving), as the ChatGPT app has them
+    struct Row: View {
+        let glyph: String
+        let title: String
+        var leaving = false
+        var body: some View {
+            Label { Text(title) } icon: { Image("Glyphs/" + glyph).resizable().frame(width: 22, height: 22) }
+                .foregroundStyle(leaving ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+        }
+    }
+
+    // the ChatGPT app's group headings: its own words at a readable size, grey, not upper case
+    struct Header: View {
+        let title: String
+        init(_ title: String) { self.title = title }
+        // systemGray itself: a Form greys its headers already, so .secondary on top came out two steps lighter
+        var body: some View { Text(title).font(.headline).foregroundStyle(Color(.systemGray)).textCase(nil) }
     }
 }
 
