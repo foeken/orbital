@@ -89,6 +89,8 @@ async function say(id, text) {
   return id;
 }
 
+let settingsRead = false;
+
 window.orbital = {
   // true once signed in and connected; false when this web view has no Tana session
   async connect() {
@@ -105,6 +107,9 @@ window.orbital = {
   // the Timeline page, three days per page, as the rows the desktop renderer gets
   async timeline(pages = 1) {
     timeline.setPages(pages);
+    // the watch choices, from the settings document: waited for on the first read only, read in the background after that
+    const fresh = within('settings document', settings.hydrate()).catch(() => {});
+    if (!settingsRead) { await fresh; settingsRead = true; }
     return JSON.stringify(await timeline.rows());
   },
   // main/documents.js webLink: a node's page on home.tana.inc, under the org document's ulid

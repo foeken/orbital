@@ -1,9 +1,9 @@
 'use strict';
 // What main/timeline.js, main/inbox.js and main/settings.js ask of the desktop, for the phone (ios/engine/build.js maps each require here). Today's pins
 // and today's node are read over the sync stream with the SDK's own code, as main/pins.js reads them; the watch choices
-// in the settings document, live queries and call state still answer empty. The banner edits never reach the phone:
+// come from the settings document (main/settings.js); live queries and call state still answer empty. The banner edits never reach the phone:
 // they are kept on the Mac that announced them.
-// ponytail: watch choices and live meetings are empty; add them from the settings document and sdk/livequery.js.
+// ponytail: live meetings are empty; add them from sdk/livequery.js.
 const { isMcp, S, today } = require('../../main/state');
 const pins = require('../../sdk/pins');
 
@@ -87,8 +87,10 @@ module.exports = {
   },
   // ./documents
   announcedEdits: () => [],
-  notifyWatchedIds: () => new Set(),
-  notifySilencedIds: () => new Set(),
+  // the watch choices (settings key notify: node → true watched, false silenced), as main/documents.js reads them; the
+  // settings document is read once the phone has hydrated it (index.js registerPush, timeline)
+  notifyWatchedIds: () => new Set(Object.entries(require('../../main/settings').get('notify') || {}).filter(([, on]) => on === true).map(([id]) => id)),
+  notifySilencedIds: () => new Set(Object.entries(require('../../main/settings').get('notify') || {}).filter(([, on]) => on === false).map(([id]) => id)),
   document: (id) => within('reading ' + id, S.client.sync.subscribe(id)),
   // ./pins: main/pins.js pinnedDates, and todayNode(0, true), which finds today's node and never makes it
   pinnedDates: () => within('date pins', pins.datePins(S.client.sync, S.me.userUri)).catch(() => ({})),
