@@ -133,6 +133,11 @@ function mockApi() {
   const mockDefs = { 'tana:type:mock0': [
     { key: 'lvl00001', title: 'Level', type: 'options', options: [{ label: 'High' }, { label: 'Medium' }, { label: 'Low' }] },
     { key: 'src00001', title: 'Sources', type: 'link', cardinality: 'multiple', to: [{ uri: 'tana:type:mock1', name: 'Decision Record' }] },
+    // enough fields that the bar folds the idle ones behind "…" (#624)
+    { key: 'imp00001', title: 'Impact', type: 'options', options: [{ label: '1' }, { label: '2' }, { label: '3' }, { label: '4' }] },
+    { key: 'lik00001', title: 'Likelihood', type: 'options', options: [{ label: 'Rare' }, { label: 'Likely' }, { label: 'Certain' }] },
+    { key: 'rev00001', title: 'Review date', type: 'date' },
+    { key: 'own00001', title: 'Owner', type: 'member' },
   ] };
   const mockFields = (docId) => (docId === 'mockdoc1' ? [{ key: FIELD_KEY, label: 'Discuss with', text: 'Stan Engbers', segments: [{ text: 'Stan Engbers' }] },
     ...mockDefs['tana:type:mock0'].map((d) => ({ key: 'tana:type:mock0?attribute=' + d.key, label: d.title, text: '', lines: [], type: d.type, cardinality: d.cardinality, options: d.options, to: d.to }))] : []);

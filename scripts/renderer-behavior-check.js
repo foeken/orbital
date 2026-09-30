@@ -9778,6 +9778,41 @@ checks.push(async function runMarkdownCheck() {
   assert.equal(await api.paste('- a\n- b'), false, 'a code block takes a paste as its text');
   console.log('ok  markdown in the editor: typed marks and line markers, and pastes read as markdown');
 });
+// Field pills (#624): past four, the ones filtering nothing fold into "…", whose rows add a pill and open it; the menus
+// put the type's fields under their own heading; a field sorts by its value, dates by their day and numbers as numbers.
+checks.push(function runFieldPillsCheck() {
+  const api = vm.runInNewContext(`
+    let menu = null; const pillKey = () => 'library';
+    ${sourceLine('const isFieldKey')}
+    ${sourceBetween("// A menu's choices with the type's fields", 'const pillsApply')}
+    let id = 'default', held = null, lastOrder = null;
+    const sortBy = () => id, soonestFirst = () => false, statusRank = () => undefined, fieldKey = (d) => d.group, fieldValuesOf = (n) => n.v || [];
+    const pageFieldDefs = () => [{ group: 'field?attribute=Review date', type: 'date' }, { group: 'field?attribute=Impact', type: 'options' }];
+    ${sourceLine('const SORT_KEY')}
+    ${sourceLine('const NEWEST_FIRST')}
+    ${sourceBetween('const fieldSortKey', 'function setSortBy(')}
+    ${functionSource('sortRows')}
+    ({ foldFields, fieldSection, menu: () => menu, focus: () => pillFocus, sort: (by, rows) => { id = by; return sortRows(rows).map((n) => n.id); } });
+  `);
+  const pill = (i, set = false) => ({ id: 'field:' + i, field: 'type?attribute=' + i, set, label: 'Field ' + i });
+  const ids = (defs) => plain(defs.map((d) => d.id));
+  const few = [{ id: 'type' }, pill(1), pill(2), pill(3), pill(4), { id: 'sort' }];
+  assert.deepEqual(ids(api.foldFields(few)), ids(few), 'four field pills or fewer all stay on the bar');
+  const many = [{ id: 'type' }, pill(1), pill(2, true), pill(3), pill(4), pill(5), pill(6), { id: 'status' }, { id: 'sort' }];
+  const folded = api.foldFields(many);
+  assert.deepEqual(ids(folded), ['type', 'field:2', 'morefields', 'status', 'sort'], 'past four, only the field filtering something stays, with "…" after it');
+  const rows = folded[2].rows();
+  assert.deepEqual(plain(rows.map((r) => r.head || r.label)), ['Type fields', 'Field 1', 'Field 3', 'Field 4', 'Field 5', 'Field 6'], '"…" offers the folded fields under their heading');
+  rows[2].run();
+  assert.deepEqual(plain([api.menu(), api.focus()]), [{ id: 'field:3', index: 0 }, 'field:3'], 'picking one opens its menu and moves the focus to it');
+  assert.deepEqual(ids(api.foldFields(many)), ['type', 'field:2', 'field:3', 'morefields', 'status', 'sort'], 'and it stays on the bar in its own place');
+  assert.deepEqual(plain(api.fieldSection([['default', 'Default'], ['title', 'Title'], ['field?attribute=Impact', 'Impact']], ([, label]) => ({ label })).map((r) => r.head || r.label)),
+    ['Default', 'Title', 'Type fields', 'Impact'], 'Sort, Group and Display head the fields with a small section of their own');
+  const dated = [{ id: 'mid', v: ['Jul 17, 2026'] }, { id: 'none' }, { id: 'early', v: ['Nov 14, 2025'] }, { id: 'late', v: ['Sep 4, 2026'] }]; // alphabetically: Jul, Nov, Sep
+  assert.deepEqual(plain(api.sort('field?attribute=Review date', dated)), ['early', 'mid', 'late', 'none'], 'a date field sorts by its day, earliest first, rows without one last');
+  assert.deepEqual(plain(api.sort('field?attribute=Impact', [{ id: 'ten', v: ['10'] }, { id: 'nine', v: ['9'] }, { id: 'one', v: ['1'] }])), ['one', 'nine', 'ten'], 'and numbers as numbers');
+  console.log('ok  field pills: past four the idle ones fold behind "…", fields under their own heading in the menus, sorted by value (#624)');
+});
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
