@@ -89,8 +89,8 @@ struct SideMenu: View {
             ForEach([Shell.Page.timeline, .searches], id: \.self) { item in
                 Button { page = item; close() } label: {
                     HStack(spacing: 14) {
-                        Image(item == .timeline ? "Glyphs/timeline" : "Glyphs/library").resizable().frame(width: 22, height: 22)
-                        Text(item.rawValue)
+                        Image(item == .timeline ? "Glyphs/timelineMenu" : "Glyphs/libraryMenu").resizable().frame(width: 22, height: 22)
+                        Text(item.rawValue).fontWeight(.medium)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
