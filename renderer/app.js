@@ -113,6 +113,8 @@ document.documentElement.addEventListener('pointerleave', () => pointerIn(false)
 tana.onChanged((docId, info) => {
   // The Timeline's meetings moved (main/timeline.js): the page is read again where it is on screen, and on arrival elsewhere
   if (docId === TIMELINE_PAGE) { if (zoom?.docId === TIMELINE_PAGE) reload(TIMELINE_PAGE).then(() => renderSoon(true), showError); return; }
+  // and so is a change to today's node, whose tasks are among Today's Tasks: one added there shows at once
+  if (docId && zoom?.docId === TIMELINE_PAGE && (kids.get(TIMELINE_PAGE) || []).some((n) => n.timeline?.day === docId)) reload(TIMELINE_PAGE).then(() => renderSoon(true), showError);
   if (docId) {
     // A newer update would reorder this row under Updated; keep the layout the user is looking at until Clean up.
     if (typeof sortBy === 'function' && (sortBy() === 'updated' || (typeof groupBy === 'function' && groupBy() === 'updated'))) {

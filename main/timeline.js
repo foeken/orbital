@@ -23,10 +23,11 @@
 // yourself, for you or for someone else, are one such row too ("You added 2 tasks"), never marked new.
 const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
-const { pinnedDates } = require('./pins');
+const { pinnedDates, todayNode } = require('./pins');
 const { NOT_CONNECTED, S, iso, isMcp, send } = require('./state');
 const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
-const { announcedEdits, notifySilencedIds, notifyWatchedIds } = require('./documents');
+const { announcedEdits, document, notifySilencedIds, notifyWatchedIds } = require('./documents');
+const { readOutline } = require('../sdk/content');
 const { inboxFrom } = require('./views');
 const { openLiveQuery } = require('../sdk/livequery');
 const { callState, callSessions } = require('../sdk/calls');
@@ -287,18 +288,26 @@ async function rows(progress) {
         subtext: meetingNote(n.calendarEvent, true), people: meetingPeople(n.calendarEvent, me, myEmail) }));
     return { events, upcoming };
   }
-  // Today's Tasks: the tasks pinned through today. Completed tasks age out after their pinned day; a pin for today
-  // still keeps them here.
+  // Today's Tasks: the tasks pinned through today, then the ones on today's node (main/pins.js todayNode, found and
+  // never made here): whatever its outline references, a full reference (Tana's embed block, or a line that is one
+  // mention, as Add to Today writes it) or a mention among words. Reading it keeps it live, so a change to it reads the
+  // page again (renderer/app.js). Completed tasks age out after their pinned day; a pin for today, or a place on
+  // today's node, still keeps them here.
   async function today() {
-    const pinDatesById = new Map(Object.entries(await pinnedDates()));
+    const [pinDates, day] = await Promise.all([pinnedDates(), todayNode(0, true).catch(() => null)]);
+    const pinDatesById = new Map(Object.entries(pinDates));
     const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);
-    const { nodes: pinned = [] } = pinnedIds.length ? await graph.listNodes({ nodeIds: pinnedIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: pinnedIds.length }) : {};
+    const refs = (rows) => rows.flatMap((n) => [n.reference && n.reference.uri, ...(n.segments || []).map((s) => s.mention && s.mention.uri), ...refs(n.children || [])]);
+    const onDay = new Set((day ? await document(day).then((doc) => refs(readOutline(doc)), () => []) : []).filter((id) => /^tana:text:/.test(id || ''))); // the listNodes below keeps the tasks
+    const ids = [...new Set([...pinnedIds, ...onDay])];
+    const { nodes: pinned = [] } = ids.length ? await graph.listNodes({ nodeIds: ids, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: ids.length }) : {};
     const byId = new Map(pinned.map((n) => [n.id, n]));
-    return pinnedIds.map((id) => byId.get(id)).filter(Boolean).map((n) => {
+    const rows = ids.map((id) => byId.get(id)).filter(Boolean).map((n) => {
       rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
       const row = toNode(graphRow(n));
-      return row.done && !pinDatesById.get(n.id).includes(date) ? null : { ...row, editable: false, checkable: row.editable !== false }; // unknown (null) ticks, as a log row's box and every other row does; Tana refuses what it refuses (#545)
+      return row.done && !onDay.has(n.id) && !pinDatesById.get(n.id).includes(date) ? null : { ...row, editable: false, checkable: row.editable !== false }; // unknown (null) ticks, as a log row's box and every other row does; Tana refuses what it refuses (#545)
     }).filter(Boolean);
+    return { rows, day };
   }
   const got = {};
   const page = () => pageOf(got, seen, now, date);
@@ -326,12 +335,18 @@ async function rows(progress) {
 function pageOf(got, seen, now, date) {
   const top = !!(got.today && got.meetings), all = top && !!(got.watched && got.agents && got.inbox);
   const upcoming = top ? got.meetings.upcoming : [];
+  // Free time: from now (or the end of the meeting under way) to the next meeting's start, between Today's Tasks and
+  // Upcoming meetings. The renderer counts it down (renderer/timeline.js timelineFreeSegs); none when they touch or overlap.
+  const until = upcoming.length ? Date.parse(upcoming[0].start) : 0;
+  const from = Math.max(now, ...(top ? got.meetings.events : []).filter((e) => e.end).map((e) => e.end));
+  const freeRow = until > from ? [{ id: PAGE + ':free', text: 'Free', segments: [{ text: 'Free' }], kind: 'block', block: 'bullet', icon: 'free', editable: false, hasChildren: false, children: [],
+    createdAt: iso(now), unread: false, timeline: { uri: null, time: '', tone: 'new', free: { from, until } } }] : [];
   const upcomingText = 'Upcoming meetings';
   const upcomingRow = upcoming.length ? [{ id: PAGE + ':upcoming', text: upcomingText, segments: [{ text: upcomingText }], kind: 'block', block: 'bullet', icon: 'meeting',
     editable: false, hasChildren: true, children: upcoming, createdAt: iso(now), unread: false, timeline: { uri: null, time: '', tone: 'new', upcoming: true } }] : []; // no time of its own: it sits under Today's Now
   const todayText = "Today's Tasks";
   const todayRow = top ? [{ id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
-    editable: false, hasChildren: true, children: got.today, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } }] : [];
+    editable: false, hasChildren: true, children: got.today.rows, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true, day: got.today.day } }] : []; // day: a change to today's node reads the page again (renderer/app.js)
   const events = all ? [...got.watched, ...got.agents, ...got.inbox, ...got.meetings.events] : [];
   // New tasks in a row from one source on one day are one entry, timed by the newest of them
   const day = (at) => new Date(at).toDateString();
@@ -341,7 +356,7 @@ function pageOf(got, seen, now, date) {
     if (e.kind === 'inbox' && last && last.kind === 'inbox' && last.actor === e.actor && day(last.at) === day(e.at)) last.tasks.push(e);
     else merged.push(e.kind === 'inbox' ? { ...e, tasks: [e] } : e);
   }
-  return [...todayRow, ...upcomingRow, ...merged.map((e) => {
+  return [...todayRow, ...freeRow, ...upcomingRow, ...merged.map((e) => {
     const title = (e.title || '').trim() || 'Untitled'; // a calendar's titles can end in a space ("Kick-off | My Nedap Pilot "), which pushed the Join glyph out
     let segments, note = null, change = null, detail = null, children = [];
     // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".

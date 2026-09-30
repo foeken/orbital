@@ -358,6 +358,7 @@ function rowSig(n) {
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
     n.proposal ? n.proposal.note : null, n.subtext, n.people, n.join, n.meeting && n.meeting.id, n.timeline && n.timeline.recording, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    n.timeline?.free && timelineFreeSegs(n.timeline.free), // the Timeline's free time, counting down
     tableView() ? typeDefs() : null, // a table cell's picker is made from the page's field definitions (views.js cellPicker)
     demoMode, // demo mode masks the words and makes every row read-only: a row drawn before the switch shows real titles
     translateTo(), translations.get(translateSrc(n)), translationPending(translateSrc(n)), shownOriginal.has(translateId(n)), // into which language, shown translated, being translated, or not (renderer/translate.js)
@@ -890,7 +891,7 @@ function nodeEl(node, docId, parent) {
     if (!demoMode && !clickOpens && canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
-    const own = segsOf(node), segs = english ? translatedSegs(node, english.text) : pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : own;
+    const own = node.timeline?.free ? timelineFreeSegs(node.timeline.free) : segsOf(node), segs = english ? translatedSegs(node, english.text) : pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : own;
     renderSegs(text, segs, display.id);
     text.classList.toggle('chiponly', chipOnly(text));
     if (english) originalOnFocus(text, () => renderSegs(text, segsOf(node), display.id)); // the caret going in finds the original: that is what an edit saves
