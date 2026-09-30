@@ -1050,8 +1050,13 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   Its task rows show their box and assignee and nothing else, whatever any view's Display chose (`displayKeys`): the
   page has no Display pill, and borrowing the last list view's made them change with it.
   - **Now**: first **Today's Tasks** (tasks-2 icon): incomplete tasks pinned to today or earlier and completed ones
-    pinned to today, future pins excluded; with none, "All done - Add more", where Add more opens a search of your
-    open tasks and pins the choice to today. Then, when any are left, **Upcoming meetings**: today's meetings still to
+    pinned to today, future pins excluded, then the tasks on today's node (the `YYYY-MM-DD` document, found and never
+    made here: the tasks its outline references, as a full reference (Tana's `embed` block or a line that is one
+    mention) or among words, done ones included; reading it keeps it live, so a change to it reads the page again); with none, "All done - Add more", where Add more opens a search of your
+    open tasks and pins the choice to today. Then the **free time** before the next meeting (a content face, eyes closed): "No meetings
+    for **44 more minutes**" ("1 hour and 20 more minutes", "2 more hours"), or during a meeting the gap after it ("No meetings for **30 minutes**
+    after this one"), counted down every 15
+    seconds in the renderer and gone when the meetings touch or overlap. Then, when any are left, **Upcoming meetings**: today's meetings still to
     start, earliest first, each with its time and who else is on it ("14:00–15:00 · Jeroen Oostewechel"), opening the
     meeting. A meeting still to come, or under way on the timeline, has the Tana glyph after its title ("Join in
     Tana"), which opens it in Tana (`row.join` through `doc:link`). One timer per read, a second after the next start

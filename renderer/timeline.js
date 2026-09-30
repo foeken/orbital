@@ -38,8 +38,19 @@ function timelineGroups(list) {
   return days.map((g) => ({ ...g, title: timelineDay(g.id), collapsed: timelineFolded.has(g.id),
     toggle: () => { if (!timelineFolded.delete(g.id)) timelineFolded.add(g.id); render(true); } }));
 }
-// The rule closes the blocks at the top — Today's Tasks, then Upcoming meetings when there are any — before the history
-const timelineTopEnds = (n, next) => !!(n.timeline?.today || n.timeline?.upcoming) && !next?.timeline?.upcoming;
+// The rule closes the blocks at the top — Today's Tasks, then the free time and Upcoming meetings when there are any — before the history
+const timelineTopEnds = (n, next) => !!(n.timeline?.today || n.timeline?.free || n.timeline?.upcoming) && !(next?.timeline?.free || next?.timeline?.upcoming);
+// The free time before the next meeting (main/timeline.js pageOf): "No meetings for 44 more minutes", in whole minutes
+// rounded up, counted down while the page is on screen; the page is read again once the meeting starts, which takes
+// the row away. During a meeting it is the gap after it: "No meetings for 30 minutes after this one".
+function timelineFreeSegs({ from, until }) {
+  const later = from > Date.now(), more = later ? '' : 'more ';
+  const m = Math.max(1, Math.ceil((until - Math.max(Date.now(), from)) / 6e4)), h = Math.floor(m / 60);
+  const unit = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+  const left = m < 60 ? m + ' ' + more + (m === 1 ? 'minute' : 'minutes') : m % 60 ? unit(h, 'hour') + ' and ' + m % 60 + ' ' + more + (m % 60 === 1 ? 'minute' : 'minutes') : h + ' ' + more + (h === 1 ? 'hour' : 'hours');
+  return [{ text: 'No meetings for ' }, { text: left, marks: { bold: true } }, ...(later ? [{ text: ' after this one' }] : [])];
+}
+setInterval(() => { if (zoom?.docId === TIMELINE_PAGE && kids.get(TIMELINE_PAGE)?.some((n) => n.timeline?.free)) renderSoon(); }, 15e3); // rowSig carries the minutes, so only that row is redrawn
 // Join: a meeting still to come or under way is joined from Tana, so its Tana glyph after the title opens the meeting
 // there (row.join, the meeting's id; main/timeline.js). Its own click: the row around it opens the meeting here.
 function timelineJoinEl(node) {

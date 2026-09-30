@@ -49,6 +49,7 @@ WANT.chatgpt = path.join(__dirname, '..', 'build', 'icons', 'chatgpt.svg');
 // A node pinned to the sidebar or to a date: the tack, distinct from the map-marker 'pin' the meeting rows use
 WANT.pinned = path.join(__dirname, '..', 'build', 'icons', 'pin-tack.svg');
 WANT.todayTasks = path.join(__dirname, '..', 'build', 'icons', 'tasks-2.svg'); // Timeline's Today's Tasks row
+WANT.free = path.join(__dirname, '..', 'build', 'icons', 'face-smile-closed-eyes.svg'); // Timeline's free time before the next meeting: the bliss of no meetings
 // What the model suggested, rather than what you typed or what Tana knows (Cmd+K "Discuss with …")
 WANT.sparkle = path.join(__dirname, '..', 'build', 'icons', 'orbit-sparkle.svg');
 // The "/" menu's Table and Image rows (renderer/nodes.js glyphSvg), from the Nucleo UI 18px outline set

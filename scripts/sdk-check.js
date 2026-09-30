@@ -3278,6 +3278,8 @@ async function main() {
     const pinnedReadOnly = { id: id(), title: 'Pinned but read-only', participants: { [ME]: { type: 'user', role: 'viewer' } }, state: { type: 'open' } };
     const pinnedInherited = { id: id(), title: 'Pinned, access inherited', state: { type: 'open' } }; // no participants entry: editability unknown (#545)
     const completedOverdue = { id: id(), title: 'Completed yesterday', state: { type: 'open' } };
+    const dayTask = { id: id(), title: "Done on today's node", state: { type: 'closed' } }; // on today's node, not pinned
+    let dayNode = null, dayDoc = null; // today's node (main/pins.js todayNode), once there is one
     const completedDoc = new Document(completedOverdue.id);
     completedDoc.transact((l) => initDocument(l, completedOverdue.title, ME, { kind: 'task' })); setState(completedDoc, 'closed', COLLEAGUE);
     const liveDocs = new Map([[completedOverdue.id, completedDoc]]);
@@ -3326,10 +3328,11 @@ async function main() {
       client: {
         graph: {
           listNodes: async (p) => {
+            if (p.textQuery) return { nodes: dayNode ? [dayNode] : [] }; // todayNode looking for today's node by its title
             if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Rob Jansen', userProfile: {} }] };
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
             if ((p.nodeTypes || []).includes('chat')) return { nodes: [agentChat] };
-            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, pinnedInherited, completedOverdue, byAgent, doneThenEdited].filter((n) => p.nodeIds.includes(n.id)) };
+            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, pinnedInherited, completedOverdue, byAgent, doneThenEdited, dayTask].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
             if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [...(soonToo ? [soon] : []), going, meeting, summed, allDay] }; }
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
@@ -3343,6 +3346,7 @@ async function main() {
           subscribe: async (uri, init) => {
             if (uri.startsWith('tana:liveQuery:')) { const d = new Document(uri); d.transact(init); if (d.data.toJSON().query.types.includes('call')) callsLive = d; else liveDoc = d; return d; }
             if (uri === CALL) { liveDocs.set(CALL, callDoc); return callDoc; }
+            if (dayNode && uri === dayNode.id) return dayDoc;
             return uri === ME ? profile : uri === pinMapUri ? pinMap : null;
           } },
       } });
@@ -3370,6 +3374,18 @@ async function main() {
       const shared = await Promise.all([backend.timelinePage.rows(), backend.timelinePage.rows(), backend.timelinePage.rows()]);
       g.listEdges = edgesOf;
       assert.deepEqual([builds, shared[1] === shared[2], shared[0].length === shared[1].length], [2, true, true], 'three asks, two builds');
+    }
+    { // the tasks today's node references join Today's Tasks after the pinned ones, once each; a done one there stays
+      dayNode = { id: 'tana:text:' + ulid(), title: today };
+      dayDoc = new Document(dayNode.id);
+      dayDoc.transact((l) => initDocument(l, today, ME, { kind: 'doc' }));
+      outline.insertMention(dayDoc, { uri: pinnedEditable.id, label: 'Pinned and editable' }); // a line that is one mention: pinned too, listed once
+      outline.insertMention(dayDoc, { uri: 'tana:plaindate:' + today, label: 'Today' }); // a date is no task
+      dayDoc.transact((l) => { const list = l.getMap('content').get('children'), m = list.insertContainer(list.length, new LoroMap()); m.set('nodeName', 'embed'); m.setContainer('attributes', new LoroMap()).set('tanaUri', dayTask.id); }); // Tana's full reference
+      const top = (await backend.timelinePage.rows())[0];
+      assert.deepEqual(JSON.parse(JSON.stringify([top.children.map((c) => c.text), top.timeline.day])),
+        [['Pinned and editable', 'Pinned but read-only', 'Pinned, access inherited', "Done on today's node"], dayNode.id], "today's node adds its tasks to Today's Tasks, and the row names the node so a change to it reads the page again");
+      dayNode = null;
     }
     const sync = (await backend.timelinePage.rows()).find((r) => r.timeline.uri === meeting.id);
     assert.deepEqual(JSON.parse(JSON.stringify(sync.people)), ['Ann Bakker', 'Bo Smit', 'Cas de Vries', 'Dee Jansen', 'Eva Mol'].map((name) => ({ uri: name.split(' ')[0].toLowerCase() + '@example.com', name })),
@@ -3452,6 +3468,15 @@ async function main() {
     assert.deepEqual(JSON.parse(JSON.stringify(withSoon[1].children[0].people)), [{ uri: 'ann@example.com', name: 'Ann Bakker' }], 'and who, as faces');
     assert.equal(withSoon[1].children[0].join, soon.id, 'and is joined from Tana too');
     assert.ok(!withSoon.slice(2).some((r) => r.timeline.uri === soon.id), 'and not among what happened');
+    assert.ok(!withSoon.some((r) => r.timeline.free), 'no free time while the meeting under way runs into the next one');
+    { // the free time between the blocks: from the end of the meeting under way to the next one's start
+      const was = { ...soon.calendarEvent };
+      Object.assign(soon.calendarEvent, { startTime: ago(-2 * H), endTime: ago(-2.5 * H) });
+      const later = await backend.timelinePage.rows();
+      assert.deepEqual(JSON.parse(JSON.stringify([later[1].icon, later[1].timeline.free, later[2].timeline.upcoming])),
+        ['free', { from: Date.parse(going.calendarEvent.endTime), until: Date.parse(soon.calendarEvent.startTime) }, true], 'free from the end of Board prep until Standup, above Upcoming meetings');
+      Object.assign(soon.calendarEvent, was);
+    }
     soonToo = false;
     assert.ok(!(await backend.timelinePage.rows()).some((r) => r.timeline.upcoming), 'with none to come the block is not drawn');
     // Three days a page: four days back is not on the first one, and one page older brings it in
