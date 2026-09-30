@@ -46,6 +46,17 @@ module.exports = [
     files: ['shell.js'],
     languageOptions: { sourceType: 'module', globals: globals.browser },
   },
+  {
+    // The manual's pages (manual/*.html): classic scripts, their own scope; search-index.js only sets a global.
+    files: ['manual/*.js'],
+    languageOptions: { sourceType: 'script', globals: globals.browser },
+    rules: { 'no-unused-vars': ['error', { vars: 'local', args: 'none' }] },
+  },
+  {
+    // The scenes that draw the manual's pictures: node scripts whose injected helpers run in the page.
+    files: ['manual/scenes/**/*.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
 ];
 
 function rendererGlobals() {

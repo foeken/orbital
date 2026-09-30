@@ -597,6 +597,19 @@ ipcMain.handle('canvas:open', (_e, id) => {
   canvasWindows.set(id, win);
   win.loadURL(url);
 });
+// The manual (manual/index.html): every feature with pictures, in a window of its own and the asking page's theme.
+// Opening it again brings it forward; a link out of it goes to the browser.
+let manualWin = null;
+ipcMain.handle('manual:open', (_e, theme) => {
+  if (manualWin && !manualWin.isDestroyed()) return manualWin.focus();
+  const dark = theme === 'dark';
+  manualWin = new BrowserWindow({ width: 1320, height: 900, minWidth: 760, minHeight: 520, title: 'Orbital Manual', titleBarStyle: 'hiddenInset', backgroundColor: dark ? '#1c1e20' : '#ffffff',
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  manualWin.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  manualWin.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:\/\//i.test(url)) shell.openExternal(url); } });
+  manualWin.on('closed', () => { manualWin = null; });
+  manualWin.loadFile(path.join(__dirname, 'manual', 'index.html'), { query: { theme: dark ? 'dark' : 'light' } });
+});
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());

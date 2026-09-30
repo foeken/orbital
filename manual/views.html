@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Views &amp; saved searches · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: one screen, three presets. The Library state is the plain one, which reduced motion shows. */
+  .views-hero { --loop: 9s; gap: 34px; }
+  .views-tabs { display: flex; flex-direction: column; gap: 8px; }
+  .views-tab { font-size: 14px; font-weight: 600; color: var(--faint); padding: 7px 14px; border-radius: 8px; }
+  .views-tab.t2 { color: var(--ink); background: var(--surface); box-shadow: var(--shadow-soft); }
+  .views-stage { position: relative; width: 390px; height: 214px; }
+  .views-stage .win { position: absolute; inset: 0; }
+  .views-s1, .views-s3 { opacity: 0; }
+  .views-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .views-pill { font-size: 11.5px; font-weight: 600; color: oklch(0.5 0.1 250); background: oklch(0.95 0.03 250); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  .views-pill i { font-style: normal; font-weight: 500; opacity: .75; margin-right: 4px; }
+  .views-pill.grey { color: var(--muted); background: var(--well); }
+  [data-theme="dark"] .views-pill { color: oklch(0.8 0.08 250); background: oklch(0.32 0.05 250); }
+  [data-theme="dark"] .views-pill.grey { color: var(--muted); background: var(--well); }
+  .views-glyph { width: 13px; height: 13px; border: 1.5px solid oklch(0.62 0.12 var(--hue)); border-radius: 4px; flex: none; }
+  .views-meta { font-size: 12px; color: var(--faint); }
+  .mg.in .views-s1 { animation: views-s1 var(--loop) infinite; }
+  .mg.in .views-s2 { animation: views-s2 var(--loop) infinite; }
+  .mg.in .views-s3 { animation: views-s3 var(--loop) infinite; }
+  .mg.in .views-tab.t1 { animation: views-t1 var(--loop) infinite; }
+  .mg.in .views-tab.t2 { animation: views-t2 var(--loop) infinite; }
+  .mg.in .views-tab.t3 { animation: views-t3 var(--loop) infinite; }
+  @keyframes views-s1 { 0%, 29% { opacity: 1; transform: none; } 33%, 96% { opacity: 0; transform: translateY(4px); } 100% { opacity: 1; } }
+  @keyframes views-s2 { 0%, 30% { opacity: 0; transform: translateY(4px); } 34%, 62% { opacity: 1; transform: none; } 66%, 100% { opacity: 0; } }
+  @keyframes views-s3 { 0%, 63% { opacity: 0; transform: translateY(4px); } 67%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes views-t1 { 0%, 30% { color: var(--ink); background: var(--surface); box-shadow: var(--shadow-soft); } 33%, 97% { color: var(--faint); background: none; box-shadow: none; } }
+  @keyframes views-t2 { 0%, 31% { color: var(--faint); background: none; box-shadow: none; } 34%, 63% { color: var(--ink); background: var(--surface); box-shadow: var(--shadow-soft); } 66%, 100% { color: var(--faint); background: none; box-shadow: none; } }
+  @keyframes views-t3 { 0%, 64% { color: var(--faint); background: none; box-shadow: none; } 67%, 97% { color: var(--ink); background: var(--surface); box-shadow: var(--shadow-soft); } 100% { color: var(--faint); background: none; box-shadow: none; } }
+
+  /* rows arriving and leaving, and the row a tick keeps in place until Clean up */
+  .views-live { --loop: 9s; flex-direction: column; gap: 14px; }
+  .views-live .win { width: 380px; }
+  .views-live .row { overflow: hidden; border-radius: 7px; padding: 0 6px; }
+  .views-new { height: 0; opacity: 0; }
+  .views-gone, .views-held { height: 0; opacity: 0; }
+  .views-held .box { background: var(--done-soft); border-color: var(--done-soft); }
+  .views-live-btn { font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--surface); box-shadow: var(--shadow-soft); border-radius: 999px; padding: 5px 13px; }
+  .mg.in .views-new { animation: views-new var(--loop) infinite; }
+  .mg.in .views-gone { animation: views-gone var(--loop) infinite; }
+  .mg.in .views-held { animation: views-held var(--loop) infinite; }
+  .mg.in .views-held .box { animation: views-tick var(--loop) infinite; }
+  .mg.in .views-live-btn { animation: views-btn var(--loop) infinite; }
+  @keyframes views-new { 0%, 12% { height: 0; opacity: 0; background: rgba(52, 168, 83, .22); } 17% { height: 28px; opacity: 1; background: rgba(52, 168, 83, .22); } 32%, 96% { height: 28px; opacity: 1; background: transparent; } 100% { height: 0; opacity: 0; } }
+  @keyframes views-gone { 0%, 30% { height: 28px; opacity: 1; background: transparent; } 33% { background: rgba(217, 48, 37, .2); } 40%, 100% { height: 0; opacity: 0; background: rgba(217, 48, 37, .2); } }
+  @keyframes views-held { 0%, 72% { height: 28px; opacity: 1; } 74% { opacity: .45; height: 28px; } 80%, 100% { height: 0; opacity: 0; } }
+  @keyframes views-tick { 0%, 46% { background: none; border-color: var(--faint); } 48%, 100% { background: var(--done-soft); border-color: var(--done-soft); } }
+  @keyframes views-btn { 0%, 48% { opacity: 0; transform: scale(.8); } 52%, 70% { opacity: 1; transform: none; } 72% { transform: translateY(2px) scale(.94); background: var(--well); } 76% { opacity: 1; transform: none; } 82%, 100% { opacity: 0; transform: scale(.8); } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 7</p>
+    <h1>One list, aimed any way you like</h1>
+    <p class="lead">Inbox, Library and Types are the same screen with a different filter. Once you can read the pills over a list, you can aim it anywhere, lay it out as a table, and keep the query as a saved search.</p>
+    <div class="mg views-hero" aria-hidden="true">
+      <div class="views-tabs"><span class="views-tab t1">Inbox</span><span class="views-tab t2">Library</span><span class="views-tab t3">Types</span></div>
+      <div class="views-stage">
+        <div class="win views-s1">
+          <div class="ttl">Inbox</div>
+          <div class="views-pills"><span class="views-pill"><i>Type</i>Any type</span><span class="views-pill"><i>Status</i>Inbox</span><span class="views-pill"><i>Assigned to</i>Anyone</span><span class="views-pill grey"><i>Group</i>None</span></div>
+          <div class="row"><span class="box"></span><span class="bar" style="--w:210px"></span></div>
+          <div class="row"><span class="box"></span><span class="bar" style="--w:150px"></span></div>
+        </div>
+        <div class="win views-s2">
+          <div class="ttl">Library</div>
+          <div class="views-pills"><span class="views-pill"><i>Type</i>Tasks</span><span class="views-pill"><i>Status</i>All four</span><span class="views-pill"><i>Assigned to</i>Anyone</span><span class="views-pill grey"><i>Group</i>Status</span></div>
+          <div class="row"><span class="lbl">In progress</span></div>
+          <div class="row"><span class="box"></span><span class="bar" style="--w:190px"></span></div>
+          <div class="row"><span class="box"></span><span class="bar" style="--w:230px"></span></div>
+          <div class="row"><span class="box on"></span><span class="bar" style="--w:130px"></span></div>
+        </div>
+        <div class="win views-s3">
+          <div class="ttl">Types</div>
+          <div class="views-pills"><span class="views-pill"><i>Type</i>Types</span><span class="views-pill"><i>Visible to</i>Any</span><span class="views-pill grey"><i>Group</i>None</span></div>
+          <div class="row"><span class="views-glyph" style="--hue:268"></span>Project <span class="views-meta">Studio LT</span></div>
+          <div class="row"><span class="views-glyph" style="--hue:150"></span>Decision Record <span class="views-meta">Studio LT</span></div>
+          <div class="row"><span class="views-glyph" style="--hue:32"></span>Co-Worker <span class="views-meta">Library</span></div>
+        </div>
+      </div>
+      <span class="cap-line">The same pills every time: a preset only decides where they start.</span>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="presets" data-k="inbox library types view preset">Inbox, Library and Types</h2>
+    <p>A <b>view</b> is a list of Tana nodes with a filter on it. Orbital has three, and they differ only in the filter they start with:</p>
+    <ul>
+      <li><b>Inbox</b> lists the tasks still in the Inbox state, anybody's.</li>
+      <li><b>Library</b> lists every task, in all four states, grouped by Responsibility and sorted by Updated until you choose otherwise. Completed tasks show for three days.</li>
+      <li><b>Types</b> lists your workspace's types, each with the space it lives in (or Library when it has none). Chapter 10 is about <a href="types.html">what a type does</a>.</li>
+    </ul>
+    <h3>Open a view</h3>
+        <p>Press <kbd>⌘K</kbd> and type its name: the rows <b>Inbox</b>, <b>Library</b> and <b>Types</b> sit in the Views group. Each view remembers its own filter, so changing the Library never touches the Inbox.</p>
+    <figure class="clip wide"><video data-m="views-presets"></video><figcaption>From the Library to Types to the Inbox with ⌘K.</figcaption></figure>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>types</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="pills" data-k="filter pill status assigned visible limit completed when">Filter with the pills</h2>
+    <p>The pills under the title say what the list asks Tana for. Blue pills filter which rows come back; grey ones only arrange the rows that did.</p>
+    <figure class="anno wide">
+      <img data-m="views-pills" alt="The Library's pills: Type, Add filter, Status, Completed, Assigned to, Visible to, Limit, Sort, Group, Display and Save as search">
+      <span class="pin" style="--x:3.4%;--y:27%">1</span>
+      <span class="pin" style="--x:21.8%;--y:27%">2</span>
+      <span class="pin" style="--x:52.6%;--y:27%">3</span>
+      <span class="pin" style="--x:68.1%;--y:27%">4</span>
+      <span class="pin" style="--x:84.6%;--y:27%">5</span>
+      <span class="pin" style="--x:3.4%;--y:71%">6</span>
+      <span class="pin" style="--x:14%;--y:71%">7</span>
+      <span class="pin" style="--x:58.4%;--y:71%">8</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Type</b> Picks kinds (Meetings, Tasks, Docs, Chats, Canvases, Agents, Skills, Searches, Spaces, People, Types) or your workspace's own types. The two lists never mix: ticking one clears the other.</li>
+      <li><b>Status</b> Picks task states: Inbox, In Progress, Completed, Later. It only counts while tasks are in the list.</li>
+      <li><b>Completed</b> How old a completed task may be and still show: 3 days, 7 days, 30 days or All. Shown while Status lets Completed in.</li>
+      <li><b>Assigned to</b> Anyone, you, Unassigned, or one member.</li>
+      <li><b>Visible to</b> Any visibility, or only what Everyone in the organisation can see.</li>
+      <li><b>Limit</b> How many rows to ask for (50 to 1,000). Tana keeps the most recently changed ones, and a cut list says so under its rows.</li>
+      <li><b>Sort, Group, Display</b> Arrange the rows you have (next section).</li>
+      <li><b>Save as search</b> Keeps this query as a saved search.</li>
+    </ol>
+    <p>With only meetings in the list, a <b>When</b> pill appears: Any time, Recent, Today, Upcoming or Past. When the list holds typed documents, their fields get pills too, and past four the ones you are not using fold behind <b>Add filter</b> (<a href="types.html#type-pages">Chapter 10</a> shows them).</p>
+    <h3>Change a pill</h3>
+        <p>Click a pill, or <kbd>⇥</kbd> to it and press <kbd>↩</kbd>. Its menu ticks what is chosen. Status and Type let you tick several and stay open; other choices close the menu. Type letters to narrow a long menu, <kbd>↑</kbd> <kbd>↓</kbd> to move, <kbd>esc</kbd> to close. The list changes at once.</p>
+    <figure class="clip wide"><video data-m="views-pill"></video><figcaption>Untick Completed in Status, and the Completed pill steps aside.</figcaption></figure>
+    <div class="split">
+      <div>
+        <h3>Every pill is a ⌘K row</h3>
+        <p><kbd>⌘K</kbd> lists the pills under <b>View options</b> by what they do (<b>Filter by type</b>, <b>Filter by status</b>, <b>Filter by assignee</b>, <b>Filter by visibility</b>, <b>Filter by meeting time</b>, <b>Sort by</b>, <b>Group by</b>…) with the current value on the right. Their choices fold in too: type <b>filter by status later</b> and press <kbd>↩</kbd>.</p>
+        <p>The pills can fold away behind the settings button beside Back and Forward (<b>Show view options</b> / <b>Hide view options</b>). Views open with them shown; saved searches and type pages open with them folded. ⌘K lists them either way.</p>
+      </div>
+      <figure class="shot"><img data-m="views-cmdk" alt="Cmd+K listing Filter by status with its choices"><figcaption>A pill and its choices, reached from the keyboard.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>filter by status</b> <i>→</i><kbd>↩</kbd></span> and tick <b>Later</b>.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="find" data-k="filter rows by text search narrow">Narrow the rows by text <kbd>⌘F</kbd></h2>
+    <p><kbd>⌘F</kbd> (Cmd+K <b>Filter rows by text</b>) opens a field over the list. Type, and only rows whose title contains the words stay; a grey line under them counts the rest ("14 items filtered out"). The field stays while it has text. <kbd>esc</kbd> clears it and puts it away.</p>
+        <p>This filters what is already on screen. To ask Tana for something else, use the pills or <kbd>⌘S</kbd> search.</p>
+    <figure class="clip wide"><video data-m="views-find"></video><figcaption>⌘F, “studio”, then Escape.</figcaption></figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="arrange" data-k="group sort display section fold responsibility updated">Group, Sort and Display</h2>
+    <p>The grey pills rearrange rows without asking Tana again. Each view, saved search and type page keeps its own choice, and it follows you to your other Macs.</p>
+    <div class="split">
+      <div>
+        <h3>Group</h3>
+        <p>Puts the rows under headings: <b>None</b>, <b>Status</b>, <b>Assignee</b>, <b>Responsibility</b>, <b>Updated</b> or <b>Type</b>, plus any options, link or member field of the types on the page (under <b>Type fields</b>). Updated sorts rows into Last hour, Last day, Last week, Last month and Older.</p>
+        <p><b>Responsibility</b> is about your own work: Unassigned, Agent, My inbox, Pinned, Mine, Tracking, My later, My completed, Assigned by others. Tracking (work you handed to someone) and Pinned open short, on what moved in the last days, with a "Show 19 more tasks" line for the rest.</p>
+      </div>
+      <figure class="shot"><img data-m="views-group" alt="The Group menu over the Library"><figcaption>Group's menu, with the fields of the types on the page under Type fields.</figcaption></figure>
+    </div>
+    <h3>Fold a section</h3>
+        <p>Click a heading, or press <kbd>↩</kbd> or <kbd>Space</kbd> on it, to fold that section. Its rows leave the keyboard's path too, so <kbd>↓</kbd> skips them. Folded sections stay folded next time.</p>
+    <figure class="clip wide"><video data-m="views-fold"></video><figcaption>Folding In Progress, and opening it again.</figcaption></figure>
+    <div class="split">
+      <div>
+        <h3>Sort and Display</h3>
+        <p><b>Sort</b> orders rows by <b>Default</b>, <b>Status</b>, <b>Updated</b>, <b>Created</b>, <b>Title</b>, or <b>Meeting time</b> when the list holds only meetings, and by any field of the page's types. A field sorts by its first value; rows without one go last.</p>
+        <p><b>Display</b> chooses the facts each row shows on its grey line: <b>Type</b>, <b>Lives in</b>, <b>Status</b>, <b>Assigned</b>, <b>Updated</b>, <b>Created</b>, <b>Created by</b>, and the page's fields. Tick as many as you like; the pill names the first two.</p>
+      </div>
+      <figure class="shot"><img data-m="views-display" alt="The Display menu with Status and Assigned ticked"><figcaption>Every menu has a search line: type to narrow it.</figcaption></figure>
+    </div>
+    <p>A saved search or a type page draws its rows twenty at a time; the next twenty come as "Show 20 more" at the end scrolls into view.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="table" data-k="table outliner column width grid">Outliner or table</h2>
+    <p>Any page with pills can be drawn as a table: the switch at the top right of the header, or <kbd>⌘K</kbd> <b>Switch to table</b> and <b>Switch to outliner</b>. The rows stay the same rows; each fact Display shows becomes a column. Each page remembers its choice.</p>
+        <p>In a table, a click, <kbd>↩</kbd> or <kbd>Space</kbd> on a title opens the node, and a task's box ticks without opening it. A long field value ends in an ellipsis and shows whole on hover. On a type's page, an options column can be changed in place: click the cell, or <kbd>⌘K</kbd> <b>Set Level …</b> (the field's name) on the row.</p>
+    <figure class="clip wide"><video data-m="views-table"></video><figcaption>The Library as a table: Status and Assigned become columns.</figcaption></figure>
+    <div class="split flip">
+      <div>
+        <h3>Column widths</h3>
+        <p>Drag the grip on a column header's right edge to resize it; double-click the grip to reset. From the keyboard, <kbd>⌘K</kbd> <b>Column widths …</b> lists the columns: <kbd>←</kbd> <kbd>→</kbd> make the highlighted one 20 pixels narrower or wider, <kbd>↩</kbd> resets it. Title takes whatever width is left.</p>
+      </div>
+      <figure class="shot"><img data-m="views-widths" alt="The Column widths page listing Status and Assigned"><figcaption>Column widths, the keyboard way to the grips.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>table</b> <i>→</i><kbd>↩</kbd></span>, then the same again to switch back.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="saved-searches" data-k="saved search save refresh clean up searches">Saved searches</h2>
+    <p>A <b>saved search</b> is a Tana document that stores a query. It is a place: it shows up in <kbd>⌘K</kbd> under <b>Searches</b>, can be pinned to the sidebar, and runs the same in Tana's own app.</p>
+    <h3>Save a query</h3>
+        <p>Aim a view with its pills, then press the green <b>Save as search</b> pill (or <kbd>⌘K</kbd> <b>Save as new search</b>). Orbital writes the filter, the grouping, the sort and the facts to show into a new search, names it after the filter, and opens it. Rename it like any page.</p>
+    <figure class="clip wide"><video data-m="views-save"></video><figcaption>The Library's query, kept as a search and opened.</figcaption></figure>
+    <h3>Change it, then Save</h3>
+        <p>A view keeps each change as you make it. A saved search is a document other people may use, so its changes wait: the pills stay open and a <b>Save</b> pill appears until you press it. Leave without saving and the search is as it was.</p>
+        <p>A saved search's pane menu has <b>Refresh</b>, which asks the query again. Give a search its own glyph with <kbd>⌘K</kbd> <b>Set icon</b> on its page.</p>
+    <figure class="shot wide"><img data-m="views-unsaved" alt="A saved search with a Save pill after a change of sort"><figcaption>An unsaved change: the Save pill waits at the end of the row.</figcaption></figure>
+    <div class="try"><span class="seq">On the Library, <kbd>⌘K</kbd><i>→</i> type <b>save as new</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="live" data-k="live arriving leaving green red clean up nothing here yet empty">Rows that come and go</h2>
+    <p>Views stay live. When someone adds, finishes or reassigns work, the list changes by itself, and it does so without moving what you are working on.</p>
+    <div class="mg views-live" aria-hidden="true">
+      <div class="win">
+        <div class="ttl">Library</div>
+        <div class="row views-new"><span class="box"></span>Book the offsite room</div>
+        <div class="row"><span class="box"></span>Send the pilot plan</div>
+        <div class="row views-held"><span class="box"></span>Collect the four cost sheets</div>
+        <div class="row views-gone"><span class="box"></span>Draft the LT agenda</div>
+        <div class="row"><span class="box"></span>Ask Studio teams for risks</div>
+      </div>
+      <span class="views-live-btn">Clean up</span>
+      <span class="cap-line">In green, out red; what you ticked waits for Clean up.</span>
+    </div>
+    <ul>
+      <li>A row that arrives <b>glows green</b> once. A row that leaves <b>flashes red</b> as it goes. A big change (more than 25 rows) simply redraws.</li>
+      <li>A row you just changed, say a task you completed, <b>stays where it is</b>, even if it no longer fits the filter. The <b>Clean up</b> button appears in the header; press it (or <kbd>⌘K</kbd> <b>Clean up</b>) to put every row where it belongs now.</li>
+      <li>A row that stops fitting while your caret is in it only dims, and goes once you leave it.</li>
+    </ul>
+    <div class="split">
+      <div>
+        <h3>Nothing here yet</h3>
+        <p>A list with no rows says <b>Nothing here yet</b>. When the filter is why, a <b>Clear filters</b> link sits beside it: it resets type, status, assignee, text and fields, and keeps a meetings list's time window. In an empty view, <kbd>↩</kbd> starts a new document.</p>
+      </div>
+      <figure class="shot"><img data-m="views-empty" alt="The Inbox filtered to Later, empty, with Clear filters"><figcaption>An empty Inbox, filtered to Later.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="saved-views" data-short="Saved views" data-k="save view remove saved view window layout">Saved views of a whole window</h2>
+    <div class="split">
+      <div>
+        <p>A saved search keeps one query. <kbd>⌘K</kbd> <b>Save view…</b> keeps a whole window: its panes and what each one shows. Type a new name and press <kbd>↩</kbd>, or pick an existing view to update it to this window. <b>Remove saved view</b> lists them to delete one. Saved views open from <kbd>⌘K</kbd> like any place; <a href="windows.html">Chapter 13</a> covers windows and panes.</p>
+      </div>
+      <figure class="shot"><img data-m="views-savedview" alt="Save view with the name Planning typed"><figcaption>Saving this window as “Planning”.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Open a view, a saved search or a type</td><td><kbd>⌘K</kbd> and its name</td></tr>
+      <tr><td>Filter rows by text</td><td><kbd>⌘F</kbd></td></tr>
+      <tr><td>Clear and close the text filter</td><td><kbd>esc</kbd></td></tr>
+      <tr><td>Open a pill's menu</td><td><kbd>↩</kbd> or <kbd>Space</kbd></td></tr>
+      <tr><td>Move between pills</td><td><kbd>←</kbd> <kbd>→</kbd></td></tr>
+      <tr><td>Move in a pill's menu, narrow it</td><td><kbd>↑</kbd> <kbd>↓</kbd>, type</td></tr>
+      <tr><td>Fold a group heading</td><td><kbd>↩</kbd> or <kbd>Space</kbd></td></tr>
+      <tr><td>Resize a column (Column widths …)</td><td><kbd>←</kbd> <kbd>→</kbd>, <kbd>↩</kbd> resets</td></tr>
+      <tr><td>Search Tana instead</td><td><kbd>⌘S</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

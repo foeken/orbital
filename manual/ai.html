@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>AI &amp; agents · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* shared: the agent badge and the sparkle, drawn the way the app draws them (styles.css .cbadge) */
+  .ai-bot { position: relative; overflow: hidden; display: inline-grid; place-items: center; width: 26px; height: 20px; border-radius: 6px; flex: none;
+    background: #d9f0de; color: #17652f; }
+  .ai-bot svg { width: 14px; height: 14px; }
+  .ai-bot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 28%, rgba(255, 255, 255, .9) 50%, transparent 72%); transform: translateX(-130%); }
+  [data-theme="dark"] .ai-bot { background: #1f3a28; color: #8fd0a2; }
+  [data-theme="dark"] .ai-bot::after { background: linear-gradient(100deg, transparent 28%, rgba(255, 255, 255, .25) 50%, transparent 72%); }
+  .ai-spark { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-right: 5px; }
+
+  /* ---- hero: the model reads the title for you, then the agent takes the node ---- */
+  .ai-hero { --loop: 9s; flex-direction: column; gap: 22px; }
+  .ai-hero-stage { position: relative; }
+  .ai-hero-win { width: 400px; }
+  .ai-hero-win .row:first-child { font-weight: 650; font-size: 16px; }
+  .ai-hero-title, .ai-hero-sub { display: inline-grid; }
+  .ai-hero-title > span, .ai-hero-sub > span { grid-area: 1 / 1; }
+  .ai-hero-win .ai-bot { margin-left: auto; }
+  .ai-hero-sub { font-size: 12.5px; color: var(--muted); height: 20px; align-items: center; padding-left: 24px; margin: -4px 0 6px; }
+  .ai-hero-sub u { text-underline-offset: 2px; }
+  .ai-nl, .ai-sub-wait { opacity: 0; }
+  .ai-hero-cmd { position: absolute; left: 300px; top: -34px; min-width: 0; padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); opacity: 0; white-space: nowrap; }
+  .ai-hero-cmd .ai-glyph svg { width: 15px; height: 15px; display: block; color: var(--muted); }
+  .ai-hero-cmd kbd { font-size: 11px; }
+  .ai-hero .cap { position: absolute; left: 244px; top: -40px; }
+  .ai-hero-steps { display: flex; gap: 28px; font-size: 13.5px; color: var(--muted); }
+  .ai-hero-steps b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); color: var(--ink); font-size: 11.5px; margin-right: 7px; box-shadow: 0 0 0 1px var(--line-strong); }
+  .mg.in .ai-nl { animation: ai-nl var(--loop) infinite; }
+  .mg.in .ai-en { animation: ai-en var(--loop) infinite; }
+  .mg.in .ai-sub-wait { animation: ai-wait var(--loop) infinite; }
+  .mg.in .ai-sub-wait .ai-spark { animation: ai-twinkle 1.2s ease-in-out infinite; }
+  .mg.in .ai-sub-done { animation: ai-en var(--loop) infinite; }
+  .mg.in .ai-hero-cmd { animation: ai-cmd var(--loop) infinite; }
+  .mg.in .ai-hero-win .ai-bot { animation: ai-bot var(--loop) infinite; }
+  .mg.in .ai-hero-win .ai-bot::after { animation: ai-sheen var(--loop) infinite; }
+  .mg.in .ai-s1 { animation: ai-s1 var(--loop) infinite; }
+  .mg.in .ai-s2 { animation: ai-s2 var(--loop) infinite; }
+  @keyframes ai-nl { 0%, 20% { opacity: 1; } 24%, 95% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes ai-en { 0%, 20% { opacity: 0; } 24%, 95% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes ai-wait { 0%, 6% { opacity: 0; } 9%, 20% { opacity: 1; } 23%, 100% { opacity: 0; } }
+  @keyframes ai-twinkle { 0%, 100% { opacity: .35; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.1); } }
+  @keyframes ai-cmd { 0%, 41% { opacity: 0; transform: translateY(6px); } 44%, 53% { opacity: 1; transform: none; } 56%, 100% { opacity: 0; transform: none; } }
+  @keyframes ai-bot { 0%, 54% { opacity: 0; transform: scale(.5); background: #ececec; color: #5a5a5a; }
+    57% { opacity: 1; transform: scale(1); background: #ececec; color: #5a5a5a; } 64% { background: #ececec; color: #5a5a5a; }
+    67%, 80% { background: #dde8fb; color: #1b4a8f; } 83%, 95% { opacity: 1; transform: scale(1); background: #d9f0de; color: #17652f; } 100% { opacity: 0; } }
+  [data-theme="dark"] .mg.in .ai-hero-win .ai-bot { animation-name: ai-bot-dark; }
+  @keyframes ai-bot-dark { 0%, 54% { opacity: 0; transform: scale(.5); background: #33383a; color: #b6bbbd; }
+    57% { opacity: 1; transform: scale(1); background: #33383a; color: #b6bbbd; } 64% { background: #33383a; color: #b6bbbd; }
+    67%, 80% { background: #1e3050; color: #9dc2f5; } 83%, 95% { opacity: 1; transform: scale(1); background: #1f3a28; color: #8fd0a2; } 100% { opacity: 0; } }
+  @keyframes ai-sheen { 0%, 67% { transform: translateX(-130%); } 73% { transform: translateX(130%); } 73.1% { transform: translateX(-130%); } 79% { transform: translateX(130%); } 100% { transform: translateX(130%); } }
+  @keyframes ai-s1 { 0%, 45% { opacity: 1; } 49%, 97% { opacity: .4; } 100% { opacity: 1; } }
+  @keyframes ai-s2 { 0%, 45% { opacity: .4; } 49%, 97% { opacity: 1; } 100% { opacity: .4; } }
+
+  /* ---- @Codex: the question goes to this Mac, never to Tana, until you send the answer yourself ---- */
+  .ai-local { --loop: 9s; gap: 0; }
+  .ai-local-chat { width: 270px; display: flex; flex-direction: column; gap: 10px; }
+  .ai-q { align-self: flex-end; font-size: 13px; color: var(--ink); background: var(--well); border-radius: 12px; padding: 6px 11px; box-shadow: 0 0 0 1px var(--line); }
+  .ai-a { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+  .ai-a .bar { height: 7px; }
+  .ai-a u { text-underline-offset: 2px; }
+  .ai-local-paths { display: flex; flex-direction: column; justify-content: space-around; align-self: stretch; padding: 18px 12px; }
+  .ai-local-paths .arrow { width: 64px; }
+  .ai-local-dests { display: flex; flex-direction: column; gap: 18px; }
+  .ai-dest { min-width: 0; width: 190px; padding: 11px 14px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--text); }
+  .ai-dest .lbl { color: var(--muted); }
+  .mg.in .ai-q { animation: ai-q var(--loop) infinite; }
+  .mg.in .ai-a { animation: ai-a var(--loop) infinite; }
+  .mg.in .ai-a u { animation: ai-add var(--loop) infinite; }
+  .mg.in .ai-p-mac { animation: ai-path1 var(--loop) infinite; }
+  .mg.in .ai-mac { animation: ai-glow1 var(--loop) infinite; }
+  .mg.in .ai-p-tana { animation: ai-path2 var(--loop) infinite; }
+  .mg.in .ai-tana { animation: ai-glow2 var(--loop) infinite; }
+  @keyframes ai-q { 0%, 3% { opacity: 0; transform: translateY(6px); } 7%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes ai-a { 0%, 33% { opacity: 0; transform: translateY(6px); } 37%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes ai-add { 0%, 52% { color: inherit; } 55%, 62% { color: var(--now); } 66%, 100% { color: inherit; } }
+  @keyframes ai-path1 { 0%, 9% { opacity: .25; } 13%, 32% { opacity: 1; } 38%, 100% { opacity: .25; } }
+  @keyframes ai-path2 { 0%, 58% { opacity: .25; } 62%, 80% { opacity: 1; } 86%, 100% { opacity: .25; } }
+  @keyframes ai-glow1 { 0%, 12% { box-shadow: var(--shadow-card); } 16%, 34% { box-shadow: 0 0 0 1.5px var(--now), 0 0 0 6px rgba(47, 124, 246, .15); } 40%, 100% { box-shadow: var(--shadow-card); } }
+  @keyframes ai-glow2 { 0%, 61% { box-shadow: var(--shadow-card); } 65%, 82% { box-shadow: 0 0 0 1.5px var(--now), 0 0 0 6px rgba(47, 124, 246, .15); } 88%, 100% { box-shadow: var(--shadow-card); } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 11</p>
+    <h1>Let a model read, and an agent work</h1>
+    <p class="lead">Orbital can ask a model about the node you are on: who it is for, what type it is, what an image says, what a Dutch title means. It can also hand the node to a Codex agent and show you, on the row, how that work is going.</p>
+    <div class="mg ai-hero" aria-hidden="true">
+      <div class="ai-hero-stage">
+        <div class="win ai-hero-win">
+          <div class="row"><span class="box"></span><span class="ai-hero-title"><span class="ai-nl">Terugblik offsite Studio</span><span class="ai-en">Studio offsite recap</span></span><span class="ai-bot"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2.5" y="4.5" width="11" height="8" rx="3"/><path d="M8 2.2v2.3"/><circle cx="6" cy="8.5" r=".7" fill="currentColor" stroke="none"/><circle cx="10" cy="8.5" r=".7" fill="currentColor" stroke="none"/></svg></span></div>
+          <div class="ai-hero-sub"><span class="ai-sub-wait"><span class="ai-spark"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5c.4 2.9 1.6 4.1 4.5 4.5-2.9.4-4.1 1.6-4.5 4.5-.4-2.9-1.6-4.1-4.5-4.5 2.9-.4 4.1-1.6 4.5-4.5z"/><path d="M12.5 10c.2 1.3.7 1.8 2 2-1.3.2-1.8.7-2 2-.2-1.3-.7-1.8-2-2 1.3-.2 1.8-.7 2-2z"/></svg></span>Translating…</span><span class="ai-sub-done"><span class="ai-spark"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5c.4 2.9 1.6 4.1 4.5 4.5-2.9.4-4.1 1.6-4.5 4.5-.4-2.9-1.6-4.1-4.5-4.5 2.9-.4 4.1-1.6 4.5-4.5z"/><path d="M12.5 10c.2 1.3.7 1.8 2 2-1.3.2-1.8.7-2 2-.2-1.3-.7-1.8-2-2 1.3-.2 1.8-.7 2-2z"/></svg></span>Translated from Dutch · <u>Show original</u></span></div>
+          <div class="row in1"><span class="dot"></span><span class="bar" style="--w:190px"></span></div>
+          <div class="row in1"><span class="dot"></span><span class="bar" style="--w:130px"></span></div>
+        </div>
+        <span class="cap press" style="--at:.4">⌘K</span>
+        <div class="win ai-hero-cmd"><span class="ai-glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2.5" y="4.5" width="11" height="8" rx="3"/><path d="M8 2.2v2.3"/><circle cx="6" cy="8.5" r=".7" fill="currentColor" stroke="none"/><circle cx="10" cy="8.5" r=".7" fill="currentColor" stroke="none"/></svg></span>Assign to Agent <kbd>⌘↩</kbd></div>
+      </div>
+      <div class="ai-hero-steps"><span class="ai-s1"><b>1</b>The model reads for you</span><span class="ai-s2"><b>2</b>The agent works for you</span></div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="connect" data-short="Connect a model" data-k="chatgpt openai api key sign in sign out account model">Connect a model first</h2>
+    <p>Everything in the first half of this chapter asks a model. Orbital talks to one of two: your <b>ChatGPT account</b>, or an <b>OpenAI API key</b>. When you have both, ChatGPT wins and the key is the fallback. Both stay on this Mac.</p>
+    <div class="split">
+      <div>
+        <h3>Sign in with ChatGPT</h3>
+        <p>Open <kbd>⌘K</kbd> and run <b>Sign in with ChatGPT</b> (under Settings). The <b>ChatGPT account</b> page shows a short code: enter it in the browser page that opens. <b>Copy code</b> puts it on the clipboard, and <b>Cancel ChatGPT sign-in</b> stops waiting.</p>
+        <p>Once you are in, the same row reads <b>Sign out of ChatGPT</b>, and its page says who you are signed in as. The first sign-in on a Mac without Codex may say <b>Getting ChatGPT sign-in ready…</b> while it fetches what it needs, once.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-signin" alt="The ChatGPT account page in Cmd+K, asking you to enter a code in your browser"><figcaption>The code to type in your browser, with <b>Copy code</b> under it.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Or set an OpenAI API key</h3>
+        <p>Run <b>Set OpenAI API key</b> and paste the key. The field hides what you paste, and <b>Save OpenAI API key</b> keeps it on this Mac only. Use this when you have a key and no ChatGPT account, or as a spare.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-apikey" alt="The Paste OpenAI API key page in Cmd+K"><figcaption>The key page. It saves locally and never syncs.</figcaption></figure>
+    </div>
+    <h3>What each part needs</h3>
+    <table class="keys">
+      <tr><th>Feature</th><th>Needs</th></tr>
+      <tr><td>The name <b>Discuss with …</b> suggests, <b>Classify type</b>, <b>Process image</b>, <b>Auto-translate …</b>, <b>Translate into …</b></td><td>ChatGPT or an API key</td></tr>
+      <tr><td>Icons for your types, picked for you</td><td>ChatGPT or an API key</td></tr>
+      <tr><td><b>Assign to Agent</b>, <b>Open in Codex</b>, <b>@Codex</b> in a chat</td><td>The Codex app on this Mac (or a host)</td></tr>
+    </table>
+    <div class="tip">The moment you sign in or save a key, Orbital gives every type that has no icon one that fits its name, and does the same for their fields. You see the new glyphs on bullets and chips. An icon you chose yourself, or <b>No icon</b>, is never touched.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>chatgpt</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="node" data-short="Discuss with, Classify type" data-k="discussion task discuss with classify type ai sparkle odds">Ask the model about a node</h2>
+    <p>Two rows under <b>Current node</b> in <kbd>⌘K</kbd> use the model to fill in what a document is about. Both show the sparkle while the model reads, and both leave the choice to you.</p>
+    <h3>Discuss with …</h3>
+    <p>For a document you want to talk through with someone. Run <b>Discuss with …</b> and type who: one colleague, two people, or a team. <kbd>↩</kbd> gives the document the <b>Discussion Task</b> type and writes your words into its <b>Discuss with</b> field. Names of people in your workspace become links to them.</p>
+    <p>While the page is open the model reads the title. After <b>Reading the title…</b> its guess shows as a second row, marked <b>From the title</b>. Your own words always stay on the first row, so <kbd>↩</kbd> sends what you typed and <kbd>↓</kbd> <kbd>↩</kbd> takes the guess.</p>
+    <figure class="clip wide"><video data-m="ai-discuss"></video><figcaption>The title names two people, so the model suggests them. <kbd>↓</kbd> <kbd>↩</kbd> takes the suggestion and the document becomes a <b>Discussion Task</b>.</figcaption></figure>
+    <h3>Classify type</h3>
+    <p>Run <b>Classify type</b> to let the model pick from the same types <b>Set type</b> offers. It reads the document and each type's description, then answers with the odds for every option, <b>No type</b> among them.</p>
+    <ul>
+      <li>At 80% or more it sets the type at once and says so: “Classified as Decision Record (91%)”.</li>
+      <li>Below that it lists every option with its odds, most likely first, and you pick. The current type has a tick.</li>
+      <li>It never takes a type off by itself, even when <b>No type</b> comes first.</li>
+    </ul>
+    <figure class="clip wide"><video data-m="ai-classify"></video><figcaption>Not sure: the model lists the odds, and you choose <b>Project</b>.</figcaption></figure>
+    <div class="note">A type's description and its AI instructions in Tana are what the model reads. Write them well and its answers get better.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>classify</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="images" data-short="Process image" data-k="process image clipboard screenshot receipt drop create new quick add task">Turn an image into a task or a note</h2>
+    <p>A screenshot of a message, a photo of a whiteboard, a receipt: the model reads it and decides whether it is a task or a note. Orbital makes that node with a title and the lines worth keeping, puts the image under them and opens it. With Auto-translate on, it writes in your language.</p>
+    <div class="split">
+      <div>
+        <h3>Drop it on Create new</h3>
+        <p>Drag an image file from the Finder onto the round <b>Create new</b> button in the window's bottom-right corner. It turns into <b>Process image</b>. Let go, and it reads <b>Processing image …</b> until the new node opens.</p>
+      </div>
+      <figure class="clip"><video data-m="ai-process-drop"></video><figcaption>A receipt dropped on the corner button becomes a task.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Process image from clipboard</h3>
+        <p>Copy an image, from a screenshot tool or the Finder, then open <kbd>⌘K</kbd>. <b>Process image from clipboard</b> is waiting under <b>Image</b>. The <b>Create new …</b> page leads with it too, and so does <b>Quick Add Task</b> (<kbd>⇧⌘Space</kbd>), where <kbd>↩</kbd> with no title runs it.</p>
+        <h3>Process image</h3>
+        <p>With the caret or the selection on an image in an outline, <kbd>⌘K</kbd> offers <b>Process image</b> for that image.</p>
+      </div>
+      <figure class="clip"><video data-m="ai-process-clip"></video><figcaption>From the clipboard, through <kbd>⌘K</kbd>.</figcaption></figure>
+    </div>
+    <div class="tip">Pasting an image with <kbd>⌘V</kbd> still just inserts it. Processing is always a choice you make.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="translate" data-short="Translation" data-k="translate auto-translate translation dutch german french spanish english show original replace">Read notes in your language</h2>
+    <p>When a colleague writes in Dutch, you can read the title in English without anyone changing it. Translation happens on your screen only. Tana keeps the words as they were written.</p>
+    <div class="split">
+      <div>
+        <h3>Turn it on: Auto-translate …</h3>
+        <p>Run <b>Auto-translate …</b> (under Settings) and pick a language: English, Dutch, German, French or Spanish. <b>Off</b> turns it off. The choice follows you to your other Macs and applies at once, in every pane.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-autotranslate" alt="The Auto-translate page in Cmd+K with Off and five languages"><figcaption>Five languages, and <b>Off</b>. The tick marks the current one.</figcaption></figure>
+    </div>
+    <h3>What you see</h3>
+    <p>Only titles are translated: the title of the page you are on, and a document's title as a row in a list. The lines inside a document stay as written. A translated page title has a grey line under it with the sparkle and <b>Translated from Dutch · Show original</b>, which switches back and forth. While the model works, the line says <b>Translating…</b>. A title seen before comes back at once, even after a restart.</p>
+    <figure class="clip wide"><video data-m="ai-translate"></video><figcaption>The title arrives in English. <b>Show original</b> and <b>Show translation</b> switch between the two.</figcaption></figure>
+    <div class="split flip">
+      <div>
+        <p>In a list, a translated row says <b>Translated from Dutch</b> as the first fact of its grey line. Click those words to switch that row.</p>
+        <p>Rows the app writes itself translate the node they name and keep their own sentence: a meeting on the Timeline, “Priya completed …”, a notification. Push notifications are translated before they show.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-translate-list" alt="A space listing a Dutch note, shown in English with Translated from Dutch under it"><figcaption>A Dutch note in a space's list.</figcaption></figure>
+    </div>
+    <h3>Editing a translated title</h3>
+    <p>Put the caret in a translated title and it shows its own words, so you edit and save the original. The line under it reads <b>Original, in Dutch · Show translation</b> while you type. Leave, and the translation comes back, asked again if you changed the words. Read-only rows, like the Timeline, keep their translation when you click, so the first click opens them.</p>
+    <h3>Keep a translation for good</h3>
+    <div class="split">
+      <div>
+        <p><b>Replace with translation</b> (Current node, hinted <b>From Dutch</b>) writes the English you see as the document's title in Tana.</p>
+        <p><b>Translate into …</b> writes a translation into the selection, or the row you are on, or the page. It uses your Auto-translate language, English while that is off. Rows already in that language are left alone, and a note says how many it changed. It only offers plain text you may edit, because a link or a mark would not survive.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-replace" alt="Cmd+K offering Replace with translation, from Dutch"><figcaption><b>Replace with translation</b> on the Dutch note.</figcaption></figure>
+    </div>
+    <figure class="clip wide"><video data-m="ai-translate-into"></video><figcaption><b>Translate into English</b> on one Dutch row: the row is rewritten in Tana.</figcaption></figure>
+    <div class="note">Which language a text is in is decided on this Mac, so only text in another language goes to the model. Sensitive nodes are never sent, and a names-only title like “Sam - Priya” is left alone.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>auto-translate</b> <i>→</i><kbd>↩</kbd></span> and pick <b>Into English</b>.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="agent" data-short="Assign to Agent" data-k="codex agent assign unassign prompt model host robot">Hand a node to a Codex agent</h2>
+    <p>An agent does work: it drafts, researches, files things in Tana. <b>Assign to Agent</b> gives the node you are on to a new Codex task, with the node as its context. You only say what to do with it.</p>
+    <h3>Assign to Agent</h3>
+    <p>Run <b>Assign to Agent</b>. The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. Under the prompt you can pick the model for this task and the machine it runs on. <kbd>⇥</kbd> moves between the prompt and those lists.</p>
+    <figure class="anno">
+      <img data-m="ai-prompt" alt="The Assign to Agent page: a prompt, the send row, the model and where it runs">
+      <span class="pin" style="--x:3%;--y:9%">1</span>
+      <span class="pin" style="--x:3%;--y:42%">2</span>
+      <span class="pin" style="--x:3%;--y:62%">3</span>
+      <span class="pin" style="--x:3%;--y:87%">4</span>
+    </figure>
+    <ol class="legend">
+      <li><b>The prompt</b> What the agent should do with this node.</li>
+      <li><b>Assign to Agent on This Mac</b> Sends it, the same as <kbd>⌘↩</kbd>, and names where the task will run.</li>
+      <li><b>Model for this task</b> Codex default, unless you choose another.</li>
+      <li><b>Where it runs</b> This Mac, or a host you added (see Manage Codex hosts).</li>
+    </ol>
+    <figure class="clip wide"><video data-m="ai-assign"></video><figcaption>Assigned: the badge appears beside the title, grey while the task starts, then blue as it works.</figcaption></figure>
+    <p>The node now carries the agent badge. Under <b>Group by Responsibility</b> it belongs in the <b>Agent</b> section, but it stays where it is until you press <b>Clean up</b>, so nothing jumps under your pointer. Dropping a task into the Agent section opens the same prompt.</p>
+    <p><b>Unassign from Agent</b> takes the node back at once. The task itself stays in Codex.</p>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>assign to agent</b> <i>→</i><kbd>↩</kbd></span>, write a line, then <kbd>⌘↩</kbd>.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="states" data-short="The agent badge" data-k="agent pending working waiting needs attention completed badge state host unavailable">Read the agent badge</h2>
+    <p>The robot at the end of a row says what its Codex task is doing. Orbital asks every 30 seconds while anything is assigned. The colour and the tooltip say the same thing, so you never need colour alone.</p>
+    <figure class="anno wide">
+      <img data-m="ai-badges" alt="Six tasks in the Agent section of the Library, each badge in a different state">
+      <span class="pin" style="--x:91%;--y:25.5%">1</span>
+      <span class="pin" style="--x:91%;--y:39%">2</span>
+      <span class="pin" style="--x:91%;--y:52%">3</span>
+      <span class="pin" style="--x:91%;--y:65.5%">4</span>
+      <span class="pin" style="--x:91%;--y:79%">5</span>
+      <span class="pin" style="--x:91%;--y:92%">6</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Agent pending</b> Grey. Assigned, and no Codex task has started yet.</li>
+      <li><b>Agent working</b> Blue, with a sheen crossing it. The task is running; only this state moves.</li>
+      <li><b>Agent waiting for you</b> Blue and still. The task wants an approval or an answer from you.</li>
+      <li><b>Agent completed</b> Green. The task finished its last turn.</li>
+      <li><b>Agent needs attention</b> Red. The task failed or cannot be reached; assign again to retry.</li>
+      <li><b>A completed task</b> The badge drops to a grey outline: a record that there was a task.</li>
+    </ol>
+    <p>One more state, <b>Agent host unavailable</b>, is grey: the machine running the task is away, and the task itself is fine. Click a badge, or press <kbd>↩</kbd> on it, to open its task in Codex. A task on another machine cannot be opened from here; its tooltip says where it runs.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="codex" data-short="Codex tasks and hosts" data-k="go to codex task link codex task open in codex manage codex hosts ssh machine">Go to a task, link one, or start a fresh one</h2>
+    <div class="split">
+      <div>
+        <p>Type <b>codex</b> in <kbd>⌘K</kbd> to see every row that deals with Codex:</p>
+        <ul>
+          <li><b>Go to Codex task</b> opens the task this node is assigned to. When it runs on another machine the row is greyed and says so: “Codex task is on Studio Mac mini”.</li>
+          <li><b>Link Codex task …</b> links a task that already exists.</li>
+          <li><b>Open in Codex</b> starts a new Codex task with this node's link and tracks nothing: no badge, no state.</li>
+          <li><b>Manage Codex hosts</b> lists the other machines a task can run on.</li>
+        </ul>
+      </div>
+      <figure class="shot"><img data-m="ai-codex-rows" alt="Cmd+K filtered by codex: Open in Codex, Go to Codex task, Link Codex task, Manage Codex hosts"><figcaption>The Codex rows, on an assigned node.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Link Codex task …</h3>
+        <p>In Codex, use Copy link on the task, then paste the <code>codex://threads/…</code> link (or the bare id) here. <b>Link to Codex task 3f2a9c1e…</b> links it, and the badge follows that task from then on.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-link" alt="Link Codex task page with a pasted codex link"><figcaption>A pasted link, ready to link.</figcaption></figure>
+    </div>
+    <div class="split">
+      <div>
+        <h3>Manage Codex hosts</h3>
+        <p>To run tasks on another Mac, type its name, its ssh address and the path to its <code>codex</code>, separated by spaces: <code>Build box build.local /usr/local/bin/codex</code>. <kbd>↩</kbd> on the <b>Add</b> row saves it. <kbd>↩</kbd> on a host removes it; its tasks stay. The host then shows under <b>Where it runs</b> when you assign.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-hosts" alt="Manage Codex hosts with a new host typed in"><figcaption>Adding a host in one line.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="chat" data-short="@Codex in a chat" data-k="codex chat mention local only you add to message open codex task delete">Ask @Codex in a chat, privately</h2>
+    <p>In a Tana chat, type <b>@</b> in the message box and pick <b>Codex</b> (after Tana, hinted “Ask Codex · the answer stays on this device”). Your question goes to a Codex task on this Mac with the whole conversation as context. Nothing of it reaches Tana, so nobody else in the chat sees it.</p>
+    <div class="mg ai-local" aria-hidden="true">
+      <div class="win ai-local-chat">
+        <div class="ai-q"><b>@Codex</b> what did we decide?</div>
+        <div class="ai-a"><span><b style="color:var(--text)">Codex</b> · <u>Add to message</u></span><span class="bar" style="--w:200px"></span><span class="bar" style="--w:140px"></span></div>
+      </div>
+      <div class="ai-local-paths"><span class="ai-p-mac"><i class="arrow"></i></span><span class="ai-p-tana"><i class="arrow"></i></span></div>
+      <div class="ai-local-dests">
+        <div class="win ai-dest ai-mac"><span class="lbl">This Mac</span>A Codex task. Only you see it.</div>
+        <div class="win ai-dest ai-tana"><span class="lbl">Tana</span>Only what you send yourself.</div>
+      </div>
+    </div>
+    <p>The question shows on your side in a grey bubble, with a crossed cloud in its corner: only visible to you, on this device. Dots show while Codex works, then its answer appears on the other side in grey text under <b>Codex</b>.</p>
+    <figure class="clip wide"><video data-m="ai-chat-codex"></video><figcaption>Pick <b>Codex</b> from the @ list, ask, and the answer arrives just for you.</figcaption></figure>
+    <ul>
+      <li><b>Add to message</b> on the answer's name line, <kbd>↩</kbd> on a selected answer, or <kbd>⌘K</kbd> <b>Add Codex’s answer to message</b> puts the answer in the message box. Sent from there, it is your message: the only way it reaches Tana.</li>
+      <li>Click the <b>Codex</b> line over an answer, or run <b>Open Codex task</b>, to open the task in Codex.</li>
+      <li>Select the question or answer (<kbd>↑</kbd> from the start of the message box) and press <kbd>⇧⌘⌫</kbd>, or run <b>Delete message</b>, to forget both from this Mac. The task stays in Codex.</li>
+      <li>Questions and answers are kept on this Mac, so they are still there after a restart. Your other Macs do not see them.</li>
+    </ul>
+    <div class="note">Tana has no author for an agent's words. A message written there would read as yours or as Tana AI's to everyone in the chat. So Codex answers only you, and is told never to write to Tana.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Open Cmd+K, where every row in this chapter lives</td><td><kbd>⌘K</kbd></td></tr>
+      <tr><td>Take the model's suggestion on Discuss with …</td><td><kbd>↓</kbd> <kbd>↩</kbd></td></tr>
+      <tr><td>Quick Add Task: ↩ with no title processes the clipboard image</td><td><kbd>⇧⌘Space</kbd></td></tr>
+      <tr><td>Assign to Agent: send the prompt</td><td><kbd>⌘↩</kbd></td></tr>
+      <tr><td>Assign to Agent: a new line in the prompt</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>Assign to Agent: to the model and host lists, and back</td><td><kbd>⇥</kbd></td></tr>
+      <tr><td>Assign to Agent: cancel, writing nothing</td><td><kbd>esc</kbd></td></tr>
+      <tr><td>In a chat: select the newest message from the message box</td><td><kbd>↑</kbd></td></tr>
+      <tr><td>In a chat: delete the selected message, or a Codex question and its answer</td><td><kbd>⇧⌘⌫</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

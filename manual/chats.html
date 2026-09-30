@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Chats · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* a chat pane: bubbles, Tana's words, the composer; the pieces the diagrams share */
+  .ch-pane { width: 440px; height: 300px; padding: 16px 18px 14px; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; }
+  .ch-me { align-self: flex-end; background: #e6f0fb; color: var(--ink); border-radius: 12px; padding: 6px 12px; font-size: 13.5px; }
+  [data-theme="dark"] .ch-me { background: #1e3a5c; }
+  .ch-them { display: flex; flex-direction: column; gap: 5px; }
+  .ch-name { font-size: 11.5px; font-weight: 650; color: var(--ink); }
+  .ch-dots { display: flex; gap: 4px; height: 14px; align-items: center; }
+  .ch-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+  .ch-box { position: relative; border: 1px solid var(--line-strong); border-radius: 12px; height: 44px; margin-top: 6px; font-size: 13px; color: var(--faint); }
+  .ch-box > span { position: absolute; left: 12px; top: 12px; white-space: nowrap; }
+  .ch-box .ch-typed { color: var(--ink); overflow: hidden; }
+  .ch-send { position: absolute; right: 8px; top: 8px; width: 26px; height: 26px; border-radius: 50%; background: var(--now); opacity: .45; }
+  .ch-mode { font-size: 10.5px; font-weight: 650; letter-spacing: .5px; text-transform: uppercase; color: var(--now); align-self: flex-start; }
+
+  /* hero: To Tana is answered; Tab, and To the chat is only for the people in it */
+  .ch-hero { --loop: 11s; gap: 40px; }
+  .ch-hero .cap { position: absolute; }
+  .ch-hero-legend { display: flex; flex-direction: column; gap: 14px; width: 220px; font-size: 13.5px; color: var(--text); }
+  .ch-hero-legend b { display: block; }
+  .ch-hero-legend > div { padding-left: 12px; border-left: 2px solid var(--line-strong); transition: none; }
+  .mg.in .ch-leg1 { animation: ch-leg1 var(--loop) infinite; }
+  .mg.in .ch-leg2 { animation: ch-leg2 var(--loop) infinite; }
+  @keyframes ch-leg1 { 0%, 44% { border-color: var(--now); } 50%, 100% { border-color: var(--line-strong); } }
+  @keyframes ch-leg2 { 0%, 48% { border-color: var(--line-strong); } 52%, 96% { border-color: var(--now); } 100% { border-color: var(--line-strong); } }
+  .mg.in .ch-q1 { animation: ch-q1 var(--loop) infinite; }
+  .mg.in .ch-dots1 { animation: ch-dots1 var(--loop) infinite; }
+  .mg.in .ch-a1 { animation: ch-a1 var(--loop) infinite; }
+  .mg.in .ch-q2 { animation: ch-q2 var(--loop) infinite; }
+  .mg.in .ch-t1 { animation: ch-t1 var(--loop) infinite; }
+  .mg.in .ch-t2 { animation: ch-t2 var(--loop) infinite; }
+  .mg.in .ch-ph1 { animation: ch-ph1 var(--loop) infinite; }
+  .mg.in .ch-ph2 { animation: ch-ph2 var(--loop) infinite; }
+  .mg.in .ch-m1 { animation: ch-m1 var(--loop) infinite; }
+  .mg.in .ch-m2 { animation: ch-m2 var(--loop) infinite; }
+  .ch-dots1, .ch-t1, .ch-t2, .ch-ph1, .ch-m1 { opacity: 0; }
+  .ch-m1, .ch-m2 { grid-area: 1 / 1; }
+  .ch-modes { display: grid; }
+  @keyframes ch-t1 { 0%, 4% { opacity: 1; width: 0; } 14% { opacity: 1; width: 150px; } 17% { opacity: 1; width: 150px; } 18%, 100% { opacity: 0; width: 150px; } }
+  @keyframes ch-q1 { 0%, 17% { opacity: 0; transform: translateY(8px); } 20%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes ch-dots1 { 0%, 20% { opacity: 0; } 22%, 32% { opacity: 1; } 33%, 100% { opacity: 0; } }
+  @keyframes ch-a1 { 0%, 32% { opacity: 0; max-height: 0; } 36%, 96% { opacity: 1; max-height: 60px; } 100% { opacity: 0; max-height: 0; } }
+  @keyframes ch-ph1 { 0%, 3.5% { opacity: 1; } 4%, 18.5% { opacity: 0; } 19%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  @keyframes ch-ph2 { 0%, 49% { opacity: 0; } 50%, 54.5% { opacity: 1; } 55%, 68.5% { opacity: 0; } 69%, 100% { opacity: 1; } }
+  @keyframes ch-m1 { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  @keyframes ch-m2 { 0%, 49% { opacity: 0; } 50%, 100% { opacity: 1; } }
+  @keyframes ch-t2 { 0%, 55% { opacity: 1; width: 0; } 55.1% { opacity: 1; } 64% { opacity: 1; width: 170px; } 67% { opacity: 1; width: 170px; } 68%, 100% { opacity: 0; width: 170px; } }
+  @keyframes ch-q2 { 0%, 67% { opacity: 0; transform: translateY(8px); } 70%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  .ch-t1, .ch-t2 { width: 0; }
+  .ch-ph1, .ch-ph2, .ch-t1, .ch-t2 { transition: none; }
+  .ch-a1 { overflow: hidden; }
+
+  /* @Codex: a message for Tana goes to the chat; one for Codex stays on this Mac */
+  .ch-codex { --loop: 8s; gap: 150px; }
+  .ch-codex .win { width: 230px; min-height: 120px; }
+  .ch-codex .ttl { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .ch-codex .ttl svg { width: 18px; height: 18px; color: var(--muted); }
+  .ch-codex .mt-small { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .ch-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; border-radius: 10px; padding: 4px 10px; background: #e6f0fb; color: var(--ink); white-space: nowrap; }
+  [data-theme="dark"] .ch-chip { background: #1e3a5c; }
+  .ch-chip.grey { background: var(--well); outline: 1px solid var(--line-strong); }
+  .ch-chip svg { width: 13px; height: 13px; color: var(--muted); }
+  .ch-codex .ch-src { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; gap: 10px; align-items: center; z-index: 2; }
+  .ch-codex .ch-land { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .ch-codex .ch-l1, .ch-codex .ch-l2 { opacity: 1; }
+  .mg.in .ch-f1 { animation: ch-f1 var(--loop) infinite; }
+  .mg.in .ch-f2 { animation: ch-f2 var(--loop) infinite; }
+  .mg.in .ch-l1 { animation: ch-l1 var(--loop) infinite; }
+  .mg.in .ch-l2 { animation: ch-l2 var(--loop) infinite; }
+  .ch-f1, .ch-f2 { opacity: 0; }
+  @keyframes ch-f1 { 0%, 6% { opacity: 0; transform: none; } 10% { opacity: 1; transform: none; } 26% { opacity: 1; transform: translate(-190px, 10px); } 28%, 100% { opacity: 0; transform: translate(-190px, 10px); } }
+  @keyframes ch-l1 { 0%, 26% { opacity: 0; } 29%, 94% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes ch-f2 { 0%, 44% { opacity: 0; transform: none; } 48% { opacity: 1; transform: none; } 64% { opacity: 1; transform: translate(190px, 10px); } 66%, 100% { opacity: 0; transform: translate(190px, 10px); } }
+  @keyframes ch-l2 { 0%, 64% { opacity: 0; } 67%, 94% { opacity: 1; } 100% { opacity: 0; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 12</p>
+    <h1>Chats are conversations with Tana and your team</h1>
+    <p class="lead">A chat opens as a conversation: your messages on the right, answers on the left, a message box at the bottom. You decide with one key whether Tana answers or only the people in the chat read it.</p>
+    <div class="mg ch-hero" aria-hidden="true">
+      <div class="win ch-pane">
+        <div class="ch-me ch-q1">Draft the Studio memo?</div>
+        <div class="ch-dots ch-dots1"><i></i><i></i><i></i></div>
+        <div class="ch-them ch-a1"><span class="ch-name">Tana AI</span><span class="bar" style="--w:230px"></span><span class="bar" style="--w:170px"></span></div>
+        <div class="ch-me ch-q2">Sam, can you check the dates?</div>
+        <div class="ch-modes"><span class="ch-mode ch-m1">To Tana</span><span class="ch-mode ch-m2" style="color:var(--muted)">To the chat</span></div>
+        <div class="ch-box">
+          <span class="ch-ph1">Ask Tana · @ links · / runs a skill</span>
+          <span class="ch-ph2">Message the chat · @ links · Tab: to Tana</span>
+          <span class="ch-typed ch-t1">Draft the Studio memo?</span>
+          <span class="ch-typed ch-t2">Sam, can you check the dates?</span>
+          <i class="ch-send"></i>
+        </div>
+      </div>
+      <div class="ch-hero-legend">
+        <div class="ch-leg1"><b>To Tana</b> Tana answers, with the dots while it thinks.</div>
+        <div class="ch-leg2"><b>To the chat</b> For the people in it. Tana stays quiet unless you mention it.</div>
+        <div style="display:flex;gap:8px;align-items:center;border:0;padding:0">
+          <span class="cap press" style="position:static;--at:.17">↩</span>
+          <span class="cap press" style="position:static;--at:.48">⇥</span>
+          <span class="cap press" style="position:static;--at:.67">↩</span>
+        </div>
+      </div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="find" data-short="Where chats live" data-k="library filter chats meeting chat mcp hidden search">Where your chats live</h2>
+    <p>Chats are documents like any other, so the <b>Library</b> lists them next to your tasks and notes. Filter the Library to <b>Chats</b> with the type pill to see only them, newest first. A meeting's private AI chat ("Private AI chat for …") shows up here too, while the chats Tana starts for its own background work stay out.</p>
+    <figure class="shot wide"><img data-m="chats-library" alt="The Library filtered to chats"><figcaption>The Library with its type filter set to <b>Chats</b>. The two MCP chats carry an <b>MCP</b> tag.</figcaption></figure>
+    <div class="split">
+      <div>
+        <h3>Toggle MCP chats</h3>
+        <p>Every time another app asks Tana something through MCP, it leaves a chat whose title starts with "MCP:". To keep them out of the way, run <kbd>⌘K</kbd> <b>Toggle MCP chats</b> (under Settings; its hint says <b>Shown</b> or <b>Hidden</b>). It hides them from every list and every search at once, and the setting follows you to your other Macs. A chat you open by its link still opens.</p>
+      </div>
+      <figure class="clip"><video data-m="chats-mcp"></video><figcaption>⌘S <b>#chat</b> before and after <b>Toggle MCP chats</b>.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘S</kbd><i>→</i> type <b>#chat</b></span> to find a chat by its title.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="conversation" data-short="Reading a chat" data-k="bubble message author time attachment reference link">A chat reads as a conversation</h2>
+    <p>Open a chat and it starts at its newest message, with the caret in the message box. It keeps following new messages as long as you stay near the bottom. Scroll up to read older ones, and the page stays where you left it.</p>
+    <figure class="anno wide">
+      <img data-m="chats-conversation" alt="A chat with Tana: bubbles, answers, a proposal and the message box">
+      <span class="pin" style="--x:57%;--y:8.6%">1</span>
+      <span class="pin" style="--x:53%;--y:19%">2</span>
+      <span class="pin" style="--x:32%;--y:23.9%">3</span>
+      <span class="pin" style="--x:21.5%;--y:28%">4</span>
+      <span class="pin" style="--x:30%;--y:41%">5</span>
+      <span class="pin" style="--x:41.5%;--y:45.6%">6</span>
+      <span class="pin" style="--x:48.5%;--y:91.7%">7</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Who can see it</b> "Only you can see this chat", or the faces of the people in it. The Add participants link opens the sharing page.</li>
+      <li><b>Your messages</b> In a light blue bubble on the right. Hover over one to see when it was sent.</li>
+      <li><b>Thought for 14 seconds</b> How long Tana worked on the answer below it.</li>
+      <li><b>Who answered</b> In bold over each run of replies: Tana AI, a colleague, or Codex.</li>
+      <li><b>References</b> Nodes a message mentions or attaches, as links that open them.</li>
+      <li><b>Proposals</b> What Tana suggested creating or changing, as cards.</li>
+      <li><b>The message box</b> It stays at the bottom however long the chat gets.</li>
+    </ol>
+    <p>Tana's answers keep their shape: headings, bullets, numbered lists, quotes and code. Messages themselves cannot be edited, and anything you cannot write to says so in the box: <b>You can read this chat but not write in it</b>.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="thinking" data-k="thought for seconds finished thinking subagent error">Thinking, and what Tana did</h2>
+    <div class="split">
+      <div>
+        <p>While Tana works on an answer, a grey line over it shimmers <b>Thinking...</b>. When the answer is done, the line says how long it took: <b>Thought for 14 seconds</b>, "2 minutes", or <b>Finished thinking</b> when the time is not known. The line shows only on answers where Tana used its tools.</p>
+        <p>When Tana handed part of the work to a helper, the line gets a chevron. Click it to fold out a link to that helper's own chat. If an answer failed, the reason sits in the same grey place: <b>Error: …</b>.</p>
+      </div>
+      <figure class="clip"><video data-m="chats-thought"></video><figcaption>The chevron on <b>Thought for 14 seconds</b> shows the helper Tana asked.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="proposals" data-short="Proposals in a chat" data-k="approve reject action send to slite new document change">Proposals inside a chat</h2>
+    <p>When Tana suggests a new document, a change to one, or an action in another system, the suggestion arrives as a card in its answer. The card names the thing, what kind of proposal it is and where it stands: <b>awaiting your approval</b>, <b>approved</b> or <b>rejected</b>.</p>
+    <figure class="shot wide"><img data-m="chats-proposal" alt="An answer from Tana with two proposal cards"><figcaption>An action waiting for approval (its approve button reads <b>Send to Slite</b>), and a new document already approved.</figcaption></figure>
+    <p>While a card waits, it has the same approve and reject buttons as the Proposals page. Click the card itself to open what was proposed; <kbd>⌘</kbd>-click opens it in a new tab. A change to an existing document is merged by Tana itself, so its approve button stays greyed with <b>approve in Tana</b> as the reason. All your pending proposals, across chats, are on the Proposals page: see <a href="timeline.html">Timeline, notifications &amp; proposals</a>.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="compose" data-short="Writing a message" data-k="composer send enter mention skill slash drop add to chat draft">Write a message</h2>
+    <div class="split">
+      <div>
+        <p>Type in the box and press <kbd>↩</kbd> to send. <kbd>⇧↩</kbd> starts a new line, and <kbd>esc</kbd> leaves the box. Three dots show where Tana's answer will appear, and the answer then streams in as Tana writes it.</p>
+        <p>Whatever you type and do not send stays in that chat's box while the window is open. If a message cannot be sent, your words go back into the box.</p>
+      </div>
+      <figure class="clip"><video data-m="chats-send"></video><figcaption>Send with ↩. The dots stand in for Tana's answer until it arrives.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>@ links and mentions</h3>
+        <p>Type <b>@</b> to link a node. <b>Tana</b> comes first: mentioning it asks Tana to answer, even in a chat with other people. <b>Codex</b> comes next (see <a href="#codex">below</a>), then your recent pages and search results. Pasting a Tana link turns it into the node's chip as well.</p>
+      </div>
+      <figure class="shot"><img data-m="chats-mention" alt="The @ dropdown with Tana, Codex and a recent page"><figcaption>"@" at the caret. Tana first, then Codex.</figcaption></figure>
+    </div>
+    <div class="split">
+      <div>
+        <h3>/ runs a skill</h3>
+        <p>Typed as the very first character, <b>/</b> opens the workspace's skills. The one you pick sits as a pill in front of your text and goes with the message for Tana to run. <kbd>⌫</kbd> at the start of the text, or a click on the pill, removes it.</p>
+      </div>
+      <figure class="shot"><img data-m="chats-skill" alt="The Choose a skill to run page"><figcaption><b>Choose a skill to run</b> lists the workspace's skills.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Add to chat …</h3>
+        <p>To talk about something you are looking at, run <kbd>⌘K</kbd> <b>Add to chat …</b> on it (or on a selection: "Add 3 items to chat …"). Pick <b>New chat</b> or one of your chats, and the items land at the start of that chat's message box, ready for your question. Dragging rows onto a chat's message box does the same.</p>
+      </div>
+      <figure class="shot"><img data-m="chats-addto" alt="Add to which chat, with New chat and the recent chats"><figcaption><b>Add to chat …</b> offers a new chat and your chats, last changed first.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq">In a chat: type <b>@</b> <i>→</i><kbd>↩</kbd> on <b>Tana</b> <i>→</i> type your question <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="modes" data-short="To Tana or to the chat" data-k="tab mode to tana to the chat ai auto respond">To Tana, or to the chat <kbd>⇥</kbd></h2>
+    <p>Each message goes one of two ways, and the empty box tells you which:</p>
+    <ul>
+      <li><b>Ask Tana · @ links · / runs a skill</b>: Tana is asked to answer.</li>
+      <li><b>Message the chat · @ links · Tab: to Tana</b>: the message is for the people in the chat, and Tana stays quiet.</li>
+    </ul>
+    <figure class="clip wide"><video data-m="chats-mode"></video><figcaption><kbd>⇥</kbd> in an empty box switches between the two. Watch the placeholder.</figcaption></figure>
+    <p>A chat starts in the mode it uses by itself: a chat that is yours alone asks Tana, and a chat with other people in it messages them. Press <kbd>⇥</kbd> in the empty box to switch. Mentioning <b>@Tana</b> asks it to answer in either mode. While a skill is attached, the message stays in To Tana, since the skill is for Tana to run.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="questions" data-short="When Tana asks" data-k="question card dismiss continue submit select all that apply defaults">When Tana asks you something</h2>
+    <p>Sometimes Tana needs an answer before it goes on. Its message then reads <b>Waiting for your input</b>, and a question card takes the message box's place, one question at a time ("2 of 2").</p>
+    <div class="split">
+      <figure class="clip"><video data-m="chats-questions"></video><figcaption>One option picked for the first question, two ticked for the second.</figcaption></figure>
+      <div>
+        <ul>
+          <li><kbd>↑</kbd> <kbd>↓</kbd> move through the options; <kbd>1</kbd>–<kbd>9</kbd> pick one directly.</li>
+          <li><kbd>Space</kbd> ticks an option where it says <b>Select all that apply</b>.</li>
+          <li>The last row, <b>No, and tell Tana what to do differently</b>, takes your own words.</li>
+          <li><kbd>↩</kbd> is <b>Continue</b>, and <b>Submit</b> on the last question. With nothing picked, it takes the highlighted option.</li>
+          <li><kbd>←</kbd> <kbd>→</kbd> step between questions.</li>
+          <li><kbd>esc</kbd> is <b>Dismiss</b>: Tana goes on with sensible defaults.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="shot wide"><img data-m="chats-answered" alt="Tana's answer after the questions were submitted"><figcaption>After <b>Submit</b>, Tana carries on from your answers.</figcaption></figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="people" data-short="New chats and people" data-k="new chat new chat with invite participants rename status">New chats, and bringing people in</h2>
+    <div class="split">
+      <div>
+        <h3>New chat and New chat with …</h3>
+        <p><kbd>⌘K</kbd> <b>New chat</b> starts a chat with Tana that only you can see, and opens it. It is called "New chat" until Tana names it after its first answer. <b>New chat with …</b> lists your colleagues. Pick one, and the new chat is shared with just the two of you.</p>
+      </div>
+      <figure class="shot"><img data-m="chats-new" alt="⌘K with New chat and New chat with"><figcaption>Both rows, under Actions.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Invite to chat…</h3>
+        <p>On an open chat, <kbd>⌘K</kbd> <b>Invite to chat…</b> lists the workspace's members. The one you pick can read and write in the chat from then on. A line in the middle of the chat says so: "Sam Okafor was added to the chat." Once there are two of you, Tana answers only when mentioned, and the box moves to To the chat.</p>
+        <p>A chat that takes its audience from a meeting or a space cannot be narrowed to a list of people, so Orbital refuses the invite there and says why.</p>
+        <h3>Rename</h3>
+        <p><kbd>⌘K</kbd> <b>Rename</b> on a chat you can edit lets you type a new title. The messages themselves stay as they are.</p>
+      </div>
+      <figure class="clip"><video data-m="chats-invite"></video><figcaption>Inviting Sam. Both status lines appear in the chat.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="messages" data-short="Selecting messages" data-k="select message delete message arrow keyboard">Select and delete messages <kbd>⇧⌘⌫</kbd></h2>
+    <div class="split">
+      <div>
+        <p>A chat can be read from the keyboard. <kbd>↑</kbd> at the very start of the message box selects the newest message, with a ring around it. <kbd>↑</kbd> and <kbd>↓</kbd> walk through the messages, and <kbd>↓</kbd> past the last one, or <kbd>esc</kbd>, takes you back to the box.</p>
+        <p>With one of your own messages selected, <kbd>⇧⌘⌫</kbd> or <kbd>⌘K</kbd> <b>Delete message</b> removes it from the chat, for everyone in it. You can delete only your own messages, never Tana's or a colleague's.</p>
+        <p>With a message selected, <kbd>⌘K</kbd> opens with that message's own rows at the top, under <b>Message</b>.</p>
+      </div>
+      <figure class="clip"><video data-m="chats-delete"></video><figcaption>↑ twice to reach "Perfect, thanks!", then ⇧⌘⌫.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="codex" data-short="Ask @Codex" data-k="codex agent local device private answer add to message open codex task">Ask @Codex, privately</h2>
+    <p>Pick <b>Codex</b> after <b>@</b> and your question goes to a Codex task on this Mac instead of to Tana. Codex reads the conversation and answers you alone. Nothing of it is written to Tana, so nobody else in the chat sees the question or the answer.</p>
+    <div class="mg ch-codex" aria-hidden="true">
+      <div class="win">
+        <div class="ttl"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 14.25h8a3.25 3.25 0 0 0 .4-6.48A4.5 4.5 0 0 0 4.75 8a3 3 0 0 0 .25 6.25Z"/></svg>The chat</div>
+        <div class="mt-small">Tana and everyone in it</div>
+        <div class="ch-land"><span class="ch-chip ch-l1">Draft the memo?</span></div>
+      </div>
+      <div class="win">
+        <div class="ttl"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.75" y="3.25" width="12.5" height="8.5" rx="1.5"/><path d="M6.5 14.75h5M9 11.75v3"/></svg>This Mac</div>
+        <div class="mt-small">Only you</div>
+        <div class="ch-land"><span class="ch-chip grey ch-l2"><b>@Codex</b> what changed?</span></div>
+      </div>
+      <div class="ch-src">
+        <span class="ch-chip ch-f1">Draft the memo?</span>
+        <span class="ch-chip grey ch-f2"><b>@Codex</b> what changed?</span>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <p>Your question shows in a grey bubble among the messages, marked with a crossed-out cloud: "Only visible for you, on this device. Never saved to Tana." Codex's answer comes under it in grey, with the dots until it arrives. Questions and answers are kept on this Mac, so they are still there after a restart.</p>
+        <ul>
+          <li><b>Add to message</b> on Codex's name line (or <kbd>↩</kbd> on the selected answer, or <kbd>⌘K</kbd> <b>Add Codex’s answer to message</b>) puts the answer in your message box, to send as your own words.</li>
+          <li>Click the name line, or run <kbd>⌘K</kbd> <b>Open Codex task</b>, to open the task in Codex.</li>
+          <li><b>Delete message</b> on the question removes it and its answer from this Mac.</li>
+        </ul>
+      </div>
+      <figure class="clip"><video data-m="chats-codex"></video><figcaption>A question for Codex. The answer stays on this Mac.</figcaption></figure>
+    </div>
+    <p>Codex needs to be set up on this Mac first. <a href="ai.html">AI &amp; agents</a> covers Codex, its hosts and handing whole nodes to an agent.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Send the message</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>New line in the message</td><td><kbd>⇧↩</kbd></td></tr>
+      <tr><td>Switch between To Tana and To the chat (empty box)</td><td><kbd>⇥</kbd></td></tr>
+      <tr><td>Link a node, Tana or Codex</td><td><kbd>@</kbd></td></tr>
+      <tr><td>Run a skill (first character)</td><td><kbd>/</kbd></td></tr>
+      <tr><td>Leave the message box</td><td><kbd>esc</kbd></td></tr>
+      <tr><td>Select the newest message, then walk the messages</td><td><kbd>↑</kbd> <kbd>↓</kbd></td></tr>
+      <tr><td>Delete the selected message (your own)</td><td><kbd>⇧⌘⌫</kbd></td></tr>
+      <tr><td>Question card: move, pick, tick</td><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>1</kbd>–<kbd>9</kbd> <kbd>Space</kbd></td></tr>
+      <tr><td>Question card: continue or submit, step, dismiss</td><td><kbd>↩</kbd> <kbd>←</kbd> <kbd>→</kbd> <kbd>esc</kbd></td></tr>
+      <tr><td>Find a chat</td><td><kbd>⌘S</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

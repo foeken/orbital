@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Tasks · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<!-- this chapter's diagrams: names prefixed with the chapter id, animation under .mg.in, keyframes in percent of --loop -->
+<style>
+  .tasks-hero { --loop: 7s; }
+  .tasks-hero .win { width: 360px; }
+  .mg.in .tasks-hero-box { animation: tasks-box var(--loop) infinite; }
+  .mg.in .tasks-hero-title { animation: tasks-strike var(--loop) infinite; }
+  @keyframes tasks-box { 0%, 38% { background: none; border-color: var(--faint); } 42%, 92% { background: var(--done-soft); border-color: var(--done-soft); transform: scale(1); } 40% { transform: scale(.8); } 100% { background: none; } }
+  @keyframes tasks-strike { 0%, 40% { color: var(--ink); text-decoration-color: transparent; } 46%, 92% { color: var(--faint); text-decoration-color: currentColor; } 100% { color: var(--ink); } }
+  .tasks-hero-title { text-decoration: line-through; color: var(--faint); } /* the end state, which reduced motion shows */
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 6</p>
+    <h1>Tasks move from Inbox to done</h1>
+    <p class="lead">A task is a node with a state. You set it with one key, hand it to someone with another, and Orbital keeps the rest in step with Tana.</p>
+    <div class="mg tasks-hero" aria-hidden="true">
+      <div class="win">
+        <div class="row"><span class="box tasks-hero-box"></span><span class="tasks-hero-title">Send the Q3 board deck</span></div>
+        <div class="row in1"><span class="dot"></span><span class="bar" style="--w:160px"></span></div>
+      </div>
+      <span class="cap press" style="position:absolute;right:22%;bottom:22%;--at:.38">⌘↩</span>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="states" data-k="status inbox later completed">The four states</h2>
+    <p>Every task is in one of four states: <b>Inbox</b>, <b>In Progress</b>, <b>Completed</b> and <b>Later</b>.</p>
+    <div class="split">
+      <div>
+        <h3>Tick it off <kbd>⌘↩</kbd></h3>
+        <p>With the caret in a task, <kbd>⌘↩</kbd> completes it: the box squashes, the tick draws, the title is struck.</p>
+      </div>
+      <figure class="clip"><video data-m="tasks-tick"></video><figcaption>Completing a task from the keyboard.</figcaption></figure>
+    </div>
+    <figure class="anno wide">
+      <img data-m="tasks-row" alt="A task row with its parts">
+      <span class="pin" style="--x:4%;--y:50%">1</span>
+      <span class="pin" style="--x:60%;--y:50%">2</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Checkbox</b> ticks the task in Tana.</li>
+      <li><b>Grey line</b> says who has it and who can see it.</li>
+    </ol>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>status</b> <i>→</i><kbd>↩</kbd></span> and pick <b>Later</b>.</div>
+    <div class="note">A done task stays where it is until you press <b>Clean up</b>, so nothing moves under you while you work.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Complete or reopen the task</td><td><kbd>⌘↩</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>
+

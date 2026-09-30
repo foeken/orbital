@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Writing in the outline · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: ↩ starts a row, ⇥ tucks it under the one above */
+  .writing-hero { --loop: 8s; }
+  .writing-hero .win { width: 340px; }
+  .writing-hero .row { overflow: hidden; }
+  .writing-hero-r3 { padding-left: 22px; }
+  .writing-hero-keys { position: absolute; right: 13%; bottom: 22%; display: flex; gap: 8px; }
+  .mg.in .writing-hero-r2 { animation: writing-r2 var(--loop) infinite; }
+  .mg.in .writing-hero-t2 { animation: writing-t2 var(--loop) infinite; }
+  .mg.in .writing-hero-r3 { animation: writing-r3 var(--loop) infinite; }
+  .mg.in .writing-hero-t3 { animation: writing-t3 var(--loop) infinite; }
+  @keyframes writing-r2 { 0%, 13% { height: 0; opacity: 0; } 15%, 92% { height: 28px; opacity: 1; } 100% { height: 28px; opacity: 0; } }
+  @keyframes writing-t2 { 0%, 16% { clip-path: inset(0 100% 0 0); animation-timing-function: steps(17, end); } 32%, 100% { clip-path: inset(0 0 0 0); } }
+  @keyframes writing-r3 { 0%, 39% { height: 0; opacity: 0; padding-left: 0; } 41%, 51% { height: 28px; opacity: 1; padding-left: 0; } 55%, 92% { height: 28px; opacity: 1; padding-left: 22px; } 100% { height: 28px; opacity: 0; padding-left: 22px; } }
+  @keyframes writing-t3 { 0%, 56% { clip-path: inset(0 100% 0 0); animation-timing-function: steps(20, end); } 72%, 100% { clip-path: inset(0 0 0 0); } }
+
+  /* a lone link is the node itself */
+  .writing-ref { --loop: 7s; min-height: 200px; }
+  .writing-ref .win { width: 360px; }
+  .writing-ref-pre { display: inline-block; overflow: hidden; white-space: pre; max-width: 0; }
+  .writing-ref-box { width: 15px; border-width: 1.5px; margin-right: 0; }
+  .writing-ref-chip { color: var(--ink); }
+  .mg.in .writing-ref-pre { animation: writing-ref-pre var(--loop) infinite; }
+  .mg.in .writing-ref-box { animation: writing-ref-box var(--loop) infinite; }
+  .mg.in .writing-ref-chip { animation: writing-ref-chip var(--loop) infinite; }
+  @keyframes writing-ref-pre { 0%, 38% { max-width: 60px; } 46%, 92% { max-width: 0; } 100% { max-width: 60px; } }
+  @keyframes writing-ref-box { 0%, 44% { width: 0; border-width: 0; margin-right: -9px; opacity: 0; } 52%, 92% { width: 15px; border-width: 1.5px; margin-right: 0; opacity: 1; } 100% { width: 0; border-width: 0; margin-right: -9px; opacity: 0; } }
+  @keyframes writing-ref-chip { 0%, 44% { color: var(--accent); text-decoration: underline; } 52%, 92% { color: var(--ink); text-decoration: none; } 100% { color: var(--accent); text-decoration: underline; } }
+  .writing-ref-said { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; font-size: 13px; color: var(--muted); }
+  .writing-ref-said span { position: absolute; left: 0; right: 0; opacity: 0; }
+  .writing-ref-said .b { opacity: 1; }
+  .mg.in .writing-ref-said .a { animation: writing-ref-a var(--loop) infinite; }
+  .mg.in .writing-ref-said .b { animation: writing-ref-b var(--loop) infinite; }
+  @keyframes writing-ref-a { 0%, 38% { opacity: 1; } 44%, 94% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes writing-ref-b { 0%, 44% { opacity: 0; } 52%, 92% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* a drag: the pointer's x picks the level the row lands at */
+  .writing-levels { --loop: 8s; }
+  .writing-levels .win { width: 380px; }
+  .writing-levels-gap { position: relative; height: 10px; }
+  .writing-levels-line { position: absolute; top: 4px; left: 22px; right: 0; height: 2px; border-radius: 1px; background: var(--now); }
+  .writing-levels-line::before { content: ""; position: absolute; left: -3px; top: -2.5px; width: 7px; height: 7px; border-radius: 50%; background: var(--now); }
+  .writing-levels-hand { position: absolute; left: 150px; top: 100px; transform: translateX(22px); }
+  .writing-levels-hand .ptr { position: absolute; left: 0; top: 0; }
+  .writing-levels-ghost { position: absolute; left: 16px; top: 10px; font-size: 13px; color: var(--muted); background: var(--surface); border-radius: 6px; padding: 2px 8px; box-shadow: var(--shadow-soft); white-space: nowrap; }
+  .writing-levels-said { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; font-size: 13px; color: var(--muted); }
+  .writing-levels-said span { position: absolute; left: 0; right: 0; opacity: 0; }
+  .writing-levels-said .l2 { opacity: 1; }
+  .mg.in .writing-levels-line { animation: writing-lv-line var(--loop) infinite; }
+  .mg.in .writing-levels-hand { animation: writing-lv-hand var(--loop) infinite; }
+  .mg.in .writing-levels-said .l1 { animation: writing-lv-1 var(--loop) infinite; }
+  .mg.in .writing-levels-said .l2 { animation: writing-lv-2 var(--loop) infinite; }
+  .mg.in .writing-levels-said .l3 { animation: writing-lv-3 var(--loop) infinite; }
+  @keyframes writing-lv-line { 0%, 28% { left: 44px; } 34%, 60% { left: 22px; } 66%, 92% { left: 0; } 98%, 100% { left: 44px; } }
+  @keyframes writing-lv-hand { 0%, 28% { transform: translateX(44px); } 34%, 60% { transform: translateX(22px); } 66%, 92% { transform: translateX(0); } 98%, 100% { transform: translateX(44px); } }
+  @keyframes writing-lv-1 { 0%, 28% { opacity: 1; } 32%, 94% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes writing-lv-2 { 0%, 30% { opacity: 0; } 34%, 60% { opacity: 1; } 64%, 100% { opacity: 0; } }
+  @keyframes writing-lv-3 { 0%, 62% { opacity: 0; } 66%, 92% { opacity: 1; } 96%, 100% { opacity: 0; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 3</p>
+    <h1>Every line is a node</h1>
+    <p class="lead">You write in Orbital the way you write in Tana: each line is a row, and rows nest under rows. By the end of this chapter you can shape an outline from the keyboard, link it to the rest of your workspace, and move it around with the mouse.</p>
+    <div class="mg writing-hero" aria-hidden="true">
+      <div class="win">
+        <div class="ttl">Offsite plan</div>
+        <div class="row"><span class="dot"></span>Why we meet</div>
+        <div class="row writing-hero-r2"><span class="dot"></span><span class="writing-hero-t2">Agree both pilots</span></div>
+        <div class="row writing-hero-r3"><span class="dot"></span><span class="writing-hero-t3">Sam leads onboarding</span><span class="caret"></span></div>
+      </div>
+      <div class="writing-hero-keys"><span class="cap press" style="--at:.14">↩</span><span class="cap press" style="--at:.40">↩</span><span class="cap press" style="--at:.52">⇥</span></div>
+      <p class="cap-line">↩ starts the next row · ⇥ tucks it under the one above</p>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="rows" data-k="bullet marker chevron guide heading quote code divider numbered">Rows and markers</h2>
+    <p>A page is a title with rows under it. Every row is a node of its own: a block of the document you are in. A row with children has a thin guide line running down beside them.</p>
+    <p>Only list rows carry a marker. A bullet row has a dot, a numbered row its number. Text, headings, quotes and code have no marker, and their words start where the title's words start. Headings are darker than body text and open a new section with some space above them.</p>
+    <figure class="anno wide">
+      <img data-m="writing-blocks" alt="A document showing a heading, nested bullets, a mention, marks, a quote, a code block, a numbered list and a divider">
+      <span class="pin" style="--x:11.8%;--y:15.3%">1</span>
+      <span class="pin" style="--x:1.4%;--y:19.9%">2</span>
+      <span class="pin" style="--x:3.6%;--y:30.5%">3</span>
+      <span class="pin" style="--x:49.6%;--y:59.3%">4</span>
+      <span class="pin" style="--x:1.2%;--y:67.5%">5</span>
+      <span class="pin" style="--x:48.5%;--y:71.4%">6</span>
+      <span class="pin" style="--x:29%;--y:75.6%">7</span>
+      <span class="pin" style="--x:26%;--y:80.1%">8</span>
+      <span class="pin" style="--x:1.2%;--y:87.2%">9</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Heading</b> Three levels. No marker, darker words.</li>
+      <li><b>Chevron</b> Shows on hover beside a row with children. A click folds or unfolds it.</li>
+      <li><b>Guide line</b> Runs under a row's children.</li>
+      <li><b>Mention</b> A link to another node, drawn with its icon. More under <a href="#references">References</a>.</li>
+      <li><b>Marks</b> Bold, italic, strikethrough, code and links, inside a row.</li>
+      <li><b>Quote</b> A bar on the left, no marker.</li>
+      <li><b>Code block</b> Monospace on a grey panel.</li>
+      <li><b>Numbered list</b> Counts itself.</li>
+      <li><b>Divider</b> A thin line across the page.</li>
+    </ol>
+    <p>A folded row keeps its dot, drawn on a soft halo, so you can see it has children. A web address in a row is a link: click it and it opens in your browser. The words in Tana stay exactly as you typed them.</p>
+    <p>When the caret is in a row you can type there; a row you cannot edit (a member, a meeting title, something read-only) shows a focus ring instead of a caret.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="typing" data-short="Keys in a row" data-k="enter tab indent outdent backspace join split soft line break">Typing and the keys in a row</h2>
+    <p>There is no edit mode. Click a row and type. Orbital saves a moment after you stop, and again when you press <kbd>↩</kbd>, leave the row or go somewhere else.</p>
+    <div class="split">
+      <div>
+        <h3>Enter starts the next row <kbd>↩</kbd></h3>
+        <p><kbd>↩</kbd> splits the row at the caret: what stands after the caret moves to a new row below. On a row that is open with children, the new row becomes its first child. At the very start of a row, <kbd>↩</kbd> puts an empty row in front of it instead.</p>
+        <p><kbd>⇧↩</kbd> adds a line break inside the row without starting a new one.</p>
+      </div>
+      <figure class="clip"><video data-m="writing-type"></video><figcaption>Typing a small outline: <kbd>↩</kbd> for a new row, <kbd>⇥</kbd> to nest it, <kbd>⇧⇥</kbd> to bring it back out.</figcaption></figure>
+    </div>
+    <h3>Tab nests, Shift-Tab comes back out <kbd>⇥</kbd></h3>
+    <p><kbd>⇥</kbd> tucks the row under the row above it. <kbd>⇧⇥</kbd> moves it back out, to just after its parent. On a plain line of text, <kbd>⇥</kbd> first turns it into a bullet; <kbd>⇧⇥</kbd> on a top-level bullet takes the bullet off again.</p>
+    <h3>Backspace at the start of a row <kbd>⌫</kbd></h3>
+    <p>At the start of a row, <kbd>⌫</kbd> works in small steps. First it takes the bullet off. If the row above is empty, that empty row goes. Otherwise the row's words join the row above, with the caret where they meet. An empty row is removed and the caret goes up. Nothing joins across an image, a table, a divider or a reference.</p>
+    <h3>Moving the caret</h3>
+    <p><kbd>↑</kbd> and <kbd>↓</kbd> go to the row above or below and try to keep the caret at the same spot across. <kbd>←</kbd> and <kbd>→</kbd> at the edge of a row carry on into the next one. From the first row, <kbd>↑</kbd> goes into the title. <kbd>esc</kbd> leaves the row.</p>
+    <p>A new row takes after the row it came from: a bullet makes a bullet, a quote a quote, a numbered row the next number. After a heading or a code block, the next row is plain text.</p>
+    <div class="try"><span class="seq">Type a line <i>→</i><kbd>↩</kbd><i>→</i> type another <i>→</i><kbd>⇥</kbd><i>→</i><kbd>⇧⇥</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="markdown" data-k="markdown shortcut heading bullet checkbox divider bold italic">Markdown as you type</h2>
+    <div class="split flip">
+      <div>
+        <p>You can shape a row by typing the markdown for it at the very start. The characters disappear and the row takes that shape in Tana.</p>
+        <ul>
+          <li><code>- </code> or <code>* </code> a bullet, <code>1. </code> a numbered row</li>
+          <li><code># </code>, <code>## </code>, <code>### </code> a heading</li>
+          <li><code>&gt; </code> a quote, <code>&#96;&#96;&#96;</code> a code block</li>
+          <li><code>[] </code> or <code>[ ] </code> a checkbox</li>
+          <li><code>---</code> on an empty row: a divider</li>
+        </ul>
+      </div>
+      <figure class="clip"><video data-m="writing-markdown"></video><figcaption><code>## </code> makes a heading, <code>**short**</code> turns bold, <code>~~formal~~</code> is struck, and <code>[] </code> makes a checkbox.</figcaption></figure>
+    </div>
+    <p>Inside a row, a mark lands the moment you type its closing characters: <code>**bold**</code>, <code>*italic*</code>, <code>~~strike~~</code>, <code>&#96;code&#96;</code> and <code>[label](https://…)</code> for a link. The caret stays just after the marked words, so what you type next is plain again.</p>
+    <p>Pasting works the same way. Paste several lines, or text with markdown in it, and it arrives as real rows: headings, nested bullets, numbered rows, checkboxes, quotes, code and dividers, with the marks kept. One <kbd>⌘Z</kbd> takes the whole paste back.</p>
+    <div class="tip">A code block keeps what you type as text, so <code>- </code> or <code>#</code> stay as characters there.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="toolbar" data-short="Toolbar and marks" data-k="format bold italic strikethrough code style block type text heading">The toolbar, marks and block types</h2>
+    <div class="split">
+      <div>
+        <p>Select some words in a row and a small toolbar floats above them. From left to right:</p>
+        <ul>
+          <li>the <b>style menu</b>, which names the row's type and changes it</li>
+          <li><b>B</b> bold <kbd>⌘B</kbd></li>
+          <li><b>I</b> italic <kbd>⌘I</kbd></li>
+          <li><b>S</b> strikethrough <kbd>⇧⌘S</kbd></li>
+          <li><b>&lt;&gt;</b> code <kbd>⌘E</kbd></li>
+          <li><b>@</b> link the words to a node (see <a href="#linking">@ links</a>)</li>
+        </ul>
+      </div>
+      <figure class="clip"><video data-m="writing-toolbar"></video><figcaption>Select words, press <b>B</b>, then open the style menu.</figcaption></figure>
+    </div>
+    <figure class="shot">
+      <img data-m="writing-style" alt="The style menu under the toolbar, listing Text, Heading 1, Heading 2, Heading 3, Bullet List and Numbered List">
+      <figcaption>The style menu: <b>Text</b>, <b>Heading 1</b> to <b>Heading 3</b>, <b>Bullet List</b>, <b>Numbered List</b>, <b>Code Block</b> and <b>Quote</b>. The tick marks what the row is now. Use <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>↩</kbd>, or click.</figcaption>
+    </figure>
+    <p>For a child row, <b>Text</b> stays in the menu but greyed out: in Tana a child has to be a list row. The mark keys work without the toolbar too, on whatever you have selected. <kbd>esc</kbd> hides the toolbar and keeps your selection.</p>
+    <p><kbd>⌘↩</kbd> turns any plain row into a checkbox, and ticks or unticks one that is already a checkbox. On a task it completes the task (see <a href="tasks.html">Tasks</a>).</p>
+    <div class="try"><span class="seq">Select a word <i>→</i><kbd>⌘B</kbd><i>→</i><kbd>⌘I</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="slash" data-k="slash command insert block checklist divider table image doc task">The “/” menu</h2>
+    <div class="split flip">
+      <div>
+        <p>Type <kbd>/</kbd> at the start of an empty row to choose what the row should be. Keep typing to narrow the list, then press <kbd>↩</kbd>.</p>
+        <p>Under <b>Blocks</b>: the headings, <b>Bullet List</b>, <b>Numbered List</b>, <b>Checklist</b>, <b>Code Block</b>, <b>Quote</b>, <b>Divider</b>, <b>Table</b> and <b>Image</b>. <b>Image</b> also answers to “picture”, “photo” and “upload”.</p>
+        <p>Below the blocks come the things you can create: <b>Doc</b>, <b>Task</b> and the rest of what <b>Create new …</b> offers, with your workspace's own types under their own heading. <b>Task</b> asks for the task's name, makes it, and turns the row into a reference to it, as Tana's own “/” does. <kbd>esc</kbd> goes back to the list.</p>
+      </div>
+      <figure class="shot"><img data-m="writing-slash" alt="The / menu listing block types"><figcaption>The “/” menu on an empty row.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="linking" data-short="@ links" data-k="at mention link paste tana link create">@ links</h2>
+    <div class="split">
+      <div>
+        <p>Select some words and type <kbd>@</kbd>. A small search drops down under them, already searching for your words. The <kbd>@</kbd> itself is not typed.</p>
+        <p>Pick a result with <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>↩</kbd>: your words become a link to that node. The first row is always <b>Create “…”</b>, which makes a new document with your words as its title and links to it (<kbd>⌘↩</kbd>). <kbd>esc</kbd> leaves your words as they were.</p>
+        <p>Type <kbd>@</kbd> with nothing selected and the same search opens empty, with the nodes you viewed recently first. What you pick goes in at the caret.</p>
+      </div>
+      <figure class="clip"><video data-m="writing-link"></video><figcaption>“Sam” selected, <kbd>@</kbd>, a result picked: the word is now a link.</figcaption></figure>
+    </div>
+    <h3>Pasting a Tana link</h3>
+    <p>Copy a node's link (<b>Copy link</b>, <kbd>⌘C</kbd> in <kbd>⌘K</kbd>, or a link from Tana itself) and paste it into a row. It lands as a mention of that node, named after it. If the link cannot be read, the row stays as it was and a red note says why. Pasted into a title, an image or a divider, a link stays plain text.</p>
+    <div class="note">A page's title is plain text in Tana, so <kbd>@</kbd> in a title puts the linked node's name there as words, not as a link.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="references" data-k="mention full reference embed chip deleted">References and mentions</h2>
+    <p>A link to another node comes in two shapes, and which one you get depends only on what else is on the line.</p>
+    <div class="mg writing-ref" aria-hidden="true">
+      <div class="win"><div class="row"><span class="dot"></span><span class="box writing-ref-box"></span><span><span class="writing-ref-pre">See </span><span class="writing-ref-chip">Book the room</span></span></div></div>
+      <p class="writing-ref-said"><span class="a">Words around it: a mention, a link you click</span><span class="b">Alone on its line: the node itself, box and all</span></p>
+    </div>
+    <p>A <b>mention</b> sits among words. It is a blue link with the target's icon, and a click opens the target.</p>
+    <p>A <b>full reference</b> is a row with nothing on it but the link. That row <em>is</em> the node it points at: it draws that node's bullet, tags and grey line, and a task shows its own checkbox, so you can tick it off right there. Rename the node anywhere and the row follows. Type anything else on the line and it becomes an ordinary row with a mention in it.</p>
+    <figure class="anno wide">
+      <img data-m="writing-refs" alt="Full references to a task and a person, a folded row, mentions in a sentence and a full reference with a meeting glyph">
+      <span class="pin" style="--x:42.5%;--y:20.3%">1</span>
+      <span class="pin" style="--x:14%;--y:27.7%">2</span>
+      <span class="pin" style="--x:27%;--y:50.6%">3</span>
+      <span class="pin" style="--x:48.3%;--y:65.2%">4</span>
+      <span class="pin" style="--x:49.8%;--y:72.6%">5</span>
+      <span class="pin" style="--x:95%;--y:81.9%">6</span>
+    </figure>
+    <ol class="legend">
+      <li><b>A task, referenced</b> Its own checkbox. Tick it here.</li>
+      <li><b>A person, referenced</b> Drawn with the member glyph.</li>
+      <li><b>A folded row</b> Its dot sits on a halo: there is more inside.</li>
+      <li><b>Mentions</b> Blue links among words, each with its target's icon: a person and a task here.</li>
+      <li><b>A task from a meeting</b> The meeting glyph links back to where it was decided.</li>
+      <li><b>Web links</b> Open in your browser.</li>
+    </ol>
+    <p>Working with a full reference: a first click selects the row, a second click puts the caret in it, and <kbd>↩</kbd> on the selected row starts typing at the end. The bullet or <kbd>Space</kbd> opens the node. Unfold it with its chevron or <kbd>⌘↓</kbd> and you see the node's own outline under a dashed guide line; what you type there is written into that node.</p>
+    <p>When a node you link to is deleted, its links show it: a mention gets a trash glyph and a strike, and a full reference a trash bullet and a struck title. Neither opens. Undo the delete and they come back.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="images" data-k="picture photo upload paste drop screenshot">Images</h2>
+    <div class="split">
+      <div>
+        <p>There are three ways to add a picture, and all three end the same way:</p>
+        <ul>
+          <li><b>Paste</b> an image into a row. It lands just after that row.</li>
+          <li><b>“/” Image</b> opens the file picker. Choose one file or several.</li>
+          <li><b>Drop</b> files from the Finder. The drop line shows where they will land.</li>
+        </ul>
+        <p>Each file shows at once as a grey row with its name and “Uploading…”. They go up one at a time, and each grey row turns into the picture as it lands.</p>
+      </div>
+      <figure class="clip"><video data-m="writing-image"></video><figcaption>Two pictures on their way up, then <kbd>Space</kbd> opens one full size.</figcaption></figure>
+    </div>
+    <p>Press <kbd>esc</kbd> on a grey row to cancel that file; the others carry on. Orbital takes the image types Tana does (PNG, JPEG, GIF, WebP, HEIC, AVIF, SVG, TIFF and a few more) up to 50 MB each, and skips anything else in a drop.</p>
+    <p>On a picture, <kbd>Space</kbd> or a click opens it full size; <kbd>esc</kbd>, <kbd>Space</kbd>, <kbd>↩</kbd> or a click closes it. <kbd>⌫</kbd> or <kbd>⇧⌘⌫</kbd> removes it, and <kbd>↑</kbd> <kbd>↓</kbd> step over it.</p>
+    <div class="tip">With the caret on a picture, <kbd>⌘K</kbd> offers <b>Process image</b>: Orbital reads the picture and makes a task or a note from it.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="drafts" data-k="draft empty row new document list">Drafts</h2>
+    <p>A page always ends in an empty <b>draft row</b>, so there is somewhere to type. It is drawn as what it will become, but it only exists in Tana once you type the first character. Leave it empty and it quietly goes away. <kbd>⌫</kbd> on it moves the caret up.</p>
+    <div class="split flip">
+      <div>
+        <p>Lists work the same way. In the Library, a view or a saved search, <kbd>↩</kbd> at the end of a row drafts a new document right under it. Type its title and press <kbd>↩</kbd> or move on: only then is it created, with all its words. <kbd>esc</kbd> or <kbd>⌫</kbd> on an empty draft throws it away.</p>
+        <p>The draft takes after where you are. In a saved search of one type you get a node of that type. In a list grouped by responsibility you get a task set up for that group, the same as dropping a task there (see <a href="tasks.html">Tasks</a>).</p>
+      </div>
+      <figure class="clip"><video data-m="writing-draft"></video><figcaption><kbd>↩</kbd> in the Library drafts a row; it becomes a task once it has a name.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="moving" data-short="Move, fold, remove" data-k="move up down collapse expand fold delete remove">Moving, folding and removing rows</h2>
+    <div class="split">
+      <div>
+        <p><kbd>⇧⌘↑</kbd> and <kbd>⇧⌘↓</kbd> move the row one step up or down among its siblings, children and all.</p>
+        <p><kbd>⌘↑</kbd> folds the row away and <kbd>⌘↓</kbd> unfolds it. The chevron beside the row does the same, and on a document row in a list <kbd>⌘K</kbd> offers <b>Collapse</b> or <b>Expand</b>.</p>
+        <p><kbd>⇧⌘⌫</kbd> removes the row you are in with everything under it, wherever the caret is. The caret goes to the row before.</p>
+      </div>
+      <figure class="clip"><video data-m="writing-move"></video><figcaption><kbd>⇧⌘↑</kbd> moves “Shared cost tracking” up; <kbd>⌘↑</kbd> and <kbd>⌘↓</kbd> fold and unfold its parent.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="undo" data-k="undo redo history">Undo and redo</h2>
+    <div class="split flip">
+      <div>
+        <p><kbd>⌘Z</kbd> undoes and <kbd>⇧⌘Z</kbd> redoes. They are also <b>Undo</b> and <b>Redo</b> in <kbd>⌘K</kbd>.</p>
+        <p>There is one history for everything you change, across all documents. Each step is one thing you did: an <kbd>↩</kbd>, a paste, a move. What you were typing is saved first, then undone as one step, and the caret goes back to the row it touched. Deleting a document is in the same history, so <kbd>⌘Z</kbd> brings it back.</p>
+        <p>Sharing and moving a document to a space are not undone this way: those you change back yourself.</p>
+      </div>
+      <figure class="clip"><video data-m="writing-undo"></video><figcaption><kbd>⇧⌘⌫</kbd> removes a branch; <kbd>⌘Z</kbd> brings it back.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="selection" data-k="select multiple rows shift range">Selecting rows</h2>
+    <div class="split">
+      <div>
+        <p>To work on several rows at once, select them. <kbd>⇧↓</kbd> and <kbd>⇧↑</kbd> grow the selection from the row you are in, and <kbd>⇧</kbd>-click selects everything up to the row you click. <kbd>⌘</kbd>-click adds or removes one row.</p>
+        <p><kbd>⇧↑</kbd> past the first row selects the parent, with all its children. <kbd>⇧↓</kbd> then gives back the selection you had, step by step.</p>
+      </div>
+      <figure class="clip"><video data-m="writing-select"></video><figcaption><kbd>⇧↓</kbd> takes in the next row; <kbd>⇧↑</kbd> climbs to the parent.</figcaption></figure>
+    </div>
+    <p>With rows selected, <kbd>⇧⌘↑</kbd> and <kbd>⇧⌘↓</kbd> move them together, <kbd>⇥</kbd> and <kbd>⇧⇥</kbd> nest and un-nest them, and <kbd>⇧⌘⌫</kbd> removes them. <kbd>esc</kbd> or a plain arrow key ends the selection. These keys never delete or move whole documents in a list.</p>
+    <figure class="shot">
+      <img data-m="writing-select-cmdk" alt="Cmd+K with a Selection group: Add 2 items to chat and Delete 2 items">
+      <figcaption><kbd>⌘K</kbd> over a selection leads with what fits it, such as <b>Add 2 items to chat …</b> and <b>Delete 2 items</b>.</figcaption>
+    </figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="drag" data-k="drag drop move mouse grab reorder">Drag and drop</h2>
+    <p>You can also move a row with the mouse. Pick it up by its marker (the dot, or the number) and drop it where a blue line shows it will land. Rows without a marker, like text and headings, show a small grip in the same spot when you point at them. An empty row cannot be picked up.</p>
+    <div class="mg writing-levels" aria-hidden="true">
+      <div class="win">
+        <div class="row"><span class="dot"></span>Walk through both pilots</div>
+        <div class="row in1"><span class="dot"></span>Shared cost tracking</div>
+        <div class="row in2"><span class="dot"></span>Finance joins</div>
+        <div class="writing-levels-gap"><i class="writing-levels-line"></i></div>
+        <div class="row"><span class="dot"></span>Offsite agenda</div>
+        <div class="writing-levels-hand"><span class="ptr"></span><span class="writing-levels-ghost">Onboarding buddies</span></div>
+      </div>
+      <p class="writing-levels-said"><span class="l1">Further right: after “Finance joins”</span><span class="l2">A step left: after “Shared cost tracking”</span><span class="l3">All the way left: after “Walk through both pilots”</span></p>
+    </div>
+    <div class="split flip">
+      <div>
+        <p>One gap between two rows can mean several places. Move the pointer left and right: the line follows, starting where the words of that level start. Further right lands the row deeper; further left lands it higher up. The line only appears where the row can really land.</p>
+        <p>The row moves whole, with its children. Where it lands, its parent opens so you can see it, and a parent left empty folds up. Dropping a row back where it was does nothing.</p>
+      </div>
+      <figure class="clip"><video data-m="writing-drag"></video><figcaption>Dragging “Onboarding buddies”: the line moves between two levels as the pointer does, and the row lands after “Shared cost tracking”.</figcaption></figure>
+    </div>
+    <h3>What a drop does</h3>
+    <ul>
+      <li><b>Into a list</b>, a line of text becomes a list row. A heading, code block or image refuses to become somebody's child.</li>
+      <li><b>A document from a list</b> (a view, the Library, a saved search) lands as a full reference to it. The list itself keeps its own order.</li>
+      <li><b>Onto a meeting's row</b>, the nodes you drag are pinned to that meeting, and a note says so.</li>
+      <li><b>Onto a chat's message box</b>, the rows go into your message: documents as chips, other rows as their words (see <a href="chats.html">Chats</a>).</li>
+      <li><b>A task onto a group</b> in a list grouped by responsibility changes what it is to match that group (see <a href="tasks.html">Tasks</a>).</li>
+    </ul>
+    <p>A row cannot move to another document by dragging; a reference to a document can. A selection of several rows travels whole only into a chat; to move several rows, use <kbd>⇧⌘↑</kbd> <kbd>⇧⌘↓</kbd> and <kbd>⇥</kbd>.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="tables" data-k="table cell row column grid">Tables</h2>
+    <div class="split">
+      <div>
+        <p><b>“/” Table</b> puts a three by three table under the row, with a header row. Click a cell and type: the cell saves like any row.</p>
+        <p><kbd>⇥</kbd> and <kbd>⇧⇥</kbd> walk the cells in reading order. <kbd>↑</kbd> <kbd>↓</kbd> go up and down a column, and <kbd>←</kbd> <kbd>→</kbd> at a cell's edge go to the next cell. Past the ends, you leave the table. <kbd>esc</kbd> selects the whole table as one row; there <kbd>↩</kbd> goes back into the first cell and <kbd>⌫</kbd> removes the table.</p>
+      </div>
+      <figure class="clip"><video data-m="writing-table"></video><figcaption>Typing in a cell, then <kbd>⌘K</kbd> with “row” finds the table's own commands.</figcaption></figure>
+    </div>
+    <p>With the caret in a cell, <kbd>⌘K</kbd> has a <b>Table</b> group: <b>Add row above</b>, <b>Add row below</b>, <b>Move row up</b>, <b>Move row down</b>, <b>Delete row</b>, <b>Add column left</b>, <b>Add column right</b>, <b>Move column left</b>, <b>Move column right</b> and <b>Delete column</b>. Each is one undo step. Tana's rules hold, so the header row stays on top and the last row and column stay; a command that cannot run is shown greyed.</p>
+    <p>Paste an image into a cell and it goes into that cell, after the text. The table as a whole moves, selects and deletes like any row, with <kbd>⇧⌘↑</kbd> <kbd>⇧⌘↓</kbd> or a drag.</p>
+    <div class="try"><span class="seq">On an empty row type <b>/table</b> <i>→</i><kbd>↩</kbd><i>→</i> type <i>→</i><kbd>⇥</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>New row (split at the caret)</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>Line break inside a row</td><td><kbd>⇧↩</kbd></td></tr>
+      <tr><td>Nest / un-nest</td><td><kbd>⇥</kbd> <kbd>⇧⇥</kbd></td></tr>
+      <tr><td>Take off the bullet, join the row above</td><td><kbd>⌫</kbd> at the start</td></tr>
+      <tr><td>Move the row up / down</td><td><kbd>⇧⌘↑</kbd> <kbd>⇧⌘↓</kbd></td></tr>
+      <tr><td>Fold / unfold</td><td><kbd>⌘↑</kbd> <kbd>⌘↓</kbd></td></tr>
+      <tr><td>Remove the row and its children</td><td><kbd>⇧⌘⌫</kbd></td></tr>
+      <tr><td>Checkbox on or off, complete a task</td><td><kbd>⌘↩</kbd></td></tr>
+      <tr><td>Bold, italic, strikethrough, code</td><td><kbd>⌘B</kbd> <kbd>⌘I</kbd> <kbd>⇧⌘S</kbd> <kbd>⌘E</kbd></td></tr>
+      <tr><td>Link to a node</td><td><kbd>@</kbd></td></tr>
+      <tr><td>Choose a block type</td><td><kbd>/</kbd> on an empty row</td></tr>
+      <tr><td>Undo / redo</td><td><kbd>⌘Z</kbd> <kbd>⇧⌘Z</kbd></td></tr>
+      <tr><td>Grow the selection</td><td><kbd>⇧↑</kbd> <kbd>⇧↓</kbd></td></tr>
+      <tr><td>Open a picture or a reference</td><td><kbd>Space</kbd></td></tr>
+      <tr><td>Leave the row</td><td><kbd>esc</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Types &amp; fields · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: Set type picks Project; the chip pops, the bullet takes the hue, the fields arrive. The typed state is the plain one. */
+  .types-hero { --loop: 8s; gap: 26px; }
+  .types-pal { width: 190px; padding: 10px; }
+  .types-pal .lbl { display: block; margin: 0 6px 6px; }
+  .types-opt { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); padding: 5px 8px; border-radius: 7px; }
+  .types-opt.off { color: var(--faint); }
+  .types-opt.pick { background: var(--well); }
+  .types-g { width: 11px; height: 11px; border-radius: 3px; border: 1.5px solid oklch(0.62 0.12 var(--hue)); flex: none; }
+  .types-doc { width: 380px; }
+  .types-doc .ttl { display: flex; align-items: center; gap: 9px; }
+  .types-bullet { width: 8px; height: 8px; border-radius: 50%; background: oklch(0.62 0.12 268); flex: none; }
+  .types-field { display: grid; grid-template-columns: 96px 1fr; align-items: center; height: 30px; border-top: 1px solid var(--line); font-size: 13px; overflow: hidden; }
+  .types-field:last-of-type { border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+  .types-flabel { color: var(--muted); }
+  .types-val { display: flex; align-items: center; gap: 6px; color: var(--ink); }
+  .types-fchip { background: var(--well); border-radius: 5px; padding: 1px 7px; }
+  .mg.in .types-pal { animation: types-pal var(--loop) infinite; }
+  .mg.in .types-opt.pick { animation: types-pick var(--loop) infinite; }
+  .mg.in .types-hero .chip { animation: types-chip var(--loop) infinite; }
+  .mg.in .types-bullet { animation: types-bullet var(--loop) infinite; }
+  .mg.in .types-field { animation: types-field var(--loop) infinite; animation-delay: calc(var(--i) * .12s); }
+  @keyframes types-pal { 0%, 4% { opacity: 0; transform: translateY(6px); } 9%, 34% { opacity: 1; transform: none; } 40%, 100% { opacity: .25; transform: none; } }
+  @keyframes types-pick { 0%, 16% { background: none; } 20%, 36% { background: var(--well); box-shadow: 0 0 0 1.5px var(--now); } 40%, 100% { background: var(--well); box-shadow: none; } }
+  @keyframes types-chip { 0%, 36% { opacity: 0; transform: scale(.6); } 41% { opacity: 1; transform: scale(1.08); } 45%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes types-bullet { 0%, 37% { background: var(--faint); } 42%, 96% { background: oklch(0.62 0.12 268); } 100% { background: var(--faint); } }
+  @keyframes types-field { 0%, 46% { height: 0; opacity: 0; border-color: transparent; } 52%, 96% { height: 30px; opacity: 1; border-color: var(--line); } 100% { height: 0; opacity: 0; } }
+
+  /* the type owns its look: a new colour on the type reaches every document of it */
+  @property --types-h { syntax: '<number>'; inherits: true; initial-value: 30; }
+  .types-owns { --loop: 8s; --types-h: 30; gap: 22px; }
+  .types-owns .win { min-width: 0; }
+  .types-def { width: 200px; }
+  .types-def .ttl { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .types-swatch { width: 14px; height: 14px; border-radius: 4px; border: 2px solid oklch(0.62 0.13 var(--types-h)); }
+  .types-line { font-size: 12.5px; color: var(--muted); line-height: 1.9; }
+  .types-docs { display: flex; flex-direction: column; gap: 12px; }
+  .types-docs .win { width: 230px; padding: 11px 14px; }
+  .types-docs .row { height: 24px; font-size: 13.5px; }
+  .types-docs .chip { --hue: var(--types-h); }
+  .types-dot { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.62 0.13 var(--types-h)); flex: none; }
+  .types-flow { width: 56px; }
+  .mg.in.types-owns { animation: types-hue var(--loop) infinite; }
+  @keyframes types-hue { 0%, 38% { --types-h: 268; } 50%, 94% { --types-h: 30; } 100% { --types-h: 268; } }
+  .mg.in .types-owns-cap { animation: mg-press var(--loop) calc(.36 * var(--loop)) infinite backwards; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 10</p>
+    <h1>A type says what a node is</h1>
+    <p class="lead">Give a document a type and it takes the type's colour, its glyph and its fields. Then every node of that type can be listed, filtered and grouped by those fields.</p>
+    <div class="mg types-hero" aria-hidden="true">
+      <div class="win types-pal">
+        <span class="lbl">Set type to…</span>
+        <div class="types-opt pick"><span class="types-g" style="--hue:268"></span>Project</div>
+        <div class="types-opt"><span class="types-g" style="--hue:150"></span>Decision Record</div>
+        <div class="types-opt off"><span class="types-g" style="--hue:32"></span>Co-Worker</div>
+      </div>
+      <div class="win types-doc">
+        <div class="ttl"><span class="types-bullet"></span>Studio relaunch <span class="chip" style="--hue:268"># Project</span></div>
+        <div class="types-field" style="--i:0"><span class="types-flabel">Level</span><span class="types-val"><span class="types-fchip">High</span></span></div>
+        <div class="types-field" style="--i:1"><span class="types-flabel">Owner</span><span class="types-val"><span class="face" style="--hue:30">PR</span>Priya Raman</span></div>
+        <div class="types-field" style="--i:2"><span class="types-flabel">Review date</span><span class="types-val">14 Oct</span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:210px"></span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:150px"></span></div>
+      </div>
+      <span class="cap-line">One choice brings the type's colour, its chip and its fields.</span>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="set-type" data-k="set type remove type no type classify">Give a document a type</h2>
+    <p>A type is part of your Tana workspace: Project, Decision Record, Meeting notes, whatever your team made. Documents and meetings can each carry one.</p>
+    <h3>Set type</h3>
+        <p>With the caret in a document (or on its row), press <kbd>⌘K</kbd> and choose <b>Set type</b>; its hint shows the current type or "No type". The page lists every type:</p>
+        <ul>
+          <li>the current one ticked, and <b>No type</b> first when there is a type to take off;</li>
+          <li>a type that cannot go on this document greyed, with the space it lives in ("Lives in Studio LT"). A space's type only fits documents in that space; a Library type fits anything.</li>
+        </ul>
+        <p>The choices are ⌘K rows too: type <b>set type to project</b> and press <kbd>↩</kbd>. <b>Remove type</b> takes the type off in one step.</p>
+    <figure class="clip wide"><video data-m="types-settype"></video><figcaption>The space's types are greyed for a document outside it; Co-Worker fits.</figcaption></figure>
+    <div class="split flip">
+      <div>
+        <h3>Classify type</h3>
+        <p><kbd>⌘K</kbd> <b>Classify type</b> lets the model read the document and weigh the same list. When it is at least 80% sure it sets the type and says so ("Classified as Decision Record (91%)"); otherwise it shows every option with its odds and you pick. It never takes a type off on its own. <a href="ai.html">Chapter 11</a> explains the model and how to sign in.</p>
+        <p><b>Discuss with …</b> is a shortcut to one type: it makes the document a Discussion Task and fills its "Discuss with" field.</p>
+      </div>
+      <figure class="shot"><img data-m="types-classify" alt="Classify type listing No type 40%, Project, Decision Record and Co-Worker 20% each"><figcaption>Unsure, the model shows its odds and leaves the choice to you.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>set type</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="types-view" data-k="types view archive archived unarchive">The Types view</h2>
+    <div class="split">
+      <div>
+        <p><kbd>⌘K</kbd> <b>Types</b> lists your workspace's types, each drawn in its glyph and colour, with the space it lives in (or Library). Every type is also a ⌘K row of its own, under <b>Types</b>. Click a type or press <kbd>↩</kbd> on it to open its page.</p>
+      </div>
+      <figure class="shot"><img data-m="types-view" alt="The Types view: Project and Decision Record in Studio LT, Co-Worker in the Library"><figcaption>Three types, each with its home.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Archive a type</h3>
+        <p>To retire a type, put the caret on its row and choose <kbd>⌘K</kbd> <b>Archive type</b>. Tana archives rather than deletes: the type leaves every list and picker, and documents that have it keep it. <kbd>⌘K</kbd> <b>Archived types</b> lists them, with when; <kbd>↩</kbd> brings one back and opens it.</p>
+      </div>
+      <figure class="shot"><img data-m="types-archived" alt="Archived types listing Retro Note, archived 5 days ago"><figcaption>⌘K Archived types: <kbd>↩</kbd> unarchives.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="type-pages" data-k="type page field pill add filter table instances">A type's page</h2>
+    <p>A type's page lists every document of that type. It works like a saved search (<a href="views.html">Chapter 7</a>): the same Sort, Group, Display, table and <kbd>⌘F</kbd>. Its pills start folded; open them with the settings button beside Back and Forward. Each row's grey line shows its field values.</p>
+    <figure class="shot wide"><img data-m="types-page" alt="The Project type page listing four projects with their Level, Impact, Likelihood and Review date"><figcaption>Project's page: the rows show their field values.</figcaption></figure>
+    <div class="split">
+      <div>
+        <h3>Filter by a field</h3>
+        <p>Every options, link, member and date field gets a pill. Options filter by label (tick several), links and members by what they point at (with a search line, since there can be hundreds), dates by <b>Today</b>, <b>Upcoming</b> or <b>Past</b>. Changes apply at once and are kept per type; nothing is written to Tana.</p>
+        <p>Past four field pills, the ones you are not using fold behind <b>Add filter</b>. Its menu lists them under "Type fields"; pick one and its pill comes back, open. A field that filters something always keeps its pill.</p>
+        <p>The same pills appear wherever one type is picked in the Type pill, and on mixed lists for the types on the page.</p>
+      </div>
+      <figure class="shot"><img data-m="types-addfilter" alt="The Add filter menu listing Level, Sources, Impact, Likelihood, Review date and Owner"><figcaption>Idle fields wait behind Add filter.</figcaption></figure>
+    </div>
+    <h3>As a table</h3>
+        <p><kbd>⌘K</kbd> <b>Switch to table</b> gives each field a column. On a type's page, an options column can be changed in place: click the cell, or <kbd>⌘K</kbd> <b>Set Level …</b> with the row focused.</p>
+        <p>In a saved search picking one type, <kbd>↩</kbd> at the end of a row makes a new document of that type, with every field the filter fixes already filled in.</p>
+    <figure class="shot wide"><img data-m="types-table" alt="The Project type page as a table with Level, Sources, Impact, Likelihood, Review date, Owner and Updated columns"><figcaption>One column per field.</figcaption></figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="look" data-k="set icon set colour colour hue nucleo glyph grey">Icon and colour</h2>
+    <p>A type's glyph and colour belong to the type, so every document of it follows: its bullet, its sidebar row, and the chip a mention of it draws.</p>
+    <div class="mg types-owns" aria-hidden="true">
+      <div class="win types-def">
+        <div class="ttl"><span class="types-swatch"></span>Project</div>
+        <div class="types-line">Level · Options<br>Owner · Member<br>Review date · Date</div>
+      </div>
+      <div class="types-flow arrow"></div>
+      <div class="types-docs">
+        <div class="win"><div class="row"><span class="types-dot"></span>Studio relaunch <span class="chip"># Project</span></div></div>
+        <div class="win"><div class="row"><span class="types-dot"></span>Pilot programme <span class="chip"># Project</span></div></div>
+      </div>
+      <span class="cap types-owns-cap" style="position:absolute;left:8%;bottom:16%">⌘K</span>
+      <span class="cap-line">Change the type once; every document of it changes with it.</span>
+    </div>
+    <h3>Set icon</h3>
+        <p>With the caret on a type (its row in Types, or its page), <kbd>⌘K</kbd> <b>Set icon</b> opens a search over about 3,500 Nucleo glyphs. Type a word, pick one with <kbd>↩</kbd>. <b>No icon</b> puts the generic glyph back. Tasks and meetings keep their own glyphs.</p>
+        <p>A saved search takes an icon the same way, for itself. When you are signed in to a model, Orbital picks a glyph for every type that has none yet, once; your own choice always wins.</p>
+    <figure class="clip wide"><video data-m="types-icon"></video><figcaption>Project gets a rocket.</figcaption></figure>
+    <h3>Set colour</h3>
+        <p><kbd>⌘K</kbd> <b>Set colour</b> lists twelve named colours, each drawn in the type's glyph, with the current one ticked. <b>Grey</b> removes the tint, and <b>Tana's colour</b> goes back to the colour Tana has. Type a name to narrow the list, or a number from 0 to 360 for an exact hue.</p>
+    <figure class="clip wide"><video data-m="types-colour"></video><figcaption>Project takes a new colour, and the Types list shows it at once.</figcaption></figure>
+    <div class="note">Icons and colours are Orbital's own. They live in your Orbital settings, follow you to your other Macs, and never change the type in Tana.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="fields" data-k="field value options link member date text clear value select value">Fields on a document</h2>
+    <p>A typed document shows its fields between the title and the outline, one line each: the field's glyph, its name, then its value, all values starting in one column. An expanded document in a list shows them too.</p>
+    <figure class="anno wide">
+      <img data-m="types-fields" alt="A document's fields: Discuss with, Level with Medium and a struck Urgent, Sources with two links one marked with a warning, Impact and Likelihood empty, Review date and Owner">
+      <span class="pin" style="--x:3.9%;--y:30.3%">1</span>
+      <span class="pin" style="--x:20%;--y:30.3%">2</span>
+      <span class="pin" style="--x:16%;--y:40.3%">3</span>
+      <span class="pin" style="--x:33%;--y:40.3%">4</span>
+      <span class="pin" style="--x:44.5%;--y:50%">5</span>
+      <span class="pin" style="--x:29.5%;--y:59.7%">6</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Glyph</b> The field's icon. ⌘K Set field icon changes it for the whole type.</li>
+      <li><b>Text and date fields</b> Small outlines: type, <kbd>↩</kbd> for another line, <kbd>⇥</kbd>, <kbd>⌘Z</kbd>, all as in a row.</li>
+      <li><b>Options</b> Chips, one per value.</li>
+      <li><b>Struck</b> A value the type no longer offers ("No longer offered"). You can only remove it.</li>
+      <li><b>⚠</b> A link to something the field does not link to. Tana would refuse it.</li>
+      <li><b>Select value, Link to …</b> Mark an empty field; click to fill it.</li>
+    </ol>
+    <h3>Pick a value</h3>
+        <p>Options, link and member fields hold a closed list, so there is nothing to type into. <kbd>↑</kbd> <kbd>↓</kbd> stop on them like rows. <kbd>↩</kbd>, <kbd>Space</kbd>, a click or any letter opens the picker; <kbd>⌫</kbd> takes the last value off. From <kbd>⌘K</kbd>: <b>Select value …</b> or <b>Link to …</b>.</p>
+        <p>The options picker ticks what is chosen. A single field writes and closes; a multiple one toggles and stays open. <b>Clear value</b> empties it. A link picker searches only what the field may link to (members, for a member field), listing them before you type.</p>
+    <figure class="clip wide"><video data-m="types-pick"></video><figcaption>Impact: open the picker, choose 3, and the chip pops in.</figcaption></figure>
+    <div class="try"><span class="seq"><kbd>↓</kbd> to an empty options field <i>→</i><kbd>↩</kbd> <i>→</i> pick <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="define" data-short="Define fields" data-k="edit fields add field set field type number of values edit choices link to types">Define a type's fields</h2>
+    <p>On a type's page, <kbd>⌘K</kbd> <b>Edit fields</b> lists its field definitions under the title, each with its kind as a grey chip: <b>Options</b> with its choices, <b>Link</b> with the types it links to, <b>Member</b>, <b>Date</b> or <b>Text</b>, and <b>Single</b> or <b>Multiple</b> where set. <b>Done editing fields</b> hides them again.</p>
+        <p><kbd>⌘K</kbd> <b>Add field …</b> (on a type or any of its fields) asks for a name, then a kind.</p>
+    <figure class="shot wide"><img data-m="types-define" alt="Project's field definitions: Level, Sources, Impact, Likelihood, Review date, Owner"><figcaption>Project's six fields and their kinds.</figcaption></figure>
+    <div class="split flip">
+      <div>
+        <h3>Change a definition</h3>
+        <p>Click a definition, or put the caret on it and press <kbd>⌘K</kbd>:</p>
+        <ul>
+          <li><b>Set field type …</b>: Text, Options, Link, Member or Date.</li>
+          <li><b>Number of values …</b>: Single or Multiple.</li>
+          <li><b>Edit choices …</b> (options): type and <kbd>↩</kbd> to add, <kbd>↩</kbd> on a choice to rename it, <kbd>⌘⌫</kbd> to remove, <kbd>⇧⌘↑</kbd> <kbd>⇧⌘↓</kbd> to move. At most 60 characters and no duplicates; the page says so before anything is written.</li>
+          <li><b>Link to types …</b> (links): which types it may point at.</li>
+          <li><b>Set field icon</b>: the field's glyph, everywhere it shows.</li>
+        </ul>
+        <p>Each change is one undo step.</p>
+      </div>
+      <figure class="shot"><img data-m="types-fieldcmds" alt="Cmd+K on the Level definition: Set field type, Number of values, Edit choices, Link to types (greyed), Set field icon"><figcaption>What ⌘K offers on an options field.</figcaption></figure>
+    </div>
+    <figure class="clip wide"><video data-m="types-choices"></video><figcaption>Edit choices on Level: “Critical” joins High, Medium and Low.</figcaption></figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Set type, Set icon, Set colour, Edit fields, Add field</td><td><kbd>⌘K</kbd> and the row's name</td></tr>
+      <tr><td>Open a field's picker</td><td><kbd>↩</kbd>, <kbd>Space</kbd> or a letter</td></tr>
+      <tr><td>Remove a field's last value</td><td><kbd>⌫</kbd></td></tr>
+      <tr><td>Add a choice (Edit choices …)</td><td>type, <kbd>↩</kbd></td></tr>
+      <tr><td>Remove a choice</td><td><kbd>⌘⌫</kbd></td></tr>
+      <tr><td>Move a choice</td><td><kbd>⇧⌘↑</kbd> <kbd>⇧⌘↓</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

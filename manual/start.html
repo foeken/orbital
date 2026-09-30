@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>First steps · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: ⌘K opens the palette, ↩ runs its first row, the page arrives */
+  .start-hero { --loop: 8s; min-height: 330px; }
+  .start-hero .start-win { width: 380px; }
+  .start-hero .start-pal { position: absolute; left: 50%; top: 50%; width: 330px; margin: -104px 0 0 -165px; padding: 10px 10px 12px; opacity: 0; z-index: 2; }
+  .start-pal .start-in { font-size: 14px; color: var(--faint); padding: 2px 8px 10px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+  .start-pal .lbl { font-size: 10.5px; padding: 4px 8px 2px; }
+  .start-pal .row { padding: 0 8px; border-radius: 7px; }
+  .start-pal .row.hl { background: var(--well); }
+  .start-pal .start-grey { opacity: .45; }
+  .start-hero .start-keys { position: absolute; right: 7%; bottom: 16%; display: flex; gap: 6px; }
+  .start-win .row { opacity: 1; }
+  .mg.in .start-pal { animation: start-pal var(--loop) infinite; }
+  .mg.in .start-win { animation: start-dim var(--loop) infinite; }
+  .mg.in .start-win .row { animation: start-rise var(--loop) calc(var(--i) * .12s) infinite backwards; }
+  @keyframes start-pal { 0%, 11% { opacity: 0; transform: translateY(-8px) scale(.98); } 15%, 50% { opacity: 1; transform: none; } 54%, 100% { opacity: 0; transform: none; } }
+  @keyframes start-dim { 0%, 11% { opacity: 1; } 15%, 50% { opacity: .55; } 54%, 100% { opacity: 1; } }
+  @keyframes start-rise { 0%, 55% { opacity: 0; transform: translateY(8px); } 62%, 100% { opacity: 1; transform: none; } }
+
+  /* one outline over your Tana: a change travels each way */
+  .start-sync { --loop: 7s; min-height: 250px; gap: 0; }
+  .start-sync .win { width: 230px; }
+  .start-sync .start-wire { position: relative; width: 120px; height: 60px; }
+  .start-sync .start-wire .arrow { position: absolute; left: 10px; right: 10px; }
+  .start-sync .start-wire .arrow.a { top: 18px; }
+  .start-sync .start-wire .arrow.b { top: 42px; transform: scaleX(-1); }
+  .start-sync .start-bit { position: absolute; width: 8px; height: 8px; margin: -3px 0 0 -4px; border-radius: 50%; background: var(--now); opacity: 0; }
+  .start-sync .start-bit.a { top: 19px; left: 10px; } .start-sync .start-bit.b { top: 43px; left: 110px; }
+  .start-sync .lbl { margin-bottom: 6px; }
+  .mg.in .start-bit.a { animation: start-go var(--loop) infinite; }
+  .mg.in .start-bit.b { animation: start-back var(--loop) infinite; }
+  .mg.in .start-got { animation: start-glow var(--loop) infinite; }
+  .mg.in .start-sent { animation: start-glow var(--loop) calc(var(--loop) / 2) infinite backwards; }
+  @keyframes start-go { 0%, 10% { opacity: 0; transform: none; } 14% { opacity: 1; } 34% { opacity: 1; transform: translateX(100px); } 38%, 100% { opacity: 0; transform: translateX(100px); } }
+  @keyframes start-back { 0%, 60% { opacity: 0; transform: none; } 64% { opacity: 1; } 84% { opacity: 1; transform: translateX(-100px); } 88%, 100% { opacity: 0; transform: translateX(-100px); } }
+  @keyframes start-glow { 0%, 36% { background: transparent; } 40%, 48% { background: rgba(52, 168, 83, .14); } 60%, 100% { background: transparent; } }
+  .start-sync .row { border-radius: 6px; padding: 0 4px; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 1</p>
+    <h1>Everything starts at ⌘K</h1>
+    <p class="lead">Orbital is a keyboard-first window onto your Tana. After this chapter you can sign in, find your way around the window, and know where to look when something goes wrong.</p>
+    <div class="mg start-hero" aria-hidden="true">
+      <div class="win start-win">
+        <div class="ttl">Timeline</div>
+        <div class="row" style="--i:0"><span class="box"></span><span class="bar" style="--w:200px"></span></div>
+        <div class="row" style="--i:1"><span class="box"></span><span class="bar" style="--w:150px"></span></div>
+        <div class="row" style="--i:2"><span class="dot"></span><span class="bar" style="--w:230px"></span></div>
+        <div class="row in1" style="--i:3"><span class="dot"></span><span class="bar" style="--w:120px"></span></div>
+        <div class="row" style="--i:4"><span class="box"></span><span class="bar" style="--w:170px"></span></div>
+      </div>
+      <div class="win start-pal">
+        <div class="start-in">Run a command</div>
+        <div class="lbl">Get started</div>
+        <div class="row hl"><span class="dot" style="background:var(--now)"></span>Log in to Tana</div>
+        <div class="lbl start-grey">Views</div>
+        <div class="row start-grey"><span class="dot"></span><span class="bar" style="--w:90px"></span></div>
+        <div class="row start-grey"><span class="dot"></span><span class="bar" style="--w:120px"></span></div>
+      </div>
+      <div class="start-keys"><span class="cap press" style="--at:.09">⌘</span><span class="cap press" style="--at:.11">K</span><span class="cap press" style="--at:.5">↩</span></div>
+      <p class="cap-line">⌘K opens the palette, ↩ runs the row, and the page arrives</p>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="what" data-short="What Orbital is" data-k="tana outliner about">What Orbital is</h2>
+    <p>Orbital shows your Tana as one fast outline: a title, then rows. Every line you see is a node in Tana. You type straight into it, with no edit mode and no save button, and Orbital writes each change to Tana as you go. Changes made in Tana, or by your colleagues, show up here the same way.</p>
+    <p>It is built for the keyboard. Every feature is a row in the command palette, <kbd>⌘K</kbd>, so there is one place to find anything and a key for whatever you do often. The mouse works too, but you never need it.</p>
+    <div class="mg start-sync" aria-hidden="true">
+      <div class="win">
+        <div class="lbl">Tana</div>
+        <div class="row start-sent"><span class="box"></span><span class="bar" style="--w:140px"></span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:110px"></span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:160px"></span></div>
+      </div>
+      <div class="start-wire"><div class="arrow a"></div><div class="arrow b"></div><span class="start-bit a"></span><span class="start-bit b"></span></div>
+      <div class="win">
+        <div class="lbl">Orbital</div>
+        <div class="row start-got"><span class="box"></span><span class="bar" style="--w:140px"></span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:110px"></span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:160px"></span></div>
+      </div>
+      <p class="cap-line">One outline over your Tana, live in both directions</p>
+    </div>
+    <div class="note">Orbital reads and writes the same documents Tana does. There is no copy to keep in step: close Orbital and your work is already in Tana.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="sign-in" data-k="login log in welcome sign out logout">Signing in</h2>
+    <p>The first time you open Orbital, the page is a welcome that teaches the one key you need. The big <kbd>⌘</kbd> and <kbd>K</kbd> keycaps sit in the middle like a planet, with Tasks, Meetings, Notes, People and Inbox in orbit around them. Hold the keys and the keycaps go down with you.</p>
+    <h3>Log in with the keyboard</h3>
+    <p>The two steps under the planet are the whole lesson: press <kbd>⌘K</kbd>, then <kbd>↩</kbd>. While you are signed out, the palette lists <b>Log in to Tana</b> first, so <kbd>↩</kbd> runs it. Tana's own login opens, and once you are in, the window fills with your work.</p>
+    <figure class="clip wide"><video data-m="start-welcome"></video><figcaption>The welcome, <kbd>⌘K</kbd>, then <kbd>↩</kbd> on <b>Log in to Tana</b>.</figcaption></figure>
+    <p>Prefer the mouse? After 15 seconds a <b>Log in to Tana</b> button fades in under the steps.</p>
+    <div class="split flip">
+      <div>
+        <h3>Only the login works until you are in</h3>
+        <p>Every other row in the palette stays in its place, greyed out, so you can already see what Orbital offers. None of them runs until you have signed in. A window with several panes shows its first page alone until then.</p>
+      </div>
+      <figure class="shot"><img data-m="start-signedout-palette" alt="The command palette while signed out: Log in to Tana at the top, every other row greyed"><figcaption>Signed out, <b>Log in to Tana</b> is the one live row.</figcaption></figure>
+    </div>
+    <div class="split">
+      <div>
+        <h3>Log out</h3>
+        <p><kbd>⌘K</kbd> <b>Log out of Tana</b> (under Settings) asks once more on a page of its own. <b>Log out</b> ends the session in every Orbital window until you log in again; <b>Cancel</b> or <kbd>esc</kbd> steps back.</p>
+      </div>
+      <figure class="shot"><img data-m="start-logout" alt="The Log out of Tana page: Log out, every window, and Cancel"><figcaption>Logging out asks once, then signs out every window.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>log out</b> <i>→</i><kbd>↩</kbd><i>→</i><kbd>esc</kbd></span> to see the question without answering it.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="window" data-short="The window" data-k="header house eye tabs panes title rows create new">The window at a glance</h2>
+    <p>A window holds one or more pages, side by side as panes or stacked as tabs. Out of the box it opens on the <b>Work View</b>: the Timeline on the left and My Tasks on the right. Here it shows a task on the right instead.</p>
+    <figure class="anno wide">
+      <img data-m="start-window" alt="An Orbital window with two panes: the Timeline and a task">
+      <span class="pin" style="--x:90.8%;--y:2.4%">1</span>
+      <span class="pin" style="--x:10.3%;--y:6.5%">2</span>
+      <span class="pin" style="--x:91.8%;--y:6.4%">3</span>
+      <span class="pin" style="--x:59.9%;--y:45%">4</span>
+      <span class="pin" style="--x:8.6%;--y:13.4%">5</span>
+      <span class="pin" style="--x:61.2%;--y:12.8%">6</span>
+      <span class="pin" style="--x:60.9%;--y:38%">7</span>
+      <span class="pin" style="--x:94.2%;--y:95.5%">8</span>
+    </figure>
+    <ol class="legend">
+      <li><b>The window's header</b> The house opens the Work View, the eye shows or blurs sensitive items, <kbd>⌘</kbd> opens the palette and the question mark opens the Help tour. Each acts in the pane you are working in.</li>
+      <li><b>Tabs</b> Each page has a tab that names it. Drag a tab to move the page, or close it with its ×.</li>
+      <li><b>The page's buttons</b> Back, Forward, the page's switches and its ⋯ menu. They show while the pointer is over that page, and each tooltip names its key.</li>
+      <li><b>Panes</b> Pages sit side by side. The chapter on <a href="windows.html">windows and panes</a> covers splitting, tabs and floating.</li>
+      <li><b>A view</b> The Timeline: today's tasks, meetings and what changed. <a href="timeline.html">Chapter 5</a> reads it row by row.</li>
+      <li><b>The title</b> The page's name, or the node you zoomed into. On a document you can type in it; a task shows its checkbox before it.</li>
+      <li><b>Rows</b> Every line is a node. A marker sits in the gutter and children indent under a thin guide line.</li>
+      <li><b>Create new</b> The round corner button. Hover it and the words slide out; see <a href="#create">Create new</a> below.</li>
+    </ol>
+    <p>With one page in the window, the page's buttons sit in the window's header instead of a tab bar. There is no footer or status line: the title says where you are, and Back walks your history.</p>
+    <div class="tip">Hover any button to read its key. The tooltips follow the keys you record yourself, so they are never out of date.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="help" data-k="tour basics question mark manual">The Help tour</h2>
+    <div class="split">
+      <div>
+        <p>The Help tour is seven short pages of basics, each with a small loop of the keys at work: <kbd>⌘K</kbd>, writing in an outline, finding and linking, planning your day, panes, and signing in with ChatGPT.</p>
+        <p>It opens by itself once, the first time you sign in. After that, open it from the <b>?</b> in the window's header or with <kbd>⌘K</kbd> <b>Help</b>. Move with <kbd>→</kbd> and <kbd>←</kbd> or <b>Next</b> and <b>Back</b>; <kbd>esc</kbd> closes it. Pressing <kbd>⌘K</kbd> closes the tour and opens the palette, the key it teaches.</p>
+        <p>The last page offers <b>Sign in with ChatGPT</b>, which Orbital uses for small jobs such as picking a type. If you are signed in already, it says so instead.</p>
+      </div>
+      <figure class="clip"><video data-m="start-help"></video><figcaption>Paging through the tour with <kbd>→</kbd>.</figcaption></figure>
+    </div>
+    <p>This manual lives one row further down: <kbd>⌘K</kbd> <b>Open Manual</b>, under Help. <b>About Orbital</b> sits in the same group and lists the website, the licence and what Orbital is built with.</p>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>help</b> <i>→</i><kbd>↩</kbd><i>→</i><kbd>→</kbd><kbd>→</kbd><i>→</i><kbd>esc</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="loading" data-short="Loading" data-k="loader skeleton arriving rows glow flash">The loader and rows that arrive</h2>
+    <div class="split flip">
+      <div>
+        <p>When you launch Orbital or press <kbd>⌘R</kbd> (<b>Reload</b>), the first page builds itself while its rows are on their way: the title, then rows of small glyphs and rounded bars growing in one by one, with a soft light sweeping through them. When the real rows land, the sketch fades and they rise in from top to bottom.</p>
+        <p>It waits 300 ms before it draws anything, so a quick load never flickers. The Timeline builds more slowly and fills in part by part. Pages you open later simply wait a moment for their rows; the loader only plays at launch and on Reload.</p>
+      </div>
+      <figure class="clip"><video data-m="start-loader"></video><figcaption>The page building itself, then the real rows rising in.</figcaption></figure>
+    </div>
+    <h3>Rows that arrive or leave</h3>
+    <p>Once a page is settled, a row that arrives, because someone assigned you a task or a filter now lets it in, glows once. A row that leaves flashes as it goes. A row whose words change while it stays is updated in place without a flash, so a colleague typing does not light up your page. Very large changes, more than 25 rows at once, are not animated at all.</p>
+    <div class="note">A row you are working in never jumps away. If a change means it no longer belongs on the page, it dims and stays until your caret leaves it.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="notices" data-short="Notices and errors" data-k="toast error relogin session expired">Notices, errors and the login line</h2>
+    <p>Orbital reports back at the foot of the window, above everything else, and gets out of the way again.</p>
+    <div class="split">
+      <figure class="shot"><img data-m="start-note" alt="A dark notice at the foot of the window: Link copied"><figcaption>A notice says something is done, then fades after a few seconds.</figcaption></figure>
+      <figure class="shot"><img data-m="start-error" alt="A red error at the foot of the window"><figcaption>A failed action is red and stays for six seconds.</figcaption></figure>
+    </div>
+    <ul>
+      <li><b>Notices</b> confirm what you did: "Link copied", "Added 3 items to Today". A newer notice replaces the one showing.</li>
+      <li><b>Notices about one node</b>, such as the task Quick Add Task just made, stay a little longer and open that node when you click them.</li>
+      <li><b>Errors</b> are the same toast in red. Nothing else interrupts you: there are no dialogs to dismiss.</li>
+    </ul>
+    <h3>When Tana needs you to log in again</h3>
+    <p>The one message that stays is about your session. When Tana asks for a new login, a red line appears under the page title with a <b>Log in to Tana</b> link. Your pages stay readable meanwhile; click the link, sign in, and the line goes.</p>
+    <figure class="shot wide"><img data-m="start-relogin" alt="A red line under the page title: the session has expired, with a Log in to Tana link"><figcaption>The login line sits under the title until you sign in again.</figcaption></figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="create" data-k="create new corner button process image drop clipboard">Create new</h2>
+    <div class="split">
+      <div>
+        <p>The round button in the window's bottom-right corner makes something new. Hover it and the words <b>Create new</b> slide out beside the glyph. A click opens <kbd>⌘K</kbd> <b>Create new …</b> for the pane you are working in: a Task, a Meeting, a Chat, a Canvas, or a document of one of your workspace's types.</p>
+        <p>The button hides while you are signed out, and sits under the palette's shade while a palette is open.</p>
+      </div>
+      <figure class="clip"><video data-m="start-create"></video><figcaption>Hover, click, and choose what to make.</figcaption></figure>
+    </div>
+    <h3>Drop an image on it</h3>
+    <div>
+      <div>
+        <p>Drag an image file over the button and it changes to <b>Process image</b>. Drop it, and Orbital asks the AI to read it: a receipt, a whiteboard or a screenshot becomes a task or a note, with a title, the lines worth keeping, and the image under them. The button says <b>Processing image …</b> until the new node opens.</p>
+        <p>PNG, JPEG, WebP and GIF work. With Auto-translate on, the title and lines are written in your language; otherwise in the image's own.</p>
+      </div>
+    </div>
+    <figure class="clip wide"><video data-m="start-drop"></video><figcaption>An image dropped on the corner button becomes a task.</figcaption></figure>
+    <p>You can do the same without dragging. <kbd>⌘K</kbd> <b>Process image</b> works on the image row under your caret, and <b>Process image from clipboard</b> appears whenever you have copied an image. The <b>Create new …</b> page leads with it too, and so does Quick Add Task (<kbd>⇧⌘Space</kbd>), where <kbd>↩</kbd> with no title typed processes the clipboard's image.</p>
+    <div class="try">Copy a screenshot, then <span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>process</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Open the command palette, or log in while signed out</td><td><kbd>⌘K</kbd> <kbd>↩</kbd></td></tr>
+      <tr><td>Page through the Help tour</td><td><kbd>→</kbd> <kbd>←</kbd></td></tr>
+      <tr><td>Close the tour, or step back in a palette</td><td><kbd>esc</kbd></td></tr>
+      <tr><td>Reload the window, every pane</td><td><kbd>⌘R</kbd></td></tr>
+      <tr><td>Quick Add Task</td><td><kbd>⇧⌘Space</kbd></td></tr>
+      <tr><td>Go to Home</td><td><kbd>⇧⌘H</kbd></td></tr>
+    </table>
+    <p>Every key Orbital knows is in the <a href="keys.html">keyboard reference</a>.</p>
+  </section>
+</main>
+</body>
+</html>
+
+
+

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Finding your way · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: a bullet takes you into a row, ⌘[ brings you back */
+  .navigating-hero { --loop: 8s; }
+  .navigating-stage { position: relative; width: 340px; height: 176px; }
+  .navigating-stage .win { position: absolute; inset: 0; }
+  .navigating-a { opacity: 0; }
+  .navigating-b .row.in1 { padding-left: 0; }
+  .navigating-go .dot { background: var(--ink); }
+  .navigating-stage .ptr { left: 22px; top: 90px; opacity: 0; }
+  .navigating-hero .cap { position: absolute; right: 14%; bottom: 24%; }
+  .mg.in .navigating-a { animation: navigating-a var(--loop) infinite; }
+  .mg.in .navigating-b { animation: navigating-b var(--loop) infinite; }
+  .mg.in .navigating-stage .ptr { animation: navigating-ptr var(--loop) infinite; }
+  .mg.in .navigating-go { animation: navigating-go var(--loop) infinite; }
+  @keyframes navigating-a { 0%, 30% { opacity: 1; transform: none; } 36%, 62% { opacity: 0; transform: translateY(-6px); } 64% { opacity: 0; transform: translateX(-16px); } 72%, 100% { opacity: 1; transform: none; } }
+  @keyframes navigating-b { 0%, 30% { opacity: 0; transform: translateY(8px); } 38%, 62% { opacity: 1; transform: none; } 70%, 100% { opacity: 0; transform: translateX(16px); } }
+  @keyframes navigating-ptr { 0%, 4% { opacity: 0; transform: translate(170px, 70px); } 10% { opacity: 1; transform: translate(170px, 70px); } 24% { opacity: 1; transform: none; } 27% { transform: scale(.85); } 30% { opacity: 1; transform: none; } 40%, 100% { opacity: 0; transform: translate(40px, 30px); } }
+  @keyframes navigating-go { 0%, 22% { background: transparent; } 26%, 34% { background: var(--well); } 40%, 100% { background: transparent; } }
+
+  /* three ways to open elsewhere */
+  .navigating-else { --loop: 9s; gap: 28px; flex-wrap: wrap; }
+  .navigating-else figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .navigating-mini { position: relative; width: 190px; height: 118px; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
+  .navigating-mini .band { height: 18px; background: var(--well); display: flex; gap: 4px; padding: 4px 8px 0; }
+  .navigating-mini .tab { height: 14px; width: 54px; border-radius: 5px 5px 0 0; background: var(--surface); }
+  .navigating-mini .tab.new { box-shadow: inset 0 1.5px 0 var(--now); }
+  .navigating-mini .body { position: absolute; inset: 18px 0 0 0; padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+  .navigating-mini .bar { height: 6px; border-radius: 3px; background: var(--line-strong); width: var(--w); }
+  .navigating-mini .side { position: absolute; top: 18px; bottom: 0; right: 0; width: 46%; border-left: 1px solid var(--line-strong); background: var(--surface); padding: 10px; display: flex; flex-direction: column; gap: 7px; box-shadow: inset 1.5px 0 0 var(--now); }
+  .navigating-mini .float { position: absolute; right: 12px; bottom: 12px; width: 88px; height: 58px; border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-card), 0 0 0 1.5px var(--now); padding: 9px; display: flex; flex-direction: column; gap: 6px; }
+  .navigating-else figcaption { margin: 0; font-size: 13px; color: var(--muted); text-align: center; }
+  .navigating-else figcaption kbd { font-size: 12px; }
+  .mg.in .navigating-else-tab { animation: navigating-tab var(--loop) infinite; }
+  .mg.in .navigating-else-side { animation: navigating-side var(--loop) infinite; }
+  .mg.in .navigating-else-float { animation: navigating-float var(--loop) infinite; }
+  @keyframes navigating-tab { 0%, 8% { width: 0; opacity: 0; } 14%, 92% { width: 54px; opacity: 1; } 100% { width: 0; opacity: 0; } }
+  @keyframes navigating-side { 0%, 36% { width: 0; opacity: 0; } 44%, 92% { width: 46%; opacity: 1; } 100% { width: 0; opacity: 0; } }
+  @keyframes navigating-float { 0%, 64% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.04); opacity: 1; } 74%, 92% { transform: none; opacity: 1; } 100% { transform: scale(.6); opacity: 0; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 4</p>
+    <h1>Go into anything, and back</h1>
+    <p class="lead">Every row can be a page of its own. You go in with a click on its bullet and come back with <kbd>⌘[</kbd>. This chapter shows every way around: into nodes, back and forward, home, and into other panes.</p>
+    <div class="mg navigating-hero" aria-hidden="true">
+      <div class="navigating-stage">
+        <div class="win navigating-a">
+          <div class="ttl">Studio pilots</div>
+          <div class="row"><span class="dot"></span>Agenda</div>
+          <div class="row navigating-go"><span class="dot"></span>Walk through both pilots</div>
+          <div class="row"><span class="dot"></span>Next steps</div>
+        </div>
+        <div class="win navigating-b">
+          <div class="ttl">Walk through both pilots</div>
+          <div class="row"><span class="dot"></span>Onboarding buddies</div>
+          <div class="row"><span class="dot"></span>Shared cost tracking</div>
+          <div class="row in1"><span class="dot"></span><span class="bar" style="--w:120px"></span></div>
+        </div>
+        <span class="ptr"></span>
+      </div>
+      <span class="cap press" style="--at:.63">⌘[</span>
+      <p class="cap-line">A bullet goes in · ⌘[ comes back</p>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="zoom" data-short="Going in and back" data-k="zoom bullet open page back forward history">Going in and coming back</h2>
+    <div class="split">
+      <div>
+        <h3>Click a bullet to go in</h3>
+        <p>Click a row's bullet and the row becomes the page: its words are the title, its children the rows. This is called zooming in. Any node opens this way, from a bullet, a mention, a search result, a pin or a notification.</p>
+        <p>The page opens at its top. The caret waits in the draft row at the end, out of sight, and the first key you type scrolls down to it.</p>
+      </div>
+      <figure class="clip"><video data-m="navigating-zoom"></video><figcaption>A bullet goes into “Walk through both Studio pilots”; <kbd>⌘[</kbd> goes back and <kbd>⌘]</kbd> forward again.</figcaption></figure>
+    </div>
+    <h3>Back and Forward <kbd>⌘[</kbd> <kbd>⌘]</kbd></h3>
+    <p><kbd>⌘[</kbd> goes back to the page you were on, and <kbd>⌘]</kbd> forward again. They are also the arrows at the top right, and <b>Go back</b> and <b>Go forward</b> in <kbd>⌘K</kbd>. Each page keeps its own history, so going back in one pane leaves the others alone. With nothing to go back to, Back does nothing.</p>
+    <p>If the page you are on is deleted or archived, here or in Tana, the pane goes back to the page before it, and the deleted page leaves the history.</p>
+    <h3>With the keyboard</h3>
+    <p>With nothing focused, <kbd>↓</kbd> or <kbd>⇥</kbd> puts you on the first row and <kbd>↑</kbd> on the last. On a row you cannot type in, <kbd>Space</kbd> goes into it; on a reference, <kbd>Space</kbd> opens what it points at.</p>
+    <div class="try"><span class="seq">Click a bullet <i>→</i><kbd>⌘[</kbd><i>→</i><kbd>⌘]</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="page-top" data-short="Title and buttons" data-k="title header buttons back forward graph meeting home help sensitive">The title and the buttons above it</h2>
+    <p>The title says where you are. There are no breadcrumbs: Back walks the way you came.</p>
+    <h3>The title</h3>
+    <p>On a document you can edit, the title is edited in place, like a row. <kbd>↩</kbd> finishes and goes to the first row; <kbd>esc</kbd> puts back what was there. <kbd>↓</kbd> from the title goes to the first row, and <kbd>↑</kbd> from the first row comes back up. A task shows its checkbox before the title (<kbd>⌘↩</kbd> ticks it there too), and a meeting shows its full date and time. The titles of members and meetings cannot be edited.</p>
+    <h3>The buttons</h3>
+    <p>Point at a page and its buttons fade in at the top right; move away and they fade out. Each button's tooltip names its key.</p>
+    <figure class="anno wide">
+      <img data-m="navigating-header" alt="The buttons at the top right of the window: back, forward, meeting, graph, then home, sensitive items, the command palette and help">
+      <span class="pin" style="--x:54.3%;--y:64%">1</span>
+      <span class="pin" style="--x:59.6%;--y:64%">2</span>
+      <span class="pin" style="--x:64.8%;--y:64%">3</span>
+      <span class="pin" style="--x:70%;--y:64%">4</span>
+      <span class="pin" style="--x:79.6%;--y:64%">5</span>
+      <span class="pin" style="--x:84.8%;--y:64%">6</span>
+      <span class="pin" style="--x:90%;--y:64%">7</span>
+      <span class="pin" style="--x:95.1%;--y:64%">8</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Back</b> <kbd>⌘[</kbd>, greyed when there is nowhere to go.</li>
+      <li><b>Forward</b> <kbd>⌘]</kbd></li>
+      <li><b>Meeting</b> On a page that came from a meeting: opens that meeting.</li>
+      <li><b>Graph</b> Shows or hides the Graph pane of this page's links (see <a href="windows.html">Windows</a>).</li>
+      <li><b>Home</b> Opens the Work View.</li>
+      <li><b>Sensitive items</b> Shows or blurs what you marked sensitive (see <a href="sharing.html">Sharing</a>).</li>
+      <li><b>⌘K</b> Opens the command palette.</li>
+      <li><b>Help</b> The short tour of the basics.</li>
+    </ol>
+    <p>The first four belong to the page, and a button that does not apply is left out. On a list page there can be more: the switch that folds the filter pills away, the <b>Outliner</b> / <b>Table</b> switch that shows the rows as a table (see <a href="views.html">Views</a>), and <b>Clean up</b> when changed rows are waiting to move. The last four belong to the window and act on the page in front. When a window holds several pages, each page's own buttons sit in its tab bar instead.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="meeting" data-short="Pages from meetings" data-k="meeting write-up canvas window">A page that came from a meeting</h2>
+    <div class="split flip">
+      <div>
+        <p>A task that Tana's AI took from a meeting, or a note written in one, remembers where it came from. Its page shows the meeting button at the top right; the tooltip names the meeting and its day. Click it to go to the meeting.</p>
+        <p>A meeting always opens at its write-up, the notes of what was said. That is true from every route: a bullet, a search, a pin. More in <a href="meetings.html">Meetings</a>.</p>
+        <p>A canvas is different: it opens in a window of its own, on Tana's page for it, and the page you were on stays where it is.</p>
+      </div>
+      <figure class="clip"><video data-m="navigating-meeting"></video><figcaption>From a task to the meeting it came from, which opens at its write-up.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="home" data-k="home work view set as home go to home">Home and the Work View</h2>
+    <p><b>Home</b> is the window you come back to. <b>Go to Home</b> <kbd>⇧⌘H</kbd> takes the whole window there, all its panes at once. In <kbd>⌘K</kbd> it says what Home is, and while you are already there it is greyed with “Current”.</p>
+    <div class="split">
+      <div>
+        <p>Until you choose otherwise, Home is the <b>Work View</b>: the Timeline on the left and My Tasks on the right. The house button at the top of the window always opens the Work View, whatever Home is.</p>
+        <p>To make the window you have now your Home, with its panes and what each one shows, run <b>Set as Home</b> in <kbd>⌘K</kbd>. It is kept as a saved view called “Home”; remove it and Home is the Work View again. Saved views are in <a href="windows.html">Windows, panes &amp; the Graph</a>.</p>
+      </div>
+      <figure class="shot"><img data-m="navigating-home" alt="Cmd+K with home typed: Go to Home with the key Shift-Command-H and Work View, and Set as Home"><figcaption><kbd>⌘K</kbd> <b>home</b>: where Home is, and making this window Home.</figcaption></figure>
+    </div>
+    <figure class="shot wide"><img data-m="navigating-workview" alt="The Work View: the Timeline on the left, My Tasks on the right"><figcaption>The Work View: today's Timeline beside your tasks.</figcaption></figure>
+    <div class="try"><span class="seq"><kbd>⇧⌘H</kbd> from anywhere</span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="recent" data-short="Recent places" data-k="recently viewed search reopen launch">Recently viewed, and where you left off</h2>
+    <div class="split flip">
+      <div>
+        <p>Open search with <kbd>⌘S</kbd> and type nothing: the list shows <b>Recently viewed</b>, the last twenty nodes you opened, newest first. It is the quickest way back to something you just had.</p>
+        <p>Orbital also remembers where every page was. Quit and start again, and each pane opens where you left it, at the same node. The very first start opens the Work View.</p>
+      </div>
+      <figure class="shot"><img data-m="navigating-recent" alt="Search with an empty query listing Recently viewed nodes"><figcaption><kbd>⌘S</kbd> with nothing typed.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="elsewhere" data-short="Open elsewhere" data-k="new tab pane floating command option shift click">Opening a node somewhere else</h2>
+    <p>Hold a key while you open something and it opens beside what you have, not in its place.</p>
+    <div class="mg navigating-else" aria-hidden="true">
+      <figure>
+        <div class="navigating-mini"><div class="band"><span class="tab"></span><span class="tab new navigating-else-tab"></span></div><div class="body"><span class="bar" style="--w:120px"></span><span class="bar" style="--w:90px"></span><span class="bar" style="--w:140px"></span></div></div>
+        <figcaption><kbd>⌘</kbd>-click: a new tab</figcaption>
+      </figure>
+      <figure>
+        <div class="navigating-mini"><div class="band"></div><div class="body"><span class="bar" style="--w:70px"></span><span class="bar" style="--w:55px"></span><span class="bar" style="--w:80px"></span></div><div class="side navigating-else-side"><span class="bar" style="--w:50px"></span><span class="bar" style="--w:40px"></span></div></div>
+        <figcaption><kbd>⇧</kbd>-click: a pane beside</figcaption>
+      </figure>
+      <figure>
+        <div class="navigating-mini"><div class="band"></div><div class="body"><span class="bar" style="--w:120px"></span><span class="bar" style="--w:90px"></span><span class="bar" style="--w:140px"></span></div><div class="float navigating-else-float"><span class="bar" style="--w:50px"></span><span class="bar" style="--w:36px"></span></div></div>
+        <figcaption><kbd>⌥</kbd>-click: a floating pane</figcaption>
+      </figure>
+    </div>
+    <ul>
+      <li><kbd>⌘</kbd> opens it as a <b>new tab</b> in this pane, as a browser does.</li>
+      <li><kbd>⇧</kbd> opens it in a <b>new pane beside</b> this one.</li>
+      <li><kbd>⌥</kbd> opens it in a <b>floating pane</b> over the window.</li>
+    </ul>
+    <p>In the outline, hold the key and click a bullet. In <kbd>⌘K</kbd> and <kbd>⌘S</kbd>, use <kbd>⌘↩</kbd>, <kbd>⇧↩</kbd> or <kbd>⌥↩</kbd>, or hold the key and click a row; it works even before the search has answered. On a row that opens with a plain click, <kbd>⌥</kbd>-click opens it in a floating pane; <kbd>⌘</kbd>- and <kbd>⇧</kbd>-click there select rows instead (see <a href="writing.html#selection">Selecting rows</a>).</p>
+    <figure class="shot wide"><img data-m="navigating-tabs" alt="Two pages as tabs of one pane"><figcaption>Two pages as tabs in one pane: the tab names its page.</figcaption></figure>
+    <p>A place is shown in one pane at a time. Open something that is already on screen in another pane and Orbital takes you to that pane. The Library is the one page that can be open in several. Panes, tabs and saved views have their own chapter: <a href="windows.html">Windows, panes &amp; the Graph</a>.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Go back / forward</td><td><kbd>⌘[</kbd> <kbd>⌘]</kbd></td></tr>
+      <tr><td>Go to Home</td><td><kbd>⇧⌘H</kbd></td></tr>
+      <tr><td>Search, with recently viewed</td><td><kbd>⌘S</kbd></td></tr>
+      <tr><td>Open as a new tab / beside / floating</td><td><kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>⌥</kbd> + click</td></tr>
+      <tr><td>The same from ⌘K or ⌘S</td><td><kbd>⌘↩</kbd> <kbd>⇧↩</kbd> <kbd>⌥↩</kbd></td></tr>
+      <tr><td>First row / last row, with nothing focused</td><td><kbd>↓</kbd> <kbd>↑</kbd></td></tr>
+      <tr><td>Go into a read-only row or a reference</td><td><kbd>Space</kbd></td></tr>
+      <tr><td>From the title to the first row, and back</td><td><kbd>↓</kbd> <kbd>↑</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

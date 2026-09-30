@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Tasks · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: one task walking through its states. The box is the state: dashed, grey, green tick. */
+  .tasks-hero { --loop: 9s; flex-direction: column; gap: 18px; }
+  .tasks-hero .win { width: 420px; }
+  .tasks-hero .row { font-size: 15px; height: 34px; }
+  .tasks-hero .box { width: 17px; height: 17px; border-radius: 5px; }
+  .tasks-hero-box { border-style: dashed; }
+  .tasks-states { display: flex; gap: 8px; }
+  .tasks-st { font-size: 12.5px; font-weight: 600; color: var(--faint); padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); }
+  .tasks-hero .cap { position: absolute; right: calc(50% - 310px); top: 64px; }
+  .mg.in .tasks-hero-box { animation: tasks-box var(--loop) infinite; }
+  .mg.in .tasks-hero-title { animation: tasks-strike var(--loop) infinite; }
+  .mg.in .tasks-st.s1 { animation: tasks-s1 var(--loop) infinite; }
+  .mg.in .tasks-st.s2 { animation: tasks-s2 var(--loop) infinite; }
+  .mg.in .tasks-st.s3 { animation: tasks-s3 var(--loop) infinite; }
+  .mg.in .tasks-hero-box::after { animation: tasks-tickmark var(--loop) infinite; }
+  @keyframes tasks-box {
+    0%, 26% { border-style: dashed; border-color: var(--faint); background: none; transform: none; }
+    29% { transform: scale(.8); }
+    31%, 58% { border-style: solid; border-color: var(--line-strong); background: var(--line-strong); transform: none; }
+    61% { transform: scale(.75); border-style: solid; }
+    64%, 94% { border-style: solid; border-color: var(--done-soft); background: var(--done-soft); transform: none; }
+    100% { border-style: dashed; border-color: var(--faint); background: none; }
+  }
+  @keyframes tasks-tickmark { 0%, 62% { opacity: 0; } 66%, 94% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes tasks-strike { 0%, 62% { color: var(--ink); text-decoration-color: transparent; } 67%, 94% { color: var(--faint); text-decoration-color: currentColor; } 100% { color: var(--ink); text-decoration-color: transparent; } }
+  @keyframes tasks-s1 { 0%, 27% { color: var(--ink); border-color: var(--ink); } 30%, 100% { color: var(--faint); border-color: var(--line-strong); } }
+  @keyframes tasks-s2 { 0%, 28% { color: var(--faint); border-color: var(--line-strong); } 31%, 59% { color: var(--ink); border-color: var(--ink); } 62%, 100% { color: var(--faint); border-color: var(--line-strong); } }
+  @keyframes tasks-s3 { 0%, 60% { color: var(--faint); border-color: var(--line-strong); background: var(--surface); } 64%, 95% { color: #fff; border-color: var(--done-soft); background: var(--done-soft); } 100% { color: var(--faint); border-color: var(--line-strong); background: var(--surface); } }
+  .tasks-hero-box::after { content: ""; position: absolute; left: 5px; top: 1.5px; width: 4px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  /* end state, which reduced motion shows: completed */
+  .tasks-hero-box { border-style: solid; border-color: var(--done-soft); background: var(--done-soft); }
+  .tasks-hero-title { text-decoration: line-through; color: var(--faint); }
+  .tasks-st.s3 { color: #fff; border-color: var(--done-soft); background: var(--done-soft); }
+
+  /* the facts after a title move to the grey line under it when the title needs the width */
+  .tasks-fit { --loop: 8s; }
+  .tasks-fit .win { width: 480px; overflow: hidden; }
+  .mg.in .tasks-fit .win { animation: tasks-narrow var(--loop) infinite; }
+  .tasks-fit .row { font-size: 14px; }
+  .tasks-facts { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .tasks-bell { width: 11px; height: 11px; border: 1.5px solid var(--faint); border-radius: 6px 6px 2px 2px; display: inline-block; }
+  .tasks-glyph { width: 12px; height: 12px; border: 1.5px solid var(--faint); border-radius: 50% 50% 3px 3px; display: inline-block; }
+  .tasks-sub { display: flex; align-items: center; gap: 7px; height: 22px; padding-left: 28px; color: var(--muted); font-size: 12.5px; }
+  .tasks-sub .face, .tasks-fit .face { width: 18px; height: 18px; font-size: 8px; line-height: 18px; }
+  .tasks-inline { opacity: 0; }
+  .tasks-under { opacity: 1; }
+  .mg.in .tasks-inline { animation: tasks-inline var(--loop) infinite; }
+  .mg.in .tasks-under { animation: tasks-under var(--loop) infinite; }
+  @keyframes tasks-narrow { 0%, 24% { width: 480px; } 40%, 80% { width: 330px; } 96%, 100% { width: 480px; } }
+  @keyframes tasks-inline { 0%, 28% { opacity: 1; } 32%, 88% { opacity: 0; } 94%, 100% { opacity: 1; } }
+  @keyframes tasks-under { 0%, 30% { opacity: 0; transform: translateY(-4px); } 36%, 88% { opacity: 1; transform: none; } 92%, 100% { opacity: 0; } }
+  .tasks-fit .cap-line { bottom: 12px; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 6</p>
+    <h1>Tasks move from Inbox to done</h1>
+    <p class="lead">A task is a node with a state. You set the state with one key, hand the task to someone with another, and Orbital keeps every copy of it in step with Tana.</p>
+    <div class="mg tasks-hero" aria-hidden="true">
+      <div class="win">
+        <div class="row"><span class="box tasks-hero-box"></span><span class="tasks-hero-title">Send the Q3 board deck</span></div>
+        <div class="row in1"><span class="dot"></span><span class="bar" style="--w:180px"></span></div>
+        <div class="row in1"><span class="dot"></span><span class="bar" style="--w:120px"></span></div>
+      </div>
+      <span class="cap press" style="--at:.6">⌘↩</span>
+      <div class="tasks-states"><span class="tasks-st s1">Inbox</span><span class="tasks-st s2">In Progress</span><span class="tasks-st s3">Completed</span></div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="states" data-k="status inbox in progress completed later box">The four states</h2>
+    <p>Every task is in one of four states. The box in front of the title tells you which one, so you can read a list at a glance.</p>
+    <figure class="anno wide">
+      <img data-m="tasks-states" alt="A task list grouped by status: Inbox, In Progress, Completed and Later">
+      <span class="pin" style="--x:20.5%;--y:34.5%">1</span>
+      <span class="pin" style="--x:32%;--y:52.7%">2</span>
+      <span class="pin" style="--x:24.5%;--y:76.8%">3</span>
+      <span class="pin" style="--x:30%;--y:94.7%">4</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Inbox</b> A dashed box. Someone, or Tana's AI, suggested the task and nobody has taken it on yet.</li>
+      <li><b>In Progress</b> A grey box. The task is accepted and open.</li>
+      <li><b>Completed</b> A green tick, the title struck through and grey. Finished work goes quiet.</li>
+      <li><b>Later</b> Parked for now. Its marker is a small zz.</li>
+    </ol>
+    <p>Clicking a dashed box accepts the task first: it turns grey and moves to In Progress. The next click completes it. A change shows at once on every copy of the task, in every pane: the list, a page that mentions it, the Timeline.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="complete" data-k="tick done reopen clean up cmd enter">Tick it off</h2>
+          <h3>Complete <kbd>⌘↩</kbd></h3>
+      <p>With the caret in a task, press <kbd>⌘↩</kbd>. The box squashes, the tick draws in green, the title is struck through and you hear a short pop. Press it again to reopen the task. In <kbd>⌘K</kbd> the same thing is the row <b>Complete</b>, or <b>Reopen</b> on a finished task. On a page that is a task, <kbd>⌘↩</kbd> in the title works too.</p>
+      <p>In a note, <kbd>⌘↩</kbd> ticks a checkbox row the same way.</p>
+    <figure class="clip wide"><video data-m="tasks-tick"></video><figcaption>Completing a task from the keyboard, then <b>Clean up</b>.</figcaption></figure>
+    <h3>Rows stay put until Clean up</h3>
+    <p>A task you just changed keeps its place in the list, even when it now belongs in another group. Nothing jumps away while you are working on it. When rows are being held, a brush button appears in the page's header; click it, or run <b>Clean up</b> from <kbd>⌘K</kbd>, and every row slides to where it belongs. With nothing held, the <kbd>⌘K</kbd> row stays listed but grey, with the hint "Nothing to clean up".</p>
+    <div class="note">A list that reshuffles under your cursor makes you lose your place, or click the wrong row. Holding rows until you ask means the list only changes when you are ready for it. <a href="views.html">Views &amp; saved searches</a> shows the same rule for any list.</div>
+    <div class="try"><span class="seq">Click a task <i>→</i><kbd>⌘↩</kbd><i>→</i><kbd>⌘K</kbd><i>→</i> type <b>clean</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="status" data-k="set status later inbox progress">Set status</h2>
+          <p>For any state other than done, use <kbd>⌘K</kbd> <b>Set status</b>. Its hint shows the state the task is in now. It opens a short page of the four states, the current one ticked; type a few letters and press <kbd>↩</kbd>.</p>
+      <p>You can skip the page: the four choices are also folded into <kbd>⌘K</kbd> itself, so typing <b>status later</b> finds <b>Set status to Later</b> directly.</p>
+    <figure class="clip wide"><video data-m="tasks-status"></video><figcaption>An Inbox task accepted with <b>Set status</b>: the dashed box turns grey.</figcaption></figure>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>status later</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="assign" data-k="assignee assign to edit assignees unassigned">Who has it</h2>
+          <p>A task is assigned to one person, a few, or nobody. Two <kbd>⌘K</kbd> rows change that:</p>
+      <ul>
+        <li><b>Edit assignees</b> opens the list of members with the current ones ticked. <kbd>↩</kbd> on a name adds or removes that person, and the page stays open for the next one. Its hint lists who has it now.</li>
+        <li><b>Assign to …</b> hands the task to one person outright, replacing whoever had it. <b>Unassigned</b> at the top clears it. Each member is also folded into <kbd>⌘K</kbd>, as <b>Assign to Sam Okafor</b>.</li>
+      </ul>
+      <p>The list also offers <b>Agent</b>, which hands the task to a Codex agent on your Mac; see <a href="ai.html">AI &amp; agents</a>.</p>
+    <figure class="clip wide"><video data-m="tasks-assign"></video><figcaption><b>Edit assignees</b> adds Priya next to Sam.</figcaption></figure>
+    <p>If you assign someone who cannot open the task, Orbital asks what to do: <b>Grant access</b>, <b>Keep private</b>, or <b>Cancel</b>. Until it is solved, the task's grey line says "Not visible to …" in a soft rose. <a href="sharing.html">Sharing &amp; privacy</a> explains who can see what.</p>
+    <div class="try"><span class="seq">Click a task <i>→</i><kbd>⌘K</kbd><i>→</i> type <b>assign to</b> and a name <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="facts" data-k="grey line assignee audience faces bell pinned meeting agent badge">The grey line</h2>
+    <p>After a task's title come its facts, in grey: who has it, who can see it, whether you are watching it. When the title needs the room, the facts move to the grey line under it, so a long title never wraps into what looks like a second one.</p>
+    <figure class="anno wide">
+      <img data-m="tasks-facts" alt="Two task rows with their assignee, bell, audience faces and an agent badge">
+      <span class="pin" style="--x:25.3%;--y:58%">1</span>
+      <span class="pin" style="--x:32%;--y:35%">2</span>
+      <span class="pin" style="--x:14.5%;--y:50%">3</span>
+      <span class="pin" style="--x:15.5%;--y:85%">4</span>
+      <span class="pin" style="--x:94.2%;--y:70%">5</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Assignee</b> The name of whoever has the task.</li>
+      <li><b>Bell</b> You are watching it: its changes reach your Timeline and notifications. Click the bell to stop.</li>
+      <li><b>Who can see it</b> A lock glyph with a face for each person, the first four and then "+n".</li>
+      <li><b>Everyone</b> Visible to the whole workspace. Private tasks say "Private", and a space's tasks name the space.</li>
+      <li><b>Agent badge</b> A Codex agent is working on the task. It tells you what the agent is doing.</li>
+    </ol>
+    <p>The small icons stay faint until the pointer or the caret is on the row. Other facts can join the line: a tack when the task is pinned (<a href="pins.html">Pins &amp; dates</a>), and a meeting glyph when Tana's AI took the task from a meeting. Hover it for "From Leadership sync · Wed", click it to open that meeting. Which facts a list shows is up to its <b>Display</b> pill.</p>
+    <div class="mg tasks-fit" aria-hidden="true">
+      <div class="win">
+        <div class="row"><span class="box"></span><span>Prepare the offsite agenda for the leadership team</span><span class="tasks-facts tasks-inline">Sam Okafor <span class="tasks-bell"></span></span></div>
+        <div class="tasks-sub"><span class="tasks-glyph"></span><span class="faces"><span class="face" style="--hue:250">RV</span><span class="face" style="--hue:30">SO</span><span class="face" style="--hue:150">PR</span></span><span class="tasks-under">· Sam Okafor <span class="tasks-bell"></span></span></div>
+      </div>
+      <span class="cap-line">A narrow pane: the facts move under the title instead of wrapping it.</span>
+    </div>
+    <h3 id="agent">Tasks for an agent</h3>
+    <p>A task you gave to a Codex agent carries the agent badge at the end of its row. The badge says what the agent is doing: waiting to start, working, waiting for you, finished, or in need of attention. Click it to open the agent's task. When the task itself is completed, the badge turns into a grey outline, a note of what happened rather than something to act on. <a href="ai.html">AI &amp; agents</a> covers the rest.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="watching" data-k="notify bell watch notifications stop notifying default">Watching a task</h2>
+    <div class="split flip">
+      <div>
+        <p>Watching a node means its changes reach you: as a macOS notification, and as entries on your <a href="timeline.html#history">Timeline</a>. A watched node has a bell among its facts.</p>
+      <p>You do not have to set this up. Orbital watches a task you created and gave to someone else, whether they picked it up or not, because that is the work you are waiting on. A task assigned to you is yours to look at, and a task someone else made is theirs to follow, so neither is watched by default.</p>
+      <p>To choose for yourself, use <kbd>⌘K</kbd> <b>Notify on changes</b> on any node, or <b>Stop notifying</b> on a watched one. A click on the bell stops it too. Your choice always beats the rule, and it follows you to your other Macs.</p>
+    </div>
+    <figure class="shot"><img data-m="tasks-notify" alt="Cmd+K with the Notify on changes row"><figcaption><b>Notify on changes</b>, under Current node.</figcaption></figure>
+  </div>
+  <div class="try"><span class="seq">Open a note you care about <i>→</i><kbd>⌘K</kbd><i>→</i> type <b>notify</b> <i>→</i><kbd>↩</kbd></span></div>
+</section>
+
+<section class="topic">
+  <h2 id="create" data-k="quick add task new task create shift cmd space type assign">Creating tasks</h2>
+  <div class="split">
+    <div>
+      <h3>Quick Add Task <kbd>⇧⌘Space</kbd></h3>
+      <p>Press <kbd>⇧⌘Space</kbd> anywhere in Orbital, or run <b>Quick Add Task</b> from <kbd>⌘K</kbd>. A card opens over the window with one field. Type the title and press <kbd>↩</kbd>: the task is created, In Progress and assigned to you, and a note appears that opens it when clicked.</p>
+      <p>The line under the field says what you are about to make, such as "Task · Assigned to Me".</p>
+      <ul>
+        <li><kbd>↑</kbd> <kbd>↓</kbd> pick the type: plain Task, or one of your workspace's workflow types.</li>
+        <li><kbd>⇥</kbd>, or a click on that line, turns the field into <b>Assign to…</b>. Type a name, <kbd>↩</kbd> picks it and brings your title back.</li>
+        <li><kbd>esc</kbd> closes the card; <kbd>⌘K</kbd> closes it and opens the palette.</li>
+      </ul>
+    </div>
+    <figure class="clip"><video data-m="tasks-quickadd"></video><figcaption>A title, a type and an assignee, without leaving the keyboard.</figcaption></figure>
+  </div>
+  <p>With an image on the clipboard and no title typed, the card offers <b>Process image from clipboard</b>, which turns a screenshot into a task or a note (see <a href="ai.html">AI &amp; agents</a>).</p>
+  <h3>Other ways in</h3>
+  <p><kbd>⌘K</kbd> <b>Create new …</b>, or the round button in the window's bottom-right corner, makes a task or any other kind of node. In a note, type <kbd>/</kbd> and pick Task: you name the task, and the line becomes a reference to it; see <a href="writing.html">Writing in the outline</a>. An empty My Tasks list reminds you of <kbd>⇧⌘Space</kbd> too.</p>
+  <div class="try"><span class="seq"><kbd>⇧⌘Space</kbd><i>→</i> type a title <i>→</i><kbd>⇥</kbd><i>→</i> a name <i>→</i><kbd>↩</kbd><i>→</i><kbd>↩</kbd></span></div>
+</section>
+
+<section class="topic">
+  <h2 id="selection" data-k="select several multiple selection shift">Several tasks at once</h2>
+  <p>Select tasks with <kbd>⇧↓</kbd> and <kbd>⇧↑</kbd> from the row you are on, or <kbd>⌘</kbd>-click them one by one. Then open <kbd>⌘K</kbd>: it leads with a <b>Selection</b> group made for them.</p>
+      <ul>
+        <li><b>Set status for 3 tasks</b>, with the states folded in as for one task.</li>
+        <li><b>Assign 3 tasks to</b>, which gives them all to one person.</li>
+        <li>And what fits any rows, such as <b>Add 3 items to Today</b>.</li>
+      </ul>
+      <p>Rows that are not tasks are left out, and the hint says how many were skipped.</p>
+    <figure class="clip wide"><video data-m="tasks-select"></video><figcaption>Two tasks completed in one go.</figcaption></figure>
+    <div class="try"><span class="seq">Click a task <i>→</i><kbd>⇧↓</kbd><kbd>⇧↓</kbd><i>→</i><kbd>⌘K</kbd><i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Complete or reopen the task you are in</td><td><kbd>⌘↩</kbd></td></tr>
+      <tr><td>Quick Add Task, anywhere in Orbital</td><td><kbd>⇧⌘Space</kbd></td></tr>
+      <tr><td>Pick a type on the Quick Add card</td><td><kbd>↑</kbd> <kbd>↓</kbd></td></tr>
+      <tr><td>Assign to someone else on the card</td><td><kbd>⇥</kbd></td></tr>
+      <tr><td>Select the rows below or above</td><td><kbd>⇧↓</kbd> <kbd>⇧↑</kbd></td></tr>
+      <tr><td>Add a row to the selection</td><td><kbd>⌘</kbd>-click</td></tr>
+      <tr><td>Set status, Edit assignees, Assign to …, Clean up</td><td><kbd>⌘K</kbd> then the row</td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>
+
+
+
+

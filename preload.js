@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('api', {
   setWindowLayout: (doc, keys) => ipcRenderer.invoke('window:setLayout', doc, keys), // true: the window reloads into it, each page on its keys
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the shell's Trellis theme and the window behind it follow the page
   openOverlay: (page, theme) => ipcRenderer.invoke('overlay:open', page, theme), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme
+  openManual: (theme) => ipcRenderer.invoke('manual:open', theme), // the manual in a window of its own (main.js), in this page's theme
   closeOverlay: (result) => ipcRenderer.invoke('overlay:close', result), // help.html and task.html: done; { palette?: true, note?: string } for the page that asked
   onOverlayClosed: (cb) => ipcRenderer.on('overlay:closed', (_e, result) => cb(result || {})), // the page that asked hears what the overlay had to say
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser

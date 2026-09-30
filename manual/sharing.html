@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Sharing &amp; privacy · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* ---- hero: who can see a node is a field of the node, and it changes in three steps ---- */
+  .sharing-hero { --loop: 9s; flex-direction: column; gap: 22px; }
+  .sharing-card { width: 420px; }
+  .sharing-card .ttl { display: flex; align-items: center; gap: 9px; }
+  .sharing-field { display: flex; align-items: center; height: 34px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 13.5px; color: var(--muted); gap: 10px; }
+  .sharing-field svg { width: 15px; height: 15px; flex: none; }
+  .sharing-field .name { width: 80px; flex: none; }
+  .sharing-val { display: inline-grid; align-items: center; }
+  .sharing-val > span { grid-area: 1 / 1; display: flex; align-items: center; gap: 6px; color: var(--ink); }
+  .sharing-val .me { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .sharing-glyph { display: inline-grid; }
+  .sharing-glyph > svg { grid-area: 1 / 1; }
+  .sharing-s1, .sharing-s3 { opacity: 0; }
+  .sharing-steps { display: flex; gap: 10px; }
+  .sharing-steps span { font-size: 13px; padding: 5px 12px; border-radius: 999px; color: var(--muted); background: var(--surface); box-shadow: 0 0 0 1px var(--line-strong); }
+  .sharing-steps .sharing-t2 { color: var(--ink); box-shadow: 0 0 0 1.5px var(--now); } /* the end state reduced motion shows */
+  .mg.in .sharing-s1 { animation: sharing-s1 var(--loop) infinite; }
+  .mg.in .sharing-s2 { animation: sharing-s2 var(--loop) infinite; }
+  .mg.in .sharing-s3 { animation: sharing-s3 var(--loop) infinite; }
+  .mg.in .sharing-t1 { animation: sharing-t1 var(--loop) infinite; }
+  .mg.in .sharing-t2 { animation: sharing-t2 var(--loop) infinite; }
+  .mg.in .sharing-t3 { animation: sharing-t3 var(--loop) infinite; }
+  .mg.in .sharing-s2 .face { animation: sharing-face var(--loop) infinite; }
+  .mg.in .sharing-s2 .face:nth-child(2) { animation-delay: .12s; }
+  .mg.in .sharing-s2 .face:nth-child(3) { animation-delay: .24s; }
+  @keyframes sharing-s1 { 0%, 28% { opacity: 1; } 32%, 96% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes sharing-s2 { 0%, 30% { opacity: 0; } 34%, 61% { opacity: 1; } 65%, 100% { opacity: 0; } }
+  @keyframes sharing-s3 { 0%, 63% { opacity: 0; } 67%, 96% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes sharing-face { 0%, 31% { transform: scale(.4); } 36%, 100% { transform: none; } }
+  @keyframes sharing-t1 { 0%, 28% { color: var(--ink); box-shadow: 0 0 0 1.5px var(--now); } 32%, 96% { color: var(--muted); box-shadow: 0 0 0 1px var(--line-strong); } 100% { color: var(--ink); box-shadow: 0 0 0 1.5px var(--now); } }
+  @keyframes sharing-t2 { 0%, 30% { color: var(--muted); box-shadow: 0 0 0 1px var(--line-strong); } 34%, 61% { color: var(--ink); box-shadow: 0 0 0 1.5px var(--now); } 65%, 100% { color: var(--muted); box-shadow: 0 0 0 1px var(--line-strong); } }
+  @keyframes sharing-t3 { 0%, 63% { color: var(--muted); box-shadow: 0 0 0 1px var(--line-strong); } 67%, 96% { color: var(--ink); box-shadow: 0 0 0 1.5px var(--now); } 100% { color: var(--muted); box-shadow: 0 0 0 1px var(--line-strong); } }
+
+  /* ---- the mark follows you, the eye stays on this Mac ---- */
+  .sharing-eye { --loop: 8s; gap: 22px; flex-wrap: wrap; }
+  .sharing-mac { width: 230px; padding: 12px 14px; }
+  .sharing-mac .lbl { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .sharing-mac .lbl svg { width: 16px; height: 16px; color: var(--muted); }
+  .sharing-mac .row { font-size: 13px; height: 26px; }
+  .sharing-blur { display: inline-grid; } .sharing-blur > * { grid-area: 1 / 1; align-self: center; }
+  .sharing-blur .bar { width: 120px; }
+  .sharing-left .sharing-blur .bar, .sharing-right .sharing-blur .w { opacity: 0; } /* the end state: shown on this Mac, hidden on the other */
+  .sharing-left .eye-off { opacity: 0; }
+  .sharing-right .eye-on { opacity: 0; }
+  .sharing-icon { display: inline-grid; } .sharing-icon > svg { grid-area: 1 / 1; }
+  .sharing-mid { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); text-align: center; }
+  .sharing-mid .chip { --hue: 250; }
+  .sharing-eye .cap { position: absolute; left: calc(50% - 300px); top: 18px; }
+  .mg.in .sharing-left .sharing-blur .bar { animation: sharing-off var(--loop) infinite; }
+  .mg.in .sharing-left .sharing-blur .w { animation: sharing-on var(--loop) infinite; }
+  .mg.in .sharing-left .eye-off { animation: sharing-off var(--loop) infinite; }
+  .mg.in .sharing-left .eye-on { animation: sharing-on var(--loop) infinite; }
+  @keyframes sharing-off { 0%, 44% { opacity: 1; } 46%, 94% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes sharing-on { 0%, 44% { opacity: 0; } 46%, 94% { opacity: 1; } 100% { opacity: 0; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 14</p>
+    <h1>Decide who sees what</h1>
+    <p class="lead">Every node says who can see it, right under its title. You change that in place, move a node to where the right people are, and keep private things private on your own screen, even while someone looks over your shoulder.</p>
+    <div class="mg sharing-hero" aria-hidden="true">
+      <div class="win sharing-card">
+        <div class="ttl"><span class="box"></span>Prepare the offsite agenda</div>
+        <div class="sharing-field">
+          <span class="sharing-glyph"><svg class="sharing-s1" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="7" width="10" height="7" rx="2"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg><svg class="sharing-s2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13.5c.5-2.4 2.2-3.6 4.2-3.6s3.7 1.2 4.2 3.6"/><circle cx="11.3" cy="6" r="1.8"/><path d="M11.5 9.6c1.5.1 2.5 1.2 2.9 3"/></svg><svg class="sharing-s3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 2 1.8 10 0 12M8 2c-1.8 2-1.8 10 0 12"/></svg></span>
+          <span class="name">Visible to</span>
+          <span class="sharing-val">
+            <span class="sharing-s1"><span class="me">Robin Vega</span></span>
+            <span class="sharing-s2"><span class="faces"><span class="face" style="--hue:250">RV</span><span class="face" style="--hue:30">SO</span><span class="face" style="--hue:150">PR</span></span></span>
+            <span class="sharing-s3">Everyone</span>
+          </span>
+        </div>
+        <div class="row in1"><span class="dot"></span><span class="bar" style="--w:180px"></span></div>
+        <div class="row in1"><span class="dot"></span><span class="bar" style="--w:130px"></span></div>
+      </div>
+      <div class="sharing-steps"><span class="sharing-t1">Only me</span><span class="sharing-t2">Selected people</span><span class="sharing-t3">Everyone in the space</span></div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="visible" data-short="Who can see it" data-k="visible to audience faces everyone private only me anyone with the link">Who can see a node</h2>
+    <p>Right under the title of a document, the <b>Visible to</b> field answers the question before you share anything. It shows the audience's glyph and then:</p>
+    <ul>
+      <li><b>your own name</b> when only you can see it,</li>
+      <li><b>one person's name</b>, or a <b>face per person</b> when a few people can, with a count past a handful,</li>
+      <li><b>Everyone</b>, or the <b>space's name</b>, when the audience is everyone in the workspace or in that space,</li>
+      <li><b>Anyone with the link</b> after that, when link sharing is on in Tana.</li>
+    </ul>
+    <p>Hover the field for the audience in words: <b>Visible only to you</b>, <b>Visible to selected people</b>, <b>Visible to space members</b> (named, as in “Visible to members of Studio LT”) or <b>Visible to everyone</b>. The same words are used wherever Orbital describes an audience.</p>
+    <figure class="shot wide"><img data-m="sharing-visible" alt="A task's fields: Assigned to Sam Okafor, Visible to three faces"><figcaption>Sam has this task, and Robin, Sam and Priya can see it.</figcaption></figure>
+    <div class="split flip">
+      <div>
+        <p>In a list, each row's grey line says the same in short: the glyph and the faces, or the audience's words.</p>
+        <p>Click the field, or press <kbd>↩</kbd> or <kbd>Space</kbd> on it, to change who can see the node. On a meeting's write-up it changes the meeting's audience. A sensitive page, a chat and a saved search have no Visible to field; a chat says who can see it in one grey line at its top.</p>
+      </div>
+      <figure class="shot"><img data-m="sharing-rows" alt="Library rows with the audience on each row's grey line"><figcaption>The audience on a row's grey line.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="edit" data-short="Edit visibility" data-k="edit visibility only me selected people inherit add participants share">Change who can see it</h2>
+    <div class="split">
+      <div>
+        <p>Run <b>Edit visibility</b> in <kbd>⌘K</kbd> (under Current node), or click the Visible to field. It offers what Tana lets you set on this node:</p>
+        <ul>
+          <li><b>Only me</b>: private to you.</li>
+          <li><b>Selected people …</b>: you pick who.</li>
+          <li><b>Inherit: Visible to members of Studio LT</b>: whoever can see the space the node lives in. The row names that audience.</li>
+        </ul>
+        <p>A choice Orbital cannot check with Tana is not offered, and a row that cannot run yet says why.</p>
+      </div>
+      <figure class="shot"><img data-m="sharing-options" alt="The Edit visibility page: Only me, Selected people, Inherit: Visible to members of Studio LT"><figcaption>The three audiences a node can have.</figcaption></figure>
+    </div>
+    <h3>Selected people …</h3>
+    <p>Lists the people in your workspace, with those who can already see the node first. Type to narrow, <kbd>↩</kbd> ticks or unticks a person, and <b>Apply selected people</b> saves the list. <b>Back to visibility</b> returns to the three choices. <b>Add participants …</b> in <kbd>⌘K</kbd> goes straight to this list.</p>
+    <figure class="clip wide"><video data-m="sharing-edit"></video><figcaption>Adding Tomas: <b>Selected people …</b>, tick him, <b>Apply selected people</b>. A fourth face joins the field.</figcaption></figure>
+    <div class="note">A change of audience is not in <kbd>⌘Z</kbd>'s history: it is shown to you before it happens, so you undo it by choosing again.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>visibility</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="assign" data-short="Assigned but can't see it" data-k="grant access keep private cancel can't see assign not visible pill">Assigning someone who can't see it</h2>
+    <div class="split">
+      <div>
+        <p>Assign a task to someone outside its audience and Orbital asks at once, the way Tana does: “Tomas Ilves can't see this”.</p>
+        <ul>
+          <li><b>Grant access</b> (<kbd>↩</kbd>) shares the task with them.</li>
+          <li><b>Keep private</b> (<kbd>esc</kbd>) leaves the audience as it is.</li>
+          <li><b>Cancel</b> takes the assignment back.</li>
+        </ul>
+        <p>When the audience comes from a space, Grant access is greyed: widening it is the space's business, so move the task instead.</p>
+      </div>
+      <figure class="shot"><img data-m="sharing-ask" alt="Tomas Ilves can't see this: Grant access, Keep private, Cancel, and Tana's sentence under them"><figcaption>The question, on the card you assigned from.</figcaption></figure>
+    </div>
+    <figure class="shot wide"><img data-m="sharing-ghost" alt="Visible to with a dashed + Tomas Ilves pill after the faces"><figcaption>Kept private: Tomas shows as a dashed pill after the faces.</figcaption></figure>
+    <p>Whatever you answered, someone assigned but shut out stays visible as a dashed <b>+ Name</b> pill in Visible to. Click the pill to share the task with that person.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="move" data-short="Move to a space" data-k="move to space library before after audience preview">Move it to a space, or to the Library</h2>
+    <div class="split">
+      <div>
+        <p>Where a node lives decides who can see it when it inherits its audience. <b>Move to …</b> lists your spaces and the Library, and folds them into <kbd>⌘K</kbd> itself: type <b>move to studio</b> and <b>Move to Studio LT</b> is right there. <b>Move to Library</b> takes the node out of its space.</p>
+        <p>Before anything moves, Orbital shows who can see the node now and who will afterwards, as two grey lines: <b>Before:</b> who can see it now, and <b>After:</b> who will, each an audience such as “Visible to everyone”. Then choose <b>Move to …</b> or <b>Cancel</b>.</p>
+      </div>
+      <figure class="shot"><img data-m="sharing-move" alt="Moving to Studio LT: Before Everyone, After Studio LT, then Move to Studio LT and Cancel"><figcaption>The move says what it does to the audience first.</figcaption></figure>
+    </div>
+    <p>A move is checked with Tana first: you need to be able to write in both places, a node cannot go inside itself, and a type always lives in a space. What cannot be checked is greyed, never guessed. Like visibility, a move is not undone with <kbd>⌘Z</kbd>: move it back.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="delete" data-short="Delete, restore, archive" data-k="delete recently deleted restore trash archive type archived types undo">Delete, restore and archive</h2>
+    <p><b>Delete</b> in <kbd>⌘K</kbd> deletes the node you are on, or the rows you selected. <kbd>⇧⌘⌫</kbd> does the same for the node under the caret or the selected blocks. Tana keeps what you delete, so <kbd>⌘Z</kbd> brings it straight back. On a node you cannot change, Delete is greyed with “Read-only”. If the page on screen is deleted, here or elsewhere, the pane goes back to where you were before.</p>
+    <figure class="clip wide"><video data-m="sharing-delete"></video><figcaption>A task deleted: the page goes back to the Library, and <b>Recently deleted</b> lists it, ready to restore.</figcaption></figure>
+    <div class="split">
+      <div>
+        <h3>Recently deleted</h3>
+        <p>Lists what you deleted, newest first, with how long ago. Type to narrow it; <kbd>↩</kbd> restores the node and opens it. Orbital keeps this list on this Mac for a month, up to 25 nodes. Something deleted while Orbital was closed is not on it.</p>
+        <h3>Archive type and Archived types</h3>
+        <p>A type is archived, never deleted: on a type, <b>Archive type</b> takes it out of every list and picker, and its nodes keep it. <b>Archived types</b> lists them; <kbd>↩</kbd> unarchives one and opens it. <kbd>⌘Z</kbd> undoes an archive too.</p>
+      </div>
+      <figure class="shot"><img data-m="sharing-archived" alt="The Archived types page with one type, Retro Note, archived 5 days ago"><figcaption><b>Archived types</b>: <kbd>↩</kbd> brings one back.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="link" data-short="Copy link, Open in Tana" data-k="copy link open in tana url share">Copy link and Open in Tana</h2>
+    <div class="split">
+      <div>
+        <p><b>Copy link</b> <kbd>⌘C</kbd> copies the node's link on home.tana.inc, the one Tana itself would give you. With text selected, <kbd>⌘C</kbd> copies the text as usual; with nothing selected it copies the link. The tab's menu has <b>Copy link</b> for the page's own node.</p>
+        <p><b>Open in Tana</b> opens that link in Tana's web app, for anything Orbital does not do. On a meeting, <b>Join call</b> opens its call link.</p>
+      </div>
+      <figure class="shot"><img data-m="sharing-link" alt="Cmd+K with link typed: Link Codex task and Copy link with Command-C"><figcaption><b>Copy link</b> under Current node, with its key.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="sensitive" data-short="Sensitive nodes" data-k="sensitive blur mark as sensitive eye toggle sensitive visibility private">Keep sensitive nodes hidden</h2>
+    <p>Some nodes should not be readable on a shared screen: a salary review, a health note. <b>Mark as sensitive</b> in <kbd>⌘K</kbd> hides the node's words everywhere they appear: its row, its title, chips and links to it, tooltips. Grey bars stand where the words were. A sensitive node also stops saying who can see it, and its tab reads “Hidden”. <b>Unmark as sensitive</b> takes the mark off. With rows selected, the row reads <b>Mark 3 items as sensitive</b>.</p>
+    <figure class="clip wide"><video data-m="sharing-sensitive"></video><figcaption>Marked sensitive, the row turns to grey bars. The eye in the header shows it, and hides it again.</figcaption></figure>
+    <h3>The eye, or Toggle sensitive visibility</h3>
+    <p>The eye in the window's header shows sensitive nodes, and hides them again. The crossed eye means sensitive nodes are hidden. <b>Toggle sensitive visibility</b> in <kbd>⌘K</kbd> does the same, its hint saying <b>Hidden</b> or <b>Shown</b>.</p>
+    <div class="mg sharing-eye" aria-hidden="true">
+      <div class="win sharing-mac sharing-left">
+        <div class="lbl">This Mac<span class="sharing-icon"><svg class="eye-off" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5l11-11"/></svg><svg class="eye-on" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg></span></div>
+        <div class="row"><span class="dot"></span><span class="sharing-blur"><span class="w">Salary review Q4</span><span class="bar"></span></span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:120px"></span></div>
+      </div>
+      <div class="sharing-mid"><span class="chip">Sensitive</span>the mark follows you</div>
+      <div class="win sharing-mac sharing-right">
+        <div class="lbl">Your other Mac<span class="sharing-icon"><svg class="eye-off" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5l11-11"/></svg><svg class="eye-on" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg></span></div>
+        <div class="row"><span class="dot"></span><span class="sharing-blur"><span class="w">Salary review Q4</span><span class="bar"></span></span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:120px"></span></div>
+      </div>
+      <p class="cap-line">The mark follows you to every Mac · the eye only opens this one</p>
+    </div>
+    <p>The marks follow you to your other Macs. Whether they are shown does not: showing them on your laptop never shows them on the office screen. This Mac remembers the eye's position until you switch it back. Sensitive nodes are never sent to a model for translation or anything else.</p>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>sensitive</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="demo" data-short="Demo mode" data-k="demo mode made-up words fake names presentation screen share nothing saved">Demo mode</h2>
+    <p>For showing Orbital to someone without showing your work. <b>Toggle demo mode</b> in <kbd>⌘K</kbd> (hint <b>On</b> or <b>Off</b>) swaps everything that came from Tana for made-up words, on screen only.</p>
+    <figure class="clip wide"><video data-m="sharing-demo"></video><figcaption>Demo mode on, then off: every title and row becomes made-up words, and back.</figcaption></figure>
+    <ul>
+      <li>Each word becomes one made-up word, capitals kept, and the same node always reads the same, so the page still looks real.</li>
+      <li>People get a made-up name with as many words. Pictures become grey boxes with a privacy mark, and do not open.</li>
+      <li>Orbital's own words stay as they are: view and page titles, headings, commands, types, dates and field options.</li>
+      <li><b>Nothing is saved.</b> Rows cannot be edited, checkboxes are off, and anything that would write to Tana says “Demo mode is on: nothing is saved to Tana”. Quick Add Task does not open, and no notification banners appear.</li>
+    </ul>
+    <p>It switches every window at once, and this Mac remembers it until you turn it off.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="hidden" data-short="Hidden items" data-k="edit hidden items hide title prefix star mcp chats toggle">Hide titles you never want to see</h2>
+    <div class="split">
+      <div>
+        <p>Some things you never need in a list: an agent's daily output, a recurring note. <b>Edit hidden items</b> keeps a list of titles that every view and every search skips.</p>
+        <p>Type a title and press <kbd>↩</kbd> on <b>Hide "…"</b>. A whole title matches exactly (<b>Exact</b>); end it with <b>*</b> to match every title that starts that way (<b>Prefix</b>). Case does not matter. Your patterns are listed below the field; <kbd>↩</kbd> on one unhides it. The list follows you to your other Macs.</p>
+        <p>A hidden node is only left out of lists. Open it from a link and it opens as usual.</p>
+      </div>
+      <figure class="shot"><img data-m="sharing-hidden" alt="Edit hidden items with Lunch* typed: Hide Lunch* as a prefix"><figcaption><b>Lunch*</b> hides every title that starts with Lunch.</figcaption></figure>
+    </div>
+    <h3>Toggle MCP chats</h3>
+    <p>Chats that other tools start through Tana's MCP connection can crowd your lists. <b>Toggle MCP chats</b> hides them from every list and search, and shows them again; its hint says <b>Hidden</b> or <b>Shown</b>.</p>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>hidden</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Copy the node's link (with no text selected)</td><td><kbd>⌘C</kbd></td></tr>
+      <tr><td>Delete the node or the selected blocks</td><td><kbd>⇧⌘⌫</kbd></td></tr>
+      <tr><td>Bring back what you deleted or archived</td><td><kbd>⌘Z</kbd></td></tr>
+      <tr><td>Grant access, when someone assigned can't see it</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>Keep it private</td><td><kbd>esc</kbd></td></tr>
+      <tr><td>Everything else in this chapter</td><td><kbd>⌘K</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>
+

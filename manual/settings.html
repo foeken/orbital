@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Settings &amp; housekeeping · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* ---- hero: a choice made on one Mac travels through the Orbital document in Tana to the other; the window stays ---- */
+  .settings-hero { --loop: 9s; gap: 0; }
+  .settings-mac { width: 200px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .settings-mac .lbl { margin-bottom: 2px; }
+  .settings-pref { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--text); height: 22px; }
+  .settings-pref .chip { height: 20px; font-size: 11.5px; padding: 0 8px; }
+  .settings-val { display: inline-grid; } .settings-val > * { grid-area: 1 / 1; justify-self: end; }
+  .settings-local { color: var(--faint); }
+  .settings-local i { font-style: normal; font-size: 11px; }
+  .settings-doc { width: 170px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); }
+  .settings-doc .ttl { font-size: 14px; margin: 0; }
+  .settings-doc .bar { height: 6px; }
+  .settings-path { display: flex; flex-direction: column; justify-content: center; padding: 0 10px; }
+  .settings-path .arrow { width: 56px; opacity: .3; }
+  .settings-old { opacity: 0; } /* the end state: the new choice on both Macs */
+  .settings-b .settings-new { opacity: 1; }
+  .mg.in .settings-a .settings-old { animation: settings-old-a var(--loop) infinite; }
+  .mg.in .settings-a .settings-new { animation: settings-new-a var(--loop) infinite; }
+  .mg.in .settings-b .settings-old { animation: settings-old-b var(--loop) infinite; }
+  .mg.in .settings-b .settings-new { animation: settings-new-b var(--loop) infinite; }
+  .mg.in .settings-p1 .arrow { animation: settings-p1 var(--loop) infinite; }
+  .mg.in .settings-p2 .arrow { animation: settings-p2 var(--loop) infinite; }
+  .mg.in .settings-doc { animation: settings-doc var(--loop) infinite; }
+  .mg.in .settings-a .settings-pick { animation: settings-pick var(--loop) infinite; }
+  @keyframes settings-old-a { 0%, 14% { opacity: 1; } 18%, 96% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes settings-new-a { 0%, 14% { opacity: 0; } 18%, 96% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes settings-old-b { 0%, 52% { opacity: 1; } 56%, 96% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes settings-new-b { 0%, 52% { opacity: 0; } 56%, 96% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes settings-p1 { 0%, 18% { opacity: .3; } 22%, 34% { opacity: 1; } 40%, 100% { opacity: .3; } }
+  @keyframes settings-p2 { 0%, 38% { opacity: .3; } 42%, 54% { opacity: 1; } 60%, 100% { opacity: .3; } }
+  @keyframes settings-doc { 0%, 30% { box-shadow: var(--shadow-card); } 34%, 44% { box-shadow: 0 0 0 1.5px var(--now), 0 0 0 6px rgba(47, 124, 246, .15); } 50%, 100% { box-shadow: var(--shadow-card); } }
+  @keyframes settings-pick { 0%, 10% { background: transparent; } 13%, 22% { background: var(--well); } 28%, 100% { background: transparent; } }
+  .settings-pick { border-radius: 6px; margin: 0 -6px; padding: 0 6px; }
+  .settings-hero .cap-line { bottom: 10px; }
+
+  /* ---- text size: one key, every pane ---- */
+  .settings-size { --loop: 7s; gap: 26px; }
+  .settings-size .win { width: 250px; }
+  .settings-size .ttl { transform-origin: left center; }
+  .settings-size .row { transform-origin: left center; }
+  .settings-grow { transform: scale(1.12); } /* the end state */
+  .mg.in .settings-grow { animation: settings-grow var(--loop) infinite; }
+  @keyframes settings-grow { 0%, 22% { transform: none; } 30%, 54% { transform: scale(1.12); } 60%, 82% { transform: scale(1.24); } 88%, 100% { transform: scale(1.12); } }
+  .settings-size .keys { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 15</p>
+    <h1>Make it yours, everywhere</h1>
+    <p class="lead">Orbital keeps your choices in a document of its own in Tana, so the theme, the keys and the views you set on one Mac are there on the next. What belongs to one screen stays on that screen. This chapter covers those choices, and the housekeeping rows: export, reload, sync, updates and signing out.</p>
+    <div class="mg settings-hero" aria-hidden="true">
+      <div class="win settings-mac settings-a">
+        <span class="lbl">This Mac</span>
+        <div class="settings-pref settings-pick">Theme<span class="settings-val"><span class="settings-old">Light</span><span class="settings-new">Dark</span></span></div>
+        <div class="settings-pref">Hidden items<span class="chip" style="--hue:250">Lunch*</span></div>
+        <div class="settings-pref settings-local">Window size<i>1440 × 900</i></div>
+      </div>
+      <div class="settings-path settings-p1"><i class="arrow"></i></div>
+      <div class="win settings-doc">
+        <div class="ttl">Orbital</div>
+        <span>your settings, in Tana</span>
+        <span class="bar" style="--w:120px"></span><span class="bar" style="--w:90px"></span>
+      </div>
+      <div class="settings-path settings-p2"><i class="arrow"></i></div>
+      <div class="win settings-mac settings-b">
+        <span class="lbl">Your other Mac</span>
+        <div class="settings-pref">Theme<span class="settings-val"><span class="settings-old">Light</span><span class="settings-new">Dark</span></span></div>
+        <div class="settings-pref">Hidden items<span class="chip" style="--hue:250">Lunch*</span></div>
+        <div class="settings-pref settings-local">Window size<i>1280 × 800</i></div>
+      </div>
+      <p class="cap-line">Choices about your content travel · the window stays where it is</p>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="theme" data-short="Light and dark" data-k="theme dark mode light mode toggle system appearance">Light, dark, or follow macOS</h2>
+    <div class="split">
+      <div>
+        <p>Out of the box, Orbital follows macOS: light by day, dark when your Mac switches. <kbd>⌘K</kbd> has two rows under <b>Settings</b>:</p>
+        <ul>
+          <li><b>Toggle dark mode</b> (or <b>Toggle light mode</b> while dark) picks a theme and stops following macOS.</li>
+          <li><b>Toggle system dark/light mode</b> goes back to following macOS; its hint says <b>Following macOS</b> while it does.</li>
+        </ul>
+        <p>The theme reaches every window at once, and follows you to your other Macs. The dark theme is a palette of its own, charcoal and soft, not the light one turned inside out.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-themerows" alt="Cmd+K with mode typed: Toggle dark mode, Toggle demo mode, Toggle system dark/light mode, following macOS"><figcaption>The theme rows, with <b>Following macOS</b> on.</figcaption></figure>
+    </div>
+    <figure class="clip wide"><video data-m="settings-theme"></video><figcaption><b>Toggle dark mode</b>, then <b>Toggle light mode</b>.</figcaption></figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="text-size" data-short="Text size" data-k="text size zoom larger smaller reset font bigger">Text size</h2>
+    <div class="mg settings-size" aria-hidden="true">
+      <div class="win">
+        <div class="ttl settings-grow">Studio pilots</div>
+        <div class="row settings-grow"><span class="dot"></span><span class="bar" style="--w:150px"></span></div>
+        <div class="row settings-grow"><span class="dot"></span><span class="bar" style="--w:110px"></span></div>
+      </div>
+      <div class="keys"><span class="cap press" style="--at:.24">⇧⌘+</span><span class="cap press" style="--at:.56">⇧⌘+</span><span class="cap press" style="--at:.84">⇧⌘-</span></div>
+    </div>
+    <div class="split">
+      <div>
+        <p><b>Larger text</b> <kbd>⇧⌘+</kbd> and <b>Smaller text</b> <kbd>⇧⌘-</kbd> step the whole window's text up and down. <b>Reset text size</b> <kbd>⌘0</kbd> goes back to the standard size. Every pane and window follows, and this Mac remembers the size.</p>
+        <p>These three keys are fixed: they cannot be recorded over, and no other row can take them.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-textrows" alt="Cmd+K with text typed: Larger text, Smaller text, Reset text size, with their keys"><figcaption>The text size rows and their keys.</figcaption></figure>
+    </div>
+    <figure class="clip wide"><video data-m="settings-textsize"></video><figcaption>Two steps larger, one smaller, then <kbd>⌘0</kbd> resets it.</figcaption></figure>
+    <div class="try"><span class="seq"><kbd>⇧⌘+</kbd><i>→</i><kbd>⌘0</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="follows" data-short="What follows you" data-k="settings sync document orbital other mac machine local synced preferences">What follows you, and what stays on this Mac</h2>
+    <p>The first time you sign in, Orbital makes a document in Tana called <b>Orbital</b>, whose first line says what it is. It holds your choices, and every Mac you sign in on reads them from there. This Mac keeps a copy too, so the app opens with your choices before the connection is up, and a change made offline goes to Tana once you are back online.</p>
+    <p>The rule is simple: a choice about your content is the same wherever you open Orbital; a choice about this screen is not.</p>
+    <table class="keys">
+      <tr><th>Follows you to every Mac</th><th>Stays on this Mac</th></tr>
+      <tr><td>Theme, Home, saved views, recorded keys</td><td>The window's size and place, and the sidebar's width</td></tr>
+      <tr><td>Each view's filters, sort, grouping, folded sections and which facts a row shows</td><td>Which page each pane had open, and where you were in it</td></tr>
+      <tr><td>Hidden items and the MCP chats switch</td><td>Text size</td></tr>
+      <tr><td>Type, field and saved-search icons, and a type's colour</td><td>Whether sensitive nodes are shown, and demo mode</td></tr>
+      <tr><td>Sensitive marks</td><td>Recently viewed and Recently deleted</td></tr>
+      <tr><td>Which nodes you watch for changes</td><td>Your OpenAI API key and your ChatGPT sign-in</td></tr>
+      <tr><td>Auto-translate, agent assignments and the Codex hosts they run on</td><td>Answers from @Codex in a chat</td></tr>
+    </table>
+    <div class="split">
+      <div>
+        <h3>Recorded keys travel too</h3>
+        <p>A key you record with <kbd>⇧⌘K</kbd> on a <kbd>⌘K</kbd> row is saved in the Orbital document, so the same key runs the same row on your other Macs. <a href="commands.html">⌘K, the command palette</a> shows how to record one.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-record" alt="Recording keyboard shortcut for Sync: Control Command Y"><figcaption>Recording <kbd>⌃⌘Y</kbd> for <b>Sync</b>. Saved, it works on every Mac.</figcaption></figure>
+    </div>
+    <div class="note">You can open the Orbital document in Tana like any note, and delete it. Nothing is lost: the next launch writes a new one from what this Mac remembers. Two Macs that each made one before they knew of the other settle on the older one by themselves.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="pdf" data-short="Export to PDF" data-k="export pdf print save a4 document">Export to PDF</h2>
+    <div class="split">
+      <div>
+        <p><b>Export to PDF</b> (under Current node in <kbd>⌘K</kbd>) saves the document you are on as an A4 PDF, read-only documents included. Anything you were still typing is saved first. A Save dialog opens with the document's title as the file name; cancel it and nothing is written.</p>
+        <p>The PDF has the whole outline, folded rows included, with its headings, lists, marks and images, in light print typography. It leaves out what belongs to the app: buttons, the Graph, typed fields, and the contents of referenced nodes.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-pdf" alt="Cmd+K with export typed: Export to PDF under Current node"><figcaption><b>Export to PDF</b> on a note.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="reload" data-short="Reload and Sync" data-k="reload refresh sync fetch again loader">Reload and Sync</h2>
+    <div class="split">
+      <div>
+        <h3>Reload <kbd>⌘R</kbd></h3>
+        <p>Reloads the whole window, every pane (the hint says <b>Every pane</b>). Whatever you were typing is sent first, the loader plays, and every pane comes back where it was. Use it when something on screen looks stale.</p>
+        <h3>Sync</h3>
+        <p>Asks Tana again for every open view, without reloading anything. Lists already stay live on their own, so you rarely need it. It has no key out of the box; record one if you like.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-reload" alt="Cmd+K with reload typed: Reload, Command-R, Every pane"><figcaption><b>Reload</b>, under Window.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="help" data-short="Help, updates, About" data-k="help manual check for updates about orbital license version website">Help, the manual, updates and About</h2>
+    <div class="split">
+      <div>
+        <p>The <b>Help</b> group sits at the end of <kbd>⌘K</kbd>:</p>
+        <ul>
+          <li><b>Help</b> opens the short tour of the basics, as the <b>?</b> in the window's header does.</li>
+          <li><b>Open Manual</b> opens this manual in a window of its own, in your theme. Opening it again brings that window forward.</li>
+          <li><b>Check for updates</b> looks for a newer Orbital, as the app menu's Check for Updates… does, and says what it found. An update installs when you quit.</li>
+          <li><b>About Orbital</b> is described below.</li>
+        </ul>
+      </div>
+      <figure class="shot"><img data-m="settings-help" alt="The end of Cmd+K: Settings rows, then Help, Open Manual, About Orbital and Check for updates"><figcaption>The end of <kbd>⌘K</kbd>: Settings, then Help.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>About Orbital</h3>
+        <p>Says what Orbital is, links to its <b>Website</b> and the full <b>License</b>, and lists what it is <b>Built with</b>: Trellis for the panes, Electron for the app, Loro for live sync, each opening its own licence. <b>Good to know</b> sums up the licence in four lines, and says that Orbital is not affiliated with Tana.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-about" alt="The About Orbital page: Website, License, Built with Trellis, Electron and Loro, and Good to know"><figcaption><b>About Orbital</b>.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="account" data-short="Log in and out" data-k="log out log in sign out session tana account">Log out, and log in again</h2>
+    <div class="split">
+      <div>
+        <p><b>Log out of Tana</b> (under Settings) asks once more on a page of its own. <b>Log out</b> ends the session in every Orbital window until you log in again, and closes every canvas window. <b>Cancel</b> or <kbd>esc</kbd> steps back. Your settings stay in Tana and on this Mac, so logging back in picks up where you were.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-logout" alt="The Log out of Tana page: Log out, every window until you log in again, and Cancel"><figcaption>One more question before you are signed out.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <p>Signed out, <kbd>⌘K</kbd> leads with <b>Log in to Tana</b>, and it is the only row that works: the rest wait, greyed, until you are in. <kbd>⌘K</kbd> <kbd>↩</kbd> opens Tana's own sign-in. <a href="start.html#sign-in">First steps</a> walks through it.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-login" alt="Cmd+K while signed out: Log in to Tana first, the other rows greyed"><figcaption>Signed out: only <b>Log in to Tana</b> runs.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>log out</b> <i>→</i><kbd>↩</kbd><i>→</i><kbd>esc</kbd></span> to see the question without answering it.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Larger text</td><td><kbd>⇧⌘+</kbd></td></tr>
+      <tr><td>Smaller text</td><td><kbd>⇧⌘-</kbd></td></tr>
+      <tr><td>Reset text size</td><td><kbd>⌘0</kbd></td></tr>
+      <tr><td>Reload the window, every pane</td><td><kbd>⌘R</kbd></td></tr>
+      <tr><td>Record a key for the highlighted <kbd>⌘K</kbd> row</td><td><kbd>⇧⌘K</kbd></td></tr>
+      <tr><td>Quit (the window closing keeps Orbital in the Dock)</td><td><kbd>⌘Q</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Windows, panes &amp; the Graph · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* ---- hero: ⌘N opens a pane beside, Show graph adds the Graph, and the Graph follows the pane you click into ---- */
+  .windows-hero { --loop: 10s; flex-direction: column; gap: 18px; }
+  .windows-stage { position: relative; }
+  .windows-win { width: 600px; height: 230px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; display: flex; flex-direction: column; }
+  .windows-band { height: 22px; flex: none; background: var(--well); display: flex; gap: 6px; align-items: center; padding: 0 10px; }
+  .windows-band i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+  .windows-panes { flex: 1; display: flex; min-height: 0; }
+  .windows-pane { position: relative; overflow: hidden; flex: none; padding: 30px 14px 10px; display: flex; flex-direction: column; gap: 9px; white-space: nowrap; }
+  .windows-pane + .windows-pane { border-left: 1px solid var(--line); }
+  .windows-pane::before { content: attr(data-tab); position: absolute; left: 0; top: 0; height: 22px; padding: 0 12px; display: flex; align-items: center; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--surface); box-shadow: inset 0 -1px 0 var(--line); }
+  .windows-pane .t { font-weight: 700; color: var(--ink); font-size: 14px; }
+  .windows-pane .row { height: 18px; font-size: 12px; gap: 7px; }
+  .windows-a { flex: 1; }
+  .windows-b { width: 200px; }
+  .windows-g { width: 150px; background: var(--well); }
+  .windows-g .lbl { font-size: 9.5px; margin-top: 2px; }
+  .windows-g .set { display: flex; flex-direction: column; gap: 8px; }
+  .windows-g .set .bar { height: 6px; }
+  .windows-g .set1 { opacity: 0; position: absolute; left: 14px; top: 30px; right: 14px; }
+  .windows-b::before { box-shadow: inset 0 1.5px 0 var(--now), inset 0 -1px 0 var(--line); color: var(--ink); } /* the end state: B has the keys */
+  .windows-hero .ptr { left: 470px; top: 150px; opacity: 0; }
+  .windows-hero .cap { position: absolute; left: -58px; top: 70px; }
+  .windows-hero .windows-say { position: absolute; right: -40px; top: -18px; min-width: 0; padding: 7px 11px; font-size: 12.5px; color: var(--ink); opacity: 0; white-space: nowrap; }
+  .mg.in .windows-b { animation: windows-b var(--loop) infinite; }
+  .mg.in .windows-g { animation: windows-g var(--loop) infinite; }
+  .mg.in .windows-a::before { animation: windows-fa var(--loop) infinite; }
+  .mg.in .windows-b::before { animation: windows-fb var(--loop) infinite; }
+  .mg.in .windows-g .set1 { animation: windows-s1 var(--loop) infinite; }
+  .mg.in .windows-g .set2 { animation: windows-s2 var(--loop) infinite; }
+  .mg.in .windows-hero .ptr { animation: windows-ptr var(--loop) infinite; }
+  .mg.in .windows-say { animation: windows-say var(--loop) infinite; }
+  @keyframes windows-b { 0%, 16% { width: 0; padding-left: 0; padding-right: 0; opacity: 0; } 24%, 95% { width: 200px; padding-left: 14px; padding-right: 14px; opacity: 1; } 100% { width: 0; padding-left: 0; padding-right: 0; opacity: 0; } }
+  @keyframes windows-g { 0%, 40% { width: 0; padding-left: 0; padding-right: 0; opacity: 0; } 48%, 95% { width: 150px; padding-left: 14px; padding-right: 14px; opacity: 1; } 100% { width: 0; padding-left: 0; padding-right: 0; opacity: 0; } }
+  @keyframes windows-fa { 0%, 68% { box-shadow: inset 0 1.5px 0 var(--now), inset 0 -1px 0 var(--line); color: var(--ink); } 70%, 100% { box-shadow: inset 0 -1px 0 var(--line); color: var(--muted); } }
+  @keyframes windows-fb { 0%, 68% { box-shadow: inset 0 -1px 0 var(--line); color: var(--muted); } 70%, 100% { box-shadow: inset 0 1.5px 0 var(--now), inset 0 -1px 0 var(--line); color: var(--ink); } }
+  @keyframes windows-s1 { 0%, 69% { opacity: 1; } 72%, 100% { opacity: 0; } }
+  @keyframes windows-s2 { 0%, 69% { opacity: 0; } 73%, 100% { opacity: 1; } }
+  @keyframes windows-ptr { 0%, 56% { opacity: 0; transform: translate(-120px, 40px); } 60% { opacity: 1; transform: translate(-120px, 40px); } 67% { opacity: 1; transform: none; } 69% { transform: scale(.85); } 71% { transform: none; opacity: 1; } 80%, 100% { opacity: 0; } }
+  @keyframes windows-say { 0%, 32% { opacity: 0; transform: translateY(6px); } 35%, 46% { opacity: 1; transform: none; } 50%, 100% { opacity: 0; } }
+  .windows-steps { display: flex; gap: 26px; font-size: 13.5px; color: var(--muted); }
+  .windows-steps b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); color: var(--ink); font-size: 11.5px; margin-right: 7px; box-shadow: 0 0 0 1px var(--line-strong); }
+
+  /* ---- a canvas opens in a window of its own ---- */
+  .windows-canvas { --loop: 7s; gap: 26px; }
+  .windows-list { width: 230px; }
+  .windows-list .row { font-size: 13px; height: 26px; }
+  .windows-list .hit { border-radius: 6px; padding: 0 6px; margin: 0 -6px; }
+  .windows-board { position: relative; width: 220px; height: 150px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
+  .windows-board .band { height: 18px; background: var(--well); }
+  .windows-board .shape { position: absolute; border: 1.5px solid var(--faint); border-radius: 8px; }
+  .windows-board .s1 { left: 22px; top: 40px; width: 60px; height: 40px; }
+  .windows-board .s2 { left: 120px; top: 78px; width: 70px; height: 46px; border-radius: 50%; }
+  .windows-board .ln { position: absolute; left: 82px; top: 62px; width: 44px; height: 1.5px; background: var(--faint); transform: rotate(28deg); transform-origin: left; }
+  .windows-canvas .arrow { width: 60px; }
+  .mg.in .windows-canvas .hit { animation: windows-hit var(--loop) infinite; }
+  .mg.in .windows-board { animation: windows-board var(--loop) infinite; }
+  @keyframes windows-hit { 0%, 18% { background: transparent; } 22%, 36% { background: var(--well); } 42%, 100% { background: transparent; } }
+  @keyframes windows-board { 0%, 30% { opacity: 0; transform: translateY(10px) scale(.94); } 40%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 13</p>
+    <h1>Work in several places at once</h1>
+    <p class="lead">A window holds as many pages as you like: side by side, as tabs, or floating. Each page is a whole outliner of its own. Beside them, the Graph pane lists everything linked to the page you are in, and follows you from pane to pane.</p>
+    <div class="mg windows-hero" aria-hidden="true">
+      <div class="windows-stage">
+        <div class="windows-win">
+          <div class="windows-band"><i></i><i></i><i></i></div>
+          <div class="windows-panes">
+            <div class="windows-pane windows-a" data-tab="Leadership sync">
+              <span class="t">Leadership sync</span>
+              <div class="row"><span class="dot"></span><span class="bar" style="--w:170px"></span></div>
+              <div class="row"><span class="dot"></span><span class="bar" style="--w:120px"></span></div>
+              <div class="row"><span class="dot"></span><span class="bar" style="--w:150px"></span></div>
+            </div>
+            <div class="windows-pane windows-b" data-tab="Library">
+              <span class="t">Library</span>
+              <div class="row"><span class="box"></span><span class="bar" style="--w:110px"></span></div>
+              <div class="row"><span class="box"></span><span class="bar" style="--w:90px"></span></div>
+              <div class="row"><span class="box"></span><span class="bar" style="--w:120px"></span></div>
+            </div>
+            <div class="windows-pane windows-g" data-tab="Graph">
+              <div class="set set1"><span class="lbl">Pinned</span><span class="bar" style="--w:90px"></span><span class="bar" style="--w:70px"></span><span class="lbl">Outcomes</span><span class="bar" style="--w:80px"></span></div>
+              <div class="set set2"><span class="lbl">Mentioned in</span><span class="bar" style="--w:76px"></span><span class="bar" style="--w:96px"></span></div>
+            </div>
+          </div>
+        </div>
+        <span class="cap press" style="--at:.17">⌘N</span>
+        <div class="win windows-say">Show graph</div>
+        <span class="ptr"></span>
+      </div>
+      <div class="windows-steps"><span><b>1</b>Open a pane</span><span><b>2</b>Show the Graph</span><span><b>3</b>It follows your pane</span></div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="pages" data-short="Pages and panes" data-k="pane page window tab bar header layout one pane per place">A window is a set of pages</h2>
+    <p>Every pane in a window is a page: a complete outliner with its own view, its own place, its own Back and Forward, and its own filter. What you do in one leaves the others alone. Quit, start again or <b>Reload</b>, and every page opens where you left it.</p>
+    <figure class="anno wide">
+      <img data-m="windows-window" alt="A window with two panes: the left one has two tabs, the right one shows a document">
+      <span class="pin" style="--x:93%;--y:2.5%">1</span>
+      <span class="pin" style="--x:1.4%;--y:6.5%">2</span>
+      <span class="pin" style="--x:31%;--y:6.5%">3</span>
+      <span class="pin" style="--x:54.5%;--y:6.5%">4</span>
+      <span class="pin" style="--x:58%;--y:45%">5</span>
+      <span class="pin" style="--x:97%;--y:95.5%">6</span>
+    </figure>
+    <ol class="legend">
+      <li><b>The window's header</b> The house opens the Work View, the eye shows or hides sensitive items, then <kbd>⌘K</kbd> and Help. They act in the pane in front.</li>
+      <li><b>A tab</b> names its page. The bold one is the page in front of its pane.</li>
+      <li><b>Another tab</b> in the same pane. Click it to bring its page forward.</li>
+      <li><b>The page's buttons</b> Back, Forward and the rest show while the pointer is over the pane. The “…” opens the pane's menu.</li>
+      <li><b>The line between panes</b> Drag it to give one pane more room.</li>
+      <li><b>Create new</b> in the corner makes a new node in the pane in front.</li>
+    </ol>
+    <p>A window with one page has no tab bar at all: it looks as if there were no panes, and the page's buttons sit in the window's header. The tab bars appear once there is a second page.</p>
+    <div class="note"><b>One pane per place.</b> A node, a document or a view is shown in one pane at a time. Open something that is already on screen in another pane, from a row, a link or <kbd>⌘K</kbd>, and Orbital takes you to that pane. The Library is the one page you can have open in several.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="open" data-short="Open panes, tabs, windows" data-k="new pane new tab new floating pane new window float command n option">Open a pane, a tab or a window</h2>
+    <div class="split">
+      <div>
+        <h3>New pane <kbd>⌘N</kbd></h3>
+        <p>Opens the Library in a new pane to the right of the one you are in, and puts the keys there. The Library is where a new pane starts, because it is the one place two panes may both show.</p>
+      </div>
+      <figure class="clip"><video data-m="windows-newpane"></video><figcaption><kbd>⌘N</kbd> splits the window: the Library opens beside the page.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>New tab and New floating pane</h3>
+        <p><b>New tab</b> (hint “Beside this page”) opens the Library as a tab in the pane you are in. <b>New floating pane</b> opens it in a pane that floats over the others, which you can drag anywhere and dock later. Neither has a key out of the box; record one with <kbd>⇧⌘K</kbd> on the row.</p>
+      </div>
+      <figure class="clip"><video data-m="windows-float"></video><figcaption><kbd>⌘K</kbd> <b>New floating pane</b>.</figcaption></figure>
+    </div>
+    <div class="split">
+      <div>
+        <h3>New window <kbd>⌥⌘N</kbd></h3>
+        <p>Opens another window, a little down and to the right of this one, on the page you were on. File › New Window does the same. Each window has its own panes. Only the first window remembers its size and layout for the next launch, so a spare window never replaces your usual one.</p>
+        <p>Closing the last window keeps Orbital in the Dock. Click the Dock icon, or a notification, to get a window back; <kbd>⌘Q</kbd> quits.</p>
+      </div>
+      <figure class="shot"><img data-m="windows-cmdk" alt="Cmd+K with new typed: New tab, New pane, New window, New floating pane"><figcaption>Every way to open a page, under <b>Window</b> in <kbd>⌘K</kbd>.</figcaption></figure>
+    </div>
+    <h3>Open something straight into a new page</h3>
+    <p>Hold a key while you open a node and it lands beside what you have: <kbd>⌘</kbd> in a new tab, <kbd>⇧</kbd> in a pane beside, <kbd>⌥</kbd> in a floating pane. In <kbd>⌘K</kbd> and <kbd>⌘S</kbd> press <kbd>⌘↩</kbd>, <kbd>⇧↩</kbd> or <kbd>⌥↩</kbd> on a result; in the outline, hold the key and click a bullet. <a href="navigating.html#elsewhere">Finding your way</a> has the details.</p>
+    <figure class="clip wide"><video data-m="windows-elsewhere"></video><figcaption>From search: <kbd>⌘↩</kbd> opens a task as a new tab, then <kbd>⇧↩</kbd> opens another task in a pane beside it.</figcaption></figure>
+    <div class="try"><span class="seq"><kbd>⌘N</kbd><i>→</i><kbd>⌘/</kbd><i>→</i><kbd>⌘/</kbd></span> opens a pane and moves between the two.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="tabs" data-short="Tabs and the pane menu" data-k="tab drag dock float rename copy link refresh close pane menu">Tabs, and moving pages around</h2>
+    <div class="split">
+      <div>
+        <p>A tab names its page, so a view, a saved search or an app page under a tab drops its own heading. A document keeps its title.</p>
+        <p>Drag a tab to rearrange the window. Drop it on another pane's tab bar to make it a tab there, on the edge of a pane to dock it beside, or away from the panes to float it. The tab bars along the top also drag the whole window.</p>
+        <h3>The pane menu</h3>
+        <p>Right-click a tab, or click the <b>…</b> at the end of its bar. What the menu offers depends on the page:</p>
+      </div>
+      <figure class="shot"><img data-m="windows-menu" alt="The pane menu of a document tab: Rename, Copy link, Maximize, Float, Move, Close"><figcaption>The menu of a document's tab.</figcaption></figure>
+    </div>
+    <ul>
+      <li><b>Refresh</b> on a saved search asks its query again.</li>
+      <li><b>Rename</b> where the page's title can be typed in: the title is selected, ready for new words. <kbd>⌘K</kbd> <b>Rename</b> does the same.</li>
+      <li><b>Copy link</b> on a page that shows a node from Tana copies that node's link.</li>
+      <li><b>Save as new search</b> on a view with pills, such as the Library.</li>
+      <li><b>Delete</b> on a saved search. <kbd>⌘Z</kbd> brings it back.</li>
+      <li><b>Maximize</b>, <b>Float</b>, <b>Move</b> and <b>Close</b> for the pane itself.</li>
+    </ul>
+    <h3>Close a page <kbd>⌘W</kbd></h3>
+    <p><kbd>⌘W</kbd>, the tab's ×, the menu's <b>Close</b> or <kbd>⌘K</kbd> <b>Close pane</b> close the page. Whatever you were typing is sent to Tana first. The last page never closes on its own: <kbd>⌘W</kbd> then closes the window.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="navigate" data-short="Maximize, overview, zoom" data-k="next pane previous pane next tab maximize restore show all panes zoom back forward pinch overview">Move between panes, and zoom</h2>
+    <p>With more than one page in a window, <kbd>⌘K</kbd> gains a row for every move between them. Each has a key, pressed from inside any page.</p>
+    <div class="split">
+      <div>
+        <h3>Maximize or restore pane <kbd>⌥⌘↓</kbd></h3>
+        <p>Fills the window with the pane you are in, so a long document gets the room. Press it again to put every pane back.</p>
+        <h3>Next and previous</h3>
+        <p><b>Next pane</b> <kbd>⌘/</kbd> and <b>Previous pane</b> <kbd>⇧⌘/</kbd> move the keys between panes. <b>Next tab</b> <kbd>⇧⌘]</kbd> and <b>Previous tab</b> <kbd>⇧⌘[</kbd> move between the tabs of one pane.</p>
+      </div>
+      <figure class="clip"><video data-m="windows-maximize"></video><figcaption><kbd>⌥⌘↓</kbd> maximizes the pane, and again restores it.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Zoom and Show all panes <kbd>⌥⌘↑</kbd></h3>
+        <p>The window zooms like a map. Pinch on the trackpad to zoom in on a pane or out over all of them; a plain scroll still scrolls the page. <b>Show all panes</b> fits every pane in the window again, and <b>Zoom back</b> <kbd>⌥⌘[</kbd> and <b>Zoom forward</b> <kbd>⌥⌘]</kbd> step through where you zoomed. <kbd>esc</kbd>, when nothing else needs it, zooms out one level.</p>
+      </div>
+      <figure class="clip"><video data-m="windows-zoom"></video><figcaption>A pinch zooms in on one pane; <kbd>⌥⌘↑</kbd> shows all of them.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌥⌘↓</kbd><i>→</i> read <i>→</i><kbd>⌥⌘↓</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="saved-views" data-short="Saved views and Home" data-k="work view save view remove saved view set as home go to home house layout">Saved views, the Work View and Home</h2>
+    <p>A saved view is a whole window kept under a name: its panes, where each sits, and what each one shows. Open it later and the window is rebuilt, every pane where you saved it. Saved views follow you to your other Macs.</p>
+    <div class="split">
+      <div>
+        <h3>Save view…</h3>
+        <p>Lay the window out, then run <b>Save view…</b>. Type a name and press <kbd>↩</kbd> on <b>Save view “…”</b> (with no views to update yet, the page just says <b>Type a name for this view</b>). To update a view you already have, pick it from the list under the field instead; it keeps its name, so Home and any key you recorded for it still find it.</p>
+        <p>A page on today's day node or this week's is saved as “today” and “this week”, so the view opens on the day you open it.</p>
+      </div>
+      <figure class="shot"><img data-m="windows-saveview" alt="The Save view page, with the saved views listed under Update a saved view"><figcaption>Name a new view, or update one below.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Open one, or remove one</h3>
+        <p>Your views are listed under <b>Saved views</b> in <kbd>⌘K</kbd>. Choose one and the window reloads into it. From a second window, the view opens in your main window, which comes forward.</p>
+        <p><b>Remove saved view</b> lists them to take one off. The <b>Work View</b> is always there: save over it to change it, but it cannot be removed.</p>
+      </div>
+      <figure class="shot"><img data-m="windows-views" alt="Cmd+K with view typed: the Saved views group, then Save view and Remove saved view"><figcaption>Saved views sit in their own group in <kbd>⌘K</kbd>.</figcaption></figure>
+    </div>
+    <h3>The Work View and Home</h3>
+    <p>The <b>Work View</b> is the view Orbital starts with: today's Timeline on the left and My Tasks on the right. The house in the window's header opens it.</p>
+    <p><b>Home</b> is where <b>Go to Home</b> <kbd>⇧⌘H</kbd> takes the whole window. It is the Work View until you run <b>Set as Home</b>, which keeps this window as a saved view called “Home”. Remove that view and Home is the Work View again. <a href="navigating.html#home">Finding your way</a> shows both.</p>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>save view</b> <i>→</i><kbd>↩</kbd><i>→</i> type a name <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="graph" data-short="The Graph pane" data-k="graph links backlinks mentioned in references outcomes pinned changes show graph hide graph focus graph rail">The Graph pane</h2>
+    <p>The Graph pane lists what the document in your current pane is connected to: what is pinned to it, what came out of it, where it is mentioned, and how it changed. One window has one Graph pane, and it always shows the links of the pane you are in.</p>
+    <div class="split">
+      <div>
+        <h3>Show graph</h3>
+        <p>Run <b>Show graph</b> in <kbd>⌘K</kbd>, or click the Graph switch among the page's buttons. It shows only on a page with a document, since a view or a search has no links of its own. The pane opens beside the page, about a third of a column wide, and leaves the keys where they were. <b>Hide graph</b>, its tab's ×, or the switch again close it.</p>
+        <p>It is a pane like any other: tab it, float it, maximize it. It is kept in the window's layout and in a saved view.</p>
+      </div>
+      <figure class="clip"><video data-m="windows-showgraph"></video><figcaption><kbd>⌘K</kbd> <b>Show graph</b> beside a meeting.</figcaption></figure>
+    </div>
+    <figure class="anno wide">
+      <img data-m="windows-graph" alt="A meeting beside the Graph pane with Pinned, Outcomes, References and Mentioned in">
+      <span class="pin" style="--x:71.6%;--y:11.5%">1</span>
+      <span class="pin" style="--x:71.6%;--y:25%">2</span>
+      <span class="pin" style="--x:71.6%;--y:38.5%">3</span>
+      <span class="pin" style="--x:71.6%;--y:46.5%">4</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Pinned</b> What is pinned to this meeting or space. Where you may add pins, “Pin something …” at the end of the section opens search to pin another node here.</li>
+      <li><b>Outcomes</b> Tasks it owns, ticked off right here with <kbd>Space</kbd> or a click.</li>
+      <li><b>References</b> Documents it owns that are not tasks.</li>
+      <li><b>Mentioned in</b> Every document that mentions it: its backlinks.</li>
+    </ol>
+    <p>Backlinks come in the groups Tana's own Backlinks panel uses. A node picked in another node's field gets a section per field, named <b>Type › Field</b>, and plain mentions come last under <b>Mentioned in</b>. On a meeting's write-up, <b>Proposals</b> lists what Tana's AI proposed in the meeting's chats. <b>Changes</b>, at the bottom, is the document's history, newest first: who changed it and when, with a pen for an edit, a new page for Created and a bin for Deleted.</p>
+    <p>A section with nothing in it is left out, and a document with no links says so. Click a section's heading to fold it; it stays folded. The Graph is live: a new mention or pin shows up while you look.</p>
+    <h3>It follows the pane you are in</h3>
+    <p>Click into another pane, or move there with <kbd>⌘/</kbd>, and the Graph switches to that pane's document. A row you open from the Graph opens in that pane.</p>
+    <figure class="clip wide"><video data-m="windows-follow"></video><figcaption>Two pages and one Graph: clicking into the task on the right switches the Graph from the meeting's links to the task's.</figcaption></figure>
+    <h3>Focus graph</h3>
+    <p><b>Focus graph</b> in <kbd>⌘K</kbd> puts the keys on its first row, as a click on its tab does. It has no key out of the box: record one with <kbd>⇧⌘K</kbd>.</p>
+    <table class="keys">
+      <tr><th>In the Graph pane</th><th>Keys</th></tr>
+      <tr><td>Move between rows</td><td><kbd>↑</kbd> <kbd>↓</kbd></td></tr>
+      <tr><td>Open the row in the pane it follows</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>Tick off a task</td><td><kbd>Space</kbd></td></tr>
+      <tr><td>Fold or unfold the row's section</td><td><kbd>←</kbd> <kbd>→</kbd></td></tr>
+      <tr><td>Give the keys back to the page</td><td><kbd>esc</kbd> or <kbd>⌘←</kbd></td></tr>
+    </table>
+    <div class="tip">Who a page is for and who can see it are not in the Graph: they are the first fields under the title, <b>Assigned to</b> and <b>Visible to</b>. See <a href="sharing.html#visible">Sharing &amp; privacy</a>.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="presence" data-short="Who else is here" data-k="presence caret others collaborators colour live">See who else is on the page</h2>
+    <div class="split">
+      <div>
+        <p>When someone else has the same document open in Tana, you see their caret: a thin line in their colour at the character they are on, with their name on it. It moves as they type. Each person keeps one colour everywhere.</p>
+        <p>You show up for them the same way. While your caret is in a row, Orbital tells Tana where it is, and stops when you leave the outline or the window. Your own other tabs and Macs show too, under your name. Lists and views show no carets: only the document on screen does.</p>
+      </div>
+      <figure class="shot"><img data-m="windows-presence" alt="Two colleagues' carets, labelled Sam Okafor and Priya Raman, in the rows of a note"><figcaption>Sam and Priya are in this note with you.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="canvas" data-short="Canvases" data-k="canvas board tldraw window new canvas">Canvases open in a window of their own</h2>
+    <p>A canvas is a board to draw on, with no outline inside. Orbital does not draw it itself: a canvas opens in a window of its own, showing Tana's board. The page you came from stays where it was, and opening the same canvas again brings its window forward.</p>
+    <div class="mg windows-canvas" aria-hidden="true">
+      <div class="win windows-list">
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:120px"></span></div>
+        <div class="row hit"><span class="dot"></span>Studio org sketch</div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:100px"></span></div>
+      </div>
+      <i class="arrow"></i>
+      <div class="windows-board"><div class="band"></div><span class="shape s1"></span><span class="ln"></span><span class="shape s2"></span></div>
+    </div>
+    <div class="split">
+      <div>
+        <p>Click a canvas row, or press <kbd>↩</kbd> on it, to open its window; holding <kbd>⌘</kbd>, <kbd>⇧</kbd> or <kbd>⌥</kbd> opens the window too. <b>New canvas</b> in <kbd>⌘K</kbd> makes one at once, named the way Tana names one (“Canvas Sep 30, 2026, 2:05 PM”). <b>Canvas</b> under <b>Create new …</b> asks for a name first. Logging out closes every canvas window.</p>
+      </div>
+      <figure class="shot"><img data-m="windows-canvas" alt="Cmd+K with canvas typed: New canvas, A board, drawn by Tana"><figcaption><b>New canvas</b> opens a board in its own window.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>New pane (the Library, to the right)</td><td><kbd>⌘N</kbd></td></tr>
+      <tr><td>New window</td><td><kbd>⌥⌘N</kbd></td></tr>
+      <tr><td>Open a result in a new tab, a pane beside, a floating pane</td><td><kbd>⌘↩</kbd> <kbd>⇧↩</kbd> <kbd>⌥↩</kbd></td></tr>
+      <tr><td>Next pane / Previous pane</td><td><kbd>⌘/</kbd> <kbd>⇧⌘/</kbd></td></tr>
+      <tr><td>Next tab / Previous tab</td><td><kbd>⇧⌘]</kbd> <kbd>⇧⌘[</kbd></td></tr>
+      <tr><td>Maximize or restore pane</td><td><kbd>⌥⌘↓</kbd></td></tr>
+      <tr><td>Show all panes</td><td><kbd>⌥⌘↑</kbd></td></tr>
+      <tr><td>Zoom back / Zoom forward</td><td><kbd>⌥⌘[</kbd> <kbd>⌥⌘]</kbd></td></tr>
+      <tr><td>Close pane (the last one closes the window)</td><td><kbd>⌘W</kbd></td></tr>
+      <tr><td>Go to Home</td><td><kbd>⇧⌘H</kbd></td></tr>
+      <tr><td>Reload the window, every pane</td><td><kbd>⌘R</kbd></td></tr>
+    </table>
+    <p>Every one of these is a <kbd>⌘K</kbd> row, so <kbd>⇧⌘K</kbd> records a different key for it. Rows with no key yet, such as <b>New tab</b>, <b>Show graph</b> and <b>Focus graph</b>, can get one the same way.</p>
+  </section>
+</main>
+</body>
+</html>
+

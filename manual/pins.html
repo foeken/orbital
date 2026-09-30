@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Pins &amp; dates · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: one node, pinned to three places in turn. It stays where it lives; each place gains a line pointing at it. */
+  .pins-hero { --loop: 9s; gap: 0; }
+  .pins-stage { position: relative; width: 620px; height: 250px; }
+  .pins-node { position: absolute; left: 0; top: 92px; width: 230px; }
+  .pins-node .row { font-size: 13.5px; }
+  .pins-tack { width: 9px; height: 12px; border: 1.5px solid var(--faint); border-radius: 5px 5px 2px 2px; display: inline-block; opacity: 0; }
+  .pins-place { position: absolute; right: 0; width: 230px; min-width: 0; padding: 10px 14px; }
+  .pins-place .lbl { display: block; margin-bottom: 2px; }
+  .pins-place .row { height: 24px; font-size: 13px; }
+  .pins-p1 { top: 0; } .pins-p2 { top: 86px; } .pins-p3 { top: 172px; }
+  .pins-place .pins-add { overflow: hidden; height: 24px; }
+  .pins-place .meet { width: 12px; height: 12px; border: 1.5px solid var(--meeting); border-radius: 3px; flex: none; }
+  .pins-link { position: absolute; left: 238px; height: 1.5px; width: 166px; background: var(--now); transform-origin: left center; opacity: 0; }
+  .pins-l1 { top: 112px; transform: rotate(-24deg); } .pins-l2 { top: 124px; width: 152px; } .pins-l3 { top: 136px; transform: rotate(24deg); }
+  .mg.in .pins-l1 { animation: pins-l1 var(--loop) infinite; }
+  .mg.in .pins-l2 { animation: pins-l2 var(--loop) infinite; }
+  .mg.in .pins-l3 { animation: pins-l3 var(--loop) infinite; }
+  .mg.in .pins-p1 .pins-add { animation: pins-a1 var(--loop) infinite; }
+  .mg.in .pins-p2 .pins-add { animation: pins-a2 var(--loop) infinite; }
+  .mg.in .pins-p3 .pins-add { animation: pins-a3 var(--loop) infinite; }
+  .mg.in .pins-tack { animation: pins-tack var(--loop) infinite; }
+  @keyframes pins-l1 { 0%, 8% { opacity: 0; clip-path: inset(0 100% 0 0); } 16%, 90% { opacity: 1; clip-path: inset(0 0 0 0); } 97%, 100% { opacity: 0; } }
+  @keyframes pins-l2 { 0%, 32% { opacity: 0; clip-path: inset(0 100% 0 0); } 40%, 90% { opacity: 1; clip-path: inset(0 0 0 0); } 97%, 100% { opacity: 0; } }
+  @keyframes pins-l3 { 0%, 56% { opacity: 0; clip-path: inset(0 100% 0 0); } 64%, 90% { opacity: 1; clip-path: inset(0 0 0 0); } 97%, 100% { opacity: 0; } }
+  @keyframes pins-a1 { 0%, 14% { height: 0; opacity: 0; background: rgba(47, 124, 246, .12); } 18% { height: 24px; opacity: 1; } 30%, 92% { height: 24px; opacity: 1; background: transparent; } 98%, 100% { height: 0; opacity: 0; } }
+  @keyframes pins-a2 { 0%, 38% { height: 0; opacity: 0; background: rgba(47, 124, 246, .12); } 42% { height: 24px; opacity: 1; } 54%, 92% { height: 24px; opacity: 1; background: transparent; } 98%, 100% { height: 0; opacity: 0; } }
+  @keyframes pins-a3 { 0%, 62% { height: 0; opacity: 0; background: rgba(47, 124, 246, .12); } 66% { height: 24px; opacity: 1; } 78%, 92% { height: 24px; opacity: 1; background: transparent; } 98%, 100% { height: 0; opacity: 0; } }
+  @keyframes pins-tack { 0%, 12% { opacity: 0; transform: translateY(-5px); } 16%, 92% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
+  .pins-link { opacity: 1; } .pins-tack { opacity: 1; } /* end state, for reduced motion */
+
+  /* pin to today versus Add to Today: a list that points at the node, or a line written into a page */
+  .pins-vs { --loop: 8s; gap: 40px; align-items: stretch; }
+  .pins-vs .col { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .pins-vs .win { width: 250px; min-width: 0; padding: 12px 14px; }
+  .pins-vs .row { height: 26px; font-size: 13px; }
+  .pins-vs .chip { font-size: 11px; height: 19px; }
+  .pins-vs .lbl { text-align: center; }
+  .pins-vs .pins-say { font-size: 12.5px; color: var(--muted); max-width: 250px; text-align: center; line-height: 1.45; margin: 0; }
+    .pins-ref { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .pins-new { overflow: hidden; height: 26px; }
+  .mg.in .pins-vs .pins-new { animation: pins-new var(--loop) infinite; }
+  @keyframes pins-new { 0%, 20% { height: 0; opacity: 0; background: rgba(47, 124, 246, .12); } 28% { height: 26px; opacity: 1; background: rgba(47, 124, 246, .12); } 45%, 92% { height: 26px; opacity: 1; background: transparent; } 100% { height: 0; opacity: 0; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 8</p>
+    <h1>One node, found in many places</h1>
+    <p class="lead">A pin puts a node where you will look for it: your sidebar, a day, a meeting. The node never moves and nothing is copied, so unpinning is always safe.</p>
+    <div class="mg pins-hero" aria-hidden="true">
+      <div class="pins-stage">
+        <div class="win pins-node"><div class="row"><span class="box"></span>Prepare the offsite agenda <span class="pins-tack"></span></div><div class="row in1"><span class="dot"></span><span class="bar" style="--w:110px"></span></div></div>
+        <span class="pins-link pins-l1"></span><span class="pins-link pins-l2"></span><span class="pins-link pins-l3"></span>
+        <div class="win pins-place pins-p1"><span class="lbl">Sidebar</span><div class="row"><span class="dot"></span>Studio LT</div><div class="row pins-add"><span class="box"></span>Prepare the offsite…</div></div>
+        <div class="win pins-place pins-p2"><span class="lbl">Today</span><div class="row"><span class="box"></span>Draft the LT agenda</div><div class="row pins-add"><span class="box"></span>Prepare the offsite…</div></div>
+        <div class="win pins-place pins-p3"><span class="lbl">Leadership sync · pinned</span><div class="row pins-add"><span class="box"></span>Prepare the offsite…</div></div>
+      </div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="kinds" data-k="pin kinds sidebar date meeting personal">Three places to pin</h2>
+    <p>Every pin row lives in <kbd>⌘K</kbd>, under Current node. Type <b>pin</b> with the caret in a node, or on its page, and you see them all.</p>
+    <div class="grid">
+      <a class="card" href="#sidebar"><span class="n">Yours</span><h4>Sidebar</h4><p>Keeps a node in Tana's sidebar, on every device you use.</p></a>
+      <a class="card" href="#dates"><span class="n">Yours</span><h4>A day</h4><p>Puts the node on today, tomorrow or any date, as a plan for that day.</p></a>
+      <a class="card" href="#meetings"><span class="n">Shared</span><h4>A meeting</h4><p>Hangs the node on a meeting, where everyone in it can see it.</p></a>
+    </div>
+    <div class="split">
+      <div>
+        <p>Sidebar and day pins are personal: nobody else sees them, and you can pin a node you can only read. A pin on a meeting is part of that meeting, so it is shared with its people.</p>
+        <p>Pinning never moves or copies the node. It stays where it lives, and unpinning only takes away the pointer.</p>
+      </div>
+      <figure class="shot"><img data-m="pins-palette" alt="Cmd+K filtered to pin, showing Pin to today, Pin to date, Pin to tomorrow, Pin to meeting, Pin to current meeting and Edit pins"><figcaption>Type <b>pin</b> in <kbd>⌘K</kbd>. Each row can get a key of its own with <kbd>⇧⌘K</kbd>.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="sidebar" data-k="tack pinned mark pin to sidebar">Pin to the sidebar</h2>
+    <p>The sidebar is Tana's own list of your favourite places, the same one you see at home.tana.inc. Open <kbd>⌘K</kbd> <b>Edit pins</b> and choose <b>Pin to sidebar</b>; it is listed there, on the page that shows all of a node's pins.</p>
+    <p>A pinned node carries a small tack among its grey facts, wherever it is listed. Click the tack to open <b>Edit pins</b> for it.</p>
+    <figure class="shot wide"><img data-m="pins-mark" alt="A task row with a tack showing it is pinned, next to its bell"><figcaption>The tack after "Sam Okafor" says the task is pinned somewhere of yours.</figcaption></figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="dates" data-k="pin to today tomorrow date unpin day plan">Pin to a day</h2>
+    <p><b>Pin to today</b> and <b>Pin to tomorrow</b> put the node on that day. Once it is there, the row reads <b>Unpin from today</b> and takes it off again, so one recorded key does both. When the node is pinned to that day for everyone, unpinning mutes it for you alone.</p>
+    <div class="split">
+      <div>
+        <h3>Pin to date …</h3>
+      <p>For any other day, choose <b>Pin to date …</b> and type the day in words. The page shows the date it read before you press <kbd>↩</kbd>, so you always see what you are about to pin. It understands:</p>
+      <ul>
+        <li><b>today</b>, <b>tomorrow</b>, a weekday such as <b>fri</b> (the next one)</li>
+        <li><b>in 3 days</b>, <b>2w</b>, <b>1 month</b>, <b>next week</b> (the coming Monday)</li>
+        <li><b>12 oct</b>, <b>12/10</b> (day first), <b>2026-10-12</b>; a date without a year is the next time it comes round</li>
+      </ul>
+    </div>
+    <figure class="clip"><video data-m="pins-date"></video><figcaption>Friday, in 3 days, 12 October, next week: the date shows before you press <kbd>↩</kbd>.</figcaption></figure>
+  </div>
+  <h3>Where day pins show up</h3>
+  <p>Tasks pinned to today, or to an earlier day while still open, fill <b>Today's Tasks</b> at the top of the <a href="timeline.html#timeline">Timeline</a>. A task list grouped by <b>Responsibility</b> gathers them in a <b>Pinned</b> section, each with its days on the grey line: "Pinned to Today · 2026-09-30".</p>
+  <figure class="shot wide"><img data-m="pins-pinned" alt="A task list grouped by Responsibility with a Pinned section"><figcaption>Group by Responsibility: pinned tasks, whoever has them.</figcaption></figure>
+  <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>pin to date</b> <i>→</i><kbd>↩</kbd><i>→</i> type <b>next week</b> <i>→</i><kbd>↩</kbd></span></div>
+</section>
+
+<section class="topic">
+  <h2 id="edit" data-k="edit pins unpin where pinned">Edit pins</h2>
+  <div class="split flip">
+    <div>
+      <p><kbd>⌘K</kbd> <b>Edit pins</b> shows every place the node is pinned: the sidebar, each day, each meeting. Its hint in <kbd>⌘K</kbd> already says it, such as "Sidebar, 1 date", or "Not pinned".</p>
+      <p><kbd>↩</kbd> on a pin takes it off, and the page stays open for the next one. Under <b>Pin it</b> are the places it is not pinned yet: <b>Pin to sidebar</b>, <b>Pin to today</b>, <b>Pin to tomorrow</b> and <b>Pin to meeting …</b>. Typing narrows both halves; with nothing left the page says "No pin matches" or "Not pinned anywhere".</p>
+    </div>
+    <figure class="shot"><img data-m="pins-edit" alt="The Edit pins page listing the sidebar, today and a meeting"><figcaption>Pinned to the sidebar, today and Leadership sync.</figcaption></figure>
+  </div>
+  <div class="try"><span class="seq">Click the tack on a row <i>→</i><kbd>↩</kbd></span> to unpin it from the first place listed.</div>
+</section>
+
+<section class="topic">
+  <h2 id="meetings" data-k="pin to meeting current meeting hub">Pin to a meeting</h2>
+  <div class="split">
+    <div>
+      <p>A meeting has pinned items of its own: the documents and tasks it is about. Two rows add to them.</p>
+      <ul>
+        <li><b>Pin to current meeting</b> pins the node on the meeting you have joined right now. Its hint names the meeting, or says "No active meeting" and stays grey.</li>
+        <li><b>Pin to meeting …</b> lets you choose: your meetings from a week back to a week ahead, the next one first. Type to narrow, <kbd>↩</kbd> pins.</li>
+      </ul>
+      <p>The pinned node then shows on the meeting's page, in the <b>Pinned</b> section of its Graph pane, for everyone in the meeting. Spaces keep pins the same way. Taking one off goes through <b>Edit pins</b> and needs permission to change that meeting. <a href="meetings.html">Meetings</a> tells the rest.</p>
+    </div>
+    <figure class="shot"><img data-m="pins-meeting" alt="The Pin to which meeting page listing meetings, the next one first"><figcaption>Meetings that are on or coming first, then the ones that are over.</figcaption></figure>
+  </div>
+</section>
+
+<section class="topic">
+  <h2 id="today" data-k="today this week add to today tomorrow ctrl shift d day page week page">Today and This week</h2>
+  <p>Besides pins, Orbital keeps a page per day and per week, the way many people keep a daily note. <kbd>⌘K</kbd> <b>Today</b>, or <kbd>⌃⇧D</kbd>, opens today's page, titled with the date (2026-09-30). <b>This week</b> opens the week's page, such as "Week 40 (2026)". Each is made the first time you ask for it.</p>
+  <h3>Add to Today</h3>
+      <p>With the caret on a node, <kbd>⌘K</kbd> <b>Add to Today</b> writes a line into today's page that points at it. <b>Add to Tomorrow</b> and <b>Add to This Week</b> do the same for those pages. With rows selected they read <b>Add 3 items to Today</b>.</p>
+      <p>The tasks on today's page count as Today's Tasks on the Timeline, done ones included.</p>
+    <figure class="clip wide"><video data-m="pins-addtoday"></video><figcaption><b>Add to Today</b>, then <kbd>⌃⇧D</kbd> opens the day's page with the task on it.</figcaption></figure>
+    <div class="mg pins-vs" aria-hidden="true">
+      <div class="col">
+        <span class="lbl">Pin to today</span>
+        <div class="win"><div class="row"><span class="box"></span>Prepare the offsite agenda</div><div class="row"><span class="lbl" style="font-size:10.5px">Pinned to Today</span></div></div>
+        <p class="pins-say">The node stays as it is. Your day's list points at it, and only you see that.</p>
+      </div>
+      <div class="col">
+        <span class="lbl">Add to Today</span>
+        <div class="win"><div class="ttl" style="font-size:14px">2026-09-30</div><div class="row"><span class="dot"></span>Call the venue</div><div class="row pins-new"><span class="dot"></span><span class="pins-ref">Prepare the offsite agenda</span></div></div>
+        <p class="pins-say">A line is written into the day's page, a reference anyone who can open the page will see.</p>
+      </div>
+    </div>
+    <div class="try"><span class="seq">Click a task <i>→</i><kbd>⌘K</kbd><i>→</i> type <b>add to today</b> <i>→</i><kbd>↩</kbd><i>→</i><kbd>⌃⇧D</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="mentions" data-k="date mention at sign @ day chip">Dates in your notes</h2>
+          <p>A date can live in the text itself. Type <kbd>@</kbd> and then a day in words, like <b>friday</b> or <b>12 oct</b>. Words that read as a day put that date first in the list; <kbd>↩</kbd> writes it as a date chip, such as "Oct 2, 2026". It reads the same words as <b>Pin to date …</b>.</p>
+      <p>A date chip is a link like any other mention; <a href="writing.html">Writing in the outline</a> covers <kbd>@</kbd> in full.</p>
+    <figure class="clip wide"><video data-m="pins-mention"></video><figcaption>Typing <kbd>@</kbd> and <b>friday</b> makes a date chip.</figcaption></figure>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Open today's page</td><td><kbd>⌃⇧D</kbd></td></tr>
+      <tr><td>Pin to today, Pin to tomorrow, Pin to date …, Edit pins</td><td><kbd>⌘K</kbd> then the row</td></tr>
+      <tr><td>Give a pin row a key of its own</td><td><kbd>⇧⌘K</kbd> on the row</td></tr>
+      <tr><td>Unpin on the Edit pins page</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>A date in the text</td><td><kbd>@</kbd> then the day</td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>
+
+
+
+
