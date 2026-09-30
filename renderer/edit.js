@@ -478,11 +478,15 @@ if (savedPlace && isPlaceId(savedPlace.docId) && savedPlace.title != null) {
 }
 async function restorePlace() {
   let saved = savedPlace;
-  if (saved && saved.myTasks) { // a first launch's second pane: My Tasks, found or made once there is a connection to ask
+  // a first launch's second pane (My Tasks), or a saved view's Today or This week: found or made once there is a connection to ask
+  if (saved && (saved.myTasks || saved.today || saved.week)) {
     if (!connected && !zoom) return;
     savedPlace = null;
     if (zoom) return; // somewhere else already
-    try { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; myTasksId = n.id; } catch { return; } // the view it is on is the fallback; the id for the Home check (renderer/nodes.js), a search just made included
+    try {
+      if (saved.myTasks) { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; myTasksId = n.id; } // the id for the Home check (renderer/nodes.js), a search just made included
+      else saved = { docId: await (saved.today ? tana.todayNode() : tana.weekNode()), nodeId: null }; // a saved view's Today or This week (renderer/palette.js saveView)
+    } catch { return; } // the view it is on is the fallback
     if (zoom) return;
   }
   // Somewhere else already — a link, a notification — wins. The page seeded above is this same place, so it does not.

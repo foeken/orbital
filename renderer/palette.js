@@ -1180,6 +1180,17 @@ async function saveView(name, id) { // id: kept under that id (Set as Home), els
   if (doc) delete doc.navigation; // Trellis's zoom is how you were looking, not the view: a view opens with every pane shown
   const ids = doc ? Object.values(doc.views || {}).filter((v) => v && v.type === 'page').map((v) => String((v.params && v.params.side) || '')) : [''];
   for (const id of ids) for (const key of ['view', 'place']) keys[key + (id ? ':' + id : '')] = localStorage.getItem(key + (id ? ':' + id : ''));
+  // A page on your day or week node is Today or This week (#639): the view reopens on the day and week it is opened in.
+  // By id, found now and never made: they are your own documents (main/pins.js ownNode), not a colleague's of that title.
+  // The places are read above, before this lookup, so a page moved meanwhile is saved where it was when asked.
+  const find = (p) => Promise.resolve(p).catch(() => null);
+  const [today, week] = await Promise.all([find(tana.todayNode && tana.todayNode(0, true)), find(tana.weekNode && tana.weekNode(true))]);
+  for (const name of Object.keys(keys)) {
+    let p = null;
+    if (name.startsWith('place')) try { p = JSON.parse(keys[name]); } catch { /* not a place */ }
+    const date = p && p.docId && !p.nodeId ? (p.docId === today ? 'today' : p.docId === week ? 'week' : null) : null;
+    if (date) keys[name] = JSON.stringify({ [date]: true });
+  }
   const old = savedViews().find((v) => (id ? v.id === id : v.name === name)), keep = id || (old && old.id);
   setPref('savedViews', [...savedViews().filter((v) => v !== old), { ...(keep ? { id: keep } : {}), name, doc, keys }]);
   showNote((old ? 'Updated' : 'Saved') + ' view \u201c' + name + '\u201d');
