@@ -224,7 +224,9 @@ struct Composer: View {
                 .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
         }
         .padding(.horizontal, open ? 14 : 36) // inset as the Codex app's composer is at rest; wider while you type, as its card is
-        .padding(.bottom, 4)
+        .padding(.bottom, focused ? 14 : 4) // clear of the keyboard while you type, as the Codex app's card is
         .animation(reduceMotion ? nil : .snappy, value: open)
+        .animation(reduceMotion ? nil : .snappy, value: focused)
+        .task { if CommandLine.arguments.contains("-typing") { try? await Task.sleep(for: .seconds(1)); focused = true } } // -typing: with the keyboard up
     }
 }
