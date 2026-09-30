@@ -117,6 +117,8 @@ function visibilityFieldEl(parent) {
   else { const words = document.createElement('span'); words.className = 'fhint'; words.textContent = summary.audience.label; el.append(words); }
   if (summary.linkShared) { const link = document.createElement('span'); link.className = 'fhint'; link.textContent = 'Anyone with the link'; el.append(link); } // Tana's own switch, read-only here
   if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'fhint fwarn'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
+  const fix = summary.hiddenFrom && access === node && hiddenFromFix(node);
+  if (fix) { const link = document.createElement('button'); link.type = 'button'; link.className = 'ffix'; link.textContent = 'Fix this'; link.title = 'Share it with ' + summary.hiddenFrom; link.onclick = (e) => { e.stopPropagation(); fix(); }; el.append(link); }
   const open = tana.accessOptions ? () => openVisibility(access, summary.scope) : null;
   el.onclick = (e) => { if (open && !e.target.closest('.mention')) open(); }; // a person's mention is a link to them, as anywhere else
   el.onkeydown = (e) => {

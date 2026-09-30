@@ -851,6 +851,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .node.fullref > .children { border-left-style: dashed; }
 .node.fullref.done > .line .text { color: var(--muted); text-decoration: line-through; }
 :is(.text, .fvalue) .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.fields .ffix { margin-left: 8px; padding: 0; border: 0; background: none; font: inherit; line-height: 22px; color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; } /* "Fix this" (#622): a link, so blue */
 /* a reference that knows what it points at draws its icon in front, in the link's own colour; the underline is
    moved onto the label so it runs under the words rather than under the icon */
 :is(.text, .fvalue) .mention:has(svg) { text-decoration: none; }
@@ -1368,6 +1369,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .demo-image { background: #303436; color: #6f7479; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] :is(.text, .fvalue) .mention { color: #8fc1e1; }
+[data-theme="dark"] .fields .ffix { color: #8fc1e1; }
 [data-theme="dark"] :is(.text, .fvalue) .mention, [data-theme="dark"] :is(.text, .fvalue) .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */
 [data-theme="dark"] :is(.text, .fvalue) .mention:hover { color: #b5ddf4; }
 [data-theme="dark"] :is(.text, .fvalue) .mention.hue, [data-theme="dark"] :is(.text, .fvalue) .mention.hue .mlabel { color: oklch(0.8 0.1 var(--hue)); text-decoration-color: oklch(0.45 0.06 var(--hue)); }

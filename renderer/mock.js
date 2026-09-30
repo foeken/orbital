@@ -361,7 +361,7 @@ function mockApi() {
       };
     },
     accessOptions: async (docId) => { const writable = !!all.find((doc) => doc.id === docId)?.editable; return { sharing: writable, move: writable, deletable: writable, rules: writable ? ['me', 'people', 'inherit'] : [], roles: ['editor', 'admin'], sharingToken: 'mock-sharing', inheritAudience: { scope: 'space', title: space.text } }; },
-    setSharing: async (docId, selection) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('sharing unavailable'); if (selection.rule === 'inherit' && selection.token !== 'mock-sharing') throw new Error('Reload the audience disclosure and explicitly select inherit'); meta.restricted = selection.rule !== 'inherit'; meta.participants = selection.rule === 'people' ? selection.participants : []; meta.audience = selection.rule === 'me' ? 'only-me' : selection.rule === 'people' ? 'people' : 'unknown'; emit(docId); },
+    setSharing: async (docId, selection) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('sharing unavailable'); if (selection.rule === 'inherit' && selection.token !== 'mock-sharing') throw new Error('Reload the audience disclosure and explicitly select inherit'); meta.restricted = selection.rule !== 'inherit'; meta.participants = selection.rule === 'people' ? [{ uri: members[0].id, type: 'user', role: 'admin' }, ...selection.participants.map((p) => ({ ...p, type: 'user' }))] : []; meta.audience = selection.rule === 'me' ? 'only-me' : selection.rule === 'people' ? 'people' : 'unknown'; emit(docId); }, // you stay in it, as access.setSharing keeps its actor
     searchSpaces: async (query) => [info(space)].filter((node) => node.title.toLowerCase().includes(String(query).toLowerCase())).map((node) => ({ ...node, selectable: true })),
     previewMove: async (docId, spaceId) => {
       const doc = all.find((node) => node.id === docId);
@@ -375,7 +375,8 @@ function mockApi() {
       if (settling.delete(docId)) throw new Error('document is still settling');
       const meta = structuredClone(taskDetails.get(docId) || { assignees: [], restricted: undefined, participants: [], audience: 'unknown' });
       const people = meta.restricted ? meta.participants.map((p) => p.uri) : meta.audience === 'everyone' ? members.map((m) => m.id) : null; // main names the audience's people (sdk/node.js)
-      return { ...meta, ...(people ? { people } : {}), watched: notifyChoices[docId] ?? (meta.assignees.length > 0 && !meta.assignees.includes(members[0].id)) }; // main's default: yours, handed to somebody else
+      const hiddenFrom = meta.restricted ? meta.assignees.filter((uri) => !meta.participants.some((p) => p.uri === uri)) : []; // assigned, but shut out (sdk/node.js audienceMetadata)
+      return { ...meta, ...(people ? { people } : {}), ...(hiddenFrom.length ? { hiddenFrom } : {}), watched: notifyChoices[docId] ?? (meta.assignees.length > 0 && !meta.assignees.includes(members[0].id)) }; // main's default: yours, handed to somebody else
     },
     setState: async (docId, state) => { const doc = all.find((d) => d.id === docId && d.icon === 'task'); if (!doc) throw new Error('not a task'); mut(docId, () => { doc.state = state; doc.done = state === 'closed'; }); emit(docId); return 1; },
     setStateMany: async (docIds, state) => { const docs = docIds.map((id) => all.find((d) => d.id === id && d.icon === 'task')); if (docs.some((doc) => !doc)) throw new Error('not a task'); mut(docIds[0], () => { for (const doc of docs) { doc.state = state; doc.done = state === 'closed'; } }); emit(null); return docs.length; },

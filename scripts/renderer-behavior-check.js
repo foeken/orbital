@@ -9710,6 +9710,36 @@ checks.push(function runDemoNumbersCheck() {
   assert.doesNotMatch(masked, /Sam|Q3|plan/, 'the words around them are still masked');
   console.log('ok  demo mode keeps numbers: times and dates read as themselves');
 });
+// "Fix this" beside "Not visible to …" (#622): offered only where the page's own people are its audience and you may
+// share it, and it shares with the shut-out assignees as editors, everyone already there kept at their role.
+checks.push(async function runHiddenFromFixCheck() {
+  const ME = 'tana:user-profile:me', PETER = 'tana:user-profile:peter', SAM = 'tana:user-profile:sam', DOC = 'tana:text:doc';
+  const api = vm.runInNewContext(`
+    const calls = [], loads = [], taskMetaById = new Map(), accessById = new Map(), notifyById = new Map();
+    const me = () => ({ id: '${ME}' }), loadMembers = () => {}, loadAccess = (id) => loads.push(id);
+    const tana = { setSharing: async (id, selection) => { calls.push([id, selection]); } };
+    const run = (fn) => fn(), loadRoots = async () => {}, render = () => {}, closePalette = () => {};
+    ${functionSource('applySharing')}
+    ${functionSource('hiddenFromFix')}
+    ({ taskMetaById, accessById, calls, loads, fix: (id) => hiddenFromFix({ id }) });
+  `);
+  const own = (participants) => ({ restricted: true, hiddenFrom: [PETER], participants });
+  api.taskMetaById.set(DOC, own([{ uri: ME, type: 'user', role: 'admin' }, { uri: SAM, type: 'user', role: 'viewer' }]));
+  assert.equal(api.fix(DOC), null, 'no link until it is known that you may share the page');
+  assert.deepEqual(plain(api.loads), [DOC], 'and that is asked for');
+  api.accessById.set(DOC, { rules: ['me', 'people'] });
+  api.fix(DOC)();
+  await Promise.resolve();
+  assert.deepEqual(plain(api.calls), [[DOC, { rule: 'people', participants: [{ uri: SAM, role: 'viewer' }, { uri: PETER, role: 'editor' }] }]],
+    'Fix this adds the shut-out assignee as an editor and keeps everyone else at their role (you are the sharer, not a participant)');
+  api.taskMetaById.set('tana:text:inherit', { restricted: undefined, hiddenFrom: [PETER], participants: [] }); api.accessById.set('tana:text:inherit', { rules: ['me', 'people', 'inherit'] });
+  assert.equal(api.fix('tana:text:inherit'), null, 'an audience taken from where the page lives is not narrowed to fix it');
+  api.taskMetaById.set('tana:text:ro', own([{ uri: ME, type: 'user', role: 'editor' }])); api.accessById.set('tana:text:ro', { rules: [] });
+  assert.equal(api.fix('tana:text:ro'), null, 'nor is a page you may not share');
+  api.taskMetaById.set('tana:text:fine', { restricted: true, participants: [] }); api.accessById.set('tana:text:fine', { rules: ['people'] });
+  assert.equal(api.fix('tana:text:fine'), null, 'and a page everyone assigned can see has nothing to fix');
+  console.log('ok  Fix this: shares with the assignees a page shuts out, only where its own people are its audience (#622)');
+});
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

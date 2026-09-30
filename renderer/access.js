@@ -24,6 +24,17 @@ function applySharing(doc, selection) {
     }
   });
 }
+// "Fix this" beside "Not visible to …" (renderer/fields.js, #622): the assignees the page shuts out join its own
+// participants as editors, everyone already there kept, by the write Selected people … makes. Only where the page's
+// own list is its audience and you may change it: an audience taken from a space is that space's to widen.
+function hiddenFromFix(node) {
+  const meta = taskMetaById.get(node.id), mine = (loadMembers(), me()?.id);
+  if (!meta || meta.restricted !== true || !meta.hiddenFrom?.length || !tana.setSharing || !mine) return null;
+  loadAccess(node.id);
+  if (!accessById.get(node.id)?.rules?.includes('people')) return null;
+  const kept = meta.participants.filter((p) => p.uri !== mine).map((p) => ({ uri: p.uri, role: p.role }));
+  return () => applySharing(node, { rule: 'people', participants: [...kept, ...meta.hiddenFrom.map((uri) => ({ uri, role: 'editor' }))] });
+}
 function banSvg() { return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1" fill="none" stroke="currentColor" stroke-linejoin="round"><line x1="3.873" y1="14.127" x2="14.118" y2="3.882"></line><circle cx="9" cy="9" r="7.25"></circle></g></svg>'; }
 // doc: the document the rows are for; the page's own, unless a folded level built for another asks (renderer/palette.js)
 function visibilityRows(q, doc = palDoc) {
