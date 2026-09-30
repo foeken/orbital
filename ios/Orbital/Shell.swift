@@ -45,6 +45,7 @@ struct Shell: View {
                 }
                 .safeAreaInset(edge: .bottom) { Composer { path.append(try await engine.ask($0)) } } // a new chat, opened as it starts
             }
+            .accessibilityHidden(menu) // with the menu open, VoiceOver reads the menu, not the page pushed aside
             // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
             .mask { RoundedRectangle(cornerRadius: menu ? 44 : 0, style: .continuous).ignoresSafeArea() }
             // pushed aside, the page is a card with a hairline edge, as the ChatGPT app's is; a tap closes it. (A sheet

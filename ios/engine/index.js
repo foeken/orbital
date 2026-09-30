@@ -10,6 +10,7 @@ import { readOutline } from '../../sdk/content';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { listSidebar } from '../../sdk/pins';
 import { completedInWindow, searchQueryParams } from '../../sdk/query';
+import { everyoneOnly } from '../../sdk/access';
 import { S, isSpace, iso } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
@@ -17,11 +18,15 @@ import { issues, members, within } from './stand-ins';
 import NUCLEO from 'nucleo-ui';
 
 const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; } };
-// tana-session.js without Electron: the page's own cookies, one lookup at a time, a minute before expiry as Tana does
-let last = null, expiresAt = 0, inFlight = null, answer = 'not asked';
+// tana-session.js without Electron: the page's own cookies, a minute before expiry as Tana does. One lookup at a time of
+// each kind: a forced refresh (sdk/transport.js after a 401, which retries once) never waits on a plain lookup that may
+// hand back the same expired token (tana-session.js keeps the two apart the same way).
+let last = null, expiresAt = 0, answer = 'not asked';
+const inFlight = {};
 function fetchSession(refresh) {
+  const kind = refresh ? 'refresh' : 'plain';
   // no-store: Tana sends this with no cache headers, and a signed-out answer from before signing in must never be reused
-  inFlight ||= fetch('/api/auth/session' + (refresh ? '?refresh=true' : ''), { credentials: 'include', cache: 'no-store', headers: { accept: 'application/json' } })
+  return (inFlight[kind] ||= fetch('/api/auth/session' + (refresh ? '?refresh=true' : ''), { credentials: 'include', cache: 'no-store', headers: { accept: 'application/json' } })
     .then(async (res) => {
       if (!res.ok && res.status !== 401 && res.status !== 403) throw new Error('GET /api/auth/session failed: HTTP ' + res.status);
       const json = await res.json().catch(() => ({}));
@@ -29,8 +34,7 @@ function fetchSession(refresh) {
       answer = res.status + ' ' + (last ? 'signed in' : 'signed out' + (json.reason ? ' (' + json.reason + ')' : ''));
       expiresAt = last && last.accessToken ? (claims(last.accessToken).exp || 0) * 1000 : 0;
       return last;
-    }, (e) => { answer = String(e && e.message || e); throw e; }).finally(() => { inFlight = null; });
-  return inFlight;
+    }, (e) => { answer = String(e && e.message || e); throw e; }).finally(() => { delete inFlight[kind]; }));
 }
 async function getAccessToken({ refresh = false } = {}) {
   if (refresh || !last || Date.now() > expiresAt - 60000) await fetchSession(refresh);
@@ -52,7 +56,36 @@ function storageId() {
 
 // A graph node as a list row (ios/Orbital/Timeline.swift Row): its words, its kind for the glyph, its state for a box
 const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
-const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
+const listRow = (n) => ({ id: n.id, title: secret().has(n.id) ? PRIVATE : n.title || 'Untitled', icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
+
+// What you marked sensitive in Orbital (the settings document's sensitive: node ids) is blurred on the desktop until you
+// reveal it; the phone has no reveal, so it never shows those words: a title reads Private, an entry about one says only
+// that a private item changed, and zooming into one shows nothing of it.
+const PRIVATE = 'Private';
+const secret = () => new Set(Array.isArray(settings.get('sensitive')) ? settings.get('sensitive') : []);
+function redact(rows, hidden = secret()) {
+  if (!hidden.size) return rows;
+  return rows.map((r) => {
+    const children = r.children && redact(r.children, hidden);
+    if (!hidden.has(r.id) && !hidden.has(r.timeline && r.timeline.uri)) return { ...r, children };
+    const words = r.timeline && !r.timeline.today ? 'A private item changed' : PRIVATE;
+    return { ...r, title: words, text: words, segments: [{ text: words }], children, subtext: null, people: [],
+      ...(r.timeline ? { timeline: { ...r.timeline, note: null, change: null, detail: null } } : {}) };
+  });
+}
+
+// The documents this page opened or ticked (open, toggle) are let go of once they are no longer among the last few, as
+// the desktop lets its on-demand reads go (main/documents.js onDemand): a subscription holds the whole document, and a
+// chat can be megabytes. One the page already held for something else (the Timeline's) is left alone.
+const KEEP = 12, kept = [];
+async function hold(id) {
+  const had = !!S.client.sync.getDocument(id), doc = await within('opening ' + id, S.client.sync.subscribe(id));
+  const at = kept.indexOf(id);
+  if (at >= 0) kept.splice(at, 1);
+  if (at >= 0 || !had) kept.push(id); // newest last; one held for something else is never ours to let go
+  while (kept.length > KEEP) S.client.sync.unsubscribe(kept.shift()).catch(() => {}); // drains queued writes first
+  return doc;
+}
 // A reference with no label of its own is named by the graph, as main/documents.js resolveReferences does; each name is
 // asked once, since a chat on screen is read again every two seconds
 const names = new Map();
@@ -68,20 +101,20 @@ async function titled(rows) {
   return rows;
 }
 // A saved search's rows: its stored query asked as main/related.js searchRows asks it
-// ponytail: view.audience 'everyone' is not narrowed here (main/related.js everyoneOnly); add it if a search uses it.
 async function searchRows(doc) {
   const { query, view } = readSearch(doc);
   if (!query || !Object.keys(query).length) throw new Error('This saved search has no readable query');
   const scoped = (query.ownerUris || []).some((u) => typeof u === 'string' && isSpace(u));
   const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
   const { nodes = [] } = await S.client.graph.listNodes(searchQueryParams(query, S.me.userUri, rowLimit(view.limit), undefined, spaces));
-  return nodes.filter((n) => completedInWindow(n, view.completedWithin)).map(listRow);
+  const found = nodes.filter((n) => completedInWindow(n, view.completedWithin));
+  return (view.audience === 'everyone' ? await everyoneOnly(S.client.graph, found) : found).map(listRow);
 }
 
 // What you type in the composer, written into a chat as Tana writes a message and Tana asked to answer, as the desktop
 // sends one (main/documents.js sendChat); the answer arrives as live updates to the chat, which the chat screen reads
 async function say(id, text) {
-  const doc = await within('opening ' + id, S.client.sync.subscribe(id));
+  const doc = await hold(id);
   if (doc.writeDenied) throw new Error('You can read this chat but not write in it');
   const me = S.me.userUri, user = S.me.user || {};
   const name = (await members().catch(() => [])).find((m) => m.id === me)?.title || user.email;
@@ -94,6 +127,11 @@ async function say(id, text) {
 }
 
 let settingsRead = false;
+// no session, or another one: the old client's stream is closed rather than left reconnecting
+function drop() {
+  if (S.client) S.client.close().catch(() => {});
+  S.client = S.me = null;
+}
 
 // The icon a saved search was given with Set icon (the settings document's typeIcons, main/icons.js: search uri → Nucleo
 // label), drawn by this page into a PNG the app shows as a template image, since SwiftUI has no SVG: 54 px, the 18 px
@@ -119,9 +157,12 @@ async function iconPng(label) {
 window.orbital = {
   // true once signed in and connected; false when this web view has no Tana session
   async connect() {
-    if (!(await fetchSession(false))) { S.client = S.me = null; return false; }
+    if (!(await fetchSession(false))) { drop(); return false; }
     const c = claims(last.accessToken), user = last.userExternalId || c['urn:tana:user:id'];
-    S.me = { userUri: 'tana:user-profile:' + user, user: last.user, orgId: c.org_id || last.organizationId, orgDocUri: last.orgDocUri };
+    const me = { userUri: 'tana:user-profile:' + user, user: last.user, orgId: c.org_id || last.organizationId, orgDocUri: last.orgDocUri };
+    // the client is made for one user in one org (its peer id, the sync stream): signed in as someone else, a new one
+    if (S.me && (S.me.userUri !== me.userUri || S.me.orgId !== me.orgId)) drop();
+    S.me = me;
     if (!S.client) {
       // the whole client, sync stream included: a same-origin fetch stream here, as Tana's own client runs it
       S.client = createTanaClient({ getAccessToken, orgId: S.me.orgId, peerId: await peerId(user), storageId: storageId(), clientName: 'orbital-ios' });
@@ -135,17 +176,27 @@ window.orbital = {
     // the watch choices, from the settings document: waited for on the first read only, read in the background after that
     const fresh = within('settings document', settings.hydrate()).catch(() => {});
     if (!settingsRead) { await fresh; settingsRead = true; }
-    return JSON.stringify(await timeline.rows());
+    return JSON.stringify(redact(await timeline.rows()));
   },
   // A task's box, as the desktop's does it (renderer/edit.js toggleDone, main/documents.js doc:setDone and mutTasks): an
   // Inbox task is accepted first (In Progress), a finished one is reopened, anything else is completed. Answers the state
   // written; refuses what is not a task or is read-only to you.
+  // A write only queues, and Tana says no later, as a write-denied event (sdk/sync.js): its answer is waited for a few
+  // seconds so a refused box goes back rather than looking ticked until the next read.
+  // ponytail: 3 s for Tana's refusal; a slower one shows at the next read.
   async toggle(id) {
-    const doc = await within('opening ' + id, S.client.sync.subscribe(id)), n = readNode(doc);
+    const doc = await hold(id), n = readNode(doc);
     if (!STATE_TYPES.includes(n.stateType)) throw new Error('Only a task can be ticked off');
-    if (editable(n, S.me.userUri) === false) throw new Error('This task is read-only to you');
+    if (doc.writeDenied || editable(n, S.me.userUri) === false) throw new Error('This task is read-only to you');
     const next = n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed';
+    const refused = new Promise((resolve) => {
+      const on = (denied) => { if (denied === id) done(true); };
+      const done = (answer) => { S.client.sync.off('write-denied', on); clearTimeout(timer); resolve(answer); };
+      const timer = setTimeout(() => done(false), 3000);
+      S.client.sync.on('write-denied', on);
+    });
     setState(doc, next, S.me.userUri);
+    if (await refused) throw new Error('Tana refused the change: this task is read-only to you');
     return JSON.stringify(next);
   },
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
@@ -154,7 +205,8 @@ window.orbital = {
   // docs/CHATS.md), a saved search its results, a meeting the documents it owns (its write-up, its outcomes), anything
   // else its outline (sdk/content.js).
   async open(id) {
-    const kind = id.split(':')[1], doc = await within('opening ' + id, S.client.sync.subscribe(id)), n = readNode(doc);
+    const kind = id.split(':')[1], doc = await hold(id), n = readNode(doc);
+    if (secret().has(id)) return JSON.stringify({ title: PRIVATE, kind, rows: [], private: true });
     let rows;
     if (kind === 'chat') {
       const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), messages = doc.data.get('messages');
@@ -162,7 +214,7 @@ window.orbital = {
     } else if (kind === 'search') rows = await searchRows(doc);
     else if (kind === 'event') rows = (await S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest })).nodes.map(listRow);
     else rows = readOutline(doc);
-    return JSON.stringify({ id, title: n.title || 'Untitled', kind, rows: await titled(rows) });
+    return JSON.stringify({ title: n.title || 'Untitled', kind, rows: redact(await titled(rows)) });
   },
   // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
   // answer (main/documents.js newChat), with what you typed as its first message. Answers the chat's id.

@@ -13,4 +13,43 @@ for (const text of ['', 'abc', 'system:tana', 'x'.repeat(55), 'y'.repeat(56), 'z
 }
 assert.deepStrictEqual([...standIns.createHash('sha256').update('abc').digest()], [...crypto.createHash('sha256').update('abc').digest()]);
 assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
-console.log('ios engine check ok');
+
+// The bundle itself, when Bun is here to build it (CI has none): built as the Xcode phase builds it, then run in a vm
+// made to look like the session page, with a fake Tana that signs in and answers every call empty. It must say ready,
+// connect with a bearer token, and answer the Timeline in the desktop's row shape. Its 8 s give-ups (stand-ins.js within)
+// are made immediate, since this fake never opens the sync stream.
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm');
+const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSync(b, ['--version']).status === 0);
+(async () => {
+  if (!bun) return console.log('ios engine check ok (the bundle skipped: no Bun)');
+  const out = path.join(os.tmpdir(), 'orbital-engine-check.js');
+  const built = spawnSync(bun, [path.join(__dirname, '../ios/engine/build.js'), out], { encoding: 'utf8' });
+  assert.strictEqual(built.status, 0, 'the engine bundles: ' + built.stderr);
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const token = 'x.' + b64({ exp: Math.floor(Date.now() / 1000) + 300, 'urn:tana:user:id': 'u1', org_id: 'org_1' }) + '.y';
+  const calls = [], posted = [], store = new Map();
+  const fetch = async (url, init = {}) => {
+    calls.push(String(url));
+    if (String(url).startsWith('/api/auth/session')) return new Response(JSON.stringify({ authenticated: true, accessToken: token, userExternalId: 'u1', orgDocUri: 'tana:org:01aaaaaaaaaaaaaaaaaaaaaaaa', user: { email: 'a@b.c' } }));
+    assert.ok(new Headers(init.headers).get('authorization') === 'Bearer ' + token, 'every platform call carries the session token');
+    return new Response(new Uint8Array(0), { headers: { 'content-type': 'application/proto' } });
+  };
+  const ctx = { structuredClone, queueMicrotask, fetch, Response, Headers, Request, URL, AbortController, AbortSignal, TextEncoder, TextDecoder, atob, btoa, crypto, WebAssembly, Blob, DecompressionStream,
+    setTimeout: (f, ms, ...a) => setTimeout(f, ms === 8000 ? 1 : ms, ...a), clearTimeout, setInterval, clearInterval, console: { ...console, log() {}, warn() {}, error() {} }, Promise,
+    location: { origin: 'https://home.tana.inc', pathname: '/api/auth/session' },
+    localStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i], get length() { return store.size; } },
+    webkit: { messageHandlers: { orbital: { postMessage: (m) => posted.push(m) } } } };
+  ctx.window = ctx.globalThis = ctx.self = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(out, 'utf8'), ctx);
+  assert.deepStrictEqual(posted, ['ready'], 'the page says ready');
+  assert.strictEqual(await ctx.orbital.connect(), true, 'signed in, it connects');
+  const rows = JSON.parse(await ctx.orbital.timeline(1));
+  assert.ok(Array.isArray(rows) && rows.every((r) => typeof r.id === 'string'), 'the Timeline answers rows');
+  assert.ok(calls.some((c) => c.includes('GraphService/ListNodes')), 'the Timeline asks the graph');
+  assert.strictEqual(ctx.orbital.email(), 'a@b.c');
+  fs.rmSync(out, { force: true });
+  console.log('ios engine check ok');
+  process.exit(0); // the fake sync stream keeps retrying
+})().catch((e) => { console.error(e); process.exit(1); });

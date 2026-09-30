@@ -27,5 +27,6 @@ for (const name of USED) {
   if (!window.ICONS[name]) throw new Error('no glyph ' + name + ' in icons.js');
   write(name, window.ICONS[name]);
 }
-for (const [name, [from, width]] of Object.entries(HEAVY)) write(name, window.ICONS[from].replace(/stroke-width="[\d.]+"/g, 'stroke-width="' + width + '"'));
+for (const [name, [from, width]] of Object.entries(HEAVY)) write(name, window.ICONS[from].replace(/stroke-width="(?:[\d.]+|var\(--nucleo-stroke-width, [\d.]+\))"/g, 'stroke-width="' + width + '"'));
+// (the weight is a number, or Nucleo's CSS variable as the timeline glyph has it)
 console.log('wrote', USED.length + Object.keys(HEAVY).length, 'glyphs to', path.relative(process.cwd(), out));

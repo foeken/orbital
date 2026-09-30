@@ -81,7 +81,7 @@
 			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# the SDK and main/timeline.js, bundled into the app (ios/engine/build.js)\nBUN=\"$HOME/.bun/bin/bun\"\n[ -x \"$BUN\" ] || BUN=bun\n\"$BUN\" \"$SRCROOT/engine/build.js\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/engine.js\"\n";
+			shellScript = "# the SDK and main/timeline.js, bundled into the app (ios/engine/build.js)\nBUN=\"$HOME/.bun/bin/bun\"\n[ -x \"$BUN\" ] || BUN=bun\ncommand -v \"$BUN\" >/dev/null || { echo \"error: Bun bundles the engine: brew install oven-sh/bun/bun (ios/README.md)\"; exit 1; }\n\"$BUN\" \"$SRCROOT/engine/build.js\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/engine.js\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

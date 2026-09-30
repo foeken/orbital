@@ -4,7 +4,7 @@
 // come from the settings document (main/settings.js); live queries and call state still answer empty. The banner edits never reach the phone:
 // they are kept on the Mac that announced them.
 // ponytail: live meetings are empty; add them from sdk/livequery.js.
-const { isMcp, S, today } = require('../../main/state');
+const { isMcp, memberTitle, S, today } = require('../../main/state');
 const pins = require('../../sdk/pins');
 
 const issues = []; // a part that failed, for the app's Details log (index.js orbital.issues)
@@ -80,7 +80,7 @@ module.exports = {
   },
   // the workspace's people, asked once per session (a chat on screen is read every two seconds); asked again after a failure
   members: () => (people ||= S.client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
-    .then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: n.title })), (e) => { people = null; throw e; })),
+    .then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: memberTitle(n) })), (e) => { people = null; throw e; })),
   // ./views inboxFrom
   inboxFrom(me, creator, chat, names) {
     if (creator && creator !== me) return 'From ' + (names.get(creator) || 'someone else');

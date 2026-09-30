@@ -41,7 +41,9 @@ struct ListRow: View {
         .padding(.vertical, 6)
         .contentShape(Rectangle())
         .onTapGesture { openURL.zoom(row.target) }
+        .accessibilityElement(children: .contain)
         .accessibilityAddTraits(row.target != nil ? .isButton : [])
+        .accessibilityAction { openURL.zoom(row.target) }
     }
 }
 
@@ -57,7 +59,9 @@ struct NodeScreen: View {
 
     var body: some View {
         Group {
-            if let page {
+            if let page, page.isPrivate == true {
+                ContentUnavailableView("Private", systemImage: "lock", description: Text("You marked this sensitive in Orbital, so the phone does not show it."))
+            } else if let page {
                 switch page.kind {
                 case "chat":
                     ChatView(rows: page.rows)
@@ -136,6 +140,8 @@ struct OutlineRow: View {
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
         .onTapGesture { openURL.zoom(row.reference?.uri) }
+        .accessibilityAddTraits(row.reference != nil ? .isButton : [])
+        .accessibilityAction { openURL.zoom(row.reference?.uri) }
     }
 }
 

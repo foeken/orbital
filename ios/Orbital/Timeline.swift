@@ -227,6 +227,7 @@ struct Entry: View {
         // one element to VoiceOver, unless it lists tasks, whose boxes have to stay reachable
         .accessibilityElement(children: row.children?.isEmpty == false ? .contain : .combine)
         .accessibilityAddTraits(row.timeline?.uri != nil ? .isButton : [])
+        .accessibilityAction { openURL.zoom(row.timeline?.uri) } // VoiceOver's double tap: a tap gesture is not one
     }
 }
 
@@ -235,6 +236,7 @@ struct Entry: View {
 struct TaskBox: View {
     let task: Row
     let engine: Engine
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let state = engine.state(of: task)
@@ -245,7 +247,7 @@ struct TaskBox: View {
         .buttonStyle(.plain)
         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 } // centred on the first line, as the markers are
         .sensoryFeedback(.success, trigger: engine.states[task.id]) { _, now in now == "closed" } // your own tick, not a change read from Tana
-        .animation(.snappy, value: state)
+        .animation(reduceMotion ? nil : .snappy, value: state)
         .accessibilityLabel(task.words)
         .accessibilityValue(state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed")
         .accessibilityHint("Ticks the task off, or back on")
@@ -334,6 +336,7 @@ struct Meeting: View {
         .onTapGesture { openURL.zoom(row.id) }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction { openURL.zoom(row.id) }
     }
 }
 

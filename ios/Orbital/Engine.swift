@@ -40,7 +40,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         super.init()
         config.userContentController.add(self, name: "orbital") // held for the app's life, as the engine is
         web.customUserAgent = Self.safari
-        web.isInspectable = true
+        #if DEBUG
+        web.isInspectable = true // Safari's Web Inspector; never in a release, where the page holds a live Tana token
+        #endif
         web.navigationDelegate = self
         if Self.isSample { showSample(); return }
         Task {
@@ -69,9 +71,13 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         Task { await connect() }
     }
 
+    // A page that never started: offline, or Tana unreachable, sign-in included, where no page of Tana's is there to say so.
+    // A load cut off on purpose is not one (a redirect replacing it, WebKit's "Frame load interrupted" as sign-in hands over).
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         note("load failed: \(error.localizedDescription)")
-        guard phase != .signedOut else { return } // Tana's own pages handle their own errors
+        let e = error as NSError
+        guard !(e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled), !(e.domain == "WebKitErrorDomain" && e.code == 102) else { return }
+        watch?.cancel()
         phase = .failed(error.localizedDescription)
     }
 
@@ -79,6 +85,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // plain .allow let iOS hand Tana's sign-in callback to that app and cut this load off ("Frame load interrupted"):
     // the __session cookie never landed and the Tana app opened instead (#658). WebKit's allow-without-trying-app-link
     // (WKNavigationActionPolicyAllow + 2, as Firefox for iOS uses it) keeps every page in this web view.
+    // ponytail: a private WebKit value, fine for these development builds; an App Store build needs another way (#658).
     static let allowHere = WKNavigationActionPolicy(rawValue: WKNavigationActionPolicy.allow.rawValue + 2) ?? .allow
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
@@ -92,6 +99,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             if ok {
                 justSignedIn = false
                 email = try? await web.callAsyncJavaScript("return orbital.email()", contentWorld: .page) as? String
+                await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // at once: the refresh may not finish
                 phase = .ready
                 await refresh()
             } else if justSignedIn {
@@ -156,6 +164,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     func more() async {
+        guard !loading else { return } // a second tap while the first is loading would count a page never read
         pages += 1
         await refresh()
     }
@@ -177,7 +186,13 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // A node zoomed into (orbital.open): its title, its kind and what it holds
-    struct Page: Decodable { let title: String; let kind: String; let rows: [Row] }
+    struct Page: Decodable {
+        let title: String
+        let kind: String
+        let rows: [Row]
+        let isPrivate: Bool? // marked sensitive in Orbital: nothing of it is sent (ios/engine/index.js redact)
+        enum CodingKeys: String, CodingKey { case title, kind, rows, isPrivate = "private" }
+    }
     func open(_ id: String) async throws -> Page {
         if let s = Self.sample { if let page = s.pages[id] { return page }; throw Failure(errorDescription: "Not in the sample") }
         let page: Page = try await call("return await orbital.open(id)", ["id": id])

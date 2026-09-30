@@ -49,7 +49,7 @@ if (process.platform === 'darwin') {
     assert.ok(shipped(path.resolve(root, file)), file + ' is shipped: the app requires or runs it');
   }
   for (const file of ['node_modules/loro-crdt/web/index.js', 'node_modules/loro-crdt/base64', 'node_modules/loro-crdt/bundler/loro_wasm_bg.wasm',
-    'node_modules/loro-crdt/browser', 'scripts/sdk-check.js', 'scripts/fixtures/task-snapshot.b64']) {
+    'node_modules/loro-crdt/browser', 'scripts/sdk-check.js', 'scripts/fixtures/task-snapshot.b64', 'ios/Orbital/Engine.swift', 'ios/engine/index.js']) {
     assert.ok(!shipped(path.resolve(root, file)), file + ' is left out of the package');
   }
 }
