@@ -297,7 +297,16 @@ ipcMain.on('window:getSide', (e) => {
   const page = pageOf(e) || addPage(e);
   const side = page ? page.side : '', start = page && starts.get(side);
   if (start) starts.delete(side);
-  e.returnValue = start ? { side, start } : { side };
+  const saved = !start && page && (db.setting('places') || {})[side];
+  e.returnValue = start ? { side, start } : saved ? { side, saved } : { side };
+});
+// Each page's view and place, mirrored from its localStorage (renderer/edit.js rememberPlace) into the database the layout
+// is saved in: Chromium has lost a whole profile's localStorage between two launches, and every tab but the first then
+// opened on My Tasks (#636). preload.js fills a key localStorage no longer has from this copy.
+ipcMain.on('page:place', (e, view, place) => {
+  const page = pageOf(e), places = db.setting('places') || {}, now = places[page?.side];
+  if (!page || typeof view !== 'string' || typeof place !== 'string' || place.length > 20000 || (now && now.view === view && now.place === place)) return;
+  db.setSetting('places', { ...places, [page.side]: { view, place } });
 });
 // A page taking the keys (preload.js, its window's focus): the window and page a notification click opens in, and ⌘W closes
 ipcMain.on('page:focus', (e) => { const page = pageOf(e); if (page) { S.win = page.win; S.pane = page; } });

@@ -472,7 +472,9 @@ Cmd+K leads with a Selection group for it (§8).
   to the Library and the preference is repaired (`repairHome`), but only from a list that could have named it:
   `searchesLoaded` is set only by an answer that lands while connected.
 - **Reopening where you left off.** `rememberPlace` stores `{ docId, nodeId, from, title, icon }` under `place` (per
-  split side) in localStorage; a view with nothing zoomed is stored as `{}`, a place too. Boot seeds the page from it
+  split side) in localStorage; a view with nothing zoomed is stored as `{}`, a place too. Main keeps a copy of each
+  page's `view` and `place` in SQLite beside the layout (`page:place`), and preload fills a key localStorage no longer
+  has from it: Chromium has lost a profile's localStorage whole, and every tab then opened on My Tasks (#636). Boot seeds the page from it
   before the first render, so a launch opens on that page with its header and the loader; `restorePlace` then reads
   the real node, and a page that is gone leaves the launch on the view. Children are asked for only once connected,
   and the page you were on is fetched before the view behind it. A launch with nothing stored opens the Work View.

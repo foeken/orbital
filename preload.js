@@ -18,19 +18,25 @@ if (window.top !== window) {
   window.addEventListener('focus', () => ipcRenderer.send('page:focus'));
   window.addEventListener('pagehide', () => ipcRenderer.send('page:gone'));
 }
-const pane = ipcRenderer.sendSync('window:getSide'); // { side, start? }: this page's id in its window (main.js)
+const pane = ipcRenderer.sendSync('window:getSide'); // { side, start? | saved? }: this page's id in its window (main.js)
 // what the page that opened this one, or the saved view it is part of, has it start on: stored before the page reads it
+// saved: main's copy of where this page last was, for a key localStorage lost (#636)
 try {
   for (const [key, value] of Object.entries(pane.start || {})) {
     if (key !== 'view' && key !== 'place') continue;
     const name = key + (pane.side ? ':' + pane.side : '');
     if (value === null) localStorage.removeItem(name); else localStorage.setItem(name, value);
   }
+  for (const [key, value] of Object.entries(pane.saved || {})) {
+    const name = key + (pane.side ? ':' + pane.side : '');
+    if ((key === 'view' || key === 'place') && typeof value === 'string' && localStorage.getItem(name) === null) localStorage.setItem(name, value);
+  }
 } catch { /* no storage: the page opens where it last was, and still gets window.api below */ }
 
 contextBridge.exposeInMainWorld('api', {
   side: pane.side, // this page's id, fixed for its life: '' the first page, then '2', '3', ... (renderer/state.js SIDE)
   savedAs: pane.start && pane.start.as, // the id it has in the saved view it opened in, when another window had that one (renderer/nodes.js)
+  rememberPlace: (view, place) => ipcRenderer.send('page:place', view, place), // main's copy of this page's view and place (#636)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
