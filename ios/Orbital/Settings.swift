@@ -14,18 +14,18 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent { Text(engine.email ?? "Tana") } label: { Row(glyph: "member", title: "Account") }
+                    LabeledContent { Text(engine.email ?? "Tana") } label: { Row(glyph: "tana", title: "Account") }
                     NavigationLink { SignInLog(lines: engine.log) } label: { Row(glyph: "info", title: "Sign-in details") }
                     Button {
                         dismiss()
                         Task { await engine.signOut() }
-                    } label: { Row(glyph: "tana", title: "Sign out of Tana") }
+                    } label: { SignOut(title: "Sign out of Tana") }
                 } header: { Header("Tana") }
                 Section {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
                         if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
-                        Button { ChatGPT.forget(); self.chatgpt = nil } label: { Row(glyph: "chatgpt", title: "Sign out of ChatGPT") }
+                        Button { ChatGPT.forget(); self.chatgpt = nil } label: { SignOut(title: "Sign out of ChatGPT") }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
                     }
@@ -53,7 +53,7 @@ struct SettingsView: View {
         }
     }
 
-    // a row's glyph and words in the text colour, a sign-out too: red on it was too much, and a destructive role paints it red
+    // a row's glyph and words in the text colour: each account by its service's mark (Tana's, OpenAI's)
     struct Row: View {
         let glyph: String
         let title: String
@@ -61,6 +61,12 @@ struct SettingsView: View {
             Label { Text(title) } icon: { Image("Glyphs/" + glyph).resizable().frame(width: 22, height: 22) }
                 .foregroundStyle(.primary)
         }
+    }
+
+    // a sign-out: its words alone, at the right edge, in the text colour (red and a glyph were too much)
+    struct SignOut: View {
+        let title: String
+        var body: some View { Text(title).foregroundStyle(.primary).frame(maxWidth: .infinity, alignment: .trailing) }
     }
 
     // the ChatGPT app's group headings: its own words at a readable size, grey, not upper case
