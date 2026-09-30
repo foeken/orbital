@@ -125,7 +125,7 @@ function visibilityFieldEl(parent) {
     if (fix) { pill.type = 'button'; const plus = document.createElement('b'); plus.textContent = '+'; pill.append(plus); }
     pill.append(memberName(uri));
     pill.title = 'Assigned, but can\u2019t see this task' + (fix ? '. Click to share it with ' + memberName(uri) : '');
-    if (fix) pill.onclick = (e) => { e.stopPropagation(); fix(uri); };
+    if (fix) pill.onclick = (e) => { e.stopPropagation(); fix([uri]); };
     el.append(pill);
   }
   const open = tana.accessOptions ? () => openVisibility(access, summary.scope) : null;

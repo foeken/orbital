@@ -33,8 +33,27 @@ function hiddenFromFix(node) {
   loadAccess(node.id);
   if (!accessById.get(node.id)?.rules?.includes('people')) return null;
   const kept = meta.participants.filter((p) => p.uri !== mine).map((p) => ({ uri: p.uri, role: p.role }));
-  // one person (a pill on the page) or everyone the page shuts out
-  return (only) => applySharing(node, { rule: 'people', participants: [...kept, ...(only ? [only] : meta.hiddenFrom).map((uri) => ({ uri, role: 'editor' }))] });
+  // the people named (a pill on the page, the assign prompt) or everyone the page shuts out
+  return (uris = meta.hiddenFrom) => applySharing(node, { rule: 'people', participants: [...kept, ...uris.map((uri) => ({ uri, role: 'editor' }))] });
+}
+// Assigning someone who cannot see the task (#622): Tana asks there and then, and so does Orbital, on the palette card
+// the assignment was made from. Grant access shares it with them (hiddenFromFix, the pill's write), Keep private leaves
+// it as it is (Escape too), Cancel takes the assignment back. The pill in Visible to stays either way.
+const namesOf = (uris) => { const n = uris.map(memberName); return n.length > 1 ? n.slice(0, -1).join(', ') + ' and ' + n.at(-1) : n[0]; };
+function openShareAsk(doc, uris, before) {
+  loadAccess(doc.id);
+  // Tana's title is the field's placeholder, the answers come first so Enter runs one, and its sentence follows as a
+  // note (the Log out and About pages' shape)
+  const who = namesOf(uris), question = who + ' can\u2019t see this', title = String(doc.text || doc.title || 'This task').trim();
+  openPage('shareAsk', question, { back: closePalette, rows: () => {
+    const fix = hiddenFromFix(doc); // asked on every draw: the page's access arrives after the card opens
+    return [
+      { group: question, icon: 'userLock', label: 'Grant access', hint: fix ? 'Share it with ' + who : accessById.has(doc.id) ? 'Shared through where it lives' : 'Checking permission\u2026', disabled: !fix, run: () => fix(uris) },
+      { group: question, icon: 'lock', label: 'Keep private', run: closePalette },
+      { group: question, icon: 'undo', label: 'Cancel', hint: 'Unassign ' + who, run: () => { closePalette(); setTaskAssignees(doc, before); } },
+      { group: question, label: '\u201c' + demoText(title, doc.id) + '\u201d is assigned to ' + who + ', but they won\u2019t be able to open it unless you grant access or move it somewhere they can see.', disabled: true, note: true, wrap: true },
+    ];
+  } });
 }
 function banSvg() { return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1" fill="none" stroke="currentColor" stroke-linejoin="round"><line x1="3.873" y1="14.127" x2="14.118" y2="3.882"></line><circle cx="9" cy="9" r="7.25"></circle></g></svg>'; }
 // doc: the document the rows are for; the page's own, unless a folded level built for another asks (renderer/palette.js)

@@ -254,6 +254,7 @@ async function setNodeNotify(id, on) {
 function setTaskAssignees(doc, assignees) {
   const meta = taskMetaById.get(doc.id);
   if (!meta || !tana.setAssignees) return;
+  const before = meta.assignees;
   const frozen = !!(palTaskCtx?.fromSelection && sel);
   if (frozen) selectionFrozen = true;
   run(async () => {
@@ -261,7 +262,11 @@ function setTaskAssignees(doc, assignees) {
       await tana.setAssignees(doc.id, assignees);
       // Read again rather than patched: who the audience leaves out (hiddenFrom) is main's to say, and a copy of the
       // old metadata with new assignees kept the old warning — and overwrote the fresh read the change event started.
-      try { taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); } catch { taskMetaById.delete(doc.id); } // the next render asks
+      let fresh = null;
+      try { fresh = await tana.taskMeta(doc.id); taskMetaById.set(doc.id, fresh); } catch { taskMetaById.delete(doc.id); } // the next render asks
+      // someone just assigned who cannot open it: ask, on the card it was assigned from (renderer/access.js openShareAsk)
+      const shut = ((fresh && fresh.hiddenFrom) || []).filter((uri) => !before.includes(uri));
+      if (shut.length && !palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) { openShareAsk(doc, shut, before); render(); return; }
       if (!palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) closePalette();
       render();
     } catch (e) {

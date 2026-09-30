@@ -9837,7 +9837,7 @@ checks.push(async function runHiddenFromFixCheck() {
     'Fix this adds the shut-out assignee as an editor and keeps everyone else at their role (you are the sharer, not a participant)');
   // a pill on the page shares with its own person only (#622)
   api.calls.length = 0; api.taskMetaById.set(DOC, { ...own([{ uri: ME, type: 'user', role: 'admin' }]), hiddenFrom: [PETER, SAM] }); api.accessById.set(DOC, { rules: ['people'] }); // a share forgets what it knew of the page's access
-  api.fix(DOC)(SAM); await Promise.resolve();
+  api.fix(DOC)([SAM]); await Promise.resolve();
   assert.deepEqual(plain(api.calls), [[DOC, { rule: 'people', participants: [{ uri: SAM, role: 'editor' }] }]], 'a pill shares the page with that one person');
   api.taskMetaById.set('tana:text:inherit', { restricted: undefined, hiddenFrom: [PETER], participants: [] }); api.accessById.set('tana:text:inherit', { rules: ['me', 'people', 'inherit'] });
   assert.equal(api.fix('tana:text:inherit'), null, 'an audience taken from where the page lives is not narrowed to fix it');
@@ -9846,6 +9846,49 @@ checks.push(async function runHiddenFromFixCheck() {
   api.taskMetaById.set('tana:text:fine', { restricted: true, participants: [] }); api.accessById.set('tana:text:fine', { rules: ['people'] });
   assert.equal(api.fix('tana:text:fine'), null, 'and a page everyone assigned can see has nothing to fix');
   console.log('ok  Fix this: shares with the assignees a page shuts out, only where its own people are its audience (#622)');
+});
+// Assigning someone who cannot see the task asks, as Tana does (#622): Grant access shares with them, Keep private
+// leaves it, Cancel takes the assignment back; nobody shut out, nothing asked.
+checks.push(async function runShareAskCheck() {
+  const ME = 'tana:user-profile:me', PETER = 'tana:user-profile:peter', DOC = { id: 'tana:text:doc', text: 'Draft the migration plan' };
+  const api = vm.runInNewContext(`
+    const calls = [], taskMetaById = new Map(), accessById = new Map(), notifyById = new Map();
+    let page = null, palette = { hidden: false }, palMode = 'assignees', palDoc = null, palTaskCtx = null, sel = null, selectionFrozen = false, renderDeferred = false, closed = 0;
+    let assigned = [], hidden = [];
+    const me = () => ({ id: '${ME}' }), loadMembers = () => {}, loadAccess = () => {}, memberName = (uri) => uri === '${PETER}' ? 'Peter Leppers' : uri;
+    const demoText = (t) => t, render = () => {}, renderPalette = () => {}, loadRoots = async () => {}, showError = (e) => { throw e; };
+    const closePalette = () => { closed++; palette.hidden = true; palMode = 'cmd'; };
+    const openPage = (mode, placeholder, spec) => { palMode = mode; page = spec; };
+    const run = (fn) => fn();
+    const tana = {
+      setAssignees: async (id, uris) => { calls.push(['assign', uris]); assigned = uris; },
+      taskMeta: async () => ({ assignees: assigned, restricted: true, participants: [{ uri: '${ME}', type: 'user', role: 'admin' }], hiddenFrom: assigned.filter((u) => hidden.includes(u)) }),
+      setSharing: async (id, selection) => { calls.push(['share', selection]); },
+    };
+    ${functionSource('applySharing')}
+    ${functionSource('hiddenFromFix')}
+    ${sourceLine('const namesOf')}
+    ${functionSource('openShareAsk')}
+    ${functionSource('setTaskAssignees')}
+    ({ calls, taskMetaById, accessById, page: () => page, mode: () => palMode, closed: () => closed,
+      assign: async (doc, uris, shutOut) => { hidden = shutOut; palette.hidden = false; palMode = 'assignees'; palDoc = doc; page = null; setTaskAssignees(doc, uris); for (let i = 0; i < 5; i++) await Promise.resolve(); } });
+  `);
+  api.taskMetaById.set(DOC.id, { assignees: [], restricted: true, participants: [{ uri: ME, type: 'user', role: 'admin' }] });
+  api.accessById.set(DOC.id, { rules: ['me', 'people'] });
+  await api.assign(DOC, [PETER], [PETER]);
+  assert.equal(api.mode(), 'shareAsk', 'assigning someone who cannot see it asks');
+  const rows = api.page().rows('');
+  assert.deepEqual(plain(rows.map((r) => r.label.startsWith('\u201c') ? 'text' : r.label)), ['Grant access', 'Keep private', 'Cancel', 'text'], 'with its three answers first, so Enter runs one, and Tana\u2019s sentence');
+  assert.equal(rows[0].group, 'Peter Leppers can\u2019t see this', 'under Tana\u2019s heading');
+  rows[0].run(); await Promise.resolve();
+  assert.deepEqual(plain(api.calls.at(-1)), ['share', { rule: 'people', participants: [{ uri: PETER, role: 'editor' }] }], 'Grant access shares the task with them');
+  api.taskMetaById.set(DOC.id, { assignees: [], restricted: true, participants: [{ uri: ME, type: 'user', role: 'admin' }] }); api.accessById.set(DOC.id, { rules: ['people'] });
+  await api.assign(DOC, [PETER], [PETER]);
+  api.page().rows('')[2].run(); for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.deepEqual(plain(api.calls.at(-1)), ['assign', []], 'Cancel takes the assignment back');
+  await api.assign(DOC, [PETER], []);
+  assert.equal(api.mode(), 'cmd', 'someone who can see it is simply assigned: nothing asked, the card closes');
+  console.log('ok  assigning someone who cannot see a task asks: grant access, keep private or cancel (#622)');
 });
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {

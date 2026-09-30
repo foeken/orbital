@@ -1198,7 +1198,8 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .palette .row.disabled .ricon { color: #c0c0c0; }
 .palette .row.disabled :is(kbd, .hint) { opacity: .55; } /* its key and hint grey with it */
 .palette .ricon { flex: none; width: 16px; height: 16px; color: #8a8a8a; }
-.palette .row.note .ricon:empty { display: none; } /* a note is a line under its heading, not a row missing its glyph */
+.palette .row.note .ricon:empty { display: none; }
+.palette .row.wrap { height: auto; padding-top: 6px; padding-bottom: 6px; } .palette .row.wrap .label { white-space: normal; line-height: 20px; } /* a sentence, not a name: it wraps (the assign prompt, renderer/access.js openShareAsk) */ /* a note is a line under its heading, not a row missing its glyph */
 .palette .ricon svg { display: block; width: 16px; height: 16px; }
 .palette .ricon.dot::before { content: ""; display: block; width: 6px; height: 6px; margin: 5px; border-radius: 50%; background: #555; }
 .palette .ricon.right { color: var(--muted); }
