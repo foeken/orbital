@@ -194,13 +194,6 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let _: String = try await call("return JSON.stringify(await orbital.send(id, text))", ["id": id, "text": text])
     }
 
-    // This phone's push token into Orbital's settings document (orbital.registerPush), so the Mac sends it its banners
-    func registerPush(_ token: String, environment: String) async {
-        guard phase == .ready, !CommandLine.arguments.contains("-sample") else { return }
-        let doc: String? = try? await call("return JSON.stringify(await orbital.registerPush(token, environment, name))", ["token": token, "environment": environment, "name": UIDevice.current.name])
-        if let doc { note("push: this iPhone (\(environment)) is in \(doc)") }
-    }
-
     struct Failure: LocalizedError { let errorDescription: String? }
     private func call<T: Decodable>(_ js: String, _ arguments: [String: Any]) async throws -> T {
         do {

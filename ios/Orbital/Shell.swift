@@ -19,7 +19,6 @@ struct Shell: View {
     @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
-    @Environment(Pushes.self) private var pushes
     private let width: CGFloat = 300
 
     var body: some View {
@@ -99,13 +98,6 @@ struct Shell: View {
             guard args.contains("-menudemo") else { return }
             try? await Task.sleep(for: .seconds(2)); show(true)
             try? await Task.sleep(for: .seconds(2)); show(false)
-        }
-        // a tapped push opens its node over the Timeline, whatever was on screen
-        .task(id: pushes.opened) {
-            guard let id = pushes.opened else { return }
-            settings = false; page = .timeline; show(false)
-            path = [id]
-            pushes.opened = nil
         }
     }
 

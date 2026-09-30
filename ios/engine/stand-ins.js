@@ -87,7 +87,7 @@ module.exports = {
   // ./documents
   announcedEdits: () => [],
   // the watch choices (settings key notify: node → true watched, false silenced), as main/documents.js reads them; the
-  // settings document is read once the phone has hydrated it (index.js registerPush, timeline)
+  // settings document is read once the phone has hydrated it (index.js timeline)
   notifyWatchedIds: () => new Set(Object.entries(require('../../main/settings').get('notify') || {}).filter(([, on]) => on === true).map(([id]) => id)),
   notifySilencedIds: () => new Set(Object.entries(require('../../main/settings').get('notify') || {}).filter(([, on]) => on === false).map(([id]) => id)),
   document: (id) => within('reading ' + id, S.client.sync.subscribe(id)),
