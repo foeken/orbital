@@ -267,6 +267,13 @@ window.orbital = {
     const chosen = settings.get('typeIcons') || {};
     return JSON.stringify(await Promise.all(nodes.sort((a, b) => at(a) - at(b)).map(async (n) => ({ ...listRow(n), glyph: await iconPng(chosen[n.id]).catch(() => null) }))));
   },
+  // Settings' Sign out, before the app deletes the cookies: a session lookup still under way would set them again (the
+  // desktop waits for its lookups the same way, tana-session.js logout), and the client closes
+  async signOut() {
+    await Promise.allSettled(Object.values(inFlight));
+    last = null;
+    drop();
+  },
   issues: () => issues.splice(0), // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 window.webkit?.messageHandlers?.orbital?.postMessage('ready');

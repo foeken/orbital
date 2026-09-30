@@ -221,7 +221,10 @@ struct Composer: View {
                         text = ""; focused = false; sending = true
                         Task {
                             do { let warning = try await send(words); withAnimation { failure = warning } }
-                            catch { text = words; withAnimation { failure = error.localizedDescription } }
+                            catch {
+                                if text.isEmpty { text = words } // what was typed since stays; the unsent words come back only to an empty box
+                                withAnimation { failure = error.localizedDescription }
+                            }
                             sending = false
                         }
                     } label: {

@@ -17,11 +17,12 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
 // The bundle itself, when Bun is here to build it (CI has none): built as the Xcode phase builds it, then run in a vm
 // made to look like the session page, with a fake Tana that signs in and answers every call empty. It must say ready,
 // connect with a bearer token, and answer the Timeline in the desktop's row shape. Its 8 s give-ups (stand-ins.js within)
-// are made immediate, since this fake never opens the sync stream.
+// are made immediate, since this fake never opens the sync stream. Locally it is skipped without Bun; CI installs it.
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm');
 const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSync(b, ['--version']).status === 0);
 (async () => {
+  if (!bun && process.env.CI) throw new Error('CI must build the engine: install Bun (.github/workflows/ci.yml)');
   if (!bun) return console.log('ios engine check ok (the bundle skipped: no Bun)');
   const out = path.join(os.tmpdir(), 'orbital-engine-check.js');
   const built = spawnSync(bun, [path.join(__dirname, '../ios/engine/build.js'), out], { encoding: 'utf8' });
@@ -57,7 +58,12 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   const page = boot(new Map([['orbital:tana:user-profile:u1@org_1:settingsRead', 'true']]));
   assert.strictEqual(await page.orbital.connect(), true);
   const rows = JSON.parse(await page.orbital.timeline(1));
-  assert.ok(Array.isArray(rows) && rows.every((r) => typeof r.id === 'string'), 'the Timeline answers rows');
+  // the graph answers nothing here, so the page is its Today's Tasks stop alone, in the shape Timeline.swift reads
+  const today = rows.find((r) => r.timeline && r.timeline.today);
+  assert.ok(today, 'the Timeline answers its Today stop: ' + JSON.stringify(rows).slice(0, 200));
+  assert.match(today.id, /^orbital:timeline:today:/);
+  assert.strictEqual(today.icon, 'todayTasks');
+  assert.ok(Array.isArray(today.children) && typeof today.createdAt === 'string' && today.segments[0].text === "Today's Tasks");
   assert.ok(page.calls.some((c) => c.includes('GraphService/ListNodes')), 'the Timeline asks the graph');
   assert.strictEqual(page.orbital.email(), 'a@b.c');
   fs.rmSync(out, { force: true });

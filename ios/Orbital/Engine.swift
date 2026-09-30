@@ -23,6 +23,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
+    @ObservationIgnored private var session = 0 // counts sign-outs: a read that began before one never saves or shows what it got
 
     static let session = URL(string: "https://home.tana.inc/api/auth/session")!
     static let home = URL(string: "https://home.tana.inc")!
@@ -152,13 +153,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard phase == .ready, !loading, !Self.isSample else { return }
         loading = true
         defer { loading = false }
+        let started = session
         do {
-            rows = try await call("return await orbital.timeline(pages)", ["pages": pages])
+            let read: [Row] = try await call("return await orbital.timeline(pages)", ["pages": pages])
+            guard started == session else { return } // signed out meanwhile
+            rows = read
             error = nil
             settle(rows)
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
+            guard started == session else { return }
             if error.localizedDescription.contains("not authenticated") { signIn() } // the session ran out: sign in again
             self.error = error.localizedDescription
         }
@@ -170,8 +175,11 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         await refresh()
     }
 
-    // Settings' Sign out: Tana's cookies go from WebKit and the Keychain, and the page starts over at Tana's sign-in
+    // Settings' Sign out: the engine lets its session lookups finish and closes, then Tana's cookies go from WebKit and the
+    // Keychain, and the page starts over at Tana's sign-in. A refresh still under way sees the count move and keeps nothing.
     func signOut() async {
+        session += 1
+        _ = try? await web.callAsyncJavaScript("await orbital.signOut()", contentWorld: .page)
         let store = web.configuration.websiteDataStore.httpCookieStore
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
