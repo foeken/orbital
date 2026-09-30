@@ -427,6 +427,10 @@ Cmd+K leads with a Selection group for it (§8).
   same canvas again brings its window forward. ⌘/⇧/⌥ on a canvas (`openElsewhere`) opens that window too rather than a
   pane, and signing out closes every canvas window. A canvas row's title cannot be typed in, so a click on it (or Enter)
   opens the window as a type row's does (`opensOnClick`), in a list, the Library and search alike.
+  A new one comes from Cmd+K (issue #620): **New canvas** makes it at once under the name Tana gives one ("Canvas Sep
+  30, 2026, 2:05 PM"), and **Canvas** under Create new … asks its name first; either writes what Tana's own create
+  writes (sdk/node.js `initDocument`, kind `canvas`) and opens its window. The "/" menu leaves Canvas out: it drafts
+  on the page, and a canvas has no page.
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
   to does nothing: Home is the whole window, which one pane's Back does not replace (issue #444).
   When the page on screen is deleted or archived (here, in another pane or in Tana), the pane goes back to the page
@@ -485,7 +489,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
   Filter rows by text, Switch to table/outliner and Column widths ….
-- **Actions**: Log in (signed out), Create new …, Quick Add Task, Search Tana, Undo, Redo, Mark all as read, Sync.
+- **Actions**: Log in (signed out), Create new …, Quick Add Task, New canvas, Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous

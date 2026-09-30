@@ -270,7 +270,8 @@ function slashRows(q) {
     run: () => (type === 'image' ? pickImages() : runSlashBlock(type)),
   }));
   // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new …" list
-  const choices = creationChoices.some((c) => c.kind === 'doc') ? creationChoices : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...creationChoices];
+  const made = creationChoices.filter((c) => c.kind !== 'canvas'); // a canvas has no page to draft here: ⌘K makes one (#620)
+  const choices = made.some((c) => c.kind === 'doc') ? made : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...made];
   for (const choice of choices) rows.push(choice.kind === 'task' ? { // "/" Task: made here and referenced in the row (taskFromSlash)
     group: 'Create', icon: choice.icon, label: 'Task', hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
     run: () => taskFromSlash(choice),

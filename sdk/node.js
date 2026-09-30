@@ -25,11 +25,11 @@ function ulid(now = Date.now()) {
 // Tana-created event (tana:event:01exampley0000000000000000, without the calendar-provider fields), starting at
 // the next half hour for 30 minutes.
 function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri, query, view } = {}) {
-  if (!['doc', 'task', 'meeting', 'chat', 'search', 'type'].includes(kind)) throw new Error('unknown kind ' + kind);
-  if (entityTypeUri !== undefined && (!/^tana:type:[0-9a-z]{26}$/.test(entityTypeUri) || kind === 'chat')) throw new Error('Invalid custom type');
+  if (!['doc', 'task', 'meeting', 'chat', 'search', 'type', 'canvas'].includes(kind)) throw new Error('unknown kind ' + kind);
+  if (entityTypeUri !== undefined && (!/^tana:type:[0-9a-z]{26}$/.test(entityTypeUri) || kind === 'chat' || kind === 'canvas')) throw new Error('Invalid custom type');
   if (ownerUri !== undefined && !/^tana:space:[0-9a-z]{26}$/.test(ownerUri)) throw new Error('Invalid type home space');
   const data = loro.getMap('data');
-  data.set('type', kind === 'meeting' ? 'event' : kind === 'chat' ? 'chat' : kind === 'search' ? 'search' : kind === 'type' ? 'type' : 'text');
+  data.set('type', kind === 'meeting' ? 'event' : ['chat', 'search', 'type', 'canvas'].includes(kind) ? kind : 'text');
   if (entityTypeUri) data.set('entityTypeUri', entityTypeUri);
   if (ownerUri) data.set('ownerUri', ownerUri);
   data.set('title', title);
@@ -63,6 +63,10 @@ function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), enti
     return; // no sharedPinDates, no assignedToUris, no outline content
   }
   data.setContainer('sharedPinDates', new LoroList());
+  // A canvas as Tana's own create writes it (the canvas wrapper's create in shared-*.js, read 2026-09-30): type,
+  // createdAt, ownerUri, sharedPinDates, title and the access fields, nothing else. Its board is the `canvas` root,
+  // which tldraw fills when the board first opens (main.js canvas:open).
+  if (kind === 'canvas') return;
   if (kind === 'chat') {
     data.setContainer('participantUris', new LoroList());
     data.setContainer('messages', new LoroList());
