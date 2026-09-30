@@ -25,7 +25,7 @@ const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], 
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
 // ---- group by: plain headings over the rows the view already loaded, no extra query ----
-const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['responsibility', 'Responsibility'], ['updated', 'Updated'], ['type', 'Type']];
+const GROUPS = [['none', 'None', 'none'], ['status', 'Status', 'status'], ['assignee', 'Assignee', 'assigned'], ['responsibility', 'Responsibility', 'userAlert'], ['updated', 'Updated', 'updated'], ['type', 'Type', 'type']]; // [id, label, icon]
 const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type', field: 'No value' }; // responsibility has none: see below
 // A field's missing value is its own section, headed No value: an options field can have a choice called that too.
 const NO_FIELD = '\u0000no value';
@@ -318,7 +318,7 @@ function showAllTracking(id) { trackingShown.add(collapseKey(id)); render(true);
 // ---- sort: the same rows in another order, again without asking the backend for anything ----
 // Only what a row actually carries can be sorted on. main.js toNode passes updatedAt and createdAt as ISO 8601
 // strings, so they compare as strings; a row that carries neither (an older cached row) keeps its place at the end.
-const SORTS = [['default', 'Default'], ['status', 'Status'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title'], ['meeting', 'Meeting time']];
+const SORTS = [['default', 'Default', 'sort'], ['status', 'Status', 'status'], ['updated', 'Updated', 'updated'], ['created', 'Created', 'created'], ['title', 'Title', 'rename'], ['meeting', 'Meeting time', 'calendar']];
 // Meeting time only where meetings are all there is: nothing else has a start to sort on.
 const meetingSort = () => onlyMeetings(filters.get(pillKey()));
 // The fields of the page's types can be sorted on too (#624), after the built-in orders; load: the Sort menu is open
@@ -360,7 +360,7 @@ function sortRows(list) {
 // ---- display: which of a row's facts it shows ----
 // When it was made, when it last moved and where it lives read as one grey sub-line under the title, because they are
 // all answers to "what is this row"; the rest stay where they already are — the type chips, the assignee, the box.
-const DISPLAY = [['type', 'Type'], ['space', 'Lives in'], ['status', 'Status'], ['assigned', 'Assigned'], ['updated', 'Updated'], ['created', 'Created'], ['creator', 'Created by']];
+const DISPLAY = [['type', 'Type', 'type'], ['space', 'Lives in', 'space'], ['status', 'Status', 'status'], ['assigned', 'Assigned', 'assigned'], ['updated', 'Updated', 'updated'], ['created', 'Created', 'created'], ['creator', 'Created by', 'member']];
 const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
 // On a type's page every field it defines can be shown too, keyed by its attribute key; the ones with a closed set of
 // values (the ones that get a pill) and the last change are shown until you choose otherwise, as Tana's type page does.
