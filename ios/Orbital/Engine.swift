@@ -14,6 +14,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var loading = false
     var error: String?
     var pages = 1
+    var email: String? // the Tana account signed in, for Settings
     var states: [String: String] = [:] // task id -> the stateType ticked here, until a read of Tana agrees with it
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value (#658). A line is
     // added only when it differs from the one before, so the screen is redrawn only when something moved.
@@ -76,7 +77,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // plain .allow let iOS hand Tana's sign-in callback to that app and cut this load off ("Frame load interrupted"):
     // the __session cookie never landed and the Tana app opened instead (#658). WebKit's allow-without-trying-app-link
     // (WKNavigationActionPolicyAllow + 2, as Firefox for iOS uses it) keeps every page in this web view.
-    private static let allowHere = WKNavigationActionPolicy(rawValue: WKNavigationActionPolicy.allow.rawValue + 2) ?? .allow
+    static let allowHere = WKNavigationActionPolicy(rawValue: WKNavigationActionPolicy.allow.rawValue + 2) ?? .allow
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
         Self.allowHere
@@ -88,6 +89,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             note("engine: session " + ((try? await web.callAsyncJavaScript("return orbital.why()", contentWorld: .page) as? String) ?? "?"))
             if ok {
                 justSignedIn = false
+                email = try? await web.callAsyncJavaScript("return orbital.email()", contentWorld: .page) as? String
                 phase = .ready
                 await refresh()
             } else if justSignedIn {
@@ -158,6 +160,23 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         await refresh()
     }
 
+    // Settings' Sign out: Tana's cookies go from WebKit and the Keychain, and the page starts over at Tana's sign-in
+    func signOut() async {
+        let store = web.configuration.websiteDataStore.httpCookieStore
+        for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
+        Keychain.delete("tana-cookies")
+        rows = []; states = [:]; email = nil; pages = 1
+        note("signed out")
+        start()
+    }
+
+    struct Found: Decodable, Identifiable { let id: String; let title: String; let kind: String; let state: String? }
+    func search(_ text: String) async -> [Found] {
+        guard phase == .ready, !text.trimmingCharacters(in: .whitespaces).isEmpty,
+              let json = try? await web.callAsyncJavaScript("return await orbital.search(text)", arguments: ["text": text], contentWorld: .page) as? String else { return [] }
+        return (try? JSONDecoder().decode([Found].self, from: Data(json.utf8))) ?? []
+    }
+
     // A task's box: drawn in its new state at once, written by engine.js (orbital.toggle, the desktop's rule), and put
     // back with the reason in Details if Tana refuses. The row stays where it is (orbital-design: never move things
     // under the user); the next read confirms it.
@@ -216,25 +235,15 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 // has none, so a session Tana rotated since is never overwritten by an older one.
 @MainActor
 enum SavedSession {
-    private static let item: [CFString: Any] = [kSecClass: kSecClassGenericPassword, kSecAttrService: "com.dreetje.orbital", kSecAttrAccount: "tana-cookies"]
     private static func isTana(_ c: HTTPCookie) -> Bool { c.domain.hasSuffix("tana.inc") }
 
     static func save(from store: WKHTTPCookieStore) async {
-        guard let data = encode(await store.allCookies().filter(isTana)) else { return }
-        SecItemDelete(item as CFDictionary)
-        var add = item
-        add[kSecValueData] = data
-        add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        if let data = encode(await store.allCookies().filter(isTana)) { Keychain.save(data, "tana-cookies") }
     }
 
     static func restore(into store: WKHTTPCookieStore) async {
         guard !(await store.allCookies()).contains(where: { isTana($0) && $0.name == "__session" }) else { return }
-        var query = item
-        query[kSecReturnData] = true
-        query[kSecMatchLimit] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return }
+        guard let data = Keychain.load("tana-cookies") else { return }
         for cookie in decode(data) { await store.setCookie(cookie) }
     }
 
@@ -248,6 +257,29 @@ enum SavedSession {
         return list.compactMap { HTTPCookie(properties: Dictionary(uniqueKeysWithValues: $0.map { (HTTPCookiePropertyKey($0.key), $0.value) })) }
             .filter { ($0.expiresDate ?? .distantFuture) > .now }
     }
+}
+
+// What the app keeps secret, on this phone only (never synced, never in a backup to another device)
+enum Keychain {
+    private static func item(_ account: String) -> [CFString: Any] { [kSecClass: kSecClassGenericPassword, kSecAttrService: "com.dreetje.orbital", kSecAttrAccount: account] }
+
+    static func save(_ data: Data, _ account: String) {
+        SecItemDelete(item(account) as CFDictionary)
+        var add = item(account)
+        add[kSecValueData] = data
+        add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    static func load(_ account: String) -> Data? {
+        var query = item(account)
+        query[kSecReturnData] = true
+        query[kSecMatchLimit] = kSecMatchLimitOne
+        var out: CFTypeRef?
+        return SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess ? out as? Data : nil
+    }
+
+    static func delete(_ account: String) { SecItemDelete(item(account) as CFDictionary) }
 }
 
 struct WebHost: UIViewRepresentable {

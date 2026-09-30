@@ -60,48 +60,45 @@ struct TimelineScreen: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        NavigationStack {
-            List {
-                if !today.isEmpty {
-                    Section("Today's tasks") {
-                        ForEach(today) { task in
-                            RailRow(time: "") { TaskBox(task: task, engine: engine) } content: { TaskWords(row: task, done: engine.state(of: task) == "closed") }
-                                .onTapGesture { open(task.id) }
-                        }
+        List {
+            if !today.isEmpty {
+                Section("Today's tasks") {
+                    ForEach(today) { task in
+                        RailRow(time: "") { TaskBox(task: task, engine: engine) } content: { TaskWords(row: task, done: engine.state(of: task) == "closed") }
+                            .onTapGesture { open(task.id) }
                     }
-                }
-                if !upcoming.isEmpty || free != nil {
-                    Section("Coming up") {
-                        if let free { FreeLine(free: free) }
-                        ForEach(upcoming) { Meeting(row: $0, open: open) }
-                    }
-                }
-                ForEach(days, id: \.0) { title, rows in
-                    Section(title) { ForEach(rows) { Entry(row: $0, engine: engine, open: open) } }
-                }
-                if !days.isEmpty {
-                    Button { Task { await engine.more() } } label: {
-                        Text(engine.loading ? "Loading…" : "Show three more days").frame(maxWidth: .infinity)
-                    }
-                    .foregroundStyle(.secondary)
-                    .disabled(engine.loading)
-                    .listRowSeparator(.hidden)
                 }
             }
-            .listStyle(.plain)
-            .refreshable { await engine.refresh() }
-            .navigationTitle("Timeline")
-            .overlay {
-                if engine.rows.isEmpty {
-                    if engine.loading { ProgressView() }
-                    else if let error = engine.error { ContentUnavailableView("Timeline didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
-                    else { ContentUnavailableView("Nothing yet", systemImage: "clock", description: Text("Changes to your tasks, new Inbox tasks and your meetings show up here.")) }
+            if !upcoming.isEmpty || free != nil {
+                Section("Coming up") {
+                    if let free { FreeLine(free: free) }
+                    ForEach(upcoming) { Meeting(row: $0, open: open) }
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                if let error = engine.error, !engine.rows.isEmpty {
-                    Text(error).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar)
+            ForEach(days, id: \.0) { title, rows in
+                Section(title) { ForEach(rows) { Entry(row: $0, engine: engine, open: open) } }
+            }
+            if !days.isEmpty {
+                Button { Task { await engine.more() } } label: {
+                    Text(engine.loading ? "Loading…" : "Show three more days").frame(maxWidth: .infinity)
                 }
+                .foregroundStyle(.secondary)
+                .disabled(engine.loading)
+                .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .refreshable { await engine.refresh() }
+        .overlay {
+            if engine.rows.isEmpty {
+                if engine.loading { ProgressView() }
+                else if let error = engine.error { ContentUnavailableView("Timeline didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
+                else { ContentUnavailableView("Nothing yet", systemImage: "clock", description: Text("Changes to your tasks, new Inbox tasks and your meetings show up here.")) }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let error = engine.error, !engine.rows.isEmpty {
+                Text(error).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar)
             }
         }
     }
@@ -154,7 +151,7 @@ struct RailRow<Dot: View, Content: View>: View {
             marker.frame(width: Rail.marker)
             content.frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
         .listRowInsets(EdgeInsets(top: 0, leading: Rail.inset, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
@@ -186,7 +183,7 @@ struct Entry: View {
                         Button { open(child.id) } label: { TaskWords(row: child, done: engine.state(of: child) == "closed").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
                             .buttonStyle(.plain)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, 8)
                 }
             }
             .overlay(alignment: .topTrailing) {

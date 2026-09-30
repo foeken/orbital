@@ -78,6 +78,12 @@ window.orbital = {
   },
   loro: loro.version,
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
+  email: () => (last && last.user && last.user.email) || null,
+  // Search in the app's top bar: Tana's own text search over everything you can see, newest change first
+  async search(text) {
+    const { nodes = [] } = await S.client.graph.listNodes({ textQuery: text, limit: 40, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+    return JSON.stringify(nodes.map((n) => ({ id: n.id, title: n.title || 'Untitled', kind: n.id.split(':')[1], state: (n.state && n.state.type) || null })));
+  },
   issues: () => issues.splice(0), // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 window.webkit?.messageHandlers?.orbital?.postMessage('ready');
