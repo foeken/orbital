@@ -485,7 +485,7 @@ async function restorePlace() {
     if (zoom) return; // somewhere else already
     try {
       if (saved.myTasks) { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; myTasksId = n.id; } // the id for the Home check (renderer/nodes.js), a search just made included
-      else { const c = saved.today ? 'today' : 'week'; saved = { docId: await (c === 'today' ? tana.todayNode() : tana.weekNode()), nodeId: null }; dateIds[c] = saved.docId; } // renderer/nodes.js datePlace
+      else { const c = saved.today ? 'today' : 'week'; saved = { docId: await (c === 'today' ? tana.todayNode() : tana.weekNode()), nodeId: null }; dateIdsNow()[c] = saved.docId; } // renderer/nodes.js datePlace
     } catch { return; } // the view it is on is the fallback
     if (zoom) return;
   }

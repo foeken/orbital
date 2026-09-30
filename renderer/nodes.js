@@ -293,14 +293,22 @@ let myTasksId = null;
 // Your day and week nodes as they are now, found and never made: a place on one is Today or This week in a saved view
 // ({ today: true }, { week: true }), which reopens on the day and week it is opened in (#639). By id: they are your own
 // documents (main/pins.js ownNode), and a colleague's with the same title is not one.
-// ponytail: asked on connect, Save view and a view's restore only, so past midnight Home knows yesterday's node until one of those
+// Kept for the day they were found on: past midnight the first check asks again and draws when it answers.
 let dateIds = {};
+const dateIdsNow = () => (dateIds.day === localDate() ? dateIds : (dateIds = { day: localDate() }));
 async function findDateNodes() {
   const find = (p) => Promise.resolve(p).catch(() => null);
   const [today, week] = await Promise.all([find(tana.todayNode && tana.todayNode(0, true)), find(tana.weekNode && tana.weekNode(true))]);
-  return (dateIds = { today, week });
+  const now = dateIdsNow();
+  if (today) now.today = today; // one made meanwhile (a saved view's restore) is kept over an answer that did not find it
+  if (week) now.week = week;
+  return now;
 }
-const datePlace = (p) => (p && p.docId && !p.nodeId ? (p.docId === dateIds.today ? 'today' : p.docId === dateIds.week ? 'week' : null) : null);
+function datePlace(p) {
+  if (!p || !p.docId || p.nodeId) return null;
+  if (dateIds.day !== localDate()) { dateIdsNow(); findDateNodes().then(() => renderSoon()); return null; }
+  return p.docId === dateIds.today ? 'today' : p.docId === dateIds.week ? 'week' : null;
+}
 const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).startsWith(SEARCH_ID) && (myTasksId ? zoom.docId === myTasksId : /^my tasks$/i.test(String((docOf(zoom.docId) || {}).text || '').trim())) : zoom.docId === TIMELINE_PAGE);
 // In a saved view a page is Home on the place that view keeps for it ('place', 'place:2', …; {} is its view)
 function atSavedView(v) {
