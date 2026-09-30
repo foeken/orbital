@@ -154,7 +154,7 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   Escape clears and hides it, and while it has text it stays visible. A page with no rows and no filter says
   "Nothing here yet". A pill's menu stops above the window's edge and scrolls inside, and the keyboard keeps its
   active option in view; a toggle carries `aria-pressed`.
-  More than four field pills fold the ones filtering nothing behind a **…** pill (`foldFields`, renderer/pills.js,
+  More than four field pills fold the ones filtering nothing behind an **Add filter** pill (the filter glyph with a plus; its tooltip names the folded fields) (`foldFields`, renderer/pills.js,
   issue #624): its menu lists them under "Type fields" with a search line, and picking one puts its pill back on the
   bar, open, for the rest of the session. A field that filters something always keeps its pill, and Cmd+K lists every
   field either way.

@@ -151,7 +151,7 @@ function fieldSection(list, rowOf) {
   if (at >= 0) rows.splice(at, 0, { head: 'Type fields' });
   return rows;
 }
-// Past FIELD_PILLS field pills, the ones not filtering anything fold into a "…" pill whose menu adds one to the bar
+// Past FIELD_PILLS field pills, the ones not filtering anything fold into an Add filter pill whose menu adds one to the bar
 // and opens it (#624): the bar keeps the fields you filter by and the ones you asked for. Cmd+K still lists every
 // field (pillDefs), so this is only about the bar. What was asked for is kept for the session, per page.
 const FIELD_PILLS = 4;
@@ -162,7 +162,9 @@ function foldFields(defs) {
   if (fields.length <= FIELD_PILLS) return defs;
   const folded = fields.filter((d) => !d.set && !asked.has(d.id) && !(menu && menu.id === d.id));
   if (!folded.length) return defs;
-  const more = { id: 'morefields', label: '…', title: 'Filter by another field', search: true, find: 'Search fields…', rows: () => [{ head: 'Type fields' }, ...folded.map((d) => ({ label: d.label, icon: d.icon, run: () => {
+  // the filter glyph with a plus: it adds a filter on a field, it never makes a field; the tooltip names what is behind it
+  const names = folded.map((d) => d.label), shown = names.slice(0, 3).join(', ') + (names.length > 3 ? ' and ' + (names.length - 3) + ' more' : '');
+  const more = { id: 'morefields', icon: 'filterPlus', label: 'Add filter', title: 'Filter by another field: ' + shown, search: true, find: 'Search fields…', rows: () => [{ head: 'Type fields' }, ...folded.map((d) => ({ label: d.label, icon: d.icon, run: () => {
     askedFields.set(pillKey(), asked.add(d.id));
     menu = { id: d.id, index: 0 }; pillFocus = d.id; // straight into its choices, as a click on it would
   } }))] };
