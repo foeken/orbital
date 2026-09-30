@@ -15,7 +15,6 @@ struct SettingsView: View {
             Form {
                 Section {
                     LabeledContent { Text(engine.email ?? "Tana") } label: { Row(glyph: "tana", title: "Account") }
-                    NavigationLink { SignInLog(lines: engine.log) } label: { Row(glyph: "info", title: "Sign-in details") }
                     Button {
                         dismiss()
                         Task { await engine.signOut() }
