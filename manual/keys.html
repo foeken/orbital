@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Keyboard reference · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: the five keys to learn first, pressed in turn */
+  .keys-hero { --loop: 10s; min-height: 270px; }
+  .keys-row { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+  .keys-k { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 140px; }
+  .keys-k .caps { display: flex; gap: 5px; }
+  .keys-k .caps .cap { min-width: 40px; }
+  .keys-k .say { font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: center; line-height: 1.35; }
+  .mg.in .keys-k { animation: keys-lit var(--loop) calc(var(--i) * var(--loop) / 5) infinite backwards; }
+  @keyframes keys-lit { 0% { opacity: .38; transform: none; } 3%, 18% { opacity: 1; transform: translateY(-5px); } 21%, 100% { opacity: .38; transform: none; } }
+  /* the tables: a third column links to the chapter that explains the key */
+  .keys td.go, .keys th.go { width: 1%; white-space: nowrap; text-align: right; padding-left: 18px; }
+  .keys td.go { font-size: 13px; }
+  .keys td.go a { color: var(--faint); }
+  .keys td.go a:hover { color: var(--accent); }
+  .keys tr > :nth-child(2) { text-align: right; white-space: nowrap; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 16</p>
+    <h1>Every key on one page</h1>
+    <p class="lead">A lookup for every key Orbital knows: the built-in ones, the fixed ones, and the keys you use while writing. Each row links to the chapter that explains it.</p>
+    <div class="mg keys-hero" aria-hidden="true">
+      <div class="keys-row">
+        <div class="keys-k" style="--i:0"><div class="caps"><span class="cap press" style="--at:.02">⌘</span><span class="cap press" style="--at:.02">K</span></div><div class="say">Run anything</div></div>
+        <div class="keys-k" style="--i:1"><div class="caps"><span class="cap press" style="--at:.22">⌘</span><span class="cap press" style="--at:.22">S</span></div><div class="say">Search Tana</div></div>
+        <div class="keys-k" style="--i:2"><div class="caps"><span class="cap press" style="--at:.42">⇧⌘</span><span class="cap press" style="--at:.42">Space</span></div><div class="say">Quick Add Task</div></div>
+        <div class="keys-k" style="--i:3"><div class="caps"><span class="cap press" style="--at:.62">⌘</span><span class="cap press" style="--at:.62">↩</span></div><div class="say">Complete a task</div></div>
+        <div class="keys-k" style="--i:4"><div class="caps"><span class="cap press" style="--at:.82">⇧⌘</span><span class="cap press" style="--at:.82">H</span></div><div class="say">Go to Home</div></div>
+      </div>
+      <p class="cap-line">Five keys cover most days; ⌘K finds the rest</p>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="first" data-short="Learn these first" data-k="essential basics">The keys to learn first</h2>
+    <div class="split">
+      <div>
+        <p>You can reach everything from <kbd>⌘K</kbd>, and every row there shows its key as a chip at its right end. So you never need this page to discover a key: open the palette, type what you want, and read the chip. Keep this page for looking one up.</p>
+      </div>
+      <figure class="shot"><img data-m="keys-chips" alt="The palette with pane typed: New pane ⌘N, Next pane ⌘/, Close pane ⌘W, Previous pane ⇧⌘/, Show all panes ⌥⌘↑, Maximize or restore pane ⌥⌘↓"><figcaption>Each row wears its key. These are the pane rows.</figcaption></figure>
+    </div>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th><th class="go">See</th></tr>
+      <tr><td>Open or close the command palette</td><td><kbd>⌘K</kbd></td><td class="go"><a href="commands.html#basics">⌘K</a></td></tr>
+      <tr><td>Search all of Tana</td><td><kbd>⌘S</kbd></td><td class="go"><a href="commands.html#search">Search</a></td></tr>
+      <tr><td>Quick Add Task, from any Orbital window</td><td><kbd>⇧⌘Space</kbd></td><td class="go"><a href="tasks.html">Tasks</a></td></tr>
+      <tr><td>Complete or reopen a task, tick a checkbox</td><td><kbd>⌘↩</kbd></td><td class="go"><a href="tasks.html">Tasks</a></td></tr>
+      <tr><td>Go to Home (the Work View)</td><td><kbd>⇧⌘H</kbd></td><td class="go"><a href="navigating.html">Finding your way</a></td></tr>
+      <tr><td>Undo, redo</td><td><kbd>⌘Z</kbd> <kbd>⇧⌘Z</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+    </table>
+  </section>
+
+  <section class="topic">
+    <h2 id="writing" data-k="enter tab indent outdent bold italic code strike link">Writing in a row</h2>
+    <div class="split flip">
+      <div>
+        <p>There is no edit mode: put the caret in a row and type. These are the keys the row itself answers to.</p>
+      </div>
+      <figure class="clip"><video data-m="keys-write"></video><figcaption><kbd>↩</kbd> a new row, <kbd>⇥</kbd> in, <kbd>⇧⇥</kbd> out, <kbd>⌘↩</kbd> tick it.</figcaption></figure>
+    </div>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th><th class="go">See</th></tr>
+      <tr><td>Split the row at the caret; at the very start, a new row above</td><td><kbd>↩</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>A line break inside the row</td><td><kbd>⇧↩</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Indent, outdent</td><td><kbd>⇥</kbd> <kbd>⇧⇥</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>At the start of a row: take the bullet off, then join it to the row above</td><td><kbd>⌫</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Bold, italic, code</td><td><kbd>⌘B</kbd> <kbd>⌘I</kbd> <kbd>⌘E</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Strike through</td><td><kbd>⇧⌘S</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Select the row's words; again, every row</td><td><kbd>⌘A</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Link a page, person or meeting</td><td><kbd>@</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Choose a block type, or create something</td><td><kbd>/</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Into the formatting toolbar, with words selected</td><td><kbd>⇥</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Leave the row</td><td><kbd>esc</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Undo, redo, across every document</td><td><kbd>⌘Z</kbd> <kbd>⇧⌘Z</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+    </table>
+    <p>Typed at the start of a row, <b>- </b> or <b>* </b> starts a bullet, <b>1. </b> a numbered item, <b># </b> to <b>### </b> a heading, <b>&gt; </b> a quote, <b>[] </b> a checkbox, three backticks a code block and <b>---</b> a divider. Typed inline, <b>**bold**</b>, <b>*italic*</b>, <b>~~strike~~</b> and <b>`code`</b> turn into marks as you close them.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="moving" data-short="Moving and selecting" data-k="select move delete collapse expand arrows">Moving rows and selecting</h2>
+    <div class="split">
+      <div>
+        <p>The arrows walk the caret from the title through the fields into the outline. Hold <kbd>⇧</kbd> to select whole rows; the moving keys then act on all of them.</p>
+      </div>
+      <figure class="clip"><video data-m="keys-move"></video><figcaption><kbd>⇧⌘↓</kbd> moves the row down, <kbd>⇧⌘↑</kbd> back up.</figcaption></figure>
+    </div>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th><th class="go">See</th></tr>
+      <tr><td>The row above, below; with nothing focused, the first or last row</td><td><kbd>↑</kbd> <kbd>↓</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>At a row's edge: the row before, after</td><td><kbd>←</kbd> <kbd>→</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Collapse, expand</td><td><kbd>⌘↑</kbd> <kbd>⌘↓</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Move the row or the selection among its siblings</td><td><kbd>⇧⌘↑</kbd> <kbd>⇧⌘↓</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Select rows; past the first, the parent</td><td><kbd>⇧↑</kbd> <kbd>⇧↓</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Add a row to the selection, or extend it</td><td><kbd>⌘</kbd>-click, <kbd>⇧</kbd>-click</td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Delete the block, or the selected blocks, with their children</td><td><kbd>⇧⌘⌫</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Open a read-only row, or what a reference points at</td><td><kbd>Space</kbd></td><td class="go"><a href="navigating.html">Finding your way</a></td></tr>
+      <tr><td>Clear the selection</td><td><kbd>esc</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+    </table>
+  </section>
+
+  <section class="topic">
+    <h2 id="around" data-short="Getting around" data-k="back forward home today filter copy link">Getting around</h2>
+    <div class="split flip">
+      <div>
+        <p>Each page keeps its own history. Back and Forward walk it, and Home puts the whole window back the way you like it.</p>
+      </div>
+      <figure class="clip"><video data-m="keys-back"></video><figcaption><kbd>⌘[</kbd> goes back a page, <kbd>⌘]</kbd> forward again.</figcaption></figure>
+    </div>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th><th class="go">See</th></tr>
+      <tr><td>Go back, go forward</td><td><kbd>⌘[</kbd> <kbd>⌘]</kbd></td><td class="go"><a href="navigating.html">Finding your way</a></td></tr>
+      <tr><td>Go to Home</td><td><kbd>⇧⌘H</kbd></td><td class="go"><a href="navigating.html">Finding your way</a></td></tr>
+      <tr><td>Today: your node for today</td><td><kbd>⌃⇧D</kbd></td><td class="go"><a href="pins.html">Pins &amp; dates</a></td></tr>
+      <tr><td>Filter the rows on the page by text</td><td><kbd>⌘F</kbd></td><td class="go"><a href="views.html">Views</a></td></tr>
+      <tr><td>Clear and hide the filter</td><td><kbd>esc</kbd></td><td class="go"><a href="views.html">Views</a></td></tr>
+      <tr><td>Copy the node's link, with no words selected</td><td><kbd>⌘C</kbd></td><td class="go"><a href="sharing.html">Sharing</a></td></tr>
+      <tr><td>Zoom into a row</td><td>Click its bullet</td><td class="go"><a href="navigating.html">Finding your way</a></td></tr>
+      <tr><td>Open a bullet in a new tab, a pane beside, a floating pane</td><td><kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>⌥</kbd>-click</td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Open ⌘K on a row</td><td>Right-click, or <kbd>⌃</kbd>-click</td><td class="go"><a href="commands.html#context">⌘K</a></td></tr>
+    </table>
+  </section>
+
+  <section class="topic">
+    <h2 id="palettes" data-short="Palettes and overlays" data-k="palette search recorder help quick add">In the palettes and overlays</h2>
+    <div class="split">
+      <div>
+        <p><kbd>⌘K</kbd>, <kbd>⌘S</kbd> and every page they open share the same keys. The Help tour and Quick Add Task lie over the whole window and have a few of their own; in both, <kbd>⌘K</kbd> closes them and opens the palette.</p>
+      </div>
+      <figure class="shot"><img data-m="commands-match" alt="The palette with nfp typed: New floating pane, with the matched letters in bold"><figcaption>Type a few letters, then <kbd>↩</kbd>.</figcaption></figure>
+    </div>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th><th class="go">See</th></tr>
+      <tr><td>Move, run the highlighted row</td><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>↩</kbd></td><td class="go"><a href="commands.html#basics">⌘K</a></td></tr>
+      <tr><td>Step back a page, or close</td><td><kbd>esc</kbd></td><td class="go"><a href="commands.html#levels">⌘K</a></td></tr>
+      <tr><td>Open the row's place in a new tab, a pane beside, a floating pane</td><td><kbd>⌘↩</kbd> <kbd>⇧↩</kbd> <kbd>⌥↩</kbd></td><td class="go"><a href="commands.html#elsewhere">⌘K</a></td></tr>
+      <tr><td>Record a key for the highlighted row</td><td><kbd>⇧⌘K</kbd></td><td class="go"><a href="commands.html#record">⌘K</a></td></tr>
+      <tr><td>In the recorder: save, reset, cancel</td><td><kbd>↩</kbd> <kbd>⌫</kbd> <kbd>esc</kbd></td><td class="go"><a href="commands.html#record">⌘K</a></td></tr>
+      <tr><td>Help tour: next page, previous page, close</td><td><kbd>→</kbd> <kbd>←</kbd> <kbd>esc</kbd></td><td class="go"><a href="start.html#help">First steps</a></td></tr>
+      <tr><td>Quick Add Task: choose the type</td><td><kbd>↑</kbd> <kbd>↓</kbd></td><td class="go"><a href="tasks.html">Tasks</a></td></tr>
+      <tr><td>Quick Add Task: pick who gets it, and back</td><td><kbd>⇥</kbd></td><td class="go"><a href="tasks.html">Tasks</a></td></tr>
+      <tr><td>Quick Add Task: create; with no title, process the clipboard's image</td><td><kbd>↩</kbd></td><td class="go"><a href="start.html#create">First steps</a></td></tr>
+      <tr><td>A chat's composer: switch between To Tana and To the chat, in an empty message</td><td><kbd>⇥</kbd></td><td class="go"><a href="chats.html">Chats</a></td></tr>
+    </table>
+  </section>
+
+  <section class="topic">
+    <h2 id="windows" data-short="Windows and panes" data-k="pane tab maximize overview zoom close window">Windows and panes</h2>
+    <p>Most pane keys work only while a window has more than one page; with one page, the row keeps them for moving the caret.</p>
+    <figure class="clip wide"><video data-m="keys-panes"></video><figcaption><kbd>⌘/</kbd> to the next pane, <kbd>⌥⌘↓</kbd> to fill the window with it, and again to restore.</figcaption></figure>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th><th class="go">See</th></tr>
+      <tr><td>New window</td><td><kbd>⌥⌘N</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>New pane, to the right</td><td><kbd>⌘N</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Next pane, previous pane</td><td><kbd>⌘/</kbd> <kbd>⇧⌘/</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Next tab, previous tab</td><td><kbd>⇧⌘]</kbd> <kbd>⇧⌘[</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Maximize or restore the pane</td><td><kbd>⌥⌘↓</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Show all panes</td><td><kbd>⌥⌘↑</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Zoom back, zoom forward</td><td><kbd>⌥⌘[</kbd> <kbd>⌥⌘]</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Step out of a zoom, with nothing focused</td><td><kbd>esc</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Close the pane</td><td><kbd>⌘W</kbd></td><td class="go"><a href="windows.html">Windows</a></td></tr>
+      <tr><td>Reload the window, every pane</td><td><kbd>⌘R</kbd></td><td class="go"><a href="start.html#loading">First steps</a></td></tr>
+    </table>
+  </section>
+
+  <section class="topic">
+    <h2 id="fixed" data-short="Fixed keys" data-k="text size zoom reserved own record">Fixed keys and your own</h2>
+    <div class="split flip">
+      <div>
+        <p>Every key on this page except the few below is a palette row with a default, and you can change it: highlight the row in <kbd>⌘K</kbd> and press <kbd>⇧⌘K</kbd>. Your keys follow you to every Mac you sign in on. The keys below are fixed, and the recorder refuses them with the reason.</p>
+      </div>
+      <figure class="shot"><img data-m="commands-reserved" alt="The recorder refusing ⌘K: it already opens the command palette"><figcaption>A fixed key cannot be recorded.</figcaption></figure>
+    </div>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th><th class="go">See</th></tr>
+      <tr><td>The command palette</td><td><kbd>⌘K</kbd></td><td class="go"><a href="commands.html#basics">⌘K</a></td></tr>
+      <tr><td>Record a key</td><td><kbd>⇧⌘K</kbd></td><td class="go"><a href="commands.html#record">⌘K</a></td></tr>
+      <tr><td>Larger text, smaller text, reset</td><td><kbd>⇧⌘+</kbd> <kbd>⇧⌘-</kbd> <kbd>⌘0</kbd></td><td class="go"><a href="settings.html">Settings</a></td></tr>
+      <tr><td>Delete the block</td><td><kbd>⇧⌘⌫</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+      <tr><td>Move the row or selection</td><td><kbd>⇧⌘↑</kbd> <kbd>⇧⌘↓</kbd></td><td class="go"><a href="writing.html">Writing</a></td></tr>
+    </table>
+    <p>A recorded key needs <kbd>⌘</kbd> or <kbd>⌃</kbd>, or is a function key on its own such as <kbd>F6</kbd>. <b>Sync</b>, <b>Focus graph</b>, <b>Show graph</b> and most other rows start without a key, waiting for one of yours.</p>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>sync</b> <i>→</i><kbd>⇧⌘K</kbd><i>→</i> press <kbd>F6</kbd> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+</main>
+</body>
+</html>
+
+

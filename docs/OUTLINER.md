@@ -533,7 +533,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
-  key. **Help**: Help, Check for updates (the app menu's Check for Updates…, whose dialogs answer), and About Orbital: a page with the website and the licence as links, the big dependencies
+  key. **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
+  release), Check for updates (the app menu's Check for Updates…, whose dialogs answer), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
   not affiliated with Tana (renderer/palette.js `openAboutPalette`, the same words as the README's License section).
 
@@ -1238,7 +1239,7 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
 The page on screen has its presence room open (renderer/presence.js follows the zoom after every render;
 main/presence.js keeps one counted room per document over sdk/presence.js). Lists show no presence.
 
-- **Others.** Avatars beside the title, and each person's caret drawn where Tana draws it: a thin line in their colour
+- **Others.** Each person's caret drawn where Tana draws it: a thin line in their colour
   (from their user hash) between the characters it is on, their full name on it, below the caret when the row is too
   near the top. The position is read from the entry's Loro cursor (`content.cursorOffset`), which stays right as text is
   typed, so an edit redraws the carets without a presence message; the block offset (`content.charOffset`, ProseMirror

@@ -214,3 +214,5 @@ an entry in `main/documents.js` `creationOptions` and the mock's `creationOption
 | live queries, presence, PDF export, the updater | scripts/livequery-check.js, presence-check.js, pdf-check.js, updater-check.js |
 
 When the change moves a convention or an API, update the doc that describes it in the same PR.
+
+Every PR also updates the manual: the chapter that owns the feature, its scene in `manual/scenes/` and its pictures, then `node manual/scenes/index.js --coverage`. The orbital-manual skill (`.agents/skills/orbital-manual/SKILL.md`) says which chapter owns what and how to re-record a picture.

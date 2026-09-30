@@ -41,4 +41,4 @@ git push origin "v$version"
 gh release create "v$version" "$zip" --repo "$releases" --title "v$version" --notes "Orbital $version for Apple Silicon. Signed and notarized; unzip and move it to Applications."
 echo "released v$version to $releases"
 # Slack has no token here: the agent cutting the release posts the notes with its Slack connector.
-echo "next: write the release notes (gh release edit v$version --repo $releases --notes-file …) and post them in #orbital on Slack (channel C0C5D5C07EH) with a link to https://github.com/$releases/releases/tag/v$version"
+echo "next: publish manual/ to https://orbital.md/manual (.agents/skills/orbital-manual/SKILL.md, Publishing), write the release notes (gh release edit v$version --repo $releases --notes-file …) and post them in #orbital on Slack (channel C0C5D5C07EH) with a link to https://github.com/$releases/releases/tag/v$version"

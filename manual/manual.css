@@ -1,0 +1,244 @@
+/* The Orbital manual (manual/*.html, manual.js). One stylesheet: the page, the sidebar, figures and clips, callouts,
+   the search palette, and the primitives the motion diagrams (.mg) are drawn from. Grey unless colour means something,
+   hairlines, softness only for what floats: the app's own rules (.agents/skills/orbital-design). */
+:root {
+  --bg: #ffffff; --side: #f6f6f5; --ink: #1c2024; --text: #3d4146; --muted: #6b7075; --faint: #9a9ea3;
+  --line: #e7e7e5; --line-strong: #d9d9d6; --surface: #ffffff; --well: #f4f4f3; --kbd: #f1f1f0;
+  --accent: #508fbb; --now: #2f7cf6; --done: #34a853; --done-soft: #6fae82; --warn: #d93025; --meeting: #c9962b;
+  --shadow-card: 0 12px 40px rgba(0, 0, 0, .12), 0 0 0 1px rgba(0, 0, 0, .05);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 28px rgba(0, 0, 0, .07);
+  --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --side-w: 272px; --col: 720px; --wide: 1000px;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --bg: #1c1e20; --side: #202325; --ink: #eceef0; --text: #c6cacd; --muted: #999ea3; --faint: #71767b;
+  --line: #2f3336; --line-strong: #3a3f42; --surface: #26292b; --well: #25282a; --kbd: #2e3235;
+  --accent: #6aa6cf; --now: #4b8ff8; --done-soft: #6fae82;
+  --shadow-card: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .07);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 30px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 28px; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+b, strong { color: var(--ink); font-weight: 600; }
+code { font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--well); border-radius: 5px; padding: 1px 5px; }
+kbd { font: 600 .8em/1 -apple-system, system-ui, sans-serif; color: var(--ink); background: var(--kbd); border-radius: 6px; padding: 4px 7px;
+  box-shadow: inset 0 -1.5px 0 rgba(0, 0, 0, .12), 0 0 0 1px rgba(0, 0, 0, .04); white-space: nowrap; display: inline-block; min-width: 1.9em; text-align: center; vertical-align: .08em; }
+[data-theme="dark"] kbd { box-shadow: inset 0 -1.5px 0 rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .06); }
+kbd + kbd { margin-left: 3px; }
+::selection { background: rgba(80, 143, 187, .25); }
+
+/* ---- frame: sidebar and page ---- */
+.drag { position: fixed; top: 0; left: 0; right: 0; height: 30px; -webkit-app-region: drag; z-index: 30; }
+.progress { position: fixed; top: 0; left: var(--side-w); right: 0; height: 2px; z-index: 31; pointer-events: none; }
+.progress i { display: block; height: 100%; width: 100%; background: var(--now); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); }
+.side { position: fixed; inset: 0 auto 0 0; width: var(--side-w); background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; z-index: 20; }
+.side .brand { display: flex; align-items: center; gap: 11px; padding: 46px 22px 16px; color: var(--ink); font-weight: 650; font-size: 15px; letter-spacing: -.1px; }
+.side .brand:hover { text-decoration: none; }
+.side .brand small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; letter-spacing: 0; margin-top: -2px; }
+.side .brand img { width: 38px; height: 38px; flex: none; margin: -4px -2px -4px -4px; } /* the app's own icon (build/icon.png), padded as macOS draws it */
+.side .find { margin: 4px 14px 12px; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface);
+  color: var(--muted); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; transition: border-color .2s, box-shadow .2s; }
+.side .find:hover { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(80, 143, 187, .12); }
+.side .find span { flex: 1; }
+.side .find svg { width: 15px; height: 15px; }
+.side nav { flex: 1; overflow: auto; padding: 4px 10px 24px; scrollbar-width: none; }
+.side nav a { display: flex; gap: 10px; align-items: baseline; padding: 6px 12px; border-radius: 8px; color: var(--text); font-size: 14px; line-height: 1.4; }
+.side nav a:hover { background: rgba(0, 0, 0, .04); text-decoration: none; }
+[data-theme="dark"] .side nav a:hover { background: rgba(255, 255, 255, .05); }
+.side nav a .n { width: 18px; flex: none; color: var(--faint); font-variant-numeric: tabular-nums; font-size: 12px; }
+.side nav a.on { color: var(--ink); font-weight: 600; background: rgba(0, 0, 0, .05); }
+[data-theme="dark"] .side nav a.on { background: rgba(255, 255, 255, .07); }
+.side nav a.on .n { color: var(--accent); }
+.side nav .toc { position: relative; margin: 2px 0 8px 29px; padding-left: 12px; border-left: 1px solid var(--line-strong); }
+.side nav .toc a { padding: 3px 8px; font-size: 13px; color: var(--muted); border-radius: 6px; }
+.side nav .toc a.here { color: var(--ink); }
+.side nav .toc .mark { position: absolute; left: -1px; width: 1.5px; background: var(--now); border-radius: 1px; transition: top .3s var(--ease-out), height .3s var(--ease-out); }
+.side .foot { padding: 12px 22px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); display: flex; justify-content: space-between; align-items: center; }
+.side .foot button { font: inherit; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+.side .foot button:hover { background: rgba(0, 0, 0, .05); color: var(--ink); }
+.page { margin-left: var(--side-w); padding: 64px 56px 120px; }
+.page > * { max-width: var(--col); margin-left: auto; margin-right: auto; }
+.page > .wide, .page > .hero, .page > section { max-width: var(--wide); }
+section.topic > :not(.wide):not(.split):not(.grid):not(.mg):not(.anno):not(.clip):not(.shot) { max-width: var(--col); }
+section.topic > * { margin-left: 0; margin-right: 0; } /* one left edge for words, pictures and callouts */
+section.topic { margin: 0 auto; padding-top: 40px; }
+@media (max-width: 1000px) { :root { --side-w: 0px; } .side { display: none; } .page { padding: 56px 28px 100px; } .progress { left: 0; } }
+
+/* ---- type ---- */
+.hero { padding: 24px 0 8px; }
+.eyebrow { font-size: 12.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 1.4px; color: var(--accent); margin: 0 0 14px; }
+h1 { font-size: 50px; line-height: 1.06; letter-spacing: -1.6px; color: var(--ink); margin: 0 0 18px; font-weight: 750; max-width: 14em; }
+.lead { font-size: 20px; line-height: 1.6; color: var(--muted); margin: 0 0 30px; max-width: 34em; }
+h2 { font-size: 30px; line-height: 1.2; letter-spacing: -.7px; color: var(--ink); margin: 28px 0 10px; font-weight: 700; }
+h2 .k { margin-left: 10px; font-size: 15px; vertical-align: 6px; }
+h3 { font-size: 19px; line-height: 1.35; letter-spacing: -.2px; color: var(--ink); margin: 34px 0 6px; font-weight: 650; }
+h3 kbd, h2 kbd { font-size: 13px; vertical-align: 3px; margin-left: 6px; }
+h2 a.anchor, h3 a.anchor { opacity: 0; margin-left: 8px; color: var(--faint); font-weight: 400; transition: opacity .15s; }
+h2:hover a.anchor, h3:hover a.anchor { opacity: 1; text-decoration: none; }
+p { margin: 0 0 14px; }
+ul, ol { padding-left: 1.25em; margin: 0 0 16px; }
+li { margin: 4px 0; }
+li::marker { color: var(--faint); }
+hr { border: 0; border-top: 1px solid var(--line); margin: 48px auto; }
+.muted { color: var(--muted); }
+
+/* "In this chapter": the sections, as chips that jump there */
+.learn { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; padding: 0; list-style: none; }
+.learn li { margin: 0; }
+.learn a { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; padding: 6px 12px; border-radius: 999px; background: var(--well); color: var(--text); border: 1px solid transparent; transition: border-color .2s, color .2s, transform .2s var(--ease-out); }
+.learn a:hover { border-color: var(--line-strong); color: var(--ink); text-decoration: none; transform: translateY(-1px); }
+.learn a::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+
+/* ---- layout blocks ---- */
+.split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 44px; align-items: center; margin: 28px auto; }
+.split.flip > :first-child { order: 2; }
+.split > div > h3:first-child { margin-top: 0; }
+@media (max-width: 1180px) { .split { grid-template-columns: minmax(0, 1fr); gap: 18px; } .split.flip > :first-child { order: 0; } }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin: 22px 0; }
+.card { border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 16px; background: var(--surface); transition: border-color .2s, transform .25s var(--ease-out), box-shadow .25s; }
+a.card { color: inherit; display: block; }
+a.card:hover { text-decoration: none; border-color: var(--line-strong); transform: translateY(-2px); box-shadow: var(--shadow-soft); }
+.card h4 { margin: 0 0 4px; color: var(--ink); font-size: 15.5px; font-weight: 650; }
+.card p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; }
+.card .n { font-size: 12px; color: var(--accent); font-weight: 650; letter-spacing: .6px; }
+
+/* ---- figures: stills, clips, annotated ---- */
+figure { margin: 26px auto; }
+figure.wide, .wide { max-width: var(--wide); }
+.frame { position: relative; border-radius: 12px; overflow: hidden; background: var(--well); box-shadow: var(--shadow-soft); outline: 1px solid var(--line); outline-offset: -1px; }
+.frame img, .frame video { display: block; width: 100%; height: auto; }
+.shot .frame { cursor: zoom-in; }
+figcaption { font-size: 13.5px; color: var(--muted); margin-top: 10px; line-height: 1.55; }
+figcaption b { color: var(--text); }
+.clip .frame::after { content: "Loop"; position: absolute; top: 10px; left: 10px; font: 600 10.5px/1 -apple-system, system-ui; letter-spacing: .6px; text-transform: uppercase;
+  color: #fff; background: rgba(20, 20, 22, .62); backdrop-filter: blur(6px); padding: 5px 8px 5px 18px; border-radius: 999px; pointer-events: none; opacity: .0; transition: opacity .25s; }
+.clip .frame::before { content: ""; position: absolute; z-index: 1; top: 16px; left: 18px; width: 6px; height: 6px; border-radius: 50%; background: #ff5f57; opacity: 0; transition: opacity .25s; }
+.clip .frame:hover::after, .clip .frame:hover::before, .clip.paused .frame::after, .clip.paused .frame::before { opacity: 1; }
+.clip.paused .frame::after { content: "Paused"; }
+.clip.paused .frame::before { background: #bbb; }
+.clip .frame { cursor: pointer; }
+.clip:not(.paused) .frame::before { animation: live 1.6s ease-in-out infinite; }
+@keyframes live { 50% { transform: scale(.6); } }
+/* annotated: numbered pins over a still, and the legend under it; hovering one lights the other */
+.anno .frame { overflow: visible; }
+.anno .frame img { border-radius: 12px; }
+.pin { position: absolute; left: var(--x); top: var(--y); width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: var(--now); color: #fff;
+  font: 650 12.5px/26px -apple-system, system-ui; text-align: center; box-shadow: 0 0 0 3px rgba(255, 255, 255, .9), 0 4px 12px rgba(47, 124, 246, .45); cursor: default; transition: transform .25s var(--ease-spring); }
+[data-theme="dark"] .pin { box-shadow: 0 0 0 3px rgba(28, 30, 32, .9), 0 4px 12px rgba(47, 124, 246, .45); }
+.pin::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--now); opacity: 0; }
+.shown .pin::after { animation: ping 2.8s var(--ease-out) infinite; animation-delay: calc(var(--i, 0) * .25s); }
+@keyframes ping { 0% { transform: scale(.8); opacity: .8; } 60%, 100% { transform: scale(2); opacity: 0; } }
+.pin.lit { transform: scale(1.25); }
+.legend { list-style: none; counter-reset: pin; padding: 0; margin: 16px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px 22px; }
+.legend li { counter-increment: pin; position: relative; padding: 6px 8px 6px 38px; border-radius: 8px; font-size: 14.5px; line-height: 1.5; transition: background .2s; margin: 0; }
+.legend li::before { content: counter(pin); position: absolute; left: 6px; top: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--well); color: var(--ink); font: 650 12px/22px -apple-system, system-ui; text-align: center; transition: background .2s, color .2s; }
+.legend li.lit { background: var(--well); }
+.legend li.lit::before { background: var(--now); color: #fff; }
+.legend b { display: block; }
+/* the lightbox a still opens into */
+.lightbox { position: fixed; inset: 0; z-index: 50; background: rgba(10, 10, 12, .72); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 40px; cursor: zoom-out; animation: fade .2s; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 12px; box-shadow: 0 30px 80px rgba(0, 0, 0, .5); animation: zoomin .3s var(--ease-out); }
+@keyframes fade { from { opacity: 0; } }
+@keyframes zoomin { from { transform: scale(.94); opacity: 0; } }
+
+/* ---- callouts ---- */
+.try, .tip, .note { position: relative; margin: 22px auto; padding: 14px 18px 14px 50px; border-radius: 12px; font-size: 15px; line-height: 1.65; }
+.try { background: linear-gradient(135deg, rgba(47, 124, 246, .07), rgba(80, 143, 187, .04)); border: 1px solid rgba(47, 124, 246, .18); }
+.tip { background: var(--well); }
+.note { border: 1px dashed var(--line-strong); }
+.try::before, .tip::before, .note::before { position: absolute; left: 18px; top: 15px; font: 700 10.5px/1 -apple-system, system-ui; letter-spacing: .5px; text-transform: uppercase; }
+.try::before { content: "Try"; color: var(--now); }
+.tip::before { content: "Tip"; color: var(--done); }
+.note::before { content: "Why"; color: var(--muted); }
+.try .seq { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.try .seq i { font-style: normal; color: var(--faint); }
+
+/* keys: a table of what to press */
+.keys { width: 100%; border-collapse: collapse; margin: 18px 0 24px; font-size: 14.5px; }
+.keys td { padding: 9px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.keys tr:last-child td { border-bottom: 0; }
+.keys td:last-child { text-align: right; white-space: nowrap; }
+.keys th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--faint); font-weight: 650; padding: 0 4px 6px; border-bottom: 1px solid var(--line-strong); }
+.keys th:last-child { text-align: right; }
+
+/* ---- next / previous ---- */
+.pager { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 80px; max-width: var(--wide); }
+.pager a { border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; color: var(--ink); font-weight: 600; transition: border-color .2s, transform .25s var(--ease-out); }
+.pager a:hover { text-decoration: none; border-color: var(--accent); transform: translateY(-2px); }
+.pager a small { display: block; color: var(--muted); font-weight: 500; font-size: 12.5px; margin-bottom: 2px; }
+.pager a.next { text-align: right; grid-column: 2; }
+
+/* ---- the manual's own ⌘K ---- */
+.pal { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .18); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; animation: fade .15s; }
+[data-theme="dark"] .pal { background: rgba(0, 0, 0, .5); }
+.pal .box { width: min(640px, 92vw); background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-card); overflow: hidden; animation: palin .22s var(--ease-out); }
+@keyframes palin { from { transform: translateY(-8px) scale(.98); opacity: 0; } }
+.pal input { width: 100%; border: 0; outline: 0; background: none; font: inherit; font-size: 18px; padding: 18px 20px; color: var(--ink); border-bottom: 1px solid var(--line); }
+.pal ul { list-style: none; margin: 0; padding: 6px; max-height: 58vh; overflow: auto; }
+.pal li { margin: 0; }
+.pal .grp { font-size: 12px; color: var(--muted); padding: 10px 12px 4px; }
+.pal a { display: flex; gap: 10px; align-items: baseline; padding: 8px 12px; border-radius: 8px; color: var(--ink); font-size: 14.5px; }
+.pal a small { margin-left: auto; color: var(--faint); font-size: 12.5px; }
+.pal a.on, .pal a:hover { background: var(--well); text-decoration: none; }
+.pal .empty { padding: 16px; color: var(--muted); font-size: 14px; }
+
+/* ---- reveal as you scroll ---- */
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease-out), transform .7s var(--ease-out); }
+.reveal.shown { opacity: 1; transform: none; }
+
+/* ================= motion diagrams =================
+   .mg is a stage; its parts are drawn from the primitives below. Animations belong under .mg.in (the stage gets .in
+   when it scrolls into view and loses it when it leaves), so each loop starts from its first frame when you arrive.
+   --loop is the stage's loop length; write keyframes in percent of it. Reduced motion shows the last frame. */
+.mg { --loop: 6s; position: relative; margin: 26px auto; border-radius: 16px; overflow: hidden; min-height: 260px;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(80, 143, 187, .09), transparent 60%), var(--well);
+  outline: 1px solid var(--line); outline-offset: -1px; display: flex; align-items: center; justify-content: center; padding: 28px; }
+.mg::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(var(--line-strong) 1px, transparent 1.2px); background-size: 18px 18px; opacity: .55;
+  mask-image: radial-gradient(90% 80% at 50% 40%, #000, transparent); pointer-events: none; }
+.mg > * { position: relative; }
+.mg .cap-line { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 13px; color: var(--muted); }
+.hero .mg { min-height: 300px; margin-top: 8px; }
+/* a floating card: a pane, a palette, a menu */
+.mg .win { background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-card); padding: 14px 16px; min-width: 260px; }
+.mg .win .ttl { font-weight: 700; color: var(--ink); font-size: 17px; letter-spacing: -.3px; margin-bottom: 8px; }
+/* an outline row: marker, words */
+.mg .row { display: flex; align-items: center; gap: 9px; height: 28px; font-size: 14px; color: var(--ink); white-space: nowrap; }
+.mg .row.in1 { padding-left: 22px; } .mg .row.in2 { padding-left: 44px; }
+.mg .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex: none; margin: 0 4px; }
+.mg .bar { height: 8px; border-radius: 4px; background: var(--line-strong); width: var(--w, 120px); }
+.mg .box { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--faint); flex: none; position: relative; }
+.mg .box.on { background: var(--done-soft); border-color: var(--done-soft); }
+.mg .box.on::after { content: ""; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.mg .strike { text-decoration: line-through; color: var(--faint); }
+.mg .chip { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 6px; font-size: 12.5px; font-weight: 550;
+  color: oklch(0.5 0.13 var(--hue, 250)); background: oklch(0.94 0.035 var(--hue, 250)); }
+[data-theme="dark"] .mg .chip { color: oklch(0.8 0.1 var(--hue, 250)); background: oklch(0.32 0.05 var(--hue, 250)); }
+.mg .face { width: 22px; height: 22px; border-radius: 50%; background: oklch(0.86 0.05 var(--hue, 250)); color: oklch(0.38 0.09 var(--hue, 250)); font: 650 9.5px/22px -apple-system, system-ui; text-align: center; flex: none; box-shadow: 0 0 0 2px var(--surface); }
+.mg .faces { display: flex; } .mg .faces .face + .face { margin-left: -6px; }
+.mg .cap { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; height: 40px; padding: 0 11px; border-radius: 9px; font: 650 18px/1 -apple-system, system-ui;
+  color: var(--ink); background: var(--surface); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .1), 0 1px 0 var(--line-strong), 0 6px 16px rgba(0, 0, 0, .08); }
+.mg .caret { display: inline-block; width: 1.5px; height: 1.1em; background: var(--now); vertical-align: -.15em; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.mg .ptr { position: absolute; width: 18px; height: 22px; background: #111; clip-path: polygon(0 0, 0 82%, 23% 64%, 40% 100%, 55% 94%, 39% 60%, 70% 60%); filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 2px 3px rgba(0, 0, 0, .3)); z-index: 5; }
+[data-theme="dark"] .mg .ptr { background: #fff; filter: drop-shadow(0 0 1.5px #000) drop-shadow(0 2px 3px rgba(0, 0, 0, .4)); }
+.mg .hl { background: var(--well); border-radius: 7px; }
+.mg .glow { box-shadow: 0 0 0 1.5px var(--now), 0 0 0 5px rgba(47, 124, 246, .15); }
+.mg .lbl { font-size: 12px; font-weight: 650; letter-spacing: .6px; text-transform: uppercase; color: var(--faint); }
+.mg .arrow { height: 1.5px; background: var(--faint); position: relative; }
+.mg .arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 4.5px solid transparent; border-left: 7px solid var(--faint); border-right: 0; }
+/* a keycap pressed once per loop: .cap.press with --at (0..1, where in the loop it goes down). Any other move is the
+   diagram's own @keyframes in percent of --loop, under .mg.in, in the chapter's <style>. */
+.mg.in .press { animation: mg-press var(--loop) calc(var(--at, 0) * var(--loop)) infinite backwards; }
+@keyframes mg-press { 0%, 100% { transform: none; } 3% { transform: translateY(2px) scale(.94); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .1); background: var(--well); } 8% { transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .mg *, .mg *::before, .mg *::after, .pin::after { animation: none !important; transition: none !important; }
+}

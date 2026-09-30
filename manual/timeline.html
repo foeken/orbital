@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Timeline, notifications &amp; proposals · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* shared parts: a Timeline entry is a time, a marker on the rail and a sentence */
+  .timeline-e { display: grid; grid-template-columns: 44px 22px 1fr; align-items: center; column-gap: 8px; height: 30px; font-size: 13.5px; color: var(--text); white-space: nowrap; overflow: hidden; }
+  .timeline-e b { color: var(--ink); }
+  .timeline-e s { color: var(--faint); }
+  .timeline-t { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; position: relative; }
+  .timeline-t.new::after { content: ""; position: absolute; right: -4px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--now); }
+  .timeline-mk { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--faint); background: var(--surface); position: relative; justify-self: center; font: 600 10px/15px -apple-system, system-ui; text-align: center; color: var(--muted); }
+  .timeline-mk.done { background: var(--done-soft); border-color: var(--done-soft); }
+  .timeline-mk.done::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .timeline-mk.ring { border-style: dotted; }
+  .timeline-mk.flat { border-color: transparent; background: none; }
+  .timeline-quote { margin: 0 0 4px 74px; border-left: 2px solid var(--line-strong); background: var(--well); border-radius: 0 6px 6px 0; padding: 5px 10px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .timeline-quote b { color: var(--ink); }
+
+  /* hero: the top of the page (today's tasks, the free time counting down), then history arriving newest first */
+  .timeline-hero { --loop: 9s; }
+  .timeline-hero .win { width: 470px; padding: 16px 18px 14px; }
+  .timeline-now { display: grid; grid-template-columns: 44px 22px 1fr; column-gap: 8px; row-gap: 2px; font-size: 13.5px; color: var(--ink); align-items: center; }
+  .timeline-now .sub { grid-column: 3; display: flex; align-items: center; gap: 8px; height: 24px; color: var(--text); }
+  .timeline-now .sub .box { width: 13px; height: 13px; }
+  .timeline-free { grid-column: 3; color: var(--muted); height: 26px; display: flex; align-items: center; gap: 5px; }
+  .timeline-free b { color: var(--text); position: relative; display: inline-block; min-width: 1.2em; }
+  .timeline-free .n2 { position: absolute; left: 0; opacity: 0; }
+  .timeline-rule { height: 1px; background: var(--line); margin: 10px 0 6px; }
+  .timeline-in { overflow: hidden; }
+  .mg.in .timeline-hero-a { animation: timeline-arrive var(--loop) infinite; }
+  .mg.in .timeline-hero-b { animation: timeline-arrive2 var(--loop) infinite; }
+  .mg.in .timeline-hero-a .timeline-t.new::after { animation: timeline-dot var(--loop) infinite; }
+  .mg.in .timeline-free .n1 { animation: timeline-n1 var(--loop) infinite; }
+  .mg.in .timeline-free .n2 { animation: timeline-n2 var(--loop) infinite; }
+  .mg.in .timeline-hero .tick { animation: timeline-tick var(--loop) infinite; }
+  @keyframes timeline-arrive { 0%, 14% { height: 0; opacity: 0; background: rgba(47, 124, 246, .10); } 20% { height: 30px; opacity: 1; background: rgba(47, 124, 246, .10); } 38%, 96% { height: 30px; opacity: 1; background: transparent; } 100% { height: 0; opacity: 0; } }
+  @keyframes timeline-arrive2 { 0%, 46% { height: 0; opacity: 0; background: rgba(47, 124, 246, .10); } 52% { height: 30px; opacity: 1; background: rgba(47, 124, 246, .10); } 70%, 96% { height: 30px; opacity: 1; background: transparent; } 100% { height: 0; opacity: 0; } }
+  @keyframes timeline-dot { 0%, 20% { transform: scale(1.8); } 30%, 100% { transform: none; } }
+  @keyframes timeline-n1 { 0%, 60% { opacity: 1; transform: none; } 64%, 100% { opacity: 0; transform: translateY(-6px); } }
+  @keyframes timeline-n2 { 0%, 60% { opacity: 0; transform: translateY(6px); } 64%, 100% { opacity: 1; transform: none; } }
+  @keyframes timeline-tick { 0%, 76% { background: none; border-color: var(--faint); } 79%, 100% { background: var(--done-soft); border-color: var(--done-soft); } }
+  .timeline-free .n1 { opacity: 0; } .timeline-free .n2 { opacity: 1; } /* the end state, for reduced motion */
+  .timeline-hero .tick { background: var(--done-soft); border-color: var(--done-soft); }
+
+  /* where the history comes from: two sources flowing into one page */
+  .timeline-src { --loop: 6s; gap: 26px; }
+  .timeline-src .srcs { display: flex; flex-direction: column; gap: 14px; }
+  .timeline-src .srcs .win { min-width: 0; width: 230px; padding: 12px 14px; }
+  .timeline-src .srcs .lbl { display: block; margin-bottom: 4px; }
+  .timeline-src .srcs .row { font-size: 13px; height: 24px; }
+  .timeline-src .bell { width: 12px; height: 12px; border: 1.5px solid var(--faint); border-radius: 6px 6px 2px 2px; flex: none; }
+  .timeline-lane { position: relative; width: 90px; height: 150px; }
+  .timeline-lane .arrow { position: absolute; left: 0; right: 0; }
+  .timeline-lane .a1 { top: 40px; transform: rotate(14deg); transform-origin: left; }
+  .timeline-lane .a2 { top: 118px; transform: rotate(-14deg); transform-origin: left; }
+  .timeline-lane i { position: absolute; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--now); opacity: 0; }
+  .timeline-lane .p1 { top: 37px; } .timeline-lane .p2 { top: 115px; }
+  .mg.in .timeline-lane .p1 { animation: timeline-p1 var(--loop) infinite; }
+  .mg.in .timeline-lane .p2 { animation: timeline-p2 var(--loop) infinite; }
+  @keyframes timeline-p1 { 0% { opacity: 0; transform: none; } 8% { opacity: 1; } 40% { opacity: 1; transform: translate(84px, 20px); } 46%, 100% { opacity: 0; transform: translate(84px, 20px); } }
+  @keyframes timeline-p2 { 0%, 45% { opacity: 0; transform: none; } 52% { opacity: 1; } 84% { opacity: 1; transform: translate(84px, -20px); } 90%, 100% { opacity: 0; transform: translate(84px, -20px); } }
+  .timeline-src .timeline-pg { width: 330px; }
+
+  /* a proposal: approve and it goes green into place; reject and it leaves red */
+  .timeline-prop { --loop: 8s; }
+  .timeline-prop .win { width: 460px; }
+  .timeline-prow { display: flex; align-items: center; gap: 9px; height: 46px; padding: 0 6px; border-radius: 8px; font-size: 13.5px; color: var(--ink); overflow: hidden; }
+  .timeline-prow small { display: block; font-size: 11.5px; color: var(--faint); line-height: 1.2; }
+  .timeline-prow .grow { flex: 1; line-height: 1.3; }
+  .timeline-btn { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--muted); position: relative; flex: none; }
+  .timeline-btn.ok::after { content: ""; position: absolute; left: 6px; top: 2.5px; width: 4px; height: 8px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+  .timeline-btn.no { border-radius: 3px 3px 5px 5px; width: 15px; height: 17px; border-top-width: 3px; }
+  .timeline-send { font-size: 12px; font-weight: 600; color: var(--text); border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .mg.in .timeline-pa { animation: timeline-yes var(--loop) infinite; }
+  .mg.in .timeline-pb { animation: timeline-no var(--loop) infinite; }
+  .mg.in .timeline-prop .ptr { animation: timeline-ptr var(--loop) infinite; }
+  @keyframes timeline-yes { 0%, 22% { height: 46px; opacity: 1; background: transparent; } 26% { background: rgba(52, 168, 83, .2); } 34%, 100% { height: 0; opacity: 0; background: rgba(52, 168, 83, .2); } }
+  @keyframes timeline-no { 0%, 62% { height: 46px; opacity: 1; background: transparent; } 66% { background: rgba(217, 48, 37, .16); } 74%, 96% { height: 0; opacity: 0; background: rgba(217, 48, 37, .16); } 100% { height: 46px; opacity: 1; } }
+  @keyframes timeline-ptr { 0% { transform: translate(120px, 90px); } 16%, 24% { transform: translate(0, 0); } 21% { transform: translate(0, 0) scale(.85); } 50%, 64% { transform: translate(27px, 0); } 61% { transform: translate(27px, 0) scale(.85); } 100% { transform: translate(120px, 90px); } }
+  .timeline-prop .ptr { left: calc(50% + 178px); top: 96px; }
+  .timeline-events td:first-child { white-space: nowrap; width: 38%; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 5</p>
+    <h1>What moved while you were away</h1>
+    <p class="lead">Three pages keep you up to date without searching: the Timeline for your day and everything that changed, Notifications for what Tana tells you, and Proposals for what Tana's AI wants your yes or no on.</p>
+    <div class="mg timeline-hero" aria-hidden="true">
+      <div class="win">
+        <div class="ttl">Timeline</div>
+        <div class="timeline-now">
+          <span class="timeline-t">Now</span><span class="timeline-mk flat">✓</span><span>Today's Tasks</span>
+          <span class="sub"><span class="box tick"></span>Send the venue options</span>
+          <span class="sub"><span class="box"></span>Draft the LT agenda</span>
+          <span></span><span class="timeline-mk flat">☺</span><span class="timeline-free">No meetings for <b><span class="n1">44</span><span class="n2">43</span></b> more minutes</span>
+        </div>
+        <div class="timeline-rule"></div>
+        <div class="timeline-in timeline-hero-b"><div class="timeline-e"><span class="timeline-t new">11:52</span><span class="timeline-mk pen">✎</span><span>Sam Okafor <b>edited</b> Offsite plan</span></div></div>
+        <div class="timeline-in timeline-hero-a"><div class="timeline-e"><span class="timeline-t new">11:13</span><span class="timeline-mk done"></span><span>Priya Raman <b>completed</b> <s>Book the room</s></span></div></div>
+        <div class="timeline-e"><span class="timeline-t">10:47</span><span class="timeline-mk">+</span><span>Tomas Ilves <b>accepted</b> Guardrail sessions</span></div>
+        <div class="timeline-e"><span class="timeline-t">09:00</span><span class="timeline-mk" style="border-radius:4px">▦</span><span>Leadership sync <span style="color:var(--faint)">· 1 h</span></span></div>
+      </div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="timeline" data-k="today tasks free time upcoming meetings join">The Timeline</h2>
+    <p>The Timeline is a page of Orbital's own. Open it from <kbd>⌘K</kbd> with the row <b>Timeline</b>, under Views. The top of the page is about now: what you plan to do today and what is coming up. Below a thin rule is the history, newest first.</p>
+    <figure class="anno wide">
+      <img data-m="timeline-now" alt="The top of the Timeline: Today's Tasks, the free time and the upcoming meetings">
+      <span class="pin" style="--x:21%;--y:23.8%">1</span>
+      <span class="pin" style="--x:18.5%;--y:50%">2</span>
+      <span class="pin" style="--x:32%;--y:55.8%">3</span>
+      <span class="pin" style="--x:24%;--y:65%">4</span>
+      <span class="pin" style="--x:28%;--y:71.8%">5</span>
+      <span class="pin" style="--x:29%;--y:93.9%">6</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Today's Tasks</b> Tasks you pinned to today, plus open ones pinned to an earlier day, plus the tasks on today's page.</li>
+      <li><b>Add more</b> Opens a search of your open tasks. Pick one and it is pinned to today.</li>
+      <li><b>Free time</b> How long until your next meeting. It counts down while you look.</li>
+      <li><b>Upcoming meetings</b> Today's meetings that have not started yet, earliest first.</li>
+      <li><b>Join in Tana</b> The Tana glyph after a meeting opens it in Tana, where you join the call.</li>
+      <li><b>Faces</b> Who else is in the meeting, after its time.</li>
+    </ol>
+    <h3>Today's Tasks</h3>
+    <p>This list is your plan for the day. A task lands here in three ways: you pin it to today, it was pinned to an earlier day and is still open, or it is on today's page (the <b>Today</b> document, see <a href="pins.html#today">Pins &amp; dates</a>). Tasks you finish today stay in the list, ticked, so you can see what you got done. With nothing left it says <b>All done - Add more</b>.</p>
+    <div class="split">
+      <div>
+        <h3>Add more</h3>
+      <p>Click <b>Add more</b> under the list. A search of the open tasks assigned to you opens. Type to narrow it, press <kbd>↩</kbd>, and the task is pinned to today. It shows in Today's Tasks straight away.</p>
+    </div>
+    <figure class="shot"><img data-m="timeline-addmore" alt="The Add more search, with one open task matching the word board"><figcaption>Add more searches your open tasks. <kbd>↩</kbd> pins the one you pick to today.</figcaption></figure>
+  </div>
+  <h3>Free time and upcoming meetings</h3>
+  <p>The line with the relaxed face says how long you have before the next meeting: "No meetings for <b>44 more minutes</b>", or "1 hour and 20 more minutes". During a meeting it says how much room there is after it: "No meetings for <b>30 minutes</b> after this one". It counts down by itself and disappears when meetings run back to back.</p>
+  <p>Under it, <b>Upcoming meetings</b> lists today's meetings that are still to come, each with its time and the faces of the other people in it. Click one to open it. A meeting under way that is being recorded or transcribed gets a small blue marker with a ring pulsing out of it, so you can see at a glance that a call is on the record.</p>
+  <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>timeline</b> <i>→</i><kbd>↩</kbd></span> then click <b>Add more</b> and pin one task to today.</div>
+</section>
+
+<section class="topic">
+  <h2 id="history" data-short="History" data-k="completed accepted edited later inbox agent unread days">What happened, newest first</h2>
+  <p>Under the rule, the Timeline tells the story of the last days. Each entry has a time on the left, a marker on the rail and one sentence: who did what to which node. Entries are grouped by day: Today, Yesterday, then the date.</p>
+  <figure class="anno wide">
+    <img data-m="timeline-history" alt="The Timeline's history with completed, accepted and edited entries">
+    <span class="pin" style="--x:4.3%;--y:50%">1</span>
+    <span class="pin" style="--x:4.3%;--y:29.5%">2</span>
+    <span class="pin" style="--x:35.5%;--y:5.9%">3</span>
+    <span class="pin" style="--x:41.5%;--y:24.7%">4</span>
+    <span class="pin" style="--x:62.8%;--y:44.2%">5</span>
+    <span class="pin" style="--x:34.5%;--y:63.4%">6</span>
+    <span class="pin" style="--x:21%;--y:76%">7</span>
+    <span class="pin" style="--x:10.5%;--y:83.2%">8</span>
+  </figure>
+  <ol class="legend">
+    <li><b>Time</b> When it happened, on a 24-hour clock.</li>
+    <li><b>Blue dot</b> New since you last opened the Timeline.</li>
+    <li><b>Added to your Inbox</b> A run of new tasks from one source is one quiet line, with the tasks under it. The robot means an agent put them there.</li>
+    <li><b>Completed</b> A green tick and a struck title for finished work.</li>
+    <li><b>Edited</b> A pen, with Tana's summary of the change quoted under it.</li>
+    <li><b>Added by a person</b> A dotted ring marks tasks a colleague gave you.</li>
+    <li><b>A meeting you were in</b> Shown at its start, with its length and who else was there.</li>
+    <li><b>Day sections</b> Today, Yesterday, then the date. Each folds like any group.</li>
+  </ol>
+  <table class="keys timeline-events">
+    <tr><th>The entry says</th><th>It means</th></tr>
+    <tr><td>Priya Raman <b>completed</b> …</td><td>Someone ticked off a task you follow.</td></tr>
+    <tr><td>Tomas Ilves <b>accepted</b> …</td><td>A task moved from Inbox to In Progress.</td></tr>
+    <tr><td><b>moved to Later</b> · <b>moved back to Inbox</b></td><td>Someone parked a task, or sent it back.</td></tr>
+    <tr><td>Sam Okafor <b>edited</b> …</td><td>The node changed. Tana's summary is quoted under it: the title in bold, then the detail.</td></tr>
+    <tr><td>An AI agent added 4 tasks to your Inbox</td><td>New tasks for you. The marker says who: a robot for an agent, Tana's prism for Tana's AI, a dotted ring for a person.</td></tr>
+    <tr><td>You added 2 tasks</td><td>Tasks you made for yourself, in one line and never marked new.</td></tr>
+    <tr><td>Leadership sync · 1 h</td><td>A meeting you were in. One that ended without a summary is drawn faint.</td></tr>
+  </table>
+  <p>Click an entry, or press <kbd>↩</kbd> on it, to open the node it is about. Your own changes stay out: the Timeline is about what others did.</p>
+  <h3>Where the history comes from</h3>
+  <p>Two things feed the history: the nodes you watch (the ones with a bell, see <a href="tasks.html#watching">Watching a task</a>) and the tasks assigned to you in the last two weeks. Watch a node and its changes start showing here. Stop watching it and they stop.</p>
+  <div class="mg timeline-src" aria-hidden="true">
+    <div class="srcs">
+      <div class="win"><span class="lbl">Nodes you watch</span><div class="row"><span class="bell"></span>Prepare the offsite agenda</div><div class="row"><span class="bell"></span>Studio LT charter</div></div>
+      <div class="win"><span class="lbl">Tasks for you · two weeks</span><div class="row"><span class="box"></span>Book a room</div><div class="row"><span class="box"></span>Contact Dana</div></div>
+    </div>
+    <div class="timeline-lane"><span class="arrow a1"></span><span class="arrow a2"></span><i class="p1"></i><i class="p2"></i></div>
+    <div class="win timeline-pg">
+      <div class="ttl">Timeline</div>
+      <div class="timeline-e"><span class="timeline-t new">11:52</span><span class="timeline-mk pen">✎</span><span>Sam <b>edited</b> Offsite agenda</span></div>
+      <div class="timeline-e"><span class="timeline-t">10:31</span><span class="timeline-mk ring"></span><span>Tomas added a task</span></div>
+      <div class="timeline-e"><span class="timeline-t">09:12</span><span class="timeline-mk done"></span><span>Priya <b>completed</b> <s>Charter</s></span></div>
+    </div>
+  </div>
+  <h3>Three more days</h3>
+      <p>The page opens on today and the two days before. Scroll to the end and it reads three more days by itself; the <b>Show three more days</b> line at the bottom does the same when you click it, and says "Loading…" while it works.</p>
+    <figure class="shot wide"><img data-m="timeline-end" alt="The end of the Timeline with the Show three more days line"><figcaption>The end of the page reads further back as you reach it.</figcaption></figure>
+    <div class="note">The Timeline is rebuilt from Tana every time you open it, which takes about a second. That is why it always matches what happened, even on a Mac that was asleep all week.</div>
+    <div class="try"><span class="seq">Open the Timeline <i>→</i> <kbd>↓</kbd> to an entry <i>→</i><kbd>↩</kbd></span> to jump to the node it is about.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="notifications" data-k="unread read mark all bell inbox">Notifications</h2>
+    <p>Notifications is Tana's own inbox of notices, shown as a page: someone assigned you a task, added you to a meeting, archived a type. Open it from <kbd>⌘K</kbd> with <b>Notifications</b>; its hint says how many are unread, such as "2 unread".</p>
+          <h3>Read and unread</h3>
+      <p>An unread notification has a blue dot where the bullet would be. Click the dot to mark it read; click the grey one to make it unread again. Opening a row, with <kbd>↩</kbd>, <kbd>Space</kbd> or a click on its words, marks it read and takes you to what it is about. When that is something Orbital has no page for, it opens in Tana.</p>
+      <p>In <kbd>⌘K</kbd>, <b>Mark as read</b> and <b>Mark as unread</b> act on the rows you are on or have selected. <b>Mark all as read</b> clears them all; its hint gives the count, and it turns grey when nothing is unread.</p>
+    <figure class="clip wide"><video data-m="timeline-read"></video><figcaption>Each row is Tana's sentence, the time in grey. A click on the blue dot marks one read; <b>Mark all as read</b> clears the rest.</figcaption></figure>
+    <div class="tip">New notifications arrive while the page is open, and the unread count in <kbd>⌘K</kbd> follows along.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>mark all</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="proposals" data-k="approve reject send ai from others action">Proposals</h2>
+    <p>When Tana's AI suggests something in a chat or a meeting, such as a new document, a change or an action in another tool, it waits for someone to accept it. The Proposals page collects everything waiting on you. Open it from <kbd>⌘K</kbd> with <b>Proposals</b>; the hint says how many are pending.</p>
+    <figure class="anno wide">
+      <img data-m="timeline-proposals" alt="The Proposals page with approve and reject buttons on each row">
+      <span class="pin" style="--x:85%;--y:20.2%">1</span>
+      <span class="pin" style="--x:92.6%;--y:30.9%">2</span>
+      <span class="pin" style="--x:98.9%;--y:30.9%">3</span>
+      <span class="pin" style="--x:34.5%;--y:46.7%">4</span>
+      <span class="pin" style="--x:12.8%;--y:57.7%">5</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Send to Slite</b> An action in another system. Approving it runs it there; the button names the system, or says "Run".</li>
+      <li><b>Approve</b> Accepts a proposed new document. It joins your Tana as it was proposed.</li>
+      <li><b>Reject</b> Turns the proposal down. Works on every kind.</li>
+      <li><b>Approve in Tana</b> A change or deletion Tana merges itself. Approve is grey here, with the reason on hover.</li>
+      <li><b>From others</b> Proposals from meetings you were not in, or chats of a space or a colleague. Folded until you open it.</li>
+    </ol>
+          <h3>Approve or reject</h3>
+      <p>Each row is the proposed document itself, with a grey line saying where it was proposed ("Proposed in Board prep") and when. Press <kbd>Space</kbd> to look inside it. The two buttons at the end of the row answer it: the row leaves in green for a yes and in red for a no. <kbd>⌘K</kbd> has the same pair as <b>Approve proposal</b> and <b>Reject proposal</b>, for the row you are on or a selection.</p>
+      <p>If Tana refuses, the row comes back and a note says why.</p>
+    <figure class="clip wide"><video data-m="timeline-approve"></video><figcaption>Approve a proposed task: the row leaves the page.</figcaption></figure>
+    <div class="mg timeline-prop" aria-hidden="true">
+      <div class="win">
+        <div class="ttl">Proposals</div>
+        <div class="timeline-prow timeline-pa"><span class="box"></span><span class="grow">Check out the new editor<small>Proposed in Board prep</small></span><span class="timeline-btn ok"></span><span class="timeline-btn no"></span></div>
+        <div class="timeline-prow timeline-pb"><span class="dot"></span><span class="grow">Studio LT charter<small>Change proposed in Private AI chat · approve in Tana</small></span><span class="timeline-btn ok" style="opacity:.35"></span><span class="timeline-btn no"></span></div>
+        <div class="timeline-prow"><span class="dot"></span><span class="grow">Sync FinOps risk update<small>Proposed in Slite Risk Document Update</small></span><span class="timeline-send">Send to Slite</span><span class="timeline-btn no"></span></div>
+      </div>
+      <span class="ptr"></span>
+      <span class="cap-line">Yes goes green and joins Tana. No goes red and is gone.</span>
+    </div>
+    <div class="note">Nothing tells Orbital when a new proposal appears, so the page reads Tana again each time you open it. The count in <kbd>⌘K</kbd> is read when Orbital connects.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>proposals</b> <i>→</i><kbd>↩</kbd></span> then <kbd>Space</kbd> on a row to see what is being proposed.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <p>None of these pages has a key of its own out of the box. Each is a <kbd>⌘K</kbd> row, so you can give it one: highlight the row and press <kbd>⇧⌘K</kbd>.</p>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Open Timeline, Notifications or Proposals</td><td><kbd>⌘K</kbd> then the page's name</td></tr>
+      <tr><td>Open the entry, notification or node you are on</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>Open a proposal's document, or a notification's source</td><td><kbd>Space</kbd></td></tr>
+      <tr><td>Record a key for the highlighted row</td><td><kbd>⇧⌘K</kbd></td></tr>
+      <tr><td>Reload, staying on the page</td><td><kbd>⌘R</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>
+
+
+
+

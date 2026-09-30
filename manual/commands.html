@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>⌘K, the command palette · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* hero: the caret moves from a task to a meeting, and the palette's rows follow it */
+  .commands-hero { --loop: 8s; gap: 34px; min-height: 320px; }
+  .commands-hero .commands-page { width: 290px; }
+  .commands-hero .commands-page .row { border-radius: 7px; padding: 0 6px; }
+  .commands-hero .commands-pal { width: 300px; padding: 12px 10px 14px; }
+  .commands-pal .commands-in { font-size: 14px; color: var(--faint); padding: 0 8px 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .commands-pal .lbl { font-size: 10.5px; padding: 0 8px 4px; }
+  .commands-sets { position: relative; height: 90px; }
+  .commands-set { position: absolute; inset: 0; }
+  .commands-set .row { padding: 0 8px; border-radius: 7px; }
+  .commands-set .row:first-child { background: var(--well); }
+  .commands-set .k { margin-left: auto; font: 600 11px/1 -apple-system, system-ui; color: var(--muted); background: var(--well); border-radius: 5px; padding: 3px 6px; }
+  .commands-set .row:first-child .k { background: var(--surface); }
+  .commands-cal { width: 15px; height: 14px; border: 1.5px solid var(--meeting); border-top-width: 4px; border-radius: 3px; flex: none; }
+  .commands-a { opacity: 0; }
+  .commands-m { box-shadow: 0 0 0 1.5px var(--now), 0 0 0 5px rgba(47, 124, 246, .15); }
+  .mg.in .commands-a { animation: commands-a var(--loop) infinite; }
+  .mg.in .commands-b { animation: commands-b var(--loop) infinite; }
+  .mg.in .commands-t { animation: commands-t var(--loop) infinite; }
+  .mg.in .commands-m { animation: commands-m var(--loop) infinite; }
+  @keyframes commands-a { 0%, 4% { opacity: 0; transform: translateY(4px); } 8%, 44% { opacity: 1; transform: none; } 48%, 100% { opacity: 0; } }
+  @keyframes commands-b { 0%, 48% { opacity: 0; transform: translateY(4px); } 54%, 94% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
+  @keyframes commands-t { 0%, 3% { box-shadow: none; } 6%, 44% { box-shadow: 0 0 0 1.5px var(--now), 0 0 0 5px rgba(47, 124, 246, .15); } 48%, 100% { box-shadow: none; } }
+  @keyframes commands-m { 0%, 48% { box-shadow: none; } 52%, 94% { box-shadow: 0 0 0 1.5px var(--now), 0 0 0 5px rgba(47, 124, 246, .15); } 98%, 100% { box-shadow: none; } }
+
+  /* ↩, ⌘↩, ⇧↩, ⌥↩: where a place opens */
+  .commands-where { --loop: 8s; min-height: 250px; }
+  .commands-opts { display: grid; grid-template-columns: repeat(4, 158px); gap: 18px; }
+  .commands-opt { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .commands-opt .cap { font-size: 15px; height: 34px; min-width: 34px; }
+  .commands-opt span.lbl { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink); font-weight: 600; }
+  .commands-mini { position: relative; width: 150px; height: 96px; background: var(--surface); border-radius: 9px; box-shadow: var(--shadow-soft), 0 0 0 1px var(--line); overflow: hidden; }
+  .commands-mini i { position: absolute; display: block; border-radius: 4px; }
+  .commands-mini .tab { top: 6px; height: 10px; width: 38px; background: var(--well); }
+  .commands-mini .body { top: 22px; bottom: 6px; background: var(--well); }
+  .commands-mini .new { background: rgba(47, 124, 246, .16); box-shadow: inset 0 0 0 1.5px var(--now); }
+  .commands-mini .fl { right: 10px; bottom: 10px; width: 62px; height: 44px; border-radius: 6px; background: var(--surface); box-shadow: 0 6px 14px rgba(0, 0, 0, .18), inset 0 0 0 1.5px var(--now); }
+  .mg.in .commands-opt { animation: commands-lit var(--loop) calc(var(--i) * var(--loop) / 4) infinite backwards; }
+  @keyframes commands-lit { 0% { opacity: .4; transform: none; } 4%, 22% { opacity: 1; transform: translateY(-4px); } 26%, 100% { opacity: .4; transform: none; } }
+  @media (max-width: 1180px) { .commands-opts { grid-template-columns: repeat(2, 158px); } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 2</p>
+    <h1>⌘K lists what you can do right here</h1>
+    <p class="lead">The command palette is where every feature lives. Learn to read it and you can find anything Orbital does, run it in a few keys, and give it a shortcut of your own.</p>
+    <div class="mg commands-hero" aria-hidden="true">
+      <div class="win commands-page">
+        <div class="ttl">Monday</div>
+        <div class="row commands-t"><span class="box"></span>Send the Q3 board deck</div>
+        <div class="row commands-m"><span class="commands-cal"></span>Budget review Q4</div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:150px"></span></div>
+      </div>
+      <div class="arrow" style="width:44px"></div>
+      <div class="win commands-pal">
+        <div class="commands-in">Run a command</div>
+        <div class="lbl">Current node</div>
+        <div class="commands-sets">
+          <div class="commands-set commands-a">
+            <div class="row"><span class="dot"></span>Complete<span class="k">⌘↩</span></div>
+            <div class="row"><span class="dot"></span>Set status</div>
+            <div class="row"><span class="dot"></span>Assign to …</div>
+          </div>
+          <div class="commands-set commands-b">
+            <div class="row"><span class="dot"></span>Change time / location</div>
+            <div class="row"><span class="dot"></span>Add attendee</div>
+            <div class="row"><span class="dot"></span>Copy link<span class="k">⌘C</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="cap-line">Move the caret, and the rows at the top change with it</p>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="basics" data-short="Open, type, run" data-k="command palette run filter match">Open, type, run</h2>
+    <div>
+      <div>
+        <p>Press <kbd>⌘K</kbd> anywhere. A card opens over the page with a field that says <b>Run a command</b> and a list of rows under small grey headings. Type a few letters to narrow the list, move with <kbd>↑</kbd> and <kbd>↓</kbd>, and press <kbd>↩</kbd> to run the highlighted row. <kbd>esc</kbd> closes the palette, and <kbd>⌘K</kbd> again does too. The page stays as it was behind it, and your caret goes back where it was.</p>
+        <p>You can also click a row. In a window with several panes the card covers the whole window, but it acts in the pane you opened it from.</p>
+      </div>
+    </div>
+    <figure class="clip wide"><video data-m="commands-run"></video><figcaption>Caret in a task, <kbd>⌘K</kbd>, type <b>comp</b>, <kbd>↩</kbd>: the task is completed.</figcaption></figure>
+    <h3>How typing finds a row</h3>
+    <div class="split flip">
+      <div>
+        <p>You rarely need a whole word. The palette looks for your letters the way you would abbreviate, best matches first:</p>
+        <ul>
+          <li>the start of the label: <b>in</b> finds Inbox</li>
+          <li>the first letters of its words: <b>mtl</b> finds Move to Library</li>
+          <li>the start of a later word: <b>in</b> also finds Zoom in</li>
+          <li>pieces of words: <b>molib</b></li>
+          <li>letters in order: <b>inbx</b></li>
+        </ul>
+        <p>The letters that matched are bold. Among equal matches, the shorter label wins.</p>
+      </div>
+      <figure class="shot"><img data-m="commands-match" alt="The palette with nfp typed: New floating pane, with N, f and p in bold"><figcaption><b>nfp</b> is enough for <b>New floating pane</b>.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>nfp</b> <i>→</i><kbd>↩</kbd></span> for a floating pane, then <kbd>⌘W</kbd> to close it again.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="context" data-short="Rows follow the caret" data-k="current node selection right-click context">Rows that follow your caret</h2>
+    <p>The first group is about what you are on. With the caret in a row, or zoomed into a node, it is <b>Current node</b>: the things you can do to that node, in a fixed order. First where it goes (<b>Open node</b>, <b>Expand</b>, <b>Collapse</b>), then its state, who has it, a meeting's time and people, when and where it lives (pins, dates, its space), what it is (type and fields), how it looks, the agent, who can see it, its link and export, and last <b>Delete</b>.</p>
+    <div class="split">
+      <figure class="shot"><img data-m="commands-context" alt="The palette over a task: Current node with Open node, Set status, Edit assignees, Assign to …, Add to chat …, Delete, Rename"><figcaption>The rows for the task under the caret come first.</figcaption></figure>
+      <figure class="shot"><img data-m="commands-selection" alt="The palette over four selected rows: a Selection group with Add 4 items to chat … and Delete 4 items"><figcaption>With rows selected, the <b>Selection</b> group acts on all of them.</figcaption></figure>
+    </div>
+    <p>Select several rows (<kbd>⇧↓</kbd>, or <kbd>⌘</kbd>-click) and the palette leads with <b>Selection</b> instead, counting what each row acts on ("Delete 4 items"). Rows that an action cannot apply to are counted as skipped, and the page's own rows follow under <b>Current page</b>.</p>
+    <p><b>Right-click</b> a row, or <kbd>⌃</kbd>-click it, to open <kbd>⌘K</kbd> on that row: the caret goes where you clicked, and the palette acts on it. On a row inside a selection, the selection stays.</p>
+    <div class="try">Put the caret in any task, then <span class="seq"><kbd>⌘K</kbd></span> and read the first group. Move to a meeting and open it again.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="groups" data-short="Groups" data-k="views actions navigate window settings help order">Groups and their order</h2>
+    <div class="split flip">
+      <div>
+        <p>Below the node's own rows, the rest of the palette is always in the same order, so you learn where things are. When you type, the group with the best match moves up as a whole, and groups that match equally well keep this order.</p>
+      </div>
+      <figure class="shot"><img data-m="commands-groups" alt="The palette with nothing focused: Image, then Views with Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types"><figcaption>With nothing focused, the list starts at the views.</figcaption></figure>
+    </div>
+    <table class="keys">
+      <tr><th>Group</th><th>What is in it</th></tr>
+      <tr><td><b>Selection</b> or <b>Current node</b></td><td>What you can do to the rows you are on</td></tr>
+      <tr><td><b>Table</b></td><td>Rows, columns and cells, with the caret in a table</td></tr>
+      <tr><td><b>Image</b></td><td>Process image, Process image from clipboard</td></tr>
+      <tr><td><b>Views</b></td><td>Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types</td></tr>
+      <tr><td><b>Searches</b> and <b>Types</b></td><td>Your saved searches, and one row per workspace type</td></tr>
+      <tr><td><b>View options</b></td><td>The page's filters, sorting and grouping, Clean up, Filter rows by text</td></tr>
+      <tr><td><b>Actions</b></td><td>Create new …, Quick Add Task, New canvas, Search Tana, Undo, Redo, Sync</td></tr>
+      <tr><td><b>Navigate</b></td><td>Go back, Go forward, Go to Home, Set as Home, Recently deleted</td></tr>
+      <tr><td><b>Window</b></td><td>New window, New pane, New tab, the pane moves, Reload, Save view…</td></tr>
+      <tr><td><b>Saved views</b></td><td>The Work View and any layout you saved</td></tr>
+      <tr><td><b>Settings</b></td><td>Text size, dark mode, hidden and sensitive items, accounts, Log out of Tana</td></tr>
+      <tr><td><b>Help</b></td><td>Help, Open Manual, About Orbital, Check for updates</td></tr>
+    </table>
+    <div class="split">
+      <div><p>The palette lists commands, never documents. Type something that matches no command and you get one row, <b>Search Tana for “…”</b>, which carries your words into <a href="#search">search</a>.</p></div>
+      <figure class="shot"><img data-m="commands-fallback" alt="No results, and one row: Search Tana for quarterly budget"><figcaption>No command matches, so the words go to search.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="levels" data-short="Second levels and pages" data-k="folded sub move to set status assign page back">Second levels and pages</h2>
+    <p>Some rows hold a list of their own: <b>Move to …</b>, <b>Set status</b>, <b>Edit assignees</b> and <b>Assign to …</b>, <b>Create new …</b>, <b>Edit visibility</b> and the view options such as <b>Sort by</b>. You can reach their choices without opening them. Once the first two letters you type point at such a row, each choice appears as a row of its own right under it: "Set status to In Progress", "Move to Studio LT", "Assign to Priya", "Sort by Title". <b>Set status</b> and <b>Move to …</b> are short lists, so their choices join in for any query: <b>inb</b> finds <b>Set status to Inbox</b>.</p>
+    <p>A row whose label ends in <b>…</b> asks you something first. <kbd>↩</kbd> on it opens a page of the palette, with its own field and rows. <kbd>esc</kbd> steps back to the page that opened it, and from the command page closes the palette.</p>
+    <figure class="clip wide"><video data-m="commands-fold"></video><figcaption><b>inb</b> reaches <b>Set status to Inbox</b> directly; <b>Create new …</b> opens its page, and <kbd>esc</kbd> steps back.</figcaption></figure>
+    <div class="tip">A choice that appears this way can get a key of its own, like any row. "Set status to Later" on <kbd>⌃⌘L</kbd> skips the palette entirely.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="greyed" data-short="Greyed rows" data-k="disabled grey unavailable why">Greyed rows, and why</h2>
+    <div class="split">
+      <div>
+        <p>Orbital shows you every option, even the ones you cannot use right now. A row that cannot run stays in its place, greyed, and its grey hint on the right says why: <b>Go to Home</b> says <b>Current</b> when you are already there, and <b>Go back</b> is grey with nothing to go back to. A read-only node shows <b>Delete</b> greyed. While you are signed out, everything but <b>Log in to Tana</b> is grey.</p>
+        <p><kbd>↑</kbd> and <kbd>↓</kbd> skip greyed rows, so <kbd>↩</kbd> always does something. The exception is a greyed row you can give a key to, such as <b>Clean up</b> before there is anything to clean up: the highlight still stops there so <kbd>⇧⌘K</kbd> can record it.</p>
+      </div>
+      <figure class="shot"><img data-m="start-signedout-palette" alt="The palette while signed out: every row but Log in to Tana is greyed"><figcaption>Signed out, every row is shown and only one runs.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="record" data-short="Your own keys" data-k="shortcut hotkey record reserved chip key">Your own keys</h2>
+    <p>Any row with a key shows it as a chip at its right end, such as <kbd>⌃⇧D</kbd> on Today. You can give almost any row a key, or change the one it has. Highlight the row, and the field's right end reads <kbd>⇧⌘K</kbd> <b>Set key</b>. Press <kbd>⇧⌘K</kbd>.</p>
+    <figure class="clip wide"><video data-m="commands-record"></video><figcaption>Recording <kbd>⌃⌘Y</kbd> for <b>Sync</b>: the chip shows on the row at once.</figcaption></figure>
+    <div class="split">
+      <div>
+        <p>The recorder says <b>Recording keyboard shortcut for:</b> and the row's name. Press the combo you want and it appears, with a red dot while it listens. <kbd>↩</kbd> or <b>Save</b> keeps it, <kbd>⌫</kbd> or <b>Reset</b> goes back to the row's own key, and <kbd>esc</kbd> or <b>Cancel</b> leaves it as it was.</p>
+        <p>A combo needs <kbd>⌘</kbd> or <kbd>⌃</kbd>, so typing is never taken over; a function key such as <kbd>F6</kbd> works on its own. Some keys are fixed and refused, with the reason under the keys: <kbd>⌘K</kbd>, <kbd>⇧⌘K</kbd>, the text size keys <kbd>⌘0</kbd> <kbd>⇧⌘+</kbd> <kbd>⇧⌘-</kbd>, <kbd>⇧⌘⌫</kbd>, <kbd>⇧⌘↑</kbd> and <kbd>⇧⌘↓</kbd>. So is any combo another row already has, and the warning names that row.</p>
+        <p>Your keys follow you to every Mac you sign in on, and the tooltips on buttons show them too.</p>
+      </div>
+      <figure class="shot"><img data-m="commands-reserved" alt="The recorder refusing ⌘K: it already opens the command palette"><figcaption>A fixed key is refused, and the recorder says why.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>sync</b> <i>→</i><kbd>⇧⌘K</kbd><i>→</i> press <kbd>⌃⌘Y</kbd> <i>→</i><kbd>↩</kbd></span>. <b>Sync</b> has no key of its own until you give it one; <kbd>⇧⌘K</kbd> then <kbd>⌫</kbd> takes it off again.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="search" data-k="cmd+s find related semantic filter #task #meeting recently viewed">⌘S: search all of Tana</h2>
+    <p><kbd>⌘S</kbd> opens the same card as a search, <b>Search Tana</b>. Results arrive as you type, each with its glyph, title, tags and a grey line such as a meeting's date. Titles that hold more of your words come first, and those words are bold. <kbd>↩</kbd> opens the result wherever it lives. <kbd>⌘S</kbd> closes it again, and opening one palette closes the other.</p>
+    <figure class="clip wide"><video data-m="commands-search"></video><figcaption>Typing <b>board</b>: the matches first, then <b>Related</b> results that are about the same thing.</figcaption></figure>
+    <h3>Related results</h3>
+    <p>From four characters on, documents that only Tana's meaning-based search found follow under <b>Related</b>: notes and tasks about your words without containing them.</p>
+    <h3>Filter with #</h3>
+    <div class="split flip">
+      <div>
+        <p>Put <b>#task</b>, <b>#meeting</b>, <b>#member</b> or <b>#</b> and a type's name anywhere in the query to keep only that kind. <b>#meeting budget</b> finds meetings about the budget; a type name Tana does not know gives no results.</p>
+      </div>
+      <figure class="shot"><img data-m="commands-filters" alt="Search with #meeting: only meetings, each with its day and time"><figcaption><b>#meeting</b> lists meetings, with their dates.</figcaption></figure>
+    </div>
+    <h3>Recently viewed</h3>
+    <div class="split">
+      <div>
+        <p>With nothing typed, <kbd>⌘S</kbd> shows the last 20 documents you opened, most recent first. It is the quickest way back to something you just had open.</p>
+      </div>
+      <figure class="shot"><img data-m="commands-recent" alt="Search with no query: Recently viewed, four documents"><figcaption>An empty search is your history.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq"><kbd>⌘S</kbd><i>→</i> type <b>#meeting</b> <i>→</i><kbd>↓</kbd><i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="elsewhere" data-short="Open it elsewhere" data-k="new tab pane floating cmd shift option enter">Open it somewhere else</h2>
+    <p>A row that opens a place, such as a search result, a saved search, a type, Today or This week, can open it beside what you are reading instead of replacing it. Hold a modifier as you press <kbd>↩</kbd>, or as you click:</p>
+    <div class="mg commands-where" aria-hidden="true">
+      <div class="commands-opts">
+        <div class="commands-opt" style="--i:0"><span class="cap press" style="--at:.01">↩</span><div class="commands-mini"><i class="tab" style="left:6px"></i><i class="body new" style="left:6px;right:6px"></i></div><span class="lbl">Here</span></div>
+        <div class="commands-opt" style="--i:1"><span class="cap press" style="--at:.26">⌘↩</span><div class="commands-mini"><i class="tab" style="left:6px"></i><i class="tab new" style="left:48px"></i><i class="body" style="left:6px;right:6px"></i></div><span class="lbl">A new tab</span></div>
+        <div class="commands-opt" style="--i:2"><span class="cap press" style="--at:.51">⇧↩</span><div class="commands-mini"><i class="tab" style="left:6px"></i><i class="body" style="left:6px;right:78px"></i><i class="tab new" style="left:78px"></i><i class="body new" style="left:78px;right:6px"></i></div><span class="lbl">A pane beside</span></div>
+        <div class="commands-opt" style="--i:3"><span class="cap press" style="--at:.76">⌥↩</span><div class="commands-mini"><i class="tab" style="left:6px"></i><i class="body" style="left:6px;right:6px"></i><i class="fl"></i></div><span class="lbl">A floating pane</span></div>
+      </div>
+    </div>
+    <p>The same modifiers work on a click: <kbd>⌘</kbd>-click, <kbd>⇧</kbd>-click or <kbd>⌥</kbd>-click a row in either palette, or a bullet in the outline. If the place is already open in another pane, that pane comes forward instead. You can press the key before a search has answered: it waits and opens the right result. While you are making an <b>@</b> link, <kbd>⌘↩</kbd> keeps its meaning there and creates a new node.</p>
+    <div class="try"><span class="seq"><kbd>⌘S</kbd><i>→</i> type a few letters <i>→</i><kbd>⇧↩</kbd></span> and the result opens in a pane beside this one.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Open or close the command palette</td><td><kbd>⌘K</kbd></td></tr>
+      <tr><td>Open or close search</td><td><kbd>⌘S</kbd></td></tr>
+      <tr><td>Move, run</td><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>↩</kbd></td></tr>
+      <tr><td>Step back a page, or close</td><td><kbd>esc</kbd></td></tr>
+      <tr><td>Open in a new tab, a pane beside, a floating pane</td><td><kbd>⌘↩</kbd> <kbd>⇧↩</kbd> <kbd>⌥↩</kbd></td></tr>
+      <tr><td>Record a key for the highlighted row</td><td><kbd>⇧⌘K</kbd></td></tr>
+      <tr><td>In the recorder: save, reset, cancel</td><td><kbd>↩</kbd> <kbd>⌫</kbd> <kbd>esc</kbd></td></tr>
+      <tr><td>Open ⌘K on a row</td><td>Right-click, or <kbd>⌃</kbd>-click</td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>
+
+
+
+

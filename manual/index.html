@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'self' 'sha256-AQZkkZV3P64lrFC+jaU6WTfmDOwntlNYEQJKqhlmMU8='">
+<title>Orbital manual</title>
+<!-- served at /manual on the web (orbital.md): add the folder's slash before anything relative loads -->
+<script>if (/^https?:$/.test(location.protocol) && /\/manual$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);</script>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* the cover's planet: ⌘K at the centre, what you work on in orbit around it (the signed-out welcome, renderer/app.js) */
+  .welcome-hero { --loop: 8s; min-height: 380px; }
+  .welcome-sys { position: relative; width: 560px; height: 300px; }
+  .welcome-ring { position: absolute; left: 50%; top: 50%; width: 500px; height: 170px; margin: -85px 0 0 -250px; border: 1.5px solid var(--line-strong); border-radius: 50%; }
+  .welcome-glow { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px; border-radius: 50%; background: radial-gradient(circle, rgba(80, 143, 187, .22), transparent 65%); }
+  .welcome-keys { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: 10px; z-index: 2; }
+  .welcome-keys .cap { width: 76px; height: 76px; font-size: 34px; border-radius: 16px; }
+  .welcome-sat { position: absolute; left: 0; top: 0; offset-path: ellipse(250px 85px at 280px 150px); offset-rotate: 0deg; animation: welcome-orbit 26s linear infinite; animation-delay: calc(var(--n) * -5.2s); z-index: 3;
+    display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 9px; background: var(--surface); box-shadow: var(--shadow-soft); font-size: 13.5px; font-weight: 550; color: var(--ink); white-space: nowrap; }
+  .welcome-sat i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .welcome-sat.m i { background: var(--meeting); } .welcome-sat.t i { background: var(--done-soft); } .welcome-sat.p i { background: var(--accent); }
+  @keyframes welcome-orbit { to { offset-distance: 100%; } }
+  .welcome-pulse { position: absolute; left: 50%; top: 50%; width: 180px; height: 100px; margin: -50px -90px; border-radius: 50%; border: 2px solid var(--now); opacity: 0; }
+  .mg.in .welcome-pulse { animation: welcome-pulse var(--loop) var(--ease-out) infinite; animation-delay: calc(.12 * var(--loop)); }
+  @keyframes welcome-pulse { 0% { transform: scale(.6); opacity: .7; } 22%, 100% { transform: scale(2.4); opacity: 0; } }
+  /* three ideas, each a small stage */
+  .welcome-ideas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 26px auto; max-width: var(--wide); }
+  @media (max-width: 1180px) { .welcome-ideas { grid-template-columns: minmax(0, 1fr); } }
+  .welcome-ideas .mg { margin: 0 0 12px; min-height: 210px; padding: 18px; }
+  .welcome-ideas h3 { margin: 0 0 4px; }
+  .welcome-ideas p { font-size: 14.5px; color: var(--muted); }
+  /* 1: type, the list narrows, Enter runs it */
+  .welcome-pal { --loop: 7s; }
+  .welcome-pal .win { width: 250px; min-width: 0; padding: 10px; }
+  .welcome-pal .q { height: 28px; font-size: 14px; color: var(--ink); border-bottom: 1px solid var(--line); margin: -2px -2px 6px; padding: 0 4px; display: flex; align-items: center; }
+  .welcome-pal .q b { font-weight: 500; overflow: hidden; white-space: nowrap; width: 3ch; }
+  .welcome-pal .row { height: 26px; padding: 0 6px; border-radius: 6px; font-size: 13px; }
+  .welcome-pal .row.hit { background: var(--well); }
+  .mg.in .welcome-pal .q b { animation: welcome-type var(--loop) steps(3) infinite; }
+  .mg.in .welcome-pal .drop { animation: welcome-drop var(--loop) var(--ease-out) infinite; }
+  .mg.in .welcome-pal .hit { animation: welcome-run var(--loop) infinite; }
+  @keyframes welcome-type { 0%, 10% { width: 0; } 30%, 100% { width: 3ch; } }
+  @keyframes welcome-drop { 0%, 22% { height: 26px; opacity: 1; } 32%, 100% { height: 0; opacity: 0; } }
+  @keyframes welcome-run { 0%, 55% { background: var(--well); } 58% { background: rgba(47, 124, 246, .18); } 64%, 100% { background: var(--well); } }
+  .welcome-pal .done { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); font-size: 12.5px; padding: 5px 10px; border-radius: 7px; background: var(--ink); color: var(--bg); opacity: 0; white-space: nowrap; }
+  .mg.in .welcome-pal .done { animation: welcome-toast var(--loop) var(--ease-out) infinite; }
+  @keyframes welcome-toast { 0%, 58% { opacity: 0; transform: translate(-50%, 6px); } 63%, 90% { opacity: 1; transform: translate(-50%, 0); } 96%, 100% { opacity: 0; } }
+  /* 2: a bullet is a door: click it and the row becomes the page */
+  .welcome-zoom { --loop: 7s; }
+  .welcome-zoom .win { width: 250px; min-width: 0; height: 150px; position: relative; overflow: hidden; }
+  .welcome-zoom .a, .welcome-zoom .b { position: absolute; inset: 12px 14px; }
+  .welcome-zoom .ttl { font-size: 15px; }
+  .welcome-zoom .target .dot { background: var(--ink); }
+  .mg.in .welcome-zoom .target .dot { animation: welcome-halo var(--loop) infinite; }
+  .mg.in .welcome-zoom .a { animation: welcome-out var(--loop) var(--ease-out) infinite; }
+  .mg.in .welcome-zoom .b { animation: welcome-in var(--loop) var(--ease-out) infinite; }
+  .welcome-zoom .b { opacity: 0; }
+  @keyframes welcome-halo { 0%, 30% { box-shadow: none; } 34%, 42% { box-shadow: 0 0 0 5px rgba(47, 124, 246, .25); } 46%, 100% { box-shadow: none; } }
+  @keyframes welcome-out { 0%, 42% { opacity: 1; transform: none; } 50%, 92% { opacity: 0; transform: translateX(-30px); } 100% { opacity: 1; transform: none; } }
+  @keyframes welcome-in { 0%, 44% { opacity: 0; transform: translateX(30px); } 52%, 90% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
+  /* 3: Orbital and Tana, one live stream between them */
+  .welcome-sync { --loop: 4s; gap: 0; }
+  .welcome-sync .end { width: 86px; height: 86px; border-radius: 20px; background: var(--surface); box-shadow: var(--shadow-soft); display: flex; align-items: center; justify-content: center; font-weight: 650; color: var(--ink); font-size: 14px; flex: none; }
+  .welcome-sync .wire { position: relative; width: 150px; height: 2px; background: var(--line-strong); }
+  .welcome-sync .wire i { position: absolute; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--now); opacity: 0; }
+  .welcome-sync .wire i.back { background: var(--done-soft); }
+  .mg.in .welcome-sync .wire i { animation: welcome-go var(--loop) linear infinite; animation-delay: calc(var(--d) * var(--loop)); }
+  .mg.in .welcome-sync .wire i.back { animation-name: welcome-back; }
+  @keyframes welcome-go { 0% { left: 0; opacity: 0; } 10%, 40% { opacity: 1; } 50%, 100% { left: 142px; opacity: 0; } }
+  @keyframes welcome-back { 0% { left: 142px; opacity: 0; } 10%, 40% { opacity: 1; } 50%, 100% { left: 0; opacity: 0; } }
+  .welcome-groups h3 { margin-top: 30px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--faint); font-weight: 650; }
+  .welcome-groups .grid { margin-top: 10px; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">The Orbital manual</p>
+    <h1>Your Tana, as one fast outline</h1>
+    <p class="lead">Orbital puts your tasks, meetings, notes and people in one outline that you drive from the keyboard. Everything it can do is one <kbd>⌘K</kbd> away, and this manual shows all of it.</p>
+    <div class="mg welcome-hero" aria-hidden="true">
+      <div class="welcome-sys">
+        <div class="welcome-glow"></div>
+        <div class="welcome-ring"></div>
+        <div class="welcome-pulse"></div>
+        <div class="welcome-keys"><span class="cap press" style="--at:.1">⌘</span><span class="cap press" style="--at:.12">K</span></div>
+        <span class="welcome-sat t" style="--n:0"><i></i>Tasks</span>
+        <span class="welcome-sat m" style="--n:1"><i></i>Meetings</span>
+        <span class="welcome-sat" style="--n:2"><i></i>Notes</span>
+        <span class="welcome-sat p" style="--n:3"><i></i>People</span>
+        <span class="welcome-sat" style="--n:4"><i></i>Inbox</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="topic">
+    <h2 id="read">How to read this manual</h2>
+    <div class="grid">
+      <div class="card"><h4>Clips loop</h4><p>Moving pictures play while they are on screen and start over when you come back. Click one to pause it.</p></div>
+      <div class="card"><h4>⌘K works here too</h4><p>Press <kbd>⌘K</kbd> or <kbd>/</kbd> to search every chapter and heading, as the palette does in the app.</p></div>
+      <div class="card"><h4>Turn the page</h4><p><kbd>⌘[</kbd> and <kbd>⌘]</kbd> go to the previous and next chapter, the keys that walk your history in Orbital.</p></div>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="glance">The window at a glance</h2>
+    <p>This is the <b>Work View</b>, where a first launch opens: the <b>Timeline</b> of your day on the left and <b>My Tasks</b> on the right. Hover a number to see what it is.</p>
+    <figure class="anno wide">
+      <img data-m="welcome-window" alt="The Orbital window with the Timeline and My Tasks side by side">
+      <span class="pin" style="--x:6%;--y:6.5%">1</span>
+      <span class="pin" style="--x:93.2%;--y:2.2%">2</span>
+      <span class="pin" style="--x:4.5%;--y:19.4%">3</span>
+      <span class="pin" style="--x:7.2%;--y:45.6%">4</span>
+      <span class="pin" style="--x:4.5%;--y:72.2%">5</span>
+      <span class="pin" style="--x:62.2%;--y:6.5%">6</span>
+      <span class="pin" style="--x:94.8%;--y:95.6%">7</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Tabs and panes</b> Every pane holds pages as tabs. Split, float and rearrange them freely. <a href="windows.html">Windows</a></li>
+      <li><b>The window's switches</b> The house opens the Work View, the eye shows sensitive items, then <kbd>⌘K</kbd> and Help. <a href="start.html">First steps</a></li>
+      <li><b>Today's Tasks</b> What you pinned to today, ready to tick off. <a href="timeline.html">Timeline</a></li>
+      <li><b>Free time and meetings</b> How long until your next meeting, and who is in each one. <a href="meetings.html">Meetings</a></li>
+      <li><b>What happened</b> Changes to what you watch and new tasks in your Inbox, newest first. <a href="timeline.html">Timeline</a></li>
+      <li><b>My Tasks</b> A saved search of your open tasks, one of the views you can make yourself. <a href="views.html">Views</a></li>
+      <li><b>Create new</b> A task, a note, a chat or a search. Drop an image on it to turn it into a task. <a href="start.html">First steps</a></li>
+    </ol>
+  </section>
+
+  <section class="topic">
+    <h2 id="ideas">Three ideas that explain the rest</h2>
+    <div class="welcome-ideas wide">
+      <div>
+        <div class="mg welcome-pal" aria-hidden="true">
+          <div class="win">
+            <div class="q"><b>pin</b><span class="caret"></span></div>
+            <div class="row drop">Set status</div>
+            <div class="row hit">Pin to today</div>
+            <div class="row drop">Search Tana</div>
+            <div class="row">Pin to tomorrow</div>
+          </div>
+          <span class="done">Pinned to today</span>
+        </div>
+        <h3>⌘K runs everything</h3>
+        <p>Every feature starts as a row in the palette. Type a few letters of what you want and press <kbd>↩</kbd>. The rows follow the caret, so they are about the node you are on.</p>
+      </div>
+      <div>
+        <div class="mg welcome-zoom" aria-hidden="true">
+          <div class="win">
+            <div class="a">
+              <div class="ttl">Studio programme</div>
+              <div class="row"><span class="dot"></span>Pilot plans</div>
+              <div class="row target"><span class="dot"></span>Offsite agenda</div>
+              <div class="row"><span class="dot"></span>Budget</div>
+            </div>
+            <div class="b">
+              <div class="ttl">Offsite agenda</div>
+              <div class="row"><span class="dot"></span>One-year roadmap</div>
+              <div class="row"><span class="dot"></span><span class="bar" style="--w:90px"></span></div>
+            </div>
+          </div>
+        </div>
+        <h3>Every line is a node</h3>
+        <p>A task, a meeting, a note and each line inside them are all nodes in one outline. Click a bullet to zoom into it, and <kbd>⌘[</kbd> takes you back out.</p>
+      </div>
+      <div>
+        <div class="mg welcome-sync" aria-hidden="true">
+          <span class="end">Orbital</span>
+          <span class="wire"><i style="--d:0"></i><i class="back" style="--d:.5"></i></span>
+          <span class="end">Tana</span>
+        </div>
+        <h3>Tana decides</h3>
+        <p>Orbital reads and writes your Tana live. What you change shows in Tana at once, and what others change arrives here as it happens. Nothing is kept anywhere else.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="topic welcome-groups">
+    <h2 id="chapters">Chapters</h2>
+    <h3>The basics</h3>
+    <div class="grid">
+      <a class="card" href="start.html"><span class="n">1</span><h4>First steps</h4><p>Sign in, the window, the Help tour.</p></a>
+      <a class="card" href="commands.html"><span class="n">2</span><h4>⌘K, the command palette</h4><p>Run anything, record your own keys, search Tana.</p></a>
+      <a class="card" href="writing.html"><span class="n">3</span><h4>Writing in the outline</h4><p>Rows, keys, marks, links, images, tables, drag and drop.</p></a>
+      <a class="card" href="navigating.html"><span class="n">4</span><h4>Finding your way</h4><p>Zoom, back and forward, Home.</p></a>
+    </div>
+    <h3>Your work</h3>
+    <div class="grid">
+      <a class="card" href="timeline.html"><span class="n">5</span><h4>Timeline, notifications &amp; proposals</h4><p>Your day at a glance, what changed, what waits for you.</p></a>
+      <a class="card" href="tasks.html"><span class="n">6</span><h4>Tasks</h4><p>States, owners, bells and Quick Add.</p></a>
+      <a class="card" href="views.html"><span class="n">7</span><h4>Views &amp; saved searches</h4><p>Inbox, Library, Types, filters, groups and your own searches.</p></a>
+      <a class="card" href="pins.html"><span class="n">8</span><h4>Pins &amp; dates</h4><p>Put a node on a day, a meeting or the sidebar.</p></a>
+      <a class="card" href="meetings.html"><span class="n">9</span><h4>Meetings</h4><p>Write-ups, attendees, time and place, calls.</p></a>
+    </div>
+    <h3>Structure and AI</h3>
+    <div class="grid">
+      <a class="card" href="types.html"><span class="n">10</span><h4>Types &amp; fields</h4><p>Give nodes a type, an icon, a colour and fields.</p></a>
+      <a class="card" href="ai.html"><span class="n">11</span><h4>AI &amp; agents</h4><p>Discuss, classify, translate, read images, hand work to Codex.</p></a>
+      <a class="card" href="chats.html"><span class="n">12</span><h4>Chats</h4><p>Conversations with Tana's AI and your team.</p></a>
+    </div>
+    <h3>Your workspace</h3>
+    <div class="grid">
+      <a class="card" href="windows.html"><span class="n">13</span><h4>Windows, panes &amp; the Graph</h4><p>Panes, tabs, windows, links, and who else is here.</p></a>
+      <a class="card" href="sharing.html"><span class="n">14</span><h4>Sharing &amp; privacy</h4><p>Who sees what, moving, deleting and hiding.</p></a>
+      <a class="card" href="settings.html"><span class="n">15</span><h4>Settings &amp; housekeeping</h4><p>Theme, text size, export, updates.</p></a>
+      <a class="card" href="keys.html"><span class="n">16</span><h4>Keyboard reference</h4><p>Every key on one page.</p></a>
+    </div>
+  </section>
+</main>
+</body>
+</html>

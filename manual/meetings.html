@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>Meetings · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* shared bits: the gold calendar glyph a meeting wears, the blue "now" dot */
+  .mt-cal { width: 15px; height: 15px; border: 1.5px solid var(--meeting); border-radius: 4px; flex: none; position: relative; box-sizing: border-box; }
+  .mt-cal::before { content: ""; position: absolute; left: 0; right: 0; top: 3px; border-top: 1.5px solid var(--meeting); }
+  .mt-now { width: 9px; height: 9px; border-radius: 50%; background: var(--now); position: relative; flex: none; }
+  .mt-now::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--now); opacity: .35; }
+  .mg.in .mt-now::after { animation: mt-pulse 1.8s ease-out infinite; }
+  @keyframes mt-pulse { from { transform: scale(1); opacity: .45; } to { transform: scale(2.6); opacity: 0; } }
+  .mt-small { font-size: 12px; color: var(--muted); }
+
+  /* hero: a meeting row is clicked, its write-up opens, and what hangs off the meeting lights up beside it */
+  .mt-hero { --loop: 8s; gap: 34px; }
+  .mt-hero .mt-list { width: 250px; }
+  .mt-hero .mt-page { width: 430px; display: grid; grid-template-columns: 1fr 138px; gap: 18px; }
+  .mt-hero .mt-row { border-radius: 7px; padding: 0 6px; margin: 0 -6px; }
+  .mt-hero .mt-field { display: flex; align-items: center; gap: 8px; height: 26px; font-size: 12.5px; color: var(--muted); }
+  .mt-hero .mt-field .faces { margin-left: 6px; }
+  .mt-hero .mt-h { font-size: 12.5px; font-weight: 650; color: var(--ink); margin: 10px 0 2px; }
+  .mt-hero .mt-hub { border-left: 1px solid var(--line); padding-left: 14px; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+  .mt-hero .mt-hub > div { font-size: 12.5px; color: var(--text); display: flex; flex-direction: column; gap: 5px; }
+  .mt-hero .mt-hub .lbl { font-size: 10.5px; }
+  .mt-hero .ptr { left: 0; top: 0; }
+  .mg.in .mt-hero-ptr { animation: mt-ptr var(--loop) infinite; }
+  .mg.in .mt-hero-row { animation: mt-row var(--loop) infinite; }
+  .mg.in .mt-hero-page { animation: mt-page var(--loop) infinite; }
+  .mg.in .mt-hub > :nth-child(1) { animation: mt-hub1 var(--loop) infinite; }
+  .mg.in .mt-hub > :nth-child(2) { animation: mt-hub2 var(--loop) infinite; }
+  .mg.in .mt-hub > :nth-child(3) { animation: mt-hub3 var(--loop) infinite; }
+  .mt-hero-ptr { opacity: 0; }
+  @keyframes mt-ptr { 0% { opacity: 0; transform: translate(200px, 150px); } 6% { opacity: 1; transform: translate(200px, 150px); } 16%, 20% { opacity: 1; transform: translate(130px, 44px); } 18% { transform: translate(130px, 44px) scale(.85); } 30%, 100% { opacity: 0; transform: translate(130px, 44px); } }
+  @keyframes mt-row { 0%, 16% { background: transparent; } 18%, 30% { background: var(--line); } 40%, 100% { background: transparent; } }
+  @keyframes mt-page { 0%, 20% { opacity: 0; transform: translateX(-14px); } 30%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes mt-hub1 { 0%, 38% { opacity: 0; transform: translateY(6px); } 44%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes mt-hub2 { 0%, 48% { opacity: 0; transform: translateY(6px); } 54%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes mt-hub3 { 0%, 58% { opacity: 0; transform: translateY(6px); } 64%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+  /* pin to the meeting you are in: ⌘K, the row, and the task lands in the meeting's Pinned */
+  .mt-pin { --loop: 7s; gap: 90px; }
+  .mt-pin .mt-task { width: 250px; }
+  .mt-pin .mt-meet { width: 260px; }
+  .mt-pin .mt-meet .ttl { display: flex; align-items: center; gap: 9px; }
+  .mt-pin .mt-pal { position: absolute; left: 50%; top: 24px; transform: translateX(-50%); min-width: 290px; padding: 10px 12px; z-index: 3; }
+  .mt-pin .mt-pal .row { background: var(--well); border-radius: 7px; padding: 0 8px; justify-content: space-between; }
+  .mt-pin .mt-fly { position: absolute; left: calc(50% - 300px); top: 50%; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); background: var(--surface);
+    box-shadow: var(--shadow-soft); border-radius: 8px; padding: 5px 10px; opacity: 0; z-index: 4; }
+  .mt-pin .cap { position: absolute; left: calc(50% - 20px); bottom: 26px; }
+  .mt-pin-pal, .mt-pin-fly { opacity: 0; }
+  .mg.in .mt-pin-pal { animation: mt-pal var(--loop) infinite; }
+  .mg.in .mt-pin-fly { animation: mt-fly var(--loop) infinite; }
+  .mg.in .mt-pin-new { animation: mt-new var(--loop) infinite; }
+  .mg.in .mt-pin-src { animation: mt-src var(--loop) infinite; }
+  @keyframes mt-pal { 0%, 20% { opacity: 0; transform: translate(-50%, -6px); } 24%, 44% { opacity: 1; transform: translate(-50%, 0); } 48%, 100% { opacity: 0; } }
+  @keyframes mt-src { 0%, 18% { background: transparent; } 20%, 60% { background: var(--line); } 66%, 100% { background: transparent; } }
+  @keyframes mt-fly { 0%, 46% { opacity: 0; transform: translate(0, 0); } 49% { opacity: 1; transform: translate(0, 0); } 62% { opacity: 1; transform: translate(360px, 34px); } 64%, 100% { opacity: 0; transform: translate(360px, 34px); } }
+  @keyframes mt-new { 0%, 62% { opacity: 0; max-height: 0; } 66%, 94% { opacity: 1; max-height: 28px; } 100% { opacity: 0; max-height: 0; } }
+  .mt-pin-new { overflow: hidden; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 9</p>
+    <h1>Meetings open at their notes</h1>
+    <p class="lead">A meeting in Orbital is the page Tana wrote about it. You open it to read what was decided, change when and where it is, add people, and pin the things you want on the table.</p>
+    <div class="mg mt-hero" aria-hidden="true">
+      <div class="win mt-list">
+        <div class="lbl" style="margin-bottom:6px">Upcoming meetings</div>
+        <div class="row mt-row mt-hero-row"><span class="mt-cal"></span>Leadership sync</div>
+        <div class="row mt-row"><span class="mt-cal" style="opacity:.5"></span><span class="bar" style="--w:120px"></span></div>
+        <div class="row mt-row"><span class="mt-cal" style="opacity:.5"></span><span class="bar" style="--w:90px"></span></div>
+        <span class="ptr mt-hero-ptr"></span>
+      </div>
+      <div class="win mt-page mt-hero-page">
+        <div>
+          <div class="ttl">Leadership sync</div>
+          <div class="mt-field">Attendees <span class="faces"><span class="face" style="--hue:250">R</span><span class="face" style="--hue:150">S</span><span class="face" style="--hue:30">P</span><span class="face" style="--hue:300">T</span></span></div>
+          <div class="row"><span class="dot"></span><span class="bar" style="--w:190px"></span></div>
+          <div class="mt-h">Key takeaways</div>
+          <div class="row"><span class="dot"></span><span class="bar" style="--w:170px"></span></div>
+          <div class="row"><span class="dot"></span><span class="bar" style="--w:140px"></span></div>
+        </div>
+        <div class="mt-hub">
+          <div><span class="lbl">Pinned</span><span class="bar" style="--w:96px"></span></div>
+          <div><span class="lbl">Outcomes</span><span style="display:flex;gap:6px;align-items:center"><span class="box"></span><span class="bar" style="--w:80px"></span></span></div>
+          <div><span class="lbl">Call</span><span>Join call</span></div>
+        </div>
+      </div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="write-up" data-k="summary tagline event forward">A meeting opens at its write-up</h2>
+    <p>After a meeting, Tana writes it up: a short summary, the key takeaways and the decisions, in a document titled after the meeting. Orbital treats that document as the meeting's page. Click a meeting anywhere, on the Timeline, in a search, in a mention or in your pins, and Orbital opens its write-up straight away.</p>
+    <p>You read and edit the write-up like any other page. The meeting's own facts, who can see it and who was invited, sit under the title. Everything else Tana keeps about the meeting (what was pinned to it, the tasks that came out of it, notes written in it) shows in the Graph pane beside it.</p>
+    <figure class="anno wide">
+      <img data-m="meetings-page" alt="The Leadership sync meeting page, with the Graph pane beside it">
+      <span class="pin" style="--x:22%;--y:13%">1</span>
+      <span class="pin" style="--x:21%;--y:19.3%">2</span>
+      <span class="pin" style="--x:21%;--y:23.6%">3</span>
+      <span class="pin" style="--x:68%;--y:41.2%">4</span>
+      <span class="pin" style="--x:14%;--y:47.5%">5</span>
+      <span class="pin" style="--x:80.5%;--y:11.7%">6</span>
+      <span class="pin" style="--x:82.2%;--y:24.8%">7</span>
+      <span class="pin" style="--x:82.6%;--y:38.3%">8</span>
+    </figure>
+    <ol class="legend">
+      <li><b>Title</b> The write-up's title, which Tana gives it with the write-up.</li>
+      <li><b>Visible to</b> Who can read the meeting. Click it to change who can see it.</li>
+      <li><b>Attendees</b> Who was invited, one per line: colleagues as links, guests by name.</li>
+      <li><b>Summary</b> Tana's few lines on what the meeting was about.</li>
+      <li><b>Key takeaways</b> The write-up itself, with the decisions under it. Edit it like any note.</li>
+      <li><b>Pinned</b> Documents and chats pinned to the meeting.</li>
+      <li><b>Outcomes</b> Tasks that came out of the meeting.</li>
+      <li><b>References</b> Other notes written in the meeting.</li>
+    </ol>
+    <div class="note">A meeting on Tana's side is a calendar event with no content of its own. Its write-up is the document whose title is the meeting's "The one where …" line, so a meeting that has not been written up yet opens on its empty event.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>Timeline</b> <i>→</i><kbd>↩</kbd></span>, then click any meeting under <b>Upcoming meetings</b>.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="page" data-short="The meeting page" data-k="attendees visible to join call video link open in tana">What the meeting page tells you</h2>
+    <div class="split">
+      <div>
+        <h3>Attendees</h3>
+        <p><b>Attendees</b> lists the people on the invitation. Colleagues are links to their profile; anyone else shows the name or address the calendar gave. Rooms and equipment are left out. After five people the list stops at <b>And 3 more</b>. Click it, or press <kbd>↩</kbd> on it, to see everyone.</p>
+        <p>An invitation says who was asked, not who came. For that, see <a href="#now">the meeting you are in now</a>.</p>
+      </div>
+      <figure class="clip"><video data-m="meetings-attendees"></video><figcaption>Five attendees, then <b>And 3 more</b> opens the rest.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Join call</h3>
+        <p>When the meeting has a video link, <kbd>⌘K</kbd> on its page offers <b>Join call</b>, with the link as its hint. It opens the call in your browser. Orbital takes the first web link in the meeting's location, or else the call link Tana keeps for the meeting.</p>
+        <p><b>Open in Tana</b> opens the same meeting in Tana's web app.</p>
+      </div>
+      <figure class="shot"><img data-m="meetings-join" alt="⌘K showing Join call with the meeting's link"><figcaption><b>Join call</b> names the link it will open.</figcaption></figure>
+    </div>
+    <div class="tip">The Graph pane opens with <kbd>⌘K</kbd> <b>Show graph</b>, or the graph button at the top right of the page. On a meeting it lists Pinned, Outcomes, Proposals (what Tana's AI proposed in the meeting's chats), References, where the meeting is mentioned, and its Changes. See <a href="windows.html">Windows, panes &amp; the Graph</a>.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="edit" data-short="Time, place and people" data-k="reschedule move location room attendee invite organizer calendar">Change the time, place and people</h2>
+    <p>If you organise a meeting, you can change it from <kbd>⌘K</kbd> on its page. Three rows appear under <b>Current node</b>, each with what it would change as its hint: <b>Change time …</b> shows when it is now, <b>Change location …</b> where, and <b>Add attendee …</b> how many people are on it. Tana sends the change on to your calendar.</p>
+    <figure class="shot"><img data-m="meetings-cmdk" alt="⌘K on a meeting with Change time, Change location and Add attendee"><figcaption>⌘K on a meeting you organise. Each row says what it would change.</figcaption></figure>
+    <p>On a meeting someone else organises, the three rows are not there, because Tana would refuse the change. <b>Change time …</b> is also missing on an all-day meeting, which Tana cannot move to a clock time.</p>
+
+    <h3>Change time …</h3>
+    <p>Type a day, a time, or both. The row under the field shows exactly the time <kbd>↩</kbd> will set, so you see it before anything changes.</p>
+    <ul>
+      <li><b>14:00</b> keeps the day and the length</li>
+      <li><b>tomorrow 9:30</b> moves both</li>
+      <li><b>fri 10:00-11:30</b> sets the start and the end</li>
+      <li><b>tomorrow</b> keeps the time of day</li>
+    </ul>
+    <p>Days are read the way <b>Pin to date …</b> reads them: weekdays, "in 3 days", "next week", dates.</p>
+    <figure class="clip wide"><video data-m="meetings-time"></video><figcaption>Moving Leadership sync to tomorrow at 9:30. Open <b>Change time …</b> again and its hint shows the new time.</figcaption></figure>
+
+    <h3>Change location …</h3>
+    <div class="split flip">
+      <div>
+        <p>Type a room, an address or a link, and press <kbd>↩</kbd> on <b>Set location to "…"</b>. With the field empty, the page shows the current location and offers <b>Remove location</b>.</p>
+      </div>
+      <figure class="shot"><img data-m="meetings-location" alt="The Change location page with a typed link"><figcaption>A new location, set with one press of ↩.</figcaption></figure>
+    </div>
+
+    <h3>Add attendee …</h3>
+    <div class="split">
+      <div>
+        <p>The page lists the people you meet with most, then your colleagues. Whoever is already invited is left out. Type to narrow the list, or type a full email address to add someone from outside. The page stays open, so you can add several people in a row.</p>
+        <p>The field says it: <b>New attendees may get a calendar invite</b>. If your calendar can send one, it will.</p>
+      </div>
+      <figure class="shot"><img data-m="meetings-attendee" alt="The Add attendee page listing Dana Brooks"><figcaption>Suggestions come first. Everyone already on the meeting is left out.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq">On a meeting you organise: <kbd>⌘K</kbd><i>→</i> type <b>time</b> <i>→</i><kbd>↩</kbd><i>→</i> type <b>tomorrow 9:30</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="pin" data-short="Pin to a meeting" data-k="pin to current meeting pin to meeting drag drop agenda">Put things on the table: pin to a meeting</h2>
+    <p>Pinning a document to a meeting puts it in the meeting's <b>Pinned</b> list, for everyone at the meeting. Use it for the agenda, the deck you will discuss, or a task you want to raise.</p>
+    <div class="mg mt-pin" aria-hidden="true">
+      <div class="win mt-task">
+        <div class="lbl" style="margin-bottom:6px">Your page</div>
+        <div class="row mt-pin-src" style="border-radius:7px;padding:0 6px;margin:0 -6px"><span class="box"></span>Book a room for the offsite</div>
+        <div class="row"><span class="box"></span><span class="bar" style="--w:130px"></span></div>
+      </div>
+      <div class="win mt-meet">
+        <div class="ttl"><span class="mt-cal"></span>Leadership sync <span class="mt-now" title=""></span><span class="mt-small">in call</span></div>
+        <div class="lbl" style="margin:4px 0 4px">Pinned</div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:110px"></span></div>
+        <div class="row mt-pin-new"><span class="box"></span>Book a room for the offsite</div>
+      </div>
+      <div class="win mt-pal mt-pin-pal"><div class="row">Pin to current meeting <span class="mt-small">Leadership sync</span></div></div>
+      <div class="mt-fly mt-pin-fly"><span class="box"></span>Book a room for the offsite</div>
+      <span class="cap press" style="--at:.2">⌘K</span>
+    </div>
+    <div class="split">
+      <div>
+        <h3>Pin to current meeting</h3>
+        <p>In a call right now? <kbd>⌘K</kbd> <b>Pin to current meeting</b> pins the page you are on to the meeting you have joined. Its hint names that meeting, says <b>Checking…</b> while Orbital asks Tana, or says <b>No active meeting</b> when you are in no call.</p>
+        <h3>Pin to meeting …</h3>
+        <p><b>Pin to meeting …</b> lets you pick any of your meetings from a week back to a week ahead. The next one is at the top, then the rest still to come, then those that are over. Type to narrow the list, and press <kbd>↩</kbd> to pin.</p>
+        <p>You can also drag a row onto a meeting's row, on the Timeline or in any list. The meeting's row lights up while you hover, and dropping pins the row to it.</p>
+      </div>
+      <div>
+        <figure class="shot"><img data-m="meetings-pin" alt="⌘K showing Pin to meeting and Pin to current meeting"><figcaption>Both rows, with the meeting you are in as the hint.</figcaption></figure>
+        <figure class="shot"><img data-m="meetings-picker" alt="The Pin to meeting page with meetings next-first"><figcaption><b>Pin to meeting …</b> lists the next meeting first.</figcaption></figure>
+      </div>
+    </div>
+    <p>To take a pin off again, use <kbd>⌘K</kbd> <b>Edit pins</b>, which lists everywhere the page is pinned, meetings included. <a href="pins.html">Pins &amp; dates</a> has the rest.</p>
+    <div class="try"><span class="seq">On any task: <kbd>⌘K</kbd><i>→</i> type <b>pin to meeting</b> <i>→</i><kbd>↩</kbd><i>→</i> pick a meeting <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="now" data-short="The meeting you are in" data-k="in call recording transcribed now today upcoming join in tana free">The meeting you are in now</h2>
+    <p>The top of the <a href="timeline.html">Timeline</a> is about today. Under <b>Upcoming meetings</b> are the meetings still to come, earliest first, each with its time and faces for who else is on it. The Tana glyph after a title (<b>Join in Tana</b>) opens that meeting in Tana, where you join the call. Above them, a line says how much free time you have before the next one.</p>
+    <figure class="shot"><img data-m="meetings-upcoming" alt="Upcoming meetings on the Timeline, each with its time and attendees"><figcaption>Today's meetings still to come, on the Timeline.</figcaption></figure>
+    <div class="split flip">
+      <div>
+        <h3>On the record</h3>
+        <p>Once a meeting starts, it moves into the Timeline's history at its start time, with its length and who else is in it. While somebody is in its call and Tana is transcribing or recording it, its marker turns blue and a blue ring pulses out of it. The ring goes when the last person leaves or the call goes off the record.</p>
+        <p>Being in the call is also what <b>Pin to current meeting</b> uses to know which meeting you mean.</p>
+      </div>
+      <figure class="shot"><img data-m="meetings-recording" alt="A meeting under way on the Timeline with a blue recording marker"><figcaption>A meeting under way whose call is being recorded.</figcaption></figure>
+    </div>
+    <div class="note">A meeting that is over and has no write-up is drawn faint on the Timeline: there is nothing to read yet.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="from-meeting" data-short="Tasks from a meeting" data-k="outcome meeting button header glyph from">Tasks that came from a meeting</h2>
+    <p>When Tana's AI takes tasks out of a meeting, it files them under that meeting. Those are the meeting's <b>Outcomes</b>, and each one keeps a way back to where it came from.</p>
+    <div class="split">
+      <div>
+        <h3>The meeting glyph on a row</h3>
+        <p>In any list, such a task has a small grey calendar glyph among its facts. Hover over it to read which meeting it came from, for example "From Leadership sync · Wed 30 Sep". Click it to open that meeting. Your caret stays in the row.</p>
+      </div>
+      <figure class="shot"><img data-m="meetings-tasklink" alt="A task row in the Library with a meeting glyph after the assignee"><figcaption>The calendar glyph after the assignee links back to the meeting.</figcaption></figure>
+    </div>
+    <h3>The meeting button in the header</h3>
+    <p>On the task's own page, a calendar button joins the buttons at the top right. It shows while your pointer is over the page, and its tooltip names the meeting. Click it to open the meeting's write-up. The button is never on the write-up itself, since that page is the meeting.</p>
+    <figure class="clip wide"><video data-m="meetings-header"></video><figcaption>From a task to the meeting it came from: the calendar button at the top right.</figcaption></figure>
+    <div class="try"><span class="seq">Open a task from a meeting <i>→</i> move the pointer over the page <i>→</i> click the calendar button at the top right</span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="keys">Keys in this chapter</h2>
+    <table class="keys">
+      <tr><th>Action</th><th>Keys</th></tr>
+      <tr><td>Open the rows for this meeting (Change time …, Join call, Pin to meeting …)</td><td><kbd>⌘K</kbd></td></tr>
+      <tr><td>Run the highlighted row; confirm the time, place or person typed</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>Back to the command list from a meeting page</td><td><kbd>esc</kbd></td></tr>
+      <tr><td>Give a row such as <b>Join call</b> a key of its own</td><td><kbd>⇧⌘K</kbd></td></tr>
+      <tr><td>Show the rest of a long attendee list (on <b>And 3 more</b>)</td><td><kbd>↩</kbd></td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>
