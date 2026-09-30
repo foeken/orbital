@@ -9786,6 +9786,11 @@ checks.push(function runFieldPillsCheck() {
   const api = vm.runInNewContext(`
     let menu = null; const pillKey = () => 'library';
     ${sourceLine('const isFieldKey')}
+    ${sourceLine('const FIELD_BY_NAME')}
+    ${sourceLine('const fieldName')}
+    const pageTypes = () => ['t1', 't2'], fieldsNamed = (t, name) => (t === 't2' && name === 'Impact' ? [{ key: 'k' }] : []);
+    const fieldGlyph = (key) => ({ 't2?attribute=k': 'flag', 'type?attribute=k': 'star' })[key] || 'field';
+    ${sourceBetween("// a field's icon in a menu", 'const pageTypes')}
     ${sourceBetween("// A menu's choices with the type's fields", 'const pillsApply')}
     let id = 'default', held = null, lastOrder = null;
     const sortBy = () => id, soonestFirst = () => false, statusRank = () => undefined, fieldKey = (d) => d.group, fieldValuesOf = (n) => n.v || [];
@@ -9808,8 +9813,11 @@ checks.push(function runFieldPillsCheck() {
   rows[2].run();
   assert.deepEqual(plain([api.menu(), api.focus()]), [{ id: 'field:3', index: 0 }, 'field:3'], 'picking one opens its menu and moves the focus to it');
   assert.deepEqual(ids(api.foldFields(many)), ['type', 'field:2', 'field:3', 'morefields', 'status', 'sort'], 'and it stays on the bar in its own place');
-  assert.deepEqual(plain(api.fieldSection([['default', 'Default'], ['title', 'Title'], ['field?attribute=Impact', 'Impact']], ([, label]) => ({ label })).map((r) => r.head || r.label)),
-    ['Default', 'Title', 'Type fields', 'Impact'], 'Sort, Group and Display head the fields with a small section of their own');
+  const section = api.fieldSection([['default', 'Default', 'sort'], ['title', 'Title', 'rename'], ['field?attribute=Impact', 'Impact'], ['type?attribute=k', 'Owner'], ['field?attribute=Notes', 'Notes']], ([, label]) => ({ label }));
+  assert.deepEqual(plain(section.map((r) => r.head || r.label)),
+    ['Default', 'Title', 'Type fields', 'Impact', 'Owner', 'Notes'], 'Sort, Group and Display head the fields with a small section of their own');
+  assert.deepEqual(plain(section.map((r) => r.icon || null)), ['sort', 'rename', null, 'flag', 'star', 'field'],
+    'a built-in row wears its list\'s icon, a field its own, one kept by name its type\'s, else the generic one');
   const dated = [{ id: 'mid', v: ['Jul 17, 2026'] }, { id: 'none' }, { id: 'early', v: ['Nov 14, 2025'] }, { id: 'late', v: ['Sep 4, 2026'] }]; // alphabetically: Jul, Nov, Sep
   assert.deepEqual(plain(api.sort('field?attribute=Review date', dated)), ['early', 'mid', 'late', 'none'], 'a date field sorts by its day, earliest first, rows without one last');
   assert.deepEqual(plain(api.sort('field?attribute=Impact', [{ id: 'ten', v: ['10'] }, { id: 'nine', v: ['9'] }, { id: 'one', v: ['1'] }])), ['one', 'nine', 'ten'], 'and numbers as numbers');

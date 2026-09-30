@@ -147,9 +147,10 @@ function fieldPill(def, f, save) {
     } })),
   ] };
 }
-// A menu's choices with the type's fields under a small heading of their own, where the first one starts (#624)
+// A menu's choices with the type's fields under a small heading of their own, where the first one starts (#624),
+// every row with its icon: a built-in one its list's third entry, a field its own, as Add filter lists them
 function fieldSection(list, rowOf) {
-  const rows = list.map(rowOf), at = list.findIndex(([id]) => isFieldKey(id));
+  const rows = list.map((x) => ({ icon: isFieldKey(x[0]) ? fieldIconOf(x[0]) : x[2], ...rowOf(x) })), at = list.findIndex(([id]) => isFieldKey(id));
   if (at >= 0) rows.splice(at, 0, { head: 'Type fields' });
   return rows;
 }
