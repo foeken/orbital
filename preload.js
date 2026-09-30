@@ -190,6 +190,7 @@ contextBridge.exposeInMainWorld('api', {
   split: (docId, nodeId, before, after, asChild) => ipcRenderer.invoke('block:split', docId, nodeId, before, after, asChild), // truncate + insert the rest in one undo step
   join: (docId, nodeId, intoId, value) => ipcRenderer.invoke('block:join', docId, nodeId, intoId, value), // Backspace at a row's start: its words onto the row above, one undo step
   insertChild: (docId, nodeId, text) => ipcRenderer.invoke('block:insertChild', docId, nodeId, text),
+  pasteMarkdown: (docId, nodeId, before, after, markdown) => ipcRenderer.invoke('block:pasteMarkdown', docId, nodeId, before, after, markdown), // rows and marks for pasted markdown, replacing the selection between before and after (segments); { id, offset } of the caret
   removeMany: (docId, nodeIds) => ipcRenderer.invoke('block:removeMany', docId, nodeIds),
   moveMany: (docId, nodeIds, direction) => ipcRenderer.invoke('block:moveMany', docId, nodeIds, direction),
   indentMany: (docId, nodeIds) => ipcRenderer.invoke('block:indentMany', docId, nodeIds), // one undo step for a whole selection

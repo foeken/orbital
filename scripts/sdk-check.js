@@ -1605,6 +1605,53 @@ async function main() {
     console.log('ok  removeMany/moveMany/indentMany/moveTo IPC bridges each record exactly one undo step');
   }
   {
+    // Pasted markdown (#598): Tana's own blocks and marks, nesting by indentation, the words around the caret kept,
+    // and one undo step for the lot.
+    const backend=mainHelpers(), d=new Document(DOC);
+    d.transact(l=>initDocument(l,'paste',ME)); const plainJson=(v)=>JSON.parse(JSON.stringify(v));
+    const row=outline.readOutline(d)[0].id; outline.setText(d,row,'Before after');
+    backend.testRuntime({me:{userUri:ME},client:{sync:{subscribe:async()=>d,getDocument:()=>d}}});
+    const SAM='tana:user-profile:01examplem0000000000000000';
+    const md=['**Bold** start','# Heading','- one','  - [x] two','    - three','- [ ] four','1. first','> quoted','---','```','code *here*','```','see [Tana](https://tana.inc) with [Sam]('+SAM+') *now*','last'].join('\n');
+    const at=await backend.handlers.get('block:pasteMarkdown')(null,DOC,row,[{text:'Before '}],[{text:' after'}],md);
+    const flat=(ns,depth=0)=>ns.flatMap(n=>[[depth,n.block,n.done??null,plainJson(n.segments)],...flat(n.children||[],depth+1)]);
+    assert.deepEqual(flat(outline.readOutline(d)),[
+      [0,'paragraph',null,[{text:'Before '},{text:'Bold',marks:{bold:true}},{text:' start'}]],
+      [0,'heading1',null,[{text:'Heading'}]],
+      [0,'bullet',null,[{text:'one'}]],
+      [1,'bullet',1,[{text:'two'}]],
+      [2,'bullet',null,[{text:'three'}]],
+      [0,'bullet',0,[{text:'four'}]],
+      [0,'numbered',null,[{text:'first'}]],
+      [0,'quote',null,[{text:'quoted'}]],
+      [0,'divider',null,[]],
+      [0,'code',null,[{text:'code *here*'}]],
+      [0,'paragraph',null,[{text:'see '},{text:'Tana',marks:{link:'https://tana.inc'}},{text:' with '},{mention:{label:'Sam',uri:SAM}},{text:' '},{text:'now',marks:{italic:true}}]],
+      [0,'paragraph',null,[{text:'last after'}]],
+    ],'every line a row of its own kind, checkboxes only where the markdown has them, nesting from indentation, inline marks and mentions native');
+    const last=outline.readOutline(d).at(-1);
+    assert.deepEqual(plainJson(at),{id:last.id,offset:4},'the caret goes where the pasted text ends, before what stood after it');
+    await backend.undo();
+    assert.deepEqual(flat(outline.readOutline(d)),[[0,'paragraph',null,[{text:'Before after'}]]],'one undo takes the whole paste back');
+    // Only a line that says "[ ]" or "[x]" gets a box, and a blank line separates rows without making one.
+    const task=outline.insertAfter(d,row,'');
+    await backend.handlers.get('block:pasteMarkdown')(null,DOC,task,[],[],'- [x] task\n\nplain');
+    assert.deepEqual(flat(outline.readOutline(d)).slice(1).map(r=>r.slice(1)),[['bullet',1,[{text:'task'}]],['paragraph',null,[{text:'plain'}]]],'a plain line after a pasted list is plain text again, without a box, and the blank line between them makes no row');
+    await backend.undo();
+    // Pasted into a list row, plain lines stay list rows.
+    outline.setBlockType(d,task,'numbered');
+    await backend.handlers.get('block:pasteMarkdown')(null,DOC,task,[],[],'a\nb');
+    assert.deepEqual(flat(outline.readOutline(d)).slice(1).map(r=>r[1]),['numbered','numbered'],'plain lines pasted into a numbered row are numbered rows');
+    await backend.undo(); outline.remove(d,task);
+    // Into an empty child row: it takes the first block's kind, and a row nested under a heading, which cannot own
+    // children, lands beside it.
+    outline.setBlockType(d,row,'bullet'); const child=outline.insertChild(d,row,'');
+    await backend.handlers.get('block:pasteMarkdown')(null,DOC,child,[],[],'## Sub\n  - under');
+    assert.deepEqual(flat(outline.readOutline(d)).map(r=>r.slice(0,2)),[[0,'bullet'],[1,'heading2'],[1,'bullet']],'an empty row becomes the heading, and what would nest under it follows it');
+    await assert.rejects(backend.handlers.get('block:pasteMarkdown')(null,DOC,row,'x',[],'# no'),/markdown and the row/,'the renderer is outside input: the row around the caret must be segments');
+    console.log('ok  pasted markdown becomes native rows and marks, in one undo step');
+  }
+  {
     const backend=mainHelpers(), docs=new Map();
     const task=(id,title)=>{const d=new Document(id);d.transact(l=>initDocument(l,title,ME));setState(d,'open',ME);docs.set(id,d);return d;};
     const first=task(DOC,'First'), second=task('tana:text:'+ulid(),'Second');
