@@ -326,6 +326,9 @@ async function related(id, { lite = false } = {}) {
     // merely lives in or was created in the meeting does not inherit its join url, so read it off the zoomed node.
     call: callOf((self0 && self0.calendarEvent) || {}),
     summaryUri: writeUp ? writeUp.id : undefined,
+    // The meeting this page belongs to (#630): its hub when that is an event and the page is not the event or its
+    // write-up, which is that meeting's own page. The page shows it beside its Graph button (renderer/rail.js).
+    meeting: idKind(hub) === 'event' && hub !== id && !(writeUp && writeUp.id === id) ? { id: hub, title: (event.title || '').trim() || undefined, start: ev.startTime || undefined } : undefined,
     fields: await fieldsOf(id), // the zoomed node's own fields, not the meeting hub's
     definitions: idKind(id) === 'type' ? await fieldDefs(id) : undefined, // a type's page lists the fields it defines
     pinHub: canPin ? hub : undefined, // where a new pin would go, when this user may write it

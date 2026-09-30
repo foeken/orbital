@@ -4062,8 +4062,11 @@ async function main() {
       sync: { subscribe: async (id) => docs.get(id) || null, getDocument: (id) => docs.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
       graph: { listNodes: async (p) => ({ nodes: (p.nodeIds || []).filter((id) => docs.has(id)).map(node) }), listEdges: async () => ({ edges: [] }), getOwnerChain: async () => ({ entries: [] }) },
     } });
-    await backend.handlers.get('doc:related')(null, space);
-    await backend.handlers.get('doc:related')(null, writeUp);
+    const onSpace = await backend.handlers.get('doc:related')(null, space);
+    const onNote = await backend.handlers.get('doc:related')(null, writeUp);
+    // the page's meeting, which the page shows beside its Graph button (#630): a note in a meeting names it, a space and
+    // the meeting's own page none
+    assert.deepEqual([JSON.parse(JSON.stringify(onNote.meeting)), onSpace.meeting, (await backend.handlers.get('doc:related')(null, meeting)).meeting], [{ id: meeting, title: 'A meeting' }, undefined, undefined], 'a page in a meeting names that meeting, and nothing else names one');
     for (const id of read) await backend.handlers.get('doc:info')(null, id);
     await backend.handlers.get('view:list')(null, 'library');
     assert.deepEqual([space, meeting].map((id) => unsubscribed.includes(id)), [true, true], 'a space and a write-up\u2019s meeting read by the sidebar are let go with the oldest reads');
