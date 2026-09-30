@@ -39,9 +39,20 @@ struct Shell: View {
                 }
                 .safeAreaInset(edge: .bottom) { Composer() }
             }
-            .clipShape(RoundedRectangle(cornerRadius: menu ? 44 : 0, style: .continuous))
+            // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
+            .mask { RoundedRectangle(cornerRadius: menu ? 44 : 0, style: .continuous).ignoresSafeArea() }
+            // pushed aside, the page is a card of clear Liquid Glass over its content, as the ChatGPT app's is; a tap closes it
+            .overlay {
+                if menu {
+                    RoundedRectangle(cornerRadius: 44, style: .continuous).fill(.clear)
+                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 44, style: .continuous))
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture { show(false) }
+                        .accessibilityHidden(true)
+                }
+            }
             .shadow(color: .black.opacity(menu ? 0.3 : 0), radius: 24)
-            .overlay { if menu { Color.black.opacity(0.001).onTapGesture { show(false) }.accessibilityHidden(true) } }
             .offset(x: menu ? width : 0)
             .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { drag in
                 guard abs(drag.translation.height) < 60 else { return }
@@ -102,30 +113,34 @@ struct SideMenu: View {
     }
 }
 
-// The composer, as the Codex app has it: what you type becomes a new thread. A thread needs a Codex host, which the phone
-// does not have yet (#665), so sending says so for a moment rather than doing nothing.
+// The composer, as the Codex app has it: what you type becomes a new chat with Tana. Sending comes next, so for now it
+// says so for a moment rather than doing nothing.
 struct Composer: View {
     @State private var text = ""
     @State private var notYet = false
 
     var body: some View {
+        let empty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         VStack(spacing: 6) {
             if notYet {
-                Text("Threads start here once your Codex hosts are on this iPhone.")
+                Text("Asking Tana from here comes next.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).transition(.opacity)
             }
             HStack(alignment: .bottom, spacing: 10) {
-                TextField("Ask Codex", text: $text, axis: .vertical).lineLimit(1...5).padding(.vertical, 6)
+                TextField("Ask Tana", text: $text, axis: .vertical).lineLimit(1...5).padding(.vertical, 7)
                 Button {
                     withAnimation { notYet = true }
                     Task { try? await Task.sleep(for: .seconds(4)); withAnimation { notYet = false } }
                 } label: {
-                    Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 22, height: 22)
+                    // the Codex app's send: a grey circle while there is nothing to send, solid once there is
+                    Image(systemName: "arrow.up").font(.body.weight(.semibold))
+                        .foregroundStyle(empty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color(.systemBackground)))
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(empty ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.primary)))
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.circle)
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityLabel("Start a thread")
+                .buttonStyle(.plain)
+                .disabled(empty)
+                .accessibilityLabel("Ask Tana")
             }
             .padding(.leading, 18)
             .padding(.trailing, 6)

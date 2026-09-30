@@ -62,21 +62,20 @@ struct TimelineScreen: View {
     var body: some View {
         List {
             if !today.isEmpty {
-                Section("Today's tasks") {
-                    ForEach(today) { task in
-                        RailRow(time: "") { TaskBox(task: task, engine: engine) } content: { TaskWords(row: task, done: engine.state(of: task) == "closed") }
-                            .onTapGesture { open(task.id) }
-                    }
+                Heading(title: "Today's tasks")
+                ForEach(today) { task in
+                    RailRow(time: "") { TaskBox(task: task, engine: engine) } content: { TaskWords(row: task, done: engine.state(of: task) == "closed") }
+                        .onTapGesture { open(task.id) }
                 }
             }
             if !upcoming.isEmpty || free != nil {
-                Section("Coming up") {
-                    if let free { FreeLine(free: free) }
-                    ForEach(upcoming) { Meeting(row: $0, open: open) }
-                }
+                Heading(title: "Coming up")
+                if let free { FreeLine(free: free) }
+                ForEach(upcoming) { Meeting(row: $0, open: open) }
             }
             ForEach(days, id: \.0) { title, rows in
-                Section(title) { ForEach(rows) { Entry(row: $0, engine: engine, open: open) } }
+                Heading(title: title)
+                ForEach(rows) { Entry(row: $0, engine: engine, open: open) }
             }
             if !days.isEmpty {
                 Button { Task { await engine.more() } } label: {
@@ -130,6 +129,19 @@ struct TimelineScreen: View {
 }
 
 // The rail's geometry: the time column, the marker's column, and where the line runs (through the markers' middle)
+// A section's heading: a row of its own between two stretches of rail, its words in the middle of the gap. Not a
+// sticky List header, whose extra space above sat the words low and whose pinned band cut the top bar off.
+struct Heading: View {
+    let title: String
+    var body: some View {
+        Text(title).font(.headline).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 16))
+            .listRowSeparator(.hidden)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 enum Rail {
     static let inset: CGFloat = 12
     static let time: CGFloat = 42
@@ -183,7 +195,7 @@ struct Entry: View {
                         Button { open(child.id) } label: { TaskWords(row: child, done: engine.state(of: child) == "closed").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
                             .buttonStyle(.plain)
                     }
-                    .padding(.top, 8)
+                    .padding(.top, 14)
                 }
             }
             .overlay(alignment: .topTrailing) {
