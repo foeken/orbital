@@ -96,7 +96,8 @@ function toggleOriginal(id) { if (!shownOriginal.delete(id)) shownOriginal.add(i
 // A translated row or title shows its own words the moment the caret goes in (before setCaret measures it), so an
 // edit is made in, and saves, the original
 const originalOf = new WeakMap(); // element -> puts its own words back
-function originalOnFocus(el, restore) { if (restore) originalOf.set(el, restore); else originalOf.delete(el); }
+const translationBack = new WeakMap(); // element -> { restore, back }: a full reference, whose chip no paintTranslation redraws, drawn translated again as the caret leaves
+function originalOnFocus(el, restore, back) { if (restore) originalOf.set(el, restore); else originalOf.delete(el); if (restore && back) translationBack.set(el, { restore, back }); else translationBack.delete(el); }
 // Only where the caret can type: a read-only row (the Timeline, a notification, a reference) keeps its translation and
 // its people, so the click that focused it opens it instead of swapping its words first
 const typable = (el) => ['true', 'plaintext-only'].includes(el.getAttribute?.('contenteditable'));
@@ -108,7 +109,12 @@ function rowNotice(el, typing) {
 }
 // Leaving a translatable row or title shows its translation again: its words may have been edited, so they are what is
 // looked up (from the cache at once, or asked, landing when the answer does), after the edit has been saved.
-document.addEventListener('focusout', (e) => { const el = e.target; rowNotice(el, false); if (el.dataset?.translate == null) return; el.dataset.translate = el.textContent; setTimeout(() => paintTranslation(el)); });
+document.addEventListener('focusout', (e) => {
+  const el = e.target; rowNotice(el, false);
+  const t = translationBack.get(el); // after the save; typed beside, the row is ordinary now and keeps its words
+  if (t && !originalOf.has(el)) setTimeout(() => { if (el.isConnected && el !== document.activeElement && chipOnly(el)) { t.back(); originalOf.set(el, t.restore); } });
+  if (el.dataset?.translate == null) return; el.dataset.translate = el.textContent; setTimeout(() => paintTranslation(el));
+});
 // el marked by markTranslatable: its translation drawn in place, unless it has the caret or was switched back to its own words
 function paintTranslation(el) {
   const src = el.dataset.translate, id = el.dataset.translateId;

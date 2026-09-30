@@ -895,7 +895,7 @@ function nodeEl(node, docId, parent) {
     const own = shown(referenceLabel(node)) || (node.timeline?.free ? timelineFreeSegs(node.timeline.free) : segsOf(node)), segs = pending.has(item.key) ? pending.get(item.key).segs : english ? shown(english.text) || translatedSegs(node, english.text) : own;
     renderSegs(text, segs, display.id);
     text.classList.toggle('chiponly', chipOnly(text));
-    if (english) originalOnFocus(text, () => renderSegs(text, own, display.id)); // the caret going in finds the original: that is what an edit saves
+    if (english) originalOnFocus(text, () => renderSegs(text, own, display.id), fullref && (() => renderSegs(text, segs, display.id))); // the caret going in finds the original: that is what an edit saves; a full reference's chip is translated again as it leaves
     const translatable = !fullref && translatableOf(item, display); // and leaving it, the translation again, once there is one (a chip is drawn again instead)
     if (translatable && !namedSeg(node)) markTranslatable(text, translatable.src, translatable.id); // a named segment's row is drawn again instead: its words are more than the name
   }
