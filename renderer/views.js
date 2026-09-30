@@ -122,6 +122,11 @@ const fieldValuesOf = (n, key, kinds = null) => {
   const name = fieldName(key), keys = name === null ? [key] : rowTypes(n).flatMap((t) => fieldsNamed(t, name, kinds).map((d) => t + '?attribute=' + d.key));
   return keys.map((k) => (n.fields || {})[k]).find((v) => v && v.length) || [];
 };
+// a field's icon in a menu: one kept by name wears the first own icon among the page's types' fields of that name
+const fieldIconOf = (key) => {
+  const name = fieldName(key), keys = name === null ? [key] : pageTypes().flatMap((t) => fieldsNamed(t, name).map((d) => t + '?attribute=' + d.key));
+  return keys.map(fieldGlyph).find((g) => g !== 'field') || 'field';
+};
 const pageTypes = () => [...new Set(fieldType() ? [fieldType()] : pageDocs().flatMap(rowTypes))];
 function pageFieldDefs(load = false) {
   const t = fieldType();
