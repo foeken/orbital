@@ -121,7 +121,7 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
    cannot line them up now that a value is rows rather than one line box, and the label drifted below the name
    beside it. Each column is given the same 22px line as a row, so the three tops agree. */
 .fields { margin-top: 18px; padding: 3px 0; border-top: 1px solid #e6e6e6; border-bottom: 1px solid #e6e6e6; display: grid; grid-template-columns: 14px max-content 1fr; align-items: start; }
-#fields { margin: 8px 0 0 16px; } /* in .scroll: its 16px more puts the fields under the title, 8px + the 10px above it is the 18px they had in the header */
+#fields { margin: 8px 0 12px 16px; } /* in .scroll: its 16px more puts the fields under the title, 8px + the 10px above it is the 18px they had in the header; 12px below keeps the first row off the rule */
 .fields .field { display: contents; color: #1a1a1a; }
 /* A page's fields read as a table: a hairline between one field and the next, under the icon, the label and the value
    alike. The grid's gaps become padding inside the cells for that, since a border cannot cross a gap. The inline
