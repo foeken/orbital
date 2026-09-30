@@ -104,7 +104,7 @@ function visibilityFieldEl(parent) {
   if (!summary || !summary.audience || sensitiveHidden(node.id)) return null; // a sensitive page says nothing about who
   const data = relatedBy.get(parent.docId), access = data && typeof data.pinHub === 'string' && data.pinHub.startsWith('tana:event:') ? { id: data.pinHub } : node;
   const row = document.createElement('div'); row.className = 'field';
-  const icon = document.createElement('span'); icon.className = 'ricon' + (summary.hiddenFrom ? ' hiddenfrom' : ''); addIcon(icon, summary.audience.icon);
+  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, summary.audience.icon);
   const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Visible to';
   const values = document.createElement('div'); values.className = 'fvalues';
   const el = document.createElement('div'); el.className = 'fvalue fchoice'; el.tabIndex = 0; el.title = summary.audience.label;
@@ -116,7 +116,18 @@ function visibilityFieldEl(parent) {
   else if (summary.people.length) el.append(...facesEls(summary.people, count));
   else { const words = document.createElement('span'); words.className = 'fhint'; words.textContent = summary.audience.label; el.append(words); }
   if (summary.linkShared) { const link = document.createElement('span'); link.className = 'fhint'; link.textContent = 'Anyone with the link'; el.append(link); } // Tana's own switch, read-only here
-  if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'fhint fwarn'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
+  // Assigned, but shut out (#622): each such person drawn among who can see it, as a dashed pill in a soft rose, the
+  // lock left as it is. Where sharing with them is certain (hiddenFromFix) the pill is a button that does it; where the
+  // audience is another's to widen it only says so, and a click on it opens the picker like the rest of the field.
+  const fix = summary.hiddenFrom && access === node ? hiddenFromFix(node) : null;
+  for (const uri of (summary.hiddenFrom && (taskMetaById.get(node.id) || {}).hiddenFrom) || []) {
+    const pill = document.createElement(fix ? 'button' : 'span'); pill.className = 'fghost';
+    if (fix) { pill.type = 'button'; const plus = document.createElement('b'); plus.textContent = '+'; pill.append(plus); }
+    pill.append(memberName(uri));
+    pill.title = 'Assigned, but can\u2019t see this task' + (fix ? '. Click to share it with ' + memberName(uri) : '');
+    if (fix) pill.onclick = (e) => { e.stopPropagation(); fix([uri]); };
+    el.append(pill);
+  }
   const open = tana.accessOptions ? () => openVisibility(access, summary.scope) : null;
   el.onclick = (e) => { if (open && !e.target.closest('.mention')) open(); }; // a person's mention is a link to them, as anywhere else
   el.onkeydown = (e) => {

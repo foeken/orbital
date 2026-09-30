@@ -164,7 +164,11 @@ function peopleEl(summary, node) {
   if (!uris.length || (node && sensitiveHidden(node.id))) return null;
   const el = document.createElement('span'); el.className = 'people';
   const word = summary.audience.word; // everyone and only you: a word, not the whole organization or your own face
-  el.append(audienceIcon(summary, node), ...(word ? [word] : facesEls(uris, summary.peopleCount || uris.length)));
+  const icon = audienceIcon(summary, node);
+  if (summary.hiddenFrom) icon.classList.remove('hiddenfrom'); // the words after it say who is shut out (#622): the lock stays as it is
+  el.append(icon, ...(word ? [word] : facesEls(uris, summary.peopleCount || uris.length)));
+  // assigned to someone who cannot see it: said in words after who can, as the page's Visible to field says it (#622)
+  if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'hiddenfrom'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
   return el;
 }
 // A bubble each for the first four people, then the rest: "+n" up to nine people, "and n others" past that. The list
@@ -250,6 +254,7 @@ async function setNodeNotify(id, on) {
 function setTaskAssignees(doc, assignees) {
   const meta = taskMetaById.get(doc.id);
   if (!meta || !tana.setAssignees) return;
+  const before = meta.assignees;
   const frozen = !!(palTaskCtx?.fromSelection && sel);
   if (frozen) selectionFrozen = true;
   run(async () => {
@@ -257,7 +262,11 @@ function setTaskAssignees(doc, assignees) {
       await tana.setAssignees(doc.id, assignees);
       // Read again rather than patched: who the audience leaves out (hiddenFrom) is main's to say, and a copy of the
       // old metadata with new assignees kept the old warning — and overwrote the fresh read the change event started.
-      try { taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); } catch { taskMetaById.delete(doc.id); } // the next render asks
+      let fresh = null;
+      try { fresh = await tana.taskMeta(doc.id); taskMetaById.set(doc.id, fresh); } catch { taskMetaById.delete(doc.id); } // the next render asks
+      // someone just assigned who cannot open it: ask, on the card it was assigned from (renderer/access.js openShareAsk)
+      const shut = ((fresh && fresh.hiddenFrom) || []).filter((uri) => !before.includes(uri));
+      if (shut.length && !palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) { openShareAsk(doc, shut, before); render(); return; }
       if (!palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) closePalette();
       render();
     } catch (e) {
