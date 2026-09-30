@@ -1325,7 +1325,7 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   write-up the event's; a sensitive page, a chat and a saved search have none. Both open on a click, Enter or Space (renderer/fields.js
   `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a
   Graph pane beside it.
-- **Attendees** (a meeting, on the event and on its write-up) follows Visible to: the roster main's `meeting:info` reads,
+- **Attendees** (a meeting, on the event and on its write-up; a task attached to a meeting has none of its own) follows Visible to: the roster main's `meeting:info` reads,
   one person per line, a member as a mention and anyone else by the calendar's name or address, rooms and resources left
   out. Past five lines "And n more" shows the rest on a click, Enter or Space, for as long as the page is open. The
   answer is kept per meeting and read again when the event changes (renderer/meeting.js `meetingInfoOf`,
