@@ -26,6 +26,7 @@ struct Row: Decodable, Identifiable {
     let meta: String?
     let note: Bool?
     let chat: Chat?
+    let glyph: String? // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
 
     struct Segment: Decodable { let text: String?; let marks: Marks?; let mention: Ref? }
     struct Marks: Decodable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }

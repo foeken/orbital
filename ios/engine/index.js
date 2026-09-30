@@ -15,6 +15,7 @@ import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { issues, members, within } from './stand-ins';
 import loro from 'loro-crdt/package.json';
+import NUCLEO from 'nucleo-ui';
 
 const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; } };
 // tana-session.js without Electron: the page's own cookies, one lookup at a time, a minute before expiry as Tana does
@@ -90,6 +91,27 @@ async function say(id, text) {
 
 let settingsRead = false;
 
+// The icon a saved search was given with Set icon (the settings document's typeIcons, main/icons.js: search uri → Nucleo
+// label), drawn by this page into a PNG the app shows as a template image, since SwiftUI has no SVG: 54 px, the 18 px
+// glyph at 3x, in the side menu's 1.6 stroke. null for a search with no icon of its own.
+let nucleo = null;
+const library = () => (nucleo ||= NUCLEO
+  ? new Response(new Blob([Uint8Array.from(atob(NUCLEO), (c) => c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('gzip'))).json()
+    .then((list) => new Map(list.map((i) => [i.n, i.s])), () => new Map())
+  : Promise.resolve(new Map()));
+async function iconPng(label) {
+  const markup = label && (await library()).get(label);
+  if (!markup) return null;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="54" height="54">' + markup.replace(/var\(--nucleo-stroke-width, [\d.]+\)/g, '1.6').replace(/currentColor/g, '#000') + '</svg>';
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  await img.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 54;
+  canvas.getContext('2d').drawImage(img, 0, 0, 54, 54);
+  return canvas.toDataURL('image/png').split(',')[1];
+}
+
 window.orbital = {
   // true once signed in and connected; false when this web view has no Tana session
   async connect() {
@@ -153,11 +175,13 @@ window.orbital = {
     return say(id, text);
   },
   send: (id, text) => say(id, text), // a follow-up in a chat
-  // Every saved search you can see, the ones pinned to your sidebar first in their order there
+  // Every saved search you can see, the ones pinned to your sidebar first in their order there, each with its icon (glyph)
   async searches() {
     const [pinned, { nodes = [] }] = await Promise.all([within('sidebar pins', listSidebar(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 200, sortOptions: newest })]);
     const at = (n) => (pinned.includes(n.id) ? pinned.indexOf(n.id) : 1e6);
-    return JSON.stringify(nodes.sort((a, b) => at(a) - at(b)).map(listRow));
+    await within('settings document', settings.hydrate()).catch(() => {}); // the icons; the last known ones when it does not answer
+    const chosen = settings.get('typeIcons') || {};
+    return JSON.stringify(await Promise.all(nodes.sort((a, b) => at(a) - at(b)).map(async (n) => ({ ...listRow(n), glyph: await iconPng(chosen[n.id]).catch(() => null) }))));
   },
   issues: () => issues.splice(0), // what went wrong since last asked (a part of the page that could not be read), for the log
 };

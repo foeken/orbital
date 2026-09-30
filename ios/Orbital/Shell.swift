@@ -14,6 +14,7 @@ struct Shell: View {
     @State private var page = Page.timeline
     @State private var path: [String] = [] // the nodes zoomed into from the page, as a push each
     @State private var searches: [Page] = []
+    @State private var icons: [String: UIImage] = [:] // saved search id -> the icon it was given in Orbital
     @State private var menu = false
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
     @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
@@ -23,7 +24,7 @@ struct Shell: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            SideMenu(page: $page, searches: searches, close: { path = []; show(false) }, settings: { settings = true })
+            SideMenu(page: $page, searches: searches, icons: icons, close: { path = []; show(false) }, settings: { settings = true })
                 .frame(width: width)
                 .accessibilityHidden(!menu)
             NavigationStack(path: $path) {
@@ -74,6 +75,9 @@ struct Shell: View {
         .task(id: engine.phase) {
             guard engine.phase == .ready, let found = try? await engine.searches() else { return }
             searches = found.map { .search($0.id, $0.words) }
+            icons = Dictionary(uniqueKeysWithValues: found.compactMap { row in
+                row.glyph.flatMap { Data(base64Encoded: $0) }.flatMap { UIImage(data: $0, scale: 3) }.map { (row.id, $0) }
+            })
         }
         // A sideways swipe anywhere, the menu included: the page follows the finger and settles open or shut, as the
         // ChatGPT app's does. Only a swipe that is more sideways than up or down counts, so the Timeline still scrolls.
@@ -113,6 +117,7 @@ struct Shell: View {
 struct SideMenu: View {
     @Binding var page: Shell.Page
     let searches: [Shell.Page]
+    let icons: [String: UIImage]
     let close: () -> Void
     let settings: () -> Void
 
@@ -142,7 +147,12 @@ struct SideMenu: View {
     private func item(_ item: Shell.Page) -> some View {
                 Button { page = item; close() } label: {
                     HStack(spacing: 14) {
-                        Image("Glyphs/" + item.glyph).resizable().frame(width: 22, height: 22)
+                        // a saved search by the icon you gave it in Orbital (Set icon), else the search glyph
+                        Group {
+                            if case .search(let id, _) = item, let icon = icons[id] { Image(uiImage: icon).renderingMode(.template).resizable() }
+                            else { Image("Glyphs/" + item.glyph).resizable() }
+                        }
+                        .frame(width: 22, height: 22)
                         Text(item.title).fontWeight(.medium).lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
