@@ -1,13 +1,14 @@
 ---
 name: orbital-manual
-description: Build, update and re-capture Orbital's in-app manual (manual/, Cmd+K Open Manual). Use in every PR that adds, removes or changes something a user can see or do in Orbital (a Cmd+K row, a key, a page, a pane, a label, a behaviour), and whenever a chapter, a picture, a clip or a motion diagram of the manual is written, restyled or re-recorded.
+description: Build, update, re-capture and publish Orbital's manual (manual/, https://orbital.md/manual, Cmd+K Open Manual). Use in every PR that adds, removes or changes something a user can see or do in Orbital (a Cmd+K row, a key, a page, a pane, a label, a behaviour), whenever a chapter, a picture, a clip or a motion diagram of the manual is written, restyled or re-recorded, and at every release (publishing it to orbital.md).
 ---
 
 # The Orbital manual
 
-The manual is the app's own documentation: static pages in `manual/`, opened from Cmd+K → Help → **Open Manual** in a
-window of their own (main.js `manual:open`). Every chapter pictures the real window on the mock data. It ships in the
-app; `manual/scenes/` (the tooling) does not.
+The manual is the app's own documentation: static pages in `manual/`, published at **https://orbital.md/manual**
+with every release. Cmd+K → Help → **Open Manual** opens it there in the browser, in the app's theme (`?theme=`); none of
+`manual/` is packaged. Every chapter pictures the real window on the mock data. A PR's manual changes go live with the
+next release, so the web copy always describes the released app.
 
 **Every PR updates the manual.** A change a user can see or do lands with its chapter updated in the same PR: the words,
 the scene and the pictures. A PR that changes nothing a user meets says so in its description ("Manual: nothing
@@ -132,10 +133,13 @@ Nothing is drawn twice without a reason, and the tricks are kept, not rediscover
 - Every recorded clip adds its bytes to git history for good. If the repository grows heavy from re-recorded media,
   move `manual/media` to Git LFS rather than recording less.
 
-## Publishing to orbital.md/manual
+## Publishing to orbital.md/manual (every release)
 
-The manual is also on the web at **https://orbital.md/manual**, unlisted: nothing on the front page links to it, and
-nothing should until Andre says so. The site is the Replit App **orbital.md** (Replit MCP, replId
+After `npm run release` publishes (its last line reminds you), publish `manual/` from the released commit: the app
+opens the web copy, so a release is not done until the manual there matches it. It is unlisted: nothing on the front
+page links to it, and nothing should until Andre says so. Publish only the files that changed since the last release
+(`git diff --name-only v<previous>..v<version> -- manual ':!manual/scenes'`); the whole folder only the first time or
+when that list is most of it. The site is the Replit App **orbital.md** (Replit MCP, replId
 `8231ee1f-7a4d-4d28-991a-83859947a51e`), a static deployment of `artifacts/orbital/public`; the manual is its `manual/`
 folder, copied byte for byte. The Replit tools take prompts, not files, so the files travel through a URL:
 
@@ -158,7 +162,7 @@ Change that script and its hash together (`crypto.createHash('sha256').update(co
 - `npm run check` on **Node 22**, as CI (`PATH=`/.asdf/installs/nodejs/22.14.0/bin:$PATH npm run check`, escalated for
   its loopback servers). On Node 26 sdk-check dies in undici with "ReadableStream is already closed": that is the
   runtime, not the change.
-- The manual loads from `file://` in Electron: relative links, media and scripts only; a quick look without the app is
+- The manual works from `file://` and from the web: relative links, media and scripts only; a quick look is
   `chrome-headless-shell --screenshot … "file://$PWD/manual/<id>.html?theme=dark"`.
 
 ## A big rewrite: many chapters at once

@@ -4,8 +4,9 @@ Updating the manual for a PR (which chapter owns a feature, the steps, the captu
 changed) is the orbital-manual skill: .agents/skills/orbital-manual/SKILL.md. This file is the reference for the
 building blocks; manual/scenes/kit.js has the steps scenes share, and manifest.json what has been recorded.
 
-The manual is static HTML in manual/, opened from Cmd+K → Help → Open Manual in a window of its own (main.js
-manual:open). It ships in the app; manual/scenes/ (this folder: the capture runner, the scene files, this guide) does not.
+The manual is static HTML in manual/, published at https://orbital.md/manual with every release and opened from
+Cmd+K → Help → Open Manual in the browser. None of manual/ ships in the app; this folder holds the capture runner, the
+scene files and this guide.
 
 ## Files
 

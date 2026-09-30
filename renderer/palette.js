@@ -419,7 +419,7 @@ function paletteRows(q, typed = q) {
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
-  if (tana.openManual) rows.push({ id: 'manual', group: 'Help', icon: 'help', label: 'Open Manual', hint: 'Every feature, with pictures', run: () => tana.openManual(theme) });
+  if (tana.openExternal) rows.push({ id: 'manual', group: 'Help', icon: 'help', label: 'Open Manual', hint: 'Every feature, with pictures', run: () => run(() => tana.openExternal('https://orbital.md/manual/?theme=' + theme)) }); // manual/, published there at each release
   if (tana.openExternal) rows.push({ id: 'about', group: 'Help', icon: 'info', label: 'About Orbital', keepOpen: true, run: openAboutPalette });
   if (tana.checkUpdates) rows.push({ id: 'checkUpdates', group: 'Help', icon: 'reload', label: 'Check for updates', run: () => tana.checkUpdates() }); // main's dialogs say what it found
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
