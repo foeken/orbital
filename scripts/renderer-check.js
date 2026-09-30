@@ -479,7 +479,6 @@ assert.match(source, /if \(!cleanupBtn\.classList\.contains\('out'\)\) return;\n
 // It is a header button beside the fold one, not a pill: folding the pills away must not take it with them.
 assert.match(source, /offerRefresh\(search && !searchRows\.has\(zoom\.docId\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
 assert.match(source, /const refresh = !LINKS && refreshable;/, 'the offer goes to the pane\'s menu with the title (shell.js)');
-assert.match(source, /const remove = !LINKS && onSearchPage\(\);/, 'a saved search offers Delete on its tab, told with the title (shell.js, #615)');
 const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
 const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');

@@ -5729,6 +5729,40 @@ function runPopSoundCheck() {
   assert.equal(started.length, 4, 'a tick with no press before it still pops');
 }
 
+function runSearchTabDeleteCheck() {
+  // Delete on a saved search's tab (#615) crosses three places: the page tells the shell with its title, the shell's
+  // menu offers Delete for that page only, and the page deletes when asked only while it is a saved search.
+  const page = (onSearch) => vm.runInNewContext(`
+    const posted = [], deleted = [];
+    const LINKS = false, authed = true, tana = {}, refreshable = false, zoom = { docId: 'tana:search:01exampleq0000000000000000' };
+    const pillsApply = () => false, iconNode = () => null, onSearchPage = () => ${onSearch};
+    const removeZoomedBlock = () => deleted.push(zoom.docId);
+    let toldTitle = null, toldIcon = '', handler;
+    const window = { frameElement: {}, parent: { postMessage: (m) => posted.push(m) }, addEventListener: (_t, fn) => { handler = fn; } };
+    ${sourceBetween('function tellTitle(', '// A task row carries')}
+    ${sourceBetween("window.addEventListener('message', (e) => {", "titleEl.addEventListener('blur'")}
+    ({ tell: () => { tellTitle('Sample', true); return posted.at(-1); }, ask: () => { handler({ source: window.parent, data: { orbital: 'remove' } }); return [...deleted]; } });
+  `, {});
+  const search = page(true), other = page(false);
+  assert.equal(search.tell().remove, true, 'a saved search tells the shell it can be deleted from its tab');
+  assert.equal(other.tell().remove, false, 'any other page does not');
+  assert.deepEqual(plain(search.ask()), ['tana:search:01exampleq0000000000000000'], 'Delete on the tab deletes the saved search on screen');
+  assert.deepEqual(plain(other.ask()), [], 'and nothing on a page that is no longer a saved search');
+  // shell.js is an ES module outside the renderer's scope: its menu builder is sliced from the file and run on its own
+  const shell = fs.readFileSync(require.resolve('../shell.js'), 'utf8');
+  assert.match(shell, /if \(e\.data\.remove === true\) removable\.add\(id\); else removable\.delete\(id\);/, 'the shell keeps what the title said');
+  const menuSrc = shell.slice(shell.indexOf('  menu: (view) => {'), shell.indexOf('\n  iframe:'));
+  const menu = vm.runInNewContext(`
+    const posted = [], refreshable = new Set(), renamable = new Set(), linkable = new Set(), saveable = new Set(), removable = new Set(['s']);
+    const frameOf = (id) => id, focusPage = () => {}, windowOf = (id) => ({ postMessage: (m) => posted.push([id, m]) }), rename = () => {};
+    const t = { ${menuSrc} };
+    ({ ids: (id) => t.menu({ id }).map((i) => i.id || i), press: (id) => { t.menu({ id }).find((i) => i.id === 'remove').run(); return posted; } });
+  `, {});
+  assert.deepEqual(plain(menu.ids('s')), ['remove', 'separator'], 'a saved search tab offers Delete');
+  assert.deepEqual(plain(menu.ids('p')), [], 'another tab does not');
+  assert.deepEqual(plain(menu.press('s')), [['s', { orbital: 'remove' }]], 'and pressing it asks that page');
+}
+
 function runRefreshSpinCheck() {
   // Refresh is the pane menu's (shell.js): offering it retells the title, and the menu's press asks the search again
   const api = vm.runInNewContext(`
@@ -7586,7 +7620,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
