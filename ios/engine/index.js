@@ -230,8 +230,9 @@ window.orbital = {
   // else its outline (sdk/content.js).
   async open(id) {
     await settled();
-    const kind = id.split(':')[1], doc = await hold(id), n = readNode(doc);
-    if (secret().has(id)) return JSON.stringify({ title: PRIVATE, kind, rows: [], private: true });
+    const kind = id.split(':')[1];
+    if (secret().has(id)) return JSON.stringify({ title: PRIVATE, kind, rows: [], private: true }); // before it is fetched at all
+    const doc = await hold(id), n = readNode(doc);
     let rows;
     if (kind === 'chat') {
       const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), messages = doc.data.get('messages');
