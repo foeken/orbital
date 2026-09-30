@@ -247,7 +247,7 @@ function applySettings(next) {
   if (openType && JSON.stringify(typeFilter(openType).fields || null) !== wasFields) reload(openType).then(() => renderSoon(true), showError);
   collapsedGroups.clear(); for (const key of pref('collapsedGroups', [])) collapsedGroups.add(key);
   railClosed.clear(); for (const key of pref('railClosed', [])) railClosed.add(key); // the Graph pane's, copied at load (renderer/rail.js)
-  const nextTheme = ['dark', 'system', 'light'].includes(pref('theme')) ? pref('theme') : 'light';
+  const nextTheme = themeChoice(pref('theme'));
   if (nextTheme !== themePref) showTheme(nextTheme);
   sensitiveLoading = null; loadSensitive().then(refreshSensitive); // the sensitive marks and the MCP switch are settings too, kept outside the preferences
   if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {});
