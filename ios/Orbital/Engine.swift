@@ -280,9 +280,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             return false
         }
     }
-    // a list without what was deleted here: a node, an entry about one, a search result for one
+    // a list without what was deleted here: a node, an entry about one, a search result for one, and an entry that is only
+    // the tasks it brought ("added a task to your Inbox": no node of its own) once they are all deleted, so it goes with the
+    // last of them in the one animation
     func shown(_ rows: [Row]?) -> [Row] {
-        (rows ?? []).filter { !removed.contains($0.id) && !removed.contains($0.timeline?.uri ?? "") && !removed.contains($0.target ?? "") }
+        (rows ?? []).filter { row in
+            let gone = { (id: String?) in id.map(self.removed.contains) ?? false }
+            if gone(row.id) || gone(row.timeline?.uri) || gone(row.target) { return false }
+            guard let tasks = row.children, !tasks.isEmpty, row.timeline != nil, row.timeline?.uri == nil else { return true }
+            return !tasks.allSatisfy { gone($0.id) }
+        }
     }
 
     // A message written into a chat: which chat, and a warning when Tana did not take it up (it is sent all the same)
