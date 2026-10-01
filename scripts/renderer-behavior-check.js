@@ -4401,7 +4401,6 @@ async function runHiddenItemsCheck() {
   assert.deepEqual(opened.calls, [['filters']], 'it reads the current list once');
   assert.deepEqual(opened.list, ['Lunch', 'Block*'], 'and renders what came back');
   assert.match(source, /id: 'hidden'[^}]*Edit hidden items/, 'Cmd+K carries the command that opens it');
-  assert.match(source, /palMode === 'hidden'/, 'and the palette renders, filters and types in that mode like any other');
 }
 
 // Edit pins: the page that says where this document is pinned and takes those pins off again, and the marks every
@@ -8906,7 +8905,7 @@ async function runRecentlyDeletedCheck() {
   await api.settle();
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['Not connected', true]], 'a read that failed says why, instead of Loading… for as long as the page is open (#362)');
   assert.deepEqual(plain(api.page('zz').map((r) => [r.label, r.note])), [['Not connected', true]], 'with a query too, as a note, which keeps the palette\'s "No results" from appearing under it');
-  assert.match(source, /\|\| r\.node \|\| r\.note\) && !palPage\.typed/, 'renderPalette draws no "No results" under a note');
+  assert.match(source, /palRows\.some\(\(r\) => palMode !== 'search' \|\| r\.node \|\| r\.note\) && !palPage\.typed/, 'renderPalette draws no "No results" under a note, nor under the matching rows of a page (#656)');
   assert.deepEqual(plain(await api.writeThenOpen()), ['write', 'read'], 'a delete or restore still queued lands before the page reads its list');
   const held = api.hold();
   api.row().run(); api.row().run(); await api.settle(); // opened again before the first read answered

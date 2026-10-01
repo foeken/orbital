@@ -1079,8 +1079,9 @@ function renderPalette() {
     els.push(row);
   });
   // "No results" belongs under a list that was searched and found nothing. A typed page is not a list: the agent
-  // prompt, "Discuss with …", a meeting's time or place and a field turn what is typed into their row.
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node || r.note) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  // prompt, "Discuss with …", a meeting's time or place and a field turn what is typed into their row. Any row is a
+  // result, except on Cmd+S, whose Create, date, Clear value and @ mention rows are offered whatever it found (#656).
+  if (!palRows.some((r) => palMode !== 'search' || r.node || r.note) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   keyHint();
   const active = palList.querySelector('.row.active');
