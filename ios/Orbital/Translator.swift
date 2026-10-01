@@ -11,10 +11,10 @@ final class Translator {
     struct Answer: Codable { let lang: String; let text: String } // text "": nothing to translate
 
     private(set) var to: String?
-    // what every question to ChatGPT here asks with: the desktop Settings page's Model and Thinking (synced aiModel, aiEffort),
+    // what an image is read with: the desktop Settings page's Model and Thinking (synced aiModel, aiEffort),
     // main/ai.js DEFAULT_MODEL and DEFAULT_EFFORT until it names others
     private(set) var model = "gpt-5.6-terra"
-    // translations always ask the quick one, whatever was chosen (main/ai.js TRANSLATE_MODEL): many short titles, where a
+    // translations always ask the quick one, whatever was chosen (main/ai.js DEFAULT_MODEL, as every quick job there): many short titles, where a
     // bigger model costs time and gains nothing
     static let translateModel = "gpt-5.6-terra"
     private(set) var effort = "low"

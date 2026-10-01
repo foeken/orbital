@@ -819,13 +819,18 @@ async function main() {
     assert.deepEqual([calls[0].init.body.input,calls[0].init.body.instructions],['Discuss this with Stan',ai.INSTRUCTIONS],'the title is the input; the rule is the instructions, so a title cannot be one');
     assert.equal(Object.keys(calls[0].init.body).length,4,'the title and nothing else about the document goes out');
     settings.set('aiModel','gpt-6-sol'); settings.set('aiEffort','high');
+    const tinyPng={bytes:new Uint8Array([137,80,78,71]),mimeType:'image/png'}, imageAnswer=answer('{"kind": "task", "title": "Reply to Stan"}');
+    await ai.readImage(tinyPng,fetchWith(imageAnswer));
+    assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-6-sol','high'],'reading an image follows the settings, changeable without a release');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
-    assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-6-sol','high'],'both are settings, changeable without a release');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the quick jobs keep the quick model whatever was chosen');
+    await ai.classifyType({title:'t',text:'',types:[{uri:'tana:type:a',title:'A'}]},fetchWith(answer('{"1":1}'))).catch(()=>{});
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'Classify type too');
     await ai.translate(['Open vraag over het budget'],'English',fetchWith(answer('[]')),undefined,{detect:null});
     assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'Auto-translate keeps the quick model whatever was chosen');
     assert.equal(settings.isSynced('aiModel')&&settings.isSynced('aiEffort'),true,'and they follow you, unlike the key that pays for them');
     settings.set('aiModel','gpt-4o'); settings.set('aiEffort','extreme'); // synced from an older build or another Mac: off the Settings page's lists
-    await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
+    await ai.readImage(tinyPng,fetchWith(imageAnswer));
     assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'a stored value off the lists is never sent: the default is');
     const shown = await ai.options();
     assert.deepEqual([shown.model,shown.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'and the Settings page shows the default too');
