@@ -370,6 +370,7 @@ html.framed .titlebar { padding-top: 18px; }
 
 /* ==== Page scroll and sidebar (renderer/rail.js, app.js) ==== */
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
+html:not(.listing) .scroll { padding-bottom: 50vh; } /* a document scrolls on past its last row, so the line being typed at the end can sit mid-window */
 /* Classic scrollbars drawn as the overlay's narrow line (renderer/theme.js checkScrollbars): no track, a 5px rounded
    thumb, hidden until its area is hovered or scrolled. Overlay scrollbars get none of this. */
 .classic-scroll :not(.scroll-probe)::-webkit-scrollbar { width: 11px; height: 11px; background: transparent; }
