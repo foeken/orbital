@@ -589,7 +589,6 @@ function sizeIcons() {
   if (!w || w === iconsW[pillKey()]) return;
   iconsW[pillKey()] = w;
   outline.style.setProperty('--iconw', w + 'px');
-  fitTable(); // narrower icons may leave a column room to split out
 }
 // The page changed width (render.js's ResizeObserver: the window, a pane, the sidebar, the text size), a column did, or
 // the page was drawn. moved: a hand did it, so the columns that moved play into place; a page drawing itself only snaps.

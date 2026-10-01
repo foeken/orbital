@@ -10036,6 +10036,10 @@ checks.push(function runTableFoldCheck() {
   const narrowed = undockTitle(0, 700, keys, {});
   assert.deepEqual([fold(700), narrowed, fold(700, { title: narrowed })], [1, 172, 0], 'a click on a folded name narrows Title just enough for it to split out');
   assert.ok(undockTitle(0, 560, keys, {}) < 80, 'and on a page too narrow for it, the title left would be too small: no room');
+  // metadata landing late (patchMeta → fitRowMetaSoon → fitRowMeta) can widen a table's icons: the fold is decided again
+  const calls = [];
+  vm.runInNewContext('const tableView = () => true, outline = { querySelectorAll: () => [] }; ' + functionSource('fitRowMeta') + '; fitRowMeta();', { sizeIcons: () => calls.push('size'), fitTable: (moved) => calls.push('fit' + (moved ? ' moved' : '')) });
+  assert.deepEqual(calls, ['size', 'fit'], 'a table\u2019s rows fitted again measure Visible to and refit the fold, without motion');
   console.log('ok  a table folds its first columns onto the title\u2019s line as the page narrows, the last column last');
 });
 process.exitCode = 1;
