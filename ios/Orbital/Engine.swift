@@ -23,7 +23,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var log: [String] = []
     let translator = Translator() // auto-translate, set up from the settings document at each refresh
     var sensitiveIds: Set<String> = [] // marked sensitive in Orbital (synced), for the long-press menu
-    var pinnedToday: Set<String> = [] // pinned to today, for the long-press menu
+    var pinned: Set<String> = [] // pinned to a day, any day, for the long-press menu
     var removed: Set<String> = [] // deleted here: gone from every list at once, before Tana confirms it
     var reveal = false // sensitive items shown, after a shake; never kept, as the desktop keeps it on the machine only
     // Settings' Demo mode, as the desktop's: made-up words and names on screen, nothing saved (ios/engine/demo.js); kept on this phone
@@ -173,7 +173,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
                 translator.use(to: setup.to, model: setup.model)
-                sensitiveIds = Set(setup.sensitive); pinnedToday = Set(setup.pinned)
+                sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest

@@ -417,12 +417,14 @@ window.orbital = {
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
     return JSON.stringify({ to: LANGS.includes(to) ? to : null, model: settings.get('aiModel') || null,
-      sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].includes(today())) });
+      sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length) }); // pinned to any day
   },
   // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced
   // setting the desktop's mark writes (main/documents.js setSensitive)
   async pin(id, on) {
-    await within('date pins', (on ? pinDate : unpinDate)(S.client.sync, S.me.userUri, id, today()));
+    // off: every day it is pinned to, so Remove Pin takes it out of Pinned and Today's Tasks wherever it was pinned
+    const days = on ? [today()] : (await within('date pins', datePins(S.client.sync, S.me.userUri)))[id] || [];
+    for (const day of days) await within('date pins', (on ? pinDate : unpinDate)(S.client.sync, S.me.userUri, id, day));
     return JSON.stringify(on);
   },
   async sensitive(id, on) {

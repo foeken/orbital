@@ -90,8 +90,9 @@ extension View {
         contextMenu {
             if let id, id.hasPrefix("tana:") {
                 if task { Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, then: done) } }
-                let pinned = engine.pinnedToday.contains(id), secret = engine.sensitiveIds.contains(id)
-                Button(pinned ? "Unpin from Today" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin") { Task { await engine.pin(id, !pinned); await done() } }
+                let pinned = engine.pinned.contains(id), secret = engine.sensitiveIds.contains(id)
+                // pinned to any day: only taking the pin off
+                Button(pinned ? "Remove Pin" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin") { Task { await engine.pin(id, !pinned); await done() } }
                 Button(secret ? "Not Sensitive" : "Mark as Sensitive", systemImage: secret ? "eye" : "eye.slash") { Task { await engine.markSensitive(id, !secret); await done() } }
                 Divider()
                 Button("Delete", systemImage: "trash", role: .destructive) { Task { if await engine.remove(id) { await done() } } }
