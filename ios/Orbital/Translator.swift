@@ -11,7 +11,10 @@ final class Translator {
     struct Answer: Codable { let lang: String; let text: String } // text "": nothing to translate
 
     private(set) var to: String?
-    private(set) var model = "gpt-5.6-terra" // main/ai.js DEFAULT_MODEL, unless the settings name another (aiModel)
+    // what every question to ChatGPT here asks with: the desktop Settings page's Model and Thinking (synced aiModel, aiEffort),
+    // main/ai.js DEFAULT_MODEL and DEFAULT_EFFORT until it names others
+    private(set) var model = "gpt-5.6-terra"
+    private(set) var effort = "low"
     private(set) var answers: [String: Answer] = (UserDefaults.standard.data(forKey: "translations").flatMap { try? JSONDecoder().decode([String: Answer].self, from: $0) }) ?? [:]
     @ObservationIgnored private var asked = Set<String>()
     @ObservationIgnored private var queue: [(to: String, text: String)] = [] // each with its language: Auto-translate can change while it waits
@@ -19,7 +22,7 @@ final class Translator {
 
     private(set) var problem: String? // why the last question to ChatGPT got no answer
 
-    func use(to: String?, model: String?) { self.to = to; if let model { self.model = model } }
+    func use(to: String?, model: String?, effort: String? = nil) { self.to = to; if let model { self.model = model }; if let effort { self.effort = effort } }
 
     // The words to show and, when they are a translation, the language they were in. Asks for what it does not know yet.
     func words(_ text: String, sensitive: Bool = false) -> (String, String?) {
@@ -56,7 +59,7 @@ final class Translator {
         guard !ask.isEmpty else { return save() }
         let found: [Int: Answer]
         do {
-            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: model) else {
+            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: model, effort: effort) else {
                 problem = "Sign in with ChatGPT"
                 for text in ask { asked.remove(to + "\n" + text) } // asked again once signed in
                 return save()
@@ -93,14 +96,14 @@ extension ChatGPT {
 
     // One question to ChatGPT as Codex asks it (its Responses endpoint for a ChatGPT sign-in, streamed): the answer's
     // text, or nil without a sign-in. content: the user's parts (input_text, input_image); schema: the answer's shape.
-    static func respond(_ instructions: String, _ content: [[String: Any]], model: String, schema: [String: Any]? = nil, timeout: TimeInterval = 90) async throws -> String? {
+    static func respond(_ instructions: String, _ content: [[String: Any]], model: String, effort: String, schema: [String: Any]? = nil, timeout: TimeInterval = 90) async throws -> String? {
         guard let account = try await fresh() else { return nil }
         var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/codex/responses")!)
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
         for (k, v) in ["authorization": "Bearer " + account.accessToken, "chatgpt-account-id": account.accountId ?? "", "OpenAI-Beta": "responses=experimental",
                        "originator": "codex_cli_rs", "accept": "text/event-stream", "content-type": "application/json"] { request.setValue(v, forHTTPHeaderField: k) }
-        var body: [String: Any] = ["model": model, "instructions": instructions, "store": false, "stream": true, "reasoning": ["effort": "low"],
+        var body: [String: Any] = ["model": model, "instructions": instructions, "store": false, "stream": true, "reasoning": ["effort": effort],
                                    "input": [["type": "message", "role": "user", "content": content]]]
         if let schema { body["text"] = ["format": ["type": "json_schema", "name": "answer", "schema": schema, "strict": true]] }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -134,9 +137,9 @@ extension ChatGPT {
     }
 
     // Translations by id: id -> { lang, text }, a text already in the language left out. nil without a sign-in.
-    static func translate(_ texts: [String], to: String, model: String) async throws -> [Int: Translator.Answer]? {
+    static func translate(_ texts: [String], to: String, model: String, effort: String) async throws -> [Int: Translator.Answer]? {
         let input = String(decoding: try JSONSerialization.data(withJSONObject: texts.enumerated().map { ["id": $0.offset + 1, "text": $0.element] }), as: UTF8.self)
-        guard let answer = try await respond(instructions(to), [["type": "input_text", "text": input]], model: model, schema: schema) else { return nil }
+        guard let answer = try await respond(instructions(to), [["type": "input_text", "text": input]], model: model, effort: effort, schema: schema) else { return nil }
         struct Out: Decodable { struct One: Decodable { let id: Int; let lang: String?; let text: String? }; let translations: [One] }
         let out = try JSONDecoder().decode(Out.self, from: Data(answer.utf8))
         // a null pair is the schema's "already in that language": kept as nothing to translate, so it is not asked again

@@ -180,7 +180,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             error = nil
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
-                translator.use(to: setup.to, model: setup.model)
+                translator.use(to: setup.to, model: setup.model, effort: setup.effort)
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
@@ -232,7 +232,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // What a refresh reads besides the rows (orbital.setup)
-    struct Setup: Decodable { let to: String?; let model: String?; let sensitive: [String]; let pinned: [String] }
+    struct Setup: Decodable { let to: String?; let model: String?; let effort: String?; let sensitive: [String]; let pinned: [String] }
 
     // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
     // Remove Pin takes the task out of Today's Tasks at once, collapsing as a deleted row does; the read after says where it
@@ -320,12 +320,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
     // The image made smaller (2048 px at most, JPEG) for the model and for Tana, read by ChatGPT, then made into its node
     func processImage(_ image: UIImage) async throws -> String {
-        let side: CGFloat = 2048, scale = min(1, side / max(image.size.width, image.size.height))
-        let small = UIGraphicsImageRenderer(size: CGSize(width: image.size.width * scale, height: image.size.height * scale)).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: CGSize(width: image.size.width * scale, height: image.size.height * scale)))
-        }
-        guard let jpeg = small.jpegData(compressionQuality: 0.8) else { throw Failure(errorDescription: "The image could not be read") }
-        let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.model)
+        guard let jpeg = image.fitted(2048).jpegData(compressionQuality: 0.9) else { throw Failure(errorDescription: "The image could not be read") }
+        let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.model, effort: translator.effort)
         let id: String = try await call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
                                         ["kind": read.kind ?? "doc", "title": read.title ?? "", "notes": read.notes ?? [], "image": jpeg.base64EncodedString()])
         await refresh()
@@ -507,4 +503,15 @@ struct WebHost: UIViewRepresentable {
     let web: WKWebView
     func makeUIView(context: Context) -> WKWebView { web }
     func updateUIView(_ view: WKWebView, context: Context) {}
+}
+
+extension UIImage {
+    // At most side pixels on its longest side, drawn in pixels: a renderer's default is the screen's scale (3x on an
+    // iPhone), which blew a shrunk screenshot back up three times over, blurred, before the model read it
+    func fitted(_ side: CGFloat) -> UIImage {
+        let pixels = CGSize(width: size.width * scale, height: size.height * scale), k = min(1, side / max(pixels.width, pixels.height))
+        let target = CGSize(width: (pixels.width * k).rounded(), height: (pixels.height * k).rounded()), format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
+    }
 }

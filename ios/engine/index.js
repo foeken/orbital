@@ -440,7 +440,8 @@ window.orbital = {
     return JSON.stringify(id);
   },
   // What the app needs besides rows, read at each refresh: Auto-translate as the desktop has it (renderer/translate.js:
-  // the language chosen there, a synced preference, and the model the AI rows use; the phone asks ChatGPT itself,
+  // the language chosen there, a synced preference, and the model and thinking the AI rows use (the desktop's Settings page,
+  // main/ai.js chosen); the phone asks ChatGPT itself,
   // Translator.swift), what is sensitive, and what is pinned to today (a long press offers to pin or unpin)
   // Settings' Auto-translate: the same synced preference the desktop's Cmd+K Auto-translate … writes (renderer/translate.js
   // setTranslateTo), off as no value; answered once it is in the settings document
@@ -452,7 +453,7 @@ window.orbital = {
   },
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
-    return JSON.stringify({ to: LANGS.includes(to) ? to : null, model: settings.get('aiModel') || null,
+    return JSON.stringify({ to: LANGS.includes(to) ? to : null, model: settings.get('aiModel') || null, effort: settings.get('aiEffort') || null,
       sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length) }); // pinned to any day
   },
   // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced

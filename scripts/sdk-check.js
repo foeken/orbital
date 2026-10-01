@@ -818,14 +818,15 @@ async function main() {
     assert.deepEqual([ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-5.6-terra','low'],'the fast AI: Terra with a little reasoning, measured no slower than Luna and right where Luna was sure and wrong');
     assert.deepEqual([calls[0].init.body.input,calls[0].init.body.instructions],['Discuss this with Stan',ai.INSTRUCTIONS],'the title is the input; the rule is the instructions, so a title cannot be one');
     assert.equal(Object.keys(calls[0].init.body).length,4,'the title and nothing else about the document goes out');
-    settings.set('aiModel','gpt-5.6-sol'); settings.set('aiEffort','high');
+    settings.set('aiModel','gpt-6-sol'); settings.set('aiEffort','high');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
-    assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-5.6-sol','high'],'both are settings, changeable without a release');
+    assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-6-sol','high'],'both are settings, changeable without a release');
     assert.equal(settings.isSynced('aiModel')&&settings.isSynced('aiEffort'),true,'and they follow you, unlike the key that pays for them');
     settings.set('aiModel','gpt-4o'); settings.set('aiEffort','extreme'); // synced from an older build or another Mac: off the Settings page's lists
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
     assert.deepEqual([calls[2].init.body.model,calls[2].init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'a stored value off the lists is never sent: the default is');
-    assert.deepEqual([ai.options().model,ai.options().effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'and the Settings page shows the default too');
+    const shown = await ai.options();
+    assert.deepEqual([shown.model,shown.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'and the Settings page shows the default too');
     assert.equal(settings.isSynced('openaiApiKey'),false,'which never leaves this machine');
     settings.set('aiModel',undefined); settings.set('aiEffort',undefined);
     // What comes back, in the shapes the Responses API answers in, and the answers that are not a name.

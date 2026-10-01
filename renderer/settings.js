@@ -56,8 +56,8 @@ function settingsEl() {
       // only for whoever already has a key, as ⌘K offers Set OpenAI API key (renderer/palette.js): ChatGPT is the way in
       ...(tana.setOpenAIKey && chatgptAuth?.apiKey ? [['openaiKey', 'OpenAI API key', [act('Set …', action('openaiKey'))], true]] : []),
       ...(ai ? [
-        ['brain', 'Model', choices(ai.models.map((m) => [m.replace(/^gpt-[\d.]+-/, '').replace(/^./, (c) => c.toUpperCase()), m === ai.model, () => settingsSetAI('model', m), m]))],
-        ['sparkle', 'Thinking', choices(ai.efforts.map((x) => [x[0].toUpperCase() + x.slice(1), x === ai.effort, () => settingsSetAI('effort', x)]))],
+        ['brain', 'Model', choices(ai.models.map((m) => [aiModelLabel(m), m === ai.model, () => settingsSetAI('model', m), m]))],
+        ['sparkle', 'Thinking', choices(ai.efforts.map((x) => [x === 'xhigh' ? 'Extra high' : x[0].toUpperCase() + x.slice(1), x === ai.effort, () => settingsSetAI('effort', x)]))],
       ] : []),
       // the agents that are on (main/agent.js), changed on the same page as ⌘K Choose agents
       ...(tana.agentList ? [['robot', 'Agents', [...(agentsOn().length ? agentsOn().map((a) => chip(a.label)) : [hint('None')]), act('Choose …', action('agents'))]]] : []),
@@ -91,6 +91,8 @@ function settingsEl() {
   }
   return page;
 }
+// gpt-6-sol reads Sol 6, gpt-5.6-terra Terra 5.6, gpt-5.5 GPT-5.5: the list holds a name in more than one version
+const aiModelLabel = (id) => id.replace(/^gpt-([\d.]+)-?(.*)$/, (_, version, name) => (name ? name[0].toUpperCase() + name.slice(1) + ' ' : 'GPT-') + version);
 function settingsSetAI(key, value) {
   run(async () => { await tana.setAiOption(key, value); settingsRefresh(); }); // read again: a read still out from before the write must not land over it
 }

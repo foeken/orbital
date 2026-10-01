@@ -244,13 +244,11 @@ function cleanName(answer) {
 // The model's answer as text, or null when this machine has neither a ChatGPT sign-in nor an API key. image: a data
 // URL the model sees beside the input.
 async function ask(instructions, input, fetchImpl, userData, image, only = {}) { // only: a model, effort or timeout this question uses instead
-  const use = { model: only.model || chosen().model, effort: only.effort || chosen().effort, schema: only.schema }; // schema: the JSON Schema the answer must follow
-  if (userData) {
-    // no forced token refresh per question: it was a 0.7 s round trip before every answer, and the turn's own Codex
-    // refreshes the token it uses (measured 2026-09-28: 739 ms with the refresh, 3 ms without)
-    const status = await chatgptStatus(userData, false);
-    if (status.signedIn) return askChatGPT(instructions, input, userData, use, image, only.timeout); // a signed-in ChatGPT account always wins
-  }
+  // no forced token refresh per question: it was a 0.7 s round trip before every answer, and the turn's own Codex
+  // refreshes the token it uses (measured 2026-09-28: 739 ms with the refresh, 3 ms without)
+  const signedIn = !!userData && (await chatgptStatus(userData, false)).signedIn, choice = chosen(await modelList(userData, signedIn));
+  const use = { model: only.model || choice.model, effort: only.effort || choice.effort, schema: only.schema }; // schema: the JSON Schema the answer must follow
+  if (signedIn) return askChatGPT(instructions, input, userData, use, image, only.timeout); // a signed-in ChatGPT account always wins
   const key = settings.get('openaiApiKey');
   if (!key) return null;
   const response = await fetchImpl(ENDPOINT, {
@@ -446,16 +444,38 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
 }
 
 // The model and effort every question here asks with (ask above), chosen on the Settings page (renderer/settings.js) and
-// synced. The page is input from outside the process: only these choices are stored. A synced value off the lists (an
-// older build's, another Mac's) reads as the default, for the page and for every question alike.
-const MODELS = ['gpt-5.6-luna', DEFAULT_MODEL, 'gpt-5.6-sol'], EFFORTS = ['low', 'medium', 'high'];
-const chosen = () => { const model = settings.get('aiModel'), effort = settings.get('aiEffort'); return { model: MODELS.includes(model) ? model : DEFAULT_MODEL, effort: EFFORTS.includes(effort) ? effort : DEFAULT_EFFORT }; };
-const options = () => ({ ...chosen(), models: MODELS, efforts: EFFORTS });
-function setOption(key, value) {
-  const allowed = key === 'model' ? MODELS : key === 'effort' ? EFFORTS : [];
+// synced. The choices are what this Mac can ask: signed in with ChatGPT, Codex's own model/list on the app-server the
+// questions go through (only what the account may use, each model with the reasoning efforts it takes), read once per
+// sign-in; otherwise the three below. The page is input from outside the process: only listed choices are stored, and a
+// synced value off the list (an older build's, another Mac's) reads as the default, for the page and every question alike.
+// ponytail: an API key keeps the three below; GET /v1/models when someone uses one
+const EFFORTS = ['low', 'medium', 'high'];
+const BUILT_IN = ['gpt-5.6-luna', DEFAULT_MODEL, 'gpt-6-sol'].map((id) => ({ id, efforts: EFFORTS }));
+let listed = null; // { rpc, list }: the app-server it was read from, so another sign-in reads it again
+async function modelList(userData, signedIn) {
+  if (!signedIn) return BUILT_IN;
+  const rpc = await ensureChatGPT(userData);
+  if (!rpc) return BUILT_IN;
+  if (listed?.rpc !== rpc) listed = { rpc, list: rpc.call('model/list', {}).then((res) => (res?.data || []).filter((m) => m && !m.hidden && (m.id || m.slug))
+    .map((m) => ({ id: m.id || m.slug, efforts: (m.supportedReasoningEfforts || []).map((e) => (typeof e === 'string' ? e : e?.reasoningEffort)).filter(Boolean) }))) };
+  const list = await listed.list.catch(() => []);
+  if (!list.length) listed = null; // asked again next time
+  return list.length ? list : BUILT_IN;
+}
+const chosen = (list) => {
+  const stored = settings.get('aiModel'), model = (list.find((m) => m.id === stored) || list.find((m) => m.id === DEFAULT_MODEL) || list[0]).id;
+  const found = list.find((m) => m.id === model).efforts, efforts = found.length ? found : EFFORTS, effort = settings.get('aiEffort');
+  return { model, effort: efforts.includes(effort) ? effort : efforts.includes(DEFAULT_EFFORT) ? DEFAULT_EFFORT : efforts[0], efforts };
+};
+async function options(userData) {
+  const list = await modelList(userData, !!userData && (await chatgptStatus(userData)).signedIn), { model, effort, efforts } = chosen(list);
+  return { model, effort, models: list.map((m) => m.id), efforts };
+}
+async function setOption(key, value, userData) {
+  const now = await options(userData), allowed = key === 'model' ? now.models : key === 'effort' ? now.efforts : [];
   if (!allowed.includes(value)) throw new Error('Not an AI choice: ' + key);
   settings.set(key === 'model' ? 'aiModel' : 'aiEffort', value);
-  return options();
+  return options(userData);
 }
 
 module.exports = { options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };

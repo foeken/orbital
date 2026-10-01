@@ -66,7 +66,7 @@ function mockApi() {
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', editable: false, renamable: true, hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
   const aiPick = { model: 'gpt-5.6-terra', effort: 'low' }; // the Settings page's Model and Thinking (main/ai.js options)
-  const aiOptions = () => ({ ...aiPick, models: ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol'], efforts: ['low', 'medium', 'high'] });
+  const aiOptions = () => ({ ...aiPick, models: ['gpt-6-sol', 'gpt-5.6-luna', 'gpt-5.6-terra'], efforts: ['low', 'medium', 'high'] });
   let mcpOff = false; // the app-local switch, off every launch of the mock
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
