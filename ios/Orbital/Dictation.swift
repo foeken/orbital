@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 
-// Dictation in Quick Add and the Ask Tana composer, as Codex dictates: the microphone recorded (AAC, 16 kHz mono, small
+// Dictation in Quick Add and the Ask Tana composer, as Codex dictates: the microphone recorded (AAC mono, 44.1 kHz, small
 // to send) with its level sampled for the dots that move while you speak, then sent to ChatGPT as a whole
 // (ChatGPT.transcribe) once stopped, its words handed to whoever is being dictated into.
 @MainActor @Observable
@@ -48,9 +48,9 @@ final class Dictation {
 
     private func start() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .spokenAudio)
+        try session.setCategory(.record, mode: .default)
         try session.setActive(true)
-        let recorder = try AVAudioRecorder(url: file, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 16000, AVNumberOfChannelsKey: 1])
+        let recorder = try AVAudioRecorder(url: file, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100, AVNumberOfChannelsKey: 1])
         recorder.isMeteringEnabled = true
         guard recorder.record() else { throw ChatGPT.Failure(errorDescription: "The microphone did not start") }
         self.recorder = recorder

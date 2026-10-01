@@ -31,6 +31,8 @@ struct QuickAdd: View {
                         if !dictation.recording { TextField("New task", text: $title, axis: .vertical).focused($focused).submitLabel(.done) }
                         Dictate(dictation: dictation, into: append)
                     }
+                } footer: {
+                    if let problem = dictation.problem { Text(problem) } // why dictating did not start or come back, right under the field
                 }
                 Section {
                     ForEach([Engine.TaskType(uri: nil, title: "Task")] + types) { t in
@@ -59,7 +61,7 @@ struct QuickAdd: View {
             .disabled(working != nil)
             .overlay { if let working { ProgressView(working).padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)) } }
             .safeAreaInset(edge: .bottom) {
-                if let failure = failure ?? dictation.problem { Text(failure).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar) }
+                if let failure { Text(failure).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar) }
             }
             .navigationTitle("Quick Add")
             .navigationBarTitleDisplayMode(.inline)
