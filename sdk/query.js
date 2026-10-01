@@ -367,4 +367,29 @@ function liveTrigger(p) {
   return q;
 }
 
-module.exports = { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, KIND_NODE_TYPE, hideRules, isHidden, completedWindow, completedInWindow };
+// Meeting chats in every list that includes chats (issue #39). The graph lists a chat that lives on something only when
+// asked (includeOwnedChats), and then all of them: live, 330 of 369 were Tana's own background work (summaries, proposal
+// iterations, agent runs, subagents). The rest were meeting chats, the one owned chat a person talks in, and what Tana's
+// own chat search keeps ($c in shared-*.js). The intent filter that picks them drops every other kind from a query, so
+// they are a second query under the same filters, merged by update time when that is the order and after the rest when
+// the server ranked by text. Chats have no state, so a list with a state filter asks nothing more. answer is the list
+// call to wrap (main/views.js listFilter, the iPhone engine); a refused second query leaves the list without them.
+const MEETING_CHATS = { nodeTypes: ['chat'], includeOwnedChats: true, chatInvocationIntents: ['meeting'] };
+const withMeetingChats = (p) => !!p && !p.nodeIds && !p.includeOwnedChats && !(p.stateTypes && p.stateTypes.length)
+  && Array.isArray(p.nodeTypes) && p.nodeTypes.includes('chat');
+const byUpdateTime = (p) => !!p.sortOptions && !!p.sortOptions[0] && p.sortOptions[0].field === 'SORT_FIELD_UPDATE_TIME' && p.sortOptions[0].direction === 'SORT_DIRECTION_DESCENDING';
+function addMeetingChats(answer) {
+  return async (params) => {
+    if (!withMeetingChats(params)) return answer(params);
+    const [a, b] = await Promise.all([answer(params), answer({ ...params, ...MEETING_CHATS }).catch(() => ({ nodes: [], truncated: false }))]);
+    const seen = new Set(a.nodes.map((n) => n.id));
+    let nodes = a.nodes.concat(b.nodes.filter((n) => !seen.has(n.id)));
+    if (byUpdateTime(params)) nodes.sort((x, y) => (Date.parse(y.updateTime) || 0) - (Date.parse(x.updateTime) || 0));
+    const cut = !!params.limit && nodes.length > params.limit;
+    if (cut) nodes = nodes.slice(0, params.limit);
+    const totalCount = a.totalCount != null && b.totalCount != null ? Number(a.totalCount) + Number(b.totalCount) : a.totalCount;
+    return { ...a, nodes, totalCount, truncated: a.truncated || b.truncated || cut };
+  };
+}
+
+module.exports = { addMeetingChats, liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, KIND_NODE_TYPE, hideRules, isHidden, completedWindow, completedInWindow };

@@ -4,7 +4,7 @@ const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient, takeCalls } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
-const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, addMeetingChats } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView, rowLimit } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
@@ -436,16 +436,7 @@ async function doRefresh() {
 // related search results) applies listed() itself.
 // The app's own settings document is app plumbing, not a note: it is kept out of every list and search the way
 // a hidden title is, and stays reachable by id like everything else that is filtered here.
-// It is also the one place meeting chats are added (issue #39). The graph lists a chat that lives on something only
-// when asked (includeOwnedChats), and then all of them: live, 330 of 369 were Tana's own background work (summaries,
-// proposal iterations, agent runs, subagents). The rest were meeting chats, the one owned chat a person talks in, and
-// what Tana's own chat search keeps ($c in shared-*.js). The intent filter that picks them drops every other kind from
-// a query, so they are a second query under the same filters, merged by update time when that is the order and after
-// the rest when the server ranked by text. Chats have no state, so a list with a state filter asks nothing more.
-const MEETING_CHATS = { nodeTypes: ['chat'], includeOwnedChats: true, chatInvocationIntents: ['meeting'] };
-const withMeetingChats = (p) => !!p && !p.nodeIds && !p.includeOwnedChats && !(p.stateTypes && p.stateTypes.length)
-  && Array.isArray(p.nodeTypes) && p.nodeTypes.includes('chat');
-const byUpdateTime = (p) => !!p.sortOptions && !!p.sortOptions[0] && p.sortOptions[0].field === 'SORT_FIELD_UPDATE_TIME' && p.sortOptions[0].direction === 'SORT_DIRECTION_DESCENDING';
+// It is also the one place meeting chats are added (issue #39, sdk/query.js addMeetingChats).
 function listed() {
   const rules = hiddenRules(), hideMcp = mcpHidden(), appDocs = new Set(settings.appDocIds()); // the settings document, and any it took over from
   return (n) => !appDocs.has(n.id) && !isHidden(memberTitle(n), rules) && !(hideMcp && isMcp(n));
@@ -466,18 +457,7 @@ function listFilter(c) {
     if (params && params.nodeIds) return { ...result, nodes, truncated };
     return { ...result, nodes: nodes.filter(listed()), truncated };
   };
-  c.graph.listNodes = async (params) => {
-    if (!withMeetingChats(params)) return answer(params);
-    // a refused second query leaves the list as it was without them rather than failing it
-    const [a, b] = await Promise.all([answer(params), answer({ ...params, ...MEETING_CHATS }).catch(() => ({ nodes: [], truncated: false }))]);
-    const seen = new Set(a.nodes.map((n) => n.id));
-    let nodes = a.nodes.concat(b.nodes.filter((n) => !seen.has(n.id)));
-    if (byUpdateTime(params)) nodes.sort((x, y) => (Date.parse(y.updateTime) || 0) - (Date.parse(x.updateTime) || 0));
-    const cut = !!params.limit && nodes.length > params.limit;
-    if (cut) nodes = nodes.slice(0, params.limit);
-    const totalCount = a.totalCount != null && b.totalCount != null ? Number(a.totalCount) + Number(b.totalCount) : a.totalCount;
-    return { ...a, nodes, totalCount, truncated: a.truncated || b.truncated || cut };
-  };
+  c.graph.listNodes = addMeetingChats(answer);
 }
 // Changing the list refreshes like any other filter change: replaceSection drops the rows that are now hidden, so
 // nothing comes back from the SQLite cache.

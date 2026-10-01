@@ -196,7 +196,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   on hover, only its own colour darkens. The visibility icon (`.audience`) and a warning (assigned to someone who cannot see it,
   `.hiddenfrom`) stay in full. That warning is "Not visible to …" in the subtext after who can see the row, in a soft
   rose rather than the error red, the audience glyph left grey beside it (`peopleEl`, issue #622); where the row shows
-  only the glyph, the glyph itself takes the rose.
+  only the glyph, the glyph itself takes the rose. In a table's Visible to column the words are a rose `userAlert` glyph
+  after who can see the row, "Not visible to …" in its tooltip.
 - **A task's box is its state** (#243). A task in the Inbox (`proposed`) draws a dashed box; In Progress a grey box;
   completed a green tick, with the title struck through and grey, and a short pop (`popSound`, renderer/motion.js;
   a checkbox block pops too, unchecking is silent; it sounds as the mouse button goes down on a box the
@@ -222,7 +223,7 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   sends those four and `peopleCount`, and reads the owners on demand, so they are let go like any read). Each bubble is
   an image named after its person; a guest, whose profile Tana does not let us read, is "Guest". The glyph then leaves
   the facts after the title. A table row, whose subtext is its cells, draws the same line (glyph, bubbles, the rest in
-  words) in its icons at the end, whose column widens to 190px when any row has one, and the bare glyph for a row that names nobody. It shows with the Assigned fact, and never on the Timeline, which shows neither the glyph nor the faces (`audienceShown`).
+  words) in its icons at the end, whose column widens to 190px when any row has one, and the bare glyph for a row that names nobody. It is Display's Visible to fact, on unless switched off (a Display choice stored before it was its own fact shows it; off is stored as `novisibility`, views.js `withVisibility`), and never on the Timeline, which shows neither the glyph nor the faces (`displayKeys`).
   Everyone, only you and a space are the exception: the glyph and **Everyone**, **Private** or the space's name
   ("Space members" when Tana gives no title), no bubbles, since a bubble per member or your own face tells you nothing
   (`AUDIENCES` `word`, `audienceInfo`); the page's Visible to field says the same, and Lives in leaves the space out
@@ -531,7 +532,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   A page on your day node for today or your node for this week (known by id, found at Save view and never made: renderer/palette.js
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
-- **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
+- **Settings**: Open settings (⌘,, the Settings page: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
@@ -1025,7 +1026,8 @@ A row is picked up by its marker and dropped where a line says it will land (ren
 Notifications, Proposals and the Timeline are pages of the app's own: an `orbital:` id no Tana node can have, known to
 the renderer from boot (`extra` with `appPage: true`), so `goTo`, Back and Recent reach them without asking main. Their
 rows are `outline:children` of that id. They have no pills, filter, draft row, presence room or pins, and Cmd+K offers
-nothing about them as documents. Each is a place the app remembers, so ⌘R on one reloads onto it.
+nothing about them as documents. Each is a place the app remembers, so ⌘R on one reloads onto it. Settings is an
+app page too, known and remembered the same way, but it has no rows: the renderer draws its controls itself (below).
 
 - **Notifications** (issue #18; `orbital:notifications`, Views after Inbox, hinted "2 unread"). main/inbox.js reads the
   user's `tana:user-inbox` document (sdk/inbox.js) into one read-only row per notification, newest first. A row is
@@ -1096,6 +1098,21 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
     IntersectionObserver on "Show three more days", which also works pressed and reads "Loading…"), up to 120 pages
     (`setPages`); a page too short to scroll keeps reading until it fills the screen. Watched nodes last updated before
     the window are not asked for history. No filters.
+- **Settings** (issue #672; `orbital:settings`, renderer/settings.js). Opened by Cmd+K **Open settings** (first under
+  Settings), its key ⌘, (`DEFAULT_HOTKEYS`, recordable) and the app menu's **Settings…** (main.js `createMenu`, which shows
+  ⌘, but leaves the key to the row and asks the shell to run the row in the front pane: shell.js `action`). It opens
+  in a pane to the right (`openElsewhere('right')`); one already on screen in another pane is focused instead. The page
+  draws no rows and asks main for no children (renderer/render.js): it is sections of field rows (`.fields`), each a
+  glyph, a grey label and its value, and only lasting choices are on it — General (Theme: Light, Dark, System; Home, set
+  with ⌘K Set as Home), Language (Auto-translate), AI (ChatGPT sign-in and the OpenAI API key, marked **This Mac**; Model
+  Luna/Terra/Sol and Thinking Low/Medium/High, the synced `aiModel`/`aiEffort` over `ai:options`/`ai:setOption`,
+  which take only main/ai.js's own lists; Agents, the ones that are on, over `agentList`) and Lists (hidden titles, Show MCP chats). A control changes its
+  setting the way its Cmd+K row does, mostly by running that row (`runAction`: Auto-translate, ChatGPT, the API key,
+  Choose agents and hidden titles open their palette pages). The page reads its values again when the palette closes,
+  when a setting arrives from another page or Mac, on a global refresh
+  (hidden titles edited elsewhere) and when the ChatGPT status changes; only the newest read lands, and a redraw gives
+  the keyboard back to the control that had it (drawSettings). Text size, shortcuts, the
+  sensitive eye and demo mode keep their own keys and rows and are not on it.
 
 ### Chats
 
@@ -1219,8 +1236,9 @@ main lays two pages over the whole window, above every pane, as a transparent vi
 `openOverlay`), asked for by renderer/overlays.js; each is its own scope outside the outliner. The page that asked
 keeps its caret and gets the keys back when the overlay closes, with what it had to say (`onOverlayClosed`).
 
-- **Help** (help.html): seven short pages of the basics, each with a CSS loop of the keys at work; the rest is found in
-  Cmd+K as you go. The last page offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
+- **Help** (help.html): eight short pages of the basics, each with a CSS loop of the keys at work; the rest is found in
+  Cmd+K as you go. The last page is the iPhone app: a code to scan that joins its TestFlight beta (help-testflight.svg,
+  made by qrencode; iPhone only for now). The page before it offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
   and starts the sign-in (`onOverlayClosed` `chatgpt`); signed in already, it says so instead. Opened by Cmd+K Help, the ?
   in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference): after login, once
   the connection is up and the page the launch came back to is drawn. Main opens it (`api.claimHelp`, main.js

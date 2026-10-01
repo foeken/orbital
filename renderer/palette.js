@@ -392,6 +392,7 @@ function paletteRows(q, typed = q) {
     for (const v of savedViews()) rows.push({ id: v.id || 'savedView:' + v.name, group: 'Saved views', icon: 'splitPanes', label: v.name, run: () => run(() => openSavedView(v)) });
   }
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
+  rows.push({ id: 'openSettings', group: 'Settings', icon: 'options', label: 'Open settings', run: () => openSettings() }); // the Settings page (renderer/settings.js), first in its group
   rows.push({ id: 'textLarger', group: 'Settings', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
   rows.push({ id: 'textSmaller', group: 'Settings', icon: 'textSmaller', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
   rows.push({ id: 'textReset', group: 'Settings', icon: 'textReset', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
@@ -542,7 +543,7 @@ function openCommandPalette() {
 }
 // Escape: the page says where it came from; a page that says nothing (the command page, search) closes.
 function backPalette() { (palPage.back || closePalette)(); }
-// ---- a page that lists one read from main: Recently deleted, Archived types, Hidden items, Codex hosts, the meeting picker ----
+// ---- a page that lists one read from main: Recently deleted, Archived types, Hidden items, the meeting picker ----
 // The list is null while the read is out, then what main answered, or the Error it failed with. The page draws its rows
 // once it is in, and otherwise one line saying why there are none: Loading…, the failure, or its empty line for a list
 // with nothing in it. A query that matches nothing leaves the rows empty, and the palette's own "No results" says so.

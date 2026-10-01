@@ -84,7 +84,7 @@ function patchMeta(docId) {
     // the same line a full render would build, so a row does not change shape when its metadata arrives late: the
     // facts go before the type chips, where nodeEl appends them, not after them
     const had = body.querySelector(':scope > .subtext'), sub = subtextEl(item.node, summary, had || undefined, tableRow(item.parent));
-    if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId, item.node), body.querySelector(':scope > .chip') || had || null);
+    if (summary && (displayOn('assigned') || displayOn('visibility'))) body.insertBefore(taskMetaEl(summary, docId, item.node), body.querySelector(':scope > .chip') || had || null);
     if (sub && !had) body.append(sub);
     else if (!sub && had) had.remove();
     row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
@@ -148,14 +148,14 @@ function audienceIcon(summary, node) {
   const icon = iconEl(summary.audience.icon, label);
   icon.className += ' audience'; // who can see it: never faint (styles.css, row icons)
   if (summary.hiddenFrom) icon.classList.add('hiddenfrom');
-  if (node && canEditNode(node) && isRealId(node.id) && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
+  if (canEditVisibility(node)) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
   return icon;
 }
+function canEditVisibility(node) { return node && canEditNode(node) && isRealId(node.id) && tana.accessOptions; }
 // Who can see a row, at the start of its subtext (#461): the audience's glyph, a bubble per person and how many.
 // main names them (sdk/node.js audienceMetadata): everyone is the organization's membership, the others the grants.
-function audienceUris(summary) { return (summary && summary.audience && displayOn('assigned') && audienceShown() && summary.people) || []; }
-// the Timeline says what happened and who did it, not who can see it: no audience icon or faces there
-function audienceShown() { return !(zoom && zoom.docId === TIMELINE_PAGE); }
+// Display's Visible to; the Timeline, which says what happened and who did it, never shows it (displayKeys)
+function audienceUris(summary) { return (summary && summary.audience && displayOn('visibility') && summary.people) || []; }
 // a guest's profile is not readable (the graph refuses the kind, a subscribe finds no document), so a guest is named as one
 function isGuest(uri) { return uri.startsWith('tana:guest-profile:'); }
 function peopleEl(summary, node) {
@@ -166,9 +166,13 @@ function peopleEl(summary, node) {
   const word = summary.audience.word; // everyone and only you: a word, not the whole organization or your own face
   const icon = audienceIcon(summary, node);
   if (summary.hiddenFrom) icon.classList.remove('hiddenfrom'); // the words after it say who is shut out (#622): the lock stays as it is
-  el.append(icon, ...(word ? [word] : facesEls(uris, summary.peopleCount || uris.length)));
+  const said = word && document.createElement('span');
+  if (said) { said.className = 'pword'; said.textContent = word; } // its own element, so a narrow table can leave it out (styles.css .table-view.folded)
+  el.append(icon, ...(said ? [said] : facesEls(uris, summary.peopleCount || uris.length)));
   // assigned to someone who cannot see it: said in words after who can, as the page's Visible to field says it (#622)
-  if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'hiddenfrom'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
+  // a table's column has no room for the words: a red warning glyph says it there, the words in its tooltip
+  if (summary.hiddenFrom && tableView()) { const warn = iconEl('userAlert', 'Not visible to ' + summary.hiddenFrom); warn.classList.add('hiddenfrom'); el.append(warn); }
+  else if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'hiddenfrom'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
   return el;
 }
 // A bubble each for the first four people, then the rest: "+n" up to nine people, "and n others" past that. The list
@@ -199,14 +203,18 @@ function taskMetaEl(summary, docId, node) {
   const writable = node && canEditNode(node) && isRealId(node.id);
   // .mtext: the words, which a table row leaves out (its Assigned column has the name; styles.css .table-view)
   const who = document.createElement('span'); who.className = 'mtext'; who.textContent = summary.assignees;
-  if (summary.assignees) el.append(who);
+  if (summary.assignees && displayOn('assigned') && !tableView()) el.append(who); // a table has an Assigned column for them
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
   if (summary.assignees === 'Unassigned') { const icon = iconEl('unassigned', null); icon.title = 'Unassigned'; who.prepend(icon); }
   // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there the same
   // line (glyph, faces, the rest in words) sits here with the row's icons, and the bare glyph where it names nobody
-  if (!audienceShown()) { /* the Timeline: nothing about who can see it */ }
-  else if (summary.audience && tableView()) el.append(peopleEl(summary, node) || audienceIcon(summary, node));
+  if (!displayOn('visibility')) { /* Visible to is off, or the Timeline: nothing about who can see it */ }
+  else if (summary.audience && tableView()) { // the whole cell, its words and faces too, opens the visibility picker, as the glyph does
+    const who = peopleEl(summary, node);
+    if (who && canEditVisibility(node)) clickable(who, () => openVisibility(node, summary.scope));
+    el.append(who || audienceIcon(summary, node));
+  }
   else if (summary.audience && !audienceUris(summary).length) el.append(audienceIcon(summary, node));
   else if (summary.unknownAudience) { const t = document.createElement('span'); t.className = 'mtext'; t.textContent = ' · Visibility unknown'; el.append(t); }
   // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is

@@ -172,9 +172,9 @@
       <div>
         <h3>Sort and Display</h3>
         <p><b>Sort</b> orders rows by <b>Default</b>, <b>Status</b>, <b>Updated</b>, <b>Created</b>, <b>Title</b>, or <b>Meeting time</b> when the list holds only meetings, and by any field of the page's types. A field sorts by its first value; rows without one go last.</p>
-        <p><b>Display</b> chooses the facts each row shows on its grey line: <b>Type</b>, <b>Lives in</b>, <b>Status</b>, <b>Assigned</b>, <b>Updated</b>, <b>Created</b>, <b>Created by</b>, and the page's fields. Tick as many as you like; the pill names the first two.</p>
+        <p><b>Display</b> chooses the facts each row shows on its grey line: <b>Type</b>, <b>Lives in</b>, <b>Status</b>, <b>Assigned</b>, <b>Visible to</b>, <b>Updated</b>, <b>Created</b>, <b>Created by</b>, and the page's fields. Tick as many as you like; the pill names the first two.</p>
       </div>
-      <figure class="shot"><img data-m="views-display" alt="The Display menu with Status and Assigned ticked"><figcaption>Every menu has a search line: type to narrow it.</figcaption></figure>
+      <figure class="shot"><img data-m="views-display" alt="The Display menu with Status, Assigned and Visible to ticked"><figcaption>Every menu has a search line: type to narrow it.</figcaption></figure>
     </div>
     <p>A saved search or a type page draws its rows twenty at a time; the next twenty come as "Show 20 more" at the end scrolls into view.</p>
   </section>
@@ -187,9 +187,17 @@
     <div class="split flip">
       <div>
         <h3>Column widths</h3>
-        <p>Drag the grip on a column header's right edge to resize it; double-click the grip to reset. From the keyboard, <kbd>⌘K</kbd> <b>Column widths …</b> lists the columns: <kbd>←</kbd> <kbd>→</kbd> make the highlighted one 20 pixels narrower or wider, <kbd>↩</kbd> resets it. Title takes whatever width is left.</p>
+        <p>Drag the grip on a column header's right edge to resize it, Title's included; double-click the grip to reset. From the keyboard, <kbd>⌘K</kbd> <b>Column widths …</b> lists Title and the columns: <kbd>←</kbd> <kbd>→</kbd> make the highlighted one 20 pixels narrower or wider, <kbd>↩</kbd> resets it. A Title you have not resized takes whatever width is left; once you resize it, it keeps that width and the columns stretch to share the rest of the row.</p>
       </div>
-      <figure class="shot"><img data-m="views-widths" alt="The Column widths page listing Status and Assigned"><figcaption>Column widths, the keyboard way to the grips.</figcaption></figure>
+      <figure class="shot"><img data-m="views-widths" alt="The Column widths page listing Title, Status and Assigned"><figcaption>Column widths, the keyboard way to the grips.</figcaption></figure>
+    </div>
+    <div class="split">
+      <div>
+        <h3>At every width</h3>
+        <p>A table fits its pane. When the pane is too narrow for every column, the first columns move onto the title's line, and their values follow the title in grey. Widen the pane and they split back out into columns of their own, the last column first, so the facts never change order.</p>
+        <p>The header names the columns on the title's line after <b>Title</b>, in a lighter grey. Click one to give it a column of its own: Title gets narrower to make room, and if even a narrow Title leaves none, it says so. Dragging Title's grip to the left does the same, a column at a time. A wider Title never folds a column: it stops where the columns reach the end of the row, and gives way first when the pane narrows.</p>
+      </div>
+      <figure class="clip"><video data-m="views-split"></video><figcaption>A pane narrowing and widening: the first columns glide onto the title's line and back out.</figcaption></figure>
     </div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>table</b> <i>→</i><kbd>↩</kbd></span>, then the same again to switch back.</div>
   </section>

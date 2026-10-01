@@ -275,6 +275,8 @@ function createMenu() {
     { label: app.name, submenu: [
       { role: 'about' },
       { label: 'Check for Updates…', click: () => checkUpdates(true) },
+      // the key is the renderer's Open settings row (DEFAULT_HOTKEYS), so it can be re-recorded; the menu runs that row in the front pane
+      { type: 'separator' }, { label: 'Settings…', accelerator: 'CmdOrCtrl+,', registerAccelerator: false, click: () => { if (S.win && !S.win.isDestroyed()) tellShell(S.win, 'action', 'openSettings'); } },
       { type: 'separator' }, { role: 'services' }, { type: 'separator' },
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
@@ -443,6 +445,9 @@ ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id,
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:translate', (_e, texts, to, opts) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'), { local: !!(opts && opts.local) })); // a note shown in English, never saved (renderer/translate.js); local: this Mac's answers only
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
+// The Settings page's Model and Thinking (renderer/settings.js): the synced aiModel and aiEffort, only from main's own lists
+ipcMain.handle('ai:options', () => ai.options());
+ipcMain.handle('ai:setOption', (e, key, value) => { const next = ai.setOption(key, value); tellOthers(pageOf(e)); return next; });
 // "Auto-pick type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
 // Process image (issue #507): an image read by the model into a task or a note, made with what it read as its lines

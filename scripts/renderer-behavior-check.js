@@ -113,6 +113,8 @@ const withShims = (src) => {
   if (/\bzoomable\(/.test(src) && !/const zoomable =/.test(src)) src = 'globalThis.zoomable ??= (node) => !!node;\n' + src;
   // the Timeline's page id (renderer/timeline.js): a row asks whether it is drawn there
   if (/\bTIMELINE_PAGE\b/.test(src) && !/const TIMELINE_PAGE =/.test(src)) src = "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n" + src;
+  // the Settings page's id (renderer/settings.js): a render asks whether it is drawing that page
+  if (/\bSETTINGS_PAGE\b/.test(src) && !/const SETTINGS_PAGE =/.test(src)) src = "globalThis.SETTINGS_PAGE ??= 'orbital:settings';\n" + src;
   // a related answer draws the page's fields and sidebar at once when a render would wait (renderer/rail.js loadRelated): a harness with no page has nothing to draw
   if (/\b(loadRelated|accessOptions)\b/.test(src) && !/let zoom\b/.test(src) && !/const zoom\b/.test(src)) src = 'globalThis.zoom ??= null;\n' + src;
   // Deleted nodes (renderer/nodes.js) are one Set the whole app shares. A harness that is not about deletion gets
@@ -137,8 +139,6 @@ const withShims = (src) => {
   // a row's facts share their icon and click helpers with who can see it (renderer/tasks.js peopleEl), which the
   // subtext leads with; a harness with no member list sees nobody's bubbles
   if (/\b(clickable|iconEl|audienceIcon|peopleEl)\(/.test(src) && !/function clickable\(/.test(src)) src = sourceBetween('function clickable(', '// node: the row') + '\nglobalThis.loadMembers ??= () => {}; globalThis.memberName ??= (id) => id; globalThis.members ??= null; globalThis.sensitiveHidden ??= () => false;\n' + src;
-  // the Timeline hides who can see a row (renderer/tasks.js audienceShown): a harness that is not about it is not on it
-  if (/\baudienceShown\(/.test(src)) src = (/let zoom\b/.test(src) ? '' : 'globalThis.zoom ??= null;\n') + (/const TIMELINE_PAGE =/.test(src) ? '' : "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n") + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
   if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
   // the fields a mixed list's rows carry (renderer/views.js pageFieldDefs): a harness that is not about them lists none
@@ -157,10 +157,11 @@ const withShims = (src) => {
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
   if (/\btableRow\(/.test(src) && !/const tableRow =/.test(src)) src = 'globalThis.tableRow ??= () => false;\n' + src; // and so no row drawn as one
+  if (/\btableFold\b/.test(src) && !/let tableFold\b/.test(src)) src = 'globalThis.tableFold ??= 0;\n' + src; // and no column folded onto a title's line
   if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
     // pinnedOn needs the grouping (views.js) and the date pins (state.js); no row here is in a Pinned section
-    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id); globalThis.pinnedOn ??= () => ''; globalThis.me ??= () => (globalThis.members || []).find((m) => m.me);\n" + src;
+    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'visibility', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id); globalThis.pinnedOn ??= () => ''; globalThis.me ??= () => (globalThis.members || []).find((m) => m.me);\n" + src;
   }
   // The watch-state cache lives in state.js, which most slices do not take. A slice that only clears it — a sharing
   // change can flip whether a node is watched — should not fail for want of the map itself.
@@ -1676,7 +1677,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show graph', 'Smaller text', 'Reset text size', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show graph', 'Smaller text', 'Open settings', 'Reset text size', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1751,7 +1752,7 @@ async function runSyncShortcutCheck() {
     'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home',
     'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Show graph', 'Window: Reload',
-    'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
+    'Settings: Open settings', 'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
     'Help: Help',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // A window of more pages (the shell's word, renderer/app.js) offers the workspace's moves, each a key's row asking
@@ -4166,9 +4167,10 @@ function runRowAudienceCheck() {
     const pillKey = () => 'library', onTypePage = () => false, fieldType = () => null, relatedBy = new Map(), isFieldKey = () => false;
     ${sourceBetween('const DISPLAY_DEFAULT =', '\n// On a type')}
     ${sourceBetween('const displayKeys =', 'const displayOn =')}
-    (page) => { zoom = page ? { docId: page, nodeId: null } : null; return displayKeys().join(); };
+    (page, chosen) => { zoom = page ? { docId: page, nodeId: null } : null; if (chosen) displayPref.library = chosen; return displayKeys().join(); };
   `);
-  assert.equal(display(null), 'updated,creator', 'a list view shows what its Display chose');
+  assert.equal(display(null), 'updated,creator,visibility', 'a list view shows what its Display chose, and Visible to where it was chosen before Visible to was its own');
+  assert.equal(display(null, ['updated', 'novisibility']), 'updated,novisibility', 'Visible to switched off stays off');
   assert.equal(display('orbital:timeline'), 'status,assigned', 'the Timeline shows each task\'s box and assignee, not the last view\'s Updated');
   const api = vm.runInNewContext(`
     const items = new Map(), open = new Map(), pending = new Map();
@@ -4218,7 +4220,7 @@ function runRowAudienceCheck() {
     ${functionSource('nodeEl')}
     // which facts a row shows. withShims defaults this; here the harness drives it, so the sub-line can be checked
     // both with Lives in on and with it off. Assigned through globalThis because the shim's displayOn reads it there.
-    let displayNow = ['status', 'assigned', 'updated'];
+    let displayNow = ['status', 'assigned', 'visibility', 'updated'];
     globalThis.displayKeys = () => displayNow;
     ({
       row: (node, meta) => {
@@ -4231,13 +4233,13 @@ function runRowAudienceCheck() {
         // the gap is styles.css's .tmeta > .ticon:not(:first-child) (renderer-check pins the rule): 6px after anything
         const sub = body.children.find((child) => child.className === 'subtext') || { children: [] }, people = sub.children.find((child) => child.className === 'people');
         return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className.split(' ').includes('ticon') ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: sub.value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor),
-          people: people ? [people.children[0].attrs['aria-label'], ...(typeof people.children[1] === 'string' ? [people.children[1]] : people.children[1].children.map((face) => face.value)), people.children[2] || null] : null, // a string: the audience's word (Everyone, Private)
+          people: people ? [people.children[0].attrs['aria-label'], ...(people.children[1].className === 'pword' ? [people.children[1].textContent] : people.children[1].children.map((face) => face.value)), people.children[2] || null] : null, // .pword: the audience's word (Everyone, Private)
           names: people && typeof people.children[1] !== 'string' ? people.children[1].children.map((face) => face.attrs['aria-label'] || null) : null,
           after: people ? sub.children.filter((child) => typeof child === 'string').join('') : null }; // the words after who can see it
       },
       onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
       display: (keys) => { displayNow = keys; },
-      timeline: (on) => { globalThis.zoom = on ? { docId: TIMELINE_PAGE, nodeId: null } : null; },
+      timeline: (on) => { globalThis.zoom = on ? { docId: TIMELINE_PAGE, nodeId: null } : null; displayNow = on ? ['status', 'assigned'] : ['status', 'assigned', 'visibility', 'updated']; }, // the Timeline's own Display (displayKeys)
     });
   `, { structuredClone });
   const doc = { id: 'tana:text:doc1', kind: 'document', text: 'Charter', icon: 'doc', hasChildren: true, editable: true };
@@ -4264,6 +4266,13 @@ function runRowAudienceCheck() {
   const onTimeline = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
   assert.deepEqual([onTimeline.people, onTimeline.icons, row(doc, spaceMeta).icons], [null, [], []], 'the Timeline shows nothing of who can see a row: no faces, no audience icon');
   api.timeline(false);
+  // Visible to is its own Display fact: Assigned off keeps it, and it off keeps the assignee
+  api.display(['status', 'visibility', 'updated']);
+  assert.deepEqual([row(doc, spaceMeta).icons, row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] }).people[0]], [['Visible to members of Studio LT'], 'Visible to selected people'], 'Assigned off leaves who can see a row');
+  api.display(['status', 'assigned', 'updated']);
+  const unseen = row(task, { assignees: ['tana:user-profile:sam'], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
+  assert.deepEqual([unseen.people, unseen.icons], [null, []], 'Visible to off shows neither the faces nor the audience icon');
+  api.display(['status', 'assigned', 'visibility', 'updated']);
   const five = ['me', 'sam', 'ana', 'bo', 'cy'].map((k) => 'tana:user-profile:' + k);
   assert.deepEqual(row(doc, { assignees: [], audience: 'people', people: five.slice(0, 4), peopleCount: 9 }).people.slice(-2), ['+5', null], 'up to nine people the rest is a +n bubble');
   assert.deepEqual(row(doc, { assignees: [], audience: 'people', people: five.slice(0, 4), peopleCount: 12 }).people.slice(-2), ['?', 'and 8 others'], 'past nine it is words after four bubbles, and no bubble for the rest');
@@ -4275,25 +4284,25 @@ function runRowAudienceCheck() {
   // The space sub-line used to be unconditional; it is now the Display pill's "Lives in", which ships off. Both
   // directions are pinned: wiring it back to always-on would otherwise pass every test in this file.
   assert.equal(row(doc, spaceMeta).sub, null, 'with Lives in off, a space audience does not name the space under the title');
-  api.display(['status', 'assigned', 'updated', 'space']);
+  api.display(['status', 'assigned', 'visibility', 'updated', 'space']);
   assert.equal(row(doc, spaceMeta).sub, 'Studio LT', 'turning Lives in on names it again, the way the row always did');
   assert.equal(row(doc, spacePeople).after, '', 'but not a second time when who can see it already names the space');
-  api.display(['status', 'assigned', 'updated']);
+  api.display(['status', 'assigned', 'visibility', 'updated']);
   assert.equal(row(doc, spaceMeta).sub, null, 'and turning it off takes the line away again');
   // Created by: a name on the same sub-line, joined to the creation time rather than repeating the word.
   const made = { ...doc, createdBy: 'tana:user-profile:sam', createdAt: new Date(Date.now() - 2 * 864e5).toISOString() };
-  api.display(['status', 'assigned', 'updated', 'creator']);
+  api.display(['status', 'assigned', 'visibility', 'updated', 'creator']);
   assert.equal(row(made, spaceMeta).sub, 'Created by Sam', 'Created by names the maker even when Created is off');
-  api.display(['status', 'assigned', 'updated', 'created', 'creator']);
+  api.display(['status', 'assigned', 'visibility', 'updated', 'created', 'creator']);
   assert.equal(row(made, spaceMeta).sub, 'Created 2 days ago by Sam', 'and with Created on it is one phrase, not two');
   assert.equal(row({ ...made, createdBy: 'tana:user-profile:me' }, spaceMeta).sub, 'Created 2 days ago', 'and made by you it says no name: your own work needs no byline');
   assert.equal(row(doc, spaceMeta).sub, null, 'a row the graph gave no creator for says nothing at all');
-  api.display(['status', 'assigned', 'updated']);
+  api.display(['status', 'assigned', 'visibility', 'updated']);
   // Type is the same shape: the chips are a fact about the row, shown only while the pill asks for them.
   const tagged = { ...doc, tags: [{ label: 'Charter' }] };
-  api.display(['status', 'assigned', 'updated', 'type']);
+  api.display(['status', 'assigned', 'visibility', 'updated', 'type']);
   assert.equal(row(tagged, spaceMeta).chips, 1, 'with Type on, a row shows its type chip');
-  api.display(['status', 'assigned', 'updated']);
+  api.display(['status', 'assigned', 'visibility', 'updated']);
   assert.equal(row(tagged, spaceMeta).chips, 0, 'with Type off, it does not');
   assert.equal(row(doc, { assignees: [], audience: 'unknown' }).icons, null, 'a document with nothing shareable shows nothing at all');
   // A watched node says so on the row: the bell is the only place outside Cmd+K that tells you changes reach you.
@@ -4912,7 +4921,7 @@ function runSearchPillsCheck() {
   // did not count as unsaved, the Save pill would not appear and the choice would be lost on the way out.
   api.loaded();
   assert.equal(api.dirty(), false, 'freshly loaded, the display it was saved with is not an edit');
-  assert.deepEqual(plain(api.show('created')), ['status', 'assigned', 'updated', 'created'], 'a saved search takes a display of its own');
+  assert.deepEqual(plain(api.show('created')), ['status', 'assigned', 'visibility', 'updated', 'created'], 'a saved search takes a display of its own');
   assert.equal(api.dirty(), true, 'and changing what its rows show is something to save, like the query and the arrangement');
   api.leave();
   assert.equal(api.key(), 'tasks', 'and off the search page the pills belong to the view again');
@@ -7506,6 +7515,47 @@ function runPrefsStoreCheck() {
 
 // Another page stored a view filter, a watch choice or an agent mark (main/settings.js tellOthers): this page's copies
 // follow. A page left with the old filter drew stale pills and wrote that filter back over the new one with its next pill.
+// A redraw of the Settings page builds every control anew: the one that had the keyboard gets it back (renderer/settings.js drawSettings, #673 review)
+async function runSettingsFocusCheck() {
+  const api = vm.runInNewContext(`
+    let focused = null, page = null;
+    const button = (skey) => ({ dataset: { skey }, focus() { focused = this; } });
+    const settingsEl = () => ({ buttons: [button('Theme/Light'), button('Thinking/High')] });
+    const into = { contains: (el) => !!el && el.old === true, replaceChildren: (p) => { page = p; }, querySelectorAll: () => page.buttons };
+    const document = { activeElement: { old: true, dataset: { skey: 'Thinking/High' } } };
+    ${functionSource('drawSettings')}
+    ({ draw: () => { drawSettings(into); return focused && focused === page.buttons[1]; }, away: () => { document.activeElement = { dataset: {} }; focused = null; drawSettings(into); return focused; } });
+  `);
+  assert.equal(api.draw(), true, 'the control that had the keyboard has it again after the redraw');
+  assert.equal(api.away(), null, 'and with the keyboard elsewhere, the redraw takes it from nowhere');
+}
+// The Settings page's values (renderer/settings.js settingsLoad): a refresh while a read is out starts a newer one, and the
+// older answer, landing last, must not put its stale values back over the newer ones (#673 review)
+async function runSettingsReadOrderCheck() {
+  const api = vm.runInNewContext(`
+    const SETTINGS_PAGE = 'orbital:settings';
+    let zoom = { docId: SETTINGS_PAGE }, draws = 0, chatgptAuthLoading = null;
+    const answers = [];
+    const ask = (name) => () => new Promise((resolve) => answers.push({ name, resolve }));
+    const tana = { aiOptions: ask('ai'), filters: ask('hidden') };
+    const refreshChatGPTStatus = () => {}, renderSoon = () => { draws++; };
+    ${sourceLine('let settingsAI')}
+    ${functionSource('settingsRefresh')}
+    ${functionSource('settingsLoad')}
+    ({ load: () => settingsLoad(), refresh: () => settingsRefresh(), answers, state: () => ({ ai: settingsAI, hidden: settingsHidden }) });
+  `);
+  const first = api.load();
+  api.refresh(); // a setting arrived while the first read is out
+  const second = api.load();
+  assert.equal(api.answers.length, 4, 'the refresh started a second read');
+  const answer = (from, ai, hidden) => { api.answers[from].resolve(ai); api.answers[from + 1].resolve(hidden); };
+  answer(2, { model: 'gpt-5.6-sol' }, ['New']);
+  await second;
+  answer(0, { model: 'gpt-5.6-luna' }, ['Old']);
+  await first;
+  assert.deepEqual(JSON.parse(JSON.stringify(api.state())), { ai: { model: 'gpt-5.6-sol' }, hidden: ['New'] }, 'the newer read stands: the older one landing last is dropped');
+  assert.equal(api.load(), undefined, 'and nothing is read again until the next refresh');
+}
 async function runSettingsElsewhereCheck() {
   const api = vm.runInNewContext(`
     ${sourceLine('const themeChoice')}
@@ -7826,7 +7876,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runSettingsFocusCheck, runSettingsReadOrderCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -9971,6 +10021,28 @@ checks.push(async function runShareAskCheck() {
   await api.assign(DOC, [PETER], []);
   assert.equal(api.mode(), 'cmd', 'someone who can see it is simply assigned: nothing asked, the card closes');
   console.log('ok  assigning someone who cannot see a task asks: grant access, keep private or cancel (#622)');
+});
+checks.push(function runTableFoldCheck() {
+  const foldFor = vm.runInNewContext(sourceLine('const TITLE_ROOM') + '\n' + functionSource('foldFor') + '; foldFor');
+  const keys = ['a', 'b', 'c'], fold = (room, widths = {}) => foldFor(room, keys, widths);
+  // Title 200, each column 160 + 16, the title's line 120 + 16 while anything rides on it
+  assert.equal(fold(728), 0, 'room for Title and every column: nothing folds');
+  assert.equal(fold(727), 1, 'a pixel less and the first column rides on the title\u2019s line');
+  assert.equal(fold(688), 1, 'Title, the line and the last two columns still fit');
+  assert.equal(fold(687), 2, 'then the second folds too, the last column staying');
+  assert.equal(fold(300), 3, 'and on a narrow page all of them ride on the title\u2019s line');
+  assert.equal(fold(727, { a: 40 }), 0, 'a column dragged narrower lets the rest split out sooner');
+  assert.equal(fold(728, { title: 300 }), 0, 'a title dragged wider never folds a column: it gives way first');
+  assert.equal(fold(727, { title: 150 }), 0, 'a title dragged narrower lets the columns split out sooner');
+  const undockTitle = vm.runInNewContext(sourceLine('const TITLE_ROOM') + '\n' + sourceLine('const undockTitle') + '; undockTitle');
+  const narrowed = undockTitle(0, 700, keys, {});
+  assert.deepEqual([fold(700), narrowed, fold(700, { title: narrowed })], [1, 172, 0], 'a click on a folded name narrows Title just enough for it to split out');
+  assert.ok(undockTitle(0, 560, keys, {}) < 80, 'and on a page too narrow for it, the title left would be too small: no room');
+  // metadata landing late (patchMeta → fitRowMetaSoon → fitRowMeta) can widen a table's icons: the fold is decided again
+  const calls = [];
+  vm.runInNewContext('const tableView = () => true, outline = { querySelectorAll: () => [] }; ' + functionSource('fitRowMeta') + '; fitRowMeta();', { sizeIcons: () => calls.push('size'), fitTable: (moved) => calls.push('fit' + (moved ? ' moved' : '')) });
+  assert.deepEqual(calls, ['size', 'fit'], 'a table\u2019s rows fitted again measure Visible to and refit the fold, without motion');
+  console.log('ok  a table folds its first columns onto the title\u2019s line as the page narrows, the last column last');
 });
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {

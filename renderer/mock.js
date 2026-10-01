@@ -65,6 +65,8 @@ function mockApi() {
   // the Cmd+K switch is on (mcpOff below; the per-view includeMcp filter is still gone, #247)
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', editable: false, renamable: true, hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
+  const aiPick = { model: 'gpt-5.6-terra', effort: 'low' }; // the Settings page's Model and Thinking (main/ai.js options)
+  const aiOptions = () => ({ ...aiPick, models: ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol'], efforts: ['low', 'medium', 'high'] });
   let mcpOff = false; // the app-local switch, off every launch of the mock
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
@@ -236,6 +238,7 @@ function mockApi() {
     event('done1', 1, 'done', 'apply', [{ text: 'Priya Raman ' }, bold('completed'), { text: ' ' }, { text: docs[2].text, content: true, marks: { strike: true } }], null, true, docs[2].id),
     event('start1', 1.1, 'accepted', 'tlAccepted', [{ text: 'Tomas Ilves ' }, bold('accepted'), { text: ' ' }, { text: docs[5].text, content: true }], null, false, docs[5].id),
     { ...event('edit1', 1.3, 'edit', 'updated', [{ text: 'Sam Okafor ' }, bold('edited'), { text: ' ' }, { text: docs[0].text, content: true }], null, false, docs[0].id), timeline: { uri: docs[0].id, note: null, tone: 'edit', change: 'Description added for Christmas activities proposed by Nadia', detail: 'Nadia proposed extending the Studio\'s Christmas activities, such as karaoke and games, across the company to replace separate team programmes.' } },
+    event('travel1', 1.6, 'meeting', 'pinRoute', [{ text: 'Travel to Utrecht', content: true }], '30 min', false, null), // a meeting titled Travel… (main/timeline.js meetingIcon)
     { ...event('edit2', 2, 'edit', 'updated', [{ text: 'Priya Raman ' }, bold('edited'), { text: ' ' }, { text: docs[6].text, content: true }], null, false, docs[6].id), timeline: { uri: docs[6].id, note: null, tone: 'edit', change: 'Changed the deadline from Friday to Wednesday' } },
     event('group2', 2.4, 'new', 'tlNew', [{ text: 'Tomas Ilves added a task to your Inbox' }], null, false, null, [tlTask(docs[7])]),
     event('done2', 26, 'done', 'apply', [{ text: 'Sam Okafor ' }, bold('completed'), { text: ' ' }, { text: docs[0].text, content: true, marks: { strike: true } }], 'Task completed and a note added about the deadline', false, docs[0].id),
@@ -471,6 +474,8 @@ function mockApi() {
       return [...found, ...(near ? near[1] : []).map((id) => all.find((d) => d.id === id)).filter(Boolean).map((d) => ({ ...info(d), related: true }))];
     },
     mcpHidden: async () => mcpOff,
+    aiOptions: async () => aiOptions(),
+    setAiOption: async (key, value) => { aiPick[key] = value; return aiOptions(); },
     setMcpHidden: async (on) => { mcpOff = !!on; emit(null); return mcpOff; },
     setOpenAIKey: async (key) => !!String(key || '').trim(),
     // Set type: the mock keeps main's two rules so the page behaves the same without the main process — a type that

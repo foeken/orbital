@@ -104,6 +104,8 @@ async function open() {
       settled = true;
       const oldest = await discover(new Set(gaveUp));
       if (!oldest || oldest.id === known) return use(doc);
+      // the phone follows the one a Mac kept, so it hears what is written there from now on, and merges nothing itself
+      if (S.settingsReadOnly) { if (!had) S.client.sync.unsubscribe(known).catch(() => {}); return use(oldest); }
       // the one this machine used is still an app document, not a note of yours: it stays out of the lists (appDocIds), with
       // those it had taken over itself. One key per document, so two machines giving theirs up at once both keep theirs.
       carry(oldest, [known, ...gaveUp]);
@@ -119,7 +121,7 @@ async function open() {
       settled = true;
       const found = await discover(new Set(gaveUp));
       const next = found ? use(found) : await create();
-      if (next) carry(next, gaveUp);
+      if (next && !S.settingsReadOnly) carry(next, gaveUp);
       return next;
     }
   }
@@ -129,7 +131,9 @@ async function open() {
 }
 const carry = (doc, ids) => { if (ids.length) doc.transact((loro) => { const map = loro.getMap(OLD_DOCS); for (const id of ids) map.set(id, true); }); };
 function use(doc) {
-  docId = doc.id; db.setSetting(POINTER, doc.id); describe(doc);
+  docId = doc.id; db.setSetting(POINTER, doc.id);
+  if (S.settingsReadOnly) return doc;
+  describe(doc);
   // one an older build made before any key was written carries neither a key nor the mark: without one it is a note to
   // the next machine, which would make a second document
   if (!holdsSettings(doc)) { try { doc.transact((loro) => loro.getMap(MARK).set('app', 'orbital')); } catch (e) { report(e); } }
@@ -171,6 +175,7 @@ const holdsSettings = (doc) => [MARK, ROOT, OLD_ROOT].some((root) => Object.keys
 const onlyMine = async (doc) => readNode(doc).restricted === true && !doc.loro.getMap('linkSharing').get('mode')
   && (await audienceOf(readNode(doc), S.me.userUri, { sync: S.client.sync, orgDocUri: S.me.orgDocUri })).scope === 'only-me';
 async function create() {
+  if (S.settingsReadOnly) return null; // the iPhone app never makes, merges or tidies the document: a Mac does (ios/engine/index.js)
   const id = 'tana:text:' + ulid();
   const doc = await S.client.sync.subscribe(id, (loro) => {
     initDocument(loro, TITLE, S.me.userUri);
@@ -197,7 +202,7 @@ async function hydrate() {
   const doc = await settingsDoc();
   if (!doc) return false;
   load();
-  migrate(doc);
+  if (!S.settingsReadOnly) migrate(doc);
   const remote = doc.loro.getMap(ROOT).toJSON();
   const changed = [];
   for (const [key, text] of Object.entries(remote || {})) {
@@ -208,7 +213,9 @@ async function hydrate() {
     changed.push(key);
   }
   const missing = Object.keys(cache).filter((key) => isSynced(key) && !Object.hasOwn(remote || {}, key));
-  if (missing.length) doc.transact((loro) => { const map = loro.getMap(ROOT); for (const key of missing) map.set(key, encode(cache[key])); });
+  // read only (the phone): a key only it remembers was most likely taken out on a Mac since, so it goes here too
+  if (missing.length && S.settingsReadOnly) for (const key of missing) { delete cache[key]; db.setSetting(key, undefined); changed.push(key); }
+  else if (missing.length) doc.transact((loro) => { const map = loro.getMap(ROOT); for (const key of missing) map.set(key, encode(cache[key])); });
   if (changed.length) send('settings:changed', prefs());
   return changed.length > 0;
 }

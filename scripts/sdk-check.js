@@ -822,6 +822,10 @@ async function main() {
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
     assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-5.6-sol','high'],'both are settings, changeable without a release');
     assert.equal(settings.isSynced('aiModel')&&settings.isSynced('aiEffort'),true,'and they follow you, unlike the key that pays for them');
+    settings.set('aiModel','gpt-4o'); settings.set('aiEffort','extreme'); // synced from an older build or another Mac: off the Settings page's lists
+    await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
+    assert.deepEqual([calls[2].init.body.model,calls[2].init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'a stored value off the lists is never sent: the default is');
+    assert.deepEqual([ai.options().model,ai.options().effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'and the Settings page shows the default too');
     assert.equal(settings.isSynced('openaiApiKey'),false,'which never leaves this machine');
     settings.set('aiModel',undefined); settings.set('aiEffort',undefined);
     // What comes back, in the shapes the Responses API answers in, and the answers that are not a name.
@@ -2564,6 +2568,14 @@ async function main() {
     assert.equal((await backend.handlers.get('search')(null, 'helper')).some((n) => n.title === 'MCP: helper'), false, 'search is filtered by the same switch, not only the views');
     await backend.handlers.get('mcp:setHidden')(null, false);
     assert.equal((await backend.handlers.get('search')(null, 'helper')).some((n) => n.title === 'MCP: helper'), true, 'and they come back when it is off');
+    // the Settings page's Model and Thinking (main/ai.js setOption): main's own choices only, the renderer being input from outside
+    assert.equal((await backend.handlers.get('ai:options')()).model, 'gpt-5.6-terra', 'unset, the model is the default');
+    assert.equal((await backend.handlers.get('ai:setOption')(null, 'effort', 'high')).effort, 'high', 'a listed effort is stored');
+    const before = JSON.stringify(await backend.handlers.get('ai:options')());
+    await assert.rejects(async () => backend.handlers.get('ai:setOption')(null, 'model', 'gpt-4o'), /Not an AI choice/, 'a model off the list is refused');
+    await assert.rejects(async () => backend.handlers.get('ai:setOption')(null, 'openaiApiKey', 'sk-x'), /Not an AI choice/, 'and so is any other setting');
+    assert.equal(JSON.stringify(await backend.handlers.get('ai:options')()), before, 'a refused write changes neither choice');
+    await backend.handlers.get('ai:setOption')(null, 'effort', 'low');
     assert.equal(payload.truncated, true);
     assert.equal('iconSvg' in payload.nodes.find((n) => n.id === doc.id), false, 'rows carry no app-local icon');
     assert.deepEqual(Object.keys(cache.list()), ['library'], 'the fetched rows use the view id as their cache section');
