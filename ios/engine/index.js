@@ -5,7 +5,7 @@
 // ./stand-ins.js, chosen at bundle time (build.js).
 // An ES module so the bundle runs it (Bun leaves a CommonJS entry of an iife bundle wrapped and never called).
 import { createTanaClient } from '../../sdk';
-import { STATE_TYPES, editable, initDocument, readNode, readSearch, rowLimit, setState, ulid } from '../../sdk/node';
+import { STATE_TYPES, editable, initDocument, readNode, readSearch, rowLimit, setAssignees, setState, ulid } from '../../sdk/node';
 import { insertAfter, insertImage, readOutline } from '../../sdk/content';
 import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
@@ -129,7 +129,8 @@ async function searchRows(doc) {
   const rows = arrange(found.map((n) => ({ id: n.id, title: n.title, state: (n.state && n.state.type) || null, updated: iso(n.updateTime), created: iso(n.createTime),
     createdBy: n.createdBy, assignees: n.assignedTo || [], type: typeTitles.get(n.entityType) })), view,
   { me: S.me.userUri, now: Date.now(), names: new Map(people.map((m) => [m.id, m.title])), agent: new Set(Object.keys(settings.get('codexTask') || {})), pinned: new Set(Object.keys(pinned)), watched: choice(true), silenced: choice(false) });
-  return rows.map(({ n, group }) => ({ ...listRow(byId.get(n.id)), group }));
+  const name = (uri) => ({ name: (people.find((m) => m.id === uri) || {}).title || 'Someone' }); // who a task is assigned to, drawn as faces (Faces)
+  return rows.map(({ n, group }) => ({ ...listRow(byId.get(n.id)), group, ...(n.state ? { assignees: n.assignees, people: n.assignees.map(name) } : {}) }));
 }
 
 // What you type in the composer, written into a chat as Tana writes a message and Tana asked to answer, as the desktop
@@ -217,6 +218,14 @@ async function iconPng(label) {
   return canvas.toDataURL('image/png').split(',')[1];
 }
 
+// A write only queues, and Tana says no later, as a write-denied event (sdk/sync.js): true when it does within 3 s
+const refusedSoon = (id) => new Promise((resolve) => {
+  const on = (denied) => { if (denied === id) done(true); };
+  const done = (answer) => { S.client.sync.off('write-denied', on); clearTimeout(timer); resolve(answer); };
+  const timer = setTimeout(() => done(false), 3000);
+  S.client.sync.on('write-denied', on);
+});
+
 window.orbital = {
   // true once signed in and connected; false when this web view has no Tana session
   async connect() {
@@ -258,15 +267,21 @@ window.orbital = {
     if (!STATE_TYPES.includes(n.stateType)) throw new Error('Only a task can be ticked off');
     if (doc.writeDenied || editable(n, S.me.userUri) === false) throw new Error('This task is read-only to you');
     const next = n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed';
-    const refused = new Promise((resolve) => {
-      const on = (denied) => { if (denied === id) done(true); };
-      const done = (answer) => { S.client.sync.off('write-denied', on); clearTimeout(timer); resolve(answer); };
-      const timer = setTimeout(() => done(false), 3000);
-      S.client.sync.on('write-denied', on);
-    });
+    const refused = refusedSoon(id);
     setState(doc, next, S.me.userUri);
     if (await refused) throw new Error('Tana refused the change: this task is read-only to you');
     return JSON.stringify(next);
+  },
+  // Long press, Assign to …: the workspace's people to pick from, and the task given to the one picked ([] unassigns), as the
+  // desktop's Assign to … sets it outright (main/documents.js doc:setAssignees)
+  members: async () => JSON.stringify((await members()).map((m) => ({ id: m.id, name: m.title }))),
+  async assign(id, uris) {
+    const doc = await hold(id);
+    if (doc.writeDenied || editable(readNode(doc), S.me.userUri) === false) throw new Error('This task is read-only to you');
+    const refused = refusedSoon(id);
+    setAssignees(doc, uris, S.me.userUri); // refuses what is not a task
+    if (await refused) throw new Error('Tana refused the change: this task is read-only to you');
+    return JSON.stringify(true);
   },
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
   email: () => (last && last.user && last.user.email) || null,
@@ -376,7 +391,7 @@ window.orbital = {
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
+for (const name of ['toggle', 'assign', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

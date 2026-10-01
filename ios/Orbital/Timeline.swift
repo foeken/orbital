@@ -16,6 +16,7 @@ struct Row: Decodable, Identifiable {
     let start: String?
     let join: String?
     let people: [Person]?
+    let assignees: [String]? // a task's, in a saved search: who it is assigned to, for Assign to …
     let children: [Row]?
     let timeline: Info?
     let reference: Ref?
@@ -83,9 +84,11 @@ extension OpenURLAction {
 // Long press on a node: pin it to today or take it off, mark it sensitive or not, or delete it to Tana's trash where you
 // may (Engine.pin, markSensitive, remove); done reads the page again
 extension View {
-    func nodeMenu(_ id: String?, engine: Engine, then done: @escaping () async -> Void = {}) -> some View {
+    // task: the row is a task, which offers Assign to …; assignees: who has it, when known (a saved search's rows)
+    func nodeMenu(_ id: String?, engine: Engine, task: Bool = false, assignees: [String]? = nil, then done: @escaping () async -> Void = {}) -> some View {
         contextMenu {
             if let id, id.hasPrefix("tana:") {
+                if task { Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, then: done) } }
                 let pinned = engine.pinnedToday.contains(id), secret = engine.sensitiveIds.contains(id)
                 Button(pinned ? "Unpin from Today" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin") { Task { await engine.pin(id, !pinned); await done() } }
                 Button(secret ? "Not Sensitive" : "Mark as Sensitive", systemImage: secret ? "eye" : "eye.slash") { Task { await engine.markSensitive(id, !secret); await done() } }
@@ -337,7 +340,7 @@ struct TaskLine: View {
                     .buttonStyle(.plain)
             }
         }
-        .nodeMenu(task.id, engine: engine)
+        .nodeMenu(task.id, engine: engine, task: true, assignees: task.assignees)
     }
 }
 

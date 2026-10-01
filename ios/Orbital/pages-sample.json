@@ -321,7 +321,15 @@
      "icon": "text",
      "stateType": "proposed",
      "createdAt": "2026-09-30T09:40:00Z",
-     "group": "My inbox"
+     "group": "My inbox",
+     "people": [
+      {
+       "name": "Sam Lee"
+      }
+     ],
+     "assignees": [
+      "tana:user-profile:x0"
+     ]
     },
     {
      "id": "tana:text:0000000000000000000000000a",
@@ -329,7 +337,15 @@
      "icon": "text",
      "stateType": "open",
      "createdAt": "2026-09-30T12:40:00Z",
-     "group": "Mine"
+     "group": "Mine",
+     "people": [
+      {
+       "name": "Avery Chen"
+      }
+     ],
+     "assignees": [
+      "tana:user-profile:x0"
+     ]
     },
     {
      "id": "tana:text:0000000000000000000000000f",
@@ -337,7 +353,9 @@
      "icon": "text",
      "stateType": "open",
      "createdAt": "2026-09-28T14:00:00Z",
-     "group": "Mine"
+     "group": "Mine",
+     "people": [],
+     "assignees": []
     }
    ]
   },

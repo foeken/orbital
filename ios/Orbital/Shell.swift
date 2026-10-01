@@ -106,6 +106,7 @@ struct Shell: View {
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
         .sheet(isPresented: $adding) { QuickAdd(engine: engine) }
+        .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
         .task {
             // -zoom <id>: a node open at launch, for design shots
             let args = CommandLine.arguments

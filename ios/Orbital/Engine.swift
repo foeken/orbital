@@ -228,6 +228,12 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
     func pin(_ id: String, _ on: Bool) async { await act("return await orbital.pin(id, on)", ["id": id, "on": on]) }
     func markSensitive(_ id: String, _ on: Bool) async { await act("return await orbital.sensitive(id, on)", ["id": id, "on": on]) }
+    // Long press, Assign to …: the task whose picker is open (AssignSheet), the people to pick from, and the one picked
+    struct Assigning: Identifiable { let id: String; let current: [String]?; let then: () async -> Void }
+    var assigning: Assigning?
+    struct Member: Decodable, Identifiable { let id: String; let name: String }
+    func members() async -> [Member] { Self.isSample ? [] : (try? await call("return await orbital.members()", [:])) ?? [] }
+    func assign(_ id: String, to uri: String?) async { await act("return await orbital.assign(id, uris)", ["id": id, "uris": uri.map { [$0] } ?? []]) }
     private func act(_ js: String, _ arguments: [String: Any]) async {
         guard !Self.isSample else { return }
         do { let _: Bool = try await call(js, arguments); await refresh() } catch { self.error = error.localizedDescription }

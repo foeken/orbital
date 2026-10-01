@@ -105,3 +105,43 @@ extension ChatGPT {
         return read
     }
 }
+
+// Long press, Assign to …: the workspace's people, searchable, the task's assignee ticked; a tap gives the task to that
+// person alone, as the desktop's Assign to … does, and Unassigned takes everyone off it
+struct AssignSheet: View {
+    let engine: Engine
+    let task: Engine.Assigning
+    @Environment(\.dismiss) private var dismiss
+    @State private var people: [Engine.Member] = []
+    @State private var query = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if query.isEmpty { pick(nil, "Unassigned") }
+                ForEach(people.filter { query.isEmpty || $0.name.localizedStandardContains(query) }) { pick($0.id, $0.name) }
+            }
+            .overlay { if people.isEmpty && !query.isEmpty { ContentUnavailableView.search } }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
+            .navigationTitle("Assign to")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .task { people = await engine.members().sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
+        }
+    }
+
+    private func pick(_ uri: String?, _ name: String) -> some View {
+        let on = task.current.map { now in uri.map { now == [$0] } ?? now.isEmpty } ?? false // not known (a Timeline task): none ticked
+        return Button {
+            dismiss()
+            Task { await engine.assign(task.id, to: uri); await task.then() }
+        } label: {
+            HStack {
+                Text(name).foregroundStyle(.primary)
+                Spacer()
+                if on { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.blue) }
+            }
+        }
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
