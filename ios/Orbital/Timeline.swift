@@ -95,7 +95,7 @@ extension View {
         }
     }
 
-    // What is sensitive, blurred as the desktop blurs it, until a shake of the phone shows it (Engine.reveal)
+    // What is sensitive, drawn as the desktop draws it, until a shake of the phone shows it (Engine.reveal)
     func sensitive(_ on: Bool?, engine: Engine) -> some View {
         modifier(Blur(hidden: on == true && !engine.reveal))
     }
@@ -105,9 +105,21 @@ struct Blur: ViewModifier {
     let hidden: Bool
     func body(content: Content) -> some View {
         if hidden {
-            content.blur(radius: 6).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake to show")
+            content.textRenderer(Redacted()).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake to show")
         } else {
             content
+        }
+    }
+}
+
+// The desktop's sensitive text (styles.css .sensitive): no letters, a grey bar through each line where they were, 0.72 em
+// thick across the line-through, in #696d73 at 14 %. Every Text under it is drawn this way.
+struct Redacted: TextRenderer {
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        for line in layout {
+            let b = line.typographicBounds, em = (b.ascent + b.descent) / 1.2 // a line is about 1.2 em
+            let bar = CGRect(x: b.rect.minX, y: b.rect.minY + b.ascent - 0.3 * em - 0.36 * em, width: b.rect.width, height: 0.72 * em)
+            context.fill(Path(roundedRect: bar, cornerRadius: 0.12 * em), with: .color(Color(red: 0x69 / 255, green: 0x6d / 255, blue: 0x73 / 255).opacity(0.14)))
         }
     }
 }
