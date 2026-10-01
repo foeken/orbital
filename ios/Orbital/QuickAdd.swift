@@ -1,3 +1,4 @@
+import AVFoundation
 import PhotosUI
 import SwiftUI
 
@@ -18,11 +19,27 @@ struct QuickAdd: View {
     @State private var working: String? // "Adding…", "Reading the image…"
     @State private var failure: String?
     @FocusState private var focused: Bool
+    @State private var dictation = Dictation()
+    @State private var heard: Task<Bool, Never>? // a recording on its way to text: true once its words are in the title
 
     var body: some View {
         NavigationStack {
             Form {
-                Section { TextField("New task", text: $title, axis: .vertical).focused($focused).submitLabel(.done) }
+                Section {
+                    // the title, and dictating it: the blue waveform starts listening; while it listens, ✕ throws the
+                    // recording away and ■ stops it, its words then added to the title (Codex's own dictation bar)
+                    HStack(spacing: 10) {
+                        if dictation.recording {
+                            Round(symbol: "xmark", label: "Cancel dictation") { dictation.cancel() }
+                            Listening(levels: dictation.levels)
+                            Round(symbol: "stop.fill", label: "Stop dictating") { finish() }
+                        } else {
+                            TextField("New task", text: $title, axis: .vertical).focused($focused).submitLabel(.done)
+                            if heard != nil { ProgressView().frame(width: 32, height: 32) }
+                            else { Round(symbol: "waveform", label: "Dictate", blue: true) { Task { await listen() } } }
+                        }
+                    }
+                }
                 Section {
                     ForEach([Engine.TaskType(uri: nil, title: "Task")] + types) { t in
                         Button { type = t.uri } label: {
@@ -57,7 +74,7 @@ struct QuickAdd: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") { Task { await add() } }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || working != nil)
+                    Button("Add") { Task { await add() } }.disabled((title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !dictation.recording && heard == nil) || working != nil)
                 }
             }
             .onSubmit { Task { await add() } }
@@ -72,6 +89,7 @@ struct QuickAdd: View {
                     type = found.uri
                 }
             }
+            .onDisappear { dictation.cancel() } // closed while listening: nothing kept
             .onChange(of: photo) {
                 guard let photo else { return }
                 Task { if let data = try? await photo.loadTransferable(type: Data.self), let image = UIImage(data: data) { await process(image) } }
@@ -79,7 +97,34 @@ struct QuickAdd: View {
         }
     }
 
+    private func listen() async {
+        guard ChatGPT.load() != nil else { failure = "Sign in with ChatGPT in Settings to dictate"; return }
+        guard await AVAudioApplication.requestRecordPermission() else { failure = "Allow Orbital the microphone in the Settings app to dictate"; return }
+        do { try dictation.start(); failure = nil } catch { failure = error.localizedDescription }
+    }
+
+    // the recording stopped and on its way to text, which lands after what the title already says
+    private func finish() {
+        guard let audio = dictation.stop() else { return }
+        heard = Task {
+            defer { heard = nil }
+            do {
+                guard let text = try await ChatGPT.transcribe(audio) else { failure = "Sign in with ChatGPT in Settings to dictate"; return false }
+                let said = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !said.isEmpty { title = title.isEmpty ? said : title + " " + said }
+                return true
+            } catch { failure = "Dictation: " + error.localizedDescription; return false }
+        }
+    }
+
+    // Add while listening or still transcribing: listening stops, the words are waited for, then the task is made; one
+    // whose words did not come is not made, so nothing said is lost without a word
     private func add() async {
+        if dictation.recording { finish() }
+        if let heard {
+            working = "Transcribing…"
+            guard await heard.value else { working = nil; return }
+        }
         let words = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { return }
         working = "Adding…"
@@ -175,5 +220,23 @@ struct Shared: Identifiable {
         let text = board.data(forPasteboardType: "com.dreetje.orbital.text").map { String(decoding: $0, as: UTF8.self) }
         board.items = [] // taken once
         return image != nil || text?.isEmpty == false ? Shared(text: text, image: image) : nil
+    }
+}
+
+// A round button in the title row: the blue one to dictate, the grey ones while listening
+struct Round: View {
+    let symbol: String
+    let label: String
+    var blue = false
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(blue ? .white : .primary)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(blue ? Color.blue : Color(.tertiarySystemFill)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }

@@ -111,6 +111,25 @@ extension ChatGPT {
         return answer
     }
 
+    // Dictation (Dictation.swift): the recording as text, from ChatGPT's own transcription, the one Codex dictates with. It
+    // picks the model: naming one (gpt-transcribe included) is refused there. nil without a sign-in.
+    static func transcribe(_ audio: Data) async throws -> String? {
+        guard let account = try await fresh() else { return nil }
+        let boundary = UUID().uuidString
+        var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/transcribe")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        for (k, v) in ["authorization": "Bearer " + account.accessToken, "chatgpt-account-id": account.accountId ?? "", "originator": "codex_cli_rs",
+                       "user-agent": "codex_cli_rs/0.130.0 (iOS; arm64)", "accept": "application/json", "content-type": "multipart/form-data; boundary=" + boundary] { request.setValue(v, forHTTPHeaderField: k) }
+        var body = Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"dictation.m4a\"\r\nContent-Type: audio/mp4\r\n\r\n".utf8)
+        body += audio
+        body += Data("\r\n--\(boundary)--\r\n".utf8)
+        let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+        if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 { throw Failure(errorDescription: "HTTP \(status)") }
+        struct Out: Decodable { let text: String }
+        return try JSONDecoder().decode(Out.self, from: data).text
+    }
+
     // Translations by id: id -> { lang, text }, a text already in the language left out. nil without a sign-in.
     static func translate(_ texts: [String], to: String, model: String) async throws -> [Int: Translator.Answer]? {
         let input = String(decoding: try JSONSerialization.data(withJSONObject: texts.enumerated().map { ["id": $0.offset + 1, "text": $0.element] }), as: UTF8.self)

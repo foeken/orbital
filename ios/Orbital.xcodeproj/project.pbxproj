@@ -165,6 +165,7 @@
 				INFOPLIST_FILE = "Orbital-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Orbital;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orbital listens while you dictate a task, and sends what you said to ChatGPT to write it down.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
@@ -189,6 +190,7 @@
 				INFOPLIST_FILE = "Orbital-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Orbital;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orbital listens while you dictate a task, and sends what you said to ChatGPT to write it down.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
