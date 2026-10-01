@@ -33,17 +33,35 @@ function runDetached(args, prompt) {
 // ---- reading a session back ----
 // ponytail: the projects folder is scanned for the file rather than its name worked out from the workspace path,
 // because Claude Code's own encoding of that path (realpath, "/" and "." as "-") is not documented; a scan of a few
-// folders per read. Work it out if the folder count ever makes this slow.
-function transcript(id) {
+// folders, once per session (`found` keeps the file). Work it out if the folder count ever makes this slow.
+// Read without blocking and only the end of the file: the status poll runs every 30 s in the main process, where a
+// whole long session read synchronously stalled every window (#671 review). The last turn is all a state needs.
+// ponytail: a last turn bigger than TAIL (one huge tool output) is cut off and reads as working; read more if it bites.
+const found = new Map(), TAIL = 256 * 1024;
+async function transcriptFile(id) {
+  if (found.has(id)) return found.get(id);
   if (!agent.UUID.test(String(id))) return null;
   const root = path.join(os.homedir(), '.claude', 'projects');
   let dirs = [];
-  try { dirs = fs.readdirSync(root); } catch { return null; }
+  try { dirs = await fs.promises.readdir(root); } catch { return null; }
   for (const dir of dirs) {
     const file = path.join(root, dir, id + '.jsonl');
-    try { return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean); } catch {}
+    try { await fs.promises.access(file); found.set(id, file); return file; } catch {}
   }
-  return null;
+  return null; // not written yet: looked for again next time
+}
+async function transcript(id) {
+  const file = await transcriptFile(id);
+  if (!file) return null;
+  let handle;
+  try {
+    handle = await fs.promises.open(file);
+    const { size } = await handle.stat(), start = Math.max(0, size - TAIL), bytes = Buffer.alloc(size - start);
+    await handle.read(bytes, 0, bytes.length, start);
+    let text = bytes.toString('utf8');
+    if (start) text = text.slice(text.indexOf('\n') + 1); // the first line read from the middle is a partial one
+    return text.split('\n').filter(Boolean).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+  } catch { found.delete(id); return null; } finally { await handle?.close(); }
 }
 // Where a session stands, from its last turn: the last user or assistant message in the main thread decides.
 // ponytail: a run killed half way (a reboot) ends on neither and reads as working for ever; reassigning starts afresh.
@@ -77,18 +95,15 @@ const claude = agent.register({
     return id;
   },
   async resume(taskId, prompt) { if (prompt) await runDetached(['--resume', taskId], prompt); },
-  statuses: (links) => Object.fromEntries(Object.entries(links || {}).map(([nodeId, id]) => {
-    const { state } = sessionState(transcript(id));
-    return [nodeId, state];
-  })),
+  statuses: async (links) => Object.fromEntries(await Promise.all(Object.entries(links || {}).map(async ([nodeId, id]) => [nodeId, sessionState(await transcript(id)).state]))),
   open: async (taskId) => { if (!agent.UUID.test(String(taskId))) throw new Error('Not a Claude session'); return inTerminal(quote(needClaude()) + ' --resume ' + taskId); },
   // A session id, as `claude --resume` takes it, or the command itself pasted whole.
   linkId: (text) => { const m = String(text || '').trim().match(/^(?:claude\s+(?:--resume|-r)\s+)?([0-9a-f-]{36})$/i); return m && agent.UUID.test(m[1]) ? m[1] : null; },
   openNew: async (link) => inTerminal(quote(needClaude()) + ' -- ' + quote(link)),
-  read: async (taskIds) => new Map(taskIds.map((id) => {
-    const { state, text } = sessionState(transcript(id));
+  read: async (taskIds) => new Map(await Promise.all(taskIds.map(async (id) => {
+    const { state, text } = sessionState(await transcript(id));
     return [id, { state: state === 'done' && text ? 'done' : state === 'broken' ? 'failed' : 'working', text }];
-  })),
+  }))),
 });
 
 module.exports = { claude, claudeBin, sessionState, transcript };

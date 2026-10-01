@@ -3701,6 +3701,19 @@ async function main() {
     const claude = require('../main/agents/claude');
     const said = (type, extra) => ({ type, message: { role: type, ...extra } });
     assert.equal(claude.sessionState(null).state, 'pending', 'no transcript yet is pending');
+    // The status poll reads only the end of a session, without blocking (#671 review): a long one still answers.
+    {
+      const os = require('node:os'), nodePath = require('node:path'), realHome = os.homedir, home = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'orbital-claude-home-'));
+      const dir = nodePath.join(home, '.claude', 'projects', '-tmp-Tana'); fs.mkdirSync(dir, { recursive: true });
+      const long = { type: 'user', message: { role: 'user', content: 'x'.repeat(1000) } };
+      const last = { type: 'assistant', message: { role: 'assistant', stop_reason: 'end_turn', model: 'claude-x', content: [{ type: 'text', text: 'all done' }] } };
+      fs.writeFileSync(nodePath.join(dir, THREAD + '.jsonl'), Array(400).fill(JSON.stringify(long)).concat(JSON.stringify(last)).join('\n') + '\n'); // ~400 KB, past the tail read
+      os.homedir = () => home;
+      try {
+        assert.deepEqual({ ...(await claude.claude.statuses({ [NODE]: THREAD })) }, { [NODE]: 'done' }, 'a session longer than the part read still reads its last turn');
+        assert.deepEqual({ ...(await claude.claude.read([THREAD])).get(THREAD) }, { state: 'done', text: 'all done' }, 'and @Claude gets its answer from it');
+      } finally { os.homedir = realHome; }
+    }
     // A Claude link opened on a Mac without Claude Code is an Orbital error, and a run that cannot start refuses the
     // handoff rather than leaving a task pending for ever (#671 review).
     {
@@ -3756,20 +3769,21 @@ async function main() {
     const asked = [];
     const rpc = async (method, params) => {
       asked.push(method + (params.threadId ? ' ' + params.threadId : ''));
-      if (method === 'thread/list') return { data: [thread('t-run', 'active'), thread('t-quiet', 'idle'), thread('t-err', 'systemError')] };
+      if (method === 'thread/list') { assert.equal(params.limit, 100, 'the newest hundred, asked by limit'); return { data: [thread('t-run', 'active'), thread('t-quiet', 'idle'), thread('t-err', 'systemError')] }; }
+      if (method === 'thread/read') { if (params.threadId === 't-old') return { thread: thread('t-old', 'active') }; throw new Error('no such thread'); }
       assert.equal(params.limit, 1, 'the latest turn is one turn, not a page of them');
       return { data: [{ status: params.threadId === 't-quiet' ? 'completed' : 'failed' }] };
     };
-    const links = { n1: 't-run', n2: 't-quiet', n3: 't-err', n4: 't-gone' };
-    assert.deepEqual(await agent.agentStatuses(links, rpc), { n1: 'working', n2: 'done', n3: 'broken', n4: 'broken' },
-      'every linked node is answered from one read');
-    assert.deepEqual(asked, ['thread/list', 'thread/turns/list t-quiet'],
-      'the turn call is made only where the thread is quiet: a running, failed or missing one already knows its state');
+    const links = { n1: 't-run', n2: 't-quiet', n3: 't-err', n4: 't-gone', n5: 't-old' };
+    assert.deepEqual(await agent.agentStatuses(links, rpc), { n1: 'working', n2: 'done', n3: 'broken', n4: 'broken', n5: 'working' },
+      'every linked node is answered from one read, and a task older than the newest hundred from its own (#671 review)');
+    assert.deepEqual(asked, ['thread/list', 'thread/read t-gone', 'thread/read t-old', 'thread/turns/list t-quiet'],
+      'a task missing from the list is read by id; the turn call is made only where the thread is quiet');
     assert.deepEqual(await agent.agentStatuses({}, async () => assert.fail('nothing linked, nothing asked')), {},
       'and with no linked nodes there is no read at all');
     // A reader that cannot answer — no app-server, a timeout — is red for everything, never a quiet green.
     const dead = async () => { throw new Error('timed out'); };
-    assert.deepEqual(await agent.agentStatuses(links, dead), { n1: 'broken', n2: 'broken', n3: 'broken', n4: 'broken' },
+    assert.deepEqual(await agent.agentStatuses(links, dead), { n1: 'broken', n2: 'broken', n3: 'broken', n4: 'broken', n5: 'broken' },
       'an unreachable app-server needs attention rather than claiming anything finished');
     // A thread whose turns cannot be read is pending: it is there, but nothing says the work is done.
     const halfDead = async (method) => { if (method === 'thread/list') return { data: [thread('t-quiet', 'idle')] }; throw new Error('no turns'); };

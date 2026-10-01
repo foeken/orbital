@@ -82,11 +82,18 @@ async function agentStatuses(links, rpc) {
   const out = {};
   let byId;
   try {
-    const list = await rpc('thread/list', { pageSize: 100 });
+    const list = await rpc('thread/list', { limit: 100 }); // the newest hundred (`limit`; the `pageSize` asked before was no parameter)
     byId = new Map((list && list.data || []).map((t) => [t.id, t]));
   } catch {
     for (const [nodeId] of entries) out[nodeId] = 'broken';
     return out;
+  }
+  // a linked task older than those is read on its own, rather than taken for gone (#671 review); one that cannot be
+  // read stays missing, which is the stale link it was before
+  for (const [, threadId] of entries) {
+    if (byId.has(threadId)) continue;
+    const read = await rpc('thread/read', { threadId }).catch(() => null);
+    if (read && read.thread) byId.set(threadId, read.thread);
   }
   for (const [nodeId, threadId] of entries) {
     const thread = byId.get(threadId) || null;
