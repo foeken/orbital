@@ -21,6 +21,7 @@ struct Shell: View {
     @State private var icons: [String: UIImage] = [:] // saved search id -> the icon it was given in Orbital
     @State private var menu = false
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
+    @State private var adding = CommandLine.arguments.contains("-add") // Quick Add Task; -add: open, for design shots
     @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
@@ -44,6 +45,9 @@ struct Shell: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { show(true) } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Menu")
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Quick Add Task")
                     }
                 }
                 .safeAreaInset(edge: .bottom) { Composer { let sent = try await engine.ask($0); notes[sent.id] = sent.warning; asked[sent.id] = .now; path.append(sent.id); return nil } } // a new chat, opened as it starts, its warning shown there
@@ -100,6 +104,7 @@ struct Shell: View {
                 }
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
+        .sheet(isPresented: $adding) { QuickAdd(engine: engine) }
         .task {
             // -zoom <id>: a node open at launch, for design shots
             let args = CommandLine.arguments

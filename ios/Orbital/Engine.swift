@@ -229,6 +229,30 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         do { let _: Bool = try await call(js, arguments); await refresh() } catch { self.error = error.localizedDescription }
     }
 
+    // Quick Add Task (QuickAdd.swift): the types to pick from, a task made with one, an image made into a task or a note
+    struct TaskType: Decodable, Identifiable { let uri: String?; let title: String; var id: String { uri ?? "" } }
+    func taskTypes() async -> [TaskType] {
+        Self.isSample ? [] : (try? await call("return await orbital.taskTypes()", [:])) ?? []
+    }
+    func createTask(_ title: String, type: String?) async throws -> String {
+        let id: String = try await call("return await orbital.createTask(title, type)", ["title": title, "type": type ?? NSNull()])
+        await refresh()
+        return id
+    }
+    // The image made smaller (2048 px at most, JPEG) for the model and for Tana, read by ChatGPT, then made into its node
+    func processImage(_ image: UIImage) async throws -> String {
+        let side: CGFloat = 2048, scale = min(1, side / max(image.size.width, image.size.height))
+        let small = UIGraphicsImageRenderer(size: CGSize(width: image.size.width * scale, height: image.size.height * scale)).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: CGSize(width: image.size.width * scale, height: image.size.height * scale)))
+        }
+        guard let jpeg = small.jpegData(compressionQuality: 0.8) else { throw Failure(errorDescription: "The image could not be read") }
+        let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.model)
+        let id: String = try await call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
+                                        ["kind": read.kind ?? "doc", "title": read.title ?? "", "notes": read.notes ?? [], "image": jpeg.base64EncodedString()])
+        await refresh()
+        return id
+    }
+
     // Long press, Delete (orbital.remove): to Tana's trash, then the Timeline read again; why not, when Tana says no
     // The row goes at once, collapsing out of its list (the List's own removal, under Reduce Motion without the move),
     // and comes back if Tana says no.

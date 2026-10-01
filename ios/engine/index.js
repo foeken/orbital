@@ -6,7 +6,8 @@
 // An ES module so the bundle runs it (Bun leaves a CommonJS entry of an iife bundle wrapped and never called).
 import { createTanaClient } from '../../sdk';
 import { STATE_TYPES, editable, initDocument, readNode, readSearch, rowLimit, setState, ulid } from '../../sdk/node';
-import { readOutline } from '../../sdk/content';
+import { insertAfter, insertImage, readOutline } from '../../sdk/content';
+import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
 import { addMeetingChats, completedInWindow, searchQueryParams } from '../../sdk/query';
@@ -157,11 +158,37 @@ async function access() {
 }
 const writable = async (doc) => canWrite(readNode(doc), S.me.userUri, await access()).catch(() => false);
 
+// Quick Add Task's types (task.js, main/documents.js taskTypes and customCreation): the types with a workflow that apply
+// to documents and that you may create in (a space's type keeps its tasks in that space). Each type is read and let go
+// again, and the list is kept for the session: types change rarely and there can be many.
+let taskTypeList = null;
+async function peek(id) {
+  const had = !!S.client.sync.getDocument(id);
+  try { return readNode(await within('reading ' + id, S.client.sync.subscribe(id))); } finally { if (!had) S.client.sync.unsubscribe(id).catch(() => {}); }
+}
+const taskTypes = () => (taskTypeList ||= (async () => {
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }), ctx = await access();
+  const types = await Promise.all(nodes.map(async (t) => {
+    try {
+      const type = await peek(t.id);
+      if (!type.workflowUri || (type.appliesTo ?? 'docs') !== 'docs') return null;
+      if (type.ownerUri && !(/^tana:space:/.test(type.ownerUri) && await canWrite(await peek(type.ownerUri), S.me.userUri, ctx))) return null;
+      return { uri: t.id, title: t.title || '', ownerUri: type.ownerUri || null };
+    } catch { return null; }
+  }));
+  return types.filter(Boolean).sort((a, b) => a.title.localeCompare(b.title));
+})().catch((e) => { taskTypeList = null; throw e; }));
+// a new document of yours, created as main/documents.js createDocument creates one, answered once Tana has it
+async function create(title, config) {
+  const id = 'tana:text:' + ulid();
+  return { id, doc: await hold(id, (loro) => initDocument(loro, title, S.me.userUri, config)) };
+}
+
 // no session, or another one: the old client's stream is closed rather than left reconnecting
 function drop() {
   if (S.client) S.client.close().catch(() => {});
   S.client = S.me = null;
-  settings.reset(); forget(); names.clear(); kept.length = 0; // what the last account's session knew
+  settings.reset(); forget(); names.clear(); kept.length = 0; taskTypeList = null; // what the last account's session knew
 }
 
 // The icon a saved search was given with Set icon (the settings document's typeIcons, main/icons.js: search uri → Nucleo
@@ -315,6 +342,29 @@ window.orbital = {
     await Promise.allSettled(Object.values(inFlight));
     last = null;
     drop();
+  },
+  // Quick Add Task: the types to pick from, and a task made with the title and the type chosen (open and yours, as a task
+  // from a title always is)
+  taskTypes: async () => JSON.stringify(await taskTypes()),
+  async createTask(title, typeUri) {
+    if (typeof title !== 'string' || !title.trim()) throw new Error('A task needs a title');
+    const type = typeUri ? (await taskTypes()).find((t) => t.uri === typeUri) : null;
+    if (typeUri && !type) throw new Error('A task cannot be made with that type here');
+    const { id } = await create(title.trim(), { kind: 'task', ...(type ? { entityTypeUri: type.uri, ...(type.ownerUri ? { ownerUri: type.ownerUri } : {}) } : {}) });
+    return JSON.stringify(id);
+  },
+  // Process image (main.js ai:processImage): what the model read from it (QuickAdd.swift ChatGPT.readImage) made a task
+  // or a note, its lines under the title and the image under them, uploaded as the desktop uploads a pasted one
+  async fromImage(kind, title, notes, base64, mimeType) {
+    const { id, doc } = await create(String(title).slice(0, 200), { kind: kind === 'task' ? 'task' : 'doc' });
+    for (const line of notes || []) insertAfter(doc, null, String(line));
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const fetch = (url, init) => globalThis.fetch(url, { ...init, credentials: 'omit' }); // the token alone, as with Tana's AI
+    const up = await uploadFile(bytes, { filename: 'image', mimeType, getAccessToken, fetch });
+    const uri = 'tana:image:' + ulid();
+    await hold(uri, (loro) => initImage(loro, { ownerUri: id, cid: up.cid, width: up.width, height: up.height, blurhash: up.blurhash, filename: 'image', mimeType, fileSize: bytes.length }));
+    insertImage(doc, null, uri);
+    return JSON.stringify(id);
   },
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
 };

@@ -11,7 +11,7 @@ final class Translator {
     struct Answer: Codable { let lang: String; let text: String } // text "": nothing to translate
 
     private(set) var to: String?
-    private var model = "gpt-5.6-terra" // main/ai.js DEFAULT_MODEL, unless the settings name another (aiModel)
+    private(set) var model = "gpt-5.6-terra" // main/ai.js DEFAULT_MODEL, unless the settings name another (aiModel)
     private(set) var answers: [String: Answer] = (UserDefaults.standard.data(forKey: "translations").flatMap { try? JSONDecoder().decode([String: Answer].self, from: $0) }) ?? [:]
     @ObservationIgnored private var asked = Set<String>()
     @ObservationIgnored private var queue: [String] = []
@@ -83,21 +83,19 @@ extension ChatGPT {
         "properties": ["id": ["type": "integer"], "lang": ["type": ["string", "null"]], "text": ["type": ["string", "null"]]],
     ] as [String: Any]] as [String: Any]]]
 
-    // One question to ChatGPT as Codex asks it (its Responses endpoint for a ChatGPT sign-in, streamed), answered by id:
-    // id -> { lang, text }, a text already in the language left out. nil without a sign-in.
-    static func translate(_ texts: [String], to: String, model: String) async throws -> [Int: Translator.Answer]? {
+    // One question to ChatGPT as Codex asks it (its Responses endpoint for a ChatGPT sign-in, streamed): the answer's
+    // text, or nil without a sign-in. content: the user's parts (input_text, input_image); schema: the answer's shape.
+    static func respond(_ instructions: String, _ content: [[String: Any]], model: String, schema: [String: Any]? = nil, timeout: TimeInterval = 90) async throws -> String? {
         guard let account = try await fresh() else { return nil }
         var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/codex/responses")!)
         request.httpMethod = "POST"
-        request.timeoutInterval = 90 // main/ai.js TRANSLATE_TIMEOUT
+        request.timeoutInterval = timeout
         for (k, v) in ["authorization": "Bearer " + account.accessToken, "chatgpt-account-id": account.accountId ?? "", "OpenAI-Beta": "responses=experimental",
                        "originator": "codex_cli_rs", "accept": "text/event-stream", "content-type": "application/json"] { request.setValue(v, forHTTPHeaderField: k) }
-        let input = String(decoding: try JSONSerialization.data(withJSONObject: texts.enumerated().map { ["id": $0.offset + 1, "text": $0.element] }), as: UTF8.self)
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": model, "instructions": instructions(to), "store": false, "stream": true, "reasoning": ["effort": "low"],
-            "input": [["type": "message", "role": "user", "content": [["type": "input_text", "text": input]]]],
-            "text": ["format": ["type": "json_schema", "name": "translations", "schema": schema, "strict": true]],
-        ] as [String: Any])
+        var body: [String: Any] = ["model": model, "instructions": instructions, "store": false, "stream": true, "reasoning": ["effort": "low"],
+                                   "input": [["type": "message", "role": "user", "content": content]]]
+        if let schema { body["text"] = ["format": ["type": "json_schema", "name": "answer", "schema": schema, "strict": true]] }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
         if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 { throw Failure(errorDescription: "HTTP \(status)") }
         var answer = ""
@@ -105,6 +103,13 @@ extension ChatGPT {
             guard let event = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any] else { continue }
             if event["type"] as? String == "response.output_text.delta", let delta = event["delta"] as? String { answer += delta }
         }
+        return answer
+    }
+
+    // Translations by id: id -> { lang, text }, a text already in the language left out. nil without a sign-in.
+    static func translate(_ texts: [String], to: String, model: String) async throws -> [Int: Translator.Answer]? {
+        let input = String(decoding: try JSONSerialization.data(withJSONObject: texts.enumerated().map { ["id": $0.offset + 1, "text": $0.element] }), as: UTF8.self)
+        guard let answer = try await respond(instructions(to), [["type": "input_text", "text": input]], model: model, schema: schema) else { return nil }
         struct Out: Decodable { struct One: Decodable { let id: Int; let lang: String?; let text: String? }; let translations: [One] }
         let out = try JSONDecoder().decode(Out.self, from: Data(answer.utf8))
         return Dictionary(out.translations.compactMap { t in t.lang.flatMap { lang in t.text.map { (t.id, Translator.Answer(lang: lang, text: $0)) } } }, uniquingKeysWith: { a, _ in a })
