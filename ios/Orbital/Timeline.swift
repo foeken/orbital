@@ -25,12 +25,13 @@ struct Row: Decodable, Identifiable {
     let meta: String?
     let note: Bool?
     let chat: Chat?
+    let group: String? // the section a saved search files it under (ios/engine/arrange.js)
     let glyph: String? // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
 
     struct Segment: Decodable { let text: String?; let marks: Marks?; let mention: Ref? }
     struct Marks: Decodable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
     struct Ref: Decodable { let uri: String; let label: String? }
-    struct Chat: Decodable { let mine: Bool?; let status: Bool?; let streaming: Bool? }
+    struct Chat: Decodable { let mine: Bool?; let status: Bool?; let streaming: Bool?; let author: String? }
     struct Person: Decodable { let name: String }
     struct Free: Decodable { let from: Double; let until: Double }
     struct Info: Decodable {
@@ -78,6 +79,17 @@ extension OpenURLAction {
     func zoom(_ id: String?) { if let url = id.flatMap(Row.zoom) { callAsFunction(url) } }
 }
 
+// Long press on a node: Delete, to Tana's trash where you may delete it (Engine.remove); done reads the page again
+extension View {
+    func deletable(_ id: String?, engine: Engine, then done: @escaping () async -> Void = {}) -> some View {
+        contextMenu {
+            if let id, id.hasPrefix("tana:") {
+                Button("Delete", systemImage: "trash", role: .destructive) { Task { if await engine.remove(id) { await done() } } }
+            }
+        }
+    }
+}
+
 // The Timeline as the desktop draws it (styles.css .node.tl): the time on the left, a marker on a thin rail that runs
 // the length of the page, what happened to the right. Today's tasks and Coming up sit on the same rail above the days,
 // each only when it has something in it. Colour only where it means something (orbital-design, Grey unless colour
@@ -100,7 +112,7 @@ struct TimelineScreen: View {
             if !upcoming.isEmpty || free != nil {
                 Heading(title: "Coming up")
                 if let free { FreeLine(free: free, time: today.isEmpty ? "Now" : "") }
-                ForEach(upcoming) { Meeting(row: $0) }
+                ForEach(upcoming) { Meeting(row: $0, engine: engine) }
             }
             ForEach(days, id: \.0) { title, rows in
                 Heading(title: title)
@@ -231,6 +243,7 @@ struct Entry: View {
             }
         }
         .onTapGesture { openURL.zoom(row.timeline?.uri) }
+        .deletable(row.timeline?.uri, engine: engine)
         // one element to VoiceOver, unless it lists tasks, whose boxes have to stay reachable
         .accessibilityElement(children: row.children?.isEmpty == false ? .contain : .combine)
         .accessibilityAddTraits(row.timeline?.uri != nil ? .isButton : [])
@@ -273,14 +286,15 @@ struct TaskList: View {
             ForEach(tasks) { task in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     TaskBox(task: task, engine: engine)
-                    Button { openURL.zoom(task.id) } label: { TaskWords(row: task, done: engine.state(of: task) == "closed").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
+                    Button { openURL.zoom(task.id) } label: { TaskWords(row: task, engine: engine).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
                         .buttonStyle(.plain)
                 }
+                .deletable(task.id, engine: engine)
             }
         }
         // as much room above the list as under it: under it the entry's own 14 pt and the next one's 14 pt come on top of this
-        .padding(.top, 30)
-        .padding(.bottom, 6)
+        .padding(.top, 26)
+        .padding(.bottom, 2)
     }
 }
 
@@ -315,18 +329,22 @@ struct Tick: Shape {
     }
 }
 
-// A task's words, struck and grey once done
+// A task's words, struck and grey once done; in the chosen language when they are in another (a globe says so)
 struct TaskWords: View {
     let row: Row
-    let done: Bool
+    let engine: Engine
     var body: some View {
-        Text(row.words).strikethrough(done).foregroundStyle(done ? .secondary : .primary)
+        let done = engine.state(of: row) == "closed", (words, from) = engine.translator.words(row.words)
+        (Text(words) + Text(from == nil ? "" : "  \(Image(systemName: "globe"))").font(.footnote).foregroundStyle(.tertiary))
+            .strikethrough(done).foregroundStyle(done ? .secondary : .primary)
+            .accessibilityHint(from.map { "Translated from " + $0 } ?? "")
     }
 }
 
 // A meeting still to come today: when on the left, its name, until when, and who else is on it as faces
 struct Meeting: View {
     let row: Row
+    let engine: Engine
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -335,12 +353,13 @@ struct Meeting: View {
             Marker(icon: "meeting", tone: nil, now: false)
         } content: {
             VStack(alignment: .leading, spacing: 3) {
-                Text(row.words)
+                Text(engine.translator.words(row.words).0)
                 if let until = row.subtext?.split(separator: "–").last { Text("until " + until).font(.subheadline).foregroundStyle(.secondary) }
                 if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
             }
         }
         .onTapGesture { openURL.zoom(row.id) }
+        .deletable(row.id, engine: engine)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { openURL.zoom(row.id) }

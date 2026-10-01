@@ -15,6 +15,7 @@ struct Shell: View {
     @State private var page = Page.timeline
     @State private var path: [String] = [] // the nodes zoomed into from the page, as a push each
     @State private var notes: [String: String] = [:] // chat id -> what its first message's send had to say, for the chat's own composer
+    @State private var asked: [String: Date] = [:] // chat id -> when Ask Tana sent its first message, whose answer it waits for
     @State private var searches: [Page] = []
     @State private var icons: [String: UIImage] = [:] // saved search id -> the icon it was given in Orbital
     @State private var menu = false
@@ -36,7 +37,7 @@ struct Shell: View {
                     case .search(let id, _): NodeScreen(engine: engine, id: id, titled: false).id(id)
                     }
                 }
-                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0, note: notes[$0]) }
+                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0, note: notes[$0], asked: asked[$0]) }
                 .navigationTitle(page.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -44,7 +45,7 @@ struct Shell: View {
                         Button { show(true) } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Menu")
                     }
                 }
-                .safeAreaInset(edge: .bottom) { Composer { let sent = try await engine.ask($0); notes[sent.id] = sent.warning; path.append(sent.id); return nil } } // a new chat, opened as it starts, its warning shown there
+                .safeAreaInset(edge: .bottom) { Composer { let sent = try await engine.ask($0); notes[sent.id] = sent.warning; asked[sent.id] = .now; path.append(sent.id); return nil } } // a new chat, opened as it starts, its warning shown there
             }
             .accessibilityHidden(menu) // with the menu open, VoiceOver reads the menu, not the page pushed aside
             // the whole screen, status bar included: a clip to the page's own frame cut the top bar off

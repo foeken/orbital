@@ -14,14 +14,11 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Account(glyph: "tana", email: engine.email ?? "Tana") {
-                        dismiss()
-                        Task { await engine.signOut() }
-                    }
+                    LabeledContent { Text(engine.email ?? "Tana") } label: { Row(glyph: "tana", title: "Account") }
                 } header: { Header("Tana") }
                 Section {
                     if let chatgpt {
-                        Account(glyph: "chatgpt", email: chatgpt.email ?? "ChatGPT") { ChatGPT.forget(); self.chatgpt = nil }
+                        LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
                         if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
@@ -34,6 +31,11 @@ struct SettingsView: View {
                 Section {
                     LabeledContent { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") } label: { Row(glyph: "info", title: "Version") }
                 } header: { Header("Orbital") }
+                // signing out, apart from everything else and in red, as the ChatGPT app has its Log out
+                Section {
+                    Button { dismiss(); Task { await engine.signOut() } } label: { LogOut(title: "Log out of Tana") }
+                    if chatgpt != nil { Button { ChatGPT.forget(); chatgpt = nil } label: { LogOut(title: "Log out of ChatGPT") } }
+                }
             }
             .tint(.primary) // the rows in the text colour, not the accent blue, as the ChatGPT app has them
             .toolbar {
@@ -60,21 +62,10 @@ struct SettingsView: View {
         }
     }
 
-    // An account: its service's mark, and the email with the pop-up chevrons the ChatGPT app's Appearance row has; a tap
-    // opens a menu with Sign Out, so signing out is one deliberate step and takes no row of its own
-    struct Account: View {
-        let glyph: String
-        let email: String
-        let signOut: () -> Void
+    struct LogOut: View {
+        let title: String
         var body: some View {
-            Menu {
-                Button(action: signOut) { Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") }
-            } label: {
-                LabeledContent {
-                    HStack(spacing: 5) { Text(email).lineLimit(1); Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.medium)) }
-                        .foregroundStyle(.secondary)
-                } label: { Row(glyph: glyph, title: "Account") }
-            }
+            Label { Text(title) } icon: { Image(systemName: "rectangle.portrait.and.arrow.right") }.foregroundStyle(.red)
         }
     }
 
@@ -103,8 +94,11 @@ enum ChatGPT {
         let refreshToken: String
         enum CodingKeys: String, CodingKey { case idToken = "id_token", accessToken = "access_token", refreshToken = "refresh_token" }
 
-        private var claims: [String: Any] {
-            let part = idToken.split(separator: ".").dropFirst().first.map(String.init) ?? ""
+        private var claims: [String: Any] { Self.claims(idToken) }
+        var expires: Date { (Self.claims(accessToken)["exp"] as? Double).map { Date(timeIntervalSince1970: $0) } ?? .distantPast }
+        var accountId: String? { (claims["https://api.openai.com/auth"] as? [String: Any])?["chatgpt_account_id"] as? String }
+        static func claims(_ jwt: String) -> [String: Any] {
+            let part = jwt.split(separator: ".").dropFirst().first.map(String.init) ?? ""
             var b64 = part.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
             b64 += String(repeating: "=", count: (4 - b64.count % 4) % 4)
             return Data(base64Encoded: b64).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
@@ -116,6 +110,24 @@ enum ChatGPT {
     static func load() -> Account? { Keychain.load("chatgpt").flatMap { try? JSONDecoder().decode(Account.self, from: $0) } }
     static func save(_ account: Account) { if let data = try? JSONEncoder().encode(account) { Keychain.save(data, "chatgpt") } }
     static func forget() { Keychain.delete("chatgpt") }
+
+    // The account with a live access token: renewed with its refresh token a minute before it runs out, as Codex does
+    // (codex-rs/login, the refresh_token grant); nil when signed out. A refresh refused leaves the account as it was.
+    static func fresh() async throws -> Account? {
+        guard let account = load() else { return nil }
+        if account.expires > .now.addingTimeInterval(60) { return account }
+        var request = URLRequest(url: URL(string: issuer + "/oauth/token")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["client_id": client, "grant_type": "refresh_token", "refresh_token": account.refreshToken, "scope": "openid profile email"])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.userAuthenticationRequired) }
+        struct Renewed: Decodable { let id_token: String?; let access_token: String?; let refresh_token: String? }
+        let r = try JSONDecoder().decode(Renewed.self, from: data)
+        let next = Account(idToken: r.id_token ?? account.idToken, accessToken: r.access_token ?? account.accessToken, refreshToken: r.refresh_token ?? account.refreshToken)
+        save(next)
+        return next
+    }
 
     static func base64url(_ data: Data) -> String {
         data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")

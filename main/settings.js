@@ -171,6 +171,7 @@ const holdsSettings = (doc) => [MARK, ROOT, OLD_ROOT].some((root) => Object.keys
 const onlyMine = async (doc) => readNode(doc).restricted === true && !doc.loro.getMap('linkSharing').get('mode')
   && (await audienceOf(readNode(doc), S.me.userUri, { sync: S.client.sync, orgDocUri: S.me.orgDocUri })).scope === 'only-me';
 async function create() {
+  if (S.settingsReadOnly) return null; // the iPhone app only reads the settings; a Mac makes the document (ios/engine/index.js)
   const id = 'tana:text:' + ulid();
   const doc = await S.client.sync.subscribe(id, (loro) => {
     initDocument(loro, TITLE, S.me.userUri);

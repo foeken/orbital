@@ -8,15 +8,20 @@ import { createTanaClient } from '../../sdk';
 import { STATE_TYPES, editable, initDocument, readNode, readSearch, rowLimit, setState, ulid } from '../../sdk/node';
 import { readOutline } from '../../sdk/content';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
-import { listSidebar } from '../../sdk/pins';
+import { datePins, sidebarTree } from '../../sdk/pins';
 import { addMeetingChats, completedInWindow, searchQueryParams } from '../../sdk/query';
-import { canWrite, everyoneOnly } from '../../sdk/access';
+import { canDelete, canWrite, everyoneOnly } from '../../sdk/access';
+import { arrange } from './arrange';
 import { S, isSpace, iso, visibleGraphNodes } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
 import { PRIVATE, redact as scrub } from './redact';
 import NUCLEO from 'nucleo-ui';
+
+// The phone reads Orbital's settings document and never makes one: a Mac does (main/settings.js create). Once it did,
+// when it could not find yours, and read an empty one: no icons, nothing sensitive known.
+S.settingsReadOnly = true;
 
 const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; } };
 // tana-session.js without Electron: the page's own cookies, a minute before expiry as Tana does. One lookup at a time of
@@ -106,8 +111,19 @@ async function searchRows(doc) {
   const scoped = (query.ownerUris || []).some((u) => typeof u === 'string' && isSpace(u));
   const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
   const { nodes = [] } = await S.client.graph.listNodes(searchQueryParams(query, S.me.userUri, rowLimit(view.limit), undefined, spaces));
-  const found = nodes.filter((n) => completedInWindow(n, view.completedWithin));
-  return (view.audience === 'everyone' ? await everyoneOnly(S.client.graph, found) : found).map(listRow);
+  let found = nodes.filter((n) => completedInWindow(n, view.completedWithin));
+  if (view.audience === 'everyone') found = await everyoneOnly(S.client.graph, found);
+  // arranged as the search was saved: its sort and its sections (arrange.js), with what they are named by
+  const types = [...new Set(found.map((n) => n.entityType).filter(Boolean))];
+  const [people, pinned, typeNodes] = await Promise.all([members().catch(() => []), within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({})),
+    types.length ? S.client.graph.listNodes({ nodeIds: types, limit: types.length }).then((r) => r.nodes, () => []) : []]);
+  const typeTitles = new Map(typeNodes.map((t) => [t.id, t.title])), notify = settings.get('notify') || {};
+  const choice = (on) => new Set(Object.keys(notify).filter((id) => notify[id] === on));
+  const byId = new Map(found.map((n) => [n.id, n]));
+  const rows = arrange(found.map((n) => ({ id: n.id, title: n.title, state: (n.state && n.state.type) || null, updated: iso(n.updateTime), created: iso(n.createTime),
+    createdBy: n.createdBy, assignees: n.assignedTo || [], type: typeTitles.get(n.entityType) })), view,
+  { me: S.me.userUri, now: Date.now(), names: new Map(people.map((m) => [m.id, m.title])), pinned: new Set(Object.keys(pinned)), watched: choice(true), silenced: choice(false) });
+  return rows.map(({ n, group }) => ({ ...listRow(byId.get(n.id)), group }));
 }
 
 // What you type in the composer, written into a chat as Tana writes a message and Tana asked to answer, as the desktop
@@ -128,16 +144,18 @@ const message = async (text) => ({ text, byUri: S.me.userUri, senderName: (await
 // The message is in the chat either way: Tana not taking it up is a warning under the composer, not a failed send, or
 // the composer would offer to send it again (main/documents.js askReply answers it the same way)
 async function answered(id, messageId, ownerUri) {
-  const warning = await triggerReply({ chatUri: id, messageId, ownerUri, getAccessToken }).then(() => null, (e) => 'Sent, but Tana did not answer: ' + (e && e.message || e));
+  // without the page's cookies: Tana's AI refuses a request that carries both them and the token (auth/multiple-auth-mechanisms)
+  const fetch = (url, init) => globalThis.fetch(url, { ...init, credentials: 'omit' });
+  const warning = await triggerReply({ chatUri: id, messageId, ownerUri, getAccessToken, fetch }).then(() => null, (e) => 'Sent, but Tana did not answer: ' + (e && e.message || e));
   return JSON.stringify({ id, warning });
 }
 // main/documents.js accessContext and canWriteDoc: write access to a document, from its participants and owners
-async function writable(doc) {
+async function access() {
   const c = claims(await getAccessToken());
   // the owners and the org it reads go through hold, so they are let go of like every other document read here
-  const ctx = { sync: { subscribe: (uri) => hold(uri) }, graph: S.client.graph, orgDocUri: S.me.orgDocUri, orgAdmin: c.org_id === S.me.orgId && ['admin', 'owner'].includes(c.role) };
-  return canWrite(readNode(doc), S.me.userUri, ctx).catch(() => false);
+  return { sync: { subscribe: (uri) => hold(uri) }, graph: S.client.graph, orgDocUri: S.me.orgDocUri, orgAdmin: c.org_id === S.me.orgId && ['admin', 'owner'].includes(c.role) };
 }
+const writable = async (doc) => canWrite(readNode(doc), S.me.userUri, await access()).catch(() => false);
 
 // no session, or another one: the old client's stream is closed rather than left reconnecting
 function drop() {
@@ -254,13 +272,26 @@ window.orbital = {
   },
   send: (id, text) => say(id, text), // a follow-up in a chat
   // Every saved search you can see, the ones pinned to your sidebar first in their order there, each with its icon (glyph)
+  // the ones pinned to your sidebar first, in its order (sections included), then the rest, newest first
   async searches() {
-    const [pinned, { nodes = [] }] = await Promise.all([within('sidebar pins', listSidebar(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 1000, sortOptions: newest })]);
-    const at = (n) => (pinned.includes(n.id) ? pinned.indexOf(n.id) : 1e6);
+    const [tree, { nodes = [] }] = await Promise.all([within('sidebar pins', sidebarTree(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 1000, sortOptions: newest })]);
     await settled(); // the icons and what is sensitive
-    const chosen = settings.get('typeIcons') || {};
-    return JSON.stringify(await Promise.all(nodes.sort((a, b) => at(a) - at(b)).map(async (n) => ({ ...listRow(n), glyph: await iconPng(chosen[n.id]).catch(() => null) }))));
+    const chosen = settings.get('typeIcons') || {}, byId = new Map(nodes.map((n) => [n.id, n])), order = [];
+    const take = (entries) => { for (const e of entries) { if (e.uri && byId.has(e.uri) && !order.includes(byId.get(e.uri))) order.push(byId.get(e.uri)); take(e.children || []); } };
+    take(tree);
+    take(nodes.map((n) => ({ uri: n.id })));
+    return JSON.stringify(await Promise.all(order.map(async (n) => ({ ...listRow(n), glyph: await iconPng(chosen[n.id]).catch(() => null) }))));
   },
+  // Long press, Delete: to Tana's trash, as the desktop deletes (main/documents.js documentAction), where you may
+  async remove(id) {
+    const doc = await hold(id);
+    if (!(await canDelete(doc, S.me.userUri, await access()).catch(() => false))) throw new Error('You cannot delete this');
+    await S.client.sync.softDelete(id);
+    return JSON.stringify(id);
+  },
+  // Auto-translate as the desktop has it (renderer/translate.js): the language chosen there (a synced preference),
+  // and the model the AI rows use; the phone asks ChatGPT itself (Translator.swift)
+  translation: () => { const to = settings.get('pref:translateTo'); return JSON.stringify({ to: ['English', 'Dutch', 'German', 'French', 'Spanish'].includes(to) ? to : null, model: settings.get('aiModel') || null }); },
   // Settings' Sign out, before the app deletes the cookies: a session lookup still under way would set them again (the
   // desktop waits for its lookups the same way, tana-session.js logout), and the client closes
   async signOut() {
@@ -268,6 +299,6 @@ window.orbital = {
     last = null;
     drop();
   },
-  issues: () => issues.splice(0), // what went wrong since last asked (a part of the page that could not be read), for the log
+  issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 window.webkit?.messageHandlers?.orbital?.postMessage('ready');

@@ -22,6 +22,7 @@ enum Glyph {
 struct ListRow: View {
     let row: Row
     let engine: Engine
+    var reload: () async -> Void = {}
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -34,7 +35,7 @@ struct ListRow: View {
             }
             Button { openURL.zoom(row.target) } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    if row.stateType != nil { TaskWords(row: row, done: engine.state(of: row) == "closed") } else { Text(row.styled) }
+                    if row.stateType != nil { TaskWords(row: row, engine: engine) } else { Text(engine.translator.words(row.words).0) }
                     if let at = row.createdAt.flatMap(Row.parse) {
                         Text(at, format: .relative(presentation: .named)).font(.subheadline).foregroundStyle(.secondary)
                     }
@@ -45,6 +46,7 @@ struct ListRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 6)
+        .deletable(row.target, engine: engine, then: reload)
     }
 }
 
@@ -55,9 +57,11 @@ struct NodeScreen: View {
     let id: String
     var titled = true // false when the page is the menu's own and the shell names it
     var note: String? // what the composer that started this chat had to say (Shell: Tana did not answer, or saved for later)
+    var asked: Date? // when the message that opened this chat was sent (Shell's Ask Tana): its answer is waited for
 
     @State private var page: Engine.Page?
     @State private var error: String?
+    @State private var waitingSince: Date?
 
     var body: some View {
         Group {
@@ -66,11 +70,20 @@ struct NodeScreen: View {
             } else if let page {
                 switch page.kind {
                 case "chat":
-                    ChatView(rows: page.rows)
+                    ChatView(rows: page.rows, since: waitingSince ?? asked)
                         // sent is sent: the read after it is the next poll's job, so a failed read never offers to send it twice
-                        .safeAreaInset(edge: .bottom) { Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); await load(); return sent.warning } }
+                        .safeAreaInset(edge: .bottom) {
+                            Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); waitingSince = .now; await load(); return sent.warning }
+                        }
                 case "search", "event":
-                    List(page.rows) { ListRow(row: $0, engine: engine) }
+                    // in the sections the search was saved with (Row.group), as the desktop shows it
+                    List(Array(Self.sections(page.rows).enumerated()), id: \.offset) { _, section in
+                        Section {
+                            ForEach(section.rows) { ListRow(row: $0, engine: engine, reload: load) }
+                        } header: {
+                            if let title = section.title { Text(title).font(.headline).foregroundStyle(.secondary).textCase(nil) }
+                        }
+                    }
                         .listStyle(.plain)
                         .refreshable { await load() }
                         .overlay { if page.rows.isEmpty { ContentUnavailableView(page.kind == "event" ? "No notes yet" : "Nothing found", image: "Glyphs/" + Glyph.of(page.kind)) } }
@@ -92,7 +105,7 @@ struct NodeScreen: View {
                 ProgressView()
             }
         }
-        .navigationTitle(titled ? page?.title ?? "" : "")
+        .navigationTitle(titled ? engine.translator.words(page?.title ?? "").0 : "")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {
             guard engine.phase == .ready else { return }
@@ -111,6 +124,13 @@ struct NodeScreen: View {
     // A read keeps what is on screen when it fails, and says why only while there is nothing to show
     private func load() async {
         do { page = try await engine.open(id); error = nil } catch { self.error = error.localizedDescription }
+    }
+
+    // consecutive rows under one heading; one untitled section when the search is not grouped
+    static func sections(_ rows: [Row]) -> [(title: String?, rows: [Row])] {
+        rows.reduce(into: []) { out, row in
+            if let last = out.last, last.title == row.group { out[out.count - 1].rows.append(row) } else { out.append((row.group, [row])) }
+        }
     }
 
     // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
@@ -154,46 +174,78 @@ struct OutlineRow: View {
     }
 }
 
-// A chat as the ChatGPT app shows one: your messages in grey bubbles on the right, Tana's answers as plain text under
-// its name, what it did while thinking in grey, the documents it touched as rows that open them
+// A chat as the desktop draws one (renderer/chat.js, styles.css .chat-msg): your messages in a blue bubble on the right,
+// everyone else's as plain text across the page with their name over each run of them, what Tana did while thinking
+// in grey over a hairline, and three dots while an answer is on its way (since: when the last message was sent).
 struct ChatView: View {
     let rows: [Row]
+    var since: Date?
 
     var body: some View {
+        let shown = rows.enumerated().map { i, row in (row, Self.named(row, after: rows[..<i].last)) }
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
-                ForEach(rows) { Message(row: $0) }
+                ForEach(shown, id: \.0.id) { Message(row: $0.0, named: $0.1) }
+                if waiting { Dots().padding(.top, -8) }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
         .defaultScrollAnchor(.bottom)
     }
+
+    // the name over a run of replies, not over each (renderer/chat.js chatNameEl): a status line breaks the run
+    static func named(_ row: Row, after prev: Row?) -> Bool {
+        row.chat?.mine != true && row.chat?.status != true && (prev == nil || prev?.chat?.status == true || prev?.chat?.author != row.chat?.author)
+    }
+    // Tana writing (its message streaming with no words yet), or your message still unanswered for two minutes at most
+    // (renderer/chat.js CHAT_WAIT)
+    private var waiting: Bool {
+        let last = rows.last { $0.chat?.status != true }
+        if last?.chat?.streaming == true { return (last?.children ?? []).isEmpty }
+        return last?.chat?.mine == true && since.map { Date.now.timeIntervalSince($0) < 120 } == true
+    }
 }
 
 struct Message: View {
     let row: Row
+    let named: Bool
 
     var body: some View {
         if row.chat?.status == true {
             Text(row.words).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
         } else if row.chat?.mine == true {
             VStack(alignment: .leading, spacing: 8) { ForEach(row.children ?? []) { ChatBlock(row: $0) } }
+                .foregroundStyle(Color.pair(0x1b2b41, 0xe8eeff))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(Color.pair(0xeaf3fd, 0x1e3d7b), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.leading, 48)
+                .padding(.leading, 56)
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text(row.words).font(.subheadline.weight(.semibold))
-                    if let meta = row.meta { Text(meta).font(.subheadline).foregroundStyle(.secondary) }
-                }
+                if named { Text(row.words).font(.subheadline.weight(.semibold)) }
                 ForEach(row.children ?? []) { ChatBlock(row: $0) }
-                if row.chat?.streaming == true && (row.children ?? []).isEmpty { ProgressView().controlSize(.small) } // Tana has started, no words yet
             }
         }
+    }
+}
+
+// Three dots where the answer will be, as the desktop's (renderer/chat.js chatDotsEl); still under Reduce Motion
+struct Dots: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.1, paused: reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 5) {
+                ForEach(0..<3) { i in
+                    Circle().frame(width: 7, height: 7).opacity(reduceMotion ? 0.5 : 0.25 + 0.75 * max(0, sin(t * 4 - Double(i) * 0.9)))
+                }
+            }
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Tana is writing")
     }
 }
 
@@ -204,7 +256,7 @@ struct ChatBlock: View {
 
     var body: some View {
         if row.note == true {
-            Text(row.words).font(.subheadline).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 10) { Text(row.words).font(.subheadline).foregroundStyle(.secondary); Divider() }
         } else if let ref = row.reference {
             Button { openURL.zoom(ref.uri) } label: {
                 Label { Text(row.words).lineLimit(1) } icon: { Image("Glyphs/" + Glyph.of(uri: ref.uri)).resizable().frame(width: 18, height: 18) }

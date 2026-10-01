@@ -21,6 +21,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value (#658). A line is
     // added only when it differs from the one before, so the screen is redrawn only when something moved.
     var log: [String] = []
+    let translator = Translator() // auto-translate, set up from the settings document at each refresh
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
@@ -161,6 +162,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             rows = read
             error = nil
             settle(rows)
+            if let setup: Translator.Setup = try? await call("return await orbital.translation()", [:]) { translator.use(setup) }
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
@@ -208,6 +210,19 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let page: Page = try await call("return await orbital.open(id)", ["id": id])
         settle(page.rows) // a search's tasks ticked here, once Tana agrees
         return page
+    }
+
+    // Long press, Delete (orbital.remove): to Tana's trash, then the Timeline read again; why not, when Tana says no
+    func remove(_ id: String) async -> Bool {
+        guard !Self.isSample else { return true }
+        do {
+            let _: String = try await call("return await orbital.remove(id)", ["id": id])
+            await refresh()
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
     }
 
     // A message written into a chat: which chat, and a warning when Tana did not take it up (it is sent all the same)

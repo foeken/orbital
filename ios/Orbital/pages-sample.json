@@ -177,7 +177,8 @@
      "id": "m0",
      "text": "You",
      "chat": {
-      "mine": true
+      "mine": true,
+      "author": "me"
      },
      "children": [
       {
@@ -195,7 +196,9 @@
      "id": "m1",
      "text": "Tana AI",
      "meta": "11:10",
-     "chat": {},
+     "chat": {
+      "author": "ai"
+     },
      "children": [
       {
        "id": "m1.t",
@@ -271,7 +274,8 @@
      "id": "m2",
      "text": "You",
      "chat": {
-      "mine": true
+      "mine": true,
+      "author": "me"
      },
      "children": [
       {
@@ -289,7 +293,9 @@
      "id": "m3",
      "text": "Tana AI",
      "meta": "11:12",
-     "chat": {},
+     "chat": {
+      "author": "ai"
+     },
      "children": [
       {
        "id": "m3.b0",
@@ -310,25 +316,28 @@
    "kind": "search",
    "rows": [
     {
-     "id": "tana:text:0000000000000000000000000a",
-     "title": "Draft the Q4 hiring plan",
-     "icon": "text",
-     "stateType": "open",
-     "createdAt": "2026-09-30T12:40:00Z"
-    },
-    {
      "id": "tana:text:0000000000000000000000000e",
      "title": "Book the offsite venue",
      "icon": "text",
      "stateType": "proposed",
-     "createdAt": "2026-09-30T09:40:00Z"
+     "createdAt": "2026-09-30T09:40:00Z",
+     "group": "My inbox"
+    },
+    {
+     "id": "tana:text:0000000000000000000000000a",
+     "title": "Draft the Q4 hiring plan",
+     "icon": "text",
+     "stateType": "open",
+     "createdAt": "2026-09-30T12:40:00Z",
+     "group": "Mine"
     },
     {
      "id": "tana:text:0000000000000000000000000f",
      "title": "Reply to the design crit",
      "icon": "text",
      "stateType": "open",
-     "createdAt": "2026-09-28T14:00:00Z"
+     "createdAt": "2026-09-28T14:00:00Z",
+     "group": "Mine"
     }
    ]
   },
