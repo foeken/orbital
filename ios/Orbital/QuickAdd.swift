@@ -85,7 +85,9 @@ struct QuickAdd: View {
             }
             .onSubmit { Task { await add() } }
             .task(id: type) { // the chosen type's fields, with the saved search's values when it is its type
-                fields = if let type { await engine.typeFields(type) } else { [] }
+                let found = if let type { await engine.typeFields(type) } else { [Engine.Field]() }
+                guard !Task.isCancelled else { return } // another type chosen meanwhile: its own read sets them
+                fields = found
                 values = preset?.uri == type ? preset?.fields ?? [:] : [:]
             }
             .task {
@@ -287,7 +289,9 @@ struct Choices: View {
         .task(id: query) {
             if !query.isEmpty { try? await Task.sleep(for: .milliseconds(250)) } // asked once typing pauses
             guard !Task.isCancelled else { return }
-            items = await load(query)
+            let found = await load(query)
+            guard !Task.isCancelled else { return } // typed on meanwhile: the newer answer wins
+            items = found
         }
     }
 }

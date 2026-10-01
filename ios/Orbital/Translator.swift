@@ -14,7 +14,7 @@ final class Translator {
     private(set) var model = "gpt-5.6-terra" // main/ai.js DEFAULT_MODEL, unless the settings name another (aiModel)
     private(set) var answers: [String: Answer] = (UserDefaults.standard.data(forKey: "translations").flatMap { try? JSONDecoder().decode([String: Answer].self, from: $0) }) ?? [:]
     @ObservationIgnored private var asked = Set<String>()
-    @ObservationIgnored private var queue: [String] = []
+    @ObservationIgnored private var queue: [(to: String, text: String)] = [] // each with its language: Auto-translate can change while it waits
     @ObservationIgnored private var flushing = false
 
     private(set) var problem: String? // why the last question to ChatGPT got no answer
@@ -27,8 +27,8 @@ final class Translator {
         let key = to + "\n" + text
         if let found = answers[key] { return found.text.isEmpty ? (text, nil) : (found.text, found.lang) }
         if asked.insert(key).inserted {
-            queue.append(text)
-            if !flushing { flushing = true; Task { try? await Task.sleep(for: .milliseconds(300)); await flush(to) } } // one question per screen
+            queue.append((to, text))
+            if !flushing { flushing = true; Task { try? await Task.sleep(for: .milliseconds(300)); await flush() } } // one question per screen
         }
         return (text, nil)
     }
@@ -43,10 +43,13 @@ final class Translator {
         return lang.rawValue.split(separator: "-").first.map(String.init) != codes[to]
     }
 
-    private func flush(_ to: String) async {
-        let waiting = Array(Set(queue)), batch = waiting.prefix(200)
-        queue = Array(waiting.dropFirst(200)); flushing = !queue.isEmpty // the rest in the next question
-        if flushing { Task { await flush(to) } }
+    // one language a question: the first waiting one's, the rest (more of it, or another language) in the next
+    private func flush() async {
+        guard let to = queue.first?.to else { flushing = false; return }
+        let batch = Set(Array(Set(queue.filter { $0.to == to }.map(\.text)).prefix(200)))
+        queue.removeAll { $0.to == to && batch.contains($0.text) }
+        flushing = !queue.isEmpty
+        if flushing { Task { await flush() } }
         let none = Answer(lang: "", text: "")
         for text in batch where !Self.foreign(text, to: to) { answers[to + "\n" + text] = none }
         let ask = batch.filter { answers[to + "\n" + $0] == nil }

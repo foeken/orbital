@@ -160,10 +160,18 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         }
     }
 
+    // A change told while a read is under way is not lost: one more read follows it, however many came
+    @ObservationIgnored private var again = false
     func refresh() async {
-        guard phase == .ready, !loading, !Self.isSample else { return }
+        guard phase == .ready, !Self.isSample else { return }
+        guard !loading else { again = true; return }
         loading = true
-        defer { loading = false }
+        await read()
+        loading = false
+        if again { again = false; await refresh() }
+    }
+
+    private func read() async {
         let started = session
         do {
             let read: [Row] = try await call("orbital.demo(demo); return await orbital.timeline(pages)", ["pages": pages, "demo": demo])
