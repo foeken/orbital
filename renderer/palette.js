@@ -305,7 +305,9 @@ function paletteRows(q, typed = q) {
   // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.
   if (palDoc && tana.openAgentTask && agentIds.has(palDoc.id) && agentStates.has(palDoc.id) && agentTasks.has(palDoc.id)) {
     const doc = palDoc, a = agentNamed(agentTasks.get(doc.id).agent);
-    if (a) rows.push({ rank: 'codexOpen', group: docGroup, icon: a.icon, label: 'Go to ' + a.label + ' task', run: () => openAgentTask(doc.id) });
+    // a task on another Mac stays offered, greyed with where it is (the badge is not a button there either)
+    const away = agentStateOf(doc.id) === 'elsewhere';
+    if (a) rows.push({ rank: 'codexOpen', group: docGroup, icon: a.icon, label: 'Go to ' + a.label + ' task', ...(away ? { disabled: true, hint: 'On another Mac: open it there' } : {}), run: () => openAgentTask(doc.id) });
   }
   if (palDoc && tana.accessOptions) {
     if (!palette.hidden) loadAccess(palDoc.id); // for the open palette only (#274): a key on a choice folded under these asks in runAction
