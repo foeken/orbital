@@ -144,7 +144,7 @@ struct TimelineScreen: View {
                 // line saying so, as the desktop keeps the block
                 RailRow(time: "Now", railTop: 24, bottom: 0) { Marker(icon: "todayTasks", tone: "new", now: false) } content: { Text("Today's Tasks") }
                 if today.isEmpty {
-                    RailRow(time: "", top: 10, bottom: 2) { Color.clear.frame(height: 1) } content: { // as much room under it as over it (measured)
+                    RailRow(time: "", top: 30, bottom: 16) { Color.clear.frame(height: 1) } content: { // as much room under it as over it (measured)
                         Text("Nothing pinned to today. Long-press a task to pin it.").font(.subheadline).foregroundStyle(.secondary)
                     }
                 } else {
@@ -153,16 +153,17 @@ struct TimelineScreen: View {
             }
             // as the desktop has it: the free time, then one stop for the meetings still to come, each hanging under it like
             // a task, its start time on its right (the rail's own time column says only Now)
-            if let free { FreeLine(free: free, time: hasToday ? "" : "Now") }
+            if let free { FreeLine(free: free, time: hasToday ? "" : "Now", bottom: upcoming.isEmpty ? 0 : 14) } // flush on the line under it, as the last meeting is
             if !upcoming.isEmpty {
                 RailRow(time: "", top: 14, bottom: 0) { Marker(icon: "meeting", tone: nil, now: false) } content: { Text("Upcoming meetings") }
                 // the last one as far from the line under it as the first is from the heading (measured)
-                ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, m in Meeting(row: m, engine: engine, top: i == 0 ? 20 : 14, bottom: 0) }
+                ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, m in Meeting(row: m, engine: engine, top: i == 0 ? 28 : 14, bottom: 0) }
             }
             if !upcoming.isEmpty || free != nil {
                 // a line across under what is still to come, before what has happened
                 if !days.isEmpty {
                     Color(.separator).frame(maxWidth: .infinity).frame(height: 1) // a List row lays a Divider out upright
+                        .padding(.top, 28).padding(.bottom, 19) // as far from what is above as from the day under it (measured)
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 16))
                         .listRowSeparator(.hidden)
                         .accessibilityHidden(true)
@@ -186,6 +187,7 @@ struct TimelineScreen: View {
             }
         }
         .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0) // a row as tall as its padding says: a short one was stretched to 44 pt and centred, so no margin was what it read
         // never the skeleton and the words on screen together: it goes in 0.15 s, then the rows come in
         .opacity(shown ? 1 : 0)
         .onChange(of: building, initial: true) { _, now in
@@ -248,7 +250,8 @@ struct Heading: View {
     let title: String
     var body: some View {
         Text(title).font(.headline).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 11).padding(.bottom, 17) // as far from the entry above as from the one under it (measured)
             .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 16))
             .listRowSeparator(.hidden)
             .accessibilityAddTraits(.isHeader)
@@ -354,7 +357,7 @@ struct TaskLines: View {
     var body: some View {
         let tasks = engine.shown(tasks)
         ForEach(Array(tasks.enumerated()), id: \.element.id) { i, task in
-            TaskLine(task: task, engine: engine, top: i == 0 ? 26 : 16, bottom: i == tasks.count - 1 ? 16 : 0)
+            TaskLine(task: task, engine: engine, top: i == 0 ? 30 : 16, bottom: i == tasks.count - 1 ? 16 : 0)
         }
     }
 }
@@ -462,9 +465,10 @@ struct Meeting: View {
 struct FreeLine: View {
     let free: Row.Free
     var time = "Now"
+    var bottom: CGFloat = 14
 
     var body: some View {
-        RailRow(time: time) { Marker(icon: "free", tone: "new", now: false) } content: {
+        RailRow(time: time, bottom: bottom) { Marker(icon: "free", tone: "new", now: false) } content: {
             TimelineView(.periodic(from: .now, by: 15)) { context in Text(Self.text(free, now: context.date)).foregroundStyle(.secondary) }
         }
     }
