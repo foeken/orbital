@@ -983,8 +983,15 @@ const fieldSigs = new Map(); // docId -> its field values as last announced (onC
 // ponytail: an owner let go (releaseOnDemand) hears no more changes, so its rows keep their audience until read again.
 // Each read replaces the row's owners, and a row let go forgets them (views.js refresh), so the index holds live rows only.
 const audienceReaders = new Map(), ownerSigs = new Map(), rowOwners = new Map(); // rowOwners: row -> the owners it was read through
-const ownerSig = (uri, n) => JSON.stringify([n.restricted, n.participants, uri.startsWith('tana:org:') ? n.memberUserProfileDocUris : null, uri.startsWith('tana:space:') ? n.title : null]);
-function forgetOwners(id) { for (const uri of rowOwners.get(id) || []) audienceReaders.get(uri)?.delete(id); rowOwners.delete(id); }
+// ownerUri: an owner moved elsewhere moves the audience its children inherit
+const ownerSig = (uri, n) => JSON.stringify([n.restricted, n.participants, n.ownerUri, uri.startsWith('tana:org:') ? n.memberUserProfileDocUris : null, uri.startsWith('tana:space:') ? n.title : null]);
+function forgetOwners(id) {
+  for (const uri of rowOwners.get(id) || []) {
+    const readers = audienceReaders.get(uri);
+    if (readers && readers.delete(id) && !readers.size) { audienceReaders.delete(uri); ownerSigs.delete(uri); }
+  }
+  rowOwners.delete(id);
+}
 async function audienceOwner(uri, id) {
   const d = await document(uri);
   if (d) {

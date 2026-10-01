@@ -4114,6 +4114,11 @@ async function main() {
     backend.timers.shift().fn();
     const meta = await asked;
     assert.deepEqual([meta.audience, meta.people.length, meta.people.every((uri) => people.includes(uri)), meta.peopleCount], ['everyone', 4, true, 6], 'four people and how many');
+    const again = backend.handlers.get('doc:taskMeta')(null, row); // read again, as the renderer does once told
+    while (!backend.timers.length) await new Promise(setImmediate);
+    backend.timers.shift().fn(); await again;
+    org.transact((l) => l.getMap('data').set('ownerUri', 'tana:space:' + ulid())); backend.onChange(org.id, { origin: 'remote' });
+    assert.equal(toldRow(), 2, 'read again, it is told again, and an owner moved elsewhere tells it too: its children inherit from the new place');
     for (let i = 0; i <= LIVE_ROWS; i++) await backend.handlers.get('doc:info')(null, make('Row ' + i));
     await backend.handlers.get('view:list')(null, 'library');
     assert.ok(unsubscribed.includes(org.id), 'the organization it read is let go with the older reads');
