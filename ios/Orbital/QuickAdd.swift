@@ -29,7 +29,7 @@ struct QuickAdd: View {
                     // recording away and ■ stops it, its words then added to the title (Codex's own dictation bar)
                     HStack(spacing: 10) {
                         if !dictation.recording { TextField("New task", text: $title, axis: .vertical).focused($focused).submitLabel(.done) }
-                        Dictate(dictation: dictation, blue: true, into: append)
+                        Dictate(dictation: dictation, into: append)
                     }
                 }
                 Section {

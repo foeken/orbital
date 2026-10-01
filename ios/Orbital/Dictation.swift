@@ -104,11 +104,10 @@ struct Listening: View {
     }
 }
 
-// The controls: a waveform button to start; while listening ✕ to throw the recording away, the dots, and ■ to stop
+// The controls: a microphone to start, the glyph alone as in Codex's composer; while listening ✕ to throw the recording away, the dots, and ■ to stop
 // (Codex's own dictation bar); a spinner while the words are being written down
 struct Dictate: View {
     let dictation: Dictation
-    var blue = false
     let into: (String) -> Void
     var body: some View {
         if dictation.recording {
@@ -118,23 +117,24 @@ struct Dictate: View {
         } else if dictation.transcribing {
             ProgressView().frame(width: 32, height: 32)
         } else {
-            Round(symbol: "waveform", label: "Dictate", blue: blue) { Task { await dictation.listen() } }
+            Button { Task { await dictation.listen() } } label: { Image(systemName: "mic").font(.system(size: 20)).foregroundStyle(.primary).frame(width: 34, height: 34) }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dictate")
         }
     }
 }
 
-// A round button: the blue one to dictate in Quick Add, grey otherwise
+// A round grey button: ✕ and ■ while listening
 struct Round: View {
     let symbol: String
     let label: String
-    var blue = false
     let action: () -> Void
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(blue ? .white : .primary)
+                .foregroundStyle(.primary)
                 .frame(width: 32, height: 32)
-                .background(Circle().fill(blue ? Color.blue : Color(.tertiarySystemFill)))
+                .background(Circle().fill(Color(.tertiarySystemFill)))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
