@@ -56,14 +56,8 @@ function settingsEl() {
       // only for whoever already has a key, as ⌘K offers Set OpenAI API key (renderer/palette.js): ChatGPT is the way in
       ...(tana.setOpenAIKey && chatgptAuth?.apiKey ? [['openaiKey', 'OpenAI API key', [act('Set …', action('openaiKey'))], true]] : []),
       ...(ai ? [
-        // the Quick AI answers the small questions (Auto-translate, Discuss with, Auto-pick type, type icons), the Regular AI reads images
-        ...[['quick', 'Quick', 'Translating, Discuss with, types and icons'], ['', 'Regular', 'Reading images']].flatMap(([kind, name, what]) => {
-          const k = (w) => (kind ? kind + w : w.toLowerCase()), model = ai[k('Model')], effort = ai[k('Effort')];
-          return [
-            ['brain', name + ' AI', [...choices(ai.models.map((m) => [aiModelLabel(m), m === model, () => settingsSetAI(k('Model'), m), m])), hint(what)]],
-            ['sparkle', name + ' thinking', choices(ai[k('Efforts')].map((x) => [x === 'xhigh' ? 'Extra high' : x[0].toUpperCase() + x.slice(1), x === effort, () => settingsSetAI(k('Effort'), x)]))],
-          ];
-        }),
+        // the Quick AI answers the small questions, the Regular AI reads images: each changed on ⌘K Choose models
+        ['brain', 'Models', [chip('Quick · ' + aiModelLabel(ai.quickModel)), chip('Regular · ' + aiModelLabel(ai.model)), act('Choose …', action('models'))]],
       ] : []),
       // the agents that are on (main/agent.js), changed on the same page as ⌘K Choose agents
       ...(tana.agentList ? [['robot', 'Agents', [...(agentsOn().length ? agentsOn().map((a) => chip(a.label)) : [hint('None')]), act('Choose …', action('agents'))]]] : []),
@@ -99,8 +93,32 @@ function settingsEl() {
 }
 // gpt-6-sol reads Sol 6, gpt-5.6-terra Terra 5.6, gpt-5.5 GPT-5.5: the list holds a name in more than one version
 const aiModelLabel = (id) => id.replace(/^gpt-([\d.]+)-?(.*)$/, (_, version, name) => (name ? name[0].toUpperCase() + name.slice(1) + ' ' : 'GPT-') + version);
+const aiEffortLabel = (x) => (x === 'xhigh' ? 'Extra high' : x[0].toUpperCase() + x.slice(1));
+// ---- Choose models: the Quick AI and the Regular AI (main/ai.js options), a segment each that ⇥ switches, as the chat
+// composer's ⇥ switches who it asks; ↩ on a model or a thinking level stores it, and each answer is the options again ----
+let modelsOptions = null, modelsQuick = true;
+const MODELS_USE = { quick: 'for translating, Discuss with, types and icons', regular: 'for reading images' };
+const modelsPlaceholder = () => (modelsQuick ? 'Quick AI · ⇥ Regular AI' : 'Regular AI · ⇥ Quick AI');
+function modelsRows(q) {
+  const ai = modelsOptions;
+  if (!ai || ai instanceof Error) return [{ group: 'Models', label: ai ? ai.message : 'Loading…', disabled: true, note: true }];
+  const k = (w) => (modelsQuick ? 'quick' + w : w.toLowerCase()), use = MODELS_USE[modelsQuick ? 'quick' : 'regular'];
+  const rows = [...ai.models.map((m) => ({ group: 'Model · ' + use, icon: 'brain', label: aiModelLabel(m), hint: m === ai[k('Model')] ? '✓' : '', keepOpen: true, run: () => settingsSetAI(k('Model'), m) })),
+    ...ai[k('Efforts')].map((x) => ({ group: 'Thinking', icon: 'sparkle', label: aiEffortLabel(x), hint: x === ai[k('Effort')] ? '✓' : '', keepOpen: true, run: () => settingsSetAI(k('Effort'), x) }))];
+  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
+}
 function settingsSetAI(key, value) {
-  run(async () => { await tana.setAiOption(key, value); settingsRefresh(); }); // read again: a read still out from before the write must not land over it
+  run(async () => { modelsOptions = await tana.setAiOption(key, value); renderPalette(); settingsRefresh(); }); // the Settings page reads again: a read still out from before the write must not land over it
+}
+function openModelsPalette() {
+  modelsOptions = null; modelsQuick = true;
+  openPage('models', modelsPlaceholder(), { rows: modelsRows, back: BACK_TO_COMMANDS, keys: (e) => {
+    if (e.key !== 'Tab' || e.metaKey || e.ctrlKey || e.altKey) return false;
+    modelsQuick = !modelsQuick; palInput.placeholder = modelsPlaceholder(); palIndex = 0; renderPalette();
+    return true;
+  } });
+  const seq = palSeq, landed = (options) => { if (seq === palSeq) { modelsOptions = options; renderPalette(); } }; // one answer, not a list (loadList)
+  tana.aiOptions().then(landed, (e) => landed(e instanceof Error ? e : new Error(String(e))));
 }
 // Every redraw builds the page anew, so a control that had the keyboard (Tab, then Space on High) gets it back
 function drawSettings(into) {

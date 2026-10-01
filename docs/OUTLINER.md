@@ -1107,8 +1107,9 @@ app page too, known and remembered the same way, but it has no rows: the rendere
   in a pane to the right (`openElsewhere('right')`); one already on screen in another pane is focused instead. The page
   draws no rows and asks main for no children (renderer/render.js): it is sections of field rows (`.fields`), each a
   glyph, a grey label and its value, and only lasting choices are on it — General (Theme: Light, Dark, System; Home, set
-  with ⌘K Set as Home), Language (Auto-translate), AI (ChatGPT sign-in and, only while one is stored, the OpenAI API key, marked **This Mac**; Quick AI
-  and Regular AI, each a model and its thinking (the synced settings.AI_KEYS) over `ai:options`/`ai:setOption`,
+  with ⌘K Set as Home), Language (Auto-translate), AI (ChatGPT sign-in and, only while one is stored, the OpenAI API key, marked **This Mac**; Models
+  (the Quick and the Regular AI, each a model and its thinking, the synced settings.AI_KEYS, changed on ⌘K Choose models, where ⇥
+  switches between the two) over `ai:options`/`ai:setOption`,
   which take only main/ai.js's own lists; Agents, the ones that are on, over `agentList`) and Lists (hidden titles, Show MCP chats). A control changes its
   setting the way its Cmd+K row does, mostly by running that row (`runAction`: Auto-translate, ChatGPT, the API key,
   Choose agents and hidden titles open their palette pages). The page reads its values again when the palette closes,
