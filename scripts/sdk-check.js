@@ -2565,6 +2565,13 @@ async function main() {
     assert.equal((await backend.handlers.get('search')(null, 'helper')).some((n) => n.title === 'MCP: helper'), false, 'search is filtered by the same switch, not only the views');
     await backend.handlers.get('mcp:setHidden')(null, false);
     assert.equal((await backend.handlers.get('search')(null, 'helper')).some((n) => n.title === 'MCP: helper'), true, 'and they come back when it is off');
+    // the Settings page's Model and Thinking (main/ai.js setOption): main's own choices only, the renderer being input from outside
+    assert.equal((await backend.handlers.get('ai:options')()).model, 'gpt-5.6-terra', 'unset, the model is the default');
+    assert.equal((await backend.handlers.get('ai:setOption')(null, 'effort', 'high')).effort, 'high', 'a listed effort is stored');
+    await assert.rejects(async () => backend.handlers.get('ai:setOption')(null, 'model', 'gpt-4o'), /Not an AI choice/, 'a model off the list is refused');
+    await assert.rejects(async () => backend.handlers.get('ai:setOption')(null, 'openaiApiKey', 'sk-x'), /Not an AI choice/, 'and so is any other setting');
+    assert.equal((await backend.handlers.get('ai:options')()).effort, 'high', 'a refused write changes nothing');
+    await backend.handlers.get('ai:setOption')(null, 'effort', 'low');
     assert.equal(payload.truncated, true);
     assert.equal('iconSvg' in payload.nodes.find((n) => n.id === doc.id), false, 'rows carry no app-local icon');
     assert.deepEqual(Object.keys(cache.list()), ['library'], 'the fetched rows use the view id as their cache section');

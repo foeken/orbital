@@ -443,4 +443,15 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
   return list.map(shown);
 }
 
-module.exports = { suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };
+// The model and effort every question here asks with (ask above), chosen on the Settings page (renderer/settings.js) and
+// synced. The page is input from outside the process: only these choices are stored.
+const MODELS = ['gpt-5.6-luna', DEFAULT_MODEL, 'gpt-5.6-sol'], EFFORTS = ['low', 'medium', 'high'];
+const options = () => ({ model: settings.get('aiModel') || DEFAULT_MODEL, effort: settings.get('aiEffort') || DEFAULT_EFFORT, models: MODELS, efforts: EFFORTS });
+function setOption(key, value) {
+  const allowed = key === 'model' ? MODELS : key === 'effort' ? EFFORTS : [];
+  if (!allowed.includes(value)) throw new Error('Not an AI choice: ' + key);
+  settings.set(key === 'model' ? 'aiModel' : 'aiEffort', value);
+  return options();
+}
+
+module.exports = { options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };

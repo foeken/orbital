@@ -396,6 +396,7 @@ function paletteRows(q, typed = q) {
     for (const v of savedViews()) rows.push({ id: v.id || 'savedView:' + v.name, group: 'Saved views', icon: 'splitPanes', label: v.name, run: () => run(() => openSavedView(v)) });
   }
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
+  rows.push({ id: 'openSettings', group: 'Settings', icon: 'options', label: 'Open settings', run: () => openSettings() }); // the Settings page (renderer/settings.js), first in its group
   rows.push({ id: 'textLarger', group: 'Settings', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
   rows.push({ id: 'textSmaller', group: 'Settings', icon: 'textSmaller', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
   rows.push({ id: 'textReset', group: 'Settings', icon: 'textReset', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
