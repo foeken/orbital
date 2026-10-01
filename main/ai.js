@@ -1,6 +1,6 @@
 'use strict';
 // The one place this app talks to a model (`ask`), for two Cmd+K pages (renderer/palette.js): "Discuss with …", a
-// document's title in and the person or group it names out; and "Classify type", a document and the types it can be
+// document's title in and the person or group it names out; and "Auto-pick type", a document and the types it can be
 // given in and the odds of each out; and Translate, a note's words shown in English and never saved (renderer/translate.js).
 // ChatGPT login takes priority; the API key is the fallback.
 // The API key stays in local settings. ChatGPT auth lives in a separate, local Codex home, never in Tana.
@@ -19,7 +19,7 @@ const { send } = require('./state');
 // The fast AI, for both pages: Terra with a little reasoning. Measured on 2026-09-24 through a ChatGPT sign-in against
 // Luna with none: no slower (a Discuss with suggestion took 5.8 s against 5.7 s, median of six; the wait is the round
 // trip, not the model), and right where Luna was sure and wrong — it typed twelve real documents without a confident
-// mistake, where Luna made one or two in every run (docs/OUTLINER.md, Classify type).
+// mistake, where Luna made one or two in every run (docs/OUTLINER.md, Auto-pick type).
 const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
 const ENDPOINT = 'https://api.openai.com/v1/responses';
 const TIMEOUT_MS = 20000;
@@ -273,7 +273,7 @@ async function suggestDiscussWith(title, fetchImpl = globalThis.fetch, userData)
   return answer == null ? null : cleanName(answer);
 }
 
-// ---- Classify type: which of the types a document can be given fits it, "No type" among them ----
+// ---- Auto-pick type: which of the types a document can be given fits it, "No type" among them ----
 // A type is described by its own words: the title, the description, and the AI instructions Tana's own AI follows
 // when it writes one of that type. The types are numbered, so the answer names none of them by a title that could
 // repeat. The model gives every option odds; whether the best is sure enough to apply is the page's call.

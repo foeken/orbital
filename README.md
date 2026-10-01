@@ -50,7 +50,7 @@ on this Mac or on another machine you have registered over SSH; the row wears a 
 the task's state and opens it, and says where the work is when it is elsewhere. "Discuss with…"
 makes a node a discussion task with someone, and a model can read its title to suggest who (bring
 your own OpenAI key or sign in with ChatGPT; only the title is sent, and the key stays on the machine).
-"Classify type" has the same model pick a node's type from each type's description and AI
+"Auto-pick type" has the same model pick a node's type from each type's description and AI
 instructions: a sure answer is applied, otherwise you choose from the odds.
 
 **Create a task from its title.** Shift+Cmd+Space (or Cmd+K "Quick Add Task") asks for the title and,

@@ -510,7 +510,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   Add to chat …);
   a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
-  it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
+  it is (Set type, Auto-pick type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
   sensitive); the agents (Assign to Agent, Go to <agent> task, Link <agent> task …, Open in <agent>, one of each for every agent that is on); Edit visibility, Add participants … (Edit
   visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
@@ -556,7 +556,7 @@ one.
 
 **Pages.** A row that opens a page of its own (`keepOpen`) goes through `openPage`/`showPage`, which lets go of what
 the last page left behind and takes the new page's rows and back step; Escape (`backPalette`) goes where the page says:
-the command page, or for a page opened from elsewhere, the page that opened it. The pages are described with their features: Set type, Classify type, Set icon, Set colour,
+the command page, or for a page opened from elsewhere, the page that opened it. The pages are described with their features: Set type, Auto-pick type, Set icon, Set colour,
 Discuss with (§11); Edit pins, Pin to date, Pin to meeting (§9); Recently deleted, Archived types (§14); Change time /
 location, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
 
@@ -711,13 +711,13 @@ wrong twenty.
   a type applies to documents or to meetings; a space's type only goes on a document in that space, a Library type on
   anything. Its choices also fold into Cmd+K as "Set type to …" (`subAlways`). **Remove type** (`removeType`, only on a
   typed node, hinted with the type) is the removal without the page.
-- **Classify type** (`classifyType`) lets the model choose from the same list. Main reads each selectable type's own
+- **Auto-pick type** (`classifyType`) lets the model choose from the same list. Main reads each selectable type's own
   document for its `description` and `instructions` (`typeCandidates`, main/documents.js) and sends them, numbered,
   with the document's title and text (a meeting's calendar description in place of its empty content) to
   `ai.classifyType` (main/ai.js), which answers the odds of every option, No type among them, most likely first:
   `{ current, choices: [{ uri | null, title, hue, p }] }`. While it reads the page says "Reading the document…" under
   the breathing sparkle. At 80% or more (`CLASSIFY_SURE`) for a type, it is set at once, the palette closes and a note
-  says "Classified as Decision Record (91%)" ("Already …" and no write when it has it). Otherwise the page lists every
+  says "Type set to Decision Record (91%)" ("Already …" and no write when it has it). Otherwise the page lists every
   option with its odds. No type is never applied on its own. `node scripts/platform-cli.js classify <id...>` prints the
   odds and writes nothing; a type's description and AI instructions in Tana are how its answers improve.
 - **Set icon** (`setIcon`, on a type or a saved search, #521) gives a saved search a glyph of its own (its row, its page,

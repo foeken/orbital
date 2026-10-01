@@ -105,7 +105,7 @@ function mockApi() {
   docs.push(...[['mockpin0', 'Prepare the offsite agenda'], ['mockpin1', 'Book a room for the offsite']]
     .map(([id, text]) => ({ id: 'tana:text:' + id, text, kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] })));
   const all = [...docs, dutch, ...meetings, ...spaceDocs, space, ...kinds, ...chats, ...types];
-  // a note with a Tana-shaped id, in no list: the AI and agent rows (Discuss with …, Classify type, Assign to Agent,
+  // a note with a Tana-shaped id, in no list: the AI and agent rows (Discuss with …, Auto-pick type, Assign to Agent,
   // Translate into …) are only offered on a real node, which the manual's AI chapter needs (goTo('tana:text:mockai0'))
   all.push({ id: 'tana:text:mockai0', text: 'Plan the Studio pilots with Sam Okafor and Dana Brooks', kind: 'document', hasChildren: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] });
   for (const node of all) node.editable = true;
@@ -522,7 +522,7 @@ function mockApi() {
       const names = String(title || '').match(/\b[A-Z][a-z]+(?: [A-Z][a-z]+)*/g) || [];
       return names.length ? names.slice(-2).join(' and ') : null;
     },
-    // The model behind Classify type: sure of a type whose name the title says, unsure (and leaning to none) otherwise.
+    // The model behind Auto-pick type: sure of a type whose name the title says, unsure (and leaning to none) otherwise.
     classifyType: async (docId) => {
       await new Promise((done) => setTimeout(done, 700));
       const doc = all.find((d) => d.id === docId);

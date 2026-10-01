@@ -35,7 +35,7 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // Everything else is a choice about your own content, which is the same choice wherever you open the app.
 // openaiApiKey is deliberately absent: it must remain on this machine, never in Tana. ChatGPT auth is in a separate
 // local Codex home under userData, not in these settings or in the user's regular Codex home.
-// aiModel/aiEffort are which model the AI rows use ("Discuss with", "Classify type") and how hard it thinks (main/ai.js): a
+// aiModel/aiEffort are which model the AI rows use ("Discuss with", "Auto-pick type") and how hard it thinks (main/ai.js): a
 // choice about your own content, so it follows you, while the key that pays for it stays put. Neither has UI yet —
 // unset means the defaults in main/ai.js.
 // myTasks is which saved search the Work View's right half is (main/views.js myTasks), by id so a rename keeps it.

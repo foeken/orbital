@@ -443,7 +443,7 @@ ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id,
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:translate', (_e, texts, to, opts) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'), { local: !!(opts && opts.local) })); // a note shown in English, never saved (renderer/translate.js); local: this Mac's answers only
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
-// "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
+// "Auto-pick type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
 // Process image (issue #507): an image read by the model into a task or a note, made with what it read as its lines
 // and the image under them. Returns the Node for the page to open. The image is a file dropped on Create new

@@ -1,5 +1,5 @@
 'use strict';
-// Chapter 11, AI & agents (manual/ai.html): the model (ChatGPT sign-in, API key, Discuss with, Classify type, Process
+// Chapter 11, AI & agents (manual/ai.html): the model (ChatGPT sign-in, API key, Discuss with, Auto-pick type, Process
 // image, translation) and the agents (Choose agents, Assign to Agent, the badge's states, Link / Go to / Open in an agent,
 // @Codex in a chat). tana:text:mockai0 is a note with a Tana-shaped id: the AI and agent rows need a real node.
 const pal = { sel: '#palette .card', pad: 14 };
@@ -22,7 +22,7 @@ module.exports = [
   { name: 'ai-signin', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'sign in with chatgpt' }, { wait: 300 }, { key: '↩' }, { wait: 600 }, blank], clip: pal },
   // ---- the model on a node ----
   { name: 'ai-discuss', video: true, size: NARROW, setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ key: '⌘K' }, { type: 'discuss', delay: 70 }, { wait: 300 }, { key: '↩' }, { wait: 1500 }, { key: '↓' }, { wait: 500 }, { key: '↩' }, { wait: 900 }], clip: top },
-  { name: 'ai-classify', video: true, size: NARROW, setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ key: '⌘K' }, { type: 'classify', delay: 70 }, { wait: 300 }, { key: '↩' }, { wait: 1600 }, { key: '↓' }, { wait: 500 }, { key: '↩' }, { wait: 900 }], clip: top },
+  { name: 'ai-classify', video: true, size: NARROW, setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ key: '⌘K' }, { type: 'auto-pick', delay: 70 }, { wait: 300 }, { key: '↩' }, { wait: 1600 }, { key: '↓' }, { wait: 500 }, { key: '↩' }, { wait: 900 }], clip: top },
   { name: 'ai-process-clip', video: true, size: '760x480', setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ key: '⌘K' }, { type: 'process image', delay: 60 }, { wait: 400 }, { key: '↩' }, { wait: 2600 }] },
   { name: 'ai-process-drop', video: true, size: '760x480', setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ hover: '#create', page: 'shell', at: [0.14, 0.8] }, { caption: 'receipt.png, dragged from the Finder' }, drag('dragenter'), drag('dragover'), { wait: 1400 }, drag('drop'), { caption: '' }, { wait: 2600 }] },
   // ---- translation ----

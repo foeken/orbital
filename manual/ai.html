@@ -113,7 +113,7 @@
 
   <section class="topic">
     <h2 id="connect" data-short="Connect a model" data-k="chatgpt openai api key sign in sign out account model">Connect a model first</h2>
-    <p>Everything in the first half of this chapter asks a model, through your <b>ChatGPT account</b>. Signing in once turns all of it on: translation, Discuss with, Classify type, Process image and the icons for your types. The sign-in stays on this Mac.</p>
+    <p>Everything in the first half of this chapter asks a model, through your <b>ChatGPT account</b>. Signing in once turns all of it on: translation, Discuss with, Auto-pick type, Process image and the icons for your types. The sign-in stays on this Mac.</p>
     <div class="split">
       <div>
         <h3>Sign in with ChatGPT</h3>
@@ -126,7 +126,7 @@
     <h3>What each part needs</h3>
     <table class="keys">
       <tr><th>Feature</th><th>Needs</th></tr>
-      <tr><td>The name <b>Discuss with …</b> suggests, <b>Classify type</b>, <b>Process image</b>, <b>Auto-translate …</b>, <b>Translate into …</b></td><td>Sign in with ChatGPT</td></tr>
+      <tr><td>The name <b>Discuss with …</b> suggests, <b>Auto-pick type</b>, <b>Process image</b>, <b>Auto-translate …</b>, <b>Translate into …</b></td><td>Sign in with ChatGPT</td></tr>
       <tr><td>Icons for your types, picked for you</td><td>Sign in with ChatGPT</td></tr>
       <tr><td><b>Assign to Agent</b> with Tana</td><td>Nothing: Tana is always there</td></tr>
       <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with Codex or Claude</td><td>The Codex app or CLI, or Claude Code, on this Mac</td></tr>
@@ -136,16 +136,16 @@
   </section>
 
   <section class="topic">
-    <h2 id="node" data-short="Discuss with, Classify type" data-k="discussion task discuss with classify type ai sparkle odds">Ask the model about a node</h2>
+    <h2 id="node" data-short="Discuss with, Auto-pick type" data-k="discussion task discuss with auto-pick type classify ai sparkle odds">Ask the model about a node</h2>
     <p>Two rows under <b>Current node</b> in <kbd>⌘K</kbd> use the model to fill in what a document is about. Both show the sparkle while the model reads, and both leave the choice to you.</p>
     <h3>Discuss with …</h3>
     <p>For a document you want to talk through with someone. Run <b>Discuss with …</b> and type who: one colleague, two people, or a team. <kbd>↩</kbd> gives the document the <b>Discussion Task</b> type and writes your words into its <b>Discuss with</b> field. Names of people in your workspace become links to them.</p>
     <p>While the page is open the model reads the title. After <b>Reading the title…</b> its guess shows as a second row, marked <b>From the title</b>. Your own words always stay on the first row, so <kbd>↩</kbd> sends what you typed and <kbd>↓</kbd> <kbd>↩</kbd> takes the guess.</p>
     <figure class="clip wide"><video data-m="ai-discuss"></video><figcaption>The title names two people, so the model suggests them. <kbd>↓</kbd> <kbd>↩</kbd> takes the suggestion and the document becomes a <b>Discussion Task</b>.</figcaption></figure>
-    <h3>Classify type</h3>
-    <p>Run <b>Classify type</b> to let the model pick from the same types <b>Set type</b> offers. It reads the document and each type's description, then answers with the odds for every option, <b>No type</b> among them.</p>
+    <h3>Auto-pick type</h3>
+    <p>Run <b>Auto-pick type</b> to let the model pick from the same types <b>Set type</b> offers. It reads the document and each type's description, then answers with the odds for every option, <b>No type</b> among them.</p>
     <ul>
-      <li>At 80% or more it sets the type at once and says so: “Classified as Decision Record (91%)”.</li>
+      <li>At 80% or more it sets the type at once and says so: “Type set to Decision Record (91%)”.</li>
       <li>Below that it lists every option with its odds, most likely first, and you pick. The current type has a tick.</li>
       <li>It never takes a type off by itself, even when <b>No type</b> comes first.</li>
     </ul>

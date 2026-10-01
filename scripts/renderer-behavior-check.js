@@ -8221,7 +8221,7 @@ async function runDiscussWithCheck() {
   console.log('ok  Discuss with: offered to documents only, the page writes the words as typed, the model reads the title beside it, and refusals keep it open');
 }
 
-// Cmd+K "Classify type": the model weighs the types Set type would offer. A type it is sure of is applied at once; a
+// Cmd+K "Auto-pick type": the model weighs the types Set type would offer. A type it is sure of is applied at once; a
 // less sure answer is the list, every option with its odds and "No type" among them, and the choice is yours.
 async function runClassifyTypeCheck() {
   const DOC = 'tana:text:01j0doc000000000000000000', TYPE_A = 'tana:type:01j0typea00000000000000000', TYPE_B = 'tana:type:01j0typeb00000000000000000';
@@ -8278,7 +8278,7 @@ async function runClassifyTypeCheck() {
   const sure = { current: null, choices: [{ uri: TYPE_A, title: 'Decision Record', hue: 143, p: 0.91 }, { uri: null, title: 'No type', p: 0.06 }, { uri: TYPE_B, title: 'Project', hue: 268, p: 0.03 }] };
 
   // 1. Offered where a type can go — a document or a meeting — and nowhere else.
-  assert.deepEqual(plain(api.row()), { label: 'Classify type', icon: 'sparkle', keepOpen: true }, 'the row wears the glyph of what the model works out');
+  assert.deepEqual(plain(api.row()), { label: 'Auto-pick type', icon: 'sparkle', keepOpen: true }, 'the row wears the glyph of what the model works out');
   api.node({ id: 'tana:event:01j0event00000000000000000', tags: [] });
   assert.ok(api.row(), 'a meeting carries a type too');
   for (const id of ['b12', 'tana:space:01j0space00000000000000000', TYPE_A]) {
@@ -8289,10 +8289,10 @@ async function runClassifyTypeCheck() {
   // 2. Opening asks once and says it is reading; a sure answer is applied, closed and said.
   api.node({ id: DOC, tags: [] });
   api.open();
-  assert.deepEqual(plain([api.mode(), api.state().placeholder, api.asked()]), ['classify', 'Classify type\u2026', [DOC]], 'a page of its own, and one question about this document');
+  assert.deepEqual(plain([api.mode(), api.state().placeholder, api.asked()]), ['classify', 'Auto-pick type\u2026', [DOC]], 'a page of its own, and one question about this document');
   assert.deepEqual(plain(api.page()), [['Reading the document\u2026', '', 'sparkle', true]], 'which says it is working rather than looking finished');
   await api.answer(sure);
-  assert.deepEqual(plain([api.state().written, api.state().closed, api.state().notes]), [[[DOC, TYPE_A]], 1, ['Classified as Decision Record (91%)']],
+  assert.deepEqual(plain([api.state().written, api.state().closed, api.state().notes]), [[[DOC, TYPE_A]], 1, ['Type set to Decision Record (91%)']],
     'a type the model is sure of is set at once, the palette closes, and the note says what and how sure');
 
   // 3. Sure of the type it already has: nothing to write.
@@ -8325,7 +8325,7 @@ async function runClassifyTypeCheck() {
   const renders = api.state().renders;
   await api.answer(sure);
   assert.deepEqual(plain([api.mode(), api.state().written.length, api.state().renders]), ['cmd', 2, renders], 'Escape steps back, and the late answer is dropped');
-  console.log('ok  Classify type: offered where a type goes, a sure answer applied and said, otherwise every option with its odds, "No type" never applied on its own');
+  console.log('ok  Auto-pick type: offered where a type goes, a sure answer applied and said, otherwise every option with its odds, "No type" never applied on its own');
 }
 
 // Cmd+K "Set icon": the row on a type, and the page that searches the Nucleo set built into the app. The set itself

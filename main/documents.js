@@ -369,7 +369,7 @@ async function setType(id, typeUri) {
   scheduleRefresh(2000); // the row updates from the change event; this is the index catching up for the next list
   return uri;
 }
-// What Classify type weighs (main/ai.js classifyType): the document's own words, and the types Set type would let it
+// What Auto-pick type weighs (main/ai.js classifyType): the document's own words, and the types Set type would let it
 // have, each with the description and AI instructions kept on the type's document. The graph's typeDef carries
 // neither, so every candidate is read; the sync client keeps them, so the next classify costs no more calls.
 async function typeCandidates(id) {

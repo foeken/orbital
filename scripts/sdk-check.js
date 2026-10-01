@@ -714,7 +714,7 @@ async function main() {
     assert.equal(twice.mentions.length,1);
     await backend.discussWith(plain.id,'Heads of Technology');
     assert.deepEqual(seg(plain.id),[{text:'Heads of Technology'}],'a team nobody here is named after is written as it was typed');
-    // What Classify type sends (main/documents.js typeCandidates): each type the document may have, with the
+    // What Auto-pick type sends (main/documents.js typeCandidates): each type the document may have, with the
     // description and AI instructions read off the type's own document, since the graph carries neither.
     const described=make('type','Decision Record',{description:'One decision',instructions:'Return exactly one decision'});
     make('type','Space only',{ownerUri:'tana:space:'+ulid()});
@@ -836,7 +836,7 @@ async function main() {
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:500,json:async()=>({})})),/OpenAI answered 500/);
-    // Classify type: the same call, the types described by their own words beside the document, every option back with odds.
+    // Auto-pick type: the same call, the types described by their own words beside the document, every option back with odds.
     const types=[{uri:'tana:type:a',title:'Decision Record',hue:143,description:'',instructions:'Return exactly one decision'},{uri:'tana:type:b',title:'Project',description:'A piece of work with an end'}];
     const typed={title:'Postgres over Mongo',text:'Agreed: we use Postgres',current:'tana:type:b',types};
     const classified=await ai.classifyType(typed,fetchWith(answer('\u0060\u0060\u0060json\n{"1": 0.85, "2": 0.05, "none": 0.1}\n\u0060\u0060\u0060')));

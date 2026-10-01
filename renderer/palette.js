@@ -233,7 +233,7 @@ function paletteRows(q, typed = q) {
   // Or have the model choose from the same list, reading each type's description and AI instructions (main/ai.js).
   if (palDoc && tana.classifyType && tana.setType && isRealId(palDoc.id) && TYPED_KIND.test(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'classifyType', group: docGroup, icon: 'sparkle', label: 'Classify type', hint: 'AI picks the type', keepOpen: true, run: () => openClassifyPalette(doc) });
+    rows.push({ id: 'classifyType', group: docGroup, icon: 'sparkle', label: 'Auto-pick type', hint: 'AI picks the type', keepOpen: true, run: () => openClassifyPalette(doc) });
   }
   // And straight out of one: a typed document or meeting only, named after the type it takes off. The same one write
   // as "No type" on Set type, one key instead of a page.
@@ -780,11 +780,11 @@ function openTypePalette(doc) {
   typeCtx = doc; loadTypeList(doc);
   openPage('setType', 'Set type to…', { rows: typeRows, back: BACK_TO_COMMANDS });
 }
-// ---- Classify type: the model weighs the types Set type would offer, "No type" among them ----
+// ---- Auto-pick type: the model weighs the types Set type would offer, "No type" among them ----
 // One call per open (main/ai.js classifyType). A type it is sure of is applied at once, as choosing it on Set type
 // would; anything less sure is the list, most likely first, with the odds beside each, and the choice is yours.
 // "No type" is only ever applied by choosing it: a model sure that nothing fits takes no type off on its own.
-const CLASSIFY_GROUP = 'Classify type';
+const CLASSIFY_GROUP = 'Auto-pick type';
 const CLASSIFY_SURE = 0.8; // ponytail: the model's own odds, uncalibrated; raise it if it applies types you would not
 let classifyCtx = null, classifyAI = null; // the document, and { state: 'thinking'|'ready'|'failed', current, choices, error }
 function openClassifyPalette(doc) {
@@ -800,9 +800,9 @@ function openClassifyPalette(doc) {
     const sure = best.title + ' (' + Math.round(best.p * 100) + '%)';
     if (best.uri === mine.current) { closePalette(); showNote('Already ' + sure); return; }
     renderPalette(); // the list is up while the type is written, so a refused write leaves it there to choose from
-    run(async () => { await tana.setType(doc.id, best.uri); closePalette(); showNote('Classified as ' + sure); });
+    run(async () => { await tana.setType(doc.id, best.uri); closePalette(); showNote('Type set to ' + sure); });
   });
-  openPage('classify', 'Classify type…', { rows: classifyRows, back: BACK_TO_COMMANDS });
+  openPage('classify', 'Auto-pick type…', { rows: classifyRows, back: BACK_TO_COMMANDS });
 }
 function classifyRows(q) {
   const doc = classifyCtx, ai = classifyAI;
