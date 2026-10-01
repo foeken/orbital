@@ -21,6 +21,10 @@ const { send } = require('./state');
 // trip, not the model), and right where Luna was sure and wrong — it typed twelve real documents without a confident
 // mistake, where Luna made one or two in every run (docs/OUTLINER.md, Auto-pick type).
 const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
+// Auto-translate always asks the quick one, whatever the Settings page chose: many short titles, where a bigger model
+// costs time and gains nothing; the choice there is for reading images, typing and the other jobs (the iPhone the same:
+// ios/Orbital/Translator.swift)
+const TRANSLATE_MODEL = DEFAULT_MODEL;
 const ENDPOINT = 'https://api.openai.com/v1/responses';
 const TIMEOUT_MS = 20000;
 const INSTRUCTIONS = [
@@ -425,7 +429,7 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
   if (only.local) return list.map((t) => (known.has(t) ? shown(t) : { ask: true }));
   if (missing.length) {
     // each text with its id, its answer read by the same id: never by position, which one answer left out shifts
-    const asked = translating.then(() => ask(TRANSLATE_INSTRUCTIONS(to), JSON.stringify(missing.map((text, i) => ({ id: i + 1, text }))), fetchImpl, userData, undefined, { timeout: TRANSLATE_TIMEOUT, schema: TRANSLATE_SCHEMA, ...only }));
+    const asked = translating.then(() => ask(TRANSLATE_INSTRUCTIONS(to), JSON.stringify(missing.map((text, i) => ({ id: i + 1, text }))), fetchImpl, userData, undefined, { model: TRANSLATE_MODEL, effort: DEFAULT_EFFORT, timeout: TRANSLATE_TIMEOUT, schema: TRANSLATE_SCHEMA, ...only }));
     translating = asked.catch(() => {});
     const answer = await asked;
     let out = null;

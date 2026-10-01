@@ -44,7 +44,7 @@ struct SettingsView: View {
                 } header: {
                     Header("ChatGPT")
                 } footer: {
-                    Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone.")
+                    Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone. Model and Thinking are for reading images; Auto-translate stays on Terra 5.6.")
                 }
                 Section {
                     // the language notes are shown in, the same synced setting as Cmd+K Auto-translate … on the Mac

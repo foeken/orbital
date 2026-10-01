@@ -821,10 +821,12 @@ async function main() {
     settings.set('aiModel','gpt-6-sol'); settings.set('aiEffort','high');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
     assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-6-sol','high'],'both are settings, changeable without a release');
+    await ai.translate(['Open vraag over het budget'],'English',fetchWith(answer('[]')),undefined,{detect:null});
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'Auto-translate keeps the quick model whatever was chosen');
     assert.equal(settings.isSynced('aiModel')&&settings.isSynced('aiEffort'),true,'and they follow you, unlike the key that pays for them');
     settings.set('aiModel','gpt-4o'); settings.set('aiEffort','extreme'); // synced from an older build or another Mac: off the Settings page's lists
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
-    assert.deepEqual([calls[2].init.body.model,calls[2].init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'a stored value off the lists is never sent: the default is');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'a stored value off the lists is never sent: the default is');
     const shown = await ai.options();
     assert.deepEqual([shown.model,shown.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'and the Settings page shows the default too');
     assert.equal(settings.isSynced('openaiApiKey'),false,'which never leaves this machine');

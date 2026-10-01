@@ -14,6 +14,9 @@ final class Translator {
     // what every question to ChatGPT here asks with: the desktop Settings page's Model and Thinking (synced aiModel, aiEffort),
     // main/ai.js DEFAULT_MODEL and DEFAULT_EFFORT until it names others
     private(set) var model = "gpt-5.6-terra"
+    // translations always ask the quick one, whatever was chosen (main/ai.js TRANSLATE_MODEL): many short titles, where a
+    // bigger model costs time and gains nothing
+    static let translateModel = "gpt-5.6-terra"
     private(set) var effort = "low"
     private(set) var answers: [String: Answer] = (UserDefaults.standard.data(forKey: "translations").flatMap { try? JSONDecoder().decode([String: Answer].self, from: $0) }) ?? [:]
     @ObservationIgnored private var asked = Set<String>()
@@ -59,7 +62,7 @@ final class Translator {
         guard !ask.isEmpty else { return save() }
         let found: [Int: Answer]
         do {
-            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: model, effort: effort) else {
+            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: Self.translateModel, effort: "low") else {
                 problem = "Sign in with ChatGPT"
                 for text in ask { asked.remove(to + "\n" + text) } // asked again once signed in
                 return save()

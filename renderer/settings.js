@@ -56,7 +56,7 @@ function settingsEl() {
       // only for whoever already has a key, as ⌘K offers Set OpenAI API key (renderer/palette.js): ChatGPT is the way in
       ...(tana.setOpenAIKey && chatgptAuth?.apiKey ? [['openaiKey', 'OpenAI API key', [act('Set …', action('openaiKey'))], true]] : []),
       ...(ai ? [
-        ['brain', 'Model', choices(ai.models.map((m) => [aiModelLabel(m), m === ai.model, () => settingsSetAI('model', m), m]))],
+        ['brain', 'Model', [...choices(ai.models.map((m) => [aiModelLabel(m), m === ai.model, () => settingsSetAI('model', m), m])), hint('Auto-translate stays on Terra 5.6')]],
         ['sparkle', 'Thinking', choices(ai.efforts.map((x) => [x === 'xhigh' ? 'Extra high' : x[0].toUpperCase() + x.slice(1), x === ai.effort, () => settingsSetAI('effort', x)]))],
       ] : []),
       // the agents that are on (main/agent.js), changed on the same page as ⌘K Choose agents
