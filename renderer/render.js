@@ -393,7 +393,11 @@ function renderOutline() {
     if (old && old.dataset.sig === sig && !old.classList.contains('leaving') && !old.querySelector(':scope > .children')) { mkItem(n.id, n, parent); return old; }
     const el = parent ? childEl(n, parent) : nodeEl(n, n.id, null); el.dataset.sig = sig; return el; // childEl: a block row keeps its page's document
   };
-  if (parent) {
+  if (parent && parent.docId === SETTINGS_PAGE) { // a page of controls, not rows: nothing to ask main for (renderer/settings.js)
+    list = []; caretOnOpen = false;
+    drawSettings(outline);
+    chatAfterRender(null);
+  } else if (parent) {
     if (!parent.node.draft) ensureLoaded(parent);
     list = parent.node.draft ? [] : childrenOf(parent) || [];
     // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page

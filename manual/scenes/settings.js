@@ -26,6 +26,10 @@ const card = [310, 76, 660, 556];
 
 
 module.exports = [
+  // ---- the Settings page: ⌘, opens it in a pane to the right (live: real Trellis panes); its first new page is '4' ----
+  { name: 'settings-panel', size: '1440x900', setup: [kit.live(), open('mockdoc0'), { wait: 800 }, { click: '#title' }], steps: [{ key: '⌘,' }, { wait: 2400 }] },
+  { name: 'settings-open', video: true, size: '1440x900', setup: [kit.live(), open('mockdoc0'), { wait: 800 }, { click: '#title' }], steps: [
+    { key: '⌘K' }, { type: 'settings', delay: 70 }, { wait: 400 }, { key: '↩' }, { wait: 2000 }, { click: '.settings .sopt', text: 'High', page: '4' }, { wait: 1400 }] },
   // ---- how it looks ----
   { name: 'settings-theme', video: true, size: '1000x640', setup: [stubs, open('mockdoc0'), { wait: 900 }, { click: '#title' }], steps: [
     { key: '⌘K' }, { type: 'toggle dark', delay: 60 }, { wait: 400 }, { key: '↩' }, { wait: 1300 }, { key: '⌘K' }, { type: 'toggle light', delay: 60 }, { wait: 400 }, { key: '↩' }, { wait: 1000 }], clip: { page: '' } },

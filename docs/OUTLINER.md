@@ -531,7 +531,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   A page on your day node for today or your node for this week (known by id, found at Save view and never made: renderer/palette.js
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
-- **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
+- **Settings**: Open settings (⌘,, the Settings page: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
   key. **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
@@ -1019,7 +1019,8 @@ A row is picked up by its marker and dropped where a line says it will land (ren
 Notifications, Proposals and the Timeline are pages of the app's own: an `orbital:` id no Tana node can have, known to
 the renderer from boot (`extra` with `appPage: true`), so `goTo`, Back and Recent reach them without asking main. Their
 rows are `outline:children` of that id. They have no pills, filter, draft row, presence room or pins, and Cmd+K offers
-nothing about them as documents. Each is a place the app remembers, so ⌘R on one reloads onto it.
+nothing about them as documents. Each is a place the app remembers, so ⌘R on one reloads onto it. Settings is an
+app page too, known and remembered the same way, but it has no rows: the renderer draws its controls itself (below).
 
 - **Notifications** (issue #18; `orbital:notifications`, Views after Inbox, hinted "2 unread"). main/inbox.js reads the
   user's `tana:user-inbox` document (sdk/inbox.js) into one read-only row per notification, newest first. A row is
@@ -1090,6 +1091,21 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
     IntersectionObserver on "Show three more days", which also works pressed and reads "Loading…"), up to 120 pages
     (`setPages`); a page too short to scroll keeps reading until it fills the screen. Watched nodes last updated before
     the window are not asked for history. No filters.
+- **Settings** (issue #672; `orbital:settings`, renderer/settings.js). Opened by Cmd+K **Open settings** (first under
+  Settings), its key ⌘, (`DEFAULT_HOTKEYS`, recordable) and the app menu's **Settings…** (main.js `createMenu`, which shows
+  ⌘, but leaves the key to the row and asks the shell to run the row in the front pane: shell.js `action`). It opens
+  in a pane to the right (`openElsewhere('right')`); one already on screen in another pane is focused instead. The page
+  draws no rows and asks main for no children (renderer/render.js): it is sections of field rows (`.fields`), each a
+  glyph, a grey label and its value, and only lasting choices are on it — General (Theme: Light, Dark, System; Home, set
+  with ⌘K Set as Home), Language (Auto-translate), AI (ChatGPT sign-in and the OpenAI API key, marked **This Mac**; Model
+  Luna/Terra/Sol and Thinking Low/Medium/High, the synced `aiModel`/`aiEffort` over `ai:options`/`ai:setOption`,
+  which take only main/ai.js's own lists; Codex hosts) and Lists (hidden titles, Show MCP chats). A control changes its
+  setting the way its Cmd+K row does, mostly by running that row (`runAction`: Auto-translate, ChatGPT, the API key,
+  Codex hosts and hidden titles open their palette pages). The page reads its values again when the palette closes,
+  when a setting arrives from another page or Mac (hosts edited elsewhere announce themselves too), on a global refresh
+  (hidden titles edited elsewhere) and when the ChatGPT status changes; only the newest read lands, and a redraw gives
+  the keyboard back to the control that had it (drawSettings). Text size, shortcuts, the
+  sensitive eye and demo mode keep their own keys and rows and are not on it.
 
 ### Chats
 
