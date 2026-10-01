@@ -1630,7 +1630,8 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 
 /* 6 Your keys: ⇧⌘K on a row, three keys recorded, and the row wears them */
 .hv-panes { padding-top: 26px; }
-.hv-ai { align-items: center; padding: 0; }
+.hv-ai, .hv-phone { align-items: center; padding: 0; }
+.hv-phone img { width: 156px; height: 156px; padding: 12px; background: #fff; border-radius: 12px; } /* the TestFlight link (help-testflight.svg, qrencode): dark on white in either theme, as a camera reads it */
 .hv-ai svg { width: 72px; height: 72px; color: #1a1a1a; }
 [data-theme="dark"] .hv-ai svg { color: #d0d2d2; }
 .hv-win { display: flex; gap: 1px; width: 470px; height: 176px; overflow: hidden; background: #e4e4e4; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .05); }
