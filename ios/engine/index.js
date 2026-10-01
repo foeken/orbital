@@ -226,6 +226,8 @@ const refusedSoon = (id) => new Promise((resolve) => {
   S.client.sync.on('write-denied', on);
 });
 
+const LANGS = ['English', 'Dutch', 'German', 'French', 'Spanish']; // renderer/translate.js TRANSLATE_LANGS
+
 window.orbital = {
   // true once signed in and connected; false when this web view has no Tana session
   async connect() {
@@ -340,9 +342,17 @@ window.orbital = {
   // What the app needs besides rows, read at each refresh: Auto-translate as the desktop has it (renderer/translate.js:
   // the language chosen there, a synced preference, and the model the AI rows use; the phone asks ChatGPT itself,
   // Translator.swift), what is sensitive, and what is pinned to today (a long press offers to pin or unpin)
+  // Settings' Auto-translate: the same synced preference the desktop's Cmd+K Auto-translate … writes (renderer/translate.js
+  // setTranslateTo), off as no value; answered once it is in the settings document
+  async translateTo(lang) {
+    const to = LANGS.includes(lang) ? lang : null;
+    settings.setPref('translateTo', to || undefined);
+    await settings.flush();
+    return JSON.stringify(to);
+  },
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
-    return JSON.stringify({ to: ['English', 'Dutch', 'German', 'French', 'Spanish'].includes(to) ? to : null, model: settings.get('aiModel') || null,
+    return JSON.stringify({ to: LANGS.includes(to) ? to : null, model: settings.get('aiModel') || null,
       sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].includes(today())) });
   },
   // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced

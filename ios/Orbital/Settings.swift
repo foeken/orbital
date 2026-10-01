@@ -29,11 +29,17 @@ struct SettingsView: View {
                     Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone.")
                 }
                 Section {
-                    // the language chosen in Orbital on the Mac, or why the last translation did not come
-                    LabeledContent { Text(engine.translator.status) } label: { Row(glyph: "language", title: "Auto-translate") }
+                    // the language notes are shown in, the same synced setting as Cmd+K Auto-translate … on the Mac
+                    Picker(selection: Binding { engine.translator.to ?? "" } set: { lang in Task { await engine.translate(into: lang.isEmpty ? nil : lang) } }) {
+                        Text("Off").tag("")
+                        ForEach(Translator.languages, id: \.self) { Text($0).tag($0) }
+                    } label: { Row(glyph: "language", title: "Auto-translate") }
+                    .pickerStyle(.menu)
+                    .tint(.secondary) // its value in grey, as the other rows have theirs
                     Toggle(isOn: Binding { engine.demo } set: { engine.demo = $0 }) { Row(glyph: "hidden", title: "Demo mode") }.tint(.green) // the switch in its own colour: in the rows' text colour it is white on white
                     LabeledContent { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") } label: { Row(glyph: "info", title: "Version") }
                 } header: { Header("Orbital") } footer: {
+                    if engine.translator.to != nil, let problem = engine.translator.problem { Text("Auto-translate: " + problem) } // why the last translation did not come
                     Text("Demo mode shows made-up words and names in place of yours, for showing Orbital to someone. Nothing is saved to Tana while it is on.")
                 }
                 // signing out, apart from everything else and in red, as the ChatGPT app has its Log out

@@ -227,6 +227,13 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
     func pin(_ id: String, _ on: Bool) async { await act("return await orbital.pin(id, on)", ["id": id, "on": on]) }
+    // Settings' Auto-translate: the synced preference (orbital.translateTo), shown at once and kept if Tana takes it
+    func translate(into to: String?) async {
+        let was = translator.to
+        translator.use(to: to, model: nil)
+        guard !Self.isSample else { return }
+        do { let _: String? = try await call("return await orbital.translateTo(to)", ["to": to ?? NSNull()]) } catch { translator.use(to: was, model: nil); self.error = error.localizedDescription }
+    }
     func markSensitive(_ id: String, _ on: Bool) async { await act("return await orbital.sensitive(id, on)", ["id": id, "on": on]) }
     // Long press, Assign to …: the task whose picker is open (AssignSheet), the people to pick from, and the one picked
     struct Assigning: Identifiable { let id: String; let current: [String]?; let then: () async -> Void }

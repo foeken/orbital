@@ -5,7 +5,7 @@ import SwiftUI
 // shown in the language chosen in Orbital (a synced preference), on screen only; nothing is ever saved over them. This
 // phone tells which are in another language with Apple's NaturalLanguage, as the Mac does, and asks ChatGPT for those
 // only, with your ChatGPT sign-in, the way Codex asks it. Every answer is kept on this phone, so a title is asked once.
-// What is marked sensitive is never sent to the model, as on the desktop. status says what it is doing, for Settings.
+// What is marked sensitive is never sent to the model, as on the desktop. problem says why the last translation did not come, for Settings.
 @MainActor @Observable
 final class Translator {
     struct Answer: Codable { let lang: String; let text: String } // text "": nothing to translate
@@ -18,7 +18,6 @@ final class Translator {
     @ObservationIgnored private var flushing = false
 
     private(set) var problem: String? // why the last question to ChatGPT got no answer
-    var status: String { to == nil ? "Off" : problem ?? to! }
 
     func use(to: String?, model: String?) { self.to = to; if let model { self.model = model } }
 
@@ -34,6 +33,7 @@ final class Translator {
         return (text, nil)
     }
 
+    static let languages = ["English", "Dutch", "German", "French", "Spanish"] // renderer/translate.js TRANSLATE_LANGS
     private static let codes = ["English": "en", "Dutch": "nl", "German": "de", "French": "fr", "Spanish": "es"]
     // main/ai.js DETECT_SURE: below it a text is too short or all names to say ("Martijn - Andre"), and is shown as written
     private static func foreign(_ text: String, to: String) -> Bool {
