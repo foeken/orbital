@@ -77,8 +77,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         if log.count > 100 { log.removeFirst() }
     }
 
-    // engine.js says 'ready' once it is loaded on the session page
+    // engine.js says 'ready' once it is loaded on the session page, and 'changed' when the Timeline moved under it
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.body as? String == "changed" { Task { await refresh() }; return }
         guard message.body as? String == "ready" else { return }
         Task { await connect() }
     }

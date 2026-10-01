@@ -45,6 +45,7 @@ struct Row: Decodable, Identifiable {
         let today: Bool?
         let upcoming: Bool?
         let free: Free?
+        let recording: Bool? // a meeting under way whose call is being recorded or transcribed (main/timeline.js)
     }
 
     var date: Date { createdAt.flatMap(Self.parse) ?? .now }
@@ -287,7 +288,7 @@ struct Entry: View {
     var body: some View {
         let quiet = row.tone == "faint"
         RailRow(time: row.date.formatted(.dateTime.hour().minute()), bottom: engine.shown(row.children).isEmpty ? 14 : 0) {
-            Marker(icon: row.icon, tone: row.tone, now: row.join != nil)
+            Marker(icon: row.icon, tone: row.tone, now: row.timeline?.recording == true)
         } content: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.styled).foregroundStyle(quiet ? .secondary : .primary)
@@ -524,7 +525,8 @@ struct Marker: View {
             } else {
                 Image("Glyphs/" + glyph).resizable().frame(width: 20, height: 20)
                     .foregroundStyle(now ? AnyShapeStyle(.blue) : tone == "new" || tone == "faint" ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary))
-                    .background(Circle().fill(Color(.systemBackground)).padding(-2)) // the rail passes behind the glyph, as on the desktop
+                    // the rail passes behind the glyph, as on the desktop; a recording meeting's ring pulses out between the two
+                    .background { ZStack { Circle().fill(Color(.systemBackground)).padding(-2); if now { Pulse() } } }
             }
         }
         .frame(width: 22)
@@ -537,5 +539,18 @@ struct Marker: View {
         case "tlAccepted", "tlLater", "tlInbox", "tlNew", "updated", "robot", "tana", "free", "todayTasks", "pinRoute": icon!
         default: "calendar" // a meeting (the desktop draws its type's glyph, calendar)
         }
+    }
+}
+
+// The desktop's recording ring (styles.css .tl-recording, rec-pulse): blue, swelling from behind the marker and fading,
+// every 1.4 s; under Reduce Motion a still blue disc
+struct Pulse: View {
+    @Environment(\.accessibilityReduceMotion) private var still
+    @State private var out = false
+    var body: some View {
+        Circle().fill(Color.blue)
+            .opacity(still ? 0.25 : out ? 0 : 0.45)
+            .scaleEffect(out && !still ? 2.2 : 1)
+            .onAppear { if !still { withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { out = true } } }
     }
 }

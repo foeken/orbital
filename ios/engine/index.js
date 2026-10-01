@@ -496,4 +496,11 @@ for (const name of ['toggle', 'assign', 'ask', 'send', 'remove', 'pin', 'sensiti
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }
+// What main/timeline.js tells the open pages (main/state.js send): on the phone a window of one page, the app, which reads
+// the Timeline again when it changed (a meeting starts recording, a meeting moves); a burst of changes is one read
+let told = null;
+S.win = { isDestroyed: () => false, webContents: { send(channel) {
+  if (channel !== 'outline:changed' || told) return;
+  told = setTimeout(() => { told = null; window.webkit?.messageHandlers?.orbital?.postMessage('changed'); }, 500);
+} } };
 window.webkit?.messageHandlers?.orbital?.postMessage('ready');

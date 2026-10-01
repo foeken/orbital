@@ -1,9 +1,9 @@
 'use strict';
 // What main/timeline.js and main/settings.js ask of the desktop, for the phone (ios/engine/build.js maps each require here). Today's pins
 // and today's node are read over the sync stream with the SDK's own code, as main/pins.js reads them; the watch choices
-// come from the settings document (main/settings.js); live queries and call state still answer empty. The banner edits never reach the phone:
-// they are kept on the Mac that announced them.
-// ponytail: live meetings are empty; add them from sdk/livequery.js.
+// come from the settings document (main/settings.js). Live queries and call state are the SDK's own (sdk/livequery.js,
+// sdk/calls.js), so a meeting being recorded pulses as on the desktop. The banner edits never reach the phone: they are
+// kept on the Mac that announced them.
 const { isMcp, memberTitle, S, today } = require('../../main/state');
 const pins = require('../../sdk/pins');
 
@@ -109,8 +109,4 @@ module.exports = {
     if (!node) throw new Error('no node for ' + title);
     return node.id;
   },
-  // ../sdk/livequery, ../sdk/calls
-  openLiveQuery: async () => ({ on() {}, close: async () => {} }),
-  callState: () => ({ recordings: [], offTheRecord: false }),
-  callSessions: () => ({ sessions: [] }),
 };
