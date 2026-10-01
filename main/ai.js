@@ -21,8 +21,8 @@ const { send } = require('./state');
 // trip, not the model), and right where Luna was sure and wrong — it typed twelve real documents without a confident
 // mistake, where Luna made one or two in every run (docs/OUTLINER.md, Auto-pick type).
 const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
-// Every quick job (Auto-translate, Discuss with, Classify type, the icon pick) asks this one; the Settings page's choice is
-// only for reading an image, where a bigger model reads better (ask below; the iPhone the same: ios/Orbital/Translator.swift)
+// Both the Quick AI (Auto-translate, Discuss with, Classify type, the icon pick) and the Default AI (reading an image)
+// start here until the Settings page names others (chosen below; the iPhone the same: ios/Orbital/Translator.swift)
 const ENDPOINT = 'https://api.openai.com/v1/responses';
 const TIMEOUT_MS = 20000;
 const INSTRUCTIONS = [
@@ -248,8 +248,7 @@ function cleanName(answer) {
 async function ask(instructions, input, fetchImpl, userData, image, only = {}) { // only: a model, effort or timeout this question uses instead
   // no forced token refresh per question: it was a 0.7 s round trip before every answer, and the turn's own Codex
   // refreshes the token it uses (measured 2026-09-28: 739 ms with the refresh, 3 ms without)
-  const signedIn = !!userData && (await chatgptStatus(userData, false)).signedIn;
-  const choice = image ? chosen(await modelList(userData, signedIn)) : { model: DEFAULT_MODEL, effort: DEFAULT_EFFORT };
+  const signedIn = !!userData && (await chatgptStatus(userData, false)).signedIn, choice = chosen(await modelList(userData, signedIn), image ? '' : 'quick');
   const use = { model: only.model || choice.model, effort: only.effort || choice.effort, schema: only.schema }; // schema: the JSON Schema the answer must follow
   if (signedIn) return askChatGPT(instructions, input, userData, use, image, only.timeout); // a signed-in ChatGPT account always wins
   const key = settings.get('openaiApiKey');
@@ -446,7 +445,7 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
   return list.map(shown);
 }
 
-// The model and effort an image is read with (ask above), chosen on the Settings page (renderer/settings.js) and
+// The Default AI (an image read) and the Quick AI (every other question), each a model and an effort (ask above), chosen on the Settings page (renderer/settings.js) and
 // synced. The choices are what the account can ask: signed in with ChatGPT, ChatGPT's own list of Codex models
 // (MODELS_URL, the one the iPhone reads too: ios/Orbital/Translator.swift ChatGPT.models), each with the reasoning efforts it
 // takes, read once per sign-in; otherwise the three below. The page is input from outside the process: only listed choices are stored, and a
@@ -473,19 +472,20 @@ async function modelList(userData, signedIn, fetchImpl = globalThis.fetch) {
   if (!list.length) listed = null; // asked again next time
   return list.length ? list : BUILT_IN;
 }
-const chosen = (list) => {
-  const stored = settings.get('aiModel'), model = (list.find((m) => m.id === stored) || list.find((m) => m.id === DEFAULT_MODEL) || list[0]).id;
-  const found = list.find((m) => m.id === model).efforts, efforts = found.length ? found : EFFORTS, effort = settings.get('aiEffort');
+const aiKey = (kind, what) => settings.AI_KEYS[kind ? kind + what : what.toLowerCase()]; // ('quick', 'Model') -> aiQuickModel, ('', 'Model') -> aiModel
+const chosen = (list, kind) => {
+  const stored = settings.get(aiKey(kind, 'Model')), model = (list.find((m) => m.id === stored) || list.find((m) => m.id === DEFAULT_MODEL) || list[0]).id;
+  const found = list.find((m) => m.id === model).efforts, efforts = found.length ? found : EFFORTS, effort = settings.get(aiKey(kind, 'Effort'));
   return { model, effort: efforts.includes(effort) ? effort : efforts.includes(DEFAULT_EFFORT) ? DEFAULT_EFFORT : efforts[0], efforts };
 };
 async function options(userData) {
-  const list = await modelList(userData, !!userData && (await chatgptStatus(userData)).signedIn), { model, effort, efforts } = chosen(list);
-  return { model, effort, models: list.map((m) => m.id), efforts };
+  const list = await modelList(userData, !!userData && (await chatgptStatus(userData)).signedIn), main = chosen(list, ''), quick = chosen(list, 'quick');
+  return { ...main, quickModel: quick.model, quickEffort: quick.effort, quickEfforts: quick.efforts, models: list.map((m) => m.id) };
 }
 async function setOption(key, value, userData) {
-  const now = await options(userData), allowed = key === 'model' ? now.models : key === 'effort' ? now.efforts : [];
-  if (!allowed.includes(value)) throw new Error('Not an AI choice: ' + key);
-  settings.set(key === 'model' ? 'aiModel' : 'aiEffort', value);
+  const now = await options(userData), allowed = { model: now.models, quickModel: now.models, effort: now.efforts, quickEffort: now.quickEfforts }[key] || [];
+  if (!Object.hasOwn(settings.AI_KEYS, key) || !allowed.includes(value)) throw new Error('Not an AI choice: ' + key);
+  settings.set(settings.AI_KEYS[key], value);
   return options(userData);
 }
 

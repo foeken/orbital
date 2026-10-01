@@ -180,7 +180,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             error = nil
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
-                translator.use(to: setup.to, model: setup.model, effort: setup.effort)
+                translator.use(to: setup.to, ai: setup.ai)
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
@@ -232,7 +232,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // What a refresh reads besides the rows (orbital.setup)
-    struct Setup: Decodable { let to: String?; let model: String?; let effort: String?; let sensitive: [String]; let pinned: [String] }
+    struct Setup: Decodable { let to: String?; let ai: [String: String]; let sensitive: [String]; let pinned: [String] }
 
     // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
     // Remove Pin takes the task out of Today's Tasks at once, collapsing as a deleted row does; the read after says where it
@@ -247,17 +247,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Settings' Auto-translate: the synced preference (orbital.translateTo), shown at once and kept if Tana takes it
     func translate(into to: String?) async {
         let was = translator.to
-        translator.use(to: to, model: nil)
+        translator.use(to: to)
         guard !Self.isSample else { return }
-        do { let _: String? = try await call("return await orbital.translateTo(to)", ["to": to ?? NSNull()]) } catch { translator.use(to: was, model: nil); self.error = error.localizedDescription }
+        do { let _: String? = try await call("return await orbital.translateTo(to)", ["to": to ?? NSNull()]) } catch { translator.use(to: was); self.error = error.localizedDescription }
     }
-    // Settings' Model and Thinking: used at once, kept if Tana takes it (orbital.aiChoice), as the Mac's Settings page sets them
+    // Settings' Default and Quick AI: used at once, kept if Tana takes it (orbital.aiChoice), as the Mac's Settings page sets them
     func aiChoice(_ key: String, _ value: String) async {
-        let was = (translator.model, translator.effort)
-        translator.use(to: translator.to, model: key == "model" ? value : nil, effort: key == "effort" ? value : nil)
+        let was = translator.ai
+        translator.use(to: translator.to, ai: [key: value])
         guard !Self.isSample else { return }
         do { let _: Bool = try await call("return await orbital.aiChoice(key, value)", ["key": key, "value": value]) }
-        catch { translator.use(to: translator.to, model: was.0, effort: was.1); self.error = error.localizedDescription }
+        catch { translator.use(to: translator.to, ai: was); self.error = error.localizedDescription }
     }
     func markSensitive(_ id: String, _ on: Bool) async { await act("return await orbital.sensitive(id, on)", ["id": id, "on": on]) }
     // Long press, Assign to …: the task whose picker is open (AssignSheet), the people to pick from, and the one picked
@@ -329,7 +329,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // The image made smaller (2048 px at most, JPEG) for the model and for Tana, read by ChatGPT, then made into its node
     func processImage(_ image: UIImage) async throws -> String {
         guard let jpeg = image.fitted(2048).jpegData(compressionQuality: 0.9) else { throw Failure(errorDescription: "The image could not be read") }
-        let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.model, effort: translator.effort)
+        let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.ai["model"]!, effort: translator.ai["effort"]!)
         let id: String = try await call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
                                         ["kind": read.kind ?? "doc", "title": read.title ?? "", "notes": read.notes ?? [], "image": jpeg.base64EncodedString()])
         await refresh()

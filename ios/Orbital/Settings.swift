@@ -11,6 +11,24 @@ struct SettingsView: View {
     @State private var signingIn = false
     @State private var models: [ChatGPT.Model] = [] // the choices for Model, read when signed in
 
+    // a Model and a Thinking picker for one AI (main/settings.js AI_KEYS); a new model whose levels lack the effort takes low
+    @ViewBuilder private func aiPickers(_ name: String, model modelKey: String, effort effortKey: String) -> some View {
+        let model = engine.translator.ai[modelKey] ?? "", efforts = models.first { $0.id == model }?.efforts ?? ["low", "medium", "high"]
+        Picker(selection: Binding { model } set: { id in Task {
+            await engine.aiChoice(modelKey, id)
+            let next = models.first { $0.id == id }?.efforts ?? []
+            if !next.isEmpty, !next.contains(engine.translator.ai[effortKey] ?? "") { await engine.aiChoice(effortKey, next.contains("low") ? "low" : next[0]) }
+        } }) {
+            ForEach(models) { Text(ChatGPT.label($0.id)).tag($0.id) }
+            if !models.contains(where: { $0.id == model }) { Text(ChatGPT.label(model)).tag(model) } // a choice the list no longer has
+        } label: { Row(glyph: "brain", title: name + " AI") }
+        .pickerStyle(.menu).tint(.secondary)
+        Picker(selection: Binding { engine.translator.ai[effortKey] ?? "low" } set: { x in Task { await engine.aiChoice(effortKey, x) } }) {
+            ForEach(efforts, id: \.self) { Text(ChatGPT.effortLabel($0)).tag($0) }
+        } label: { Row(glyph: "sparkle", title: name + " thinking") }
+        .pickerStyle(.menu).tint(.secondary)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -21,22 +39,10 @@ struct SettingsView: View {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
                         if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
-                        // the Mac Settings page's Model and Thinking: one synced choice, the same remote list of models
+                        // the Mac Settings page's Quick and Default AI: the same synced choices, from the same remote list of models
                         if !models.isEmpty {
-                            let model = engine.translator.model, efforts = models.first { $0.id == model }?.efforts ?? ["low", "medium", "high"]
-                            Picker(selection: Binding { model } set: { id in Task {
-                                await engine.aiChoice("model", id)
-                                let next = models.first { $0.id == id }?.efforts ?? []
-                                if !next.isEmpty, !next.contains(engine.translator.effort) { await engine.aiChoice("effort", next.contains("low") ? "low" : next[0]) }
-                            } }) {
-                                ForEach(models) { Text(ChatGPT.label($0.id)).tag($0.id) }
-                                if !models.contains(where: { $0.id == model }) { Text(ChatGPT.label(model)).tag(model) } // a choice the list no longer has
-                            } label: { Row(glyph: "brain", title: "Model") }
-                            .pickerStyle(.menu).tint(.secondary)
-                            Picker(selection: Binding { engine.translator.effort } set: { x in Task { await engine.aiChoice("effort", x) } }) {
-                                ForEach(efforts, id: \.self) { Text(ChatGPT.effortLabel($0)).tag($0) }
-                            } label: { Row(glyph: "sparkle", title: "Thinking") }
-                            .pickerStyle(.menu).tint(.secondary)
+                            aiPickers("Quick", model: "quickModel", effort: "quickEffort")
+                            aiPickers("Default", model: "model", effort: "effort")
                         }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
@@ -44,7 +50,7 @@ struct SettingsView: View {
                 } header: {
                     Header("ChatGPT")
                 } footer: {
-                    Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone. Model and Thinking are for reading images; other AI stays on Terra 5.6.")
+                    Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone. Quick AI translates and answers the small questions, Default AI reads images; both are the same on your Mac.")
                 }
                 Section {
                     // the language notes are shown in, the same synced setting as Cmd+K Auto-translate … on the Mac

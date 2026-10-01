@@ -451,17 +451,17 @@ window.orbital = {
     await settings.flush();
     return JSON.stringify(to);
   },
-  // Settings' Model and Thinking: the synced choices the Mac's Settings page writes (main/ai.js setOption), checked against
-  // the same remote list there (QuickAdd.swift / Settings.swift read it); here only that it is a model's or effort's name
+  // Settings' Default and Quick AI: the synced choices the Mac's Settings page writes (main/ai.js setOption), checked against
+  // the same remote list there (Settings.swift reads it); here only that it is a model's or effort's name
   async aiChoice(key, value) {
-    if (!['model', 'effort'].includes(key) || typeof value !== 'string' || !/^[\w.-]{1,64}$/.test(value)) throw new Error('Not an AI choice');
-    settings.set(key === 'model' ? 'aiModel' : 'aiEffort', value);
+    if (!Object.hasOwn(settings.AI_KEYS, key) || typeof value !== 'string' || !/^[\w.-]{1,64}$/.test(value)) throw new Error('Not an AI choice');
+    settings.set(settings.AI_KEYS[key], value);
     await settings.flush();
     return JSON.stringify(true);
   },
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
-    return JSON.stringify({ to: LANGS.includes(to) ? to : null, model: settings.get('aiModel') || null, effort: settings.get('aiEffort') || null,
+    return JSON.stringify({ to: LANGS.includes(to) ? to : null, ai: Object.fromEntries(Object.entries(settings.AI_KEYS).map(([k, s]) => [k, settings.get(s)]).filter(([, v]) => typeof v === 'string')),
       sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length) }); // pinned to any day
   },
   // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced

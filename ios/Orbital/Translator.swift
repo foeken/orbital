@@ -11,13 +11,9 @@ final class Translator {
     struct Answer: Codable { let lang: String; let text: String } // text "": nothing to translate
 
     private(set) var to: String?
-    // what an image is read with: the desktop Settings page's Model and Thinking (synced aiModel, aiEffort),
-    // main/ai.js DEFAULT_MODEL and DEFAULT_EFFORT until it names others
-    private(set) var model = "gpt-5.6-terra"
-    // translations always ask the quick one, whatever was chosen (main/ai.js DEFAULT_MODEL, as every quick job there): many short titles, where a
-    // bigger model costs time and gains nothing
-    static let translateModel = "gpt-5.6-terra"
-    private(set) var effort = "low"
+    // the synced Default AI (model, effort: reading an image) and Quick AI (quickModel, quickEffort: translating), set on either
+    // app's Settings (main/settings.js AI_KEYS); main/ai.js DEFAULT_MODEL and DEFAULT_EFFORT until they name others
+    private(set) var ai = ["model": "gpt-5.6-terra", "effort": "low", "quickModel": "gpt-5.6-terra", "quickEffort": "low"]
     private(set) var answers: [String: Answer] = (UserDefaults.standard.data(forKey: "translations").flatMap { try? JSONDecoder().decode([String: Answer].self, from: $0) }) ?? [:]
     @ObservationIgnored private var asked = Set<String>()
     @ObservationIgnored private var queue: [(to: String, text: String)] = [] // each with its language: Auto-translate can change while it waits
@@ -25,7 +21,7 @@ final class Translator {
 
     private(set) var problem: String? // why the last question to ChatGPT got no answer
 
-    func use(to: String?, model: String?, effort: String? = nil) { self.to = to; if let model { self.model = model }; if let effort { self.effort = effort } }
+    func use(to: String?, ai: [String: String] = [:]) { self.to = to; self.ai.merge(ai) { $1 } }
 
     // The words to show and, when they are a translation, the language they were in. Asks for what it does not know yet.
     func words(_ text: String, sensitive: Bool = false) -> (String, String?) {
@@ -62,7 +58,7 @@ final class Translator {
         guard !ask.isEmpty else { return save() }
         let found: [Int: Answer]
         do {
-            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: Self.translateModel, effort: "low") else {
+            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: ai["quickModel"]!, effort: ai["quickEffort"]!) else {
                 problem = "Sign in with ChatGPT"
                 for text in ask { asked.remove(to + "\n" + text) } // asked again once signed in
                 return save()

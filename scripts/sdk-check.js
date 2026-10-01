@@ -823,19 +823,26 @@ async function main() {
     await ai.readImage(tinyPng,fetchWith(imageAnswer));
     assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-6-sol','high'],'reading an image follows the settings, changeable without a release');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the quick jobs keep the quick model whatever was chosen');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the quick jobs ask the Quick AI, which the Default AI does not change');
+    settings.set('aiQuickModel','gpt-5.6-luna'); settings.set('aiQuickEffort','medium');
+    await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-5.6-luna','medium'],'and the Quick AI is a setting of its own');
     await ai.classifyType({title:'t',text:'',types:[{uri:'tana:type:a',title:'A'}]},fetchWith(answer('{"1":1}'))).catch(()=>{});
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'Classify type too');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-5.6-luna','medium'],'Classify type too');
     await ai.translate(['Open vraag over het budget'],'English',fetchWith(answer('[]')),undefined,{detect:null});
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'Auto-translate keeps the quick model whatever was chosen');
-    assert.equal(settings.isSynced('aiModel')&&settings.isSynced('aiEffort'),true,'and they follow you, unlike the key that pays for them');
-    settings.set('aiModel','gpt-4o'); settings.set('aiEffort','extreme'); // synced from an older build or another Mac: off the Settings page's lists
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-5.6-luna','medium'],'and Auto-translate');
+    await ai.readImage(tinyPng,fetchWith(imageAnswer));
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-6-sol','high'],'while an image keeps the Default AI');
+    assert.equal(['aiModel','aiEffort','aiQuickModel','aiQuickEffort'].every(settings.isSynced),true,'and they follow you, unlike the key that pays for them');
+    settings.set('aiModel','gpt-4o'); settings.set('aiEffort','extreme'); settings.set('aiQuickModel','gpt-4o'); // synced from an older build or another Mac: off the Settings page's lists
     await ai.readImage(tinyPng,fetchWith(imageAnswer));
     assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'a stored value off the lists is never sent: the default is');
+    await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,'medium'],'for the Quick AI too, keeping an effort the default model takes');
     const shown = await ai.options();
-    assert.deepEqual([shown.model,shown.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'and the Settings page shows the default too');
+    assert.deepEqual([shown.model,shown.effort,shown.quickModel],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT,ai.DEFAULT_MODEL],'and the Settings page shows the default too');
     assert.equal(settings.isSynced('openaiApiKey'),false,'which never leaves this machine');
-    settings.set('aiModel',undefined); settings.set('aiEffort',undefined);
+    for (const k of ['aiModel','aiEffort','aiQuickModel','aiQuickEffort']) settings.set(k,undefined);
     // the remote list of models both apps choose from (main/ai.js MODELS_URL): a hidden one left out, each with its thinking levels
     assert.deepEqual(ai.fromCatalogue({models:[{slug:'gpt-6-sol',visibility:'list',supported_reasoning_levels:[{effort:'low'},{effort:'ultra'}]},{slug:'codex-auto-review',visibility:'hide',supported_reasoning_levels:[{effort:'low'}]}]}),
       [{id:'gpt-6-sol',efforts:['low','ultra']}],'the models to choose from, as ChatGPT lists them');
@@ -2594,6 +2601,9 @@ async function main() {
     await assert.rejects(async () => backend.handlers.get('ai:setOption')(null, 'openaiApiKey', 'sk-x'), /Not an AI choice/, 'and so is any other setting');
     assert.equal(JSON.stringify(await backend.handlers.get('ai:options')()), before, 'a refused write changes neither choice');
     await backend.handlers.get('ai:setOption')(null, 'effort', 'low');
+    const quick = await backend.handlers.get('ai:setOption')(null, 'quickModel', 'gpt-6-sol');
+    assert.deepEqual([quick.quickModel, quick.model], ['gpt-6-sol', 'gpt-5.6-terra'], 'the Quick AI is stored apart from the Default AI');
+    await backend.handlers.get('ai:setOption')(null, 'quickModel', 'gpt-5.6-terra');
     assert.equal(payload.truncated, true);
     assert.equal('iconSvg' in payload.nodes.find((n) => n.id === doc.id), false, 'rows carry no app-local icon');
     assert.deepEqual(Object.keys(cache.list()), ['library'], 'the fetched rows use the view id as their cache section');
