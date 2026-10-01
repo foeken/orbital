@@ -209,9 +209,9 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 /* --fcols: Title (and the title's line, while columns are folded) and the fact columns, each at the width it was dragged to (renderer/views.js tableCols) */
 .outline.table-view { --slot: 0px; --tcols: var(--fcols); } /* px: the header's type is smaller than a row's */
 /* only a row with something in its icons keeps their column: Display can leave every row's empty (no Assigned words in a table, Visible to off) */
-.outline.table-view:has(> .node > .line > .body > .tmeta:not(:empty)) { --tcols: var(--fcols) 90px; }
+.outline.table-view:has(> .node > .line > .body > .tmeta:not(:empty)) { --tcols: var(--fcols) var(--iconw, 90px); } /* --iconw: as wide as the widest (renderer/views.js sizeIcons) */
 .outline.table-view > .node > .line > .body > .tmeta:empty { display: none; }
-.outline.table-view:has(> .node > .line > .body > .tmeta .people) { --tcols: var(--fcols) 190px; } /* room for who can see a row: glyph, faces, the rest in words */
+.outline.table-view:has(> .node > .line > .body > .tmeta .people) { --tcols: var(--fcols) var(--iconw, 190px); } /* room for who can see a row: glyph, faces, the rest in words */
 /* while columns ride on the title's line the row reads as a list, and who can see it is its glyph alone, as the
    video's narrow rows end in one small avatar: the words are in the glyph's tooltip, and it turns red when someone
    assigned cannot see the row. renderer/views.js fitTable reserves the full 190px all the same. */

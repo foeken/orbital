@@ -293,6 +293,7 @@ function tellTitle(title, renamable, icon = '') {
 const META_SEP = ' · ';
 const META_GAP = 8; // .meta's margin-left in styles.css, which offsetWidth does not carry
 function fitRowMeta() {
+  if (tableView()) sizeIcons();
   const plan = [];
   for (const body of outline.querySelectorAll('.node > .line > .body')) {
     if (tableView() && body.matches('.outline.table-view > .node > .line > .body')) continue; // a table row keeps its icons in their own column: its grey line is the other columns

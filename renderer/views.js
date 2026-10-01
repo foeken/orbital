@@ -571,10 +571,25 @@ const titleNow = (cell) => (tableFold ? Math.min(tableWidths().title || TITLE_RO
 function tableRoom() {
   const head = tableView() && outline.querySelector(':scope > .thead');
   if (!head || !head.clientWidth) return 0; // a pane not on screen has no width to fit
-  // the icons column as it is with nothing folded: folded, who can see a row shrinks to its glyph (styles.css), and
-  // measuring that would let the freed room split a column out, which would widen the icons again, and so on
-  const cs = getComputedStyle(head), icons = outline.querySelector(':scope > .node > .line > .body > .tmeta .people') ? PEOPLE_W : head.lastElementChild.offsetWidth;
+  // the icons column as it is with nothing folded (sizeIcons): folded, who can see a row shrinks to its glyph
+  // (styles.css), and measuring that would let the freed room split a column out, which would widen the icons again
+  const cs = getComputedStyle(head), icons = iconsW[pillKey()] || (outline.querySelector(':scope > .node > .line > .body > .tmeta .people') ? PEOPLE_W : head.lastElementChild.offsetWidth);
   return head.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (icons ? icons + COL_GAP : 0);
+}
+// Visible to (the icons' column) as wide as the widest of it on the page and its header, up to PEOPLE_W: each row is
+// a grid of its own, so no track can size itself to every row's content. Measured unfolded only, where the words show;
+// render.js fitRowMeta asks after every render and every row whose metadata arrived.
+const iconsW = {}; // page key -> px
+function sizeIcons() {
+  if (tableFold) return;
+  const range = document.createRange(), measure = (el) => { range.selectNodeContents(el); return range.getBoundingClientRect().width; };
+  let w = 0;
+  for (const el of outline.querySelectorAll(':scope > .node > .line > .body > .tmeta:not(:empty), :scope > .thead > span:last-child > .tlabel')) w = Math.max(w, measure(el));
+  w = Math.ceil(Math.min(w, PEOPLE_W));
+  if (!w || w === iconsW[pillKey()]) return;
+  iconsW[pillKey()] = w;
+  outline.style.setProperty('--iconw', w + 'px');
+  fitTable(); // narrower icons may leave a column room to split out
 }
 // The page changed width (render.js's ResizeObserver: the window, a pane, the sidebar, the text size), a column did, or
 // the page was drawn. moved: a hand did it, so the columns that moved play into place; a page drawing itself only snaps.
