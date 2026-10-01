@@ -32,3 +32,12 @@ and closes), `-settings` and `-typing`.
 
 `npm run check` runs `scripts/ios-engine-check.js`: the engine's stand-ins always, and with Bun installed also the bundle
 itself, driven in a vm made to look like the session page.
+
+`OrbitalUITests` drives the app itself on `-sample`, finding everything by the label VoiceOver reads: the Timeline, ticking a
+task, a sensitive task's hidden words, the menu and a saved search, a meeting's page, Ask Tana, Quick Add and Settings. The
+iOS workflow runs it on a simulator when the app or its engine changes; locally:
+
+```sh
+cd ios
+xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO
+```
