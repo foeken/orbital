@@ -128,7 +128,7 @@ struct Redacted: TextRenderer {
 }
 
 // The Timeline as the desktop draws it (styles.css .node.tl): the time on the left, a marker on a thin rail that runs
-// the length of the page, what happened to the right. Today's tasks and Coming up sit on the same rail above the days,
+// the length of the page, what happened to the right. Today's tasks, the free time and Upcoming meetings sit on the same rail above the days,
 // each only when it has something in it. Colour only where it means something (orbital-design, Grey unless colour
 // means something): Orbital's green for done, blue for new and for a meeting under way.
 struct TimelineScreen: View {
@@ -142,10 +142,14 @@ struct TimelineScreen: View {
                 RailRow(time: "Now", railTop: 24, bottom: 0) { Marker(icon: "todayTasks", tone: "new", now: false) } content: { Text("Today's Tasks") }
                 TaskLines(tasks: today, engine: engine)
             }
+            // as the desktop has it: the free time, then one stop for the meetings still to come, each hanging under it like
+            // a task, its start time on its right (the rail's own time column says only Now)
+            if let free { FreeLine(free: free, time: today.isEmpty ? "Now" : "") }
+            if !upcoming.isEmpty {
+                RailRow(time: "", top: 14, bottom: 0) { Marker(icon: "meeting", tone: nil, now: false) } content: { Text("Upcoming meetings") }
+                ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, m in Meeting(row: m, engine: engine, top: i == 0 ? 20 : 14, bottom: i == upcoming.count - 1 ? 16 : 0) }
+            }
             if !upcoming.isEmpty || free != nil {
-                Heading(title: "Coming up")
-                if let free { FreeLine(free: free, time: today.isEmpty ? "Now" : "") }
-                ForEach(upcoming) { Meeting(row: $0, engine: engine) }
                 // a line across under what is still to come, before what has happened
                 if !days.isEmpty {
                     Color(.separator).frame(maxWidth: .infinity).frame(height: 1) // a List row lays a Divider out upright
@@ -407,21 +411,24 @@ struct TaskWords: View {
     }
 }
 
-// A meeting still to come today: when on the left, its name, until when, and who else is on it as faces
+// A meeting still to come today, under Upcoming meetings: its glyph, its name on one line, and when it starts on the right
 struct Meeting: View {
     let row: Row
     let engine: Engine
+    let top: CGFloat
+    let bottom: CGFloat
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        let start = row.start.flatMap(Row.parse)
-        RailRow(time: start?.formatted(.dateTime.hour().minute()) ?? "") {
-            Marker(icon: row.icon, tone: nil, now: false) // a calendar, or a route for Travel (main/timeline.js meetingIcon)
-        } content: {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).sensitive(row.sensitive, engine: engine)
-                if let until = row.subtext?.split(separator: "–").last { Text("until " + until).font(.subheadline).foregroundStyle(.secondary) }
-                if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
+        let start = row.start.flatMap(Row.parse)?.formatted(.dateTime.hour().minute()) ?? ""
+        RailRow(time: "", top: top, bottom: bottom) { Color.clear.frame(height: 1) } content: {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                // a calendar, or a route for Travel (main/timeline.js meetingIcon)
+                Image(row.icon == "pinRoute" ? "Glyphs/pinRoute" : "Glyphs/calendar").resizable().frame(width: 18, height: 18).foregroundStyle(.secondary)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
+                Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).lineLimit(1).sensitive(row.sensitive, engine: engine)
+                Spacer(minLength: 8)
+                Text(start).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
             }
         }
         .onTapGesture { openURL.zoom(row.id) }
