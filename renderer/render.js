@@ -450,7 +450,7 @@ function renderOutline() {
   outline.classList.toggle('table-view', tableView());
   outline.classList.toggle('folded', tableView() && tableFold > 0);
   // a list page shown as a table (renderer/views.js); fitTable then folds or splits its columns for this page's width
-  if (tableView() && list.length) { outline.style.setProperty('--fcols', tableCols()); outline.prepend(tableHeadEl()); requestAnimationFrame(() => fitTable()); }
+  if (tableView() && list.length) { applyCols(); outline.prepend(tableHeadEl()); requestAnimationFrame(() => fitTable()); }
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   // Empty is an answer the page has been given: no entry at all means it has not been asked yet, which is where a

@@ -528,15 +528,20 @@ function tableHeadEl() {
 }
 // A column's width in px, per page and column, synced like the choice of a table itself; Title's is kept as 'title'.
 // A column nobody dragged is COL_W wide. Title nobody dragged takes what the others leave; dragged, it keeps its width
-// and what is left goes to an empty track before the icons, so the columns follow the title.
+// and what is left goes to the end of the row, after the icons (applyCols), so the columns and who can see a row follow the title.
 let dragWidths = null; // the widths while a grip is held: drawn as it moves, kept when it is let go (resizeColumn)
 const tableWidths = () => dragWidths || pref('tableWidths', {})[pillKey()] || {};
 const tableCols = (widths = tableWidths()) => {
   // folded, an unsized title takes at most half the row, so a long one does not cut the values after it to a letter
   // unfolded, a title dragged wider gives way down to TITLE_ROOM before a column folds (foldFor)
   const t = widths.title, lead = tableFold ? ['fit-content(' + (t ? t + 'px' : '50%') + ')', 'minmax(' + FOLD_ROOM + 'px, 1fr)'] : [t ? 'minmax(' + Math.min(t, TITLE_ROOM) + 'px, ' + t + 'px)' : 'minmax(0, 1fr)'];
-  return [...lead, ...tableKeys().slice(tableFold).map((k) => (widths[k] || COL_W) + 'px'), ...(t && !tableFold ? ['minmax(0, 1fr)'] : [])].join(' ');
+  return [...lead, ...tableKeys().slice(tableFold).map((k) => (widths[k] || COL_W) + 'px')].join(' ');
 };
+// the columns onto the page; .spare: a dragged Title leaves an empty track at the end of the row (styles.css --spare)
+function applyCols(widths = tableWidths()) {
+  outline.style.setProperty('--fcols', tableCols(widths));
+  outline.classList.toggle('spare', !!widths.title && !tableFold);
+}
 // ---- a table at every width: columns split out of the title's line as the page widens, and fold back in ----
 // After Alvish Baldha's "tables that split, stretch, and snap into place" (x.com/alvishbaldha/status/2105538797970809133).
 // Narrow, a row is its title with its first values after it in grey; wider, each value splits out into its own column,
@@ -621,7 +626,7 @@ function resizeColumn(e, key, cell) {
     dragWidths = widths;
     if (key === 'title' && foldFor(room) !== tableFold) fitTable(true); // drawn again: the new grip shows it is still held
     outline.querySelector(':scope > .thead > [data-col="title"] > .tgrip')?.classList.toggle('dragging', key === 'title');
-    outline.style.setProperty('--fcols', tableCols(widths));
+    applyCols(widths);
   };
   const up = () => {
     removeEventListener('pointermove', move); removeEventListener('pointerup', up); dragWidths = null;
@@ -636,7 +641,7 @@ function setColumnWidth(key, px) {
   const next = { ...all, [pillKey()]: mine };
   if (!Object.keys(mine).length) delete next[pillKey()];
   setPref('tableWidths', next);
-  outline.style.setProperty('--fcols', tableCols());
+  applyCols();
   fitTable(true); // a wider column may no longer fit, a narrower one may let another split out
 }
 // The keyboard's way to the same widths: ⌘K Column widths …, a row per column; ←/→ on one make it 20px narrower or

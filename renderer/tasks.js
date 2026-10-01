@@ -148,9 +148,10 @@ function audienceIcon(summary, node) {
   const icon = iconEl(summary.audience.icon, label);
   icon.className += ' audience'; // who can see it: never faint (styles.css, row icons)
   if (summary.hiddenFrom) icon.classList.add('hiddenfrom');
-  if (node && canEditNode(node) && isRealId(node.id) && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
+  if (canEditVisibility(node)) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
   return icon;
 }
+function canEditVisibility(node) { return node && canEditNode(node) && isRealId(node.id) && tana.accessOptions; }
 // Who can see a row, at the start of its subtext (#461): the audience's glyph, a bubble per person and how many.
 // main names them (sdk/node.js audienceMetadata): everyone is the organization's membership, the others the grants.
 // Display's Visible to; the Timeline, which says what happened and who did it, never shows it (displayKeys)
@@ -207,7 +208,11 @@ function taskMetaEl(summary, docId, node) {
   // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there the same
   // line (glyph, faces, the rest in words) sits here with the row's icons, and the bare glyph where it names nobody
   if (!displayOn('visibility')) { /* Visible to is off, or the Timeline: nothing about who can see it */ }
-  else if (summary.audience && tableView()) el.append(peopleEl(summary, node) || audienceIcon(summary, node));
+  else if (summary.audience && tableView()) { // the whole cell, its words and faces too, opens the visibility picker, as the glyph does
+    const who = peopleEl(summary, node);
+    if (who && canEditVisibility(node)) clickable(who, () => openVisibility(node, summary.scope));
+    el.append(who || audienceIcon(summary, node));
+  }
   else if (summary.audience && !audienceUris(summary).length) el.append(audienceIcon(summary, node));
   else if (summary.unknownAudience) { const t = document.createElement('span'); t.className = 'mtext'; t.textContent = ' · Visibility unknown'; el.append(t); }
   // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is
