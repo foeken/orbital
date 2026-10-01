@@ -906,7 +906,7 @@ function nodeEl(node, docId, parent) {
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
-  if (displayOn('assigned')) {
+  if (displayOn('assigned') || displayOn('visibility')) {
     if (taskInfo) body.append(taskMetaEl(taskInfo, display.id, display));
     else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true }, display.id, display)); // hold the slot: the real icon lands in the same place, so the row never shifts (the meeting link already in it)
   } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out

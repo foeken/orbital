@@ -84,7 +84,7 @@ function patchMeta(docId) {
     // the same line a full render would build, so a row does not change shape when its metadata arrives late: the
     // facts go before the type chips, where nodeEl appends them, not after them
     const had = body.querySelector(':scope > .subtext'), sub = subtextEl(item.node, summary, had || undefined, tableRow(item.parent));
-    if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId, item.node), body.querySelector(':scope > .chip') || had || null);
+    if (summary && (displayOn('assigned') || displayOn('visibility'))) body.insertBefore(taskMetaEl(summary, docId, item.node), body.querySelector(':scope > .chip') || had || null);
     if (sub && !had) body.append(sub);
     else if (!sub && had) had.remove();
     row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
@@ -153,9 +153,8 @@ function audienceIcon(summary, node) {
 }
 // Who can see a row, at the start of its subtext (#461): the audience's glyph, a bubble per person and how many.
 // main names them (sdk/node.js audienceMetadata): everyone is the organization's membership, the others the grants.
-function audienceUris(summary) { return (summary && summary.audience && displayOn('assigned') && audienceShown() && summary.people) || []; }
-// the Timeline says what happened and who did it, not who can see it: no audience icon or faces there
-function audienceShown() { return !(zoom && zoom.docId === TIMELINE_PAGE); }
+// Display's Visible to; the Timeline, which says what happened and who did it, never shows it (displayKeys)
+function audienceUris(summary) { return (summary && summary.audience && displayOn('visibility') && summary.people) || []; }
 // a guest's profile is not readable (the graph refuses the kind, a subscribe finds no document), so a guest is named as one
 function isGuest(uri) { return uri.startsWith('tana:guest-profile:'); }
 function peopleEl(summary, node) {
@@ -201,13 +200,13 @@ function taskMetaEl(summary, docId, node) {
   const writable = node && canEditNode(node) && isRealId(node.id);
   // .mtext: the words, which a table row leaves out (its Assigned column has the name; styles.css .table-view)
   const who = document.createElement('span'); who.className = 'mtext'; who.textContent = summary.assignees;
-  if (summary.assignees) el.append(who);
+  if (summary.assignees && displayOn('assigned')) el.append(who);
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
   if (summary.assignees === 'Unassigned') { const icon = iconEl('unassigned', null); icon.title = 'Unassigned'; who.prepend(icon); }
   // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there the same
   // line (glyph, faces, the rest in words) sits here with the row's icons, and the bare glyph where it names nobody
-  if (!audienceShown()) { /* the Timeline: nothing about who can see it */ }
+  if (!displayOn('visibility')) { /* Visible to is off, or the Timeline: nothing about who can see it */ }
   else if (summary.audience && tableView()) el.append(peopleEl(summary, node) || audienceIcon(summary, node));
   else if (summary.audience && !audienceUris(summary).length) el.append(audienceIcon(summary, node));
   else if (summary.unknownAudience) { const t = document.createElement('span'); t.className = 'mtext'; t.textContent = ' · Visibility unknown'; el.append(t); }

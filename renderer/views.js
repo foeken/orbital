@@ -360,8 +360,11 @@ function sortRows(list) {
 // ---- display: which of a row's facts it shows ----
 // When it was made, when it last moved and where it lives read as one grey sub-line under the title, because they are
 // all answers to "what is this row"; the rest stay where they already are — the type chips, the assignee, the box.
-const DISPLAY = [['type', 'Type', 'type'], ['space', 'Lives in', 'space'], ['status', 'Status', 'status'], ['assigned', 'Assigned', 'assigned'], ['updated', 'Updated', 'updated'], ['created', 'Created', 'created'], ['creator', 'Created by', 'member']];
-const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
+const DISPLAY = [['type', 'Type', 'type'], ['space', 'Lives in', 'space'], ['status', 'Status', 'status'], ['assigned', 'Assigned', 'assigned'], ['visibility', 'Visible to', 'users'], ['updated', 'Updated', 'updated'], ['created', 'Created', 'created'], ['creator', 'Created by', 'member']];
+const DISPLAY_DEFAULT = ['status', 'assigned', 'visibility', 'updated'];
+// Visible to came with Assigned until it was a fact of its own: a choice stored before then names neither and shows it,
+// and one made since names it or, switched off, 'novisibility' (setDisplay)
+const withVisibility = (keys) => (keys.includes('visibility') || keys.includes('novisibility') ? keys : [...keys, 'visibility']);
 // On a type's page every field it defines can be shown too, keyed by its attribute key; the ones with a closed set of
 // values (the ones that get a pill) and the last change are shown until you choose otherwise, as Tana's type page does.
 // A saved search or a view whose Type pill has picked one workspace type alone lists that type's instances too, so its
@@ -388,13 +391,14 @@ const displayKeys = () => {
   // it, so nothing could turn it off. Until the definitions are in, the page's own type's keys are kept as they are.
   const t = fieldType(), defs = t && (relatedBy.get(t) || {}).definitions;
   // A field kept by name stays on any list, as a field grouping does; a row without it just shows nothing for it.
-  if (Array.isArray(chosen)) return chosen.filter((k) => !isFieldKey(k) || (fieldName(k) !== null ? listPage() : defs ? defs.some((d) => fieldKey(d) === k) : !!t && k.startsWith(t + '?')));
+  if (Array.isArray(chosen)) return withVisibility(chosen.filter((k) => !isFieldKey(k) || (fieldName(k) !== null ? listPage() : defs ? defs.some((d) => fieldKey(d) === k) : !!t && k.startsWith(t + '?'))));
   return onTypePage() ? [...typeDefs().filter((d) => PILL_FIELDS.includes(d.type)).map(fieldKey), 'updated'] : DISPLAY_DEFAULT;
 };
 const displayOn = (id) => displayKeys().includes(id);
 function setDisplay(id) {
   const on = displayKeys(), next = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];
-  displayPref[pillKey()] = displayList().map(([key]) => key).filter((key) => next.includes(key)); // stored in displayList's order: fields first, as the columns run
+  const keys = displayList().map(([key]) => key).filter((key) => next.includes(key)); // stored in displayList's order: fields first, as the columns run
+  displayPref[pillKey()] = next.includes('visibility') ? keys : [...keys, 'novisibility'];
   persistPref('display', displayPref);
   render(true); // every row is built differently now, and rowSig carries the choice so none is reused
 }
