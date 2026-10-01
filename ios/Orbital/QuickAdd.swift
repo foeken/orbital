@@ -219,6 +219,7 @@ struct AssignSheet: View {
                 ForEach(people.filter { query.isEmpty || $0.name.localizedStandardContains(query) }) { pick($0.id, $0.name) }
             }
             .overlay { if people.isEmpty && !query.isEmpty { ContentUnavailableView.search } }
+            .tint(.primary)
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
             .navigationTitle("Assign to")
             .navigationBarTitleDisplayMode(.inline)
@@ -236,7 +237,7 @@ struct AssignSheet: View {
             HStack {
                 Text(name).foregroundStyle(.primary)
                 Spacer()
-                if on { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.blue) }
+                if on { Image(systemName: "checkmark").fontWeight(.semibold) }
             }
         }
         .accessibilityAddTraits(on ? .isSelected : [])

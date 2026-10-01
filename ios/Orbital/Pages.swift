@@ -38,14 +38,16 @@ struct ListRow: View {
                     let (words, from) = engine.translator.words(row.words, sensitive: row.sensitive == true)
                     if row.stateType != nil { TaskWords(row: row, engine: engine, globe: false) } else { Text(words).sensitive(row.sensitive, engine: engine) }
                     // when, then who a task is assigned to, on one grey line as the desktop's subtext has them
-                    HStack(spacing: 8) {
-                        // translated: the globe first on the grey line, before when it changed
-                        if from != nil { Image(systemName: "globe").font(.footnote).foregroundStyle(.tertiary).accessibilityLabel("Translated from " + (from ?? "")) }
-                        if let at = row.createdAt.flatMap(Row.parse) {
-                            Text(at, format: .relative(presentation: .named)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        if let people = row.people, !people.isEmpty { Faces(people: people) }
+                    // translated, when it changed, who has it: one grey line as the desktop's subtext, a bullet between each
+                    let at = row.createdAt.flatMap(Row.parse), people = row.people ?? []
+                    HStack(spacing: 6) {
+                        if from != nil { Image("Glyphs/language").resizable().frame(width: 15, height: 15).foregroundStyle(.secondary).accessibilityLabel("Translated from " + (from ?? "")) }
+                        if from != nil, at != nil { Text("·").foregroundStyle(.secondary) }
+                        if let at { Text(at, format: .relative(presentation: .named)).foregroundStyle(.secondary).lineLimit(1) }
+                        if from != nil || at != nil, !people.isEmpty { Text("·").foregroundStyle(.secondary) }
+                        if !people.isEmpty { Faces(people: people) }
                     }
+                    .font(.subheadline)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -304,16 +306,14 @@ struct NodeDetails: View {
     @State private var picking = false
 
     var body: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 12) {
             if access.task {
-                Button { engine.assigning = .init(id: id, current: access.assignees.map(\.id), then: reload) } label: {
-                    LabeledContent("Assigned to") { if access.assignees.isEmpty { Text("Unassigned") } else { Faces(people: access.assignees.persons) } }
+                field("Assigned to") { engine.assigning = .init(id: id, current: access.assignees.map(\.id), then: reload) } value: {
+                    if access.assignees.isEmpty { Text("Unassigned").foregroundStyle(.secondary) } else { Faces(people: access.assignees.persons) }
                 }
             }
-            Button { picking = true } label: {
-                LabeledContent("Visible to") {
-                    if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
-                }
+            field("Visible to") { picking = true } value: {
+                if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
             }
             if !access.hidden.isEmpty {
                 HStack {
@@ -321,13 +321,28 @@ struct NodeDetails: View {
                     Spacer()
                     if access.grants {
                         Button("Grant access") { Task { await engine.share(id, "people", access.participants + access.hidden.map(\.id)); await reload() } }
-                            .buttonStyle(.bordered).controlSize(.small)
+                            .buttonStyle(.bordered).controlSize(.small).tint(.primary)
                     }
                 }
             }
         }
-        .tint(.primary)
+        .padding(.bottom, 20) // the content below starts after a margin
+        .listRowSeparator(.hidden)
         .sheet(isPresented: $picking) { VisibilitySheet(id: id, access: access, engine: engine, done: reload) }
+    }
+
+    // a field as the desktop draws one: its name in grey, its value after it, the whole line the button that changes it
+    private func field(_ name: String, _ change: @escaping () -> Void, @ViewBuilder value: () -> some View) -> some View {
+        Button(action: change) {
+            HStack(spacing: 12) {
+                Text(name).foregroundStyle(.secondary).frame(width: 96, alignment: .leading)
+                value()
+                Spacer(minLength: 0)
+            }
+            .font(.subheadline)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -376,6 +391,7 @@ struct VisibilitySheet: View {
                     Section("Who can see it") { ForEach(access.people) { Text($0.name) } }
                 }
             }
+            .tint(.primary)
             .navigationTitle("Visibility")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
@@ -393,7 +409,7 @@ struct VisibilitySheet: View {
             Label { Text(title) } icon: { Image("Glyphs/" + glyph).resizable().frame(width: 20, height: 20) }
             Spacer()
             if let detail { Engine.Access.label(detail.scope, detail.space).labelStyle(.titleOnly) }
-            if on { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.blue) }
+            if on { Image(systemName: "checkmark").fontWeight(.semibold) }
         }
         .accessibilityAddTraits(on ? .isSelected : [])
     }
@@ -414,10 +430,11 @@ struct PeoplePicker: View {
                 HStack {
                     Text(person.name).foregroundStyle(.primary)
                     Spacer()
-                    if picked.contains(person.id) { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.blue) }
+                    if picked.contains(person.id) { Image(systemName: "checkmark").fontWeight(.semibold) }
                 }
             }
         }
+        .tint(.primary)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
         .navigationTitle("Select people")
         .navigationBarTitleDisplayMode(.inline)
