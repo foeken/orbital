@@ -30,13 +30,26 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
     const link = agent.taskLink(id);
     // a task on another Mac cannot be handed the request from here: this Mac starts its own
     if (link && link.agent === agentId && a.resume && !agent.elsewhere(link)) await a.resume(link.taskId, prompt);
-    else { started = true; agent.setTask(id, agentId, await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData })); }
+    else {
+      started = true;
+      const taskId = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData });
+      // the task this node had with another agent is let go once the new one exists; never the same agent's, whose
+      // plugin now holds the new task under this node's key
+      if (link && link.agent !== agentId) await releaseLink(id, link);
+      agent.setTask(id, agentId, taskId);
+    }
     return result;
   } catch (error) {
     if (started && a.release) await a.release(id).catch(() => {});
     if (!was && agentIds().includes(id)) { await setAgentMark(id, false); agent.clearTask(id); }
     throw error;
   }
+}
+// What a plugin still holds for a node's previous task (a Codex writer) is let go before the link moves on: a later
+// unassign releases only the agent the link then names (#671 review)
+async function releaseLink(id, link) {
+  const old = link && agent.get(link.agent);
+  if (old && old.release) await old.release(id).catch(() => {});
 }
 // Unassigning lets go of the link as well: the next assignment is a new task. The task itself is left alone — it is
 // the user's, with its own history — and so is the context in the node.
@@ -51,9 +64,10 @@ async function unassign(id) {
 // on every refresh, and a Codex read is an app-server child.
 let reading = null;
 async function readStatuses() {
+  const before = agent.links();
   const byAgent = {};
   const out = {};
-  for (const [nodeId, link] of Object.entries(agent.links())) {
+  for (const [nodeId, link] of Object.entries(before)) {
     if (agent.elsewhere(link)) out[nodeId] = 'elsewhere'; // on the Mac that ran it, where its state lives (renderer AGENT_BADGE)
     else (byAgent[link.agent] ||= {})[nodeId] = link.taskId;
   }
@@ -62,6 +76,10 @@ async function readStatuses() {
     try { Object.assign(out, a.statuses ? await a.statuses(links) : {}); }
     catch { for (const nodeId of Object.keys(links)) out[nodeId] = 'broken'; }
   }
+  // a node assigned, relinked or unlinked while this read ran is left out rather than given its old task's state:
+  // the pages sharing this read draw it pending until the next one (#671 review)
+  const now = agent.links();
+  for (const nodeId of Object.keys(out)) if (!now[nodeId] || now[nodeId].agent !== before[nodeId].agent || now[nodeId].taskId !== before[nodeId].taskId) delete out[nodeId];
   return out;
 }
 
@@ -84,6 +102,8 @@ const ipc = {
     const a = ready(agentId), taskId = a.linkId ? a.linkId(text) : null;
     if (!taskId) throw new Error('Paste a ' + a.label + ' task link');
     const result = await setAgentMark(id, true);
+    const previous = agent.taskLink(id);
+    if (!previous || previous.taskId !== taskId) await releaseLink(id, previous);
     agent.setTask(id, agentId, taskId);
     changed(e, id);
     return result;

@@ -3519,15 +3519,21 @@ async function main() {
     // asking while one read runs share it, and the next refresh reads afresh (issue #267).
     const backend = mainHelpers(); require('../db').open(':memory:');
     let reads = 0, finish;
-    backend.agent.setTask('tana:text:01examplea0000000000000000', 'codex', 'thread');
+    const N = 'tana:text:01examplea0000000000000000';
+    backend.agent.setTask(N, 'codex', 'thread');
     backend.agent.get('codex').statuses = () => { reads++; return new Promise((done) => { finish = done; }); };
     const status = backend.handlers.get('agent:status');
     const left = status(), right = status();
     assert.equal(reads, 1, 'two pages asking at once start one read');
-    finish({ n: 'working' });
-    assert.deepEqual([(await left).n, (await right).n], ['working', 'working'], 'and both get its answer');
+    finish({ [N]: 'working' });
+    assert.deepEqual([(await left)[N], (await right)[N]], ['working', 'working'], 'and both get its answer');
+    // a node relinked while a read runs is not given its old task's state (#671 review)
+    const stale = status();
+    backend.agent.setTask(N, 'codex', 'another-thread');
+    finish({ [N]: 'done' });
+    assert.equal((await stale)[N], undefined, 'a node whose task changed during the read is left for the next one');
     status();
-    assert.equal(reads, 2, 'a read that has settled is not reused: the next refresh asks again');
+    assert.equal(reads, 3, 'a read that has settled is not reused: the next refresh asks again');
     finish({});
     backend.agent.clearTask('tana:text:01examplea0000000000000000');
     console.log('ok  agent status: one read shared by every page asking at once');

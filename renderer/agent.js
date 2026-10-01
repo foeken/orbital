@@ -77,7 +77,8 @@ const agentsApply = (call) => run(async () => {
 function agentsRows(q) {
   const rows = agentList.map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
     hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
-    disabled: a.id === 'tana' || !a.installed, run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
+    // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
+    disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
   for (const a of agentsOn()) rows.push({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
     run: () => agentsApply(() => tana.setDefaultAgent(a.id)) });
   return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;

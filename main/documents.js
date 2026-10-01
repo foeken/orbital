@@ -616,12 +616,13 @@ function subscribe(id, init) {
   return S.client.sync.subscribe(id, init).catch((e) => { subscribed.delete(id); report(e); return null; });
 }
 
-function invalidateDeleted(id) {
+// note: false for a document the app made and takes back itself (discard), which is no deletion of yours to restore
+function invalidateDeleted(id, note = true) {
   deletedNodes.add(id);
   // What Cmd+K "Recently deleted" offers to restore. The title is taken before the cached row goes, from the
   // document itself while it is still open: a deleted document survives with its title, but nothing lists it.
   const open = S.client && S.client.sync.getDocument(id);
-  db.noteDeleted(id, (open && readNode(open).title) || (db.get(id) || {}).title);
+  if (note) db.noteDeleted(id, (open && readNode(open).title) || (db.get(id) || {}).title);
   db.remove(id);
   nodeHues.delete(id); hueLoaded.delete(id); editability.delete(id); nodeMeta.delete(id);
   typeTitles.delete(id); typeHues.delete(id);
@@ -1147,6 +1148,13 @@ async function documentAction(id, action, record = true) {
   return id;
   } finally { if (record) S.historyBusy = false; }
 }
+// A document the app made and takes back itself (an agent's task chat whose handoff failed): deleted on the server
+// with no place in Recently deleted and no undo step, since it was never yours to restore.
+async function discard(id) {
+  if (typeof id !== 'string' || !DOC_URI.test(id)) throw new Error('Invalid document URI');
+  await S.client.sync.softDelete(id);
+  invalidateDeleted(id, false);
+}
 // Cmd+K "Archived types". Unlike a deleted document an archived one stays in the graph, behind includeArchived, so
 // this is one query rather than a local list; graph times are ISO strings, so newest first is a string compare.
 async function archivedTypes() {
@@ -1352,4 +1360,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { webLink, newChat, sendChat, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
