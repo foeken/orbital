@@ -20,7 +20,8 @@ import { forget, issues, members, within } from './stand-ins';
 import { mark } from './sensitive';
 import NUCLEO from 'nucleo-ui';
 
-// The phone reads Orbital's settings document and never makes one: a Mac does (main/settings.js create). Once it did,
+// The phone reads Orbital's settings document and writes only the keys it sets (Mark as Sensitive): a Mac makes, merges
+// and tidies it (main/settings.js). Once it did,
 // when it could not find yours, and read an empty one: no icons, nothing sensitive known.
 S.settingsReadOnly = true;
 
@@ -63,6 +64,9 @@ function storageId() {
 
 // A graph node as a list row (ios/Orbital/Timeline.swift Row): its words, its kind for the glyph, its state for a box
 const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
+// A block Tana's agent wrote can have no id (sdk/content.js assignBlockIds, which the phone does not write): one of its own
+// here, so the row still has one to be drawn by
+const named = (rows, at = 'row') => rows.map((r, i) => ({ ...r, id: r.id || at + '.' + i, children: named(r.children || [], r.id || at + '.' + i) }));
 const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', ...(secret().has(n.id) ? { sensitive: true } : {}), icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
 
 // What you marked sensitive in Orbital (the settings document's sensitive: node ids), drawn blurred (sensitive.js)
@@ -123,7 +127,7 @@ async function searchRows(doc) {
   const byId = new Map(found.map((n) => [n.id, n]));
   const rows = arrange(found.map((n) => ({ id: n.id, title: n.title, state: (n.state && n.state.type) || null, updated: iso(n.updateTime), created: iso(n.createTime),
     createdBy: n.createdBy, assignees: n.assignedTo || [], type: typeTitles.get(n.entityType) })), view,
-  { me: S.me.userUri, now: Date.now(), names: new Map(people.map((m) => [m.id, m.title])), pinned: new Set(Object.keys(pinned)), watched: choice(true), silenced: choice(false) });
+  { me: S.me.userUri, now: Date.now(), names: new Map(people.map((m) => [m.id, m.title])), agent: new Set(Object.keys(settings.get('codexTask') || {})), pinned: new Set(Object.keys(pinned)), watched: choice(true), silenced: choice(false) });
   return rows.map(({ n, group }) => ({ ...listRow(byId.get(n.id)), group }));
 }
 
@@ -277,7 +281,7 @@ window.orbital = {
       rows = chatRows(messages ? messages.toJSON() : [], { authorName: (uri) => names.get(uri), me: S.me.userUri, streamingId: doc.data.get('streamingMessageId') });
     } else if (kind === 'search') rows = await searchRows(doc);
     else if (kind === 'event') rows = (await S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest })).nodes.map(listRow);
-    else rows = readOutline(doc);
+    else rows = named(readOutline(doc));
     return JSON.stringify({ title: n.title || 'Untitled', kind, rows: redact(await titled(rows)), sensitive: secret().has(id) });
   },
   // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
@@ -312,7 +316,8 @@ window.orbital = {
   async remove(id) {
     const doc = await hold(id);
     if (!(await canDelete(doc, S.me.userUri, await access()).catch(() => false))) throw new Error('You cannot delete this');
-    await S.client.sync.softDelete(id);
+    const done = await S.client.sync.softDelete(id);
+    if (done?.responseUnion?.case !== 'documentActionResponse') throw new Error('Tana did not confirm the delete'); // main/documents.js documentAction
     return JSON.stringify(id);
   },
   // What the app needs besides rows, read at each refresh: Auto-translate as the desktop has it (renderer/translate.js:

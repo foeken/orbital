@@ -26,9 +26,9 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
     { id: 'd', title: 'Theirs', state: 'open', updated: t(2), created: t(2), createdBy: other, assignees: [other] },
     { id: 'e', title: 'Pinned one', state: 'open', updated: t(8), created: t(8), createdBy: me, assignees: [me] },
   ];
-  const c = { me, now: Date.now(), names: new Map([[other, 'Sam']]), pinned: new Set(['e']), watched: new Set(), silenced: new Set() };
+  const c = { me, now: Date.now(), names: new Map([[other, 'Sam']]), agent: new Set(['d']), pinned: new Set(['e']), watched: new Set(), silenced: new Set() };
   const shown = (view) => arrange(rows, view, c).map(({ n, group }) => (group ? group + ':' : '') + n.id).join(' ');
-  assert.strictEqual(shown({ groupBy: 'responsibility', sortBy: '-updated' }), 'Pinned:e Mine:a Tracking:c Assigned by others:b');
+  assert.strictEqual(shown({ groupBy: 'responsibility', sortBy: '-updated' }), 'Agent:d Pinned:e Mine:a Tracking:c Assigned by others:b', 'a Codex task first, whoever has it');
   assert.strictEqual(shown({ groupBy: 'status', sortBy: 'title' }), 'Inbox:b In Progress:a In Progress:c In Progress:e In Progress:d');
   assert.strictEqual(shown({ sortBy: '-created' }), 'b d c e a');
   assert.strictEqual(shown({ groupBy: 'assignee' }), 'Sam:c Sam:d Someone:a Someone:b Someone:e', 'named by the member list, unknown as Someone');

@@ -44,15 +44,20 @@ final class Translator {
     }
 
     private func flush(_ to: String) async {
-        let batch = Array(Set(queue)).prefix(200)
-        queue = []; flushing = false
+        let waiting = Array(Set(queue)), batch = waiting.prefix(200)
+        queue = Array(waiting.dropFirst(200)); flushing = !queue.isEmpty // the rest in the next question
+        if flushing { Task { await flush(to) } }
         let none = Answer(lang: "", text: "")
         for text in batch where !Self.foreign(text, to: to) { answers[to + "\n" + text] = none }
         let ask = batch.filter { answers[to + "\n" + $0] == nil }
         guard !ask.isEmpty else { return save() }
         let found: [Int: Answer]
         do {
-            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: model) else { problem = "Sign in with ChatGPT"; return save() }
+            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: model) else {
+                problem = "Sign in with ChatGPT"
+                for text in ask { asked.remove(to + "\n" + text) } // asked again once signed in
+                return save()
+            }
             found = answered; problem = nil
         } catch {
             problem = "ChatGPT: " + error.localizedDescription
@@ -60,7 +65,7 @@ final class Translator {
             return save()
         }
         for (i, text) in ask.enumerated() {
-            guard let answer = found[i + 1] else { continue } // not answered: asked again another time
+            guard let answer = found[i + 1] else { asked.remove(to + "\n" + text); continue } // not answered: asked again another time
             answers[to + "\n" + text] = answer.text == text || answer.lang.lowercased() == to.lowercased() ? none : answer
         }
         save()

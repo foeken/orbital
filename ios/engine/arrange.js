@@ -2,7 +2,7 @@
 // A saved search's rows in the order and sections the desktop shows them (renderer/views.js groupKey, groupRows,
 // SORT_KEY), by the sort and grouping stored in the search (view.sortBy, view.groupBy): read only, nothing to choose
 // on the phone. n: { id, state, updated, created, title, createdBy, assignees, type }; c: { me, now, names (uri ->
-// name), pinned / watched / silenced (sets of ids) }. Answers [{ n, group }] in order, group null when ungrouped.
+// name), agent / pinned / watched / silenced (sets of ids) }. Answers [{ n, group }] in order, group null when ungrouped.
 // ponytail: a field as the sort or the grouping reads as the query's order, ungrouped; add the field values when wanted.
 const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
 const UPDATED = [[36e5, 'Last hour'], [864e5, 'Last day'], [7 * 864e5, 'Last week'], [30 * 864e5, 'Last month']];
@@ -17,6 +17,7 @@ function groupOf(n, by, c) {
   if (by === 'assignee') return n.assignees.length ? c.names.get(n.assignees[0]) || 'Someone' : FALLBACK.assignee;
   if (by === 'type') return n.type || FALLBACK.type;
   // what a row is to you (renderer/views.js responsibilityOf); a row you are no part of has no section and is left out
+  if (c.agent.has(n.id)) return 'Agent'; // a node handed to a Codex task (the synced codexTask), before anything else
   if (n.state && c.pinned.has(n.id)) return n.state === 'closed' ? 'My completed' : 'Pinned';
   const mine = n.createdBy === c.me, assigned = n.assignees.includes(c.me);
   if (!n.assignees.length) return mine ? 'Unassigned' : null;

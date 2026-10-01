@@ -19,6 +19,7 @@ struct Shell: View {
     @State private var asked: [String: Date] = [:] // chat id -> when Ask Tana sent its first message, whose answer it waits for
     @State private var searches: [Page] = []
     @State private var icons: [String: UIImage] = [:] // saved search id -> the icon it was given in Orbital
+    @State private var secret: Set<String> = [] // the saved searches marked sensitive, drawn so in the menu too
     @State private var menu = false
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
     @State private var adding = CommandLine.arguments.contains("-add") // Quick Add Task; -add: open, for design shots
@@ -29,7 +30,7 @@ struct Shell: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            SideMenu(page: $page, searches: $searches, icons: icons, moved: saveOrder, close: { path = []; show(false) }, settings: { settings = true })
+            SideMenu(page: $page, searches: $searches, icons: icons, hidden: engine.reveal ? [] : secret, moved: saveOrder, close: { path = []; show(false) }, settings: { settings = true })
                 .frame(width: width)
                 .accessibilityHidden(!menu)
             NavigationStack(path: $path) {
@@ -136,6 +137,7 @@ struct Shell: View {
     private func loadSearches() async {
         guard engine.phase == .ready, let found = try? await engine.searches() else { return }
         searches = Self.ordered(found.map { .search($0.id, $0.words) })
+        secret = Set(found.filter { $0.sensitive == true }.map(\.id))
         icons = Dictionary(found.compactMap { row in
             row.glyph.flatMap { Data(base64Encoded: $0) }.flatMap { UIImage(data: $0, scale: 3) }.map { (row.id, $0) }
         }, uniquingKeysWith: { first, _ in first })
@@ -150,6 +152,7 @@ struct SideMenu: View {
     @Binding var page: Shell.Page
     @Binding var searches: [Shell.Page]
     let icons: [String: UIImage]
+    let hidden: Set<String> // sensitive and not shown by a shake
     let moved: () -> Void // the order changed: Shell keeps it
     let close: () -> Void
     let settings: () -> Void
@@ -214,7 +217,7 @@ struct SideMenu: View {
                     else { Image("Glyphs/" + item.glyph).resizable() }
                 }
                 .frame(width: 22, height: 22)
-                Text(item.title).fontWeight(.medium).lineLimit(1)
+                Text(item.title).fontWeight(.medium).lineLimit(1).modifier(Blur(hidden: item.searchID.map(hidden.contains) ?? false))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
