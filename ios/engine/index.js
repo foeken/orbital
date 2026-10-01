@@ -183,6 +183,21 @@ async function creatable(uri, ctx) {
     return { uri, title: type.title || '', ownerUri: type.ownerUri || null, task: !!type.workflowUri };
   } catch { return null; }
 }
+// The phone is about tasks for now: a saved search is in its menu when everything it lists is a task, the Tasks kind or
+// a type with a workflow; the rest (meetings, chats, goals, a search of everything) stays on the desktop
+const workflow = new Map(); // type uri -> whether it has a workflow, for the session
+async function listsTasks(searchId) {
+  try {
+    const types = searchQueryToFilter(readSearch(await hold(searchId)).query, S.me.userUri).types || [];
+    for (const t of types) {
+      if (t === 'tasks') continue;
+      if (!/^tana:type:/.test(t)) return false;
+      if (!workflow.has(t)) workflow.set(t, !!(await peek(t)).workflowUri);
+      if (!workflow.get(t)) return false;
+    }
+    return types.length > 0;
+  } catch { return false; }
+}
 const taskTypes = () => (taskTypeList ||= (async () => {
   const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }), ctx = await access();
   const types = await Promise.all(nodes.map((t) => creatable(t.id, ctx)));
@@ -230,7 +245,7 @@ async function create(title, config) {
 function drop() {
   if (S.client) S.client.close().catch(() => {});
   S.client = S.me = null;
-  settings.reset(); forget(); names.clear(); kept.length = 0; taskTypeList = null; // what the last account's session knew
+  settings.reset(); forget(); names.clear(); kept.length = 0; taskTypeList = null; workflow.clear(); // what the last account's session knew
 }
 
 // The icon a saved search was given with Set icon (the settings document's typeIcons, main/icons.js: search uri → Nucleo
@@ -356,7 +371,7 @@ window.orbital = {
     return answered(id, messageId, doc.data.get('ownerUri'));
   },
   send: (id, text) => say(id, text), // a follow-up in a chat
-  // Every saved search you can see, the ones pinned to your sidebar first in their order there, each with its icon (glyph)
+  // Every saved search of tasks you can see (listsTasks), the ones pinned to your sidebar first in their order there, each with its icon (glyph)
   // the ones pinned to your sidebar first, in its order (sections included), then the rest, newest first
   async searches() {
     const [tree, { nodes = [] }] = await Promise.all([within('sidebar pins', sidebarTree(S.client.sync, S.me.userUri)).catch(() => []), S.client.graph.listNodes({ nodeTypes: ['search'], limit: 1000, sortOptions: newest })]);
@@ -365,6 +380,8 @@ window.orbital = {
     const take = (entries) => { for (const e of entries) { if (e.uri && byId.has(e.uri) && !order.includes(byId.get(e.uri))) order.push(byId.get(e.uri)); take(e.children || []); } };
     take(tree);
     take(nodes.map((n) => ({ uri: n.id })));
+    const tasks = await Promise.all(order.map((n) => listsTasks(n.id)));
+    order.splice(0, order.length, ...order.filter((_, i) => tasks[i]));
     return JSON.stringify(await Promise.all(order.map(async (n) => ({ ...listRow(n), glyph: await iconPng(chosen[n.id]).catch(() => null) }))));
   },
   // Long press, Delete: to Tana's trash, as the desktop deletes (main/documents.js documentAction), where you may
