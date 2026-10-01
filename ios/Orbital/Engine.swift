@@ -227,7 +227,15 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     struct Setup: Decodable { let to: String?; let model: String?; let sensitive: [String]; let pinned: [String] }
 
     // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
-    func pin(_ id: String, _ on: Bool) async { await act("return await orbital.pin(id, on)", ["id": id, "on": on]) }
+    // Remove Pin takes the task out of Today's Tasks at once, collapsing as a deleted row does; the read after says where it
+    // is now (still on today's node, it comes back)
+    func pin(_ id: String, _ on: Bool) async {
+        if !on { withAnimation(Self.collapse) { _ = unpinned.insert(id) } }
+        await act("return await orbital.pin(id, on)", ["id": id, "on": on])
+        unpinned.remove(id)
+    }
+    var unpinned: Set<String> = [] // pins being taken off here, out of Today's Tasks before Tana answers
+    static var collapse: Animation? { UIAccessibility.isReduceMotionEnabled ? nil : .snappy }
     // Settings' Auto-translate: the synced preference (orbital.translateTo), shown at once and kept if Tana takes it
     func translate(into to: String?) async {
         let was = translator.to
@@ -291,15 +299,14 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // The row goes at once, collapsing out of its list (the List's own removal, under Reduce Motion without the move),
     // and comes back if Tana says no.
     func remove(_ id: String) async -> Bool {
-        let move: Animation? = UIAccessibility.isReduceMotionEnabled ? nil : .snappy
-        withAnimation(move) { _ = removed.insert(id) }
+        withAnimation(Self.collapse) { _ = removed.insert(id) }
         guard !Self.isSample else { return true }
         do {
             let _: String = try await call("return await orbital.remove(id)", ["id": id])
             await refresh()
             return true
         } catch {
-            withAnimation(move) { _ = removed.remove(id) }
+            withAnimation(Self.collapse) { _ = removed.remove(id) }
             self.error = error.localizedDescription
             return false
         }

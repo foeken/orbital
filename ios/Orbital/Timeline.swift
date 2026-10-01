@@ -139,14 +139,21 @@ struct TimelineScreen: View {
 
     var body: some View {
         List {
-            if !today.isEmpty {
-                // one stop on the rail, as the desktop's: Now, the Today glyph, its words, the tasks hanging under them
+            if hasToday {
+                // one stop on the rail, as the desktop's: Now, the Today glyph, its words, the tasks hanging under them; with none, a
+                // line saying so, as the desktop keeps the block
                 RailRow(time: "Now", railTop: 24, bottom: 0) { Marker(icon: "todayTasks", tone: "new", now: false) } content: { Text("Today's Tasks") }
-                TaskLines(tasks: today, engine: engine)
+                if today.isEmpty {
+                    RailRow(time: "", top: 10, bottom: 16) { Color.clear.frame(height: 1) } content: {
+                        Text("Nothing pinned to today. Long-press a task to pin it.").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                } else {
+                    TaskLines(tasks: today, engine: engine)
+                }
             }
             // as the desktop has it: the free time, then one stop for the meetings still to come, each hanging under it like
             // a task, its start time on its right (the rail's own time column says only Now)
-            if let free { FreeLine(free: free, time: today.isEmpty ? "Now" : "") }
+            if let free { FreeLine(free: free, time: hasToday ? "" : "Now") }
             if !upcoming.isEmpty {
                 RailRow(time: "", top: 14, bottom: 0) { Marker(icon: "meeting", tone: nil, now: false) } content: { Text("Upcoming meetings") }
                 ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, m in Meeting(row: m, engine: engine, top: i == 0 ? 20 : 14, bottom: i == upcoming.count - 1 ? 16 : 0) }
@@ -211,7 +218,8 @@ struct TimelineScreen: View {
 
     // connecting and the first read are one build (Building)
     private var building: Bool { engine.rows.isEmpty && (engine.loading || engine.phase == .starting) }
-    private var today: [Row] { engine.shown(engine.rows.first { $0.timeline?.today == true }?.children) }
+    private var hasToday: Bool { engine.rows.contains { $0.timeline?.today == true } }
+    private var today: [Row] { engine.shown(engine.rows.first { $0.timeline?.today == true }?.children).filter { !engine.unpinned.contains($0.id) } }
     private var upcoming: [Row] { engine.shown(engine.rows.first { $0.timeline?.upcoming == true }?.children) }
     private var free: Row.Free? { engine.rows.first { $0.timeline?.free != nil }?.timeline?.free }
 
