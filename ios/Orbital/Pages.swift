@@ -105,7 +105,7 @@ struct NodeScreen: View {
                     }
                         .listStyle(.plain)
                         .refreshable { await load() }
-                        .overlay { if page.rows.isEmpty { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } }
+                        .overlay { if Self.flat(page.rows).isEmpty, access == nil { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } } // a document with fields shows them alone
                 }
             } else if let error {
                 ContentUnavailableView {
@@ -150,8 +150,13 @@ struct NodeScreen: View {
 
     // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
     static func flat(_ rows: [Row], depth: Int = 0) -> [(row: Row, depth: Int)] {
-        rows.flatMap { [($0, depth)] + flat($0.children ?? [], depth: depth + 1) }
+        rows.filter { !$0.blank }.flatMap { [($0, depth)] + flat($0.children ?? [], depth: depth + 1) }
     }
+}
+
+// An empty line with nothing under it, which a new task's content often is only: left out, so it draws no lone bullet
+extension Row {
+    var blank: Bool { words.trimmingCharacters(in: .whitespaces).isEmpty && (segments ?? []).isEmpty && type == nil && (children ?? []).isEmpty }
 }
 
 // One block of an outline: a bullet and its words, indented by depth; a heading bigger and with no bullet; a reference
@@ -306,43 +311,48 @@ struct NodeDetails: View {
     @State private var picking = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if access.task {
-                field("Assigned to") { engine.assigning = .init(id: id, current: access.assignees.map(\.id), then: reload) } value: {
-                    if access.assignees.isEmpty { Text("Unassigned").foregroundStyle(.secondary) } else { Faces(people: access.assignees.persons) }
-                }
-            }
-            field("Visible to") { picking = true } value: {
-                if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
-            }
-            if !access.hidden.isEmpty {
-                HStack {
-                    Label("Not visible to " + access.hidden.names, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange)
-                    Spacer()
-                    if access.grants {
-                        Button("Grant access") { Task { await engine.share(id, "people", access.participants + access.hidden.map(\.id)); await reload() } }
-                            .buttonStyle(.bordered).controlSize(.small).tint(.primary)
-                    }
-                }
+        if access.task {
+            field("Assigned to") { engine.assigning = .init(id: id, current: access.assignees.map(\.id), then: reload) } value: {
+                if access.assignees.isEmpty { Text("Unassigned").foregroundStyle(.secondary) } else { Faces(people: access.assignees.persons) }
             }
         }
-        .padding(.bottom, 20) // the content below starts after a margin
-        .listRowSeparator(.hidden)
+        field("Visible to") { picking = true } value: {
+            if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
+        }
         .sheet(isPresented: $picking) { VisibilitySheet(id: id, access: access, engine: engine, done: reload) }
+        if !access.hidden.isEmpty {
+            HStack {
+                Label("Not visible to " + access.hidden.names, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange)
+                Spacer()
+                if access.grants {
+                    Button("Grant access") { Task { await engine.share(id, "people", access.participants + access.hidden.map(\.id)); await reload() } }
+                        .buttonStyle(.bordered).controlSize(.small).tint(.primary)
+                }
+            }
+            .modifier(FieldLine())
+        }
     }
 
-    // a field as the desktop draws one: its name in grey, its value after it, the whole line the button that changes it
+    // a field as the desktop draws one: its name in grey, its value after it, a line under it, the whole row the button
+    // that changes it
     private func field(_ name: String, _ change: @escaping () -> Void, @ViewBuilder value: () -> some View) -> some View {
         Button(action: change) {
             HStack(spacing: 12) {
-                Text(name).foregroundStyle(.secondary).frame(width: 96, alignment: .leading)
+                Text(name).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
                 value()
                 Spacer(minLength: 0)
             }
-            .font(.subheadline)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .modifier(FieldLine())
+    }
+}
+
+// the line under a field, from its left edge to the right, and none above the first
+struct FieldLine: ViewModifier {
+    func body(content: Content) -> some View {
+        content.listRowSeparator(.hidden, edges: .top).listRowSeparator(.visible, edges: .bottom).alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
     }
 }
 
