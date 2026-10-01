@@ -23,6 +23,8 @@ struct Shell: View {
     @State private var menu = false
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
     @State private var adding = CommandLine.arguments.contains("-add") // Quick Add Task; -add: open, for design shots
+    @State private var shared: Shared? // shared to Orbital: Quick Add opened with it
+    @Environment(\.scenePhase) private var scene
     @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
@@ -106,6 +108,10 @@ struct Shell: View {
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
         .sheet(isPresented: $adding) { QuickAdd(engine: engine) }
+        .sheet(item: $shared) { QuickAdd(engine: engine, shared: $0) }
+        // the Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS not open it
+        .onOpenURL { _ in shared = Shared.take() ?? shared }
+        .onChange(of: scene, initial: true) { if scene == .active, let found = Shared.take() { adding = false; settings = false; shared = found } }
         .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
         .task {
             // -zoom <id>: a node open at launch, for design shots

@@ -6,6 +6,7 @@ import SwiftUI
 // ai:processImage): from Photos, or from the clipboard when it holds one. A made task is never reported as a failure.
 struct QuickAdd: View {
     let engine: Engine
+    var shared: Shared? // shared to Orbital (Share): its words to edit, or its image to read at once
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var title = ""
@@ -56,7 +57,11 @@ struct QuickAdd: View {
                 }
             }
             .onSubmit { Task { await add() } }
-            .task { focused = true; types = await engine.taskTypes() }
+            .task {
+                if let image = shared?.image { await process(image); return }
+                if title.isEmpty, let text = shared?.text { title = text }
+                focused = true; types = await engine.taskTypes()
+            }
             .onChange(of: photo) {
                 guard let photo else { return }
                 Task { if let data = try? await photo.loadTransferable(type: Data.self), let image = UIImage(data: data) { await process(image) } }
@@ -75,6 +80,7 @@ struct QuickAdd: View {
     // the image read and made into its node, which then opens, as the desktop opens it
     private func process(_ image: UIImage) async {
         working = "Reading the image…"
+        while engine.phase != .ready { try? await Task.sleep(for: .milliseconds(200)) } // shared while Orbital was not running: Tana connects first
         do {
             let id = try await engine.processImage(image)
             dismiss()
@@ -143,5 +149,21 @@ struct AssignSheet: View {
             }
         }
         .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+// What the Share extension left on Orbital's own pasteboard (ios/Share/ShareViewController.swift): an image or words, taken
+// once, when Orbital is opened by it or next comes forward
+struct Shared: Identifiable {
+    let id = UUID()
+    var text: String?
+    var image: UIImage?
+
+    static func take() -> Shared? {
+        guard let board = UIPasteboard(name: UIPasteboard.Name("com.dreetje.orbital.shared"), create: false), board.numberOfItems > 0 else { return nil }
+        let image = board.data(forPasteboardType: "com.dreetje.orbital.image").flatMap(UIImage.init(data:))
+        let text = board.data(forPasteboardType: "com.dreetje.orbital.text").map { String(decoding: $0, as: UTF8.self) }
+        board.items = [] // taken once
+        return image != nil || text?.isEmpty == false ? Shared(text: text, image: image) : nil
     }
 }
