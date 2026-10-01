@@ -18,6 +18,7 @@ import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
 import { mark } from './sensitive';
+import { demo, demoOn, demoTitle, isDemo } from './demo';
 import NUCLEO from 'nucleo-ui';
 
 // The phone reads Orbital's settings document and writes only the keys it sets (Mark as Sensitive): a Mac makes, merges
@@ -81,7 +82,7 @@ async function settled() {
   if (!settings.get('settingsRead')) throw new Error('Could not read your Orbital settings yet, so nothing is shown. Pull to try again.');
 }
 const secret = () => new Set(Array.isArray(settings.get('sensitive')) ? settings.get('sensitive') : []);
-const redact = (rows) => mark(rows, secret());
+const redact = (rows) => demo(mark(rows, secret())); // marked sensitive, then masked in demo mode
 
 // The documents this page opened or ticked (open, toggle) are let go of once they are no longer among the last few, as
 // the desktop lets its on-demand reads go (main/documents.js onDemand): a subscription holds the whole document, and a
@@ -240,6 +241,7 @@ window.orbital = {
     return true;
   },
   // the Timeline page, three days per page, as the rows the desktop renderer gets
+  demo: (on) => demoOn(on), // Settings' Demo mode, told before each read (Engine.swift refresh)
   async timeline(pages = 1) {
     timeline.setPages(pages);
     await settled(); // the watch choices and what is sensitive
@@ -282,7 +284,7 @@ window.orbital = {
     } else if (kind === 'search') rows = await searchRows(doc);
     else if (kind === 'event') rows = (await S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest })).nodes.map(listRow);
     else rows = named(readOutline(doc));
-    return JSON.stringify({ title: n.title || 'Untitled', kind, rows: redact(await titled(rows)), sensitive: secret().has(id) });
+    return JSON.stringify({ title: demoTitle(n.title || 'Untitled', id), kind, rows: redact(await titled(rows)), sensitive: secret().has(id) });
   },
   // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
   // answer (main/documents.js newChat), with what you typed as its first message. Answers the chat's id.
@@ -373,4 +375,9 @@ window.orbital = {
   },
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
 };
+// Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
+for (const name of ['toggle', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
+  const write = window.orbital[name];
+  window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
+}
 window.webkit?.messageHandlers?.orbital?.postMessage('ready');

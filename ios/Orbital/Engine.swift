@@ -26,6 +26,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var pinnedToday: Set<String> = [] // pinned to today, for the long-press menu
     var removed: Set<String> = [] // deleted here: gone from every list at once, before Tana confirms it
     var reveal = false // sensitive items shown, after a shake; never kept, as the desktop keeps it on the machine only
+    // Settings' Demo mode, as the desktop's: made-up words and names on screen, nothing saved (ios/engine/demo.js); kept on this phone
+    var demo = UserDefaults.standard.bool(forKey: "demoMode") {
+        didSet { UserDefaults.standard.set(demo, forKey: "demoMode"); Task { await refresh() } }
+    }
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
@@ -161,7 +165,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         defer { loading = false }
         let started = session
         do {
-            let read: [Row] = try await call("return await orbital.timeline(pages)", ["pages": pages])
+            let read: [Row] = try await call("orbital.demo(demo); return await orbital.timeline(pages)", ["pages": pages, "demo": demo])
             guard started == session else { return } // signed out meanwhile
             rows = read
             error = nil
@@ -308,6 +312,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // back with the reason in Details if Tana refuses. The row stays where it is (orbital-design: never move things
     // under the user); the next read confirms it.
     func toggle(_ task: Row) async {
+        guard !demo else { return } // a box does nothing in demo mode, as the desktop's is disabled
         let before = state(of: task)
         states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
         ticked[task.id] = .now

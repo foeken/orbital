@@ -31,8 +31,11 @@ struct SettingsView: View {
                 Section {
                     // the language chosen in Orbital on the Mac, or why the last translation did not come
                     LabeledContent { Text(engine.translator.status) } label: { Row(glyph: "language", title: "Auto-translate") }
+                    Toggle(isOn: Binding { engine.demo } set: { engine.demo = $0 }) { Row(glyph: "hidden", title: "Demo mode") }.tint(.green) // the switch in its own colour: in the rows' text colour it is white on white
                     LabeledContent { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") } label: { Row(glyph: "info", title: "Version") }
-                } header: { Header("Orbital") }
+                } header: { Header("Orbital") } footer: {
+                    Text("Demo mode shows made-up words and names in place of yours, for showing Orbital to someone. Nothing is saved to Tana while it is on.")
+                }
                 // signing out, apart from everything else and in red, as the ChatGPT app has its Log out
                 Section {
                     Button { dismiss(); Task { await engine.signOut() } } label: { LogOut(title: "Log out of Tana") }

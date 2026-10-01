@@ -35,6 +35,30 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   assert.strictEqual(shown({}), 'a b c d e', 'no sort: the query order');
 }
 
+// Demo mode (ios/engine/demo.js) masks as the desktop does, with its words: a node's title and an attendee one for one,
+// the same each time; the app's own wording in a Timeline row and a saved search's title kept; off, nothing changes
+{
+  const { demo, demoOn, demoTitle } = require('../ios/engine/demo.js');
+  const rows = [
+    { id: 'tana:text:a', title: 'Salary review 2026', people: [{ name: 'Kor Odinga' }] },
+    { id: 'orbital:timeline:1', segments: [{ text: 'Kor Odinga', person: true }, { text: ' completed ' }, { text: 'Budget', content: true }] },
+    { id: 'tana:search:s', title: 'My Tasks' },
+  ];
+  assert.deepStrictEqual(demo(rows), rows, 'off: as it came');
+  demoOn(true);
+  const [a, t, q] = demo(rows);
+  assert.notStrictEqual(a.title, rows[0].title);
+  assert.match(a.title, /^[A-Z][a-z]+ [a-z]+ 2026$/, 'one word for one, the capital and the number kept');
+  assert.deepStrictEqual(demo(rows)[0], a, 'the same each time');
+  assert.notStrictEqual(a.people[0].name, 'Kor Odinga');
+  assert.strictEqual(t.segments[1].text, ' completed ', "the app's own words kept");
+  assert.notStrictEqual(t.segments[0].text, 'Kor Odinga');
+  assert.notStrictEqual(t.segments[2].text, 'Budget');
+  assert.strictEqual(q.title, 'My Tasks', "a saved search's title is the app's");
+  assert.notStrictEqual(demoTitle('Salary review', 'tana:text:a'), 'Salary review');
+  demoOn(false);
+}
+
 // What is sensitive is marked to be drawn blurred (ios/engine/sensitive.js): the node itself, an entry about it, a task
 // under another entry, a row that mentions, links to or refers to it, nested rows; nothing else
 {
