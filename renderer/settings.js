@@ -9,7 +9,7 @@ const SETTINGS_PAGE = 'orbital:settings';
 extra.set(SETTINGS_PAGE, { id: SETTINGS_PAGE, text: 'Settings', title: 'Settings', kind: 'document', icon: 'options', editable: false, hasChildren: false, appPage: true });
 // what main answers asynchronously, read again each time the page is drawn after something may have changed it
 // (settingsAsked cleared): the palette closing, a setting arriving from another page or Mac
-let settingsAI = null, settingsHosts = null, settingsHidden = null, settingsAsked = false;
+let settingsAI = null, settingsHosts = null, settingsHidden = null, settingsAsked = false, settingsRead = 0; // settingsRead: the newest read, the only one whose answer lands
 function openSettings() {
   if (zoom?.docId === SETTINGS_PAGE) return;
   run(() => openElsewhere('right', SETTINGS_PAGE)); // a pane to the right; one already open in another pane is focused instead
@@ -22,9 +22,11 @@ new MutationObserver(() => { if (palette.hidden) settingsRefresh(); }).observe(p
 function settingsLoad() {
   if (settingsAsked) return;
   settingsAsked = true;
+  const mine = ++settingsRead; // a refresh while this read is out starts a newer one, and this answer is then stale
   const read = (call) => (call ? Promise.resolve(call()).catch(() => null) : Promise.resolve(null));
   refreshChatGPTStatus();
-  Promise.all([read(tana.aiOptions), read(tana.codexHosts), read(tana.filters), chatgptAuthLoading]).then(([ai, hosts, hidden]) => {
+  return Promise.all([read(tana.aiOptions), read(tana.codexHosts), read(tana.filters), chatgptAuthLoading]).then(([ai, hosts, hidden]) => {
+    if (mine !== settingsRead) return;
     settingsAI = ai; settingsHosts = Array.isArray(hosts) ? hosts : null; settingsHidden = Array.isArray(hidden) ? hidden : null;
     if (zoom?.docId === SETTINGS_PAGE) renderSoon(true);
   });
@@ -84,5 +86,5 @@ function settingsEl() {
   return page;
 }
 function settingsSetAI(key, value) {
-  run(async () => { settingsAI = await tana.setAiOption(key, value); renderSoon(true); });
+  run(async () => { await tana.setAiOption(key, value); settingsRefresh(); }); // read again: a read still out from before the write must not land over it
 }

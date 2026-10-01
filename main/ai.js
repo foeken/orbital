@@ -242,7 +242,7 @@ function cleanName(answer) {
 // The model's answer as text, or null when this machine has neither a ChatGPT sign-in nor an API key. image: a data
 // URL the model sees beside the input.
 async function ask(instructions, input, fetchImpl, userData, image, only = {}) { // only: a model, effort or timeout this question uses instead
-  const use = { model: only.model || settings.get('aiModel') || DEFAULT_MODEL, effort: only.effort || settings.get('aiEffort') || DEFAULT_EFFORT, schema: only.schema }; // schema: the JSON Schema the answer must follow
+  const use = { model: only.model || chosen().model, effort: only.effort || chosen().effort, schema: only.schema }; // schema: the JSON Schema the answer must follow
   if (userData) {
     // no forced token refresh per question: it was a 0.7 s round trip before every answer, and the turn's own Codex
     // refreshes the token it uses (measured 2026-09-28: 739 ms with the refresh, 3 ms without)
@@ -444,9 +444,11 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
 }
 
 // The model and effort every question here asks with (ask above), chosen on the Settings page (renderer/settings.js) and
-// synced. The page is input from outside the process: only these choices are stored.
+// synced. The page is input from outside the process: only these choices are stored. A synced value off the lists (an
+// older build's, another Mac's) reads as the default, for the page and for every question alike.
 const MODELS = ['gpt-5.6-luna', DEFAULT_MODEL, 'gpt-5.6-sol'], EFFORTS = ['low', 'medium', 'high'];
-const options = () => ({ model: settings.get('aiModel') || DEFAULT_MODEL, effort: settings.get('aiEffort') || DEFAULT_EFFORT, models: MODELS, efforts: EFFORTS });
+const chosen = () => { const model = settings.get('aiModel'), effort = settings.get('aiEffort'); return { model: MODELS.includes(model) ? model : DEFAULT_MODEL, effort: EFFORTS.includes(effort) ? effort : DEFAULT_EFFORT }; };
+const options = () => ({ ...chosen(), models: MODELS, efforts: EFFORTS });
 function setOption(key, value) {
   const allowed = key === 'model' ? MODELS : key === 'effort' ? EFFORTS : [];
   if (!allowed.includes(value)) throw new Error('Not an AI choice: ' + key);

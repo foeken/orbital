@@ -1016,10 +1016,11 @@ A row is picked up by its marker and dropped where a line says it will land (ren
 
 ### App pages
 
-Notifications, Proposals, the Timeline and Settings are pages of the app's own: an `orbital:` id no Tana node can have, known to
+Notifications, Proposals and the Timeline are pages of the app's own: an `orbital:` id no Tana node can have, known to
 the renderer from boot (`extra` with `appPage: true`), so `goTo`, Back and Recent reach them without asking main. Their
 rows are `outline:children` of that id. They have no pills, filter, draft row, presence room or pins, and Cmd+K offers
-nothing about them as documents. Each is a place the app remembers, so ⌘R on one reloads onto it.
+nothing about them as documents. Each is a place the app remembers, so ⌘R on one reloads onto it. Settings is an
+app page too, known and remembered the same way, but it has no rows: the renderer draws its controls itself (below).
 
 - **Notifications** (issue #18; `orbital:notifications`, Views after Inbox, hinted "2 unread"). main/inbox.js reads the
   user's `tana:user-inbox` document (sdk/inbox.js) into one read-only row per notification, newest first. A row is
