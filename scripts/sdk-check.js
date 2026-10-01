@@ -815,7 +815,7 @@ async function main() {
     assert.equal(await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan'))),'Stan');
     assert.deepEqual([calls[0].url,calls[0].init.headers.authorization],[ai.ENDPOINT,'Bearer sk-local-only']);
     assert.deepEqual([calls[0].init.body.model,calls[0].init.body.reasoning.effort],[ai.QUICK_MODEL,ai.QUICK_EFFORT]);
-    assert.deepEqual([ai.QUICK_MODEL,ai.QUICK_EFFORT,ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-6-luna','medium','gpt-5.6-terra','low'],'the Quick AI starts on Luna 6 at medium, the Regular AI on Terra at low');
+    assert.deepEqual([ai.QUICK_MODEL,ai.QUICK_EFFORT,ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-6-luna','low','gpt-5.6-terra','low'],'the Quick AI starts on Luna 6 at low, the Regular AI on Terra at low');
     assert.deepEqual([calls[0].init.body.input,calls[0].init.body.instructions],['Discuss this with Stan',ai.INSTRUCTIONS],'the title is the input; the rule is the instructions, so a title cannot be one');
     assert.equal(Object.keys(calls[0].init.body).length,4,'the title and nothing else about the document goes out');
     settings.set('aiModel','gpt-6-sol'); settings.set('aiEffort','high');

@@ -21,10 +21,11 @@ const { send } = require('./state');
 // trip, not the model), and right where Luna was sure and wrong — it typed twelve real documents without a confident
 // mistake, where Luna made one or two in every run (docs/OUTLINER.md, Auto-pick type).
 const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
-// The Quick AI's own start: Luna 6 at medium. Measured 2026-10-01 on 69 Dutch note lines and 16 titles through a ChatGPT
+// The Quick AI's own start: Luna 6 at low. Measured 2026-10-01 on 69 Dutch note lines and 16 titles through a ChatGPT
 // sign-in, three runs each: as good as Terra 5.6 at low (names kept, English left alone, now and then more natural),
-// as fast on a page (41 s against 44 s; the wait is the answer's length), and about a twentieth of the API price.
-const QUICK_MODEL = 'gpt-6-luna', QUICK_EFFORT = 'medium';
+// as fast (7.0 s for the titles, 42 s for a page, where the wait is the answer's length), and about a twentieth of the
+// API price; at medium it thought on short lists for 3 s more and translated no better.
+const QUICK_MODEL = 'gpt-6-luna', QUICK_EFFORT = 'low';
 // Both the Quick AI (Auto-translate, Discuss with, Classify type, the icon pick) and the Regular AI (reading an image)
 // start here until the Settings page names others (chosen below; the iPhone the same: ios/Orbital/Translator.swift)
 const ENDPOINT = 'https://api.openai.com/v1/responses';
