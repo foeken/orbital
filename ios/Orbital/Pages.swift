@@ -65,7 +65,10 @@ struct NodeScreen: View {
 
     var body: some View {
         Group {
-            if let page {
+            // a node you marked sensitive: what it is, and how to see it, until a shake shows it (the title says Hidden, as the desktop's tab does)
+            if let page, page.sensitive == true, !engine.reveal {
+                ContentUnavailableView { Label { Text("Hidden") } icon: { Image("Glyphs/hidden").resizable().frame(width: 48, height: 48) } } description: { Text("You marked this sensitive in Orbital. Shake your iPhone to show sensitive items, and shake it again to hide them.") }
+            } else if let page {
                 switch page.kind {
                 case "chat":
                     ChatView(rows: page.rows, since: waitingSince ?? asked, reveal: engine.reveal)
@@ -103,7 +106,6 @@ struct NodeScreen: View {
                 ProgressView()
             }
         }
-        .sensitive(page?.sensitive, engine: engine) // the node itself marked sensitive: the whole page, until a shake
         .navigationTitle(titled && !(page?.sensitive == true && !engine.reveal) ? engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0 : "")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {
