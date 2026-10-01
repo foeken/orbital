@@ -10,6 +10,7 @@ struct Shell: View {
         case timeline, search(String, String)
         var title: String { if case .search(_, let title) = self { title } else { "Timeline" } }
         var glyph: String { self == .timeline ? "timelineMenu" : "searchMenu" }
+        var searchID: String? { if case .search(let id, _) = self { id } else { nil } }
     }
 
     @State private var page = Page.timeline
@@ -27,7 +28,7 @@ struct Shell: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            SideMenu(page: $page, searches: searches, icons: icons, close: { path = []; show(false) }, settings: { settings = true })
+            SideMenu(page: $page, searches: $searches, icons: icons, moved: saveOrder, close: { path = []; show(false) }, settings: { settings = true })
                 .frame(width: width)
                 .accessibilityHidden(!menu)
             NavigationStack(path: $path) {
@@ -115,9 +116,21 @@ struct Shell: View {
     }
 
     // your saved searches for the menu, with the icons they were given in Orbital; the last list stays when a read fails
+    // The order you dragged the searches into, kept on this phone; one you never moved keeps its place after them, in
+    // the engine's order (your desktop pins first, then the newest)
+    // ponytail: on this phone only; the desktop's sidebar order is its own pin tree, written when wanted (sdk/pins placePin)
+    private static let orderKey = "searchOrder"
+    private func saveOrder() { UserDefaults.standard.set(searches.compactMap(\.searchID), forKey: Self.orderKey) }
+    static func ordered(_ list: [Page]) -> [Page] {
+        let saved = UserDefaults.standard.stringArray(forKey: orderKey) ?? []
+        let rank = Dictionary(saved.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        let at = { (i: Int, p: Page) in rank[p.searchID ?? ""] ?? saved.count + i }
+        return list.enumerated().sorted { at($0.offset, $0.element) < at($1.offset, $1.element) }.map(\.element)
+    }
+
     private func loadSearches() async {
         guard engine.phase == .ready, let found = try? await engine.searches() else { return }
-        searches = found.map { .search($0.id, $0.words) }
+        searches = Self.ordered(found.map { .search($0.id, $0.words) })
         icons = Dictionary(found.compactMap { row in
             row.glyph.flatMap { Data(base64Encoded: $0) }.flatMap { UIImage(data: $0, scale: 3) }.map { (row.id, $0) }
         }, uniquingKeysWith: { first, _ in first })
@@ -130,8 +143,9 @@ struct Shell: View {
 // The side menu: the app's name, its pages, and settings at the foot
 struct SideMenu: View {
     @Binding var page: Shell.Page
-    let searches: [Shell.Page]
+    @Binding var searches: [Shell.Page]
     let icons: [String: UIImage]
+    let moved: () -> Void // the order changed: Shell keeps it
     let close: () -> Void
     let settings: () -> Void
 
@@ -142,13 +156,27 @@ struct SideMenu: View {
                 .padding(.leading, 14)
                 .padding(.bottom, 12)
             item(.timeline)
-            // Your saved searches, those pinned to your sidebar first, as the ChatGPT app lists chats under its pages.
-            // They run to the foot of the screen and scroll under the settings button, fading out behind it rather than
-            // stopping at a hard line above it.
+            // Your saved searches, as the ChatGPT app lists chats under its pages; a long press picks one up to move it
+            // (the List's own reordering). They run to the foot of the screen and scroll under the settings button,
+            // fading out behind it rather than stopping at a hard line above it.
             if !searches.isEmpty {
                 Divider().padding(.horizontal, 14).padding(.vertical, 12)
-                ScrollView { VStack(spacing: 4) { ForEach(searches, id: \.self) { item($0) } }.padding(.bottom, 96) }
-                    .scrollBounceBehavior(.basedOnSize)
+                List {
+                    ForEach(Array(searches.enumerated()), id: \.element) { i, search in
+                        item(search)
+                            .accessibilityAction(named: "Move up") { move(i, by: -1) }
+                            .accessibilityAction(named: "Move down") { move(i, by: 1) }
+                            .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
+                    .onMove { from, to in searches.move(fromOffsets: from, toOffset: to); moved() }
+                    Color.clear.frame(height: 96).listRowSeparator(.hidden).listRowBackground(Color.clear) // clear of the settings button
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .environment(\.defaultMinListRowHeight, 0)
+                .scrollBounceBehavior(.basedOnSize)
                     .mask { VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 90) } }
                     .ignoresSafeArea(.container, edges: .bottom) // down to the screen's edge, under the home indicator
             }
@@ -162,6 +190,14 @@ struct SideMenu: View {
                 .padding(.horizontal, 12).padding(.bottom, 8)
         }
         .ignoresSafeArea(.keyboard) // the composer's keyboard does not squeeze the menu
+    }
+
+    // VoiceOver's way to reorder, which a long-press drag is not
+    private func move(_ i: Int, by step: Int) {
+        let to = i + step
+        guard searches.indices.contains(to) else { return }
+        searches.swapAt(i, to)
+        moved()
     }
 
     private func item(_ item: Shell.Page) -> some View {
