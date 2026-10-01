@@ -21,6 +21,7 @@ const ready = (id) => { const a = agent.get(id); if (!a || !agent.usable(id)) th
 // setting, so it would reach the other machines as a pending badge for work nobody took.
 async function assign(id, prompt, agentId = agent.defaultAgent()) {
   const a = ready(agentId), was = agentIds().includes(id);
+  let started = false; // a new task was begun: on failure it is let go (a Codex writer otherwise runs on, hidden), a resumed one is not
   try {
     const result = await setAgentMark(id, true, prompt);
     // the node's own title, off the document the mark just opened, so the task is named after the work
@@ -29,9 +30,10 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
     const link = agent.taskLink(id);
     // a task on another Mac cannot be handed the request from here: this Mac starts its own
     if (link && link.agent === agentId && a.resume && !agent.elsewhere(link)) await a.resume(link.taskId, prompt);
-    else agent.setTask(id, agentId, await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData }));
+    else { started = true; agent.setTask(id, agentId, await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData })); }
     return result;
   } catch (error) {
+    if (started && a.release) await a.release(id).catch(() => {});
     if (!was && agentIds().includes(id)) { await setAgentMark(id, false); agent.clearTask(id); }
     throw error;
   }

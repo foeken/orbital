@@ -1579,6 +1579,12 @@ async function main() {
     // An agent that is switched off takes nothing, and is refused before anything is written.
     const off = make('text', 'Not for Claude');
     await assert.rejects(backend.agents.assign(off.id, 'Do it', 'claude'), /not switched on/, 'an agent that is off is refused by name');
+    // A task begun and then not handed over (Codex made the thread, opening it failed) is let go, not left running (#671 review)
+    const stuck = make('text', 'Opens nowhere'), released = [];
+    codex.start = async () => { throw new Error('Cannot open Codex from here'); };
+    codex.release = async (key) => { released.push(key); };
+    await assert.rejects(backend.agents.assign(stuck.id, 'Do it', 'codex'), /Cannot open Codex/, 'the failure reaches the page');
+    assert.deepEqual(released, [stuck.id], 'and the task it began is released');
     assert.equal((backend.settings.get('codexPrompt') || {})[off.id], undefined, 'and the prompt was not written on the way');
     console.log('ok  current meeting read fresh, a task from its title alone or of a workflow type, and the agent handoff named after its node');
   }

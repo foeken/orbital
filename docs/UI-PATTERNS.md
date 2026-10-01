@@ -96,7 +96,7 @@ keepOpen: true, // the palette stays up until the write is in; the row closes it
 run: () => run(async () => {
   await tana.setType(doc.id, uri);
   closePalette();
-  showNote('Classified as ' + title);
+  showNote('Type set to ' + title);
 }),
 ```
 
@@ -292,7 +292,7 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   ("Set type", "Search Tana"); a new row follows the rows beside it in its group. A place or a choice is named as it is
   (a view's title, "Any status", a member). A hint says the current value ("Inbox") or why a row cannot run, and `✓`
   marks the current choice. A placeholder says what to type ("Search Tana", "Choose a colour or type a hue…"). A notice
-  says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
+  says what was done, in the past tense, and names the thing: "Link copied", "Type set to Decision Record".
 - **Where errors go.** An action runs through `run()`, and a failure becomes the red toast (`showError`). A palette page
   built on `loadList` shows a failed read as a disabled note row in place of its rows; other pages that read (Set icon
   and the Pin to today picker, for example) send it to the toast instead. The Quick Add Task card, a page of its own, keeps
