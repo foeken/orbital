@@ -1662,9 +1662,20 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 
 /* 6 Your keys: ⇧⌘K on a row, three keys recorded, and the row wears them */
 .hv-panes { padding-top: 26px; }
+/* 7 Sign in with ChatGPT (issue #669): the sign-in at the centre, the features it turns on around it on an orbit, each
+   lit in turn as if the moon of page 1 passed it. Still under reduced motion: the ring, the core and the five names. */
 .hv-ai { align-items: center; padding: 0; }
-.hv-ai svg { width: 72px; height: 72px; color: #1a1a1a; }
-[data-theme="dark"] .hv-ai svg { color: #d0d2d2; }
+.hv-aiorbit { position: relative; width: min(560px, 100%); height: 220px; }
+.hv-airing { position: absolute; left: 50%; top: 50%; width: 72%; height: 130px; margin: -65px 0 0 -36%; border: 1.5px solid #d4d6d8; border-radius: 50%; }
+.hv-aicore { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: #1c2024; display: flex; align-items: center; justify-content: center; }
+.hv-aicore svg { width: 34px; height: 34px; color: #fff; }
+.hv-aichip { --hv-aishadow: 0 0 0 1px rgba(0, 0, 0, .07), 0 4px 12px rgba(0, 0, 0, .05); position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 14px; background: #fff; white-space: nowrap; font-size: 13px; color: #1c2024; box-shadow: var(--hv-aishadow); }
+.hv-aichip svg { width: 14px; height: 14px; color: #6b6f73; }
+.hv-aichip:nth-of-type(3) { left: 50%; top: 13%; } .hv-aichip:nth-of-type(4) { left: 88%; top: 38%; } .hv-aichip:nth-of-type(5) { left: 80%; top: 80%; }
+.hv-aichip:nth-of-type(6) { left: 20%; top: 80%; } .hv-aichip:nth-of-type(7) { left: 12%; top: 38%; }
+[data-theme="dark"] .hv-airing { border-color: #454b4e; }
+[data-theme="dark"] .hv-aicore { background: #e8eaea; } [data-theme="dark"] .hv-aicore svg { color: #1d2022; }
+[data-theme="dark"] .hv-aichip { --hv-aishadow: 0 0 0 1px rgba(255, 255, 255, .08); background: #2a2e30; color: #d0d2d2; } [data-theme="dark"] .hv-aichip svg { color: #a8adaf; }
 .hv-win { display: flex; gap: 1px; width: 470px; height: 176px; overflow: hidden; background: #e4e4e4; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .05); }
 .hv-pn { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; background: #fff; overflow: hidden; }
 .hv-pn-b { flex: 0 0 44%; } /* still (reduced motion): the two panes side by side */
@@ -1685,6 +1696,10 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
   /* 1 */
   .hpage.on .hv-moon { animation: hv-moon 7s linear infinite; }
   .hpage.on .hv-moonbox { animation: hv-moon-z 7s linear infinite; }
+  /* 7: one feature lit at a time, round the orbit */
+  .hpage.on .hv-aichip { animation: hv-ai-lit 7.5s var(--ease-out) infinite both; }
+  .hpage.on .hv-aichip:nth-of-type(4) { animation-delay: 1.5s; } .hpage.on .hv-aichip:nth-of-type(5) { animation-delay: 3s; }
+  .hpage.on .hv-aichip:nth-of-type(6) { animation-delay: 4.5s; } .hpage.on .hv-aichip:nth-of-type(7) { animation-delay: 6s; }
   .hpage.on .hv-keys kbd { animation: pop-in var(--dur-slow) var(--ease-spring) backwards; }
   .hpage.on .hv-keys kbd:nth-child(1) { animation-delay: .25s; } .hpage.on .hv-keys kbd:nth-child(2) { animation-delay: .4s; } .hpage.on .hv-keys kbd:nth-child(3) { animation-delay: .55s; }
   /* 2 */
@@ -1717,6 +1732,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 @keyframes hv-press { 0% { opacity: 0; transform: translateY(8px) scale(.9); } 3% { opacity: 1; transform: none; } 6% { transform: translateY(2px) scale(.92); box-shadow: 0 0 0 rgba(0, 0, 0, .14); } 10% { transform: none; } 17% { opacity: 1; } 22%, 100% { opacity: 0; } }
 @keyframes hv-moon { from { offset-distance: 0%; } to { offset-distance: 100%; } }
 @keyframes hv-moon-z { 0%, 49.9% { z-index: 3; } 50%, 100% { z-index: 0; } }
+@keyframes hv-ai-lit { 0%, 2% { box-shadow: var(--hv-aishadow); } 5%, 18% { box-shadow: 0 0 0 1.5px #508fbb, 0 4px 14px rgba(80, 143, 187, .22); } 22%, 100% { box-shadow: var(--hv-aishadow); } }
 @keyframes hv-cmd-card { 0%, 4% { opacity: 0; transform: translateY(-8px) scale(.97); } 9%, 58% { opacity: 1; transform: none; } 63%, 100% { opacity: 0; transform: scale(.98); } }
 @keyframes hv-type-pin { 0%, 21.9% { content: ''; } 22%, 27.9% { content: 'p'; } 28%, 33.9% { content: 'pi'; } 34%, 100% { content: 'pin'; } }
 @keyframes hv-cmd-drop { 0%, 22% { height: 32px; opacity: 1; } 28%, 100% { height: 0; opacity: 0; } }
