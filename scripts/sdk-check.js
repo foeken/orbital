@@ -4096,7 +4096,8 @@ async function main() {
     docs.set(org.id, org);
     const row = make('Everyone sees it');
     docs.get(row).transact((l) => l.getMap('data').delete('restricted')); // inherits: the organization is its boundary
-    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: null, client: {
+    const sent = [];
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } }, client: {
       sync: { subscribe: async (id) => docs.get(id) || null, getDocument: (id) => docs.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
       graph: { listNodes: async (p) => ({ nodes: p.nodeIds ? p.nodeIds.map((id) => ({ id })) : [] }),
         getOwnerChain: async () => ({ entries: [{ uri: row, restricted: false, accessible: true }, { uri: org.id, restricted: true, accessible: true }], effectivelyRestricted: true }) },
@@ -4106,6 +4107,12 @@ async function main() {
     backend.timers.shift().fn();
     const meta = await asked;
     assert.deepEqual([meta.audience, meta.people.length, meta.people.every((uri) => people.includes(uri)), meta.peopleCount], ['everyone', 4, true, 6], 'four people and how many');
+    // #477: a change to the owner it was read through tells the row its metadata moved; one it did not read through does not
+    const toldRow = () => sent.filter(([ch, id, info]) => ch === 'outline:changed' && id === row && info && info.meta === true).length;
+    org.transact((l) => l.getMap('data').set('unrelated', 1)); backend.onChange(org.id, { origin: 'remote' });
+    assert.equal(toldRow(), 0, 'an owner change the audience does not read leaves the row alone');
+    org.transact((l) => l.getMap('data').set('memberUserProfileDocUris', { m0: ME })); backend.onChange(org.id, { origin: 'remote' });
+    assert.equal(toldRow(), 1, 'the organization losing members tells the row whose audience it is, so its faces and count are read again');
     for (let i = 0; i <= LIVE_ROWS; i++) await backend.handlers.get('doc:info')(null, make('Row ' + i));
     await backend.handlers.get('view:list')(null, 'library');
     assert.ok(unsubscribed.includes(org.id), 'the organization it read is let go with the older reads');
