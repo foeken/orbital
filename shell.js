@@ -296,6 +296,9 @@ bridge.onCommand((cmd, arg) => {
     document.body.classList.toggle('signed-out', !!arg?.signedOut);
     if (arg?.signedOut && !aside) { aside = ws.getDocument(); ws.setDocument(single(), { animate: false }); }
     else if (!arg?.signedOut && aside) { const doc = aside; aside = null; ws.setDocument(doc, { animate: false }); }
+  } else if (cmd === 'action') { // the app menu's Settings… (main.js createMenu): its row, run in the page in front
+    const win = windowOf(frameOf(ws.getSnapshot().focusedView));
+    win?.focus(); win?.postMessage({ orbital: 'action', id: String(arg) }, '*');
   } else if (cmd === 'theme') {
     theme = arg === 'dark' ? 'dark' : 'light';
     document.documentElement.dataset.theme = theme;

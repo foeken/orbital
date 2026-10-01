@@ -77,7 +77,7 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // The pane keys (Trellis's commands, run by the shell) keep off what a row's own keydown answers to: ⌥⌘ with ↑ or ↓,
 // and brackets and \ with ⇧ or ⌥; while there are panes they are taken before a row sees them (renderer/palette.js).
 // Close pane has no key of its own: ⌘W closes the pane in front (the File menu).
-const DEFAULT_HOTKEYS = { createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌥⌘N', splitView: '⌘N', otherPane: '⌘/', previousPane: '⇧⌘/', maximizePane: '⌥⌘↓', overview: '⌥⌘↑', zoomBack: '⌥⌘[', zoomForward: '⌥⌘]', nextTab: '⇧⌘]', previousTab: '⇧⌘[', goHome: '⇧⌘H' }; // "Focus graph" and "Show/Hide graph" are palette rows with no default key
+const DEFAULT_HOTKEYS = { openSettings: '⌘,', createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌥⌘N', splitView: '⌘N', otherPane: '⌘/', previousPane: '⇧⌘/', maximizePane: '⌥⌘↓', overview: '⌥⌘↑', zoomBack: '⌥⌘[', zoomForward: '⌥⌘]', nextTab: '⇧⌘]', previousTab: '⇧⌘[', goHome: '⇧⌘H' }; // "Focus graph" and "Show/Hide graph" are palette rows with no default key
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 // A header button's tooltip: what it does and, when it has one, the key that does the same. The label and row id stay
 // on the button so hovering can read the key again (renderer/edit.js), since a key recorded later changes it.

@@ -276,6 +276,8 @@ function createMenu() {
     { label: app.name, submenu: [
       { role: 'about' },
       { label: 'Check for Updates…', click: () => checkUpdates(true) },
+      // the key is the renderer's Open settings row (DEFAULT_HOTKEYS), so it can be re-recorded; the menu runs that row in the front pane
+      { type: 'separator' }, { label: 'Settings…', accelerator: 'CmdOrCtrl+,', registerAccelerator: false, click: () => { if (S.win && !S.win.isDestroyed()) tellShell(S.win, 'action', 'openSettings'); } },
       { type: 'separator' }, { role: 'services' }, { type: 'separator' },
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
@@ -446,8 +448,9 @@ ipcMain.handle('codex:models', (_e, host) => agent.listModels(undefined, host));
 ipcMain.handle('codex:hosts', () => agent.hosts());
 // Adding and removing machines. The form's three fields are validated here, and an invalid one is refused rather
 // than stored: the renderer can name a host, never reach past this boundary with a command.
-ipcMain.handle('codex:hostAdd', (_e, title, ssh, bin) => agent.addHost({ title, ssh, bin }));
-ipcMain.handle('codex:hostRemove', (_e, id) => agent.removeHost(id));
+// tellOthers: a Settings page in another pane or window lists the hosts too (renderer/settings.js)
+ipcMain.handle('codex:hostAdd', async (e, title, ssh, bin) => { const hosts = await agent.addHost({ title, ssh, bin }); tellOthers(pageOf(e)); return hosts; });
+ipcMain.handle('codex:hostRemove', async (e, id) => { const hosts = await agent.removeHost(id); tellOthers(pageOf(e)); return hosts; });
 // Which machine each linked node's task is on, read with the statuses so the UI knows what it may offer to open.
 ipcMain.handle('codex:taskHosts', () => Object.fromEntries(Object.keys(agent.codexTasks()).map((id) => [id, (agent.taskLink(id) || {}).host]).filter(([, host]) => host)));
 // The badge's destination: the task this node is linked to, opened by id the same way creating one does. The renderer
@@ -549,6 +552,9 @@ ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id,
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:translate', (_e, texts, to, opts) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'), { local: !!(opts && opts.local) })); // a note shown in English, never saved (renderer/translate.js); local: this Mac's answers only
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
+// The Settings page's Model and Thinking (renderer/settings.js): the synced aiModel and aiEffort, only from main's own lists
+ipcMain.handle('ai:options', () => ai.options());
+ipcMain.handle('ai:setOption', (e, key, value) => { const next = ai.setOption(key, value); tellOthers(pageOf(e)); return next; });
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
 // Process image (issue #507): an image read by the model into a task or a note, made with what it read as its lines

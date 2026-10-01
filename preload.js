@@ -149,6 +149,8 @@ contextBridge.exposeInMainWorld('api', {
   prefsNow: () => ipcRenderer.invoke('prefs:now'), // the same, now: what a settings:changed sent before the page listened carried
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
+  aiOptions: () => ipcRenderer.invoke('ai:options'), // { model, effort, models, efforts }: what the AI rows ask with, and the choices
+  setAiOption: (key, value) => ipcRenderer.invoke('ai:setOption', key, value), // 'model' | 'effort', one of the choices -> the options again
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),
   chatgptLogin: () => ipcRenderer.invoke('chatgpt:login'),
   chatgptCancel: () => ipcRenderer.invoke('chatgpt:cancel'),
