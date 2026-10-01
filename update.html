@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>Update Orbital</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<!-- The update card (update.js, #667): a transparent page main lays over the whole window (main.js openOverlay) when a
+     check finds a newer release. The palette's card: what is new since this version, then Update and Restart, whose
+     progress bar runs until the app quits to swap itself (updater.js). -->
+<body class="overlaypage">
+<div id="update" class="palette update">
+  <div class="card" role="dialog" aria-labelledby="updateTitle">
+    <div class="uhead">
+      <div id="updateTitle" class="utitle">Checking for updates…</div>
+      <div id="updateSub" class="usub"></div>
+    </div>
+    <div id="updateNotes" class="unotes"></div>
+    <div id="updateError" class="terror" role="alert" hidden></div>
+    <div class="ufoot">
+      <div id="updateProgress" class="uprogress" hidden><progress id="updateBar" max="1" value="0" aria-labelledby="updateStatus"></progress><span id="updateStatus" role="status"></span></div>
+      <button id="updateLater" class="button">Later <kbd>esc</kbd></button>
+      <button id="updateGo" class="button primary" disabled>Update and Restart <kbd>↩</kbd></button>
+    </div>
+  </div>
+</div>
+<script src="update.js"></script>
+</body>
+</html>

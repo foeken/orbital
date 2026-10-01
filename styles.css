@@ -1187,6 +1187,39 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .palette .tpicks kbd { margin-left: auto; }
 [data-theme="dark"] .palette .tpicks { border-bottom-color: #3a3f41; color: var(--muted); }
 [data-theme="dark"] .palette .tpicks b { color: #c9c9c9; }
+/* The update card (update.html, #667): the palette's card, taller, the release notes scrolling between the title and
+   the buttons, which give way to a progress bar in the accent blue (something happening now) once the update runs */
+.update .card { max-height: min(80vh, 640px); }
+.update .uhead { padding: 16px 20px 12px; border-bottom: 1px solid #eee; }
+.update .utitle { font-size: 17px; color: #1a1a1a; }
+.update .usub { margin-top: 2px; font-size: 13px; color: var(--muted); }
+.update .unotes { flex: 1; min-height: 0; overflow: auto; padding: 0 20px 14px; font-size: 14px; line-height: 1.5; color: #333; }
+.update .unotes:empty { display: none; }
+.update .unotes h2 { margin: 14px 0 0; font-size: 15px; font-weight: 600; }
+.update .unotes h2 span { margin-left: 8px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.update .unotes :is(h3, h4) { margin: 10px 0 2px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.update .unotes :is(p, li, blockquote, pre) { margin: 2px 0; }
+.update .unotes li { margin-left: calc(18px * (1 + var(--depth, 0))); }
+.update .unotes li::marker { color: var(--muted); }
+.update .unotes code, .update .unotes pre { font: 12.5px ui-monospace, Menlo, monospace; }
+.update .unotes code { padding: 0 3px; border-radius: 4px; background: rgba(0, 0, 0, .05); }
+.update .unotes a { color: #508fbb; text-underline-offset: 2px; }
+.update .unotes hr { border: 0; border-top: 1px solid #eee; }
+.update .ufoot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid #eee; }
+.update .ufoot kbd { margin-left: 6px; padding: 0 5px; }
+.update .button.primary kbd { background: rgba(255, 255, 255, .18); color: inherit; }
+.update .uprogress { flex: 1; display: flex; align-items: center; gap: 12px; min-height: 31px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.update .uprogress[hidden] { display: none; }
+.update progress { flex: 1; height: 6px; appearance: none; border: 0; }
+.update progress::-webkit-progress-bar { border-radius: 3px; background: #eee; }
+.update progress::-webkit-progress-value { border-radius: 3px; background: #2f8cf6; transition: width var(--dur-quick) linear; }
+[data-theme="dark"] .update :is(.uhead, .ufoot), [data-theme="dark"] .update .unotes hr { border-color: #3a3f41; }
+[data-theme="dark"] .update .utitle { color: #c9c9c9; }
+[data-theme="dark"] .update .unotes { color: #c9cccf; }
+[data-theme="dark"] .update .unotes code { background: rgba(255, 255, 255, .08); }
+[data-theme="dark"] .update .button.primary kbd { background: rgba(0, 0, 0, .1); }
+[data-theme="dark"] .update progress::-webkit-progress-bar { background: #3a3f41; }
+[data-theme="dark"] .update progress::-webkit-progress-value { background: #5aa8ff; }
 .palette input::placeholder { color: var(--muted); }
 /* the prompt page: the same field the palette always shows, with room for a few lines (↩ is a newline here) */
 .palette .ptext { border: 0; outline: none; resize: none; font: inherit; font-size: 17px; line-height: 24px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; background: #fff; }
@@ -1528,7 +1561,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 /* Help (help.html, help.js): a modal <dialog> of a few pages, each a stage with a short loop of the keys at work over its
    words. The stage's plain rules are the scene's last frame, which is what reduced motion shows; the loops live only
    under no-preference, all one --hv-loop long, so a keycap's delay lines it up with the scene it presses in. */
-body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent; } /* help.html, task.html: only the scrim and the card over the window's pages */
+body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent; } /* help.html, task.html, update.html: only the scrim and the card over the window's pages */
 .help { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 9vh 24px 0; border: 0;
   background: var(--scrim); color: inherit; justify-content: center; align-items: flex-start; -webkit-app-region: no-drag; }
 .help[open] { display: flex; }

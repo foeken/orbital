@@ -54,7 +54,13 @@ contextBridge.exposeInMainWorld('api', {
   attendeeSuggestions: () => ipcRenderer.invoke('meeting:suggestions'), // [{ email, displayName, eventCount, identityUri }]
   summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
   todayNode: (offset, findOnly) => ipcRenderer.invoke('doc:todayNode', offset, findOnly === true), // the date-titled node pinned to that day (0 today, 1 tomorrow, or 'YYYY-MM-DD'), created if missing unless findOnly (demo mode)
-  checkUpdates: () => ipcRenderer.send('app:checkUpdates'), // the app menu's Check for Updates…: main's dialogs answer (up to date, or Update and Restart)
+  checkUpdates: () => ipcRenderer.send('app:checkUpdates'), // the app menu's Check for Updates…: a newer release opens the update card (update.html) over this page, a dialog says up to date
+  // update.html (updater.js): { current, releases: [{ version, date, notes: [{ block, segments }] }] } newest first, or null;
+  // installUpdate downloads the newest and quits to swap it in (rejects with why it could not), onUpdateProgress hearing
+  // { got, total } bytes as it downloads and { verifying: true } once it is being checked
+  updateInfo: () => ipcRenderer.invoke('update:info'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p || {})),
   setDemoMode: (on) => ipcRenderer.send('app:demoMode', on === true), // demo mode is on in the outliner: main posts no notification banners
   weekNode: (findOnly) => ipcRenderer.invoke('doc:weekNode', findOnly === true), // the "Week 38 (2026)" document (ISO week), created if missing unless findOnly; not linked to the day nodes
   newWindow: (start) => ipcRenderer.invoke('window:new', start), // another outliner window (File › New Window), starting on { view, place }
