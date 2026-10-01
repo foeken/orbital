@@ -394,7 +394,7 @@ struct Meeting: View {
     var body: some View {
         let start = row.start.flatMap(Row.parse)
         RailRow(time: start?.formatted(.dateTime.hour().minute()) ?? "") {
-            Marker(icon: "meeting", tone: nil, now: false)
+            Marker(icon: row.icon, tone: nil, now: false) // a calendar, or a route for Travel (main/timeline.js meetingIcon)
         } content: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).sensitive(row.sensitive, engine: engine)
@@ -496,7 +496,7 @@ struct Marker: View {
 
     private var glyph: String {
         switch icon {
-        case "tlAccepted", "tlLater", "tlInbox", "tlNew", "updated", "robot", "tana", "free", "todayTasks": icon!
+        case "tlAccepted", "tlLater", "tlInbox", "tlNew", "updated", "robot", "tana", "free", "todayTasks", "pinRoute": icon!
         default: "calendar" // a meeting (the desktop draws its type's glyph, calendar)
         }
     }

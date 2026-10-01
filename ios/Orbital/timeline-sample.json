@@ -66,6 +66,13 @@
   },
   "children": [
    {
+    "id": "tana:event:000000000000000000000000tr",
+    "title": "Travel to Utrecht",
+    "subtext": "14:15–14:45",
+    "start": "{{min:+20}}",
+    "icon": "pinRoute"
+   },
+   {
     "id": "tana:event:0000000000000000000000000d",
     "title": "Design review",
     "subtext": "14:45–15:30",
@@ -86,7 +93,8 @@
      {
       "name": "Maria Lopez"
      }
-    ]
+    ],
+    "icon": "meeting"
    },
    {
     "id": "tana:event:0000000000000000000000000e",
@@ -97,7 +105,8 @@
      {
       "name": "Sam Lee"
      }
-    ]
+    ],
+    "icon": "meeting"
    }
   ]
  },
