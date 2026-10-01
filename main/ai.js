@@ -184,6 +184,7 @@ async function logoutChatGPT(userData) {
     activeLogin = null;
   }
   await rpc.call('account/logout');
+  listed = null; // the next account's own list, not this one's: the app-server outlives the sign-in
   loginError = null;
   const status = await readChatGPT(rpc);
   send('ai:chatgptChanged', status);

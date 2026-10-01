@@ -21,7 +21,20 @@ final class Translator {
 
     private(set) var problem: String? // why the last question to ChatGPT got no answer
 
-    func use(to: String?, ai: [String: String] = [:]) { self.to = to; self.ai.merge(ai) { $1 } }
+    func use(to: String?, ai: [String: String] = [:]) { self.to = to; self.ai.merge(ai) { $1 }; fit() }
+
+    // This account's models, once read (Engine, Settings): a synced choice off them — another account's, or one ChatGPT
+    // dropped — is asked as the start choice instead, as main/ai.js chosen does on the Mac
+    @ObservationIgnored var catalogue: [ChatGPT.Model] = [] { didSet { fit() } }
+    private func fit() {
+        guard !catalogue.isEmpty else { return }
+        for (m, e, start, startEffort) in [("model", "effort", "gpt-5.6-terra", "low"), ("quickModel", "quickEffort", "gpt-6-luna", "low")] {
+            let model = catalogue.first { $0.id == ai[m] } ?? catalogue.first { $0.id == start } ?? catalogue[0]
+            let efforts = model.levels
+            ai[m] = model.id
+            if !efforts.contains(ai[e] ?? "") { ai[e] = efforts.contains(startEffort) ? startEffort : efforts[0] }
+        }
+    }
 
     // The words to show and, when they are a translation, the language they were in. Asks for what it does not know yet.
     func words(_ text: String, sensitive: Bool = false) -> (String, String?) {
@@ -137,7 +150,10 @@ extension ChatGPT {
 
     // The models to choose from: ChatGPT's own list of Codex models, the one the Mac reads too (main/ai.js MODELS_URL, the
     // same high client_version so every model is listed), each with the thinking levels it takes. nil without a sign-in.
-    struct Model: Identifiable { let id: String; let efforts: [String] }
+    struct Model: Identifiable {
+        let id: String; let efforts: [String]
+        var levels: [String] { efforts.isEmpty ? ["low", "medium", "high"] : efforts } // a model listed without its levels takes these, as main/ai.js EFFORTS
+    }
     static func models() async throws -> [Model]? {
         guard let account = try await fresh() else { return nil }
         var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/codex/models?client_version=99.0.0")!)

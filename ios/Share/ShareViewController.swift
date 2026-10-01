@@ -13,9 +13,10 @@ final class ShareViewController: UIViewController {
         let items = extensionContext?.inputItems as? [NSExtensionItem] ?? []
         let providers = items.flatMap { $0.attachments ?? [] }
         Self.clear()
+        var left = false
         if let image = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }),
            let data = await Self.data(image), let jpeg = Self.small(data) {
-            Self.leave(jpeg, "shared.image")
+            left = Self.leave(jpeg, "shared.image")
         } else {
             // the words that came with it, then a link, then text, each once
             var words = items.compactMap { $0.attributedContentText?.string }
@@ -25,8 +26,10 @@ final class ShareViewController: UIViewController {
             }
             var seen = Set<String>()
             let text = words.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty && seen.insert($0).inserted }.joined(separator: "\n")
-            Self.leave(Data(text.utf8), "shared.text")
+            left = Self.leave(Data(text.utf8), "shared.text")
         }
+        // kept nothing (the Keychain said no): the share sheet says it failed, rather than Orbital opening on an empty Quick Add
+        guard left else { return extensionContext?.cancelRequest(withError: CocoaError(.fileWriteUnknown)) ?? () }
         open(URL(string: "orbital-share://add")!)
         extensionContext?.completeRequest(returningItems: nil)
     }
@@ -39,11 +42,11 @@ final class ShareViewController: UIViewController {
         [kSecClass: kSecClassGenericPassword, kSecAttrService: "com.dreetje.orbital", kSecAttrAccount: account, kSecAttrAccessGroup: group]
     }
     private static func clear() { for account in ["shared.image", "shared.text"] { SecItemDelete(item(account) as CFDictionary) } }
-    private static func leave(_ data: Data, _ account: String) {
+    @discardableResult private static func leave(_ data: Data, _ account: String) -> Bool {
         var add = item(account)
         add[kSecValueData] = data
         add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
     // 2048 px at most, as JPEG: what Quick Add reads it at anyway (Engine.processImage), and small enough for the Keychain

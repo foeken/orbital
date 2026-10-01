@@ -55,7 +55,10 @@ struct SettingsView: View {
                 }
             }
             .tint(.primary) // the rows in the text colour, not the accent blue, as the ChatGPT app has them
-            .task(id: chatgpt?.accessToken) { models = chatgpt == nil ? [] : (try? await ChatGPT.models()) ?? [] }
+            .task(id: chatgpt?.accessToken) {
+                models = chatgpt == nil ? [] : (try? await ChatGPT.models()) ?? []
+                if !models.isEmpty { engine.translator.catalogue = models } // the choices shown are the ones asked
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Close")
@@ -79,18 +82,17 @@ struct SettingsView: View {
         @State private var quick = true
         var body: some View {
             let modelKey = quick ? "quickModel" : "model", effortKey = quick ? "quickEffort" : "effort"
-            let model = engine.translator.ai[modelKey] ?? "", efforts = models.first { $0.id == model }?.efforts ?? ["low", "medium", "high"]
+            let model = engine.translator.ai[modelKey] ?? "", efforts = models.first { $0.id == model }?.levels ?? ["low", "medium", "high"]
             Form {
                 Picker("AI", selection: $quick) { Text("Quick").tag(true); Text("Regular").tag(false) }
                     .pickerStyle(.segmented).labelsHidden().listRowBackground(Color.clear).listRowInsets(EdgeInsets())
                 Section {
                     Picker("Model", selection: Binding { model } set: { id in Task {
                         await engine.aiChoice(modelKey, id)
-                        let next = models.first { $0.id == id }?.efforts ?? []
+                        let next = models.first { $0.id == id }?.levels ?? []
                         if !next.isEmpty, !next.contains(engine.translator.ai[effortKey] ?? "") { await engine.aiChoice(effortKey, next.contains("low") ? "low" : next[0]) }
                     } }) {
                         ForEach(models) { Text(ChatGPT.label($0.id)).tag($0.id) }
-                        if !models.contains(where: { $0.id == model }) { Text(ChatGPT.label(model)).tag(model) } // a choice the list no longer has
                     }
                     .pickerStyle(.inline).labelsHidden()
                 } header: { Header("Model") } footer: {

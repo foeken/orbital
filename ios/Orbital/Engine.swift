@@ -181,6 +181,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
                 translator.use(to: setup.to, ai: setup.ai)
+                if translator.catalogue.isEmpty, let list = try? await ChatGPT.models(), !list.isEmpty { translator.catalogue = list } // once: what this account may ask
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
