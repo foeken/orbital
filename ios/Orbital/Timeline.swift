@@ -171,14 +171,14 @@ struct TimelineScreen: View {
         }
     }
 
-    private var today: [Row] { engine.rows.first { $0.timeline?.today == true }?.children ?? [] }
-    private var upcoming: [Row] { engine.rows.first { $0.timeline?.upcoming == true }?.children ?? [] }
+    private var today: [Row] { engine.shown(engine.rows.first { $0.timeline?.today == true }?.children) }
+    private var upcoming: [Row] { engine.shown(engine.rows.first { $0.timeline?.upcoming == true }?.children) }
     private var free: Row.Free? { engine.rows.first { $0.timeline?.free != nil }?.timeline?.free }
 
     // Today, Yesterday and each day before, by the rows' own time (renderer/timeline.js timelineGroups)
     private var days: [(String, [Row])] {
         var out: [(String, [Row])] = []
-        for row in engine.rows where row.timeline?.today != true && row.timeline?.upcoming != true && row.timeline?.free == nil {
+        for row in engine.shown(engine.rows) where row.timeline?.today != true && row.timeline?.upcoming != true && row.timeline?.free == nil {
             let title = Self.day(row.date)
             if out.last?.0 == title { out[out.count - 1].1.append(row) } else { out.append((title, [row])) }
         }
@@ -248,7 +248,7 @@ struct Entry: View {
 
     var body: some View {
         let quiet = row.tone == "faint"
-        RailRow(time: row.date.formatted(.dateTime.hour().minute()), bottom: row.children?.isEmpty == false ? 0 : 14) {
+        RailRow(time: row.date.formatted(.dateTime.hour().minute()), bottom: engine.shown(row.children).isEmpty ? 14 : 0) {
             Marker(icon: row.icon, tone: row.tone, now: row.join != nil)
         } content: {
             VStack(alignment: .leading, spacing: 3) {
@@ -303,6 +303,7 @@ struct TaskLines: View {
     let engine: Engine
 
     var body: some View {
+        let tasks = engine.shown(tasks)
         ForEach(Array(tasks.enumerated()), id: \.element.id) { i, task in
             TaskLine(task: task, engine: engine, top: i == 0 ? 26 : 16, bottom: i == tasks.count - 1 ? 16 : 0)
         }

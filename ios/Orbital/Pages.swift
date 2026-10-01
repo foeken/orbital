@@ -75,7 +75,7 @@ struct NodeScreen: View {
                         }
                 case "search", "event":
                     // in the sections the search was saved with (Row.group), as the desktop shows it
-                    List(Array(Self.sections(page.rows).enumerated()), id: \.offset) { _, section in
+                    List(Array(Self.sections(engine.shown(page.rows)).enumerated()), id: \.offset) { _, section in
                         Section {
                             ForEach(section.rows) { ListRow(row: $0, engine: engine, reload: load) }
                         } header: {

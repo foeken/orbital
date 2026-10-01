@@ -24,6 +24,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     let translator = Translator() // auto-translate, set up from the settings document at each refresh
     var sensitiveIds: Set<String> = [] // marked sensitive in Orbital (synced), for the long-press menu
     var pinnedToday: Set<String> = [] // pinned to today, for the long-press menu
+    var removed: Set<String> = [] // deleted here: gone from every list at once, before Tana confirms it
     var reveal = false // sensitive items shown, after a shake; never kept, as the desktop keeps it on the machine only
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
@@ -192,7 +193,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let store = web.configuration.websiteDataStore.httpCookieStore
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
-        rows = []; states = [:]; email = nil; pages = 1
+        rows = []; states = [:]; removed = []; email = nil; pages = 1
         note("signed out")
         start()
     }
@@ -229,16 +230,25 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // Long press, Delete (orbital.remove): to Tana's trash, then the Timeline read again; why not, when Tana says no
+    // The row goes at once, collapsing out of its list (the List's own removal, under Reduce Motion without the move),
+    // and comes back if Tana says no.
     func remove(_ id: String) async -> Bool {
+        let move: Animation? = UIAccessibility.isReduceMotionEnabled ? nil : .snappy
+        withAnimation(move) { _ = removed.insert(id) }
         guard !Self.isSample else { return true }
         do {
             let _: String = try await call("return await orbital.remove(id)", ["id": id])
             await refresh()
             return true
         } catch {
+            withAnimation(move) { _ = removed.remove(id) }
             self.error = error.localizedDescription
             return false
         }
+    }
+    // a list without what was deleted here: a node, an entry about one, a search result for one
+    func shown(_ rows: [Row]?) -> [Row] {
+        (rows ?? []).filter { !removed.contains($0.id) && !removed.contains($0.timeline?.uri ?? "") && !removed.contains($0.target ?? "") }
     }
 
     // A message written into a chat: which chat, and a warning when Tana did not take it up (it is sent all the same)
