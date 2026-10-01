@@ -337,11 +337,12 @@ window.orbital = {
   // A write only queues, and Tana says no later, as a write-denied event (sdk/sync.js): its answer is waited for a few
   // seconds so a refused box goes back rather than looking ticked until the next read.
   // ponytail: 3 s for Tana's refusal; a slower one shows at the first read half a minute on (Engine.swift settle).
-  async toggle(id) {
+  // to: a state of its own instead (long press Move to Inbox: 'proposed')
+  async toggle(id, to) {
     const doc = await hold(id), n = readNode(doc);
-    if (!STATE_TYPES.includes(n.stateType)) throw new Error('Only a task can be ticked off');
+    if (!STATE_TYPES.includes(n.stateType) || (to != null && !STATE_TYPES.includes(to))) throw new Error('Only a task can be ticked off');
     if (doc.writeDenied || editable(n, S.me.userUri) === false) throw new Error('This task is read-only to you');
-    const next = n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed';
+    const next = to ?? (n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed');
     const refused = refusedSoon(id);
     setState(doc, next, S.me.userUri);
     if (await refused) throw new Error('Tana refused the change: this task is read-only to you');

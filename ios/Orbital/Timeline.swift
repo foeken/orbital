@@ -85,11 +85,12 @@ extension OpenURLAction {
 // Long press on a node: pin it to today or take it off, mark it sensitive or not, or delete it to Tana's trash where you
 // may (Engine.pin, markSensitive, remove); done reads the page again
 extension View {
-    // task: the row is a task, which offers Assign to …; assignees: who has it, when known (a saved search's rows)
-    func nodeMenu(_ id: String?, engine: Engine, task: Bool = false, assignees: [String]? = nil, then done: @escaping () async -> Void = {}) -> some View {
+    // task: the task's state, which offers Assign to … and, out of the Inbox, Move to Inbox; assignees: who has it, when known (a saved search's rows)
+    func nodeMenu(_ id: String?, engine: Engine, task: String? = nil, assignees: [String]? = nil, then done: @escaping () async -> Void = {}) -> some View {
         contextMenu {
             if let id, id.hasPrefix("tana:") {
-                if task { Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, then: done) } }
+                if task != nil { Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, then: done) } }
+                if let task, task != "proposed" { Button("Move to Inbox", systemImage: "tray") { Task { await engine.moveToInbox(id); await done() } } }
                 let pinned = engine.pinned.contains(id), secret = engine.sensitiveIds.contains(id)
                 // pinned to any day: only taking the pin off
                 Button(pinned ? "Remove Pin" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin") { Task { await engine.pin(id, !pinned); await done() } }
@@ -380,7 +381,7 @@ struct TaskLine: View {
                     .buttonStyle(.plain)
             }
         }
-        .nodeMenu(task.id, engine: engine, task: true, assignees: task.assignees)
+        .nodeMenu(task.id, engine: engine, task: engine.state(of: task), assignees: task.assignees)
     }
 }
 

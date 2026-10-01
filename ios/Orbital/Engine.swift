@@ -410,6 +410,15 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         }
     }
 
+    // Long press, Move to Inbox: the task back to Tana's Inbox state (proposed), drawn so at once and put back if Tana refuses
+    func moveToInbox(_ id: String) async {
+        guard !demo, !Self.isSample else { return }
+        let before = states[id]
+        states[id] = "proposed"
+        do { states[id] = try await call("return await orbital.toggle(id, 'proposed')", ["id": id]) as String }
+        catch { states[id] = before; self.error = error.localizedDescription }
+    }
+
     func state(of task: Row) -> String {
         states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
     }

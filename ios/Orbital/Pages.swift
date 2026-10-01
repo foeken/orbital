@@ -56,7 +56,7 @@ struct ListRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 6)
-        .nodeMenu(row.target, engine: engine, task: row.stateType != nil, assignees: row.assignees, then: reload)
+        .nodeMenu(row.target, engine: engine, task: row.stateType != nil ? engine.state(of: row) : nil, assignees: row.assignees, then: reload)
     }
 }
 
