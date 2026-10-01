@@ -977,7 +977,6 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .cbadge.working, .cbadge.waiting { background: #dde8fb; color: var(--working-ink); --cbadge-sheen: rgba(255, 255, 255, .9); }
 .cbadge.done { background: #d9f0de; color: #17652f; }
 .cbadge.broken { background: #fbdede; color: #8f1b1b; }
-.cbadge.unavailable { background: #ececec; color: #6a6a6a; } /* the machine is away, not the task broken: grey, still */
 /* the task is completed: whatever the agent did is over, so the badge drops to a grey outline and stops sweeping */
 .cbadge.closed { background: none; border: 1px solid #d5d5d5; color: #9a9a9a; padding: 1px 4px; }
 .cbadge.closed::after { content: none; }
@@ -1484,7 +1483,6 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .cbadge.working, [data-theme="dark"] .cbadge.waiting { background: #1e3050; }
 [data-theme="dark"] .cbadge.done { background: #1d3c27; color: #7fd396; }
 [data-theme="dark"] .cbadge.broken { background: #45201f; color: #f0a3a0; }
-[data-theme="dark"] .cbadge.unavailable { background: #33383a; color: #a8adaf; }
 [data-theme="dark"] .cbadge.closed { background: none; border-color: #45494b; color: #8c9194; }
 [data-theme="dark"] .pbutton.approve:hover:not(:disabled) { background: #1d3c27; color: #7fd396; }
 [data-theme="dark"] .pbutton.reject:hover { background: rgba(255, 255, 255, .08); color: #c9cccf; }

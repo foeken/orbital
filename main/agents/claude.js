@@ -1,0 +1,90 @@
+'use strict';
+// The Claude agent (main/agent.js): a node handed to Claude Code on this Mac, through the user's own `claude` and its
+// own sign-in. Orbital never signs in to Anthropic and never sees a Claude token: it starts `claude -p` as the user
+// would in a terminal, which is what Anthropic's terms allow a third-party app to do.
+//   - A task is a non-interactive run (`claude -p`) with a session id chosen here, in the shared Tana workspace. -p
+//     skips the workspace trust prompt that `claude --bg` stops on, and the id is known before the run starts.
+//   - It runs detached, so the work carries on when Orbital quits, and nothing here has to hand a writer back.
+//   - What it is doing is read from its transcript (~/.claude/projects/<workspace>/<id>.jsonl), the record Claude Code
+//     resumes from: a run that ended its turn is done, one that ended on an error is broken, anything else is working.
+//   - Go to Claude task opens Terminal on `claude --resume <id>` in that workspace, where the session lives.
+// The model is Claude Code's own default, as Codex's is.
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const agent = require('../agent');
+const { S } = require('../state');
+
+const claudeBin = () => agent.findBin('claude', [path.join(os.homedir(), '.claude', 'local', 'claude')]);
+const workspace = () => agent.agentWorkspace(S.userData);
+
+// One detached run of `claude -p`. The prompt follows `--`, so words that start with a dash stay words.
+function runDetached(args, prompt) {
+  const bin = claudeBin();
+  if (!bin) throw new Error('Claude Code is not installed on this Mac');
+  const child = require('node:child_process').spawn(bin, ['-p', ...args, '--', prompt], { cwd: workspace(), detached: true, stdio: 'ignore' });
+  child.on('error', () => {}); // a run that cannot start leaves no transcript, which reads as pending and then broken
+  child.unref();
+}
+
+// ---- reading a session back ----
+// ponytail: the projects folder is scanned for the file rather than its name worked out from the workspace path,
+// because Claude Code's own encoding of that path (realpath, "/" and "." as "-") is not documented; a scan of a few
+// folders per read. Work it out if the folder count ever makes this slow.
+function transcript(id) {
+  if (!agent.UUID.test(String(id))) return null;
+  const root = path.join(os.homedir(), '.claude', 'projects');
+  let dirs = [];
+  try { dirs = fs.readdirSync(root); } catch { return null; }
+  for (const dir of dirs) {
+    const file = path.join(root, dir, id + '.jsonl');
+    try { return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean); } catch {}
+  }
+  return null;
+}
+// Where a session stands, from its last turn: the last user or assistant message in the main thread decides.
+// ponytail: a run killed half way (a reboot) ends on neither and reads as working for ever; reassigning starts afresh.
+function sessionState(entries) {
+  if (!entries) return { state: 'pending', text: '' };
+  const said = entries.filter((e) => (e.type === 'user' || e.type === 'assistant') && !e.isSidechain && !e.isMeta && e.message);
+  const last = said.at(-1);
+  if (!last || last.type !== 'assistant' || !['end_turn', 'stop_sequence'].includes(last.message.stop_reason)) return { state: 'working', text: '' };
+  const text = (Array.isArray(last.message.content) ? last.message.content : []).filter((c) => c && c.type === 'text').map((c) => c.text).join('\n').trim();
+  // an error Claude Code reports instead of an answer (a refused login, a usage limit) is a synthetic message
+  return last.message.model === '<synthetic>' ? { state: 'broken', text } : { state: 'done', text };
+}
+
+// A Terminal window running one command: a .command file opened by the OS, which needs no Automation permission.
+const quote = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
+async function inTerminal(command) {
+  const file = path.join(os.tmpdir(), 'orbital-claude-' + Date.now().toString(36) + '.command');
+  fs.writeFileSync(file, '#!/bin/sh\ncd ' + quote(workspace()) + ' && exec ' + command + '\n', { mode: 0o700 });
+  const failed = await require('electron').shell.openPath(file);
+  if (failed) throw new Error(failed);
+}
+
+const claude = agent.register({
+  id: 'claude', label: 'Claude', icon: 'robot', missing: 'Install Claude Code',
+  available: () => !!claudeBin(),
+  start({ nodeUri, title, prompt, rules }) {
+    const id = require('node:crypto').randomUUID();
+    const name = agent.oneLine(title, 60);
+    runDetached(['--session-id', id, ...(name ? ['-n', 'Tana: ' + name] : []), ...(rules ? ['--append-system-prompt', rules] : [])], nodeUri ? agent.agentPrompt(nodeUri, title) : prompt);
+    return id;
+  },
+  resume(taskId, prompt) { if (prompt) runDetached(['--resume', taskId], prompt); },
+  statuses: (links) => Object.fromEntries(Object.entries(links || {}).map(([nodeId, id]) => {
+    const { state } = sessionState(transcript(id));
+    return [nodeId, state];
+  })),
+  open: (taskId) => { if (!agent.UUID.test(String(taskId))) throw new Error('Not a Claude session'); return inTerminal(quote(claudeBin()) + ' --resume ' + taskId); },
+  // A session id, as `claude --resume` takes it, or the command itself pasted whole.
+  linkId: (text) => { const m = String(text || '').trim().match(/^(?:claude\s+(?:--resume|-r)\s+)?([0-9a-f-]{36})$/i); return m && agent.UUID.test(m[1]) ? m[1] : null; },
+  openNew: (link) => inTerminal(quote(claudeBin()) + ' -- ' + quote(link)),
+  read: async (taskIds) => new Map(taskIds.map((id) => {
+    const { state, text } = sessionState(transcript(id));
+    return [id, { state: state === 'done' && text ? 'done' : state === 'broken' ? 'failed' : 'working', text }];
+  })),
+});
+
+module.exports = { claude, claudeBin, sessionState, transcript };

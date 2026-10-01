@@ -4,13 +4,13 @@
 const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi());
 // Demo mode draws made-up words, and nothing on screen may then reach Tana: every call that writes is refused here,
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
-const DEMO_WRITES = new Set(['sendChat', 'askAgent', 'deleteAgentAsk', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkCodexTask', 'discussWith', 'processImage',
+const DEMO_WRITES = new Set(['sendChat', 'askAgent', 'deleteAgentAsk', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
   'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
   'insertImage', 'insertTable', 'insertAfter', 'insertBefore', 'split', 'join', 'insertChild', 'pasteMarkdown', 'removeMany', 'moveMany', 'indentMany',
   'outdentMany', 'remove', 'indent', 'outdent', 'move', 'moveTo', 'insertMention', 'pin', 'unpin', 'pinTo', 'unpinFrom', 'setSensitive',
-  'setCodex', 'undo', 'redo']);
+  'setAgent', 'undo', 'redo']);
 function readOnlyInDemo(api) {
   return new Proxy({ ...api }, { // a copy: contextBridge freezes window.api, and a proxy of a frozen object must hand back its own values
     get: (own, key) => {
@@ -113,27 +113,26 @@ const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaAgain = new
 const META_RETRY_MS = 500, META_RETRY_MAX = 30000;
 const accessById = new Map(), accessLoading = new Set();
 const notifyById = new Map(), notifyLoading = new Set(); // docId -> { on, default, explicit }: whether changes to it are announced
-let codexIds = new Set(), codexLoading = null; // documents handed to the local Codex agent (app-local mark, not a Tana assignee)
-// docId -> 'pending' | 'working' | 'waiting' | 'done' | 'broken': what the linked Codex task is doing, read on the
-// refresh (main/agent.js). A node with no entry is pending: assigned, but no task has registered itself yet, which
-// is the one thing the badge must never draw as finished.
+let agentIds = new Set(), agentLoading = null; // documents handed to an agent (app-local mark, not a Tana assignee)
+// docId -> 'pending' | 'working' | 'waiting' | 'done' | 'broken': what the linked task is doing, read on the refresh
+// (main/agents/index.js). A node with no entry is pending: assigned, but no task is known for it yet, which is the one
+// thing the badge must never draw as finished.
 const agentStates = new Map();
 const AGENT_BADGE = {
-  pending: { label: 'Agent pending', title: 'Assignment requested; no Codex task yet' },
-  working: { label: 'Agent working', title: 'The Codex task is running' },
-  waiting: { label: 'Agent waiting for you', title: 'The Codex task is waiting for approval or input' },
-  done: { label: 'Agent completed', title: 'The Codex task finished its last turn' },
-  broken: { label: 'Agent needs attention', title: 'The Codex task failed or cannot be reached — assign again to retry' },
-  unavailable: { label: 'Agent host unavailable', title: 'The machine running this task cannot be reached; the task itself is fine' },
+  pending: { label: 'Agent pending', title: 'Assignment requested; no task yet' },
+  working: { label: 'Agent working', title: 'The agent\'s task is running' },
+  waiting: { label: 'Agent waiting for you', title: 'The agent\'s task is waiting for approval or input' },
+  done: { label: 'Agent completed', title: 'The agent\'s task finished its last turn' },
+  broken: { label: 'Agent needs attention', title: 'The agent\'s task failed or cannot be reached — assign again to retry' },
 };
 const agentStateOf = (id) => (AGENT_BADGE[agentStates.get(id)] ? agentStates.get(id) : 'pending');
-// The model for the assignment being written, chosen on the Assign to Agent page. '' is Codex's own default, which
-// is also what an unknown stored value falls back to: a model Codex no longer offers must not be sent.
-let agentModel = '', agentModels = [];
-// Which machine the task runs on, chosen per assignment. Laptop unless asked otherwise; the list is main's, so the
-// renderer only ever holds names.
-let agentHost = 'local', agentHosts = [];
-const agentTaskHosts = new Map(); // docId -> the machine its task runs on; only a local one can be opened from here
+const agentTasks = new Map(); // docId -> { agent, taskId }: which agent's task each linked node is
+// Every agent the app knows (main/agent.js list): Tana always, Codex and Claude greyed until installed. Read at boot
+// and after Choose agents changes it; the rows each agent brings are drawn from it.
+let agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }];
+let agentPick = 'tana'; // the agent the Assign to Agent page will hand the node to, the default until the page picks another
+const agentsOn = () => agentList.filter((a) => a.enabled && a.installed);
+const agentNamed = (id) => agentList.find((a) => a.id === id) || null;
 let visibilityPeople = new Set();
 let visibilityRoles = new Map();
 let menu = null;             // open pill menu: { id, index }

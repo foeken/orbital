@@ -90,16 +90,17 @@ contextBridge.exposeInMainWorld('api', {
   proposalAnswer: (chatUri, proposedUri, approve) => ipcRenderer.invoke('proposals:answer', chatUri, proposedUri, approve),
   timelinePages: (n) => ipcRenderer.invoke('timeline:pages', n), // how many pages of three days back children('orbital:timeline') reads; resolves to the number it took
   onTimelinePart: (cb) => ipcRenderer.on('timeline:part', (_e, rows) => cb(rows)), // the Timeline so far, while children('orbital:timeline') is still reading the rest
-  codexIds: () => ipcRenderer.invoke('codex:list'), // nodes handed to the local Codex agent; app-local, not a Tana assignee
-  setCodex: (docId, on, prompt, model, host) => ipcRenderer.invoke('codex:set', docId, on, prompt, model, host), // prompt, model and the machine it runs on are per assignment
-  codexModels: (host) => ipcRenderer.invoke('codex:models', host), // the models that host offers
-  codexHosts: () => ipcRenderer.invoke('codex:hosts'), // [{ id, title }] — names only
-  addCodexHost: (title, ssh, bin) => ipcRenderer.invoke('codex:hostAdd', title, ssh, bin), // validated in main; nothing is run here
-  removeCodexHost: (id) => ipcRenderer.invoke('codex:hostRemove', id), // the machine is forgotten; its tasks are not touched
-  codexTaskHosts: () => ipcRenderer.invoke('codex:taskHosts'), // nodeId -> host, for every linked node
-  linkCodexTask: (docId, link) => ipcRenderer.invoke('codex:link', docId, link), // an existing Codex task, pasted as codex://threads/<id>
-  openCodexTask: (docId) => ipcRenderer.invoke('codex:open', docId), // open the Codex task this node is linked to
-  codexStatus: () => ipcRenderer.invoke('codex:status'), // docId -> pending|working|waiting|done|broken for every linked node
+  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, Claude
+  agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, isDefault, link, openNew, chat, opensHere }]
+  enableAgent: (id, on) => ipcRenderer.invoke('agent:enable', id, on), // the new list
+  setDefaultAgent: (id) => ipcRenderer.invoke('agent:default', id), // the new list
+  agentIds: () => ipcRenderer.invoke('agent:ids'), // nodes handed to an agent; app-local, not a Tana assignee
+  setAgent: (docId, on, prompt, agent) => ipcRenderer.invoke('agent:set', docId, on, prompt, agent), // agent: its id, the default when absent
+  agentTasks: () => ipcRenderer.invoke('agent:tasks'), // nodeId -> { agent, taskId }, for every linked node
+  linkAgentTask: (docId, agent, link) => ipcRenderer.invoke('agent:link', docId, agent, link), // a task that already exists in that agent's app, pasted
+  openAgentTask: (docId) => ipcRenderer.invoke('agent:open', docId), // open the task this node is linked to, in its agent's app
+  openInAgent: (agent, link) => ipcRenderer.invoke('agent:openNew', agent, link), // a fresh, untracked task carrying the node's link
+  agentStatus: () => ipcRenderer.invoke('agent:status'), // docId -> pending|working|waiting|done|broken for every linked node
   // Cmd+K "Discuss with …": gives the document the Discussion Task type (created in the Library when the workspace
   // has none) and writes who into its "Discuss with" field. Resolves to { typeUri, key, who }.
   discussWith: (docId, who) => ipcRenderer.invoke('doc:discussWith', docId, who),

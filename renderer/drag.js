@@ -214,7 +214,7 @@ function groupDropWrites(target, t, me, today) {
   return [...clear, ...(assigned && t.assignees.length === 1 ? [] : [['assign', [me]]]), ...(t.stateType === state ? [] : [['state', state]]), ...(t.watched && !assigned ? [['watch', null]] : [])];
 }
 const GROUP_WRITES = {
-  agent: (id) => tana.setCodex(id, false), // the Codex task stays; its link goes, as ⌘K Unassign from Agent does
+  agent: (id) => tana.setAgent(id, false), // the task stays; its link goes, as ⌘K Unassign from Agent does
   pin: (id, date) => tana.pin(id, 'today', date),
   unpin: (id, date) => tana.unpin(id, 'today', date),
   assign: (id, uris) => tana.setAssignees(id, uris),
@@ -250,13 +250,13 @@ function dropOnGroup(task, target) {
   armGlide();
   run(async () => {
     const [meta, pins] = await Promise.all([tana.taskMeta(task.id), tana.pinState(task.id)]);
-    const writes = groupDropWrites(target, { ...task, assignees: meta.assignees, watched: meta.watched, dates: pins?.dates || [], agent: codexIds.has(task.id) }, me()?.id, localDate());
+    const writes = groupDropWrites(target, { ...task, assignees: meta.assignees, watched: meta.watched, dates: pins?.dates || [], agent: agentIds.has(task.id) }, me()?.id, localDate());
     if (!writes) throw new Error('This task can\u2019t go under ' + target);
     // who has it and its status are the document's, which a read-only task refuses: refused here, before a pin lands
     if (!task.writable && writes.some(([op]) => op === 'assign' || op === 'state')) throw new Error('This task is read-only: it can\u2019t go under ' + target);
     if (writes.some(([op, on]) => op === 'agent' && on)) return openAgentPrompt(task); // it needs a prompt: nothing is written until it is sent
     for (const [op, arg] of writes) await GROUP_WRITES[op](task.id, arg);
-    if (writes.some(([op]) => op === 'agent')) { codexIds.delete(task.id); agentStates.delete(task.id); patchCodex(task.id); }
+    if (writes.some(([op]) => op === 'agent')) { agentIds.delete(task.id); agentStates.delete(task.id); patchAgent(task.id); }
     try { taskMetaById.set(task.id, await tana.taskMeta(task.id)); } catch { taskMetaById.delete(task.id); }
     notifyById.delete(task.id);
     if (held) held.groups.delete(task.id); // a row held in place by an earlier click would stay put: this one is meant to move

@@ -296,8 +296,8 @@ function assigneeRows(q, doc = palDoc) {
   // The agent belongs in the same list a person is chosen from — it is the same question. It is not a Tana assignee
   // though (those are user profiles), so choosing it goes into the one Agent flow: the prompt page and its model
   // chooser, which owns the writing. Nothing is stored here.
-  if (tana.setCodex && isRealId(doc.id) && fuzzyMatch('Agent', q)) {
-    rows.push({ group: 'Assignees', icon: 'robot', label: 'Agent', hint: codexIds.has(doc.id) ? '✓' : '', keepOpen: true, run: () => openAgentPrompt(doc) });
+  if (tana.setAgent && isRealId(doc.id) && fuzzyMatch('Agent', q)) {
+    rows.push({ group: 'Assignees', icon: 'robot', label: 'Agent', hint: agentIds.has(doc.id) ? '✓' : '', keepOpen: true, run: () => openAgentPrompt(doc) });
   }
   return rows;
 }

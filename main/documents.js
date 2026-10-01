@@ -34,7 +34,7 @@ let liveRefsClient = null; // the sync client they are live on: a new login star
 // Let go of a target nothing holds any more: not a live reference, a view (subscribed), a read, a wait, or a watch
 // start() subscribes outside those (watched by hand, handed to the agent): letting that go would end its notifications
 function dropRef(uri) {
-  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || notifyWatchedIds().has(uri) || codexIds().includes(uri)) return;
+  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || notifyWatchedIds().has(uri) || agentIds().includes(uri)) return;
   if (reading.has(uri)) { passingReads.add(uri); return; } // tried again when that read is done
   passingReads.delete(uri);
   docStates.delete(uri);
@@ -675,11 +675,11 @@ async function setNotify(id, on) {
   return notifyState(id);
 }
 const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Completed', not_now: 'Later' };
-// ---- handing a node to the local Codex agent ----
+// ---- handing a node to an agent (main/agent.js, main/agents/) ----
 // App-local on purpose: Tana's assignedToUris takes user-profile uris only, so an agent cannot be a native assignee.
 // The ids live in the settings table beside the watch choices; two states, so a list rather than a map.
 // Assignment only: nothing here dispatches, runs or reports back.
-const codexIds = () => { const stored = settings.get('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string' && !deletedNodes.has(id)) : []; }; // a deleted node's task is let go, as notifyWatchedIds does
+const agentIds = () => { const stored = settings.get('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string' && !deletedNodes.has(id)) : []; }; // a deleted node's task is let go, as notifyWatchedIds does
 // What the agent was asked to do with the node, by id. A second map rather than a list of pairs: the assignment list
 // is what everything else reads, and turning it into objects would rewrite every reader for a field only the prompt
 // page writes. A prompt exists only alongside the assignment it was given with, so unassigning drops both.
@@ -706,8 +706,8 @@ function writeAgentContext(id, prompt) {
     return headId;
   });
 }
-async function setCodex(id, on, prompt) {
-  const next = codexIds().filter((x) => x !== id);
+async function setAgentMark(id, on, prompt) {
+  const next = agentIds().filter((x) => x !== id);
   const text = typeof prompt === 'string' ? prompt.trim() : '';
   // The visible half first. If the document will not take the context there is nothing local to undo, so a badge
   // never claims a handoff the node itself knows nothing about. With no prompt there is nothing to write, and the
@@ -828,7 +828,7 @@ function rememberSeen(id, sig) {
 // and the settings document's first write cut 42 stored pairs to 1 (#427).
 function pruneSeen(followed = new Set()) {
   seenPairs ||= storedPairs();
-  const held = new Set([...followed, ...notifyWatchedIds(), ...codexIds()]);
+  const held = new Set([...followed, ...notifyWatchedIds(), ...agentIds()]);
   const next = Object.fromEntries(Object.entries(seenPairs).filter(([id]) => subscribed.has(id) || held.has(id)));
   if (Object.keys(next).length === Object.keys(seenPairs).length) return;
   seenPairs = next;
@@ -1293,8 +1293,6 @@ const ipc = {
   // assignee. null clears the choice and falls back to that rule, so "default" stays a live answer rather than a copy.
   'notify:state': (_e, id) => notifyState(id),
   'notify:set': (e, id, on) => { const state = setNotify(id, on); settings.tellOthers(pageOf(e), id); return state; }, // the choice is stored before setNotify's first await
-  // Assigned to the local Codex agent: an app-local mark, not a Tana assignee (see main/documents.js).
-  'codex:list': () => codexIds(),
   'doc:accessOptions': (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())),
   'doc:setSharing': (_e, id, selection) => mut(id, async doc => {
     await access.setSharing(doc, S.me.userUri, selection, await accessContext()); scheduleRefresh(2000);
@@ -1351,4 +1349,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { webLink, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { webLink, newChat, sendChat, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

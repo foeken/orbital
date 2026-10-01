@@ -13,7 +13,6 @@ const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
 const settings = require('./settings');
 const db = require('../db');
-const agent = require('./agent');
 const { signedBy } = require('../updater');
 const { send } = require('./state');
 
@@ -37,11 +36,11 @@ let authRpc = null, authHome = null, authReady = null, activeLogin = null, login
 
 // With no Codex on this Mac, sign-in runs on the standalone app-server from Codex's own GitHub release, fetched into
 // userData on the first "Sign in with ChatGPT" and kept only when it carries OpenAI's Developer ID. It answers for
-// the AI rows alone: handing work to a Codex task still needs a real Codex (main/agent.js codexBin).
+// the AI rows alone: handing work to a Codex task still needs a real Codex (main/agents/codex.js codexBin).
 // ponytail: fetched once and never updated; replace the file when the sign-in protocol moves past it.
 const SERVER = 'codex-app-server', OPENAI_TEAM = '2DC432GLL2';
 const ownServer = (userData) => path.join(userData, SERVER);
-const serverBin = (userData) => agent.codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
+const serverBin = (userData) => require('./agents/codex').codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
 let installing = null;
 async function downloadServer(userData) {
   const run = promisify(require('node:child_process').execFile);
@@ -78,7 +77,7 @@ async function ensureChatGPT(userData, install = false) {
   }
   if (!authRpc) { // a second caller may have started it while the download ran
     fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-    const rpc = agent.appServerRpc(TIMEOUT_MS, undefined, chatgptNote, { codexHome: home, bin: serverBin(userData) });
+    const rpc = require('./agents/codex').appServerRpc(TIMEOUT_MS, chatgptNote, { codexHome: home, bin: serverBin(userData) });
     authRpc = rpc; authHome = home;
     authReady = rpc.ready.catch((error) => {
       if (authRpc === rpc) { authRpc = null; authHome = null; authReady = null; }

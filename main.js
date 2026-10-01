@@ -9,12 +9,11 @@ const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const { userDataDir } = require('./userdata');
 const updater = require('./updater');
-const { readNode } = require('./sdk/node');
-const agent = require('./main/agent');
+const agents = require('./main/agents');
 const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { webLink, accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { webLink, accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, fieldDefs, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
@@ -30,7 +29,7 @@ const presence = require('./main/presence');
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
 // sent to the other pages; plus outline:children, which routes between several modules.
-for (const m of [require('./main/documents'), require('./main/chatagents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, updater]) {
+for (const m of [require('./main/documents'), agents, require('./main/chatagents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, updater]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -396,13 +395,15 @@ function firstHelp(page, theme) {
 ipcMain.handle('help:claim', async (e, theme) => { const page = pageOf(e); await settingsReady(); return firstHelp(page, theme); });
 const { tellOthers } = settings; // a setting one page writes reaches the others (main/settings.js)
 ipcMain.handle('prefs:set', (e, key, value) => { const stored = settings.setPref(key, value); tellOthers(pageOf(e)); return stored; });
+// The OpenAI API key is kept for whoever already has one; Sign in with ChatGPT is the way in (issue #669). An empty key
+// clears it, and then the palette stops offering the row.
 ipcMain.handle('openai:setKey', (_e, key) => {
-  if (typeof key !== 'string' || !key.trim()) throw new Error('OpenAI API key cannot be empty');
-  settings.set('openaiApiKey', key.trim());
-  autoTypeIcons(); // a key is somebody to ask: the types with no icon need not wait for the next boot
-  return true;
+  if (typeof key !== 'string') throw new Error('OpenAI API key must be text');
+  settings.set('openaiApiKey', key.trim() || null);
+  if (key.trim()) autoTypeIcons(); // a key is somebody to ask: the types with no icon need not wait for the next boot
+  return !!key.trim();
 });
-ipcMain.handle('chatgpt:status', () => ai.chatgptStatus(app.getPath('userData'), true));
+ipcMain.handle('chatgpt:status', async () => ({ ...await ai.chatgptStatus(app.getPath('userData'), true), apiKey: !!settings.get('openaiApiKey') }));
 ipcMain.handle('chatgpt:login', async () => {
   const result = await ai.startChatGPTLogin(app.getPath('userData'));
   if (!result.verificationUrl) return result;
@@ -438,113 +439,6 @@ async function autoTypeIcons() {
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
 ai.onSignedIn = autoTypeIcons; // and a ChatGPT sign-in the same
-// Assigning hands the node to a Codex task: the context is written, the local mark is stored, and then the work is
-// opened — a new composer carrying the self-registration prompt, or the task this node already has, told what
-// changed. openExternal failing raises, so the renderer shows why and the node keeps no badge it has not earned.
-ipcMain.handle('codex:models', (_e, host) => agent.listModels(undefined, host));
-// The machines a task can be sent to, named for the chooser. No addresses, no commands, no credentials leave main.
-ipcMain.handle('codex:hosts', () => agent.hosts());
-// Adding and removing machines. The form's three fields are validated here, and an invalid one is refused rather
-// than stored: the renderer can name a host, never reach past this boundary with a command.
-ipcMain.handle('codex:hostAdd', (_e, title, ssh, bin) => agent.addHost({ title, ssh, bin }));
-ipcMain.handle('codex:hostRemove', (_e, id) => agent.removeHost(id));
-// Which machine each linked node's task is on, read with the statuses so the UI knows what it may offer to open.
-ipcMain.handle('codex:taskHosts', () => Object.fromEntries(Object.keys(agent.codexTasks()).map((id) => [id, (agent.taskLink(id) || {}).host]).filter(([, host]) => host)));
-// The badge's destination: the task this node is linked to, opened by id the same way creating one does. The renderer
-// passes the node, never a url, so there is nothing here to point somewhere else.
-ipcMain.handle('codex:open', async (_e, id) => {
-  const link = agent.taskLink(id);
-  if (!link) return false; // nothing linked yet: the badge is not a button in that state either
-  if (link.host !== 'local') return false; // the deep link resolves against this app only; the UI says where it is instead
-  if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here');
-  await shell.openExternal(agent.TASK + encodeURIComponent(link.threadId));
-  return true;
-});
-// The handoff itself, lifted out of the handler below so a check can drive it without the IPC around it.
-async function assignToAgent(id, prompt, model, host) {
-  const where = agent.hostId(host); // an id the registry knows, or nothing
-  if (!where) throw new Error('That machine is not configured any more');
-  // A machine that is not there cannot take the task: say so before anything is written, so the page keeps the
-  // prompt, the model and the choice of host and the press can simply be repeated.
-  if (where !== 'local' && !(await agent.hostReady(where))) throw new Error((agent.hostRecord(where).title || where) + ' cannot be reached right now');
-  // A task that already lives on another machine cannot be opened or queued from here — the deep link and the Codex
-  // CLI both resolve against this app's own store, which is why the badge's codex:open refuses the same way — so it
-  // is refused before the context and the stored prompt are rewritten for a handoff that will not happen.
-  const existing = agent.taskLink(id);
-  if (existing && existing.host !== 'local') throw new Error('This task runs on ' + ((agent.hostRecord(existing.host) || {}).title || existing.host) + '; queue to it from that machine');
-  const result = await setCodex(id, true, prompt);
-  // The node's own title, taken off the document the assignment just wrote to, so the Codex task is named after the
-  // work rather than after the prompt's opening sentence. Read here and not passed in by each window: one authority
-  // for both entry points, never a string a panel has been holding since it opened, and no second subscription —
-  // setCodex has the document open by the time this runs.
-  const open = S.client && S.client.sync.getDocument(id);
-  const title = open ? readNode(open).title : '';
-  const plan = agent.handoff(id, prompt, __dirname, title);
-  if (plan.kind === 'create') {
-    // Made here rather than through the public link: this is what gets the app's own workspace, the chosen model and the
-    // id up front, so the badge can stop being pending the moment the task exists and the app opens it directly.
-    const threadId = await agent.createTask({ nodeUri: id, prompt: agent.agentPrompt(id, __dirname, title), model, userData: S.userData, host: where });
-    agent.setCodexTask(id, threadId, where); // host and id land together, before anything reads either
-    // Only a task on this machine can be opened by the local deep link; one on another host is linked and watched,
-    // but the app has no route to it, and the UI says that rather than opening the wrong thing.
-    if (where === 'local') {
-      if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here');
-      await shell.openExternal(agent.TASK + encodeURIComponent(threadId));
-    }
-    return result;
-  }
-  if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here'); // no silent success
-  await shell.openExternal(plan.url);
-  if (plan.queue) queueToTask(plan.threadId, plan.queue);
-  return result;
-}
-ipcMain.handle('codex:set', async (e, id, on, prompt, model, host) => {
-  // Unassigning lets go of the link as well: the next assignment is a new task, not a return to the old one. The
-  // Codex task itself is left alone — it is the user's, with its own history — and so is the Tana context.
-  // Letting go of the link lets go of the writer with it: a child still holding that thread is what makes Codex
-  // refuse to open it. The Codex task itself is untouched — not deleted, not archived — so its history stays.
-  // The agent mark is a setting the other pages draw (the badge, the Agent section): they hear of it once the change
-  // has gone through, so a handoff that failed, which the page that asked shows as unassigned, shows so everywhere.
-  let result;
-  if (!on) { result = await setCodex(id, false, prompt); agent.clearCodexTask(id); await agent.releaseTask(id); }
-  else {
-    // A handoff that fails leaves no mark behind on a node that had none: the mark is a synced setting, so it would
-    // reach the other machines and the next launch as a pending badge for work nobody took. It is taken back the way
-    // an unassign takes it, the Codex task (if one was made) and the context in the node left alone; a node that was
-    // already assigned keeps its assignment.
-    const was = codexIds().includes(id);
-    try { result = await assignToAgent(id, prompt, model, host); }
-    catch (error) {
-      if (!was && codexIds().includes(id)) { await setCodex(id, false); agent.clearCodexTask(id); await agent.releaseTask(id).catch(() => {}); }
-      throw error;
-    }
-  }
-  tellOthers(pageOf(e), id); // the node too: a relink keeps the mark and the host, and only its task moved
-  return result;
-});
-// Linking a node to a Codex task that already exists (#143): the link Codex copies, codex://threads/<id>, or the bare
-// id. The node takes the local agent mark the way an assignment does, as a task on this machine, where a pasted
-// link can only have come from; no task is started and nothing is written to the node.
-ipcMain.handle('codex:link', async (e, id, link) => {
-  if (typeof id !== 'string' || !/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana node');
-  const threadId = String(link || '').trim().replace(/^codex:\/\/threads\//i, '').replace(/\/$/, '');
-  if (!agent.THREAD_ID.test(threadId)) throw new Error('Paste a Codex task link: codex://threads/…');
-  const result = await setCodex(id, true);
-  agent.setCodexTask(id, threadId, 'local');
-  tellOthers(pageOf(e), id);
-  return result;
-});
-// The current request, delivered to the task this node already has. Best effort on purpose: the task is open in
-// front of the user either way, and a queue that does not land must not undo an assignment that did.
-function queueToTask(threadId, message) {
-  const bin = agent.codexBin(); // the task was opened through the Codex app, so this Mac has a codex to queue with
-  try { if (bin) require('node:child_process').execFile(bin, ['queue', '--thread', threadId, '--message', message], { timeout: 20000 }, () => {}); } catch { /* the task is open regardless */ }
-}
-// One bounded app-server child per refresh answers for every linked node (main/agent.js). Every page asks on every
-// refresh, so the pages asking while a read runs share it: each read is a child per host (an ssh session for a remote
-// one), and a split window used to start two at once for the same answer (issue #267).
-let agentStatusRead = null;
-ipcMain.handle('codex:status', () => (agentStatusRead ||= agent.readAgentStatuses(agent.codexTasks()).finally(() => { agentStatusRead = null; })));
 ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(pageOf(e)); return stored; });
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:translate', (_e, texts, to, opts) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'), { local: !!(opts && opts.local) })); // a note shown in English, never saved (renderer/translate.js); local: this Mac's answers only
@@ -639,7 +533,7 @@ if (process.env.TANA_MAIN_TEST) {
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
     nodePin, dropSearchHeads,
     autoTypeIcons,
-    assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
+    agents, // the agent handoff (main/agents/index.js), so a check can drive it through the real path
     accessContext, inboxCount, S,
     testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'inbox'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };
 } else {
@@ -718,5 +612,5 @@ if (process.env.TANA_MAIN_TEST) {
   });
 
   app.on('window-all-closed', () => {}); // stay in the Dock (activate above)
-  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agent.stopOwnedTasks(); ai.stop(); }); // no writer outlives the app that spawned it
+  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agents.stop(); ai.stop(); }); // no writer outlives the app that spawned it
 }

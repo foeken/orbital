@@ -62,7 +62,7 @@ const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed'
 const RESPONSIBILITY = ['Unassigned', 'Agent', 'My inbox', 'Pinned', 'Mine', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
 function responsibilityOf(n) {
   if (n.draft) return n.group || null; // a new task drafted under a section (renderer/drag.js groupDraft) stays in it while it is typed
-  if (codexIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadCodex)
+  if (agentIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadAgentIds)
   if (isTask(n) && datePinsById.has(n.id)) return stateOf(n) === 'closed' ? 'My completed' : 'Pinned';
   const uri = me() && me().id, meta = taskMetaById.get(n.id);
   if (!uri) return null; // the member list has not landed, so "you" is not known yet

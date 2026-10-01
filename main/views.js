@@ -8,7 +8,7 @@ const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completed
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView, rowLimit } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe } = require('./documents');
+const { agentIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
 const settings = require('./settings');
@@ -74,7 +74,7 @@ async function viewRows(id, filter) {
     const ids = new Set(nodes.slice(0, LIVE_ROWS).map((n) => n.id));
     // a node you asked to be told about — or the rule watches, or that was handed to the Codex agent — stays
     // subscribed wherever you are
-    const watched = new Set([...notifyWatchedIds(), ...ruleWatched, ...codexIds()]);
+    const watched = new Set([...notifyWatchedIds(), ...ruleWatched, ...agentIds()]);
     liveIds.set(id, ids);
     for (const nodeId of ids) if (!subscribed.has(nodeId)) { subscribed.add(nodeId); subscribe(nodeId); }
     // ...and so does what another window's view lists (issue #137)
@@ -274,7 +274,7 @@ async function start() {
   // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more. What
   // this app deleted is known before any of them is asked for (the in-memory set starts empty on every launch).
   for (const { id } of db.deletedList(1000)) deletedNodes.add(id);
-  for (const id of new Set([...notifyWatchedIds(), ...codexIds()])) S.client.sync.subscribe(id).catch(() => {});
+  for (const id of new Set([...notifyWatchedIds(), ...agentIds()])) S.client.sync.subscribe(id).catch(() => {});
   watchInbox().catch(report); // new Inbox tasks, pushed by Tana as they land
   watchMine().catch(report); // the tasks you made for others, which the watch rule follows
   await refresh();

@@ -346,28 +346,34 @@ function loadPinned(force) {
     renderSoon();
   }, () => {}); // not connected yet: the next read asks again, and until then a row simply carries no mark
 }
-// The nodes assigned to the local Codex agent, once per launch. Unlike the sensitive marks nothing waits on it: a
+// The nodes assigned to an agent, once per launch. Unlike the sensitive marks nothing waits on it: a
 // row that renders before the answer lands simply has no badge yet, and the load re-renders.
-function loadCodex() {
-  if (!codexLoading) codexLoading = Promise.resolve(tana.codexIds ? tana.codexIds() : [])
-    .then((ids) => { codexIds = new Set(ids); renderSoon(); }, showError);
-  return codexLoading;
+function loadAgentIds() {
+  if (!agentLoading) agentLoading = Promise.resolve(tana.agentIds ? tana.agentIds() : [])
+    .then((ids) => { agentIds = new Set(ids); renderSoon(); }, showError);
+  return agentLoading;
 }
-// What each linked task is doing: one bounded app-server child in main answers for every linked node at once. Read at
-// boot, every 30 s while something is linked, and when a link moves (renderer/app.js), never per list reload: those
-// come in bursts, and each started a child. A node it says nothing about stays pending.
+// Which agents there are and which are on (main/agent.js), at boot and whenever Choose agents changes them.
+function loadAgentList() {
+  if (!tana.agentList) return Promise.resolve();
+  if (tana.chatAgents) tana.chatAgents().then((list) => { chatAgents = list; }, () => {}); // the agents a chat can ask follow the same switches (renderer/chat.js)
+  return tana.agentList().then((list) => { if (Array.isArray(list) && list.length) agentList = list; renderSoon(); }, () => {});
+}
+// What each linked task is doing: one read in main answers for every linked node at once (a Codex one is an
+// app-server child). Read at boot, every 30 s while something is linked, and when a link moves (renderer/app.js),
+// never per list reload: those come in bursts. A node it says nothing about stays pending.
 function loadAgentStates() {
-  // No guard on codexIds: it is filled by loadCodex, which is still in flight at boot, so gating on it meant the
+  // No guard on agentIds: it is filled by loadAgentIds, which is still in flight at boot, so gating on it meant the
   // status was never asked for after a reload and every linked task sat grey until the next refresh. Main knows the
   // links; an answer for none of them is cheap and correct.
-  if (!tana.codexStatus) return;
-  tana.codexStatus().then((states) => {
+  if (!tana.agentStatus) return;
+  tana.agentStatus().then((states) => {
     agentStates.clear();
     for (const [id, state] of Object.entries(states || {})) agentStates.set(id, state);
     renderSoon();
   }, () => {}); // a status read that fails leaves the badges as they were; it is not an error the user can act on
-  // and where each of them runs: the badge says whether it can be opened from here, so a late answer redraws too
-  if (tana.codexTaskHosts) tana.codexTaskHosts().then((hosts) => { agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts || {})) agentTaskHosts.set(id, host); renderSoon(); }, () => {});
+  // and whose task each one is: the badge and Go to <agent> task open it there, so a late answer redraws too
+  if (tana.agentTasks) tana.agentTasks().then((links) => { agentTasks.clear(); for (const [id, link] of Object.entries(links || {})) agentTasks.set(id, link); renderSoon(); }, () => {});
 }
 // recently viewed documents (localStorage "recent"), most recent first, max 20
 const recent = () => { try { return (JSON.parse(localStorage.getItem('recent')) || []).map((n) => asDoc(!n.icon && !n.tags?.length && n.id?.startsWith('tana:text:') ? { ...n, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] } : n)); } catch { return []; } };
@@ -389,7 +395,8 @@ const recentRows = () => recent().map((row) => { const live = docOf(row.id); ret
 
 async function loadRoots() {
   await loadSensitive(); // privacy gate: no document reaches the first render before the local marks do
-  loadCodex();
+  loadAgentIds();
+  loadAgentList();
   const drafts = views.flatMap((s) => s.nodes.map((node, i) => ({ view: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
   // The type glyphs come with the roots rather than on their own: a row carries the *name* of its type's icon, so
   // the markup has to be here before the rows are, and a roots load is exactly when the rows change.

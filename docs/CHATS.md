@@ -312,18 +312,19 @@ subset does not carry and would drop.
 status updates included; the app draws one other than "accepted N changes" as a small centred line (`row.chat.status`).
 
 
-## 12. @Codex: a question and its answer on this Mac, never in Tana
+## 12. @Codex and @Claude: a question and its answer on this Mac, never in Tana
 
-main/chatagents.js, renderer/chat.js (issue #468). "@" in the composer offers **Codex** after Tana; a message that mentions
-it (the chip is written as plain "@Codex") goes through `chatAgent:ask` instead of `chat:send`, and nothing of it is
+main/chatagents.js, renderer/chat.js (issues #468, #669). "@" in the composer offers, after Tana, every agent that is
+switched on in Choose agents, is on this Mac and can read an answer back (Codex, Claude); a message that mentions
+one (the chip is written as plain "@Codex") goes through `chatAgent:ask` instead of `chat:send`, and nothing of it is
 written to Tana. Tana has no author for an agent's words: a message is `human` with a `fromUserUri`, or `ai`, which
 Tana draws as the chat's own agent (§2), so an `ai` message would read as Tana's answer to everyone in the chat, and a
 `human` one as yours. Both the question and the answer stay in Orbital:
 
-1. **A Codex task on this Mac** is started with main/agent.js `createTask` (the Assign to Agent path, keyed by the chat, so
+1. **A task of that agent on this Mac** is started with the agent's own `start` (main/agents/codex.js, claude.js; the Assign to Agent path, keyed by the chat, so
    its workspace is `agent-workspaces/Tana`, shared by every task). Its prompt is the question and the whole conversation, oldest first,
    `Name: text` per message, mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
-   (`thread/start` `developerInstructions`, `RULES`) say the question and answer are shown to the asker alone and never
+   (`RULES`: Codex's `thread/start` `developerInstructions`, Claude's `--append-system-prompt`) say the question and answer are shown to the asker alone and never
    saved to Tana, to answer only what was asked, and never to write to Tana. A task that cannot start keeps nothing, and
    the words go back to the composer.
 2. **The question stays local**: `chatAsks` (chat → `[{ id, question, agent, taskId, at, state, text }]`, `id` a local

@@ -299,6 +299,7 @@ function mockApi() {
   ] };
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
+  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true }, { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true }];
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   const hiddenTitles = new Set(['Daily Brief Delivery', 'Private AI chat for*']); // Edit hidden items: an exact title and a prefix
@@ -471,7 +472,7 @@ function mockApi() {
     },
     mcpHidden: async () => mcpOff,
     setMcpHidden: async (on) => { mcpOff = !!on; emit(null); return mcpOff; },
-    setOpenAIKey: async (key) => { if (!String(key || '').trim()) throw new Error('OpenAI API key cannot be empty'); return true; },
+    setOpenAIKey: async (key) => !!String(key || '').trim(),
     // Set type: the mock keeps main's two rules so the page behaves the same without the main process — a type that
     // lives in a space fits only a document in that space, a Library type fits anything (main/documents.js).
     // fields that hold choices or links (main/documents.js setField, defineField, addTypeField), without Tana's checks
@@ -667,18 +668,19 @@ function mockApi() {
     deletedList: async () => [...deleted].reverse().map(([id, saved]) => ({ id, title: saved.doc.text || 'Untitled', deletedAt: saved.at })),
     sensitiveIds: async () => [...sensitive],
     setSensitive: async (docId, on) => { if (on) sensitive.add(docId); else sensitive.delete(docId); return on; },
-    codexIds: async () => [...codexAssigned],
-    setCodex: async (docId, on, prompt) => {
+    agentIds: async () => [...codexAssigned],
+    setAgent: async (docId, on, prompt) => {
       if (on) { codexAssigned.add(docId); if (typeof prompt === 'string' && prompt.trim()) codexPrompts.set(docId, prompt.trim()); }
       else { codexAssigned.delete(docId); codexPrompts.delete(docId); }
       return !!on;
     },
-    linkCodexTask: async (docId) => { codexAssigned.add(docId); return true; },
-    // the agent's machines and models (main/agent.js), and opening a task, enough to draw their Cmd+K pages
-    codexHosts: async () => [{ id: 'local', title: 'This Mac' }, { id: 'studio', title: 'Studio Mac mini' }],
-    codexModels: async () => ['gpt-5-codex', 'gpt-5'],
-    addCodexHost: async () => true, removeCodexHost: async () => [{ id: 'local', title: 'This Mac' }],
-    openCodexTask: async () => true,
+    linkAgentTask: async (docId) => { codexAssigned.add(docId); return true; },
+    // the agents (main/agent.js): Tana and Codex on, Claude installed and off, enough to draw their Cmd+K pages
+    agentList: async () => mockAgents.map((a) => ({ ...a })),
+    enableAgent: async (id, on) => { const a = mockAgents.find((x) => x.id === id); if (a && a.installed && id !== 'tana') { a.enabled = !!on; if (!on && a.isDefault) { a.isDefault = false; mockAgents[0].isDefault = true; } } return mockAgents.map((x) => ({ ...x })); },
+    setDefaultAgent: async (id) => { for (const a of mockAgents) a.isDefault = a.id === id; return mockAgents.map((x) => ({ ...x })); },
+    agentTasks: async () => Object.fromEntries([...codexAssigned].map((id) => [id, { agent: 'codex', taskId: '00000000-0000-4000-8000-000000000000' }])),
+    openAgentTask: async () => true, openInAgent: async () => true,
     // ChatGPT sign-in (main/ai.js): signed out, and a device code once asked
     chatgptStatus: async () => ({ available: true, signedIn: false }),
     chatgptLogin: async () => ({ userCode: 'K7QD-2M9F' }),

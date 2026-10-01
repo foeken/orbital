@@ -39,7 +39,7 @@ the third catches up on the next connect.
 |---|---|
 | View filters (`viewFilter:*`), hidden titles, the MCP switch | The window's size and position |
 | Type, field and saved-search icons and the colour a type is drawn in (`typeIcons`, `typeHues`), sensitive marks, watch choices (`notify`), which model the AI rows use ("Discuss with" and "Classify type") and how hard it thinks (`aiModel`, `aiEffort` — no UI yet, defaults in main/ai.js) | Which page you had open, where you were zoomed, whether sensitive items are unblurred (`sensitiveVisible`), the OpenAI API key (`openaiApiKey`), and ChatGPT auth in a separate, isolated Codex home under userData |
-| Agent assignments, their prompts, the machines they can run on, and the tasks they became (`codexTask`) | The row cache, which is a mirror of Tana and is rebuilt by any refresh |
+| Agent assignments, their prompts, which agents are on and the default (`agents`, `defaultAgent`), and the tasks they became (`codexTask`: node → agent and task id) | The row cache, which is a mirror of Tana and is rebuilt by any refresh |
 | Which saved search is the Work View's My Tasks (`myTasks`, its id: a rename keeps it, two machines share it) | |
 | Renderer preferences (`pref:*`): Home, recorded hotkeys, theme, sort, grouping, which facts a row shows, folded sections, the sidebar's open/closed state, saved views (`savedViews`: a window's layout and each page's view and place, under a name) | Recently viewed, the sidebar's width, the row cache, and ChatGPT auth in its isolated local Codex home |
 

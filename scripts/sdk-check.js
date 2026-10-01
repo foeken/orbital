@@ -58,7 +58,7 @@ function mainHelpers(childProcess) {
   };
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
-  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')) };
+  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')) };
 }
 
 async function main() {
@@ -900,11 +900,11 @@ async function main() {
     assert.match(calls.at(-1).init.body.instructions,/image.s own language/,'and a language that is no name is ignored');
     assert.deepEqual(await ai.readImage(png,fetchWith(answer('{"kind": "meeting", "title": "Invoice 42"}'))),{kind:'doc',title:'Invoice 42',notes:[]},'anything but a task is a note');
     await assert.rejects(ai.readImage(png,fetchWith(answer('I cannot read this image.'))),/nothing useful/,'an answer with no title makes nothing');
-    const agent=require('../main/agent'), originalRpc=agent.appServerRpc, originalBin=agent.codexBin;
+    const agent=require('../main/agents/codex'), originalRpc=agent.appServerRpc, originalBin=agent.codexBin;
     const userData=fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(),'orbital-ai-auth-'));
     let signedIn=false, note, threadStart, turnStart, serverOptions=null;
     agent.codexBin=()=>null; // a Mac with no Codex at all
-    agent.appServerRpc=(_timeout,_host,onNote,options)=>{
+    agent.appServerRpc=(_timeout,onNote,options)=>{
       note=onNote; serverOptions=options;
       return {ready:Promise.resolve(),stop(){},call:async(method,params)=>{
         if(method==='account/read')return {account:signedIn?{type:'chatgpt',email:'person@example.com',planType:'plus'}:{type:'apiKey'}};
@@ -1092,9 +1092,9 @@ async function main() {
     settings.setPref('home', 'tana:search:' + ulid());
     await settings.flush();
     assert.equal(Object.hasOwn(stored(), 'window'), false, 'a machine-local setting never reaches the document');
-    settings.set('codexTask', { 'tana:text:x': { host: 'local', threadId: '00000000-0000-4000-8000-000000000000' } });
+    settings.set('codexTask', { 'tana:text:x': { agent: 'codex', taskId: '00000000-0000-4000-8000-000000000000' } });
     await settings.flush();
-    assert.ok(Object.hasOwn(stored(), 'codexTask'), 'an agent task does: the thread id is global, and the record names the machine it runs on');
+    assert.ok(Object.hasOwn(stored(), 'codexTask'), 'an agent task does: the task id is global, and the record names its agent');
     assert.ok(Object.hasOwn(stored(), 'pref:home'), 'a renderer preference does, under the prefix the renderer reads back');
     assert.equal(Object.keys(settings.prefs()).join(), 'home', 'which is what the renderer receives, with the prefix off');
     // A second machine: its own empty database, the same document, found by name.
@@ -1152,7 +1152,8 @@ async function main() {
     await backend.handlers.get('notify:set')({ senderFrame: right.frame }, watchedDoc, true).catch(() => {}); // the state read after the write needs a document this runtime lacks
     assert.deepEqual(others().map(([name, channel, value]) => [name, channel === 'outline:changed' ? value : channel]), [['left', 'settings:changed'], ['left', watchedDoc], ['other', 'settings:changed'], ['other', watchedDoc]],
       'a watch choice tells the other pages, and has them read that document’s metadata again');
-    await backend.handlers.get('codex:link')({ senderFrame: left.frame }, watchedDoc, '00000000-0000-4000-8000-000000000000');
+    backend.agent.get('codex').available = () => true; // a Mac with Codex
+    await backend.handlers.get('agent:link')({ senderFrame: left.frame }, watchedDoc, 'codex', '00000000-0000-4000-8000-000000000000');
     assert.deepEqual(others().map(([name, channel]) => name + ' ' + channel), ['right settings:changed', 'right outline:changed', 'other settings:changed', 'other outline:changed'],
       'an agent mark tells the other pages too, with the node, since a relink moves only its task');
     // A watch choice another machine made reaches every page as that document's metadata change, as a local one does.
@@ -1162,8 +1163,8 @@ async function main() {
     await settings.applyRemote(settingsDoc.id);
     assert.deepEqual(others().filter(([, channel]) => channel === 'outline:changed').map(([name, , value]) => [name, value]), [['left', remoteWatch], ['right', remoteWatch], ['other', remoteWatch]],
       'a watch choice from another machine has every page read that document again');
-    // So does an agent task another machine linked or relinked: the mark and the host can stay the same while the task moves.
-    settingsDoc.transact((loro) => loro.getMap(settings.ROOT).set('codexTask', JSON.stringify({ ...settings.get('codexTask'), [watchedDoc]: { host: 'local', threadId: '00000000-0000-4000-8000-000000000001' } })));
+    // So does an agent task another machine linked or relinked: the mark can stay the same while the task moves.
+    settingsDoc.transact((loro) => loro.getMap(settings.ROOT).set('codexTask', JSON.stringify({ ...settings.get('codexTask'), [watchedDoc]: { agent: 'codex', taskId: '00000000-0000-4000-8000-000000000001' } })));
     await settings.applyRemote(settingsDoc.id);
     assert.deepEqual(others().filter(([, channel]) => channel === 'outline:changed').map(([name, , value]) => [name, value]), [['left', watchedDoc], ['right', watchedDoc], ['other', watchedDoc]],
       'an agent task relinked on another machine has every page read that node again');
@@ -1564,19 +1565,17 @@ async function main() {
     const noted = readNode(docs.get((await backend.createDocument('Meeting notes', { kind: 'custom', typeUri: note.id })).id));
     assert.deepEqual([noted.entityTypeUri, noted.stateType ?? null], [note.id, null], 'and a type without a workflow still makes a document');
     // The handoff names the task after its node title, so Codex names the thread after the work.
-    const handed = [];
-    backend.agent.createTask = async (opts) => { handed.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca0e'; };
+    const handed = [], codex = backend.agent.get('codex');
+    codex.available = () => true; // a Mac with Codex
+    codex.start = async (opts) => { handed.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca0e'; };
     const risk = make('text', 'Review the Q3 risk log');
-    await backend.assignToAgent(risk.id, 'Summarise it', undefined, undefined);
-    assert.equal(String(handed[0].prompt).split('\n')[0], 'Tana: Review the Q3 risk log', 'the agent is told the node title first');
-    // A node whose task already runs on another machine is refused before anything is written: the context and the
-    // stored prompt used to be rewritten first, for a handoff that then never happened.
-    const elsewhere = 'tana:text:01j0elsewhere000000000000';
-    const attic = backend.agent.addHost({ title: 'Attic', ssh: 'attic.local', bin: '/opt/codex' });
-    backend.agent.setCodexTask(elsewhere, '01a0b3a3-c000-70b0-896e-08e86986ca0f', attic.id);
-    await assert.rejects(backend.assignToAgent(elsewhere, 'Do it', 'm', 'local'), /runs on Attic/, 'a remote task is refused by name');
-    assert.equal((backend.settings.get('codexPrompt') || {})[elsewhere], undefined, 'and its prompt was not rewritten on the way');
-    console.log('ok  current meeting read fresh, a task from its title alone or of a workflow type, and the agent handoff by name and by machine');
+    await backend.agents.assign(risk.id, 'Summarise it', 'codex');
+    assert.equal(String(backend.agent.agentPrompt(handed[0].nodeUri, handed[0].title)).split('\n')[0], 'Tana: Review the Q3 risk log', 'the agent is told the node title first');
+    // An agent that is switched off takes nothing, and is refused before anything is written.
+    const off = make('text', 'Not for Claude');
+    await assert.rejects(backend.agents.assign(off.id, 'Do it', 'claude'), /not switched on/, 'an agent that is off is refused by name');
+    assert.equal((backend.settings.get('codexPrompt') || {})[off.id], undefined, 'and the prompt was not written on the way');
+    console.log('ok  current meeting read fresh, a task from its title alone or of a workflow type, and the agent handoff named after its node');
   }
   {
     const backend=mainHelpers(), d=new Document(DOC);
@@ -3497,13 +3496,13 @@ async function main() {
 
 
   {
-    // Every page asks for the Codex statuses on every refresh, and each read starts an app-server per host: the pages
+    // Every page asks for the agents' statuses on every refresh, and a Codex read starts an app-server: the pages
     // asking while one read runs share it, and the next refresh reads afresh (issue #267).
     const backend = mainHelpers(); require('../db').open(':memory:');
     let reads = 0, finish;
-    backend.agent.codexTasks = () => ({ 'tana:text:01examplea0000000000000000': 'thread' });
-    backend.agent.readAgentStatuses = () => { reads++; return new Promise((done) => { finish = done; }); };
-    const status = backend.handlers.get('codex:status');
+    backend.agent.setTask('tana:text:01examplea0000000000000000', 'codex', 'thread');
+    backend.agent.get('codex').statuses = () => { reads++; return new Promise((done) => { finish = done; }); };
+    const status = backend.handlers.get('agent:status');
     const left = status(), right = status();
     assert.equal(reads, 1, 'two pages asking at once start one read');
     finish({ n: 'working' });
@@ -3511,7 +3510,8 @@ async function main() {
     status();
     assert.equal(reads, 2, 'a read that has settled is not reused: the next refresh asks again');
     finish({});
-    console.log('ok  codex status: one read shared by every page asking at once');
+    backend.agent.clearTask('tana:text:01examplea0000000000000000');
+    console.log('ok  agent status: one read shared by every page asking at once');
   }
   // Handing a node to the local Codex agent: an app-local mark in the settings table, never a Tana assignee, and one
   // the view refresh's unsubscribe sweep is not allowed to drop.
@@ -3527,19 +3527,19 @@ async function main() {
       client: { sync: { getDocument: (id) => (id === task.id ? task : null),
         subscribe: async (id) => { if (id !== task.id) throw new Error('unavailable'); subscribed.push(id); return task; } } } });
     // the handlers answer from inside the vm, so their arrays are compared as text rather than by identity
-    const assigned = async () => (await backend.handlers.get('codex:list')(null)).join(',');
-    // Creating the task is a real app-server child; here it answers with an id, so the rest of the flow is checked.
-    const created = [];
-    backend.agent.createTask = async (opts) => { created.push(opts); return '01a0b379-afbc-74c3-a191-c419e6543bcc'; };
+    const assigned = async () => (await backend.handlers.get('agent:ids')(null)).join(',');
+    // Creating the task is a real app-server child; here Codex's start answers with an id and opens it as the real one
+    // does, so the rest of the flow is checked.
+    const created = [], cx = backend.agent.get('codex'), set = (id, on, prompt) => backend.handlers.get('agent:set')(null, id, on, prompt, 'codex');
+    cx.available = () => true;
+    cx.start = async (opts) => { created.push(opts); await backend.electron.shell.openExternal('codex://threads/01a0b379-afbc-74c3-a191-c419e6543bcc'); return '01a0b379-afbc-74c3-a191-c419e6543bcc'; };
     assert.equal(await assigned(), '', 'nothing is handed to the agent to begin with');
-    assert.equal(await backend.handlers.get('codex:set')(null, task.id, true), true);
+    assert.equal(await set(task.id, true), true);
     assert.equal(await assigned(), task.id, 'assigning stores the id');
     assert.equal((cache.setting('codex') || []).join(','), task.id, 'in the settings table, so it survives a restart');
     // The acceptance case: confirming an assignment hands the work over. Before this, assigning marked the node and
     // opened nothing, so the badge claimed a delegation that did not exist anywhere.
-    // Created here and opened directly: the app's own workspace, the chosen model, and an id up front — so the
-    // task is linked the moment it exists and Codex opens it without a trip through the browser.
-    assert.equal(created.length, 1, 'assigning creates the task through the app-server');
+    assert.equal(created.length, 1, 'assigning starts the task through the agent');
     assert.equal(created[0].nodeUri, task.id, 'for this node');
     assert.notEqual(created[0].userData, undefined, 'in the app\'s own workspace, not the last project and not this repo');
     // Reported from a screenshot (#553): a folder per node made every task a project of its own in Codex.
@@ -3551,11 +3551,11 @@ async function main() {
     fs.rmSync(dataDir, { recursive: true, force: true });
     // Reported from a screenshot: every task was called after this prompt's opening sentence, so the list read as a
     // column of identical names. The first line is the node's own title now, and Codex titles a task from it.
-    assert.equal(String(created[0].prompt).split('\n')[0], 'Tana: Draft the release notes',
+    assert.equal(String(backend.agent.agentPrompt(created[0].nodeUri, created[0].title)).split('\n')[0], 'Tana: Draft the release notes',
       'a task assigned from Cmd+K opens with its node title');
     // That title is text from the graph, so it is handled as data: one line, no control characters, capped without
     // splitting a character in half, and a node with no usable title still gets a name of its own.
-    const firstLine = (t) => String(backend.agent.agentPrompt(task.id, '/repo', t)).split('\n')[0];
+    const firstLine = (t) => String(backend.agent.agentPrompt(task.id, t)).split('\n')[0];
     assert.equal(firstLine('Create specific risk around network risk'), 'Tana: Create specific risk around network risk',
       'an ordinary title is carried through as it is');
     assert.equal(firstLine('  Two\nlines\tand\u0007a bell  '), 'Tana: Two lines and a bell',
@@ -3568,14 +3568,13 @@ async function main() {
     assert.equal(firstLine(undefined), 'Tana task', 'and so is one whose title could not be read at all');
     assert.equal(backend.opened.length, 1, 'and opens it');
     assert.equal(backend.opened[0], 'codex://threads/01a0b379-afbc-74c3-a191-c419e6543bcc', 'by id, directly');
-    assert.equal(/chatgpt\.com/.test(backend.opened[0]), false, 'with no browser route for creation');
-    assert.equal((await backend.handlers.get('codex:list')(null)).join(','), task.id, 'and the node is linked at once');
+    assert.equal((await backend.handlers.get('agent:ids')(null)).join(','), task.id, 'and the node is linked at once');
     assert.equal(assigneesOf(), before,
       'and the document is untouched: Tana assignees are user profiles, so an agent cannot be one');
     assert.equal(subscribed.join(','), task.id, 'an assigned node is subscribed at once, so changes to it keep arriving');
     // The prompt the agent was given rides along in a map of its own, so the id list every other reader walks is
     // unchanged. It is stored trimmed, and only ever beside an assignment.
-    await backend.handlers.get('codex:set')(null, task.id, true, '  Draft the release notes\nthen tell me  ');
+    await set(task.id, true, '  Draft the release notes\nthen tell me  ');
     assert.equal((cache.setting('codexPrompt') || {})[task.id], 'Draft the release notes\nthen tell me',
       'the prompt is stored under the node, trimmed at the ends and otherwise as typed');
     assert.equal(await assigned(), task.id, 'and the node is still assigned exactly once');
@@ -3585,137 +3584,115 @@ async function main() {
     assert.deepEqual(context()[0].children.map((n) => n.text), ['Draft the release notes', 'then tell me'],
       'with the prompt nested under it, one block per line and in the order it was typed');
     // Assigning again is the same decision made twice, not two contexts: the block is found by its title and rewritten.
-    await backend.handlers.get('codex:set')(null, task.id, true, 'One line only\n\n  and a third  ');
+    await set(task.id, true, 'One line only\n\n  and a third  ');
     assert.equal(context().length, 1, 'reassigning reuses the block rather than adding a second one');
     assert.deepEqual(context()[0].children.map((n) => n.text), ['One line only', 'and a third'],
       'its children are replaced by the new prompt, and a blank line is not an empty row');
     // A document that cannot be written must leave nothing behind locally: a badge would claim a handoff the node
     // knows nothing about. The visible half goes first, so there is nothing to roll back.
     const unreachable = 'tana:text:' + ulid();
-    await assert.rejects(() => backend.handlers.get('codex:set')(null, unreachable, true, 'Do the thing'),
+    await assert.rejects(() => set(unreachable, true, 'Do the thing'),
       'a document that cannot take the context fails the assignment');
-    assert.equal((await backend.handlers.get('codex:list')(null)).includes(unreachable), false, 'and is not marked as assigned');
+    assert.equal((await backend.handlers.get('agent:ids')(null)).includes(unreachable), false, 'and is not marked as assigned');
     assert.equal((cache.setting('codexPrompt') || {})[unreachable], undefined, 'nor is its prompt kept');
-    await backend.handlers.get('codex:set')(null, task.id, true);
+    await set(task.id, true);
     assert.equal(await assigned(), task.id, 'assigning twice is still one entry');
-    assert.equal(await backend.handlers.get('codex:set')(null, task.id, false), false);
+    assert.equal(await set(task.id, false), false);
     assert.equal(await assigned(), '', 'unassigning takes it back out');
     assert.deepEqual(Object.keys(cache.setting('codexPrompt') || {}), [], 'and takes the prompt with it: the two are one decision');
     assert.equal(context().length, 1, 'but the context stays in the document: by then it is ordinary content somebody may have edited');
     // A handoff that cannot be opened is not a handoff: the call fails, so the renderer shows why rather than
-    // drawing a badge for a task nobody opened.
+    // drawing a badge for a task nobody opened. The task left from the last assignment is let go first, so this one
+    // starts a new task rather than handing the old one the request.
+    await set(task.id, false);
     backend.electron.shell.refuse = true;
-    await assert.rejects(() => backend.handlers.get('codex:set')(null, task.id, true, 'Try again'),
+    await assert.rejects(() => set(task.id, true, 'Try again'),
       'an assignment that cannot open Codex fails rather than claiming delegation');
     // ...and leaves no mark behind: the mark is a synced setting, so another machine and the next launch would show a
     // pending badge for a handoff the page that asked reported as failed.
     assert.equal(await assigned(), '', 'a failed handoff takes back the mark it made');
-    assert.equal(backend.agent.codexTaskFor(task.id), null, 'and the task link');
+    assert.equal(backend.agent.taskLink(task.id), null, 'and the task link');
     backend.electron.shell.refuse = false;
     // Unassigning opens nothing at all: it takes the assignment away and leaves the task and the context alone.
     const openedBefore = backend.opened.length;
-    await backend.handlers.get('codex:set')(null, task.id, false);
+    await set(task.id, false);
     assert.equal(backend.opened.length, openedBefore, 'unassigning opens nothing');
     // The link goes with the assignment: a later one is a new task rather than a return to the old one. The Codex
     // task itself is untouched — nothing here archives or deletes it.
-    assert.equal(backend.agent.codexTaskFor(task.id), null, 'and lets go of the task id');
+    assert.equal(backend.agent.taskLink(task.id), null, 'and lets go of the task id');
     created.length = 0;
-    await backend.handlers.get('codex:set')(null, task.id, true, 'Have another go');
+    await set(task.id, true, 'Have another go');
     assert.equal(created.length, 1, 'so assigning again creates a fresh task rather than reopening the old one');
     // An assignment with nothing typed writes nothing into the document — there is no context to add.
     const beforeBlocks = outline.readOutline(task).length, beforeContext = context()[0].children.map((n) => n.text).join('|');
-    await backend.handlers.get('codex:set')(null, task.id, true);
+    await set(task.id, true);
     assert.equal(outline.readOutline(task).length, beforeBlocks, 'assigning with no prompt leaves the document alone');
     assert.equal(context().length, 1, 'and adds no second heading of its own');
     assert.equal(context()[0].children.map((n) => n.text).join('|'), beforeContext, 'and does not touch the context already there');
-    await backend.handlers.get('codex:set')(null, task.id, false);
+    await set(task.id, false);
     cache.setSetting('codex', 'nonsense'); // an older build or a bad write
     assert.equal(await assigned(), '', 'and an unreadable list is no assignment, not a crash');
-    console.log('ok  local Codex assignment: stored in settings, off the document, subscribed while assigned');
+    console.log('ok  agent assignment: stored in settings, off the document, subscribed while assigned');
   }
 
-  // Linking a node to the Codex task that handles it. The task registers itself (scripts/agent-link.js reads
-  // CODEX_THREAD_ID), so the only thing decided here is which url opens the work and what is said to it.
+  // Which agents there are, which are on, which is the default, and which task each node became (main/agent.js).
   {
-    const agent = require('../main/agent'), cache = require('../db'); cache.open(':memory:');
-    const NODE = 'tana:text:' + ulid(), THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
-    const first = agent.handoff(NODE, 'Draft the release notes', '/repo');
-    assert.equal(first.kind, 'create', 'a node with no task opens a new one');
-    assert.equal(first.threadId, null, 'and has no id yet, which is what keeps it pending rather than delegated');
-    // The supported external entry point, which the app translates into its own codex://threads/new route. Handing
-    // it that internal route directly is what silently did nothing in the running app.
-    const open = new URL(first.url);
-    assert.equal(open.protocol, 'https:', 'a new task is opened through the https entry point');
-    assert.equal(open.hostname, 'chatgpt.com');
-    assert.equal(open.pathname, '/codex/open-app', 'the path the app actually listens on');
-    const prompt = open.searchParams.get('q');
-    assert.ok(prompt, 'with the prompt in q, the parameter that entry point reads');
-    assert.match(prompt, /agent-link\.js --node tana:text:[0-9a-z]{26} --thread "\$CODEX_THREAD_ID"/,
-      'whose first concrete action is the task registering itself, by the id its own shell carries');
-    // "first action" is the claim, so the first command in the prompt is the one that has to be the callback:
-    // comparing it only against the fetch would pass a prompt that asks for the work first and the link later.
-    const commands = prompt.split('\n').map((line) => line.trim()).filter((line) => line.startsWith('node '));
-    assert.match(commands[0], /^node scripts\/agent-link\.js /, 'registering is the first thing the task is asked to run');
-    assert.ok(prompt.includes('node uri: ' + NODE), 'then it fetches that exact node, by uri');
-    assert.match(prompt, /through your Tana connection/, 'through the Tana connection it already has, choosing its own tool');
-    assert.equal(/platform-cli/.test(prompt), false, 'and not through a local CLI: retrieval is the MCP\'s job');
-    assert.match(prompt, /no Tana connection[\s\S]*say so and stop/, 'an unreachable Tana is reported, not worked around with this stale copy');
-    assert.ok(prompt.includes('Agent context'), 'and is told that block is the work request');
-    assert.equal(prompt.includes('tana:user-profile'), false, 'nothing else about the graph travels with it');
-    // Once the task has registered itself, the same assignment reopens it and says what changed.
-    assert.equal(agent.setCodexTask(NODE, THREAD), THREAD);
-    assert.equal(agent.setCodexTask(NODE, THREAD), THREAD, 'registering twice is the same link, not a second one');
-    const again = agent.handoff(NODE, 'Now also tell me when it ships', '/repo');
-    assert.equal(again.kind, 'reuse', 'a linked node reopens its task');
-    assert.equal(again.url, 'codex://threads/' + THREAD, 'by id, so no duplicate is created');
-    assert.equal(again.queue, 'Now also tell me when it ships', 'and the current request is queued to it');
-    assert.equal(agent.setCodexTask(NODE, 'not-a-thread-id'), null, 'a malformed id is no link');
-    // and one that got into the settings some other way (an older build, a hand edit) is not trusted on the way out
-    cache.setSetting('codexTask', { [NODE]: 'not-a-thread-id' });
-    assert.equal(agent.codexTaskFor(NODE), null, 'a stored id that is not a thread id is no link either');
-    assert.equal(agent.handoff(NODE, 'retry', '/repo').kind, 'create', 'so it opens a new task rather than a broken url');
-    agent.setCodexTask(NODE, THREAD);
-    agent.clearCodexTask(NODE);
-    assert.equal(agent.codexTaskFor(NODE), null, 'a broken link is dropped');
-    assert.equal(agent.handoff(NODE, 'retry', '/repo').kind, 'create', 'and the retry opens a new composer, replacing nothing until it registers');
-    // A link let go of deliberately must not come back: recovery creates, it never resurrects.
-    agent.setCodexTask(NODE, THREAD);
-    agent.clearCodexTask(NODE);
-    assert.equal(agent.codexTasks()[NODE], undefined, 'a cleared link leaves nothing behind in the map');
-    assert.equal(agent.handoff(NODE, 'again', '/repo').threadId, null, 'so the next assignment carries no id from the old task');
-    // Which machine holds the task travels with the id, because a thread's rollout only exists where it was made.
-    // Machines are records the user adds, not names in the source. The local one is the only built-in.
-    assert.deepEqual(agent.hosts().map((h) => h.id), ['local'], 'only this machine is built in');
-    const added = agent.addHost({ title: 'Donut', ssh: 'donut.example.ts.net', bin: '/Users/someone/.local/bin/codex' });
-    assert.match(added.id, /^h[a-z0-9]+$/, 'a new machine gets an opaque id of ours');
-    assert.deepEqual(agent.hosts().map((h) => h.title), ['This Mac', 'Donut'], 'and joins the list the choosers read');
-    assert.equal(agent.hostRecord(added.id).ssh, 'donut.example.ts.net', 'its address is kept in main, never in the renderer');
-    for (const bad of [{ title: '', ssh: 'a', bin: '/x' }, { title: 'x', ssh: 'a b; rm -rf /', bin: '/x' }, { title: 'x', ssh: 'a', bin: 'codex' }, { title: 'x', ssh: 'a', bin: '/x; rm -rf /' }]) {
-      assert.throws(() => agent.addHost(bad), 'a record that is not a name, a hostname and one absolute path is refused: ' + JSON.stringify(bad));
-    }
-    // Which machine travels with the id, because a thread's rollout only exists where it was made.
-    agent.setCodexTask(NODE, THREAD, added.id);
-    assert.deepEqual(agent.taskLink(NODE), { host: added.id, threadId: THREAD }, 'the host is stored beside the id');
-    // Forgetting a machine leaves its tasks alone: the link keeps pointing at a host nobody knows, which is what
-    // makes it read as unavailable rather than being run against this one.
-    agent.removeHost(added.id);
-    assert.equal(agent.hostRecord(added.id), null, 'a removed machine is unknown');
-    assert.equal(agent.taskLink(NODE).host, added.id, 'but its tasks still say where they are, never "local"');
-    assert.equal(agent.hostId(added.id), null, 'and nothing will run against it');
-    // A mapping written before hosts existed is a task on this machine: that is where it was created.
-    // …and the shapes an older build left behind, through the store the app reads (main/settings.js) rather than
-    // past it: what is being tested is the shape, not who wrote it.
-    require('../main/settings').set('codexTask', { [NODE]: THREAD });
-    assert.deepEqual(agent.taskLink(NODE), { host: 'local', threadId: THREAD }, 'an old id-only mapping still works, as a laptop task');
-    assert.equal(agent.codexTaskFor(NODE), THREAD, 'and still answers with its id');
-    require('../main/settings').set('codexTask', { [NODE]: { host: 'local', threadId: 'not-a-thread' } });
-    assert.equal(agent.taskLink(NODE), null, 'a malformed id is no link, whatever host it claims');
-    console.log('ok  Codex task link: self-registration prompt, reuse by id, stale recovery');
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const agent = backend.agent, settings = backend.settings, NODE = 'tana:text:' + ulid(), THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
+    const cx = agent.get('codex'), cl = agent.get('claude');
+    cx.available = () => true; cl.available = () => false;
+    const view = () => agent.list().map((a) => a.id + (a.installed ? '' : '?') + (a.enabled ? '+' : '') + (a.isDefault ? '*' : '')).join(' ');
+    assert.equal(view(), 'tana+* codex+ claude?', 'Tana, Codex and Claude are known; Tana is on and the default, Codex is on as before, Claude waits');
+    assert.throws(() => agent.setEnabled('tana', false), 'Tana cannot be switched off');
+    assert.throws(() => agent.setDefault('claude'), /Switch that agent on first/, 'an agent that is off cannot be the default');
+    cl.available = () => true;
+    agent.setEnabled('claude', true); agent.setDefault('claude');
+    assert.equal(view(), 'tana+ codex+ claude+*', 'switched on and chosen');
+    assert.deepEqual([settings.isSynced('agents'), settings.isSynced('defaultAgent')], [true, true], 'and both follow you to the next machine');
+    cl.available = () => false;
+    assert.equal(agent.defaultAgent(), 'tana', 'a default this Mac cannot run falls back to Tana, so Assign to Agent always has somewhere to go');
+    agent.setEnabled('claude', false); agent.setEnabled('codex', false);
+    assert.deepEqual([...agent.enabledIds()], ['tana'], 'with everything else off, Tana is left');
+    settings.set('agents', undefined); settings.set('defaultAgent', undefined);
+    // A link names its agent; the shapes older builds wrote are Codex tasks.
+    assert.equal(agent.setTask(NODE, 'codex', THREAD).taskId, THREAD);
+    assert.deepEqual({ ...agent.taskLink(NODE) }, { agent: 'codex', taskId: THREAD }, 'the agent is stored beside the task id');
+    settings.set('codexTask', { [NODE]: THREAD });
+    assert.deepEqual({ ...agent.taskLink(NODE) }, { agent: 'codex', taskId: THREAD }, 'a bare id from an older build is a Codex task');
+    settings.set('codexTask', { [NODE]: { host: 'h-gone', threadId: THREAD } });
+    assert.deepEqual({ ...agent.taskLink(NODE) }, { agent: 'codex', taskId: THREAD }, 'and so is one from when tasks ran on other machines: every task now runs here');
+    settings.set('codexTask', { [NODE]: { agent: 'nobody', taskId: THREAD } });
+    assert.equal(agent.taskLink(NODE), null, 'an agent the app does not know is no link');
+    agent.clearTask(NODE);
+    assert.equal(agent.tasks()[NODE], undefined, 'a cleared link leaves nothing behind in the map');
+    // What each agent takes as a pasted link.
+    assert.equal(cx.linkId('codex://threads/' + THREAD), THREAD, 'Codex takes its Copy link');
+    assert.equal(cx.linkId(THREAD), THREAD, 'or the bare id');
+    assert.equal(cx.linkId('not-a-thread'), null, 'and nothing else');
+    assert.equal(cl.linkId('claude --resume ' + THREAD), THREAD, 'Claude takes its resume command');
+    assert.equal(cl.linkId('codex://threads/' + THREAD), null, 'but not a Codex link');
+    // Claude's state is read from its transcript (main/agents/claude.js): the last turn decides.
+    const claude = require('../main/agents/claude');
+    const said = (type, extra) => ({ type, message: { role: type, ...extra } });
+    assert.equal(claude.sessionState(null).state, 'pending', 'no transcript yet is pending');
+    assert.equal(claude.sessionState([said('user', { content: 'Do it' })]).state, 'working', 'a question with no answer yet is working');
+    assert.deepEqual({ ...claude.sessionState([said('user', {}), said('assistant', { stop_reason: 'tool_use', content: [] })]) }, { state: 'working', text: '' }, 'and so is a turn still using tools');
+    assert.deepEqual({ ...claude.sessionState([said('user', {}), said('assistant', { stop_reason: 'end_turn', model: 'claude-x', content: [{ type: 'text', text: 'pong' }] })]) }, { state: 'done', text: 'pong' }, 'a turn that ended is done, with its words');
+    assert.equal(claude.sessionState([said('user', {}), said('assistant', { stop_reason: 'stop_sequence', model: '<synthetic>', content: [{ type: 'text', text: 'Could not refresh your login' }] })]).state, 'broken', 'an error Claude Code reports instead of an answer is broken');
+    // Tana's state is read from its chat (main/agents/tana.js).
+    const { chatState } = require('../main/agents/tana');
+    const msg = (from, extra) => ({ type: 'message', fromUserType: from, ...extra });
+    assert.equal(chatState(null, []), 'pending', 'an empty chat is pending');
+    assert.equal(chatState(null, [msg('human')]), 'working', 'a message Tana has not answered is working');
+    assert.equal(chatState('m1', [msg('human'), msg('ai')]), 'working', 'and so is one Tana is still writing');
+    assert.equal(chatState(null, [msg('human'), msg('ai', { id: 'q1', toolCalls: [{ name: 'askUserQuestion', status: 'awaiting_user_input' }], questionsData: { questions: [{ id: 'a', question: 'Which repo?', options: [] }] } })]), 'waiting', 'a question Tana asks back is waiting for you');
+    assert.equal(chatState(null, [msg('human'), msg('ai', { errorMessage: 'limit' })]), 'broken', 'an error is broken');
+    assert.equal(chatState(null, [msg('human'), msg('ai', { completedAt: 2 })]), 'done', 'an answer is done');
+    console.log('ok  agents: Tana always on and the default, Codex and Claude switched and chosen, links by agent, pasted links, Claude and Tana states');
   }
-
   // What the badge is allowed to say: the linked task's own status, one read for every linked node.
   {
-    const agent = require('../main/agent');
+    const agent = require('../main/agents/codex');
     const thread = (id, status, flags) => ({ id, status: flags ? { type: status, activeFlags: flags } : { type: status } });
     const state = (status, flags, turn, live) => agent.agentState(status === null ? null : thread('t', status, flags), turn, live);
     assert.equal(state('active'), 'working', 'a running task is working');
@@ -3758,13 +3735,6 @@ async function main() {
     // A thread whose turns cannot be read is pending: it is there, but nothing says the work is done.
     const halfDead = async (method) => { if (method === 'thread/list') return { data: [thread('t-quiet', 'idle')] }; throw new Error('no turns'); };
     assert.deepEqual(await agent.agentStatuses({ n2: 't-quiet' }, halfDead), { n2: 'pending' }, 'an unreadable turn is not a completed one');
-    // A link naming a machine the user has since forgotten is that machine's problem alone. Opening the connection
-    // to an unknown host refuses outright, and refusing used to happen outside the try that turns a machine that is
-    // away into 'unavailable' — so one forgotten host left every badge, on every machine, unanswered.
-    const GONE = 'tana:text:01examplen0000000000000000', GONE_THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
-    require('../main/settings').set('codexTask', { [GONE]: { host: 'h-forgotten', threadId: GONE_THREAD } });
-    assert.deepEqual(await agent.readAgentStatuses({ [GONE]: GONE_THREAD }), { [GONE]: 'unavailable' },
-      'a task on a machine the app no longer knows reads as unavailable, rather than taking every other badge down with it');
     console.log('ok  Agent badge state comes from the task: one read, quiet threads ask for their latest turn');
   }
 
@@ -5953,12 +5923,12 @@ async function main() {
     process.env.PATH = fakeBin + ':' + realPath;
     const backend = mainHelpers(childProcess), cache = require('../db'); cache.open(':memory:');
     process.env.PATH = realPath;
-    const agent = backend.agent;
+    const agent = backend.codex;
     const tick = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
     const notify = async (child, method, params) => { child.onData(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n'); await tick(); };
     const methods = (child) => child.sent.map((m) => m.method);
 
-    const local = await agent.createTask({ nodeUri: NODES[0], prompt: 'Draft it', userData, host: 'local' });
+    const local = await agent.createTask({ key: NODES[0], prompt: 'Draft it', userData });
     assert.equal(local, THREADS[0], 'the task is created and its id comes back');
     assert.equal(spawned[0].cmd, fakeCodex, 'on this machine the app-server is run directly, by the codex PATH finds');
     assert.equal([...spawned[0].args].join(' '), 'app-server', 'with no shell line and nothing else on the command');
@@ -5974,36 +5944,24 @@ async function main() {
       JSON.stringify([{ threadId: THREADS[0] }]), 'the finished thread is handed back through the protocol, by id');
     assert.equal(spawned[0].killed, 1, 'and only then is the writer closed, so Codex can open the task normally');
 
-    // The same lifecycle over SSH, with the address and the binary as separate arguments — never joined into a line
-    // a shell could read — and a release that closes this connection alone.
-    const donut = agent.addHost({ title: 'Donut', ssh: 'donut.example.ts.net', bin: '/Users/someone/.local/bin/codex' });
-    const remote = await agent.createTask({ nodeUri: NODES[1], prompt: 'Draft it there', userData, host: donut.id });
-    assert.equal(remote, THREADS[1], 'a task on another machine is created the same way');
-    assert.equal(spawned[1].cmd, 'ssh', 'reached over the user\'s own SSH');
-    assert.equal([...spawned[1].args].join(' '), '-o BatchMode=yes -o ConnectTimeout=8 donut.example.ts.net /Users/someone/.local/bin/codex app-server',
-      'with the host and the absolute binary as arguments of their own');
-    assert.equal(spawned[1].killed, 0, 'and it too runs until its work is done');
-    await notify(spawned[1], 'turn/completed', { threadId: THREADS[1], turn: { status: 'failed' } });
-    assert.equal(spawned[1].killed, 1, 'a turn that failed is still a turn that ended, so the SSH child is closed rather than left running');
-    assert.equal(spawned[0].killed, 1, 'and releasing one machine leaves the other exactly as it was');
-
     // Quitting cannot wait for a round trip, so the children this app is still holding are simply closed. Only those:
     // it is a list of what was spawned here, not a search for processes that look like ours.
-    await agent.createTask({ nodeUri: NODES[2], prompt: 'Still running', userData, host: 'local' });
-    assert.equal(spawned[2].killed, 0, 'a task still running is still owned');
-    agent.stopOwnedTasks();
-    assert.equal(spawned[2].killed, 1, 'and is closed when the app goes away, so no writer outlives it');
-    const isolatedHome=nodePath.join(userData,'chatgpt-auth'), isolated=agent.appServerRpc(20000,undefined,undefined,{codexHome:isolatedHome});
+    await agent.createTask({ key: NODES[2], prompt: 'Still running', userData });
+    assert.equal(spawned[1].killed, 0, 'a task still running is still owned');
+    agent.stop();
+    assert.equal(spawned[1].killed, 1, 'and is closed when the app goes away, so no writer outlives it');
+    assert.equal(spawned[0].killed, 1, 'and the one already released is not closed a second time');
+    const isolatedHome=nodePath.join(userData,'chatgpt-auth'), isolated=agent.appServerRpc(20000,undefined,{codexHome:isolatedHome});
     await isolated.ready;
-    assert.equal(JSON.stringify(spawned[3].args),JSON.stringify(['-c','cli_auth_credentials_store="file"','app-server']),'ChatGPT uses file-backed credentials in its dedicated Codex home');
-    assert.equal(spawned[3].options.env.CODEX_HOME,isolatedHome,'the app-server cannot read the user\'s regular Codex home');
-    assert.equal(['OPENAI_API_KEY','CODEX_API_KEY','CODEX_ACCESS_TOKEN'].some((key)=>Object.hasOwn(spawned[3].options.env,key)),false,'API tokens from the app environment are not inherited');
+    assert.equal(JSON.stringify(spawned[2].args),JSON.stringify(['-c','cli_auth_credentials_store="file"','app-server']),'ChatGPT uses file-backed credentials in its dedicated Codex home');
+    assert.equal(spawned[2].options.env.CODEX_HOME,isolatedHome,'the app-server cannot read the user\'s regular Codex home');
+    assert.equal(['OPENAI_API_KEY','CODEX_API_KEY','CODEX_ACCESS_TOKEN'].some((key)=>Object.hasOwn(spawned[2].options.env,key)),false,'API tokens from the app environment are not inherited');
     isolated.stop();
-    const standalone = agent.appServerRpc(20000, undefined, undefined, { bin: '/x/codex-app-server' }); await standalone.ready; standalone.stop();
-    assert.deepEqual([spawned[4].cmd, spawned[4].args.length], ['/x/codex-app-server', 0], 'the standalone server ChatGPT sign-in downloads is run as named, with no subcommand');
+    const standalone = agent.appServerRpc(20000, undefined, { bin: '/x/codex-app-server' }); await standalone.ready; standalone.stop();
+    assert.deepEqual([spawned[3].cmd, spawned[3].args.length], ['/x/codex-app-server', 0], 'the standalone server ChatGPT sign-in downloads is run as named, with no subcommand');
     fs.rmSync(fakeBin, { recursive: true, force: true });
     fs.rmSync(userData, { recursive: true, force: true });
-    console.log('ok  agent writer lifecycle: released on the turn that ends it, scoped by thread and by machine, closed on quit');
+    console.log('ok  Codex writer lifecycle: released on the turn that ends it, scoped by thread, closed on quit');
   }
   // A chat has no outline: its conversation is data.messages, rendered as read-only rows (docs/CHATS.md).
   {
@@ -6279,30 +6237,31 @@ async function main() {
     const realFetch = globalThis.fetch, created = [];
     let fetched = 0;
     globalThis.fetch = async () => { fetched++; return { status: 200, ok: true, json: async () => ({ success: true }) }; };
-    const realCreate = backend.agent.createTask, realRpc = backend.agent.appServerRpc;
-    backend.agent.createTask = async (opts) => { created.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca10'; };
+    const cx = backend.agent.get('codex'), real = { start: cx.start, read: cx.read, available: cx.available };
+    cx.start = async (opts) => { created.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca10'; };
     try {
       const askAgent = backend.handlers.get('chatAgent:ask'), ask = (e, id, text) => askAgent(e, id, 'codex', text), replies = backend.handlers.get('chatAgent:replies');
       // offered only where it can run
-      const realBin = backend.agent.codexBin;
-      backend.agent.codexBin = () => null;
+      cx.available = () => false;
       assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)], [], 'no Codex on this device, no agent to offer');
-      backend.agent.codexBin = () => '/usr/local/bin/codex';
+      cx.available = () => true;
       assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)].map((a) => ({ ...a })), [{ id: 'codex', label: 'Codex', icon: 'robot' }]);
-      backend.agent.codexBin = realBin;
-      await assert.rejects(askAgent(null, chatDoc.id, 'claude', '@Claude hi'), /No such agent/, 'only the agents in the table');
+      await assert.rejects(askAgent(null, chatDoc.id, 'claude', '@Claude hi'), /not switched on/, 'only the agents that are on');
+      backend.settings.set('agents', []); // Codex switched off in Choose agents
+      assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)], [], 'an agent switched off is not offered either');
+      backend.settings.set('agents', undefined);
       await backend.handlers.get('chat:send')(null, chatDoc.id, 'The actions are in', [], { ai: false });
       await assert.rejects(ask(null, chatDoc.id, 'no mention here'), /Mention @Codex/);
       const before = chatDoc.data.get('messages').toJSON().length;
       const { id } = await ask(null, chatDoc.id, '@Codex turn these into issues');
       assert.deepEqual([chatDoc.data.get('messages').toJSON().length, fetched], [before, 0], 'nothing is written to the chat, and Tana is not asked');
-      assert.deepEqual([created.length, created[0].nodeUri, created[0].host], [1, chatDoc.id, 'local'], 'one Codex task on this Mac');
+      assert.deepEqual([created.length, created[0].key, created[0].nodeUri], [1, chatDoc.id, undefined], 'one Codex task on this Mac, for the chat and not for a node');
       assert.match(created[0].prompt, /^turn these into issues\n[\s\S]*Robin Vega: The actions are in$/, 'the task gets the question and the whole chat, oldest first');
-      assert.match(created[0].instructions, /Neither is saved to Tana/, 'and the rules for the whole thread');
+      assert.match(created[0].rules, /Neither is saved to Tana/, 'and the rules for the whole thread');
       assert.equal(backend.settings.isSynced('chatAsks'), false, 'the question and its task stay on this Mac');
-      // the answer: the latest turn's final answer, read once and then kept
+      // the answer: the latest turn's final answer (main/agents/codex.js codexAnswer), read once and then kept
       let spawned = 0, turn = { status: 'interrupted', items: [{ type: 'agentMessage', phase: 'commentary', text: 'Looking' }] };
-      backend.agent.appServerRpc = () => { spawned++; return { ready: Promise.resolve(), call: async (m) => { assert.equal(m, 'thread/turns/list'); return { data: [turn] }; }, stop() {} }; };
+      cx.read = async (ids) => { spawned++; const text = backend.codex.codexAnswer(turn); return new Map(ids.map((i) => [i, { state: text ? 'done' : 'working', text }])); };
       assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.id, a.question, a.state]), [[id, '@Codex turn these into issues', 'working']], 'a turn still running elsewhere reads as interrupted, and progress is not the answer');
       turn = { status: 'completed', items: [{ type: 'agentMessage', phase: 'commentary', text: 'Looking' }, { type: 'agentMessage', phase: 'final_answer', text: 'Made three issues' }] };
       assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.state, a.text]), [['done', 'Made three issues']]);
@@ -6331,10 +6290,10 @@ async function main() {
       assert.equal(backend.opened.at(-1), 'codex://threads/01a0b3a3-c000-70b0-896e-08e86986ca10', 'the task this question started');
       assert.equal(await backend.handlers.get('chatAgent:open')(null, chatDoc.id, 'nosuchid'), false);
       // a task that cannot start leaves nothing behind: no message, no question kept
-      backend.agent.createTask = async () => { throw new Error('Codex is not installed on this Mac'); };
+      cx.start = async () => { throw new Error('Codex is not installed on this Mac'); };
       await assert.rejects(ask(null, chatDoc.id, 'again @codex'), /not installed/);
       assert.deepEqual([chatDoc.data.get('messages').toJSON().length, (await replies(null, chatDoc.id)).length], [before, 1]);
-    } finally { globalThis.fetch = realFetch; backend.agent.createTask = realCreate; backend.agent.appServerRpc = realRpc; }
+    } finally { globalThis.fetch = realFetch; Object.assign(cx, real); }
     console.log('ok  chatAgent:ask keeps the question and its answer on this Mac across a restart, hands the whole chat to a local Codex task, reads its answer back once; chat:delete deletes only your own messages');
   }
 

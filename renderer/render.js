@@ -356,7 +356,7 @@ function rowSig(n) {
   return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type, n.start,
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
-    displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
+    displayKeys().join(','), agentIds.has(n.id), agentStateOf(n.id), (agentTasks.get(n.id) || {}).agent, pinnedOn(n), n.table,
     n.proposal ? n.proposal.note : null, n.subtext, n.people, n.join, n.meeting && n.meeting.id, n.timeline && n.timeline.recording, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
     n.timeline?.free && timelineFreeSegs(n.timeline.free), // the Timeline's free time, counting down
     tableView() ? typeDefs() : null, // a table cell's picker is made from the page's field definitions (views.js cellPicker)
@@ -491,7 +491,7 @@ function renderOutline() {
   titleCheck.onmousedown = (e) => { if (titleCheck.onclick && !titleCheck.disabled && e.button === 0 && !titleCheck.checked && !titleCheck.classList.contains('inbox')) popSound(true); }; // the pop on the press, as a row's box
   if (demoMode) { titleCheck.disabled = true; titleCheck.onclick = null; } // read-only while demo mode is on
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
-  codexHeader(); // a rebuilt header loses the badge with everything else, so it is put back with the title
+  agentHeader(); // a rebuilt header loses the badge with everything else, so it is put back with the title
   // a task's assignees and who can see a page are its first fields (renderFields), no longer in the sidebar;
   // under the title only the chips remain.
   // Any zoomed document shows its type, not only a task: what is dropped is the kind chip, whose label is the row's
@@ -667,7 +667,7 @@ function renderFields(parent, force = false, el = $('fields')) {
 
 // a child row: document children (inside a space) are their own document, so their key, children and edits go by their own id
 const childEl = (n, item) => nodeEl(n, n.kind === 'document' ? n.id : item.docId, item);
-// A node assigned to the local Codex agent. Not an icon in the metadata strip: that strip is one of the facts the
+// A node assigned to an agent. Not an icon in the metadata strip: that strip is one of the facts the
 // Display pill can switch off, and this mark says the agent has the node.
 // The badge says what the linked task is doing, not merely that a node was assigned: an assignment with no task
 // behind it yet is pending and grey, and only work in progress animates. The wording carries the state as well as
@@ -675,7 +675,7 @@ const childEl = (n, item) => nodeEl(n, n.kind === 'document' ? n.id : item.docId
 // `done` is the row's own node, which is what the tick and the strikethrough beside it are drawn from. It is passed
 // rather than looked up because `docOf` scans every view's cached rows and answers with the first copy it finds —
 // one that may still be open in a view that has not refreshed since.
-function codexBadgeEl(id, done = !!docOf(id)?.done) {
+function agentBadgeEl(id, done = !!docOf(id)?.done) {
   const state = agentStateOf(id), words = AGENT_BADGE[state];
   const el = document.createElement('span');
   // The task itself being finished outranks whatever the agent state was: the badge becomes history, a grey outline
@@ -683,47 +683,47 @@ function codexBadgeEl(id, done = !!docOf(id)?.done) {
   el.className = 'cbadge ' + state + (done ? ' closed' : '');
   badgeMoved(el, id, state + (done ? ':closed' : '')); // a state that just changed pops, shines or shakes
   // A badge with a task behind it is the way into that task; a pending one has nowhere to go, so it stays a plain
-  // image rather than a button that does nothing. Only linked nodes have a status entry at all, which is the same
-  // fact — no second list to keep in step.
-  // Only a task on this machine can be opened from here: the deep link resolves against this app. One elsewhere is
-  // still a badge with its status, but not a way in, and its wording says where it is instead of pretending.
-  const where = agentTaskHosts.get(id);
-  const linked = agentStates.has(id) && (!where || where === 'local');
-  const elsewhere = agentStates.has(id) && where && where !== 'local';
+  // image rather than a button that does nothing.
+  const link = agentTasks.get(id), linked = agentStates.has(id) && !!link;
   el.setAttribute('role', linked ? 'button' : 'img');
-  const hostName = elsewhere ? (agentHosts.find((h) => h.id === where) || {}).title || where : '';
-  el.setAttribute('aria-label', linked ? words.label + ', open the Codex task' : elsewhere ? words.label + ', on ' + hostName : words.label);
-  el.title = linked ? words.title + ' — click to open the task' : elsewhere ? words.title + ' — this task runs on ' + hostName : words.title;
+  el.setAttribute('aria-label', linked ? words.label + ', open the ' + ((agentNamed(link.agent) || {}).label || 'agent') + ' task' : words.label);
+  el.title = linked ? words.title + ' — click to open the task' : words.title;
   if (linked) {
     el.tabIndex = 0;
     el.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as every other row control does
-    el.onclick = (e) => { e.stopPropagation(); run(() => tana.openCodexTask(id)); };
-    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); run(() => tana.openCodexTask(id)); } };
+    el.onclick = (e) => { e.stopPropagation(); openAgentTask(id); };
+    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openAgentTask(id); } };
   }
   const svg = iconNode('robot');
   if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); el.append(svg); }
   return el;
 }
+// The task behind a node: a Tana chat opens here, in Orbital; Codex's and Claude's open in their own apps (main).
+function openAgentTask(id) {
+  const link = agentTasks.get(id);
+  if (link && (agentNamed(link.agent) || {}).opensHere) return goTo(link.taskId);
+  run(() => tana.openAgentTask(id));
+}
 // Assigning from Cmd+K has to show on the row, and the palette hands the caret back to the row it was opened from,
 // where a render is deferred until the caret leaves — so the badge is put on the row itself, as patchMeta does.
-function patchCodex(docId) {
+function patchAgent(docId) {
   for (const row of outline.querySelectorAll('.node')) {
     const item = items.get(row.dataset.key), line = row.querySelector(':scope > .line');
     const node = item && (referenceTarget(item.node) || item.node);
     if (!item || !line || node.id !== docId) continue;
     line.querySelector(':scope > .cbadge')?.remove();
-    if (codexIds.has(docId)) line.append(codexBadgeEl(docId, node.done));
+    if (agentIds.has(docId)) line.append(agentBadgeEl(docId, node.done));
     if (row.dataset.sig) row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
   }
-  codexHeader(); // the open page says it too, and for the same reason it is patched rather than re-rendered
+  agentHeader(); // the open page says it too, and for the same reason it is patched rather than re-rendered
 }
 // The badge beside the zoomed title, from the same element the rows use. Only on the document's own page: zooming
 // into a block shows that block's title, and the agent was handed the document, not the block.
-function codexHeader() {
+function agentHeader() {
   const head = titleEl.parentElement;
   if (!head) return;
   head.querySelector(':scope > .cbadge')?.remove();
-  if (zoom && !zoom.nodeId && codexIds.has(zoom.docId)) head.append(codexBadgeEl(zoom.docId));
+  if (zoom && !zoom.nodeId && agentIds.has(zoom.docId)) head.append(agentBadgeEl(zoom.docId));
 }
 // A full view of an image: Space on the row, or a click on it. Built when it is asked for and taken away again,
 // so there is nothing to keep in step while it is not showing, and the focus goes back to the row it came from.
@@ -929,7 +929,7 @@ function nodeEl(node, docId, parent) {
   blurSensitive(body, docId, target && target.id);
   line.append(body);
   // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
-  if (codexIds.has(display.id)) line.append(codexBadgeEl(display.id, display.done));
+  if (agentIds.has(display.id)) line.append(agentBadgeEl(display.id, display.done));
   if (node.proposal) line.append(proposalButtonsEl(node)); // approve and reject, at the end of a Proposals row (renderer/proposals.js)
   // A click that misses the words still belongs to the row, and the row is bigger than its text: the padding
   // around it, and the blank line a soft break leaves inside it, are all places a caret can sit. It used to answer

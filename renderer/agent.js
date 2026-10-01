@@ -1,7 +1,8 @@
 'use strict';
-// The agent's pages in Cmd+K: signing in with ChatGPT, the OpenAI API key, the machines a Codex task can run on,
-// linking a task that already exists in Codex, and the prompt page Assign to Agent opens. renderer/palette.js lists
-// their rows and draws every page; the agent's badge and state are renderer/render.js and renderer/nodes.js.
+// The agents' pages in Cmd+K: signing in with ChatGPT, the OpenAI API key (kept for whoever already has one),
+// Choose agents, linking a task that already exists in an agent's app, and the prompt page Assign to Agent opens.
+// renderer/palette.js lists their rows and draws every page; the agent's badge and state are renderer/render.js and
+// renderer/nodes.js. Which agents there are is main's (main/agent.js), drawn from agentList (renderer/state.js).
 
 // ---- ChatGPT sign-in and the OpenAI API key ----
 let chatgptAuth = null, chatgptAuthLoading = null, chatgptPushes = 0; // pushes: main's announcements, newer than any read asked for before them
@@ -38,11 +39,11 @@ function chatgptRows(q) {
     { group: 'Actions', icon: 'chatgpt', label: 'Cancel ChatGPT sign-in', run: () => run(async () => { chatgptAuth = await tana.chatgptCancel(); renderPalette(); }) },
   ];
   else if (chatgptAuth.signedIn) rows = [
-    { group: 'ChatGPT', icon: 'chatgpt', label: 'Signed in as ' + (chatgptAuth.email || 'ChatGPT'), hint: 'Preferred over API key', disabled: true },
+    { group: 'ChatGPT', icon: 'chatgpt', label: 'Signed in as ' + (chatgptAuth.email || 'ChatGPT'), hint: chatgptAuth.apiKey ? 'Preferred over API key' : '', disabled: true },
     { group: 'Actions', icon: 'chatgpt', label: 'Sign out of ChatGPT', run: () => run(async () => { chatgptAuth = await tana.chatgptLogout(); renderPalette(); }) },
   ];
   else rows = [
-    { group: 'ChatGPT', icon: 'chatgpt', label: chatgptAuth.available === false ? 'Sign-in unavailable' : 'Not signed in', hint: chatgptAuth.available === false ? (chatgptAuth.error || 'Codex CLI unavailable') : 'Preferred over API key', disabled: true },
+    { group: 'ChatGPT', icon: 'chatgpt', label: chatgptAuth.available === false ? 'Sign-in unavailable' : 'Not signed in', hint: chatgptAuth.available === false ? (chatgptAuth.error || 'Codex CLI unavailable') : (chatgptAuth.apiKey ? 'Preferred over API key' : ''), disabled: true },
     { group: 'Actions', icon: 'chatgpt', label: 'Sign in with ChatGPT', run: startChatGPTLogin },
   ];
   return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
@@ -52,61 +53,60 @@ if (tana.onChatGPTStatus) tana.onChatGPTStatus((status) => {
   chatgptAuth = status;
   if (!palette.hidden && (palMode === 'cmd' || palMode === 'chatgpt')) renderPalette();
 });
+// Sign in with ChatGPT is the way in; a key already stored keeps working, and this page is where it can be cleared.
+// Once it is, Cmd+K stops offering the page (renderer/palette.js).
 function openAIKeyRows() {
   const key = palInput.value.trim();
-  return [{ group: 'OpenAI API key', icon: 'openaiKey', label: key ? 'Save OpenAI API key' : 'Enter OpenAI API key',
-    hint: key ? '↩ saves locally' : 'Nothing to save yet', disabled: !key, keepOpen: true,
+  if (!key) return [{ group: 'OpenAI API key', icon: 'openaiKey', label: 'Clear OpenAI API key', hint: 'Sign in with ChatGPT instead', keepOpen: true,
+    run: () => run(async () => { await tana.setOpenAIKey(''); chatgptAuth = { ...(chatgptAuth || {}), apiKey: false }; closePalette(); }) }];
+  return [{ group: 'OpenAI API key', icon: 'openaiKey', label: 'Save OpenAI API key', hint: '↩ saves locally', keepOpen: true,
     run: () => run(async () => { await tana.setOpenAIKey(key); closePalette(); }) }];
 }
-// ---- the machines a task can run on, managed from Cmd+K ----
-// One page: what is configured, and a line to add another. The form is the palette's own field — "Name, address,
-// path to codex", three values separated by spaces — because a page of three inputs is more machinery than this
-// needs and the palette already knows how to take one line. Main validates and stores; nothing is run here.
-const HOSTS_GROUP = 'Codex hosts · type "Name ssh-address /path/to/codex" to add one, ↩ on a host removes it';
-let hostList = null; // loadList's answer, then each write's
-const hostsApply = (call) => run(async () => { hostList = await call(); agentHosts = hostList; listReads.delete('hosts'); renderPalette(); });
-// What is typed is offered as a new host first, whether or not the list is in yet; the list is short and never
-// narrowed, so the page is a typed one.
-function hostRows(q, typed) {
-  const parts = typed.trim().split(/\s+/), add = [];
-  if (parts.length >= 3) {
-    const [title, ssh, bin] = [parts.slice(0, parts.length - 2).join(' '), parts[parts.length - 2], parts[parts.length - 1]];
-    add.push({ group: HOSTS_GROUP, icon: 'createNew', label: 'Add "' + title + '" on ' + ssh, hint: bin, keepOpen: true,
-      run: () => run(async () => { await tana.addCodexHost(title, ssh, bin); palInput.value = ''; hostsApply(() => tana.codexHosts()); }) });
-  }
-  return [...add, ...listRows(HOSTS_GROUP, hostList, add.length ? typed : '', 'No other machines yet', (list) => list.filter((h) => h.id !== 'local').map((h) => ({ group: HOSTS_GROUP, icon: 'host', label: h.title,
-    hint: '↩ removes it · its tasks stay', keepOpen: true, run: () => hostsApply(() => tana.removeCodexHost(h.id)) })))];
+// ---- Choose agents ----
+// Every agent the app knows: Tana always on, Codex and Claude greyed with what to install until this Mac has them.
+// ↩ on one switches it on or off; the second group picks the default, the agent Assign to Agent starts on. The lists
+// are main's, and each answer is the new list, so the page redraws from what was stored.
+const AGENTS_GROUP = 'Agents · ↩ switches one on or off', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
+const agentsApply = (call) => run(async () => { const list = await call(); if (Array.isArray(list)) agentList = list; renderPalette(); renderSoon(); });
+function agentsRows(q) {
+  const rows = agentList.map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
+    hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
+    disabled: a.id === 'tana' || !a.installed, run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
+  for (const a of agentsOn()) rows.push({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
+    run: () => agentsApply(() => tana.setDefaultAgent(a.id)) });
+  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
 }
-function openHostsPalette() {
-  loadList('hosts', () => tana.codexHosts(), (list) => { hostList = list; if (Array.isArray(list)) agentHosts = list; });
-  openPage('hosts', 'Name  ssh-address  /path/to/codex', { rows: hostRows, back: BACK_TO_COMMANDS, typed: true });
+function openAgentsPalette() {
+  loadAgentList().then(() => { if (palMode === 'agents') renderPalette(); });
+  openPage('agents', 'Choose agents', { rows: agentsRows, back: BACK_TO_COMMANDS });
 }
-// ---- linking a node to a Codex task that already exists (#143) ----
-// Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, and a bare id works too. Main checks it
-// again and stores it as a task on this machine; the badge and Go to Codex task then work as for any assignment.
-const CODEX_LINK = /^(?:codex:\/\/threads\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
-let agentLinkDoc = null; // the node the pasted link is for, while this page is up
+// ---- linking a node to a task that already exists in an agent's app (#143) ----
+// Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, Claude's session is its id. Main reads the
+// paste (each agent knows its own shape) and stores the link; the badge and Go to task then work as for an assignment.
+let agentLinkCtx = null; // { doc, agent } the pasted link is for, while this page is up
 function agentLinkRows(q, typed) {
-  const group = 'Link Codex task · paste a codex://threads/… link', m = typed.trim().match(CODEX_LINK), doc = agentLinkDoc;
-  if (!m) return [{ group, icon: 'robot', label: typed.trim() ? 'Not a Codex task link' : 'Paste the task link from Codex', disabled: true }];
-  return [{ group, icon: 'robot', label: 'Link to Codex task ' + m[1].slice(0, 8) + '…', keepOpen: true, run: () => run(async () => {
-    await tana.linkCodexTask(doc.id, m[1]);
-    codexIds.add(doc.id); agentTaskHosts.set(doc.id, 'local');
-    closePalette(); patchCodex(doc.id); loadAgentStates();
+  const { doc, agent } = agentLinkCtx || {}, group = 'Link ' + agent.label + ' task · paste its link or id';
+  if (!typed.trim()) return [{ group, icon: agent.icon, label: 'Paste the task link from ' + agent.label, disabled: true }];
+  return [{ group, icon: agent.icon, label: 'Link to this ' + agent.label + ' task', keepOpen: true, run: () => run(async () => {
+    await tana.linkAgentTask(doc.id, agent.id, typed.trim()); // main refuses what is not one of this agent's links, and says so
+    agentIds.add(doc.id);
+    closePalette(); patchAgent(doc.id); loadAgentStates();
   }) }];
 }
-function openAgentLink(doc) {
-  agentLinkDoc = doc; openPage('agentLink', 'codex://threads/…', { rows: agentLinkRows, back: BACK_TO_COMMANDS, typed: true });
+function openAgentLink(doc, agent) {
+  agentLinkCtx = { doc, agent };
+  openPage('agentLink', agent.id === 'codex' ? 'codex://threads/…' : agent.label + ' session id', { rows: agentLinkRows, back: BACK_TO_COMMANDS, typed: true });
 }
-// ---- assigning a node to the local agent: the prompt page, one level down in Cmd+K ----
+// ---- assigning a node to an agent: the prompt page, one level down in Cmd+K ----
 // "Assign to Agent" does not assign: it advances to this page, where the palette's single-line field is swapped for a
 // few lines of text. The node is the context, so the page asks only what to do with it. ↩ is an ordinary newline
-// here, ⌘↩ assigns, Esc cancels the assignment and closes the palette without writing anything. The one row below
-// the editor is the same action as ⌘↩, so it can be clicked, and it reports why a blank prompt cannot be sent.
+// here, ⌘↩ assigns, Esc cancels the assignment and closes the palette without writing anything. The row below the
+// editor is the same action as ⌘↩, so it can be clicked, and it reports why a blank prompt cannot be sent. Under it,
+// the agents that are on, the default ticked: the agent's own default model does the work, so there is nothing else
+// to choose.
 let agentCtx = null; // { id } of the node the prompt being typed belongs to, while this page is up
 const AGENT_GROUP = 'Assign to Agent · ↩ adds a line, ⌘↩ assigns, Esc cancels';
-const MODEL_GROUP = 'Model for this task';
-const HOST_GROUP = 'Where it runs';
+const PICK_GROUP = 'Agent';
 function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
   if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
@@ -117,35 +117,23 @@ function openAgentPrompt(doc) {
   showPage('agentPrompt', '', { rows: agentPromptRows, typed: true }); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
   agentCtx = { id: doc.id, doc }; // the row itself, so the assignment can hold it where it sits
-  agentModel = ''; // every assignment chooses again; Codex's own default until it does
-  agentHost = 'local'; // this machine unless the page says otherwise
-  if (tana.codexHosts && !agentHosts.length) tana.codexHosts().then((list) => { agentHosts = Array.isArray(list) ? list : []; if (palMode === 'agentPrompt') renderPalette(); }, () => {});
-  if (tana.codexModels && !agentModels.length) tana.codexModels().then((list) => { agentModels = Array.isArray(list) ? list : []; if (palMode === 'agentPrompt') renderPalette(); }, () => {});
+  agentPick = (agentsOn().find((a) => a.isDefault) || agentsOn()[0] || { id: 'tana' }).id; // every assignment starts on the default
   renderPalette(); palText.focus();
 }
 function agentPromptRows() {
-  const prompt = palText.value.trim();
-  // Where it will run is named on the row that sends it: the tick sits in a list you have to Tab into, so ⌘↩ from
-  // the editor was the only thing most assignments ever saw, and a task meant for another machine ran here silently.
-  const runsOn = (agentHosts.find((h) => h.id === agentHost) || {}).title || 'This Mac';
-  const rows = [{ group: AGENT_GROUP, icon: 'robot', label: prompt ? 'Assign to Agent on ' + runsOn : 'What should the agent do?',
+  const prompt = palText.value.trim(), label = (agentNamed(agentPick) || {}).label || 'Agent';
+  // The agent it goes to is named on the row that sends it: the tick sits in a list you have to Tab into, so ⌘↩ from
+  // the editor is the only thing most assignments see.
+  const rows = [{ group: AGENT_GROUP, icon: 'robot', label: prompt ? 'Assign to ' + label : 'What should ' + label + ' do?',
     hint: prompt ? '⌘↩' : 'Nothing to send yet', disabled: !prompt, keepOpen: true, run: submitAgentPrompt }];
-  // The model for this one assignment, chosen with the same keys as any other palette row. The list is Codex's own
-  // (model/list), so nothing here goes stale; with no list the default stands alone rather than a guessed menu.
-  // Choosing keeps the keyboard where it already was: picked from the list, the list keeps it so another can be
-  // tried; clicked or reached from the editor, the caret goes back to what you were writing.
-  const pick = (id) => ({ group: MODEL_GROUP, icon: 'brain', label: id || 'Codex default', hint: agentModel === id ? '✓' : '',
-    keepOpen: true, run: () => { const onList = document.activeElement === palList; agentModel = id; renderPalette(); (onList ? palList : palText).focus(); } });
-  rows.push(pick(''));
-  for (const id of agentModels) rows.push(pick(id));
-  // And which machine runs it, chosen the same way. Only names: the address and the command live in main.
-  const host = (h) => ({ group: HOST_GROUP, icon: 'host', label: h.title, hint: agentHost === h.id ? '✓' : '',
-    keepOpen: true, run: () => { const onList = document.activeElement === palList; agentHost = h.id; renderPalette(); (onList ? palList : palText).focus(); } });
-  for (const h of agentHosts) rows.push(host(h));
+  // Only with a choice to make: Tana alone needs no list. Choosing keeps the keyboard where it was: picked from the
+  // list, the list keeps it so another can be tried; clicked or reached from the editor, the caret goes back.
+  const on = agentsOn();
+  if (on.length > 1) for (const a of on) rows.push({ group: PICK_GROUP, icon: a.icon, label: a.label, hint: agentPick === a.id ? '✓' : '', keepOpen: true,
+    run: () => { const onList = document.activeElement === palList; agentPick = a.id; renderPalette(); (onList ? palList : palText).focus(); } });
   return rows;
 }
-// Saving the prompt is all "send" means in this slice: nothing is run, nothing is dispatched. The prompt is written
-// with the assignment, so a node is never marked as the agent's with no idea of what it was handed.
+// The prompt is written with the assignment, so a node is never marked as the agent's with no idea of what it was handed.
 function submitAgentPrompt() {
   const prompt = palText.value.trim(), id = agentCtx && agentCtx.id, doc = agentCtx && agentCtx.doc;
   if (!prompt || !id) return; // ⌘↩ on a blank page is not a press to answer
@@ -154,12 +142,11 @@ function submitAgentPrompt() {
     // may now sort elsewhere. Held, it keeps the place it had — nothing jumps away from the pointer — and the Clean
     // up pill appears to redraw the list where the row now belongs, exactly as a status change behaves.
     if (doc) holdRow(doc);
-    await tana.setCodex(id, true, prompt, agentModel || undefined, agentHost); // '' model means Codex's own default
-    // Only now: a machine that could not be reached leaves the page exactly as it was — prompt, model and host still
-    // chosen — so the press can simply be repeated once it wakes up.
+    await tana.setAgent(id, true, prompt, agentPick);
+    // Only now: an agent that could not take it leaves the page exactly as it was, so the press can simply be repeated.
     closePalette();
-    codexIds.add(id);
-    patchCodex(id);
+    agentIds.add(id);
+    patchAgent(id);
     loadAgentStates(); // the task exists now: ask what it is doing rather than waiting for the next refresh
     renderPills(true); // the row is held above, so this is what puts Clean up in front of it (renderer/pills.js)
     // The context block is content main wrote on its own, so the open page has to be told: the live change does say
@@ -173,15 +160,15 @@ function agentPromptKey(e) {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); return true; }
   if (e.key === 'Enter' && mod) { e.preventDefault(); e.stopPropagation(); submitAgentPrompt(); return true; }
-  // ⇥ crosses to the model list and back, so the picker is reachable without leaving the keyboard. The editor eats
+  // ⇥ crosses to the agent list and back, so the choice is reachable without leaving the keyboard. The editor eats
   // Tab either way — a tab character in a prompt is not what anyone means by pressing it here.
-  if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); focusModelRows(); return true; }
+  if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); focusAgentRows(); return true; }
   return false; // a plain ↩ is a newline, which the textarea does by itself
 }
-// The model rows take the keyboard as a group: the list itself holds the focus, and the highlighted row is the one
+// The agent rows take the keyboard as a group: the list itself holds the focus, and the highlighted row is the one
 // the palette already draws, so this borrows the navigation every other level uses rather than inventing one.
-function focusModelRows() {
-  const first = palRows.findIndex((r) => r.group === MODEL_GROUP);
+function focusAgentRows() {
+  const first = palRows.findIndex((r) => r.group === PICK_GROUP);
   if (first < 0) return;
   palIndex = first;
   palList.tabIndex = -1;

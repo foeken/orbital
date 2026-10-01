@@ -214,14 +214,13 @@ function paletteRows(q, typed = q) {
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ id: 'openInTana', group: docGroup, icon: 'tana', label: 'Open in Tana', run: () => run(async () => tana.openExternal(await tana.nodeLink(doc.id))) }); }
   // a meeting's call, on the meeting and on its write-up: its related read carries the link (callRow)
   if (palDoc && isRealId(palDoc.id)) { const call = callRow(relatedBy.get(palDoc.id)); if (call) rows.push({ ...call, group: docGroup }); }
-  if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) {
+  // Open in <agent>: a new task in that agent's app with the node's link, nothing tracked (Assign to Agent is the
+  // tracked one), one row for each agent that is on and can take a link. Codex's id keeps its old name so a recorded
+  // key still finds the row.
+  if (palDoc && tana.nodeLink && tana.openInAgent && isRealId(palDoc.id)) {
     const doc = palDoc;
-    // Open in Codex: a new Codex task with the node's link, nothing tracked (Assign to Agent is the tracked one). The id
-    // keeps its old name so a recorded key still finds the row.
-    rows.push({ id: 'sendToAgent', group: docGroup, icon: 'chatgpt', label: 'Open in Codex', hint: 'New task with this link', run: () => run(async () => {
-      const link = await tana.nodeLink(doc.id);
-      await tana.openExternal('https://chatgpt.com/codex/open-app?q=' + encodeURIComponent(link + '\n'));
-    }) });
+    for (const a of agentsOn().filter((x) => x.openNew)) rows.push({ id: a.id === 'codex' ? 'sendToAgent' : 'openIn' + a.label, rank: 'sendToAgent', group: docGroup, icon: a.icon, label: 'Open in ' + a.label, hint: 'New task with this link',
+      run: () => run(async () => tana.openInAgent(a.id, await tana.nodeLink(doc.id))) });
   }
   // What this document is: its Tana type, or none. Only a document or a meeting carries one, so a block, a space or a
   // member is not offered the row at all. The list is main's (the rules for which types fit live there); the hint is
@@ -277,39 +276,36 @@ function paletteRows(q, typed = q) {
     if (watch) rows.push({ rank: 'notify', group: docGroup, icon: 'notify', label: watch.on ? 'Stop notifying' : 'Notify on changes',
       run: () => run(() => setNodeNotify(palDoc.id, !watch.on)) });
   }
-  // Handing this node to the agent on this machine. App-local: Tana's assignees are user profiles, so nothing is
+  // Handing this node to an agent. App-local: Tana's assignees are user profiles, so nothing is
   // written into the node's own assignees. The label says what pressing it does, so it carries no id — same reason
   // as the watch row above. Assigning asks what the agent should do first (the prompt page keeps the palette open);
   // taking it back needs nothing typed, so it happens on the press.
-  if (palDoc && tana.setCodex && isRealId(palDoc.id)) {
-    const assigned = codexIds.has(palDoc.id), doc = palDoc;
+  if (palDoc && tana.setAgent && isRealId(palDoc.id)) {
+    const assigned = agentIds.has(palDoc.id), doc = palDoc;
+    const holder = agentNamed((agentTasks.get(doc.id) || {}).agent), fallback = agentsOn().find((a) => a.isDefault) || agentNamed('tana');
     rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: assigned ? 'Unassign from Agent' : 'Assign to Agent',
+      hint: assigned ? (holder ? holder.label : '') : 'To ' + ((fallback && fallback.label) || 'Tana'),
       keepOpen: !assigned,
       run: () => {
         if (!assigned) return openAgentPrompt(doc);
         run(async () => {
           holdRow(doc); // taking it back moves the row out of Agent: it stays put, and Clean up offers the redraw
-          await tana.setCodex(doc.id, false); // the prompt goes with the assignment
-          codexIds.delete(doc.id);
+          await tana.setAgent(doc.id, false); // the prompt goes with the assignment
+          agentIds.delete(doc.id);
           agentStates.delete(doc.id); // main lets go of the task id; the snapshot has to let go with it, not next refresh
-          renderPalette(); patchCodex(doc.id);
+          renderPalette(); patchAgent(doc.id);
           renderPills(true); // Clean up is decided while the pills render, and nothing else here redraws them
         });
       } });
   }
-  // A task that already exists in Codex, linked by pasting its link (#143): the page below.
-  if (palDoc && tana.linkCodexTask && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ rank: 'codexLink', group: docGroup, icon: 'robot', label: 'Link Codex task …', keepOpen: true, run: () => openAgentLink(doc) }); }
+  // A task that already exists in an agent's app, linked by pasting its link (#143): renderer/agent.js.
+  if (palDoc && tana.linkAgentTask && isRealId(palDoc.id)) { const doc = palDoc; for (const a of agentsOn().filter((x) => x.link)) rows.push({ rank: 'codexLink', group: docGroup, icon: a.icon, label: 'Link ' + a.label + ' task …', keepOpen: true, run: () => openAgentLink(doc, a) }); }
   // The way into the task the agent is handling, from the keyboard. Both halves have to hold: the node is assigned
   // now, and a task id is known for it. The status map alone was not enough — it is a snapshot, and an unassigned
   // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.
-  if (palDoc && tana.openCodexTask && codexIds.has(palDoc.id) && agentStates.has(palDoc.id)) {
-    const doc = palDoc;
-    const where = agentTaskHosts.get(doc.id);
-    // A task on another machine has no route from here, so the row says where it is rather than offering to open
-    // something it cannot. Disabled rather than hidden: the palette already greys rows it will not run, and knowing
-    // where the work is happening is worth a line.
-    if (!where || where === 'local') rows.push({ rank: 'codexOpen', group: docGroup, icon: 'robot', label: 'Go to Codex task', run: () => run(() => tana.openCodexTask(doc.id)) });
-    else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Codex task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
+  if (palDoc && tana.openAgentTask && agentIds.has(palDoc.id) && agentStates.has(palDoc.id) && agentTasks.has(palDoc.id)) {
+    const doc = palDoc, a = agentNamed(agentTasks.get(doc.id).agent);
+    if (a) rows.push({ rank: 'codexOpen', group: docGroup, icon: a.icon, label: 'Go to ' + a.label + ' task', run: () => openAgentTask(doc.id) });
   }
   if (palDoc && tana.accessOptions) {
     if (!palette.hidden) loadAccess(palDoc.id); // for the open palette only (#274): a key on a choice folded under these asks in runAction
@@ -412,11 +408,12 @@ function paletteRows(q, typed = q) {
   // names and Tana's words swapped for made-up ones on screen, for showing the app to someone (renderer/segments.js)
   if (tana.translate) rows.push({ id: 'autoTranslate', group: 'Settings', icon: 'sparkle', label: 'Auto-translate …', hint: translateTo() ? 'Into ' + translateTo() : 'Off', run: openTranslatePage }); // renderer/translate.js
   rows.push({ id: 'demoMode', group: 'Settings', icon: 'hidden', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
-  if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Settings', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
+  if (tana.agentList) rows.push({ id: 'agents', group: 'Settings', icon: 'robot', label: 'Choose agents …', hint: agentsOn().map((a) => a.label).join(', '), keepOpen: true, run: openAgentsPalette });
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
-    hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
+    hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Turns on translation, Discuss with and more' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
-  if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
+  // Sign in with ChatGPT is the way in (issue #669): the key is offered only to whoever already stored one, until it is cleared
+  if (tana.setOpenAIKey && chatgptAuth?.apiKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
   if (tana.openExternal) rows.push({ id: 'manual', group: 'Help', icon: 'help', label: 'Open Manual', hint: 'Every feature, with pictures', run: () => run(() => tana.openExternal('https://orbital.md/manual/?theme=' + theme)) }); // manual/, published there at each release
