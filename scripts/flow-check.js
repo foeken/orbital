@@ -240,7 +240,12 @@ flow('a change from elsewhere shows live and keeps your typing', async (p) => {
     const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => { ws.onopen = r; });
     let id = 0; const waiting = new Map();
     ws.onmessage = (m) => { const d = JSON.parse(m.data); if (waiting.has(d.id)) { waiting.get(d.id)(d); waiting.delete(d.id); } };
-    const send = (method, params = {}) => new Promise((r, j) => { waiting.set(++id, (d) => (d.error ? j(new Error(method + ': ' + d.error.message)) : r(d.result || {}))); ws.send(JSON.stringify({ id, method, params })); });
+    // every command answers within 15 s or fails the flow: a page promise left pending must not hang the run (or CI)
+    const send = (method, params = {}) => new Promise((r, j) => {
+      const n = ++id, timer = setTimeout(() => { waiting.delete(n); j(new Error(method + ' did not answer within 15 s')); }, 15000);
+      waiting.set(n, (d) => { clearTimeout(timer); if (d.error) j(new Error(method + ': ' + d.error.message)); else r(d.result || {}); });
+      ws.send(JSON.stringify({ id: n, method, params }));
+    });
     await send('Page.enable'); await send('Runtime.enable');
     await send('Page.addScriptToEvaluateOnNewDocument', { source: WATCH });
     await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });

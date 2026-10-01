@@ -7,12 +7,16 @@ const open = (id) => ({ js: 'goTo(' + JSON.stringify(id) + ')' });
 const pal = { sel: '#palette .card', pad: 14 };
 const blank = { js: "(() => { const s = document.createElement('style'); s.textContent = 'body > :not(#palette) { visibility: hidden !important; }'; document.head.append(s); })()" };
 const NARROW = '1000x640';
+const { real } = require('./kit');
 // the access rows wait for the node's options (renderer/access.js loadAccess): read them before the palette opens
 const access = (id) => ({ js: 'loadAccess(' + JSON.stringify(id) + '); new Promise((r) => setTimeout(r, 400))' });
 
 module.exports = [
   // ---- who can see it ----
   { name: 'sharing-visible', size: NARROW, setup: [open(AGENDA), { wait: 1200 }], clip: [0, 30, 1000, 250] },
+  // a mention of a sensitive node hides with it (renderer/segments.js): Check out the new editor marked, the page mentioning it
+  { name: 'sharing-sensitive-mention', size: NARROW, setup: [...real(), { js: "tana.setSensitive('tana:text:mockdoc2', true).then(() => { sensitiveLoading = null; return loadSensitive(); }).then(() => goTo('tana:text:mockdoc0'))" }, { wait: 1400 },
+    { js: "[...document.querySelectorAll('.node .text')].find((e) => e.textContent.startsWith('Discuss with')).scrollIntoView({ block: 'center' }); 1" }, { wait: 300 }], clip: [0, 353, 1000, 60] },
   { name: 'sharing-rows', size: '900x560', setup: [{ js: "setView('library')" }, { wait: 1200 }], clip: [0, 215, 900, 225] },
   { name: 'sharing-edit', video: true, size: '1000x700', setup: [open(AGENDA), { wait: 1200 }, access(AGENDA), { click: '#title' }], steps: [
     { key: '⌘K' }, { type: 'edit visibility', delay: 55 }, { wait: 400 }, { key: '↩' }, { wait: 900 }, { click: '#palette .row', text: 'Selected people' }, { wait: 800 },
