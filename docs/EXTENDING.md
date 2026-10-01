@@ -31,9 +31,10 @@ Two rules hold everywhere:
    call `window.api` directly: `tana` is the copy demo mode guards. Where the mock or an older main may lack the
    method, guard the row or the call with `if (tana.meetingInfo)`, as the palette rows do.
 4. **A write to Tana** — add the method's name to `DEMO_WRITES` (renderer/state.js), so demo mode refuses it with
-   "Demo mode is on: nothing is saved to Tana" wherever it is called from.
+   "Demo mode is on: nothing is saved to Tana" wherever it is called from. Anything else goes in `DEMO_SAFE`
+   (scripts/renderer-check.js), which fails until the method is in one of the two.
 5. **renderer/mock.js** — add it when the UI should work without main (the mock stands in when `window.api` is
-   undefined).
+   undefined), or list it in `NOT_MOCKED` (scripts/renderer-check.js) when the mock cannot stand in for it.
 6. **Push instead of pull** — main sends with `send('<area>:changed', …)` (main/state.js: every page of every
    window) or `e.sender.send(…)` (the page that asked); preload adds `onX: (cb) => ipcRenderer.on('<area>:changed',
    (_e, v) => cb(v))`; the renderer subscribes once at load, in the file that owns the concern (live document changes

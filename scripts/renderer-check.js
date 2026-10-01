@@ -409,8 +409,7 @@ async function searchesReconnectCheck() {
   assert.equal(context.state().attempts, 2, 'staying connected does not reload again');
 }
 
-async function mockCreationPermissionCheck() {
-  const mockApi = vm.runInNewContext(`
+const loadMock = () => vm.runInNewContext(`
     const plainOf = (value) => typeof value === 'string' ? value : (value || []).map((segment) => segment.text || '').join('');
     const segsOf = (value) => typeof value === 'string' ? [{ text: value }] : value || [];
     const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -418,10 +417,55 @@ async function mockCreationPermissionCheck() {
     ${functionSource('mockApi')}
     mockApi;
   `);
-  const api = mockApi();
+async function mockCreationPermissionCheck() {
+  const api = loadMock()();
   const created = await api.createDocument('Created task', { kind: 'task' });
   assert.equal(created.editable, true, 'a materialized mock document reports the editable capability');
   assert.equal((await api.accessOptions(created.id)).deletable, true, 'a materialized mock document can be deleted like a native editable document');
+}
+
+// Every call preload.js hands the page is decided twice, so a new one cannot slip past either. Demo mode refuses it
+// (DEMO_WRITES, renderer/state.js) or it writes no content to Tana (DEMO_SAFE); reviews found sendChat, translateTo and
+// the date-node creators missing from DEMO_WRITES. And the mock answers it or NOT_MOCKED says it does not; a mock that
+// fell behind broke the manual's scenes (#671, #607). A new call fails here until it is put in one list of each pair.
+// docs/TESTING.md has the reasoning.
+const DEMO_SAFE = new Set([
+  'accessOptions', 'activateWindow', 'addFilter', 'agentIds', 'agentList', 'agentReplies', 'agentStatus',
+  'agentTasks', 'aiOptions', 'archivedTypes', 'attendeeSuggestions', 'cancelUpload', 'chatAgents', 'chatAnswers',
+  'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
+  'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList',
+  'docTypes', 'enableAgent', 'exportPdf', 'filters', 'image', 'inboxUnread', 'installUpdate', 'login', 'logout',
+  'mcpHidden', 'meetingInfo', 'members', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
+  'onChatGPTStatus', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
+  'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
+  'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'pinDates', 'pinIds',
+  'pinState', 'prefs', 'prefsNow', 'presenceClose', 'presenceOpen', 'presenceSet', 'presenceView', 'previewMove',
+  'refresh', 'related', 'relatedWatch', 'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
+  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent',
+  'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
+  'status', 'suggestDiscussWith', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
+  'translate', 'typeIcons', 'typeList', 'updateInfo', 'viewFilter', 'viewList', 'weekNode', 'windowLayout',
+  'windowTheme', 'zoom']);
+// Electron's own (windows, overlays, updates, PDF, the zoom), what only main can tell (settings, releases, presence
+// asks), and gaps the mock has not filled yet (indentMany, outdentMany, pasteMarkdown, archiveDocument, taskTypes):
+// fill one and take it off. The renderer guards each with `tana.x &&` or the flows (scripts/flow-check.js) fail.
+const NOT_MOCKED = new Set([
+  'activateWindow', 'agentStatus', 'archiveDocument', 'cancelUpload', 'checkUpdates', 'claimHelp', 'closeOverlay',
+  'exportPdf', 'indentMany', 'installUpdate', 'onChatGPTStatus', 'onNotifyOpen', 'onOverlayClosed', 'onPresenceAsk',
+  'onReleased', 'onSettings', 'onTimelinePart', 'onUpdateProgress', 'openOverlay', 'outdentMany', 'pasteMarkdown',
+  'prefs', 'prefsNow', 'rememberPlace', 'setDemoMode', 'setPref', 'summaryUri', 'taskTypes', 'updateInfo',
+  'windowTheme', 'zoom']);
+function apiContractCheck() {
+  const preload = fs.readFileSync(require.resolve('../preload.js'), 'utf8');
+  const api = [...preload.slice(preload.indexOf("exposeInMainWorld('api'")).matchAll(/^ {2}(\w+): (?!pane\.)/gm)].map((m) => m[1]); // pane.* are values, not calls
+  const writes = new Set(vm.runInNewContext(fs.readFileSync(require.resolve('../renderer/state.js'), 'utf8').match(/const DEMO_WRITES = new Set\((\[[\s\S]*?\])\)/)[1]));
+  const mock = new Set(Object.keys(loadMock()()));
+  const stale = (set) => [...set].filter((k) => !api.includes(k));
+  assert.deepEqual(api.filter((k) => !writes.has(k) && !DEMO_SAFE.has(k)), [], 'a window.api call demo mode neither refuses (DEMO_WRITES in renderer/state.js) nor lets through (DEMO_SAFE here): decide which');
+  assert.deepEqual(api.filter((k) => writes.has(k) && DEMO_SAFE.has(k)), [], 'a call both refused and let through in demo mode');
+  assert.deepEqual(api.filter((k) => !mock.has(k) && !NOT_MOCKED.has(k)), [], 'a window.api call renderer/mock.js does not answer: mock it, or list it in NOT_MOCKED');
+  assert.deepEqual(api.filter((k) => mock.has(k) && NOT_MOCKED.has(k)), [], 'a call the mock answers is still listed in NOT_MOCKED: take it off');
+  assert.deepEqual([...stale(writes), ...stale(DEMO_SAFE), ...stale(NOT_MOCKED), ...[...mock].filter((k) => !api.includes(k))], [], 'names in these lists or the mock that window.api no longer has');
 }
 
 // ---- formatting: marks, block types, the selection toolbar and the "/" menu ----
@@ -702,6 +746,7 @@ for (const property of ['width', 'height', 'margin', 'padding', 'top', 'left']) 
   assert.doesNotMatch(turn, new RegExp('(^|[^-])' + property + ':'), 'the turn must not animate ' + property + ': that would move the pill');
 }
 
+apiContractCheck();
 Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck(), searchesReconnectCheck()]).then(() => console.log('renderer auth check passed'));
 // a mention lands in the row the caret is in (an @ at the caret, or over a selection): the render must not defer
 assert.match(functionSource('linkTo'), /render\(true\);[^\n]*\n\s*placeCaret\(/, 'linkTo forces the render before placing the caret after the mention');

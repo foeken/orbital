@@ -316,13 +316,14 @@ function fitRowMeta() {
 }
 // the outline changes width with the window, the sidebar drag and the text-size keys, and all three land here.
 // Only a width change is answered: moving the facts changes the outline's height, which would otherwise come back.
+// Observed once every script has loaded: its first answer can come between two of them, before views.js declares tableView.
 let fitWidth = null;
-if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
+if (typeof ResizeObserver === 'function') addEventListener('DOMContentLoaded', () => new ResizeObserver(() => {
   if (outline.clientWidth === fitWidth) return;
   fitWidth = outline.clientWidth;
   fitRowMeta();
   fitTable(true);
-}).observe(outline);
+}).observe(outline));
 // A row patched in place (renderer/tasks.js patchMeta) asks for the fit here: metadata arrives one answer per row as
 // the rows scroll in, and fitting after each one forced a layout of the whole outline per answer (#264). The frame
 // callback runs before the paint, so a row is never seen with its facts on the wrong line.
@@ -934,7 +935,7 @@ function nodeEl(node, docId, parent) {
     sub.prepend(translatedFactEl(translated, translated.id || node.id, sub.childNodes.length > 0));
   }
   if (sub) body.append(sub);
-  blurSensitive(body, docId, target && target.id);
+  blurSensitive(body, docId, target && target.id, node.timeline && node.timeline.uri); // a Timeline row says its node's title in its own words
   line.append(body);
   // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
   if (agentIds.has(display.id)) line.append(agentBadgeEl(display.id, display.done));

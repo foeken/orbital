@@ -120,6 +120,7 @@ function renderSegs(el, segs, identity) {
       const svg = iconNode(icon);
       a.replaceChildren(...(svg ? [svg, label] : [label]));
     }
+    blurSensitive(a, s.mention.uri); // the node's title, hidden as its own row hides it (docs/UI-PATTERNS.md, Content that is someone's)
     return [a];
   });
   // Same kind of placeholder: Chromium holds no caret before a non-editable inline that starts the field, so a row
