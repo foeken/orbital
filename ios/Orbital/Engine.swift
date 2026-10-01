@@ -247,12 +247,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // Quick Add Task (QuickAdd.swift): the types to pick from, a task made with one, an image made into a task or a note
-    struct TaskType: Decodable, Identifiable { let uri: String?; let title: String; var id: String { uri ?? "" } }
+    struct TaskType: Decodable, Identifiable { let uri: String?; let title: String; var task: Bool? = true; var id: String { uri ?? "" } }
+    // a saved search's: the type its rows are and how many of their fields it sets (orbital.searchPreset)
+    struct Preset: Decodable { let uri: String; let title: String; let task: Bool; let fields: [String: [String: String]] }
+    func searchPreset(_ id: String) async -> Preset? {
+        Self.isSample ? nil : (try? await call("return await orbital.searchPreset(id)", ["id": id])) ?? nil
+    }
     func taskTypes() async -> [TaskType] {
         Self.isSample ? [] : (try? await call("return await orbital.taskTypes()", [:])) ?? []
     }
-    func createTask(_ title: String, type: String?) async throws -> String {
-        let id: String = try await call("return await orbital.createTask(title, type)", ["title": title, "type": type ?? NSNull()])
+    func createTask(_ title: String, type: String?, search: String? = nil) async throws -> String {
+        let id: String = try await call("return await orbital.createTask(title, type, search)", ["title": title, "type": type ?? NSNull(), "search": search ?? NSNull()])
         await refresh()
         return id
     }

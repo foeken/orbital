@@ -10,7 +10,8 @@ import { insertAfter, insertImage, readOutline } from '../../sdk/content';
 import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
-import { addMeetingChats, completedInWindow, searchQueryParams } from '../../sdk/query';
+import { addMeetingChats, completedInWindow, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
+import { fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { canDelete, canWrite, everyoneOnly } from '../../sdk/access';
 import { arrange } from './arrange';
 import { S, isSpace, iso, today, visibleGraphNodes } from '../../main/state';
@@ -172,18 +173,53 @@ async function peek(id) {
   const had = !!S.client.sync.getDocument(id);
   try { return readNode(await within('reading ' + id, S.client.sync.subscribe(id))); } finally { if (!had) S.client.sync.unsubscribe(id).catch(() => {}); }
 }
+// What a document of a type is made as (main/documents.js customCreation): a task when the type has a workflow, else a
+// document of it; null for a type of meetings, or one whose space is not yours to write in
+async function creatable(uri, ctx) {
+  try {
+    const type = await peek(uri);
+    if ((type.appliesTo ?? 'docs') !== 'docs') return null;
+    if (type.ownerUri && !(/^tana:space:/.test(type.ownerUri) && await canWrite(await peek(type.ownerUri), S.me.userUri, ctx))) return null;
+    return { uri, title: type.title || '', ownerUri: type.ownerUri || null, task: !!type.workflowUri };
+  } catch { return null; }
+}
 const taskTypes = () => (taskTypeList ||= (async () => {
   const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }), ctx = await access();
-  const types = await Promise.all(nodes.map(async (t) => {
-    try {
-      const type = await peek(t.id);
-      if (!type.workflowUri || (type.appliesTo ?? 'docs') !== 'docs') return null;
-      if (type.ownerUri && !(/^tana:space:/.test(type.ownerUri) && await canWrite(await peek(type.ownerUri), S.me.userUri, ctx))) return null;
-      return { uri: t.id, title: t.title || '', ownerUri: type.ownerUri || null };
-    } catch { return null; }
-  }));
-  return types.filter(Boolean).sort((a, b) => a.title.localeCompare(b.title));
+  const types = await Promise.all(nodes.map((t) => creatable(t.id, ctx)));
+  return types.filter((t) => t && t.task).sort((a, b) => a.title.localeCompare(b.title));
 })().catch((e) => { taskTypeList = null; throw e; }));
+// Quick Add on a saved search, as Enter in one on the desktop (renderer/render.js searchPreset, #537): a search that lists
+// one type you may make documents of makes one of it, with each field its filter pins to one value (a link, a person or
+// one option) set; a field it leaves open, a choice of several or a date range is left for you. null for any other search.
+const EQUALS = [undefined, 'equals', 'MODE_EQUALS'];
+async function presetOf(searchId) {
+  const filter = searchQueryToFilter(readSearch(await hold(searchId)).query, S.me.userUri), types = filter.types || [];
+  if (types.length !== 1 || !/^tana:type:/.test(types[0])) return null;
+  const type = await creatable(types[0], await access());
+  if (!type) return null;
+  const fields = {};
+  for (const [key, f] of Object.entries(filter.fields || {})) {
+    const refs = (f && f.refs) || [], texts = ((f && f.textMatches) || []).filter((m) => EQUALS.includes(m.mode));
+    if (!f || f.date) continue;
+    if (refs.length === 1 && !texts.length) fields[key] = { ref: refs[0] };
+    else if (texts.length === 1 && !refs.length) fields[key] = { text: texts[0].value };
+  }
+  return { ...type, fields };
+}
+// those values written into the new document, as main/documents.js setField writes a field: a link with its title, and
+// the type of what it links to where the field only takes some types
+async function presetFields(doc, fields) {
+  const refs = Object.values(fields).map((v) => v.ref).filter((u) => u && !/^tana:user-profile:/.test(u));
+  const nodes = refs.length ? (await S.client.graph.listNodes({ nodeIds: refs, limit: refs.length })).nodes || [] : [];
+  const people = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), found = new Map(nodes.map((n) => [n.id, n]));
+  for (const [key, v] of Object.entries(fields)) {
+    const { typeUri, attribute } = parseKey(key), field = fieldDefinition(await hold(typeUri), attribute);
+    if (!field) continue; // no longer on its type
+    const label = v.ref && (people.get(v.ref) || (found.get(v.ref) || {}).title || v.ref);
+    setFieldText(doc, key, v.ref ? [[{ mention: { uri: v.ref, label } }]] : [v.text], { field, typeOf: (uri) => (found.get(uri) || {}).entityType });
+  }
+}
+
 // a new document of yours, created as main/documents.js createDocument creates one, answered once Tana has it
 async function create(title, config) {
   const id = 'tana:text:' + ulid();
@@ -378,11 +414,15 @@ window.orbital = {
   // Quick Add Task: the types to pick from, and a task made with the title and the type chosen (open and yours, as a task
   // from a title always is)
   taskTypes: async () => JSON.stringify(await taskTypes()),
-  async createTask(title, typeUri) {
+  searchPreset: async (searchId) => JSON.stringify(await presetOf(searchId)),
+  // searchId: the saved search Quick Add was opened on; its type, when that is the one chosen, comes with its preset values
+  async createTask(title, typeUri, searchId) {
     if (typeof title !== 'string' || !title.trim()) throw new Error('A task needs a title');
-    const type = typeUri ? (await taskTypes()).find((t) => t.uri === typeUri) : null;
+    const preset = searchId ? await presetOf(searchId) : null, fromSearch = preset && preset.uri === typeUri;
+    const type = typeUri ? (fromSearch ? preset : (await taskTypes()).find((t) => t.uri === typeUri)) : null;
     if (typeUri && !type) throw new Error('A task cannot be made with that type here');
-    const { id } = await create(title.trim(), { kind: 'task', ...(type ? { entityTypeUri: type.uri, ...(type.ownerUri ? { ownerUri: type.ownerUri } : {}) } : {}) });
+    const { id, doc } = await create(title.trim(), { kind: type && !type.task ? 'doc' : 'task', ...(type ? { entityTypeUri: type.uri, ...(type.ownerUri ? { ownerUri: type.ownerUri } : {}) } : {}) });
+    if (fromSearch) await presetFields(doc, preset.fields);
     return JSON.stringify(id);
   },
   // Process image (main.js ai:processImage): what the model read from it (QuickAdd.swift ChatGPT.readImage) made a task

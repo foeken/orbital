@@ -7,6 +7,8 @@ import SwiftUI
 struct QuickAdd: View {
     let engine: Engine
     var shared: Shared? // shared to Orbital (Share): its words to edit, or its image to read at once
+    var search: String? // opened on a saved search: a row of it, as Enter makes one there on the desktop (orbital.searchPreset)
+    @State private var preset: Engine.Preset?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var title = ""
@@ -25,14 +27,16 @@ struct QuickAdd: View {
                     ForEach([Engine.TaskType(uri: nil, title: "Task")] + types) { t in
                         Button { type = t.uri } label: {
                             HStack {
-                                Label { Text(t.title) } icon: { Image("Glyphs/task").resizable().frame(width: 20, height: 20) }
+                                Label { Text(t.title) } icon: { Image(t.task == false ? "Glyphs/doc" : "Glyphs/task").resizable().frame(width: 20, height: 20) }
                                 Spacer()
                                 if type == t.uri { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.blue) }
                             }
                         }
                         .accessibilityAddTraits(type == t.uri ? .isSelected : [])
                     }
-                } header: { Text("Type") }
+                } header: { Text("Type") } footer: {
+                    if let preset, type == preset.uri, !preset.fields.isEmpty { Text("With the " + (preset.fields.count == 1 ? "value" : "values") + " this saved search sets.") }
+                }
                 Section {
                     PhotosPicker(selection: $photo, matching: .images) { Label("Process image from Photos", systemImage: "photo") }
                     if UIPasteboard.general.hasImages {
@@ -61,6 +65,12 @@ struct QuickAdd: View {
                 if let image = shared?.image { await process(image); return }
                 if title.isEmpty, let text = shared?.text { title = text }
                 focused = true; types = await engine.taskTypes()
+                // a saved search of one type: that type, chosen, and listed even when it is no task type (a Goal is a document)
+                if let search, let found = await engine.searchPreset(search) {
+                    preset = found
+                    if !types.contains(where: { $0.uri == found.uri }) { types.insert(Engine.TaskType(uri: found.uri, title: found.title, task: found.task), at: 0) }
+                    type = found.uri
+                }
             }
             .onChange(of: photo) {
                 guard let photo else { return }
@@ -73,7 +83,7 @@ struct QuickAdd: View {
         let words = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { return }
         working = "Adding…"
-        do { _ = try await engine.createTask(words, type: type); dismiss() } catch { failure = error.localizedDescription }
+        do { _ = try await engine.createTask(words, type: type, search: search); dismiss() } catch { failure = error.localizedDescription }
         working = nil
     }
 

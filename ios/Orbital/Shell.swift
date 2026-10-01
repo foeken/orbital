@@ -107,7 +107,7 @@ struct Shell: View {
                 }
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
-        .sheet(isPresented: $adding) { QuickAdd(engine: engine) }
+        .sheet(isPresented: $adding) { QuickAdd(engine: engine, search: path.isEmpty ? page.searchID : nil) } // on a saved search: a row of it
         .sheet(item: $shared) { QuickAdd(engine: engine, shared: $0) }
         // the Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS not open it
         .onOpenURL { _ in shared = Shared.take() ?? shared }
