@@ -380,6 +380,9 @@ const displayKeys = () => {
   // The Timeline has no Display pill, and pillKey() there is the last list view's: it wore that view's choice (the
   // Library's Updated and no boxes). It shows each task's box and assignee; its own lines say when.
   if (zoom && zoom.docId === TIMELINE_PAGE) return ['status', 'assigned'];
+  // A document has no Display pill either: its rows show a task's box, assignee and age whichever list was open last
+  // (an inline task reference with no box was that list's choice leaking in).
+  if (zoom && !listPage()) return DISPLAY_DEFAULT;
   const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display');
   // a field the type no longer defines (or another type's, once the Type pill moved) is dropped: the menu cannot offer
   // it, so nothing could turn it off. Until the definitions are in, the page's own type's keys are kept as they are.

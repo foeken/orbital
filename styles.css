@@ -196,6 +196,29 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 /* a row's field values on its grey line (renderer/views.js subtextEl): the same chip, a step quieter */
 [data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }
 [data-theme="dark"] .fields .fchip.fref { background: none; }
+/* The Settings page (renderer/settings.js): its sections are field rows; the values are choices, links and a switch */
+.settings-note { margin: 6px 0 4px; font-size: 14px; color: var(--muted); }
+.settings-head { margin: 26px 0 0; padding: 0 0 8px 3px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.settings .fields { margin-top: 0; }
+.fields .settings-values { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding-left: 10px; }
+.settings button { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.settings button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus); }
+.settings .sopt { padding: 0 7px; border-radius: 4px; line-height: 22px; color: var(--muted); }
+.settings .sopt.on { background: rgba(0, 0, 0, 0.06); color: #1a1a1a; font-weight: 600; cursor: default; }
+.settings .sopt:not(.on):hover, .settings .sact:hover, .settings .fchip.sbtn:hover { color: #1a1a1a; }
+.settings .fchip { line-height: 22px; }
+.settings .sact { color: var(--muted); line-height: 22px; text-decoration: underline; text-underline-offset: 2px; }
+.settings-local { margin-left: auto; padding: 0 6px; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 4px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.settings .sswitch { position: relative; width: 28px; height: 16px; margin: 3px 0; border-radius: 8px; background: rgba(0, 0, 0, 0.14); transition: background var(--dur-quick) var(--ease-out); }
+.settings .sswitch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: left var(--dur-quick) var(--ease-out); }
+.settings .sswitch.on { background: #1a1a1a; }
+.settings .sswitch.on::after { left: 14px; }
+[data-theme="dark"] .settings .sopt.on { background: rgba(255, 255, 255, 0.1); color: #e6e8e9; }
+[data-theme="dark"] .settings .sopt:not(.on):hover, [data-theme="dark"] .settings .sact:hover, [data-theme="dark"] .settings .fchip.sbtn:hover { color: #e6e8e9; }
+[data-theme="dark"] .settings-local { border-color: rgba(255, 255, 255, 0.16); }
+[data-theme="dark"] .settings .sswitch { background: rgba(255, 255, 255, 0.18); }
+[data-theme="dark"] .settings .sswitch.on { background: #e6e8e9; }
+[data-theme="dark"] .settings .sswitch.on::after { background: #242729; }
 /* ==== Table view (renderer/views.js) ==== */
 /* a list page as a table (renderer/views.js tableCells): each row's body is a grid, its grey line's cells are the
    columns after the title, and the header uses the same columns. The body starts at one fixed gutter on every row —
@@ -370,6 +393,7 @@ html.framed .titlebar { padding-top: 18px; }
 
 /* ==== Page scroll and sidebar (renderer/rail.js, app.js) ==== */
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
+html:not(.listing) .scroll { padding-bottom: 50vh; } /* a document scrolls on past its last row, so the line being typed at the end can sit mid-window */
 /* Classic scrollbars drawn as the overlay's narrow line (renderer/theme.js checkScrollbars): no track, a 5px rounded
    thumb, hidden until its area is hovered or scrolled. Overlay scrollbars get none of this. */
 .classic-scroll :not(.scroll-probe)::-webkit-scrollbar { width: 11px; height: 11px; background: transparent; }
@@ -1186,6 +1210,39 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .palette .tpicks kbd { margin-left: auto; }
 [data-theme="dark"] .palette .tpicks { border-bottom-color: #3a3f41; color: var(--muted); }
 [data-theme="dark"] .palette .tpicks b { color: #c9c9c9; }
+/* The update card (update.html, #667): the palette's card, taller, the release notes scrolling between the title and
+   the buttons, which give way to a progress bar in the accent blue (something happening now) once the update runs */
+.update .card { max-height: min(80vh, 640px); }
+.update .uhead { padding: 16px 20px 12px; border-bottom: 1px solid #eee; }
+.update .utitle { font-size: 17px; color: #1a1a1a; }
+.update .usub { margin-top: 2px; font-size: 13px; color: var(--muted); }
+.update .unotes { flex: 1; min-height: 0; overflow: auto; padding: 0 20px 14px; font-size: 14px; line-height: 1.5; color: #333; }
+.update .unotes:empty { display: none; }
+.update .unotes h2 { margin: 14px 0 0; font-size: 15px; font-weight: 600; }
+.update .unotes h2 span { margin-left: 8px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.update .unotes :is(h3, h4) { margin: 10px 0 2px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.update .unotes :is(p, li, blockquote, pre) { margin: 2px 0; }
+.update .unotes li { margin-left: calc(18px * (1 + var(--depth, 0))); }
+.update .unotes li::marker { color: var(--muted); }
+.update .unotes code, .update .unotes pre { font: 12.5px ui-monospace, Menlo, monospace; }
+.update .unotes code { padding: 0 3px; border-radius: 4px; background: rgba(0, 0, 0, .05); }
+.update .unotes a { color: #508fbb; text-underline-offset: 2px; }
+.update .unotes hr { border: 0; border-top: 1px solid #eee; }
+.update .ufoot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid #eee; }
+.update .ufoot kbd { margin-left: 6px; padding: 0 5px; }
+.update .button.primary kbd { background: rgba(255, 255, 255, .18); color: inherit; }
+.update .uprogress { flex: 1; display: flex; align-items: center; gap: 12px; min-height: 31px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.update .uprogress[hidden] { display: none; }
+.update progress { flex: 1; height: 6px; appearance: none; border: 0; }
+.update progress::-webkit-progress-bar { border-radius: 3px; background: #eee; }
+.update progress::-webkit-progress-value { border-radius: 3px; background: #2f8cf6; transition: width var(--dur-quick) linear; }
+[data-theme="dark"] .update :is(.uhead, .ufoot), [data-theme="dark"] .update .unotes hr { border-color: #3a3f41; }
+[data-theme="dark"] .update .utitle { color: #c9c9c9; }
+[data-theme="dark"] .update .unotes { color: #c9cccf; }
+[data-theme="dark"] .update .unotes code { background: rgba(255, 255, 255, .08); }
+[data-theme="dark"] .update .button.primary kbd { background: rgba(0, 0, 0, .1); }
+[data-theme="dark"] .update progress::-webkit-progress-bar { background: #3a3f41; }
+[data-theme="dark"] .update progress::-webkit-progress-value { background: #5aa8ff; }
 .palette input::placeholder { color: var(--muted); }
 /* the prompt page: the same field the palette always shows, with room for a few lines (↩ is a newline here) */
 .palette .ptext { border: 0; outline: none; resize: none; font: inherit; font-size: 17px; line-height: 24px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; background: #fff; }
@@ -1499,9 +1556,9 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
    inherit, so what sits inside a button (a pill's menu) is not one. A press inside a pill's menu is the menu's, so the
    pill does not shrink under it. */
 @property --press { syntax: '<number>'; inherits: false; initial-value: 0; }
-:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear) {
+:is(.navbtn, .pill, .settings button, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear) {
   --press: 1; transition: transform var(--dur-slow) var(--ease-settle); }
-:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
+:is(.navbtn, .pill, .settings button, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
   transform: scale(.95); transition: transform var(--dur-quick) var(--ease-out); }
 
 /* Surface for what is built again on every key: a pill's menu and the toolbar's style menu (renderer/motion.js
@@ -1527,7 +1584,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 /* Help (help.html, help.js): a modal <dialog> of a few pages, each a stage with a short loop of the keys at work over its
    words. The stage's plain rules are the scene's last frame, which is what reduced motion shows; the loops live only
    under no-preference, all one --hv-loop long, so a keycap's delay lines it up with the scene it presses in. */
-body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent; } /* help.html, task.html: only the scrim and the card over the window's pages */
+body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent; } /* help.html, task.html, update.html: only the scrim and the card over the window's pages */
 .help { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 9vh 24px 0; border: 0;
   background: var(--scrim); color: inherit; justify-content: center; align-items: flex-start; -webkit-app-region: no-drag; }
 .help[open] { display: flex; }

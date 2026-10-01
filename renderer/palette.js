@@ -396,6 +396,7 @@ function paletteRows(q, typed = q) {
     for (const v of savedViews()) rows.push({ id: v.id || 'savedView:' + v.name, group: 'Saved views', icon: 'splitPanes', label: v.name, run: () => run(() => openSavedView(v)) });
   }
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
+  rows.push({ id: 'openSettings', group: 'Settings', icon: 'options', label: 'Open settings', run: () => openSettings() }); // the Settings page (renderer/settings.js), first in its group
   rows.push({ id: 'textLarger', group: 'Settings', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
   rows.push({ id: 'textSmaller', group: 'Settings', icon: 'textSmaller', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
   rows.push({ id: 'textReset', group: 'Settings', icon: 'textReset', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
@@ -421,7 +422,7 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
   if (tana.openExternal) rows.push({ id: 'manual', group: 'Help', icon: 'help', label: 'Open Manual', hint: 'Every feature, with pictures', run: () => run(() => tana.openExternal('https://orbital.md/manual/?theme=' + theme)) }); // manual/, published there at each release
   if (tana.openExternal) rows.push({ id: 'about', group: 'Help', icon: 'info', label: 'About Orbital', keepOpen: true, run: openAboutPalette });
-  if (tana.checkUpdates) rows.push({ id: 'checkUpdates', group: 'Help', icon: 'reload', label: 'Check for updates', run: () => tana.checkUpdates() }); // main's dialogs say what it found
+  if (tana.checkUpdates) rows.push({ id: 'checkUpdates', group: 'Help', icon: 'reload', label: 'Check for updates', run: () => tana.checkUpdates() }); // a newer release opens the update card (update.html), a dialog says up to date
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette

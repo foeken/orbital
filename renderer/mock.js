@@ -65,6 +65,8 @@ function mockApi() {
   // the Cmd+K switch is on (mcpOff below; the per-view includeMcp filter is still gone, #247)
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', editable: false, renamable: true, hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
+  const aiPick = { model: 'gpt-5.6-terra', effort: 'low' }; // the Settings page's Model and Thinking (main/ai.js options)
+  const aiOptions = () => ({ ...aiPick, models: ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol'], efforts: ['low', 'medium', 'high'] });
   let mcpOff = false; // the app-local switch, off every launch of the mock
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
@@ -471,6 +473,8 @@ function mockApi() {
       return [...found, ...(near ? near[1] : []).map((id) => all.find((d) => d.id === id)).filter(Boolean).map((d) => ({ ...info(d), related: true }))];
     },
     mcpHidden: async () => mcpOff,
+    aiOptions: async () => aiOptions(),
+    setAiOption: async (key, value) => { aiPick[key] = value; return aiOptions(); },
     setMcpHidden: async (on) => { mcpOff = !!on; emit(null); return mcpOff; },
     setOpenAIKey: async (key) => { if (!String(key || '').trim()) throw new Error('OpenAI API key cannot be empty'); return true; },
     // Set type: the mock keeps main's two rules so the page behaves the same without the main process — a type that

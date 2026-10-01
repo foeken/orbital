@@ -36,8 +36,8 @@ module.exports = [
     },
   },
   {
-    // The Help tour and Quick Add Task are pages of their own, each its own scope (index.html does not load them).
-    files: ['help.js', 'task.js'],
+    // The Help tour, Quick Add Task and the update card are pages of their own, each its own scope (index.html does not load them).
+    files: ['help.js', 'task.js', 'update.js'],
     languageOptions: { sourceType: 'script', globals: globals.browser },
     rules: { 'no-unused-vars': ['error', { vars: 'local', args: 'none' }] },
   },
