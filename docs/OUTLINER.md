@@ -196,7 +196,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   on hover, only its own colour darkens. The visibility icon (`.audience`) and a warning (assigned to someone who cannot see it,
   `.hiddenfrom`) stay in full. That warning is "Not visible to …" in the subtext after who can see the row, in a soft
   rose rather than the error red, the audience glyph left grey beside it (`peopleEl`, issue #622); where the row shows
-  only the glyph, the glyph itself takes the rose.
+  only the glyph, the glyph itself takes the rose. In a table's Visible to column the words are a rose `userAlert` glyph
+  after who can see the row, "Not visible to …" in its tooltip.
 - **A task's box is its state** (#243). A task in the Inbox (`proposed`) draws a dashed box; In Progress a grey box;
   completed a green tick, with the title struck through and grey, and a short pop (`popSound`, renderer/motion.js;
   a checkbox block pops too, unchecking is silent; it sounds as the mouse button goes down on a box the

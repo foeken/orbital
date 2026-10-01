@@ -170,7 +170,9 @@ function peopleEl(summary, node) {
   if (said) { said.className = 'pword'; said.textContent = word; } // its own element, so a narrow table can leave it out (styles.css .table-view.folded)
   el.append(icon, ...(said ? [said] : facesEls(uris, summary.peopleCount || uris.length)));
   // assigned to someone who cannot see it: said in words after who can, as the page's Visible to field says it (#622)
-  if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'hiddenfrom'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
+  // a table's column has no room for the words: a red warning glyph says it there, the words in its tooltip
+  if (summary.hiddenFrom && tableView()) { const warn = iconEl('userAlert', 'Not visible to ' + summary.hiddenFrom); warn.classList.add('hiddenfrom'); el.append(warn); }
+  else if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'hiddenfrom'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
   return el;
 }
 // A bubble each for the first four people, then the rest: "+n" up to nine people, "and n others" past that. The list
