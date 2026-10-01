@@ -214,7 +214,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Orbital;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dreetje.orbital.share;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreetje.orbital.timeline; /* the Share extension, under the app id this team already has a device profile for: a new id needs an Apple account in Xcode to register */
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
@@ -234,7 +234,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Orbital;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dreetje.orbital.share;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreetje.orbital.timeline; /* the Share extension, under the app id this team already has a device profile for: a new id needs an Apple account in Xcode to register */
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
