@@ -35,27 +35,24 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   assert.strictEqual(shown({}), 'a b c d e', 'no sort: the query order');
 }
 
-// What is sensitive never crosses the bridge (ios/engine/redact.js): the node's own title, a Timeline entry about it
-// (its sentence and Tana's words), a task under another entry, a mention of it, a link to it and a reference to it;
-// everything else as it was.
+// What is sensitive is marked to be drawn blurred (ios/engine/sensitive.js): the node itself, an entry about it, a task
+// under another entry, a row that mentions, links to or refers to it, nested rows; nothing else
 {
-  const { redact, PRIVATE } = require('../ios/engine/redact.js');
-  const S = 'tana:text:secret', rows = redact([
-    { id: S, title: 'Salary review', text: 'Salary review', segments: [{ text: 'Salary review' }] },
-    { id: 'e1', timeline: { uri: S, note: 'Raised to 90k', change: 'Edited', detail: 'x' }, segments: [{ text: 'Sam edited Salary review' }], people: [{ name: 'Sam' }] },
-    { id: 'e2', timeline: { uri: 'tana:text:open' }, segments: [{ text: 'An AI agent added a task' }], children: [{ id: S, title: 'Salary review' }, { id: 'tana:text:ok', title: 'Book the venue' }] },
-    { id: 'b1', segments: [{ text: 'See ' }, { mention: { uri: S, label: 'Salary review' } }, { text: 'Salary review', marks: { link: S } }, { mention: { uri: 'tana:text:ok', label: 'Venue' } }] },
-    { id: 'm0.a0', type: 'reference', text: 'Salary review', segments: [], reference: { uri: S, label: 'Salary review' } },
-    { id: 'today', timeline: { today: true }, segments: [{ text: "Today's Tasks" }], children: [{ id: 'p', children: [{ id: S, title: 'Salary review' }] }] },
+  const { mark } = require('../ios/engine/sensitive.js');
+  const S = 'tana:text:secret', rows = mark([
+    { id: S, title: 'Salary review' },
+    { id: 'e1', timeline: { uri: S }, segments: [{ text: 'Sam edited Salary review' }] },
+    { id: 'e2', timeline: { uri: 'tana:text:open' }, children: [{ id: S }, { id: 'tana:text:ok' }] },
+    { id: 'b1', segments: [{ text: 'See ' }, { mention: { uri: S, label: 'Salary review' } }] },
+    { id: 'b2', segments: [{ text: 'Salary review', marks: { link: S } }] },
+    { id: 'm0.a0', type: 'reference', reference: { uri: S } },
+    { id: 'p', children: [{ id: 'q', children: [{ id: S }] }] },
+    { id: 'plain', segments: [{ text: 'Book the venue' }] },
   ], new Set([S]));
-  assert.strictEqual(rows[0].title, PRIVATE);
-  assert.deepStrictEqual(rows[1].segments, [{ text: 'A private item changed' }]);
-  assert.deepStrictEqual([rows[1].timeline.note, rows[1].timeline.change, rows[1].timeline.detail, rows[1].people.length], [null, null, null, 0]);
-  assert.deepStrictEqual(rows[2].children.map((c) => c.title), [PRIVATE, 'Book the venue'], 'only the sensitive task under an entry');
-  assert.deepStrictEqual(rows[3].segments.map((g) => g.text || g.mention.label), ['See ', PRIVATE, PRIVATE, 'Venue']);
-  assert.deepStrictEqual([rows[4].reference.label, rows[4].text], [PRIVATE, PRIVATE]);
-  assert.strictEqual(rows[5].children[0].children[0].title, PRIVATE, 'nested rows too');
-  assert.ok(!JSON.stringify(rows).includes('Salary') && !JSON.stringify(rows).includes('90k'), 'no word of it anywhere');
+  assert.deepStrictEqual(rows.map((r) => !!r.sensitive), [true, true, false, true, true, true, false, false]);
+  assert.deepStrictEqual(rows[2].children.map((c) => !!c.sensitive), [true, false], 'only the sensitive task under an entry');
+  assert.strictEqual(rows[6].children[0].children[0].sensitive, true, 'nested rows too');
+  assert.strictEqual(rows[0].title, 'Salary review', 'the words stay: the phone blurs them');
 }
 
 // The bundle itself, built with Bun: built as the Xcode phase builds it, then run in a vm
@@ -110,10 +107,6 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.ok(Array.isArray(today.children) && typeof today.createdAt === 'string' && today.segments[0].text === "Today's Tasks");
   assert.ok(page.calls.some((c) => c.includes('GraphService/ListNodes')), 'the Timeline asks the graph');
   assert.strictEqual(page.orbital.email(), 'a@b.c');
-  // a sensitive node is answered Private without being fetched
-  const hidden = boot(new Map([['orbital:tana:user-profile:u1@org_1:settingsRead', 'true'], ['orbital:tana:user-profile:u1@org_1:sensitive', JSON.stringify(['tana:text:secret'])]]));
-  await hidden.orbital.connect();
-  assert.deepStrictEqual(JSON.parse(await hidden.orbital.open('tana:text:secret')), { title: 'Private', kind: 'text', rows: [], private: true });
   fs.rmSync(out, { force: true });
   console.log('ios engine check ok');
   process.exit(0); // the fake sync stream keeps retrying

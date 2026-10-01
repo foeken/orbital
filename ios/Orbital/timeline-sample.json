@@ -22,6 +22,7 @@
    {
     "id": "tana:text:0000000000000000000000000b",
     "title": "Send the offsite agenda",
+    "sensitive": true,
     "done": false,
     "stateType": "open"
    },

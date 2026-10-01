@@ -18,7 +18,7 @@ enum Glyph {
 }
 
 // One node in a list: a task's box or its kind's glyph, then its words and when it last changed as the button that opens
-// it. The box is its own button beside it, so ticking a task never opens it too (TaskList has them the same way).
+// it. The box is its own button beside it, so ticking a task never opens it too (TaskLine has them the same way).
 struct ListRow: View {
     let row: Row
     let engine: Engine
@@ -35,7 +35,7 @@ struct ListRow: View {
             }
             Button { openURL.zoom(row.target) } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    if row.stateType != nil { TaskWords(row: row, engine: engine) } else { Text(engine.translator.words(row.words).0) }
+                    if row.stateType != nil { TaskWords(row: row, engine: engine) } else { Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).sensitive(row.sensitive, engine: engine) }
                     if let at = row.createdAt.flatMap(Row.parse) {
                         Text(at, format: .relative(presentation: .named)).font(.subheadline).foregroundStyle(.secondary)
                     }
@@ -46,7 +46,7 @@ struct ListRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 6)
-        .deletable(row.target, engine: engine, then: reload)
+        .nodeMenu(row.target, engine: engine, then: reload)
     }
 }
 
@@ -65,12 +65,10 @@ struct NodeScreen: View {
 
     var body: some View {
         Group {
-            if let page, page.isPrivate == true {
-                ContentUnavailableView("Private", systemImage: "lock", description: Text("You marked this sensitive in Orbital, so the phone does not show it."))
-            } else if let page {
+            if let page {
                 switch page.kind {
                 case "chat":
-                    ChatView(rows: page.rows, since: waitingSince ?? asked)
+                    ChatView(rows: page.rows, since: waitingSince ?? asked, reveal: engine.reveal)
                         // sent is sent: the read after it is the next poll's job, so a failed read never offers to send it twice
                         .safeAreaInset(edge: .bottom) {
                             Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); waitingSince = .now; await load(); return sent.warning }
@@ -88,7 +86,7 @@ struct NodeScreen: View {
                         .refreshable { await load() }
                         .overlay { if page.rows.isEmpty { ContentUnavailableView(page.kind == "event" ? "No notes yet" : "Nothing found", image: "Glyphs/" + Glyph.of(page.kind)) } }
                 default:
-                    List(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth) }
+                    List(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal) }
                         .listStyle(.plain)
                         .refreshable { await load() }
                         .overlay { if page.rows.isEmpty { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } }
@@ -105,7 +103,8 @@ struct NodeScreen: View {
                 ProgressView()
             }
         }
-        .navigationTitle(titled ? engine.translator.words(page?.title ?? "").0 : "")
+        .sensitive(page?.sensitive, engine: engine) // the node itself marked sensitive: the whole page, until a shake
+        .navigationTitle(titled && !(page?.sensitive == true && !engine.reveal) ? engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0 : "")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {
             guard engine.phase == .ready else { return }
@@ -144,6 +143,7 @@ struct NodeScreen: View {
 struct OutlineRow: View {
     let row: Row
     let depth: Int
+    var reveal = false
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -163,6 +163,7 @@ struct OutlineRow: View {
             }
             .font(row.heading == 1 ? .title2.bold() : row.heading == 2 ? .title3.bold() : row.heading != nil ? .headline : .body)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(Blur(hidden: row.sensitive == true && !reveal))
         }
         .padding(.leading, CGFloat(depth) * 22)
         .padding(.top, row.heading != nil ? 10 : 0)
@@ -180,12 +181,13 @@ struct OutlineRow: View {
 struct ChatView: View {
     let rows: [Row]
     var since: Date?
+    var reveal = false
 
     var body: some View {
         let shown = rows.enumerated().map { i, row in (row, Self.named(row, after: rows[..<i].last)) }
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
-                ForEach(shown, id: \.0.id) { Message(row: $0.0, named: $0.1) }
+                ForEach(shown, id: \.0.id) { Message(row: $0.0, named: $0.1).modifier(Blur(hidden: $0.0.sensitive == true && !reveal)) }
                 if waiting { Dots().padding(.top, -8) }
             }
             .padding(.horizontal, 20)

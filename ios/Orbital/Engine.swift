@@ -22,6 +22,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // added only when it differs from the one before, so the screen is redrawn only when something moved.
     var log: [String] = []
     let translator = Translator() // auto-translate, set up from the settings document at each refresh
+    var sensitiveIds: Set<String> = [] // marked sensitive in Orbital (synced), for the long-press menu
+    var pinnedToday: Set<String> = [] // pinned to today, for the long-press menu
+    var reveal = false // sensitive items shown, after a shake; never kept, as the desktop keeps it on the machine only
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
@@ -162,7 +165,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             rows = read
             error = nil
             settle(rows)
-            if let setup: Translator.Setup = try? await call("return await orbital.translation()", [:]) { translator.use(setup) }
+            if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
+                translator.use(to: setup.to, model: setup.model)
+                sensitiveIds = Set(setup.sensitive); pinnedToday = Set(setup.pinned)
+            }
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
@@ -202,14 +208,24 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let title: String
         let kind: String
         let rows: [Row]
-        let isPrivate: Bool? // marked sensitive in Orbital: nothing of it is sent (ios/engine/index.js redact)
-        enum CodingKeys: String, CodingKey { case title, kind, rows, isPrivate = "private" }
+        let sensitive: Bool? // the node itself marked sensitive in Orbital: drawn blurred until a shake
     }
     func open(_ id: String) async throws -> Page {
         if let s = Self.sample { if let page = s.pages[id] { return page }; throw Failure(errorDescription: "Not in the sample") }
         let page: Page = try await call("return await orbital.open(id)", ["id": id])
         settle(page.rows) // a search's tasks ticked here, once Tana agrees
         return page
+    }
+
+    // What a refresh reads besides the rows (orbital.setup)
+    struct Setup: Decodable { let to: String?; let model: String?; let sensitive: [String]; let pinned: [String] }
+
+    // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
+    func pin(_ id: String, _ on: Bool) async { await act("return await orbital.pin(id, on)", ["id": id, "on": on]) }
+    func markSensitive(_ id: String, _ on: Bool) async { await act("return await orbital.sensitive(id, on)", ["id": id, "on": on]) }
+    private func act(_ js: String, _ arguments: [String: Any]) async {
+        guard !Self.isSample else { return }
+        do { let _: Bool = try await call(js, arguments); await refresh() } catch { self.error = error.localizedDescription }
     }
 
     // Long press, Delete (orbital.remove): to Tana's trash, then the Timeline read again; why not, when Tana says no

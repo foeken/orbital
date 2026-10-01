@@ -29,6 +29,8 @@ struct SettingsView: View {
                     Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone.")
                 }
                 Section {
+                    // the language chosen in Orbital on the Mac, or why the last translation did not come
+                    LabeledContent { Text(engine.translator.status) } label: { Row(glyph: "language", title: "Auto-translate") }
                     LabeledContent { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") } label: { Row(glyph: "info", title: "Version") }
                 } header: { Header("Orbital") }
                 // signing out, apart from everything else and in red, as the ChatGPT app has its Log out

@@ -8,15 +8,15 @@ import { createTanaClient } from '../../sdk';
 import { STATE_TYPES, editable, initDocument, readNode, readSearch, rowLimit, setState, ulid } from '../../sdk/node';
 import { readOutline } from '../../sdk/content';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
-import { datePins, sidebarTree } from '../../sdk/pins';
+import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
 import { addMeetingChats, completedInWindow, searchQueryParams } from '../../sdk/query';
 import { canDelete, canWrite, everyoneOnly } from '../../sdk/access';
 import { arrange } from './arrange';
-import { S, isSpace, iso, visibleGraphNodes } from '../../main/state';
+import { S, isSpace, iso, today, visibleGraphNodes } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
-import { PRIVATE, redact as scrub } from './redact';
+import { mark } from './sensitive';
 import NUCLEO from 'nucleo-ui';
 
 // The phone reads Orbital's settings document and never makes one: a Mac does (main/settings.js create). Once it did,
@@ -62,9 +62,9 @@ function storageId() {
 
 // A graph node as a list row (ios/Orbital/Timeline.swift Row): its words, its kind for the glyph, its state for a box
 const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
-const listRow = (n) => ({ id: n.id, title: secret().has(n.id) ? PRIVATE : n.title || 'Untitled', icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
+const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', ...(secret().has(n.id) ? { sensitive: true } : {}), icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
 
-// What you marked sensitive in Orbital (the settings document's sensitive: node ids) never shows on the phone (redact.js).
+// What you marked sensitive in Orbital (the settings document's sensitive: node ids), drawn blurred (sensitive.js)
 // Every content call reads this account's settings document first, since only it says what is sensitive: a node marked
 // on the Mac a moment ago is never shown once from an older list. After the first time that is a local read (the
 // document stays live in the engine, so it is as current as the sync stream). Before the settings were ever read the
@@ -76,7 +76,7 @@ async function settled() {
   if (!settings.get('settingsRead')) throw new Error('Could not read your Orbital settings yet, so nothing is shown. Pull to try again.');
 }
 const secret = () => new Set(Array.isArray(settings.get('sensitive')) ? settings.get('sensitive') : []);
-const redact = (rows) => scrub(rows, secret());
+const redact = (rows) => mark(rows, secret());
 
 // The documents this page opened or ticked (open, toggle) are let go of once they are no longer among the last few, as
 // the desktop lets its on-demand reads go (main/documents.js onDemand): a subscription holds the whole document, and a
@@ -243,7 +243,6 @@ window.orbital = {
   async open(id) {
     await settled();
     const kind = id.split(':')[1];
-    if (secret().has(id)) return JSON.stringify({ title: PRIVATE, kind, rows: [], private: true }); // before it is fetched at all
     const doc = await hold(id), n = readNode(doc);
     let rows;
     if (kind === 'chat') {
@@ -252,7 +251,7 @@ window.orbital = {
     } else if (kind === 'search') rows = await searchRows(doc);
     else if (kind === 'event') rows = (await S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest })).nodes.map(listRow);
     else rows = readOutline(doc);
-    return JSON.stringify({ title: n.title || 'Untitled', kind, rows: redact(await titled(rows)) });
+    return JSON.stringify({ title: n.title || 'Untitled', kind, rows: redact(await titled(rows)), sensitive: secret().has(id) });
   },
   // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
   // answer (main/documents.js newChat), with what you typed as its first message. Answers the chat's id.
@@ -289,9 +288,27 @@ window.orbital = {
     await S.client.sync.softDelete(id);
     return JSON.stringify(id);
   },
-  // Auto-translate as the desktop has it (renderer/translate.js): the language chosen there (a synced preference),
-  // and the model the AI rows use; the phone asks ChatGPT itself (Translator.swift)
-  translation: () => { const to = settings.get('pref:translateTo'); return JSON.stringify({ to: ['English', 'Dutch', 'German', 'French', 'Spanish'].includes(to) ? to : null, model: settings.get('aiModel') || null }); },
+  // What the app needs besides rows, read at each refresh: Auto-translate as the desktop has it (renderer/translate.js:
+  // the language chosen there, a synced preference, and the model the AI rows use; the phone asks ChatGPT itself,
+  // Translator.swift), what is sensitive, and what is pinned to today (a long press offers to pin or unpin)
+  async setup() {
+    const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
+    return JSON.stringify({ to: ['English', 'Dutch', 'German', 'French', 'Spanish'].includes(to) ? to : null, model: settings.get('aiModel') || null,
+      sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].includes(today())) });
+  },
+  // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced
+  // setting the desktop's mark writes (main/documents.js setSensitive)
+  async pin(id, on) {
+    await within('date pins', (on ? pinDate : unpinDate)(S.client.sync, S.me.userUri, id, today()));
+    return JSON.stringify(on);
+  },
+  async sensitive(id, on) {
+    const ids = secret();
+    if (on) ids.add(id); else ids.delete(id);
+    settings.set('sensitive', [...ids].sort());
+    await settings.flush();
+    return JSON.stringify(on);
+  },
   // Settings' Sign out, before the app deletes the cookies: a session lookup still under way would set them again (the
   // desktop waits for its lookups the same way, tana-session.js logout), and the client closes
   async signOut() {

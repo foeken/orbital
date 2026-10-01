@@ -25,6 +25,7 @@ struct Row: Decodable, Identifiable {
     let meta: String?
     let note: Bool?
     let chat: Chat?
+    let sensitive: Bool? // marked sensitive in Orbital: drawn blurred until a shake shows it (ios/engine/sensitive.js)
     let group: String? // the section a saved search files it under (ios/engine/arrange.js)
     let glyph: String? // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
 
@@ -79,13 +80,34 @@ extension OpenURLAction {
     func zoom(_ id: String?) { if let url = id.flatMap(Row.zoom) { callAsFunction(url) } }
 }
 
-// Long press on a node: Delete, to Tana's trash where you may delete it (Engine.remove); done reads the page again
+// Long press on a node: pin it to today or take it off, mark it sensitive or not, or delete it to Tana's trash where you
+// may (Engine.pin, markSensitive, remove); done reads the page again
 extension View {
-    func deletable(_ id: String?, engine: Engine, then done: @escaping () async -> Void = {}) -> some View {
+    func nodeMenu(_ id: String?, engine: Engine, then done: @escaping () async -> Void = {}) -> some View {
         contextMenu {
             if let id, id.hasPrefix("tana:") {
+                let pinned = engine.pinnedToday.contains(id), secret = engine.sensitiveIds.contains(id)
+                Button(pinned ? "Unpin from Today" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin") { Task { await engine.pin(id, !pinned); await done() } }
+                Button(secret ? "Not Sensitive" : "Mark as Sensitive", systemImage: secret ? "eye" : "eye.slash") { Task { await engine.markSensitive(id, !secret); await done() } }
+                Divider()
                 Button("Delete", systemImage: "trash", role: .destructive) { Task { if await engine.remove(id) { await done() } } }
             }
+        }
+    }
+
+    // What is sensitive, blurred as the desktop blurs it, until a shake of the phone shows it (Engine.reveal)
+    func sensitive(_ on: Bool?, engine: Engine) -> some View {
+        modifier(Blur(hidden: on == true && !engine.reveal))
+    }
+}
+
+struct Blur: ViewModifier {
+    let hidden: Bool
+    func body(content: Content) -> some View {
+        if hidden {
+            content.blur(radius: 6).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake to show")
+        } else {
+            content
         }
     }
 }
@@ -101,13 +123,8 @@ struct TimelineScreen: View {
         List {
             if !today.isEmpty {
                 // one stop on the rail, as the desktop's: Now, the Today glyph, its words, the tasks hanging under them
-                RailRow(time: "Now", railTop: 24) { Marker(icon: "todayTasks", tone: "new", now: false) } content: {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("Today's Tasks")
-                        TaskList(tasks: today, engine: engine)
-                    }
-                }
-                .accessibilityElement(children: .contain)
+                RailRow(time: "Now", railTop: 24, bottom: 0) { Marker(icon: "todayTasks", tone: "new", now: false) } content: { Text("Today's Tasks") }
+                TaskLines(tasks: today, engine: engine)
             }
             if !upcoming.isEmpty || free != nil {
                 Heading(title: "Coming up")
@@ -116,7 +133,10 @@ struct TimelineScreen: View {
             }
             ForEach(days, id: \.0) { title, rows in
                 Heading(title: title)
-                ForEach(rows) { Entry(row: $0, engine: engine) }
+                ForEach(rows) { row in
+                    Entry(row: row, engine: engine)
+                    TaskLines(tasks: row.children ?? [], engine: engine)
+                }
             }
             // always, as the desktop has it: a quiet three days must not hide the days before them
             if !engine.rows.isEmpty {
@@ -200,6 +220,7 @@ enum Rail {
 struct RailRow<Dot: View, Content: View>: View {
     let time: String
     var railTop: CGFloat = 0 // where the line starts: the first stop's starts at its marker, as the desktop's does
+    var top: CGFloat = 14, bottom: CGFloat = 14 // room above and below; an entry's tasks are rows of their own (TaskLines)
     @ViewBuilder let marker: Dot
     @ViewBuilder let content: Content
 
@@ -209,7 +230,8 @@ struct RailRow<Dot: View, Content: View>: View {
             marker.frame(width: Rail.marker)
             content.frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 14)
+        .padding(.top, top)
+        .padding(.bottom, bottom)
         .contentShape(Rectangle())
         .listRowInsets(EdgeInsets(top: 0, leading: Rail.inset, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
@@ -226,7 +248,7 @@ struct Entry: View {
 
     var body: some View {
         let quiet = row.tone == "faint"
-        RailRow(time: row.date.formatted(.dateTime.hour().minute())) {
+        RailRow(time: row.date.formatted(.dateTime.hour().minute()), bottom: row.children?.isEmpty == false ? 0 : 14) {
             Marker(icon: row.icon, tone: row.tone, now: row.join != nil)
         } content: {
             VStack(alignment: .leading, spacing: 3) {
@@ -235,17 +257,16 @@ struct Entry: View {
                     Text($0).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
                 }
                 if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
-                if let tasks = row.children, !tasks.isEmpty { TaskList(tasks: tasks, engine: engine) }
             }
+            .sensitive(row.sensitive, engine: engine)
             .padding(.trailing, row.unread == true ? 18 : 0) // the new dot's own room: a full-width sentence ran under it
             .overlay(alignment: .topTrailing) {
                 if row.unread == true { Circle().fill(.blue).frame(width: 8, height: 8).offset(y: 7).accessibilityLabel("New") }
             }
         }
         .onTapGesture { openURL.zoom(row.timeline?.uri) }
-        .deletable(row.timeline?.uri, engine: engine)
-        // one element to VoiceOver, unless it lists tasks, whose boxes have to stay reachable
-        .accessibilityElement(children: row.children?.isEmpty == false ? .contain : .combine)
+        .nodeMenu(row.timeline?.uri, engine: engine)
+        .accessibilityElement(children: .combine) // its tasks are rows of their own (TaskLines)
         .accessibilityAddTraits(row.timeline?.uri != nil ? .isButton : [])
         .accessibilityAction { openURL.zoom(row.timeline?.uri) } // VoiceOver's double tap: a tap gesture is not one
     }
@@ -274,27 +295,36 @@ struct TaskBox: View {
     }
 }
 
-// The tasks an entry lists, hanging under its words: each its box and its words, with room above the list, between the
-// tasks and under the last one so the next entry does not crowd them (styles.css .node.tl > .children)
-struct TaskList: View {
+// The tasks an entry lists, hanging under its words, each a row of its own on the rail, so a long press is about that
+// task alone: as much room above the first as under the last (with the next entry's own), more between them
+// (styles.css .node.tl > .children)
+struct TaskLines: View {
     let tasks: [Row]
     let engine: Engine
+
+    var body: some View {
+        ForEach(Array(tasks.enumerated()), id: \.element.id) { i, task in
+            TaskLine(task: task, engine: engine, top: i == 0 ? 26 : 16, bottom: i == tasks.count - 1 ? 16 : 0)
+        }
+    }
+}
+
+struct TaskLine: View {
+    let task: Row
+    let engine: Engine
+    let top: CGFloat
+    let bottom: CGFloat
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(tasks) { task in
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    TaskBox(task: task, engine: engine)
-                    Button { openURL.zoom(task.id) } label: { TaskWords(row: task, engine: engine).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
-                        .buttonStyle(.plain)
-                }
-                .deletable(task.id, engine: engine)
+        RailRow(time: "", top: top, bottom: bottom) { Color.clear.frame(height: 1) } content: {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                TaskBox(task: task, engine: engine)
+                Button { openURL.zoom(task.id) } label: { TaskWords(row: task, engine: engine).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
             }
         }
-        // as much room above the list as under it: under it the entry's own 14 pt and the next one's 14 pt come on top of this
-        .padding(.top, 26)
-        .padding(.bottom, 2)
+        .nodeMenu(task.id, engine: engine)
     }
 }
 
@@ -334,10 +364,11 @@ struct TaskWords: View {
     let row: Row
     let engine: Engine
     var body: some View {
-        let done = engine.state(of: row) == "closed", (words, from) = engine.translator.words(row.words)
+        let done = engine.state(of: row) == "closed", (words, from) = engine.translator.words(row.words, sensitive: row.sensitive == true)
         (Text(words) + Text(from == nil ? "" : "  \(Image(systemName: "globe"))").font(.footnote).foregroundStyle(.tertiary))
             .strikethrough(done).foregroundStyle(done ? .secondary : .primary)
             .accessibilityHint(from.map { "Translated from " + $0 } ?? "")
+            .sensitive(row.sensitive, engine: engine)
     }
 }
 
@@ -353,13 +384,13 @@ struct Meeting: View {
             Marker(icon: "meeting", tone: nil, now: false)
         } content: {
             VStack(alignment: .leading, spacing: 3) {
-                Text(engine.translator.words(row.words).0)
+                Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).sensitive(row.sensitive, engine: engine)
                 if let until = row.subtext?.split(separator: "–").last { Text("until " + until).font(.subheadline).foregroundStyle(.secondary) }
                 if let people = row.people, !people.isEmpty { Faces(people: people).padding(.top, 2) }
             }
         }
         .onTapGesture { openURL.zoom(row.id) }
-        .deletable(row.id, engine: engine)
+        .nodeMenu(row.id, engine: engine)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { openURL.zoom(row.id) }

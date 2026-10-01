@@ -45,6 +45,9 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $details) { NavigationStack { SignInLog(lines: engine.log) } }
+        // a shake shows what is sensitive, and the next one hides it again
+        .onReceive(NotificationCenter.default.publisher(for: .shake)) { _ in withAnimation { engine.reveal.toggle() } }
+        .sensoryFeedback(.impact, trigger: engine.reveal)
         .onChange(of: scene) { if scene == .active { Task { await engine.refresh() } } }
     }
 }
@@ -61,5 +64,14 @@ struct SignInLog: View {
         .navigationTitle("Sign-in details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ShareLink(item: text) }
+    }
+}
+
+// The shake gesture: iOS tells the window, which says so to the app (ContentView)
+extension Notification.Name { static let shake = Notification.Name("orbital.shake") }
+extension UIWindow {
+    open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        if motion == .motionShake { NotificationCenter.default.post(name: .shake, object: nil) }
+        super.motionEnded(motion, with: event)
     }
 }

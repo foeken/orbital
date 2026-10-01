@@ -5,10 +5,9 @@ import SwiftUI
 // shown in the language chosen in Orbital (a synced preference), on screen only; nothing is ever saved over them. This
 // phone tells which are in another language with Apple's NaturalLanguage, as the Mac does, and asks ChatGPT for those
 // only, with your ChatGPT sign-in, the way Codex asks it. Every answer is kept on this phone, so a title is asked once.
-// What is marked sensitive never gets here: the engine sends it as Private (ios/engine/redact.js).
+// What is marked sensitive is never sent to the model, as on the desktop. status says what it is doing, for Settings.
 @MainActor @Observable
 final class Translator {
-    struct Setup: Decodable { let to: String?; let model: String? }
     struct Answer: Codable { let lang: String; let text: String } // text "": nothing to translate
 
     private(set) var to: String?
@@ -18,11 +17,14 @@ final class Translator {
     @ObservationIgnored private var queue: [String] = []
     @ObservationIgnored private var flushing = false
 
-    func use(_ setup: Setup) { to = setup.to; if let m = setup.model { model = m } }
+    private(set) var problem: String? // why the last question to ChatGPT got no answer
+    var status: String { to == nil ? "Off" : problem ?? to! }
+
+    func use(to: String?, model: String?) { self.to = to; if let model { self.model = model } }
 
     // The words to show and, when they are a translation, the language they were in. Asks for what it does not know yet.
-    func words(_ text: String) -> (String, String?) {
-        guard let to, !text.trimmingCharacters(in: .whitespaces).isEmpty, text != "Private" else { return (text, nil) }
+    func words(_ text: String, sensitive: Bool = false) -> (String, String?) {
+        guard let to, !sensitive, !text.trimmingCharacters(in: .whitespaces).isEmpty else { return (text, nil) }
         let key = to + "\n" + text
         if let found = answers[key] { return found.text.isEmpty ? (text, nil) : (found.text, found.lang) }
         if asked.insert(key).inserted {
@@ -47,7 +49,16 @@ final class Translator {
         let none = Answer(lang: "", text: "")
         for text in batch where !Self.foreign(text, to: to) { answers[to + "\n" + text] = none }
         let ask = batch.filter { answers[to + "\n" + $0] == nil }
-        guard !ask.isEmpty, let found = try? await ChatGPT.translate(Array(ask), to: to, model: model) else { return save() }
+        guard !ask.isEmpty else { return save() }
+        let found: [Int: Answer]
+        do {
+            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: model) else { problem = "Sign in with ChatGPT"; return save() }
+            found = answered; problem = nil
+        } catch {
+            problem = "ChatGPT: " + error.localizedDescription
+            for text in ask { asked.remove(to + "\n" + text) } // asked again on the next screen that shows it
+            return save()
+        }
         for (i, text) in ask.enumerated() {
             guard let answer = found[i + 1] else { continue } // not answered: asked again another time
             answers[to + "\n" + text] = answer.text == text || answer.lang.lowercased() == to.lowercased() ? none : answer
@@ -59,6 +70,7 @@ final class Translator {
 }
 
 extension ChatGPT {
+    struct Failure: LocalizedError { let errorDescription: String? }
     // main/ai.js TRANSLATE_INSTRUCTIONS and TRANSLATE_SCHEMA, word for word
     static func instructions(_ to: String) -> String {
         ["You translate short texts from a notes app into \(to).",
@@ -87,7 +99,7 @@ extension ChatGPT {
             "text": ["format": ["type": "json_schema", "name": "translations", "schema": schema, "strict": true]],
         ] as [String: Any])
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 { throw Failure(errorDescription: "HTTP \(status)") }
         var answer = ""
         for try await line in bytes.lines where line.hasPrefix("data: ") {
             guard let event = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any] else { continue }
