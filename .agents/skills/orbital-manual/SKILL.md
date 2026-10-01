@@ -106,8 +106,6 @@ cursor, a ripple on clicks and keycaps for each key.
   with a diagram), right-click (the runner clicks left only), tooltips (headless draws none: say it in words).
 - A clip whose last change is only a CSS animation records no new frames at the end: finish on a DOM change or take a
   still for the result.
-- On a palette page (Set type, Set icon, Set colour), typing shows "No results" under rows that match
-  (renderer/palette.js, the "No results" condition): pick with arrows in clips until it is fixed.
 - Data a picture shows is fictional and should look lived-in: the mock's Timeline "Now" block, meetings starting a few
   minutes after the capture, a meeting write-up with Key takeaways, a Dutch note, faces on meetings. Keep it that way.
 
