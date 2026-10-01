@@ -19,8 +19,9 @@ function inline(segments) {
     const m = s.marks || {};
     if (m.link) { const a = document.createElement('a'); a.href = m.link; a.textContent = s.text; a.onclick = (e) => { e.preventDefault(); updApi.openExternal(m.link); }; return a; }
     const tag = m.bold ? 'b' : m.code ? 'code' : m.italic ? 'i' : m.strike ? 's' : null;
-    if (!tag) return document.createTextNode(s.text);
-    const el = document.createElement(tag); el.textContent = s.text; return el;
+    const words = s.mention ? s.mention.label : s.text; // a [label](tana:…) link parses as a mention, with no text of its own
+    if (!tag) return document.createTextNode(words);
+    const el = document.createElement(tag); el.textContent = words; return el;
   });
 }
 const TAGS = { heading1: 'h3', heading2: 'h3', heading3: 'h4', bullet: 'li', numbered: 'li', quote: 'blockquote', code: 'pre', divider: 'hr' };
@@ -70,7 +71,8 @@ if (updApi && updApi.onUpdateProgress) updApi.onUpdateProgress(progress);
 go.onclick = install;
 later.onclick = closeCard;
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') install();
+  // ↩ on a focused button or link is that one's own press (Later stays Later); anywhere else it updates
+  if (e.key === 'Enter') { if (e.target.closest && e.target.closest('button, a')) return; install(); }
   else if (e.key === 'Escape') closeCard();
   else return;
   e.preventDefault();
