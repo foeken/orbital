@@ -72,7 +72,7 @@ struct Shell: View {
                     .allowsHitTesting(menu)
                     .accessibilityHidden(true)
             }
-            .shadow(color: .black.opacity(menu ? 0.25 : 0), radius: 24)
+            .shadow(color: .black.opacity(menu ? 0.12 : 0), radius: 24)
             .offset(x: min(width, max(0, (menu ? width : 0) + drag)))
         }
         .background(Color(.systemBackground))
@@ -223,7 +223,7 @@ struct SideMenu: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(page == item ? AnyShapeStyle(.fill.secondary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(page == item ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
