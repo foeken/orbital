@@ -10,8 +10,7 @@ const path = require('node:path');
 const DIR = 'Orbital';
 const OLD_DIR = 'tana-tasks'; // the app's old name, and the whole of the legacy path
 
-// What Electron answers as app.getPath('appData'). The node-only helpers (scripts/agent-link.js,
-// scripts/codex-host.js) have no app to ask, and used to work this out for themselves.
+// What Electron answers as app.getPath('appData'), for node-only helpers that have no app to ask.
 const appDataDir = () => (process.platform === 'darwin'
   ? path.join(process.env.HOME || '', 'Library', 'Application Support')
   : process.env.APPDATA || path.join(process.env.HOME || '', '.config'));

@@ -12,7 +12,7 @@ function open(path) {
   generation++;
   // WAL: a small write is one append instead of a journal file created, synced and deleted (0.5 -> under 0.1 ms).
   // NORMAL is safe with WAL: a crash loses nothing, a power cut at most the last writes to a cache and a mirror of
-  // settings Tana also holds. Another process holding the file (scripts/codex-host.js) can keep it from switching;
+  // settings Tana also holds. Another process holding the file can keep it from switching;
   // then it stays in the mode it has until the next open.
   try { db.exec('PRAGMA journal_mode = WAL'); } catch { /* busy: the old journal still works */ }
   db.exec('PRAGMA synchronous = NORMAL');

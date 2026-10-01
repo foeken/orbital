@@ -126,7 +126,7 @@ tana.onChanged((docId, info) => {
     if (!info || info.meta !== false) { notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); if (taskMetaById.has(docId)) loadTaskMeta(docId, true); }
     if (meetingInfos.has(docId)) meetingInfoOf(docId, true); // a meeting's attendees, read again for its page's field
     // and a node linked to an agent task asks what its task is doing: another page may have relinked it to another task
-    if (info && info.meta && (agentStates.has(docId) || agentTaskHosts.has(docId))) loadAgentStates();
+    if (info && info.meta && (agentStates.has(docId) || agentTasks.has(docId))) loadAgentStates();
     // The sidebar is read once per page and left alone while the page is edited: its sections are relations, and
     // typing in a document changes none of them (a task row in it is patched by patchCopies, not re-fetched).
     // Only a metadata change — assignees, audience, participants, which main is already comparing for this flag —
@@ -254,14 +254,15 @@ function applySettings(next) {
   sensitiveLoading = null; loadSensitive().then(refreshSensitive); // the sensitive marks and the MCP switch are settings too, kept outside the preferences
   if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {});
   loadFilters(); // and so are the views' filters, the agent marks and the watch choices (main/settings.js tellOthers)
-  // a mark or a task that moved asks for the task's state and host too, or its badge waits pending for the 30 s poll;
+  // a mark or a task that moved asks for the task's state too, or its badge waits pending for the 30 s poll;
   // only then, since that read starts a Codex app-server child. Both: another machine writes the mark before the task.
-  const before = JSON.stringify([[...codexIds].sort(), [...agentTaskHosts].sort()]);
-  codexLoading = null;
-  Promise.all([loadCodex(), tana.codexTaskHosts ? tana.codexTaskHosts() : {}]).then(([, hosts]) => {
-    const next = JSON.stringify([[...codexIds].sort(), Object.entries(hosts || {}).sort()]);
+  const before = JSON.stringify([[...agentIds].sort(), [...agentTasks].sort()]);
+  agentLoading = null;
+  Promise.all([loadAgentIds(), tana.agentTasks ? tana.agentTasks() : {}]).then(([, links]) => {
+    const next = JSON.stringify([[...agentIds].sort(), Object.entries(links || {}).sort()]);
     if (next !== before) loadAgentStates();
   }, () => {});
+  loadAgentList(); // which agents are on, and the default, are settings too (Choose agents …)
   notifyById.clear();
   renderSoon();
 }
@@ -283,7 +284,7 @@ if (tana.onSettings) tana.onSettings(applySettings);
 if (tana.prefsNow) catchUpSettings();
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') showTheme('system');
-loadAgentStates(); // what each linked Codex task is doing: at boot, then on the 30 s timer below and when a link moves
+loadAgentStates(); // what each linked agent task is doing: at boot, then on the 30 s timer below and when a link moves
 loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // Cmd+K only: never blocks the first paint. Boot almost always races the sync connect (main creates the window
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
@@ -294,8 +295,8 @@ loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // as "the saved search you chose is gone" and wrote the Library over the stored choice on every launch.
 function loadSearches() { if (tana.searches) tana.searches().then((answer) => { const list = answer || [], ids = new Set(list.map((s) => s.id)); searches = [...searches.filter((s) => s.added && !ids.has(s.id)), ...list]; searchesLoaded = connected; repairHome(); renderSoon(); }, () => {}); }
 loadSearches();
-// What a Codex task is doing is Codex's, not Tana's, so no live query carries it: read every 30 s, as it was when the
+// What an agent's task is doing is the agent's, so no live query carries it: read every 30 s, as it was when the
 // refresh loop still ran that often (main.js), and only while something is handed to the agent at all.
-setInterval(() => { if (codexIds.size) loadAgentStates(); }, 30000);
+setInterval(() => { if (agentIds.size) loadAgentStates(); }, 30000);
 if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {}); // Cmd+K only: the rows themselves are filtered in main
 tana.status().then(showStatus, showError);

@@ -113,7 +113,7 @@
 
   <section class="topic">
     <h2 id="connect" data-short="Connect a model" data-k="chatgpt openai api key sign in sign out account model">Connect a model first</h2>
-    <p>Everything in the first half of this chapter asks a model. Orbital talks to one of two: your <b>ChatGPT account</b>, or an <b>OpenAI API key</b>. When you have both, ChatGPT wins and the key is the fallback. Both stay on this Mac.</p>
+    <p>Everything in the first half of this chapter asks a model, through your <b>ChatGPT account</b>. Signing in once turns all of it on: translation, Discuss with, Auto-pick type, Process image and the icons for your types. The sign-in stays on this Mac.</p>
     <div class="split">
       <div>
         <h3>Sign in with ChatGPT</h3>
@@ -122,35 +122,30 @@
       </div>
       <figure class="shot"><img data-m="ai-signin" alt="The ChatGPT account page in Cmd+K, asking you to enter a code in your browser"><figcaption>The code to type in your browser, with <b>Copy code</b> under it.</figcaption></figure>
     </div>
-    <div class="split flip">
-      <div>
-        <h3>Or set an OpenAI API key</h3>
-        <p>Run <b>Set OpenAI API key</b> and paste the key. The field hides what you paste, and <b>Save OpenAI API key</b> keeps it on this Mac only. Use this when you have a key and no ChatGPT account, or as a spare.</p>
-      </div>
-      <figure class="shot"><img data-m="ai-apikey" alt="The Paste OpenAI API key page in Cmd+K"><figcaption>The key page. It saves locally and never syncs.</figcaption></figure>
-    </div>
+    <div class="note">Saved an OpenAI API key before? It keeps working, and <b>Set OpenAI API key</b> stays in <kbd>⌘K</kbd> while it is stored. On that page, <b>Save OpenAI API key</b> replaces it with a key you paste, and <b>Clear OpenAI API key</b> removes it, taking the row with it: Sign in with ChatGPT is the way in.</div>
     <h3>What each part needs</h3>
     <table class="keys">
       <tr><th>Feature</th><th>Needs</th></tr>
-      <tr><td>The name <b>Discuss with …</b> suggests, <b>Classify type</b>, <b>Process image</b>, <b>Auto-translate …</b>, <b>Translate into …</b></td><td>ChatGPT or an API key</td></tr>
-      <tr><td>Icons for your types, picked for you</td><td>ChatGPT or an API key</td></tr>
-      <tr><td><b>Assign to Agent</b>, <b>Open in Codex</b>, <b>@Codex</b> in a chat</td><td>The Codex app on this Mac (or a host)</td></tr>
+      <tr><td>The name <b>Discuss with …</b> suggests, <b>Auto-pick type</b>, <b>Process image</b>, <b>Auto-translate …</b>, <b>Translate into …</b></td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
+      <tr><td>Icons for your types, picked for you</td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
+      <tr><td><b>Assign to Agent</b> with Tana</td><td>Nothing: Tana is always there</td></tr>
+      <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with Codex or Claude</td><td>The Codex app or CLI, or Claude Code, on this Mac</td></tr>
     </table>
     <div class="tip">The moment you sign in or save a key, Orbital gives every type that has no icon one that fits its name, and does the same for their fields. You see the new glyphs on bullets and chips. An icon you chose yourself, or <b>No icon</b>, is never touched.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>chatgpt</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
 
   <section class="topic">
-    <h2 id="node" data-short="Discuss with, Classify type" data-k="discussion task discuss with classify type ai sparkle odds">Ask the model about a node</h2>
+    <h2 id="node" data-short="Discuss with, Auto-pick type" data-k="discussion task discuss with auto-pick type classify ai sparkle odds">Ask the model about a node</h2>
     <p>Two rows under <b>Current node</b> in <kbd>⌘K</kbd> use the model to fill in what a document is about. Both show the sparkle while the model reads, and both leave the choice to you.</p>
     <h3>Discuss with …</h3>
     <p>For a document you want to talk through with someone. Run <b>Discuss with …</b> and type who: one colleague, two people, or a team. <kbd>↩</kbd> gives the document the <b>Discussion Task</b> type and writes your words into its <b>Discuss with</b> field. Names of people in your workspace become links to them.</p>
     <p>While the page is open the model reads the title. After <b>Reading the title…</b> its guess shows as a second row, marked <b>From the title</b>. Your own words always stay on the first row, so <kbd>↩</kbd> sends what you typed and <kbd>↓</kbd> <kbd>↩</kbd> takes the guess.</p>
     <figure class="clip wide"><video data-m="ai-discuss"></video><figcaption>The title names two people, so the model suggests them. <kbd>↓</kbd> <kbd>↩</kbd> takes the suggestion and the document becomes a <b>Discussion Task</b>.</figcaption></figure>
-    <h3>Classify type</h3>
-    <p>Run <b>Classify type</b> to let the model pick from the same types <b>Set type</b> offers. It reads the document and each type's description, then answers with the odds for every option, <b>No type</b> among them.</p>
+    <h3>Auto-pick type</h3>
+    <p>Run <b>Auto-pick type</b> to let the model pick from the same types <b>Set type</b> offers. It reads the document and each type's description, then answers with the odds for every option, <b>No type</b> among them.</p>
     <ul>
-      <li>At 80% or more it sets the type at once and says so: “Classified as Decision Record (91%)”.</li>
+      <li>At 80% or more it sets the type at once and says so: “Type set to Decision Record (91%)”.</li>
       <li>Below that it lists every option with its odds, most likely first, and you pick. The current type has a tick.</li>
       <li>It never takes a type off by itself, even when <b>No type</b> comes first.</li>
     </ul>
@@ -217,32 +212,44 @@
   </section>
 
   <section class="topic">
-    <h2 id="agent" data-short="Assign to Agent" data-k="codex agent assign unassign prompt model host robot">Hand a node to a Codex agent</h2>
-    <p>An agent does work: it drafts, researches, files things in Tana. <b>Assign to Agent</b> gives the node you are on to a new Codex task, with the node as its context. You only say what to do with it.</p>
+    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents default agent tana codex claude install">Choose your agents</h2>
+    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows three. <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in.</p>
+    <div class="split">
+      <div>
+        <p>Run <b>Choose agents …</b> to see all three. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat.</p>
+        <p>Under <b>Default agent</b>, <kbd>↩</kbd> picks the one <b>Assign to Agent</b> starts on. Tana is the default until you choose another. Both choices follow you to your other Macs.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, Codex on, Claude off, and the default agent"><figcaption>Which agents are on, and which one is the default.</figcaption></figure>
+    </div>
+    <div class="note">Claude runs as your own Claude Code on this Mac, signed in with your own account. Orbital never signs in to Anthropic and never sees a Claude login.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>choose agents</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="agent" data-short="Assign to Agent" data-k="agent assign unassign prompt robot tana codex claude">Hand a node to an agent</h2>
+    <p><b>Assign to Agent</b> gives the node you are on to a new task, with the node as its context. You only say what to do with it. Its hint says which agent it goes to.</p>
     <h3>Assign to Agent</h3>
-    <p>Run <b>Assign to Agent</b>. The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. Under the prompt you can pick the model for this task and the machine it runs on. <kbd>⇥</kbd> moves between the prompt and those lists.</p>
+    <p>Run <b>Assign to Agent</b>. The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. With more than one agent on, they are listed under the prompt, the default ticked; <kbd>⇥</kbd> moves between the prompt and that list. The agent's own default model does the work.</p>
     <figure class="anno">
-      <img data-m="ai-prompt" alt="The Assign to Agent page: a prompt, the send row, the model and where it runs">
+      <img data-m="ai-prompt" alt="The Assign to Agent page: a prompt, the send row, and the agents to choose from">
       <span class="pin" style="--x:3%;--y:9%">1</span>
-      <span class="pin" style="--x:3%;--y:42%">2</span>
-      <span class="pin" style="--x:3%;--y:62%">3</span>
-      <span class="pin" style="--x:3%;--y:87%">4</span>
+      <span class="pin" style="--x:3%;--y:58%">2</span>
+      <span class="pin" style="--x:3%;--y:80%">3</span>
     </figure>
     <ol class="legend">
       <li><b>The prompt</b> What the agent should do with this node.</li>
-      <li><b>Assign to Agent on This Mac</b> Sends it, the same as <kbd>⌘↩</kbd>, and names where the task will run.</li>
-      <li><b>Model for this task</b> Codex default, unless you choose another.</li>
-      <li><b>Where it runs</b> This Mac, or a host you added (see Manage Codex hosts).</li>
+      <li><b>Assign to Tana</b> Sends it, the same as <kbd>⌘↩</kbd>, and names the agent that will take it.</li>
+      <li><b>Agent</b> The agents that are on, the default ticked. Choose another for this one task.</li>
     </ol>
     <figure class="clip wide"><video data-m="ai-assign"></video><figcaption>Assigned: the badge appears beside the title, grey while the task starts, then blue as it works.</figcaption></figure>
     <p>The node now carries the agent badge. Under <b>Group by Responsibility</b> it belongs in the <b>Agent</b> section, but it stays where it is until you press <b>Clean up</b>, so nothing jumps under your pointer. Dropping a task into the Agent section opens the same prompt.</p>
-    <p><b>Unassign from Agent</b> takes the node back at once. The task itself stays in Codex.</p>
+    <p><b>Unassign from Agent</b> takes the node back at once. The task itself stays where it ran: a Tana chat, a Codex task, a Claude session.</p>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>assign to agent</b> <i>→</i><kbd>↩</kbd></span>, write a line, then <kbd>⌘↩</kbd>.</div>
   </section>
 
   <section class="topic">
-    <h2 id="states" data-short="The agent badge" data-k="agent pending working waiting needs attention completed badge state host unavailable">Read the agent badge</h2>
-    <p>The robot at the end of a row says what its Codex task is doing. Orbital asks every 30 seconds while anything is assigned. The colour and the tooltip say the same thing, so you never need colour alone.</p>
+    <h2 id="states" data-short="The agent badge" data-k="agent pending working waiting needs attention completed badge state">Read the agent badge</h2>
+    <p>The robot at the end of a row says what its agent's task is doing. Orbital asks every 30 seconds while anything is assigned. The colour and the tooltip say the same thing, so you never need colour alone.</p>
     <figure class="anno wide">
       <img data-m="ai-badges" alt="Six tasks in the Agent section of the Library, each badge in a different state">
       <span class="pin" style="--x:91%;--y:25.5%">1</span>
@@ -253,49 +260,42 @@
       <span class="pin" style="--x:91%;--y:92%">6</span>
     </figure>
     <ol class="legend">
-      <li><b>Agent pending</b> Grey. Assigned, and no Codex task has started yet.</li>
+      <li><b>Agent pending</b> Grey. Assigned, and no task has started yet.</li>
       <li><b>Agent working</b> Blue, with a sheen crossing it. The task is running; only this state moves.</li>
       <li><b>Agent waiting for you</b> Blue and still. The task wants an approval or an answer from you.</li>
       <li><b>Agent completed</b> Green. The task finished its last turn.</li>
       <li><b>Agent needs attention</b> Red. The task failed or cannot be reached; assign again to retry.</li>
+      <li><b>Agent on another Mac</b> Grey. A Claude task lives on the Mac that started it: open it there. Assigning the node here starts a new one on this Mac.</li>
       <li><b>A completed task</b> The badge drops to a grey outline: a record that there was a task.</li>
     </ol>
-    <p>One more state, <b>Agent host unavailable</b>, is grey: the machine running the task is away, and the task itself is fine. Click a badge, or press <kbd>↩</kbd> on it, to open its task in Codex. A task on another machine cannot be opened from here; its tooltip says where it runs.</p>
+    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, a Codex task in Codex, a Claude session in Terminal.</p>
   </section>
 
   <section class="topic">
-    <h2 id="codex" data-short="Codex tasks and hosts" data-k="go to codex task link codex task open in codex manage codex hosts ssh machine">Go to a task, link one, or start a fresh one</h2>
+    <h2 id="codex" data-short="Agent tasks" data-k="go to task link task open in codex claude tana">Go to a task, link one, or start a fresh one</h2>
     <div class="split">
       <div>
-        <p>Type <b>codex</b> in <kbd>⌘K</kbd> to see every row that deals with Codex:</p>
+        <p>Every agent that is on brings the rows it can do. Codex and Claude bring all three; Tana, whose tasks are chats here, brings only <b>Go to Tana task</b>. Type <b>codex</b> in <kbd>⌘K</kbd> to see Codex's:</p>
         <ul>
-          <li><b>Go to Codex task</b> opens the task this node is assigned to. When it runs on another machine the row is greyed and says so: “Codex task is on Studio Mac mini”.</li>
-          <li><b>Link Codex task …</b> links a task that already exists.</li>
-          <li><b>Open in Codex</b> starts a new Codex task with this node's link and tracks nothing: no badge, no state.</li>
-          <li><b>Manage Codex hosts</b> lists the other machines a task can run on.</li>
+          <li><b>Go to Codex task</b> opens the task this node is assigned to. <b>Go to Claude task</b> opens the session in Terminal, and <b>Go to Tana task</b> opens the chat here.</li>
+          <li><b>Link Codex task …</b> links a task that already exists. <b>Link Claude task …</b> takes a session id.</li>
+          <li><b>Open in Codex</b> starts a new Codex task with this node's link and tracks nothing: no badge, no state. <b>Open in Claude</b> does the same in Terminal.</li>
         </ul>
       </div>
-      <figure class="shot"><img data-m="ai-codex-rows" alt="Cmd+K filtered by codex: Open in Codex, Go to Codex task, Link Codex task, Manage Codex hosts"><figcaption>The Codex rows, on an assigned node.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-codex-rows" alt="Cmd+K filtered by codex: Open in Codex, Go to Codex task, Link Codex task"><figcaption>The Codex rows, on an assigned node.</figcaption></figure>
     </div>
     <div class="split flip">
       <div>
         <h3>Link Codex task …</h3>
-        <p>In Codex, use Copy link on the task, then paste the <code>codex://threads/…</code> link (or the bare id) here. <b>Link to Codex task 3f2a9c1e…</b> links it, and the badge follows that task from then on.</p>
+        <p>In Codex, use Copy link on the task, then paste the <code>codex://threads/…</code> link (or the bare id) here. <b>Link to this Codex task</b> links it, and the badge follows that task from then on.</p>
       </div>
       <figure class="shot"><img data-m="ai-link" alt="Link Codex task page with a pasted codex link"><figcaption>A pasted link, ready to link.</figcaption></figure>
-    </div>
-    <div class="split">
-      <div>
-        <h3>Manage Codex hosts</h3>
-        <p>To run tasks on another Mac, type its name, its ssh address and the path to its <code>codex</code>, separated by spaces: <code>Build box build.local /usr/local/bin/codex</code>. <kbd>↩</kbd> on the <b>Add</b> row saves it. <kbd>↩</kbd> on a host removes it; its tasks stay. The host then shows under <b>Where it runs</b> when you assign.</p>
-      </div>
-      <figure class="shot"><img data-m="ai-hosts" alt="Manage Codex hosts with a new host typed in"><figcaption>Adding a host in one line.</figcaption></figure>
     </div>
   </section>
 
   <section class="topic">
-    <h2 id="chat" data-short="@Codex in a chat" data-k="codex chat mention local only you add to message open codex task delete">Ask @Codex in a chat, privately</h2>
-    <p>In a Tana chat, type <b>@</b> in the message box and pick <b>Codex</b> (after Tana, hinted “Ask Codex · the answer stays on this device”). Your question goes to a Codex task on this Mac with the whole conversation as context. Nothing of it reaches Tana, so nobody else in the chat sees it.</p>
+    <h2 id="chat" data-short="@Codex in a chat" data-k="codex claude chat mention local only you add to message open codex task delete">Ask @Codex or @Claude in a chat, privately</h2>
+    <p>In a Tana chat, type <b>@</b> in the message box and pick <b>Codex</b> (after Tana, hinted “Ask Codex · the answer stays on this device”), or <b>Claude</b> when it is on. Your question goes to a task on this Mac with the whole conversation as context. Nothing of it reaches Tana, so nobody else in the chat sees it.</p>
     <div class="mg ai-local" aria-hidden="true">
       <div class="win ai-local-chat">
         <div class="ai-q"><b>@Codex</b> what did we decide?</div>
@@ -327,7 +327,7 @@
       <tr><td>Quick Add Task: ↩ with no title processes the clipboard image</td><td><kbd>⇧⌘Space</kbd></td></tr>
       <tr><td>Assign to Agent: send the prompt</td><td><kbd>⌘↩</kbd></td></tr>
       <tr><td>Assign to Agent: a new line in the prompt</td><td><kbd>↩</kbd></td></tr>
-      <tr><td>Assign to Agent: to the model and host lists, and back</td><td><kbd>⇥</kbd></td></tr>
+      <tr><td>Assign to Agent: to the list of agents, and back</td><td><kbd>⇥</kbd></td></tr>
       <tr><td>Assign to Agent: cancel, writing nothing</td><td><kbd>esc</kbd></td></tr>
       <tr><td>In a chat: select the newest message from the message box</td><td><kbd>↑</kbd></td></tr>
       <tr><td>In a chat: delete the selected message, or a Codex question and its answer</td><td><kbd>⇧⌘⌫</kbd></td></tr>

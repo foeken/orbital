@@ -671,7 +671,7 @@ commands.settype = async () => {
   await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
   out('now: ' + JSON.stringify(readNode(await client.sync.subscribe(id)).entityTypeUri ?? null));
 };
-// classify <id...>: the Cmd+K "Classify type" answer for each document — what the model is sent (the types with their
+// classify <id...>: the Cmd+K "Auto-pick type" answer for each document — what the model is sent (the types with their
 // description and AI instructions) and the odds it gives each. Read-only in Tana; the documents' text goes to the model.
 commands.classify = async () => {
   if (!positional.length) throw new Error('usage: classify <id...>  (read-only; sends each document and its candidate types to the model)');

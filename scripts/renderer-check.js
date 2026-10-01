@@ -66,7 +66,7 @@ assert.deepEqual(state({ authenticated: null, authChecking: false, error: 'tempo
 assert.match(source, /if \(signedOut\) rows\.unshift\(\{ id: 'login'/, 'signed out, logging in is the first ⌘K row');
 assert.match(source, /s\.authChecking === false && s\.authenticated === false/);
 assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
-assert.match(source, /id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key'/);
+assert.match(source, /if \(tana\.setOpenAIKey && chatgptAuth\?\.apiKey\) rows\.push\(\{ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key'/, 'the key row is offered only while a key is stored (issue #669)');
 assert.match(source, /id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth/);
 assert.match(source, /function openOpenAIKeyPalette\(\)[\s\S]*palInput\.type = 'password'/);
 assert.match(source, /function openAIKeyRows\(\)[\s\S]*tana\.setOpenAIKey\(key\)/);
@@ -215,7 +215,7 @@ assert.match(source, /blockSelection\(keys, true, 'Move'\)/, 'while moving it st
 assert.match(source, /tana\.setStateMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);
 assert.match(source, /const rows = \[\.\.\.selection\];/, 'what acts on the selection comes before everything else in Cmd+K');
-assert.match(source, /id: 'sendToAgent'[^\n]*label: 'Open in Codex'[\s\S]*?tana\.openExternal\('https:\/\/chatgpt\.com\/codex\/open-app\?q=' \+ encodeURIComponent\(link \+ '\\n'\)\)/, 'Open in Codex opens a new Codex thread with the current node link and a trailing newline');
+assert.match(source, /id: a\.id === 'codex' \? 'sendToAgent' : 'openIn' \+ a\.label[^\n]*label: 'Open in ' \+ a\.label[\s\S]*?tana\.openInAgent\(a\.id, await tana\.nodeLink\(doc\.id\)\)/, 'Open in <agent> hands that agent the current node link, and Codex keeps the id a recorded key finds');
 // the current document's own actions (pins, link, icon, visibility, location) follow under the same heading, before the views
 assert.ok(source.indexOf("const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';") < source.indexOf("const viewRows = views.map((s) => ({ id: 'view:'"), 'the document actions join the Current node group ahead of the views');
 assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);
@@ -520,14 +520,14 @@ assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}showPage\('
 assert.match(source, /function showPage\(mode, placeholder, page, value = ''\) \{\n(?:[^\n]*\n)*?  palInput\.placeholder = placeholder; palInput\.value = value;\n  coverWindow\([^\n]*\n\}/, 'a page starts with the field holding only what it was opened with');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.
-assert.match(source, /line\.append\(body\);[\s\S]{0,240}if \(codexIds\.has\(display\.id\)\) line\.append\(codexBadgeEl\(display\.id, display\.done\)\)/,
+assert.match(source, /line\.append\(body\);[\s\S]{0,240}if \(agentIds\.has\(display\.id\)\) line\.append\(agentBadgeEl\(display\.id, display\.done\)\)/,
   'the agent badge is appended after the body, so it ends the row, and is told whether that row is finished');
 // The badge is a status, so it can never be drawn without one: every call names the node whose state it shows, and
 // the state falls back to pending rather than to the green it used to be.
-assert.doesNotMatch(source, /codexBadgeEl\(\)/, 'no badge is drawn without the node whose task status it reports');
+assert.doesNotMatch(source, /agentBadgeEl\(\)/, 'no badge is drawn without the node whose task status it reports');
 // A badge with a task behind it opens it; a pending one has nowhere to go and must not pretend otherwise.
 assert.match(source, /el\.setAttribute\('role', linked \? 'button' : 'img'\)/, 'only a linked badge is a button');
-assert.match(source, /tana\.openCodexTask\(id\)/, 'and it opens that node\'s own task, by node, never by a url the renderer builds');
+assert.match(source, /run\(\(\) => tana\.openAgentTask\(id\)\)/, 'and it opens that node\'s own task, by node, never by a url the renderer builds');
 assert.match(source, /if \(e\.key === 'Enter' \|\| e\.key === ' '\)/, 'reachable from the keyboard, not the mouse alone');
 assert.match(source, /const agentStateOf = \(id\) => \(AGENT_BADGE\[agentStates\.get\(id\)\] \? agentStates\.get\(id\) : 'pending'\)/,
   'an assigned node with no linked task reads as pending');
@@ -697,10 +697,6 @@ assert.match(source, /if \(!force && el\.contains\(document\.activeElement\)\) \
   'while a forced render — the answer to what the user just did in the field — draws it straight away');
 assert.match(source, /return !!\(el && el\.isContentEditable && \(el === titleEl \|\| inRows\(el\)\)\);/,
   'a caret in a field row defers a render the way a caret in an outline row does');
-// The machine a task runs on has its own glyph, from the icon build like every other one — not drawn here.
-assert.match(source, /group: HOST_GROUP, icon: 'host'/, 'the Run on rows carry the host glyph');
-assert.ok(icons.ICONS.host && icons.ICONS.host.includes('currentColor'), 'which is built into icons.js and takes the palette\'s colour');
-assert.doesNotMatch(icons.ICONS.host, /<script|<foreignObject|on[a-z]+=/i, 'and carries nothing executable');
 for (const property of ['width', 'height', 'margin', 'padding', 'top', 'left']) {
   assert.doesNotMatch(turn, new RegExp('(^|[^-])' + property + ':'), 'the turn must not animate ' + property + ': that would move the pill');
 }

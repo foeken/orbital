@@ -45,12 +45,14 @@ to the node you are on. Cmd+Shift+K on any palette row records a hotkey for it, 
 app already uses. Cmd+S searches Tana itself, with `#task`, `#meeting`, `#space`, `#member` and
 `#<Type>` filters; Cmd+F filters the rows already on screen.
 
-**Hand a task to an agent.** Assign a node to the Agent with a prompt and it becomes a Codex task
-on this Mac or on another machine you have registered over SSH; the row wears a badge that reads
-the task's state and opens it, and says where the work is when it is elsewhere. "Discuss with…"
-makes a node a discussion task with someone, and a model can read its title to suggest who (bring
-your own OpenAI key or sign in with ChatGPT; only the title is sent, and the key stays on the machine).
-"Classify type" has the same model pick a node's type from each type's description and AI
+**Hand a task to an agent.** Assign a node to an agent with a prompt: Tana's own AI, always there and
+answering in a Tana chat on the node, or Codex or Claude Code when this Mac has them (Cmd+K "Choose
+agents" switches them on and picks the default). The row wears a badge that reads the task's state and
+opens it; a Claude task says so when it runs on another Mac, and @Codex or @Claude in a chat answers
+on this Mac only. "Discuss with…" makes a node a discussion task with someone, and a model can read
+its title to suggest who (sign in with ChatGPT, or keep the OpenAI API key you saved before; only the
+title is sent, and the key stays on the machine).
+"Auto-pick type" has the same model pick a node's type from each type's description and AI
 instructions: a sure answer is applied, otherwise you choose from the odds.
 
 **Create a task from its title.** Shift+Cmd+Space (or Cmd+K "Quick Add Task") asks for the title and,

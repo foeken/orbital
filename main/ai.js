@@ -1,6 +1,6 @@
 'use strict';
 // The one place this app talks to a model (`ask`), for two Cmd+K pages (renderer/palette.js): "Discuss with …", a
-// document's title in and the person or group it names out; and "Classify type", a document and the types it can be
+// document's title in and the person or group it names out; and "Auto-pick type", a document and the types it can be
 // given in and the odds of each out; and Translate, a note's words shown in English and never saved (renderer/translate.js).
 // ChatGPT login takes priority; the API key is the fallback.
 // The API key stays in local settings. ChatGPT auth lives in a separate, local Codex home, never in Tana.
@@ -13,14 +13,13 @@ const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
 const settings = require('./settings');
 const db = require('../db');
-const agent = require('./agent');
 const { signedBy } = require('../updater');
 const { send } = require('./state');
 
 // The fast AI, for both pages: Terra with a little reasoning. Measured on 2026-09-24 through a ChatGPT sign-in against
 // Luna with none: no slower (a Discuss with suggestion took 5.8 s against 5.7 s, median of six; the wait is the round
 // trip, not the model), and right where Luna was sure and wrong — it typed twelve real documents without a confident
-// mistake, where Luna made one or two in every run (docs/OUTLINER.md, Classify type).
+// mistake, where Luna made one or two in every run (docs/OUTLINER.md, Auto-pick type).
 const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
 const ENDPOINT = 'https://api.openai.com/v1/responses';
 const TIMEOUT_MS = 20000;
@@ -37,11 +36,11 @@ let authRpc = null, authHome = null, authReady = null, activeLogin = null, login
 
 // With no Codex on this Mac, sign-in runs on the standalone app-server from Codex's own GitHub release, fetched into
 // userData on the first "Sign in with ChatGPT" and kept only when it carries OpenAI's Developer ID. It answers for
-// the AI rows alone: handing work to a Codex task still needs a real Codex (main/agent.js codexBin).
+// the AI rows alone: handing work to a Codex task still needs a real Codex (main/agents/codex.js codexBin).
 // ponytail: fetched once and never updated; replace the file when the sign-in protocol moves past it.
 const SERVER = 'codex-app-server', OPENAI_TEAM = '2DC432GLL2';
 const ownServer = (userData) => path.join(userData, SERVER);
-const serverBin = (userData) => agent.codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
+const serverBin = (userData) => require('./agents/codex').codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
 let installing = null;
 async function downloadServer(userData) {
   const run = promisify(require('node:child_process').execFile);
@@ -78,7 +77,7 @@ async function ensureChatGPT(userData, install = false) {
   }
   if (!authRpc) { // a second caller may have started it while the download ran
     fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-    const rpc = agent.appServerRpc(TIMEOUT_MS, undefined, chatgptNote, { codexHome: home, bin: serverBin(userData) });
+    const rpc = require('./agents/codex').appServerRpc(TIMEOUT_MS, chatgptNote, { codexHome: home, bin: serverBin(userData) });
     authRpc = rpc; authHome = home;
     authReady = rpc.ready.catch((error) => {
       if (authRpc === rpc) { authRpc = null; authHome = null; authReady = null; }
@@ -90,7 +89,7 @@ async function ensureChatGPT(userData, install = false) {
 
 function authView(response) {
   const account = response && response.account;
-  return {
+  return withKey({
     available: true,
     signedIn: account?.type === 'chatgpt',
     email: account?.type === 'chatgpt' ? account.email : null,
@@ -98,8 +97,11 @@ function authView(response) {
     loggingIn: !!activeLogin,
     userCode: activeLogin?.userCode || null,
     error: loginError,
-  };
+  });
 }
+// Every status carries whether an OpenAI API key is stored: the pages replace theirs with each one they hear, and a
+// status without it made Set OpenAI API key disappear after any sign-in event (#671 review)
+const withKey = (status) => ({ ...status, apiKey: !!settings.get('openaiApiKey') });
 
 // A device sign-in ends when Codex says so (account/login/completed) or when a read finds the account signed in,
 // whichever comes first: Codex's own log has that notification reaching no connection at all (2026-09-23,
@@ -121,7 +123,7 @@ async function readChatGPT(rpc, refreshToken = false) {
 function chatgptNote(note) {
   if (note.method === 'account/login/completed' && activeLogin && (!note.params.loginId || note.params.loginId === activeLogin.loginId)) {
     loginDone(note.params.success, note.params.error);
-    if (authRpc) readChatGPT(authRpc).then((status) => send('ai:chatgptChanged', status), () => send('ai:chatgptChanged', { available: false, signedIn: false, error: loginError }));
+    if (authRpc) readChatGPT(authRpc).then((status) => send('ai:chatgptChanged', status), () => send('ai:chatgptChanged', withKey({ available: false, signedIn: false, error: loginError })));
   }
   if (note.method === 'turn/completed' && activeTurn && note.params?.threadId === activeTurn.threadId) {
     const pending = activeTurn; activeTurn = null; clearTimeout(pending.timer);
@@ -132,7 +134,7 @@ function chatgptNote(note) {
 
 async function chatgptStatus(userData, refreshToken = false) {
   try { const rpc = await ensureChatGPT(userData); return rpc ? await readChatGPT(rpc, refreshToken) : authView(null); }
-  catch (error) { return { available: false, signedIn: false, loggingIn: !!activeLogin, error: error.message }; }
+  catch (error) { return withKey({ available: false, signedIn: false, loggingIn: !!activeLogin, error: error.message }); }
 }
 
 async function startChatGPTLogin(userData) {
@@ -274,7 +276,7 @@ async function suggestDiscussWith(title, fetchImpl = globalThis.fetch, userData)
   return answer == null ? null : cleanName(answer);
 }
 
-// ---- Classify type: which of the types a document can be given fits it, "No type" among them ----
+// ---- Auto-pick type: which of the types a document can be given fits it, "No type" among them ----
 // A type is described by its own words: the title, the description, and the AI instructions Tana's own AI follows
 // when it writes one of that type. The types are numbered, so the answer names none of them by a title that could
 // repeat. The model gives every option odds; whether the best is sure enough to apply is the page's call.

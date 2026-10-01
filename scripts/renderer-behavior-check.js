@@ -166,13 +166,15 @@ const withShims = (src) => {
   // The watch-state cache lives in state.js, which most slices do not take. A slice that only clears it — a sharing
   // change can flip whether a node is watched — should not fail for want of the map itself.
   if (/\bnotify(ById|Loading)\b/.test(src) && !/const notifyById =/.test(src)) src = 'globalThis.notifyById ??= new Map(); globalThis.notifyLoading ??= new Set();\n' + src;
-  // Same for the set of nodes assigned to the local Codex agent: a slice that renders a row reads it to decide on the
+  // Same for the set of nodes assigned to an agent: a slice that renders a row reads it to decide on the
   // badge, and a slice that declares its own is left alone.
-  if (/\bcodexIds\b/.test(src) && !/(const|let) codexIds/.test(src)) src = 'globalThis.codexIds ??= new Set();\n' + src;
+  if (/\bagentIds\b/.test(src) && !/(const|let) agentIds/.test(src)) src = 'globalThis.agentIds ??= new Set();\n' + src;
   // The badge reads the linked task's state; a slice that only renders a row gets the real labels and the shipped
-  // fallback, which is pending — the state an assigned node has until its Codex task registers itself.
-  if (/\bagentStateOf\b|\bAGENT_BADGE\b/.test(src) && !/const agentStateOf =/.test(src)) src = "globalThis.agentStates ??= new Map(); globalThis.agentTaskHosts ??= new Map(); globalThis.agentHosts ??= []; globalThis.agentHost ??= 'local'; globalThis.loadAgentStates ??= () => {}; globalThis.openAgentPrompt ??= () => {}; globalThis.nodeRank ??= () => 0; globalThis.AGENT_BADGE ??= { pending: { label: 'Agent pending', title: 'Assignment requested; no Codex task yet' } }; globalThis.agentStateOf ??= () => 'pending';\n" + src;
-  if (/\bagentModels?\b/.test(src) && !/(const|let) agentModels/.test(src)) src = "globalThis.agentModels ??= []; globalThis.agentModel ??= '';\n" + src; // the page's model list: empty means Codex default alone
+  // fallback, which is pending — the state an assigned node has until its task is known.
+  if (/\bagentStateOf\b|\bAGENT_BADGE\b/.test(src) && !/const agentStateOf =/.test(src)) src = "globalThis.agentStates ??= new Map(); globalThis.agentTasks ??= new Map(); globalThis.loadAgentStates ??= () => {}; globalThis.openAgentPrompt ??= () => {}; globalThis.nodeRank ??= () => 0; globalThis.AGENT_BADGE ??= { pending: { label: 'Agent pending', title: 'Assignment requested; no task yet' } }; globalThis.agentStateOf ??= () => 'pending';\n" + src;
+  // the agents (renderer/state.js): Tana alone, the list a fresh install starts with
+  if (/\b(agentList|agentsOn|agentNamed|agentPick)\b/.test(src) && !/let agentList\b/.test(src)) src = "globalThis.agentList ??= [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }]; globalThis.agentPick ??= 'tana'; globalThis.agentsOn ??= () => globalThis.agentList.filter((a) => a.enabled && a.installed); globalThis.agentNamed ??= (id) => globalThis.agentList.find((a) => a.id === id) || null;\n" + src;
+  if (/\bloadAgentList\(/.test(src) && !/function loadAgentList\(/.test(src)) src = 'globalThis.loadAgentList ??= () => Promise.resolve();\n' + src;
   // And for the sections a page has folded away: state.js reads them from localStorage at load, so a slice that only
   // groups rows gets an empty set rather than failing for want of the declaration.
   if (/\bcollapsedGroups\b/.test(src) && !/(const|let) collapsedGroups/.test(src)) src = 'globalThis.collapsedGroups ??= new Set();\n' + src;
@@ -1171,7 +1173,7 @@ async function runStalePaletteInvalidationCheck() {
     let searches = [{ id: searchId, title: 'saved' }, { id: keptId, title: 'beta' }];
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: keptId };
-    const agentStates = new Map(), agentTaskHosts = new Map(), loadAgentStates = () => {};
+    const agentStates = new Map(), agentTasks = new Map(), loadAgentStates = () => {};
     const listPage = () => false; // a document is zoomed here, never a list page
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), fresh = new Map();
     const meetingInfos = new Map(); // no meeting page open here
@@ -3125,7 +3127,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     // the four tr rows are handed to Sam and still watched, so they land in Tracking and the section can be trimmed
     const taskMetaById = new Map([['t1', { assignees: ['sam'], watched: true }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'], watched: false }], ['t5', { assignees: ['me'] }], ['t6', { assignees: [] }], ['t7', { assignees: [] }], ['t8', { assignees: ['me'] }], ['t9', { assignees: ['me'] }], ['t10', { assignees: ['me'] }], ['t11', { assignees: ['sam'], watched: false }], ['ta1', { assignees: ['tana:user-profile:ghost'] }], ['ta2', { assignees: ['me'] }], ['tr1', { assignees: ['sam'], watched: true }], ['tr2', { assignees: ['sam'], watched: true }], ['tr3', { assignees: ['sam'], watched: true }], ['tr4', { assignees: ['sam'], watched: true }]]);
     // the app-local agent marks the badge is drawn from (renderer/state.js), not Tana assignees
-    const codexIds = new Set(['ta1', 'ta2', 'ta3']);
+    const agentIds = new Set(['ta1', 'ta2', 'ta3']);
     // your date pins (renderer/state.js, api.pinDates): tp1 is Sam's task on a third person, pinned to a day
     ${sourceLine('const localDate =')}
     // tq*: pinned relative to today, for the Pinned section opening on the coming week
@@ -5305,7 +5307,7 @@ const CODEX_DOC = 'tana:text:01examplea0000000000000000';
 function runCodexAssignCheck() {
   const api = vm.runInNewContext(`
     const DOC = '${CODEX_DOC}';
-    const codexIds = new Set();
+    const agentIds = new Set();
     const rendered = [], sent = [];
     const renderSoon = () => rendered.push('deferred render');
     const renderPalette = () => {};
@@ -5320,11 +5322,15 @@ function runCodexAssignCheck() {
     const OTHER = 'tana:text:01exampleb0000000000000000';
     const served = new Map([[DOC, [{ id: 'b1', text: 'Something already written', children: [] }]], [OTHER, [{ id: 'b9', text: 'Another page', children: [] }]]]);
     const agentStates = new Map();
-    const agentTaskHosts = new Map();
-    let agentHosts = [];
-    const openedTasks = [];
-    const tana = { openCodexTask: async (id) => { openedTasks.push(id); return true; }, setCodex: async (id, on, prompt) => {
+    const agentTasks = new Map([[DOC, { agent: 'codex', taskId: '01a0b379-afbc-74c3-a191-c419e6543bcc' }]]);
+    // Tana and Codex on, Tana the default: the page offers both, and the row that sends names the one it goes to
+    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, link: true, openNew: true }];
+    let agentPick = 'tana';
+    const agentsOn = () => agentList.filter((a) => a.enabled && a.installed), agentNamed = (id) => agentList.find((a) => a.id === id) || null;
+    const openedTasks = [], wentTo = [];
+    const tana = { openAgentTask: async (id) => { openedTasks.push(id); return true; }, setAgent: async (id, on, prompt, agent) => {
       sent.push([id, on, prompt]);
+      if (on) sent.agent = agent;
       if (refuse) throw new Error('This node is read-only in the outliner');
       if (on && typeof prompt === 'string' && prompt.trim()) {
         const rows = served.get(id) || [];
@@ -5342,8 +5348,6 @@ function runCodexAssignCheck() {
     const palText = { name: 'editor', hidden: true, value: '', focus() { focusedEl.el = palText; } };
     const palList = { name: 'rows', tabIndex: 0, focus() { focusedEl.el = palList; }, querySelectorAll: () => [] };
     const document_activeElement = () => focusedEl.el;
-    const agentModels = ['gpt-5.6-sol', 'anthropic/claude-opus-5'];
-    let agentModel = '';
     const runRow = (r) => { if (r && !r.disabled) r.run(); };
     const nextPalIndex = (rows, index, step) => { const n = rows.length; for (let i = 1; i <= n; i++) { const next = ((index + step * i) % n + n) % n; if (!rows[next].disabled) return next; } return index; };
     let palMode = 'cmd', palRows = [], palIndex = 0;
@@ -5357,7 +5361,7 @@ function runCodexAssignCheck() {
     const row = { dataset: { key: DOC, sig: 'sig:false' }, querySelector: () => line };
     const outline = { querySelectorAll: () => [row] };
     const items = new Map([[DOC, { node: { id: DOC, kind: 'document' } }]]);
-    const referenceTarget = () => null, rowSig = (n) => 'sig:' + codexIds.has(n.id);
+    const referenceTarget = () => null, rowSig = (n) => 'sig:' + agentIds.has(n.id);
     const docOf = (id) => (id === DOC ? palDoc : null); // the badge reads the node's own state to know the task is finished
     let zoom = null;
     // the zoomed page: the title's own header box, the children cache behind it, and a second document's cache that
@@ -5374,7 +5378,7 @@ function runCodexAssignCheck() {
     const document = { documentElement: { dataset: {} }, get activeElement() { return focusedEl.el; }, createElement: (tagName) => ({ tagName, attrs: {}, children: [], className: '',
       setAttribute(name, value) { this.attrs[name] = value; }, append(...kids) { this.children.push(...kids); } }) };
     const views = [], pinRows = () => [], selectionRows = () => [];
-    const pillCommandRows = () => [], searches = [], typeListCache = null, goTo = () => {};
+    const pillCommandRows = () => [], searches = [], typeListCache = null, goTo = (id) => wentTo.push(id);
     const authed = true, authChecking = false, signedOut = false, pinInfo = null, hotkeys = {};
     const localDate = () => '2026-09-18', setTheme = () => {};
     const docRow = () => ({});
@@ -5383,16 +5387,17 @@ function runCodexAssignCheck() {
     // holdRow is renderer/views.js: the row keeps its place, which is what lets the Clean up pill offer the redraw
     const held = [], holdRow = (n) => held.push(n.id);
     const pills = [], renderPills = () => pills.push('pills'); // where Clean up is decided (renderer/pills.js)
-    ${functionSource('codexBadgeEl')}
-    ${functionSource('codexHeader')}
-    ${functionSource('patchCodex')}
+    ${functionSource('agentBadgeEl')}
+    ${functionSource('openAgentTask')}
+    ${functionSource('agentHeader')}
+    ${functionSource('patchAgent')}
     ${sourceBetween('const AGENT_GROUP =', 'function promptEditor(')}
     ${functionSource('promptEditor')}
     ${functionSource('openAgentPrompt')}
     ${functionSource('agentPromptRows')}
     ${functionSource('submitAgentPrompt')}
     ${functionSource('agentPromptKey')}
-    ${functionSource('focusModelRows')}
+    ${functionSource('focusAgentRows')}
     ${functionSource('movePalIndex')}
     ${functionSource('agentRowsKey')}
     ${functionSource('backPalette')}
@@ -5400,7 +5405,7 @@ function runCodexAssignCheck() {
     const key = (name, mod) => { let stopped = false; return { key: name, metaKey: !!mod, preventDefault() {}, stopPropagation() { stopped = true; }, get stopped() { return stopped; } }; };
     const tick = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); }; // run() is a promise chain, like the real one
     const state = () => ({ mode: palMode, open: !palette.hidden, editor: !palText.hidden, field: !palInput.hidden, prompt: palText.value,
-      assigned: codexIds.has(DOC), badges: line.children.filter((kid) => String(kid.className).startsWith('cbadge')).map((kid) => kid.attrs),
+      assigned: agentIds.has(DOC), badges: line.children.filter((kid) => String(kid.className).startsWith('cbadge')).map((kid) => kid.attrs),
       sig: row.dataset.sig, sent: [...sent], rendered: [...rendered], closed: [...closed], errors: [...errors],
       held: [...held], pills: [...pills],
       renders: [...renders], header: head.children.filter((kid) => String(kid.className).startsWith('cbadge')).map((kid) => kid.attrs),
@@ -5412,32 +5417,32 @@ function runCodexAssignCheck() {
       type: (text) => { palText.value = text; },
       submitKey: async (name, mod) => { sent.length = 0; errors.length = 0; const e = key(name, mod); const handled = agentPromptKey(e); await tick(); return { handled, stopped: e.stopped, ...state() }; },
       promptRow: () => { const r = agentPromptRows()[0]; return { group: r.group, label: r.label, hint: r.hint, disabled: !!r.disabled }; },
-      // the row that sends has to name the machine: the tick is inside a list ⌘↩ from the editor never visits
-      runsOn: () => { agentHosts = [{ id: 'local', title: 'This Mac' }, { id: 'h1', title: 'Donut' }];
+      // the row that sends has to name the agent: the tick is inside a list ⌘↩ from the editor never visits
+      runsOn: () => {
         const here = agentPromptRows()[0].label;
-        agentPromptRows().find((r) => r.label === 'Donut').run();
+        agentPromptRows().find((r) => r.label === 'Codex').run();
         const there = agentPromptRows()[0].label;
-        agentHost = 'local'; // put the page back as it was, so the assignment below is the one the rest expects
         return { here, there }; },
+      sentTo: () => sent.agent,
       refuse: (value) => { refuse = value; },
       // the badge as a way in: linked opens that node's task, pending has nowhere to go
-      badge: (linked) => { if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const el = codexBadgeEl(DOC); return { role: el.attrs.role, label: el.attrs['aria-label'], tabIndex: el.tabIndex, hasClick: typeof el.onclick === 'function' }; },
+      badge: (linked) => { if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const el = agentBadgeEl(DOC); return { role: el.attrs.role, label: el.attrs['aria-label'], tabIndex: el.tabIndex, hasClick: typeof el.onclick === 'function' }; },
       // a finished task still shows its thread, but quietly: the badge class says so, and the stylesheet greys it out
-      badgeWhenDone: (done) => { const el = codexBadgeEl(DOC, done); return { className: el.className, label: el.attrs['aria-label'], role: el.attrs.role, hasClick: typeof el.onclick === 'function' }; },
+      badgeWhenDone: (done) => { const el = agentBadgeEl(DOC, done); return { className: el.className, label: el.attrs['aria-label'], role: el.attrs.role, hasClick: typeof el.onclick === 'function' }; },
       // the row it is drawn beside is the source: a view cache elsewhere must not decide what this row shows
-      badgeFromStaleCache: (done) => { palDoc.done = done ? 1 : 0; const el = codexBadgeEl(DOC, false); palDoc.done = 0; return el.className; },
+      badgeFromStaleCache: (done) => { palDoc.done = done ? 1 : 0; const el = agentBadgeEl(DOC, false); palDoc.done = 0; return el.className; },
       // "Go to Codex task" is offered only where both halves hold: assigned now, and a task id known for it
-      goRow: (assigned, linked) => { if (assigned) codexIds.add(DOC); else codexIds.delete(DOC); if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const r = paletteRows('').find((row) => row.rank === 'codexOpen'); return r ? r.label : null; },
-      // where the task runs decides whether there is a way in at all
-      onHost: (host) => { codexIds.add(DOC); agentStates.set(DOC, 'working'); if (host) agentTaskHosts.set(DOC, host); else agentTaskHosts.delete(DOC); agentHosts = [{ id: 'h1', title: 'Donut' }];
-        const row = paletteRows('').find((r) => r.rank === 'codexOpen'); const el = codexBadgeEl(DOC);
-        return { row: row ? row.label : null, disabled: !!(row && row.disabled), role: el.attrs.role, label: el.attrs['aria-label'] }; },
-      pressBadge: async (viaKey) => { openedTasks.length = 0; const el = codexBadgeEl(DOC); const e = { key: 'Enter', preventDefault() {}, stopPropagation() {} }; if (viaKey) el.onkeydown(e); else el.onclick(e); await tick(); return [...openedTasks]; },
+      goRow: (assigned, linked) => { if (assigned) agentIds.add(DOC); else agentIds.delete(DOC); if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const r = paletteRows('').find((row) => row.rank === 'codexOpen'); return r ? r.label : null; },
+      // whose task it is decides where the way in goes: a Tana chat opens here, a Codex task in Codex
+      onAgent: async (agent, taskId) => { agentIds.add(DOC); agentStates.set(DOC, 'working'); agentTasks.set(DOC, { agent, taskId }); openedTasks.length = 0; wentTo.length = 0;
+        const row = paletteRows('').find((r) => r.rank === 'codexOpen'); row.run(); await tick();
+        return { row: row.label, opened: [...openedTasks], wentTo: [...wentTo] }; },
+      pressBadge: async (viaKey) => { openedTasks.length = 0; const el = agentBadgeEl(DOC); const e = { key: 'Enter', preventDefault() {}, stopPropagation() {} }; if (viaKey) el.onkeydown(e); else el.onclick(e); await tick(); return [...openedTasks]; },
       // ⇥ from the editor to the model rows and back, with the rows driven by the keys the list answers to
       where: () => (focusedEl.el ? focusedEl.el.name : null),
       tab: () => { palRows = agentPromptRows(); agentPromptKey(key('Tab')); return { focus: focusedEl.el && focusedEl.el.name, group: palRows[palIndex] && palRows[palIndex].group, label: palRows[palIndex] && palRows[palIndex].label }; },
-      rows: (name) => { const handled = agentRowsKey(key(name)); return { handled, focus: focusedEl.el && focusedEl.el.name, label: palRows[palIndex] && palRows[palIndex].label, model: agentModel }; },
-      zoomInto: (id) => { zoom = id ? { docId: id, nodeId: null } : null; renders.length = 0; codexHeader(); return state(); },
+      rows: (name) => { const handled = agentRowsKey(key(name)); return { handled, focus: focusedEl.el && focusedEl.el.name, label: palRows[palIndex] && palRows[palIndex].label, agent: agentPick }; },
+      zoomInto: (id) => { zoom = id ? { docId: id, nodeId: null } : null; renders.length = 0; agentHeader(); return state(); },
     });
   `);
   return (async () => {
@@ -5458,17 +5463,17 @@ function runCodexAssignCheck() {
     assert.deepEqual(blankSubmit.sent, [], '⌘↩ on whitespace assigns nothing');
     api.type('  Draft the release notes\nthen tell me  ');
     assert.equal(plain(api.promptRow()).disabled, false, 'with something to send, the row is live');
-    // Reported: a task meant for Donut ran on this Mac. The choice was only ever a tick beside a host row, and ⌘↩
-    // from the editor never went near that list, so the destination was invisible at the moment of sending.
+    // The agent is named on the row that sends: ⌘↩ from the editor never goes near the list the tick is in.
     const where = plain(api.runsOn());
-    assert.equal(where.here, 'Assign to Agent on This Mac', 'the row that sends names the machine that will take it');
-    assert.equal(where.there, 'Assign to Agent on Donut', 'and follows the chosen host, so the destination is read where the press happens');
+    assert.equal(where.here, 'Assign to Tana', 'the row that sends names the default agent, which is where the page starts');
+    assert.equal(where.there, 'Assign to Codex', 'and follows the agent chosen, so the destination is read where the press happens');
     const newline = plain(await api.submitKey('Enter', false));
     assert.equal(newline.handled, false, 'a plain ↩ is left to the editor, so it adds a line');
     assert.deepEqual(newline.sent, [], 'and sends nothing');
     const sent = plain(await api.submitKey('Enter', true));
     assert.deepEqual(sent.sent, [[CODEX_DOC, true, 'Draft the release notes\nthen tell me']],
       '⌘↩ stores the prompt, trimmed at the ends and otherwise as typed, and assigns in the same call');
+    assert.equal(api.sentTo(), 'codex', 'to the agent the page chose');
     assert.equal(sent.assigned, true, 'the local mark follows at once rather than waiting for a re-read');
     assert.equal(sent.badges.length, 1, 'the row gains one badge');
     // An assignment whose Codex task has not registered itself yet is pending, in words as well as in colour: the
@@ -5519,19 +5524,19 @@ function runCodexAssignCheck() {
     assert.equal(refused.assigned, false, 'a write the document refuses assigns nothing');
     assert.equal(refused.badges.length, 0, 'and leaves no badge claiming a handoff that did not happen');
     assert.deepEqual(refused.errors, ['This node is read-only in the outliner'], 'the reason is shown rather than swallowed');
-    // ⇥ reaches the model picker without leaving the keyboard, and ⇥ again gives the caret back.
+    // ⇥ reaches the agent list without leaving the keyboard, and ⇥ again gives the caret back.
     api.refuse(false);
     await api.pressRow();
     api.type('Summarise this');
     const crossed = plain(api.tab());
-    assert.equal(crossed.focus, 'rows', 'Tab moves from the editor to the model rows');
-    assert.equal(crossed.group, 'Model for this task', 'landing on the models rather than the submit row');
-    assert.equal(crossed.label, 'Codex default', 'starting at the default');
+    assert.equal(crossed.focus, 'rows', 'Tab moves from the editor to the agent rows');
+    assert.equal(crossed.group, 'Agent', 'landing on the agents rather than the submit row');
+    assert.equal(crossed.label, 'Tana', 'starting at the first, Tana');
     const moved = plain(api.rows('ArrowDown'));
     assert.equal(moved.handled, true, 'the rows answer the arrows themselves');
-    assert.equal(moved.label, 'gpt-5.6-sol', 'so a model can be reached');
+    assert.equal(moved.label, 'Codex', 'so another agent can be reached');
     const chosen = plain(api.rows('Enter'));
-    assert.equal(chosen.model, 'gpt-5.6-sol', 'Enter chooses it for this assignment');
+    assert.equal(chosen.agent, 'codex', 'Enter chooses it for this assignment');
     assert.equal(chosen.focus, 'rows', 'and the list keeps the keyboard, so another can be tried');
     const returned = plain(api.rows('Tab'));
     assert.equal(returned.focus, 'editor', 'Tab again goes back to what you were writing');
@@ -5561,16 +5566,12 @@ function runCodexAssignCheck() {
     assert.equal(api.goRow(false, true), null, 'an unassigned node does not, however stale the status map is');
     assert.equal(api.goRow(true, false), null, 'nor does an assigned node whose task is not known yet');
     assert.equal(api.goRow(false, false), null, 'and a node with neither says nothing');
-    // A task on this machine can be opened; one on another machine says where it is instead of pretending.
-    const here = plain(api.onHost('local'));
-    assert.equal(here.row, 'Go to Codex task', 'a local task offers the way in');
-    assert.equal(here.disabled, false);
-    assert.equal(here.role, 'button', 'and its badge is a button');
-    const away = plain(api.onHost('h1'));
-    assert.equal(away.row, 'Codex task is on Donut', 'a task elsewhere names its machine');
-    assert.equal(away.disabled, true, 'and cannot be run, because there is no route from here');
-    assert.equal(away.role, 'img', 'its badge is not a button either');
-    assert.match(away.label, /on Donut$/, 'but it says where the work is, for anyone not seeing the colour');
+    // A Codex task opens in Codex, through main; a Tana chat opens here, in Orbital.
+    const inCodex = plain(await api.onAgent('codex', '01a0b379-afbc-74c3-a191-c419e6543bcc'));
+    assert.deepEqual([inCodex.row, inCodex.opened, inCodex.wentTo], ['Go to Codex task', [CODEX_DOC], []], 'a Codex task is opened by main, by node');
+    const inTana = plain(await api.onAgent('tana', 'tana:chat:01examplec0000000000000000'));
+    assert.deepEqual([inTana.row, inTana.opened, inTana.wentTo], ['Go to Tana task', [], ['tana:chat:01examplec0000000000000000']], 'a Tana task is its chat, opened in this window');
+    api.onAgent('codex', '01a0b379-afbc-74c3-a191-c419e6543bcc');
     // Zoomed into the node itself: the same badge, from the same element, beside the title. It goes on and comes off
     // as the assignment does, patched in place for the same reason the row's badge is.
     api.refuse(false);
@@ -6865,26 +6866,26 @@ async function runHomeCheck() {
 // filled asynchronously and is still empty when the first load runs. Main knows the links; the renderer must ask.
 function runAgentStatusBootCheck() {
   // Asked at boot, not per list reload: reloads come in bursts, and each status read starts a Codex app-server child
-  assert.match(source, /^loadAgentStates\(\);/m, 'the page asks what each linked Codex task is doing once as it loads');
+  assert.match(source, /^loadAgentStates\(\);/m, 'the page asks what each linked agent task is doing once as it loads');
   assert.doesNotMatch(functionSource('loadRoots'), /loadAgentStates/, 'and a reload of the lists does not ask again');
   const api = vm.runInNewContext(`
     const asked = [];
-    const codexIds = new Set(); // still empty: loadCodex has not answered yet, which is the boot order
-    const agentStates = new Map(), agentTaskHosts = new Map();
+    const agentIds = new Set(); // still empty: loadAgentIds has not answered yet, which is the boot order
+    const agentStates = new Map(), agentTasks = new Map();
     const renderSoon = () => {};
     const showError = () => {};
     const tana = {
-      codexStatus: async () => { asked.push('status'); return { 'tana:text:01examplea0000000000000000': 'working' }; },
-      codexTaskHosts: async () => { asked.push('hosts'); return { 'tana:text:01examplea0000000000000000': 'local' }; },
+      agentStatus: async () => { asked.push('status'); return { 'tana:text:01examplea0000000000000000': 'working' }; },
+      agentTasks: async () => { asked.push('tasks'); return { 'tana:text:01examplea0000000000000000': { agent: 'codex', taskId: 't1' } }; },
     };
     ${functionSource('loadAgentStates')}
-    ({ boot: async () => { loadAgentStates(); for (let i = 0; i < 5; i++) await Promise.resolve(); return { asked: [...asked], states: [...agentStates], hosts: [...agentTaskHosts] }; } });
+    ({ boot: async () => { loadAgentStates(); for (let i = 0; i < 5; i++) await Promise.resolve(); return { asked: [...asked], states: [...agentStates], hosts: [...agentTasks] }; } });
   `);
   return (async () => {
     const after = plain(await api.boot());
-    assert.deepEqual(after.asked, ['status', 'hosts'], 'the status is asked for on load, even before the assigned ids have arrived');
+    assert.deepEqual(after.asked, ['status', 'tasks'], 'the status is asked for on load, even before the assigned ids have arrived');
     assert.deepEqual(after.states, [['tana:text:01examplea0000000000000000', 'working']], 'so a linked task is not grey after a reload');
-    assert.deepEqual(after.hosts, [['tana:text:01examplea0000000000000000', 'local']], 'and the machine it runs on is known with it');
+    assert.deepEqual(after.hosts, [['tana:text:01examplea0000000000000000', { agent: 'codex', taskId: 't1' }]], 'and whose task it is is known with it');
   })();
 }
 
@@ -7536,32 +7537,32 @@ async function runSettingsReadOrderCheck() {
     let zoom = { docId: SETTINGS_PAGE }, draws = 0, chatgptAuthLoading = null;
     const answers = [];
     const ask = (name) => () => new Promise((resolve) => answers.push({ name, resolve }));
-    const tana = { aiOptions: ask('ai'), codexHosts: ask('hosts'), filters: ask('hidden') };
+    const tana = { aiOptions: ask('ai'), filters: ask('hidden') };
     const refreshChatGPTStatus = () => {}, renderSoon = () => { draws++; };
     ${sourceLine('let settingsAI')}
     ${functionSource('settingsRefresh')}
     ${functionSource('settingsLoad')}
-    ({ load: () => settingsLoad(), refresh: () => settingsRefresh(), answers, state: () => ({ ai: settingsAI, hosts: settingsHosts, hidden: settingsHidden }) });
+    ({ load: () => settingsLoad(), refresh: () => settingsRefresh(), answers, state: () => ({ ai: settingsAI, hidden: settingsHidden }) });
   `);
   const first = api.load();
   api.refresh(); // a setting arrived while the first read is out
   const second = api.load();
-  assert.equal(api.answers.length, 6, 'the refresh started a second read');
-  const answer = (from, ai, hosts, hidden) => { api.answers[from].resolve(ai); api.answers[from + 1].resolve(hosts); api.answers[from + 2].resolve(hidden); };
-  answer(3, { model: 'gpt-5.6-sol' }, [{ id: 'new' }], ['New']);
+  assert.equal(api.answers.length, 4, 'the refresh started a second read');
+  const answer = (from, ai, hidden) => { api.answers[from].resolve(ai); api.answers[from + 1].resolve(hidden); };
+  answer(2, { model: 'gpt-5.6-sol' }, ['New']);
   await second;
-  answer(0, { model: 'gpt-5.6-luna' }, [{ id: 'old' }], ['Old']);
+  answer(0, { model: 'gpt-5.6-luna' }, ['Old']);
   await first;
-  assert.deepEqual(JSON.parse(JSON.stringify(api.state())), { ai: { model: 'gpt-5.6-sol' }, hosts: [{ id: 'new' }], hidden: ['New'] }, 'the newer read stands: the older one landing last is dropped');
+  assert.deepEqual(JSON.parse(JSON.stringify(api.state())), { ai: { model: 'gpt-5.6-sol' }, hidden: ['New'] }, 'the newer read stands: the older one landing last is dropped');
   assert.equal(api.load(), undefined, 'and nothing is read again until the next refresh');
 }
 async function runSettingsElsewhereCheck() {
   const api = vm.runInNewContext(`
     ${sourceLine('const themeChoice')}
-    let handler = null, home = null, themePref = 'light', sensitiveLoading = null, mcpHidden = false, codexLoading = null, zoom = null, view = 'library';
-    let listed = 0, codexReads = 0, stateReads = 0, stored = {}, codexIds = new Set(), marks = [], hosts = {};
-    const agentTaskHosts = new Map();
-    const tana = { onSettings: (cb) => { handler = cb; }, viewFilter: async (id) => stored[id], codexTaskHosts: async () => hosts };
+    let handler = null, home = null, themePref = 'light', sensitiveLoading = null, mcpHidden = false, agentLoading = null, zoom = null, view = 'library';
+    let listed = 0, codexReads = 0, stateReads = 0, stored = {}, agentIds = new Set(), marks = [], hosts = {};
+    const agentTasks = new Map();
+    const tana = { onSettings: (cb) => { handler = cb; }, viewFilter: async (id) => stored[id], agentTasks: async () => hosts };
     const views = [{ id: 'library' }, { id: 'inbox' }];
     const filters = new Map([['library', { states: ['open'] }], ['inbox', { states: ['proposed'] }]]);
     const notifyById = new Map([['tana:text:a', { on: false }]]);
@@ -7570,8 +7571,9 @@ async function runSettingsElsewhereCheck() {
     const renderSoon = () => {}, showError = (e) => { throw e; }, showTheme = () => {}, loadSensitive = async () => {}, refreshSensitive = () => {};
     const widenFilter = (id, f) => f, loadView = () => { listed++; };
     const railClosed = new Set(); // the sidebar's, which applySettings reads again too
-    const loadCodex = () => { codexReads++; codexIds = new Set(marks); return (codexLoading = Promise.resolve()); };
-    const loadAgentStates = () => { stateReads++; agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts)) agentTaskHosts.set(id, host); };
+    const loadAgentIds = () => { codexReads++; agentIds = new Set(marks); return (agentLoading = Promise.resolve()); };
+    const loadAgentStates = () => { stateReads++; agentTasks.clear(); for (const [id, host] of Object.entries(hosts)) agentTasks.set(id, host); };
+    let agentListReads = 0; const loadAgentList = () => { agentListReads++; };
     ${functionSource('loadFilters')}
     ${functionSource('applySettings')} // the handler is a named function since the page also calls it after catchUpSettings
     ${sourceBetween('if (tana.onSettings) tana.onSettings(', 'if (tana.onSystemTheme)')}
@@ -7586,7 +7588,7 @@ async function runSettingsElsewhereCheck() {
   await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } });
   assert.deepEqual([api.state().listed, api.state().stateReads], [1, 1], 'a settings change that leaves this view’s filter and the marks alone lists nothing and starts no Codex read');
   // Another machine writes the mark first and the task it became later: the second change moves only the task
-  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } }, ['tana:text:a'], { 'tana:text:a': 'local' });
+  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } }, ['tana:text:a'], { 'tana:text:a': { agent: 'codex', taskId: 't1' } });
   assert.equal(api.state().stateReads, 2, 'a task that arrives after its mark reads the state again');
   console.log('ok  settings from another page: view filters, agent marks and watch states follow, and the view is listed again only when its filter moved');
 }
@@ -8042,7 +8044,7 @@ async function runLiveUpdateBurstCheck() {
     const meetingInfos = new Map(); // no meeting page open here
     const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
     const patchDoc = async (id) => { patched.push(id); }, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
-    const agentStates = new Map([['tana:text:01j0agent000000000000000000', 'working']]), agentTaskHosts = new Map(), statusReads = [], loadAgentStates = () => statusReads.push(1);
+    const agentStates = new Map([['tana:text:01j0agent000000000000000000', 'working']]), agentTasks = new Map(), statusReads = [], loadAgentStates = () => statusReads.push(1);
     const loadRoots = async () => 'rows'; // a resolved value, which is what .then(renderSoon) hands the queue
     const showError = (error) => { throw error; };
     const tana = { onChanged: (fn) => { listener = fn; } };
@@ -8269,7 +8271,7 @@ async function runDiscussWithCheck() {
   console.log('ok  Discuss with: offered to documents only, the page writes the words as typed, the model reads the title beside it, and refusals keep it open');
 }
 
-// Cmd+K "Classify type": the model weighs the types Set type would offer. A type it is sure of is applied at once; a
+// Cmd+K "Auto-pick type": the model weighs the types Set type would offer. A type it is sure of is applied at once; a
 // less sure answer is the list, every option with its odds and "No type" among them, and the choice is yours.
 async function runClassifyTypeCheck() {
   const DOC = 'tana:text:01j0doc000000000000000000', TYPE_A = 'tana:type:01j0typea00000000000000000', TYPE_B = 'tana:type:01j0typeb00000000000000000';
@@ -8326,7 +8328,7 @@ async function runClassifyTypeCheck() {
   const sure = { current: null, choices: [{ uri: TYPE_A, title: 'Decision Record', hue: 143, p: 0.91 }, { uri: null, title: 'No type', p: 0.06 }, { uri: TYPE_B, title: 'Project', hue: 268, p: 0.03 }] };
 
   // 1. Offered where a type can go — a document or a meeting — and nowhere else.
-  assert.deepEqual(plain(api.row()), { label: 'Classify type', icon: 'sparkle', keepOpen: true }, 'the row wears the glyph of what the model works out');
+  assert.deepEqual(plain(api.row()), { label: 'Auto-pick type', icon: 'sparkle', keepOpen: true }, 'the row wears the glyph of what the model works out');
   api.node({ id: 'tana:event:01j0event00000000000000000', tags: [] });
   assert.ok(api.row(), 'a meeting carries a type too');
   for (const id of ['b12', 'tana:space:01j0space00000000000000000', TYPE_A]) {
@@ -8337,10 +8339,10 @@ async function runClassifyTypeCheck() {
   // 2. Opening asks once and says it is reading; a sure answer is applied, closed and said.
   api.node({ id: DOC, tags: [] });
   api.open();
-  assert.deepEqual(plain([api.mode(), api.state().placeholder, api.asked()]), ['classify', 'Classify type\u2026', [DOC]], 'a page of its own, and one question about this document');
+  assert.deepEqual(plain([api.mode(), api.state().placeholder, api.asked()]), ['classify', 'Auto-pick type\u2026', [DOC]], 'a page of its own, and one question about this document');
   assert.deepEqual(plain(api.page()), [['Reading the document\u2026', '', 'sparkle', true]], 'which says it is working rather than looking finished');
   await api.answer(sure);
-  assert.deepEqual(plain([api.state().written, api.state().closed, api.state().notes]), [[[DOC, TYPE_A]], 1, ['Classified as Decision Record (91%)']],
+  assert.deepEqual(plain([api.state().written, api.state().closed, api.state().notes]), [[[DOC, TYPE_A]], 1, ['Type set to Decision Record (91%)']],
     'a type the model is sure of is set at once, the palette closes, and the note says what and how sure');
 
   // 3. Sure of the type it already has: nothing to write.
@@ -8373,7 +8375,7 @@ async function runClassifyTypeCheck() {
   const renders = api.state().renders;
   await api.answer(sure);
   assert.deepEqual(plain([api.mode(), api.state().written.length, api.state().renders]), ['cmd', 2, renders], 'Escape steps back, and the late answer is dropped');
-  console.log('ok  Classify type: offered where a type goes, a sure answer applied and said, otherwise every option with its odds, "No type" never applied on its own');
+  console.log('ok  Auto-pick type: offered where a type goes, a sure answer applied and said, otherwise every option with its odds, "No type" never applied on its own');
 }
 
 // Cmd+K "Set icon": the row on a type, and the page that searches the Nucleo set built into the app. The set itself

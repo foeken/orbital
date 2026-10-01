@@ -9,7 +9,7 @@ const SETTINGS_PAGE = 'orbital:settings';
 extra.set(SETTINGS_PAGE, { id: SETTINGS_PAGE, text: 'Settings', title: 'Settings', kind: 'document', icon: 'options', editable: false, hasChildren: false, appPage: true });
 // what main answers asynchronously, read again each time the page is drawn after something may have changed it
 // (settingsAsked cleared): the palette closing, a setting arriving from another page or Mac
-let settingsAI = null, settingsHosts = null, settingsHidden = null, settingsAsked = false, settingsRead = 0; // settingsRead: the newest read, the only one whose answer lands
+let settingsAI = null, settingsHidden = null, settingsAsked = false, settingsRead = 0; // settingsRead: the newest read, the only one whose answer lands
 function openSettings() {
   if (zoom?.docId === SETTINGS_PAGE) return;
   run(() => openElsewhere('right', SETTINGS_PAGE)); // a pane to the right; one already open in another pane is focused instead
@@ -26,9 +26,9 @@ function settingsLoad() {
   const mine = ++settingsRead; // a refresh while this read is out starts a newer one, and this answer is then stale
   const read = (call) => (call ? Promise.resolve(call()).catch(() => null) : Promise.resolve(null));
   refreshChatGPTStatus();
-  return Promise.all([read(tana.aiOptions), read(tana.codexHosts), read(tana.filters), chatgptAuthLoading]).then(([ai, hosts, hidden]) => {
+  return Promise.all([read(tana.aiOptions), read(tana.filters), chatgptAuthLoading]).then(([ai, hidden]) => {
     if (mine !== settingsRead) return;
-    settingsAI = ai; settingsHosts = Array.isArray(hosts) ? hosts : null; settingsHidden = Array.isArray(hidden) ? hidden : null;
+    settingsAI = ai; settingsHidden = Array.isArray(hidden) ? hidden : null;
     if (zoom?.docId === SETTINGS_PAGE) renderSoon(true);
   });
 }
@@ -42,7 +42,7 @@ function settingsEl() {
   const act = (text, fn) => button('sact', text, fn);
   const hint = (text) => el('span', 'fhint', text);
   const action = (id) => () => runAction(id);
-  const ai = settingsAI, hosts = (settingsHosts || []).filter((h) => h.id !== 'local'), hidden = settingsHidden || [];
+  const ai = settingsAI, hidden = settingsHidden || [];
   const signedIn = !!chatgptAuth?.signedIn;
   const sections = [
     ['General', [
@@ -53,12 +53,14 @@ function settingsEl() {
     ['Language', tana.translate ? [['language', 'Auto-translate', [chip(translateTo() || 'Off', action('autoTranslate'))]]] : []],
     ['AI', [
       ...(tana.chatgptStatus ? [['chatgpt', 'ChatGPT', [...(chatgptAuth ? [hint(signedIn ? (chatgptAuth.email ? demoText(chatgptAuth.email, 'chatgpt') : 'Signed in') : 'Not signed in')] : []), act(signedIn ? 'Sign out' : 'Sign in', action('chatgpt'))], true]] : []),
-      ...(tana.setOpenAIKey ? [['openaiKey', 'OpenAI API key', [act('Set …', action('openaiKey'))], true]] : []),
+      // only for whoever already has a key, as ⌘K offers Set OpenAI API key (renderer/palette.js): ChatGPT is the way in
+      ...(tana.setOpenAIKey && chatgptAuth?.apiKey ? [['openaiKey', 'OpenAI API key', [act('Set …', action('openaiKey'))], true]] : []),
       ...(ai ? [
         ['brain', 'Model', choices(ai.models.map((m) => [m.replace(/^gpt-[\d.]+-/, '').replace(/^./, (c) => c.toUpperCase()), m === ai.model, () => settingsSetAI('model', m), m]))],
         ['sparkle', 'Thinking', choices(ai.efforts.map((x) => [x[0].toUpperCase() + x.slice(1), x === ai.effort, () => settingsSetAI('effort', x)]))],
       ] : []),
-      ...(tana.codexHosts ? [['host', 'Codex hosts', [...(hosts.length ? hosts.map((h) => chip(h.title)) : [hint('Only this Mac')]), act('Manage …', action('codexHosts'))]]] : []),
+      // the agents that are on (main/agent.js), changed on the same page as ⌘K Choose agents
+      ...(tana.agentList ? [['robot', 'Agents', [...(agentsOn().length ? agentsOn().map((a) => chip(a.label)) : [hint('None')]), act('Choose …', action('agents'))]]] : []),
     ]],
     ['Lists', [
       ...(tana.filters ? [['hiddenItems', 'Hidden titles', [...(hidden.length ? hidden.slice(0, 3).map((p) => chip(demoText(p, 'hidden:' + p))) : [hint('Nothing hidden')]),

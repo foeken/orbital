@@ -61,7 +61,7 @@ if (process.platform === 'darwin') {
   const shipped = (file) => !ignore.test('/' + path.relative(root, file).split(path.sep).join('/'));
   for (const file of [require.resolve('loro-crdt'), path.join(path.dirname(require.resolve('loro-crdt')), 'loro_wasm_bg.wasm'),
     'main.js', 'preload.js', 'canvas-preload.js', 'index.html', 'update.html', 'update.js', 'shell.html', 'shell.js', 'shell.css', 'node_modules/@danfessler/trellis/dist/index.js',
-    'node_modules/@danfessler/trellis/dist/style.css', 'node_modules/@danfessler/trellis/LICENSE.md', 'build/nucleo-ui.json.gz', 'scripts/agent-link.js', 'scripts/codex-host.js', 'scripts/platform-cli.js']) {
+    'node_modules/@danfessler/trellis/dist/style.css', 'node_modules/@danfessler/trellis/LICENSE.md', 'build/nucleo-ui.json.gz', 'main/agents/index.js', 'main/agents/tana.js', 'main/agents/codex.js', 'main/agents/claude.js', 'scripts/platform-cli.js']) {
     assert.ok(shipped(path.resolve(root, file)), file + ' is shipped: the app requires or runs it');
   }
   for (const file of ['node_modules/loro-crdt/web/index.js', 'node_modules/loro-crdt/base64', 'node_modules/loro-crdt/bundler/loro_wasm_bg.wasm',

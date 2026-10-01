@@ -10,7 +10,7 @@ const list = (words) => [W, { js: "setView('library')" }, { wait: 300 },
   { js: "setViewF({ types: ['tasks'], states: null, assignee: 'anyone', completedWithin: 7 })" }, { wait: 500 },
   { js: "setPref('openPills', { ...pref('openPills', {}), library: false }); setGroupBy('status'); filterEl.value = " + JSON.stringify(words) + "; render(true)" },
   { js: HIDE_FILTER },
-  { js: "tana.setCodex('tana:text:mockpin1', true).then(() => { codexLoading = null; return loadCodex(); })" }, { wait: 900 }];
+  { js: "tana.setAgent('tana:text:mockpin1', true).then(() => { agentLoading = null; return loadAgentIds(); })" }, { wait: 900 }];
 const pinTask = (id) => [W, { js: "goTo('tana:text:" + id + "')" }, { wait: 900 }];
 // Quick Add Task is a page main lays over the window (main.js openOverlay): here an iframe of task.html does the same
 const quickAdd = "(() => { const f = document.createElement('iframe'); f.src = 'task.html?theme=' + (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');"
@@ -40,7 +40,6 @@ module.exports = [
     { key: '⌘K' }, { type: 'edit assignees' }, { wait: 300 }, { key: '↩' }, { wait: 500 },
     { type: 'priya' }, { wait: 400 }, { key: '↩' }, { wait: 900 }, { key: 'esc' }, { wait: 1400 }] },
 ];
-
 
 
 

@@ -511,8 +511,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   Add to chat …);
   a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
-  it is (Set type, Classify type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
-  sensitive); the agent (Assign to Agent, Go to Codex task, Link Codex task …, Open in Codex); Edit visibility, Add participants … (Edit
+  it is (Set type, Auto-pick type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
+  sensitive); the agents (Assign to Agent, Go to <agent> task, Link <agent> task …, Open in <agent>, one of each for every agent that is on); Edit visibility, Add participants … (Edit
   visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
@@ -533,8 +533,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings page: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
-  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
-  key. **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
+  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, ChatGPT sign-in, Set OpenAI API
+  key (only while a key is stored). **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
   not affiliated with Tana (renderer/palette.js `openAboutPalette`, the same words as the README's License section).
@@ -557,7 +557,7 @@ one.
 
 **Pages.** A row that opens a page of its own (`keepOpen`) goes through `openPage`/`showPage`, which lets go of what
 the last page left behind and takes the new page's rows and back step; Escape (`backPalette`) goes where the page says:
-the command page, or for a page opened from elsewhere, the page that opened it. The pages are described with their features: Set type, Classify type, Set icon, Set colour,
+the command page, or for a page opened from elsewhere, the page that opened it. The pages are described with their features: Set type, Auto-pick type, Set icon, Set colour,
 Discuss with (§11); Edit pins, Pin to date, Pin to meeting (§9); Recently deleted, Archived types (§14); Change time /
 location, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
 
@@ -712,13 +712,13 @@ wrong twenty.
   a type applies to documents or to meetings; a space's type only goes on a document in that space, a Library type on
   anything. Its choices also fold into Cmd+K as "Set type to …" (`subAlways`). **Remove type** (`removeType`, only on a
   typed node, hinted with the type) is the removal without the page.
-- **Classify type** (`classifyType`) lets the model choose from the same list. Main reads each selectable type's own
+- **Auto-pick type** (`classifyType`) lets the model choose from the same list. Main reads each selectable type's own
   document for its `description` and `instructions` (`typeCandidates`, main/documents.js) and sends them, numbered,
   with the document's title and text (a meeting's calendar description in place of its empty content) to
   `ai.classifyType` (main/ai.js), which answers the odds of every option, No type among them, most likely first:
   `{ current, choices: [{ uri | null, title, hue, p }] }`. While it reads the page says "Reading the document…" under
   the breathing sparkle. At 80% or more (`CLASSIFY_SURE`) for a type, it is set at once, the palette closes and a note
-  says "Classified as Decision Record (91%)" ("Already …" and no write when it has it). Otherwise the page lists every
+  says "Type set to Decision Record (91%)" ("Already …" and no write when it has it). Otherwise the page lists every
   option with its odds. No type is never applied on its own. `node scripts/platform-cli.js classify <id...>` prints the
   odds and writes nothing; a type's description and AI instructions in Tana are how its answers improve.
 - **Set icon** (`setIcon`, on a type or a saved search, #521) gives a saved search a glyph of its own (its row, its page,
@@ -760,21 +760,29 @@ wrong twenty.
   workspace's members (`nameSegments`): each member found becomes a mention of their profile, keeping the words as the
   label. Whole words only, counted in letters; the longest name wins; a first name two members share is not a match;
   nobody is referenced twice; no match or no member list writes the plain string.
-- **The model.** `main/ai.js` is the only place the app talks to a model. A signed-in ChatGPT account (Cmd+K Sign in
-  with ChatGPT / Sign out of ChatGPT, with the account status) takes priority; the local OpenAI API key (Set OpenAI API
-  key) is the fallback. Both stay on this machine. ChatGPT sign-in uses the Codex app-server in its own auth directory
-  under userData, separate from the user's Codex login, from this Mac's `codex` (`codexBin` in main/agent.js) or,
+- **The model.** `main/ai.js` is the only place the app talks to a model. Sign in with ChatGPT (Cmd+K Sign in
+  with ChatGPT / Sign out of ChatGPT, with the account status) is the way in (issue #669). An OpenAI API key stored before
+  then still works as the fallback, and Cmd+K offers **Set OpenAI API key** only while one is stored: an empty field on
+  that page clears it, and the row goes. Both stay on this machine. ChatGPT sign-in uses the Codex app-server in its own auth directory
+  under userData, separate from the user's Codex login, from this Mac's `codex` (`codexBin` in main/agents/codex.js) or,
   failing that, a standalone `codex-app-server` downloaded on first sign-in and kept only when `codesign` shows
   OpenAI's Developer ID. The model and effort are the synced settings `aiModel` and `aiEffort`, defaulting to
   `gpt-5.6-terra` with low reasoning (main/ai.js), with no UI.
-- **The agent** (main/agent.js, renderer/agent.js). **Assign to Agent** asks what the agent should do (a prompt page)
-  and hands the node to a new Codex task through Codex's deep link; the task registers itself back with
-  scripts/agent-link.js, so the node is pending until it does. The node then carries the agent badge, which says what
-  the task is doing, read every 30 s while anything is assigned. **Unassign from Agent** takes it back at once. **Go to
-  Codex task** opens it (or says which machine it is on, from the synced `codexTask` record), **Link Codex task …**
-  links a task that already exists, **Open in Codex** opens a new Codex task with the node's link and tracks nothing,
-  and **Manage Codex hosts** lists the machines a task can run on. Assign to Agent and Open in Codex need a real Codex
-  install.
+- **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
+  **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
+  attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
+  Codex's app-server) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
+  Orbital never signs in to Anthropic). Codex and Claude are offered only once this Mac has them. **Choose agents …**
+  (Settings) lists all three, greyed with what to install when missing: ↩ switches one on or off, and the second group
+  picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
+  **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
+  default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
+  badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session
+  lives only on the Mac that ran it, names that Mac in its link and reads **Agent on another Mac** (grey, not a button)
+  anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). **Unassign from Agent** takes it
+  back at once. **Go to <agent> task** opens it (Codex in Codex, Claude in Terminal on `claude --resume`, Tana's chat
+  here), **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
+  node's link and tracks nothing. Every task runs on this Mac.
 
 - **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
   (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is
@@ -1098,12 +1106,12 @@ app page too, known and remembered the same way, but it has no rows: the rendere
   in a pane to the right (`openElsewhere('right')`); one already on screen in another pane is focused instead. The page
   draws no rows and asks main for no children (renderer/render.js): it is sections of field rows (`.fields`), each a
   glyph, a grey label and its value, and only lasting choices are on it — General (Theme: Light, Dark, System; Home, set
-  with ⌘K Set as Home), Language (Auto-translate), AI (ChatGPT sign-in and the OpenAI API key, marked **This Mac**; Model
+  with ⌘K Set as Home), Language (Auto-translate), AI (ChatGPT sign-in and, only while one is stored, the OpenAI API key, marked **This Mac**; Model
   Luna/Terra/Sol and Thinking Low/Medium/High, the synced `aiModel`/`aiEffort` over `ai:options`/`ai:setOption`,
-  which take only main/ai.js's own lists; Codex hosts) and Lists (hidden titles, Show MCP chats). A control changes its
+  which take only main/ai.js's own lists; Agents, the ones that are on, over `agentList`) and Lists (hidden titles, Show MCP chats). A control changes its
   setting the way its Cmd+K row does, mostly by running that row (`runAction`: Auto-translate, ChatGPT, the API key,
-  Codex hosts and hidden titles open their palette pages). The page reads its values again when the palette closes,
-  when a setting arrives from another page or Mac (hosts edited elsewhere announce themselves too), on a global refresh
+  Choose agents and hidden titles open their palette pages). The page reads its values again when the palette closes,
+  when a setting arrives from another page or Mac, on a global refresh
   (hidden titles edited elsewhere) and when the ChatGPT status changes; only the newest read lands, and a redraw gives
   the keyboard back to the control that had it (drawSettings). Text size, shortcuts, the
   sensitive eye and demo mode keep their own keys and rows and are not on it.
