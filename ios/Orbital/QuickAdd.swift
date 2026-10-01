@@ -20,6 +20,9 @@ struct QuickAdd: View {
     @State private var failure: String?
     @FocusState private var focused: Bool
     @State private var dictation = Dictation()
+    @State private var fields: [Engine.Field] = [] // the chosen type's, to set before adding
+    @State private var values: [String: Engine.Value] = [:] // field key -> what is set in it
+    @State private var assignee: Engine.Member? // whom a task is for; nil: you
 
     var body: some View {
         NavigationStack {
@@ -48,6 +51,15 @@ struct QuickAdd: View {
                 } header: { Text("Type") } footer: {
                     if let preset, type == preset.uri, !preset.fields.isEmpty { Text("With the " + (preset.fields.count == 1 ? "value" : "values") + " this saved search sets.") }
                 }
+                // Details: whom a task is for, and the chosen type's fields, a saved search's values already in them
+                if isTask || !fields.isEmpty {
+                    Section {
+                        if isTask {
+                            NavigationLink { Choices(title: "Assign to", none: "You", load: people) { assignee = $0 } } label: { LabeledContent("Assigned to", value: assignee?.name ?? "You") }
+                        }
+                        ForEach(fields) { fieldRow($0) }
+                    } header: { Text("Details") }
+                }
                 Section {
                     PhotosPicker(selection: $photo, matching: .images) { Label("Process image from Photos", systemImage: "photo") }
                     if UIPasteboard.general.hasImages {
@@ -72,6 +84,10 @@ struct QuickAdd: View {
                 }
             }
             .onSubmit { Task { await add() } }
+            .task(id: type) { // the chosen type's fields, with the saved search's values when it is its type
+                fields = if let type { await engine.typeFields(type) } else { [] }
+                values = preset?.uri == type ? preset?.fields ?? [:] : [:]
+            }
             .task {
                 if let image = shared?.image { await process(image); return }
                 if title.isEmpty, let text = shared?.text { title = text }
@@ -91,6 +107,50 @@ struct QuickAdd: View {
         }
     }
 
+    // a task is assigned; a document of a type without a workflow (a Goal) is not
+    private var isTask: Bool { type.flatMap { t in types.first { $0.uri == t } }?.task != false }
+    private func people(_ query: String) async -> [Engine.Member] {
+        let all = await engine.members().sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return query.isEmpty ? all : all.filter { $0.name.localizedStandardContains(query) }
+    }
+
+    // One field, by its kind: a choice from its options, words, a day, or a person or node picked from a list
+    @ViewBuilder private func fieldRow(_ f: Engine.Field) -> some View {
+        let value = values[f.key]
+        switch f.kind {
+        case "options":
+            Picker(f.title, selection: Binding { value?.text ?? "" } set: { values[f.key] = $0.isEmpty ? nil : Engine.Value(text: $0) }) {
+                Text("None").tag("")
+                ForEach(f.options, id: \.self) { Text($0).tag($0) }
+            }
+            .pickerStyle(.menu).tint(.secondary)
+        case "text":
+            TextField(f.title, text: Binding { value?.text ?? "" } set: { values[f.key] = $0.isEmpty ? nil : Engine.Value(text: $0) })
+        case "date":
+            if let day = value?.ref.flatMap(Self.day) {
+                HStack {
+                    DatePicker(f.title, selection: Binding { day } set: { values[f.key] = Engine.Value(ref: Self.uri($0)) }, displayedComponents: .date)
+                    Button { values[f.key] = nil } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }.buttonStyle(.plain).accessibilityLabel("Clear " + f.title)
+                }
+            } else {
+                Button { values[f.key] = Engine.Value(ref: Self.uri(.now)) } label: { LabeledContent(f.title, value: "None") }
+            }
+        default: // a person or a link
+            NavigationLink { Choices(title: f.title, none: "None", load: { await engine.fieldChoices(f.key, $0) }) { values[f.key] = $0.map { Engine.Value(ref: $0.id, label: $0.name) } } } label: {
+                LabeledContent(f.title, value: value?.label ?? "None")
+            }
+        }
+    }
+    // a day as Tana mentions one (sdk/dates.js): tana:plaindate:YYYY-MM-DD, in this phone's calendar
+    private static func uri(_ date: Date) -> String {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "tana:plaindate:%04d-%02d-%02d", c.year!, c.month!, c.day!)
+    }
+    private static func day(_ uri: String) -> Date? {
+        let parts = uri.replacingOccurrences(of: "tana:plaindate:", with: "").split(separator: "-").compactMap { Int($0) }
+        return parts.count == 3 ? Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) : nil
+    }
+
     // dictated words land after what the title already says
     private func append(_ said: String) { title = title.isEmpty ? said : title + " " + said }
 
@@ -104,7 +164,7 @@ struct QuickAdd: View {
         let words = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { working = nil; return }
         working = "Adding…"
-        do { _ = try await engine.createTask(words, type: type, search: search); dismiss() } catch { failure = error.localizedDescription }
+        do { _ = try await engine.createTask(words, type: type, search: search, assignee: assignee?.id, values: values); dismiss() } catch { failure = error.localizedDescription }
         working = nil
     }
 
@@ -196,5 +256,33 @@ struct Shared: Identifiable {
         let text = board.data(forPasteboardType: "com.dreetje.orbital.text").map { String(decoding: $0, as: UTF8.self) }
         board.items = [] // taken once
         return image != nil || text?.isEmpty == false ? Shared(text: text, image: image) : nil
+    }
+}
+
+// A person or a node to pick, searchable: Quick Add's Assigned to and its person and link fields. none is the row that
+// leaves it unset (You, for whom a task is for). The list is asked again as you type.
+struct Choices: View {
+    let title: String
+    let none: String
+    let load: (String) async -> [Engine.Member]
+    let pick: (Engine.Member?) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var items: [Engine.Member] = []
+
+    var body: some View {
+        List {
+            if query.isEmpty { Button(none) { pick(nil); dismiss() } }
+            ForEach(items) { item in Button(item.name) { pick(item); dismiss() } }
+        }
+        .tint(.primary)
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: query) {
+            if !query.isEmpty { try? await Task.sleep(for: .milliseconds(250)) } // asked once typing pauses
+            guard !Task.isCancelled else { return }
+            items = await load(query)
+        }
     }
 }

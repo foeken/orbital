@@ -249,15 +249,26 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Quick Add Task (QuickAdd.swift): the types to pick from, a task made with one, an image made into a task or a note
     struct TaskType: Decodable, Identifiable { let uri: String?; let title: String; var task: Bool? = true; var id: String { uri ?? "" } }
     // a saved search's: the type its rows are and how many of their fields it sets (orbital.searchPreset)
-    struct Preset: Decodable { let uri: String; let title: String; let task: Bool; let fields: [String: [String: String]] }
+    struct Preset: Decodable { let uri: String; let title: String; let task: Bool; let fields: [String: Value] }
+    // Quick Add's fields of a type (orbital.typeFields), a value set in one, and what a person or link field can take
+    struct Field: Decodable, Identifiable { let key: String; let title: String; let kind: String; let options: [String]; var id: String { key } }
+    struct Value: Decodable, Equatable { var ref: String?; var label: String?; var text: String?
+        var json: [String: String] { ["ref": ref, "label": label, "text": text].compactMapValues { $0 } } }
+    func typeFields(_ type: String) async -> [Field] {
+        Self.isSample ? [] : (try? await call("return await orbital.typeFields(type)", ["type": type])) ?? []
+    }
+    func fieldChoices(_ key: String, _ query: String) async -> [Member] {
+        Self.isSample ? [] : (try? await call("return await orbital.fieldChoices(key, query)", ["key": key, "query": query])) ?? []
+    }
     func searchPreset(_ id: String) async -> Preset? {
         Self.isSample ? nil : (try? await call("return await orbital.searchPreset(id)", ["id": id])) ?? nil
     }
     func taskTypes() async -> [TaskType] {
         Self.isSample ? [] : (try? await call("return await orbital.taskTypes()", [:])) ?? []
     }
-    func createTask(_ title: String, type: String?, search: String? = nil) async throws -> String {
-        let id: String = try await call("return await orbital.createTask(title, type, search)", ["title": title, "type": type ?? NSNull(), "search": search ?? NSNull()])
+    func createTask(_ title: String, type: String?, search: String? = nil, assignee: String? = nil, values: [String: Value] = [:]) async throws -> String {
+        let id: String = try await call("return await orbital.createTask(title, type, search, assignee, values)", ["title": title, "type": type ?? NSNull(), "search": search ?? NSNull(),
+                                                                                                        "assignee": assignee ?? NSNull(), "values": values.mapValues(\.json)])
         await refresh()
         return id
     }

@@ -11,7 +11,8 @@ import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
 import { addMeetingChats, completedInWindow, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
-import { fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
+import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
+import { dateLabel, isDateUri } from '../../sdk/dates';
 import { canDelete, canWrite, everyoneOnly } from '../../sdk/access';
 import { arrange } from './arrange';
 import { S, isSpace, iso, today, visibleGraphNodes } from '../../main/state';
@@ -219,19 +220,29 @@ async function presetOf(searchId) {
     if (refs.length === 1 && !texts.length) fields[key] = { ref: refs[0] };
     else if (texts.length === 1 && !refs.length) fields[key] = { text: texts[0].value };
   }
-  return { ...type, fields };
+  return { ...type, fields: await labelled(fields) };
+}
+// each linked value with the words it shows (a person's name, a day, a node's title) and, for a node, its type, which a
+// link field that takes only some types is written with
+async function labelled(fields) {
+  const refs = Object.values(fields).map((v) => v.ref).filter((u) => u && !/^tana:user-profile:/.test(u) && !isDateUri(u));
+  const nodes = refs.length ? (await S.client.graph.listNodes({ nodeIds: refs, limit: refs.length })).nodes || [] : [];
+  const people = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), found = new Map(nodes.map((n) => [n.id, n]));
+  for (const v of Object.values(fields)) {
+    if (!v.ref) continue;
+    v.label = v.label || people.get(v.ref) || (isDateUri(v.ref) && dateLabel(v.ref)) || (found.get(v.ref) || {}).title || v.ref;
+    if (found.has(v.ref)) v.entityType = found.get(v.ref).entityType;
+  }
+  return fields;
 }
 // those values written into the new document, as main/documents.js setField writes a field: a link with its title, and
 // the type of what it links to where the field only takes some types
 async function presetFields(doc, fields) {
-  const refs = Object.values(fields).map((v) => v.ref).filter((u) => u && !/^tana:user-profile:/.test(u));
-  const nodes = refs.length ? (await S.client.graph.listNodes({ nodeIds: refs, limit: refs.length })).nodes || [] : [];
-  const people = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), found = new Map(nodes.map((n) => [n.id, n]));
+  await labelled(fields);
   for (const [key, v] of Object.entries(fields)) {
     const { typeUri, attribute } = parseKey(key), field = fieldDefinition(await hold(typeUri), attribute);
     if (!field) continue; // no longer on its type
-    const label = v.ref && (people.get(v.ref) || (found.get(v.ref) || {}).title || v.ref);
-    setFieldText(doc, key, v.ref ? [[{ mention: { uri: v.ref, label } }]] : [v.text], { field, typeOf: (uri) => (found.get(uri) || {}).entityType });
+    setFieldText(doc, key, v.ref ? [[{ mention: { uri: v.ref, label: v.label } }]] : [v.text], { field, typeOf: (uri) => (uri === v.ref ? v.entityType : undefined) });
   }
 }
 
@@ -432,14 +443,37 @@ window.orbital = {
   // from a title always is)
   taskTypes: async () => JSON.stringify(await taskTypes()),
   searchPreset: async (searchId) => JSON.stringify(await presetOf(searchId)),
-  // searchId: the saved search Quick Add was opened on; its type, when that is the one chosen, comes with its preset values
-  async createTask(title, typeUri, searchId) {
+  // Quick Add's fields: those of the chosen type you can set from a phone (words, a choice, a day, a person, a link), and
+  // what a person or link field can take: the workspace's people, or the nodes of the types it links to (any node by
+  // its title when it takes any type), as the desktop's field picker lists them (renderer/fields.js linkScope)
+  async typeFields(typeUri) {
+    if (!/^tana:type:/.test(typeUri || '')) return '[]';
+    const kinds = ['text', 'options', 'date', 'member', 'link'];
+    return JSON.stringify(definitions(await hold(typeUri)).filter((d) => d && d.key && kinds.includes(d.type || 'text'))
+      .map((d) => ({ key: typeUri + '?attribute=' + d.key, title: d.title || d.key, kind: d.type || 'text', options: (d.options || []).map((o) => o && o.label).filter(Boolean) })));
+  },
+  async fieldChoices(key, q) {
+    const { typeUri, attribute } = parseKey(key), def = fieldDefinition(await hold(typeUri), attribute);
+    if (!def) return '[]';
+    if (def.type === 'member') return JSON.stringify((await members()).map((m) => ({ id: m.id, name: m.title })));
+    const types = (def.to || []).map((t) => t.uri).filter(Boolean);
+    if (!types.length && !q) return '[]';
+    const { nodes = [] } = await S.client.graph.listNodes({ ...(types.length ? { entityTypes: types } : {}), ...(q ? { textQuery: q } : {}), limit: 100, sortOptions: newest });
+    return JSON.stringify(nodes.map((n) => ({ id: n.id, name: n.title || 'Untitled' })));
+  },
+  // searchId: the saved search Quick Add was opened on; its type, when that is the one chosen, comes with its preset
+  // values. values: what was set in Quick Add's fields ({ key: { ref, label? } | { text } }), over the preset's;
+  // assignee: whom a task is for, yours when none
+  async createTask(title, typeUri, searchId, assignee, values) {
     if (typeof title !== 'string' || !title.trim()) throw new Error('A task needs a title');
     const preset = searchId ? await presetOf(searchId) : null, fromSearch = preset && preset.uri === typeUri;
     const type = typeUri ? (fromSearch ? preset : (await taskTypes()).find((t) => t.uri === typeUri)) : null;
     if (typeUri && !type) throw new Error('A task cannot be made with that type here');
     const { id, doc } = await create(title.trim(), { kind: type && !type.task ? 'doc' : 'task', ...(type ? { entityTypeUri: type.uri, ...(type.ownerUri ? { ownerUri: type.ownerUri } : {}) } : {}) });
-    if (fromSearch) await presetFields(doc, preset.fields);
+    const own = Object.fromEntries(Object.entries(values || {}).filter(([k, v]) => type && k.startsWith(type.uri + '?attribute=') && v && (v.ref || (typeof v.text === 'string' && v.text.trim()))));
+    const fields = values ? own : fromSearch ? preset.fields : {}; // Quick Add sends what it shows, the preset's included
+    if (Object.keys(fields).length) await presetFields(doc, fields);
+    if (assignee && assignee !== S.me.userUri && (!type || type.task)) setAssignees(doc, [assignee], S.me.userUri);
     return JSON.stringify(id);
   },
   // Process image (main.js ai:processImage): what the model read from it (QuickAdd.swift ChatGPT.readImage) made a task
