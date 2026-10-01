@@ -451,6 +451,14 @@ window.orbital = {
     await settings.flush();
     return JSON.stringify(to);
   },
+  // Settings' Model and Thinking: the synced choices the Mac's Settings page writes (main/ai.js setOption), checked against
+  // the same remote list there (QuickAdd.swift / Settings.swift read it); here only that it is a model's or effort's name
+  async aiChoice(key, value) {
+    if (!['model', 'effort'].includes(key) || typeof value !== 'string' || !/^[\w.-]{1,64}$/.test(value)) throw new Error('Not an AI choice');
+    settings.set(key === 'model' ? 'aiModel' : 'aiEffort', value);
+    await settings.flush();
+    return JSON.stringify(true);
+  },
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
     return JSON.stringify({ to: LANGS.includes(to) ? to : null, model: settings.get('aiModel') || null, effort: settings.get('aiEffort') || null,
@@ -534,7 +542,7 @@ window.orbital = {
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'assign', 'share', 'translateTo', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
+for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

@@ -444,20 +444,28 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
 }
 
 // The model and effort every question here asks with (ask above), chosen on the Settings page (renderer/settings.js) and
-// synced. The choices are what this Mac can ask: signed in with ChatGPT, Codex's own model/list on the app-server the
-// questions go through (only what the account may use, each model with the reasoning efforts it takes), read once per
-// sign-in; otherwise the three below. The page is input from outside the process: only listed choices are stored, and a
+// synced. The choices are what the account can ask: signed in with ChatGPT, ChatGPT's own list of Codex models
+// (MODELS_URL, the one the iPhone reads too: ios/Orbital/Translator.swift ChatGPT.models), each with the reasoning efforts it
+// takes, read once per sign-in; otherwise the three below. The page is input from outside the process: only listed choices are stored, and a
 // synced value off the list (an older build's, another Mac's) reads as the default, for the page and every question alike.
 // ponytail: an API key keeps the three below; GET /v1/models when someone uses one
 const EFFORTS = ['low', 'medium', 'high'];
 const BUILT_IN = ['gpt-5.6-luna', DEFAULT_MODEL, 'gpt-6-sol'].map((id) => ({ id, efforts: EFFORTS }));
-let listed = null; // { rpc, list }: the app-server it was read from, so another sign-in reads it again
-async function modelList(userData, signedIn) {
+// client_version decides which models a client is offered: a high one lists every model, and the questions here are plain
+// Responses requests any listed model answers (a Codex of this Mac's version would not yet see gpt-6.1-sol, live 2026-10-01)
+const MODELS_URL = 'https://chatgpt.com/backend-api/codex/models?client_version=99.0.0';
+const fromCatalogue = (json) => (json?.models || []).filter((m) => m && m.slug && m.visibility !== 'hide')
+  .map((m) => ({ id: m.slug, efforts: (m.supported_reasoning_levels || []).map((l) => l?.effort).filter(Boolean) }));
+let listed = null; // { rpc, list }: the app-server whose sign-in it was read with, so another sign-in reads it again
+async function modelList(userData, signedIn, fetchImpl = globalThis.fetch) {
   if (!signedIn) return BUILT_IN;
   const rpc = await ensureChatGPT(userData);
   if (!rpc) return BUILT_IN;
-  if (listed?.rpc !== rpc) listed = { rpc, list: rpc.call('model/list', {}).then((res) => (res?.data || []).filter((m) => m && !m.hidden && (m.id || m.slug))
-    .map((m) => ({ id: m.id || m.slug, efforts: (m.supportedReasoningEfforts || []).map((e) => (typeof e === 'string' ? e : e?.reasoningEffort)).filter(Boolean) }))) };
+  if (listed?.rpc !== rpc) listed = { rpc, list: rpc.call('getAuthStatus', { includeToken: true, refreshToken: false }).then(async ({ authToken } = {}) => {
+    const res = await fetchImpl(MODELS_URL, { headers: { authorization: 'Bearer ' + authToken } });
+    if (!res.ok) throw new Error('model list: HTTP ' + res.status);
+    return fromCatalogue(await res.json());
+  }) };
   const list = await listed.list.catch(() => []);
   if (!list.length) listed = null; // asked again next time
   return list.length ? list : BUILT_IN;
@@ -478,4 +486,4 @@ async function setOption(key, value, userData) {
   return options(userData);
 }
 
-module.exports = { options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };
+module.exports = { fromCatalogue, MODELS_URL, options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };

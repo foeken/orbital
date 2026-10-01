@@ -136,6 +136,26 @@ extension ChatGPT {
         return try JSONDecoder().decode(Out.self, from: data).text
     }
 
+    // The models to choose from: ChatGPT's own list of Codex models, the one the Mac reads too (main/ai.js MODELS_URL, the
+    // same high client_version so every model is listed), each with the thinking levels it takes. nil without a sign-in.
+    struct Model: Identifiable { let id: String; let efforts: [String] }
+    static func models() async throws -> [Model]? {
+        guard let account = try await fresh() else { return nil }
+        var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/codex/models?client_version=99.0.0")!)
+        request.setValue("Bearer " + account.accessToken, forHTTPHeaderField: "authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 { throw Failure(errorDescription: "HTTP \(status)") }
+        struct Out: Decodable { struct M: Decodable { struct L: Decodable { let effort: String }; let slug: String; let visibility: String?; let supported_reasoning_levels: [L]? }; let models: [M] }
+        return try JSONDecoder().decode(Out.self, from: data).models.filter { $0.visibility != "hide" }.map { Model(id: $0.slug, efforts: ($0.supported_reasoning_levels ?? []).map(\.effort)) }
+    }
+    // as the Mac's Settings page names them (renderer/settings.js aiModelLabel): gpt-6-sol Sol 6, gpt-5.5 GPT-5.5
+    static func label(_ id: String) -> String {
+        guard id.hasPrefix("gpt-") else { return id }
+        let parts = id.dropFirst(4).split(separator: "-", maxSplits: 1).map(String.init)
+        return parts.count == 2 ? parts[1].prefix(1).uppercased() + parts[1].dropFirst() + " " + parts[0] : "GPT-" + parts[0]
+    }
+    static func effortLabel(_ effort: String) -> String { effort == "xhigh" ? "Extra high" : effort.prefix(1).uppercased() + effort.dropFirst() }
+
     // Translations by id: id -> { lang, text }, a text already in the language left out. nil without a sign-in.
     static func translate(_ texts: [String], to: String, model: String, effort: String) async throws -> [Int: Translator.Answer]? {
         let input = String(decoding: try JSONSerialization.data(withJSONObject: texts.enumerated().map { ["id": $0.offset + 1, "text": $0.element] }), as: UTF8.self)

@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var chatgpt = ChatGPT.load()
     @State private var signingIn = false
+    @State private var models: [ChatGPT.Model] = [] // the choices for Model, read when signed in
 
     var body: some View {
         NavigationStack {
@@ -20,6 +21,23 @@ struct SettingsView: View {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
                         if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
+                        // the Mac Settings page's Model and Thinking: one synced choice, the same remote list of models
+                        if !models.isEmpty {
+                            let model = engine.translator.model, efforts = models.first { $0.id == model }?.efforts ?? ["low", "medium", "high"]
+                            Picker(selection: Binding { model } set: { id in Task {
+                                await engine.aiChoice("model", id)
+                                let next = models.first { $0.id == id }?.efforts ?? []
+                                if !next.isEmpty, !next.contains(engine.translator.effort) { await engine.aiChoice("effort", next.contains("low") ? "low" : next[0]) }
+                            } }) {
+                                ForEach(models) { Text(ChatGPT.label($0.id)).tag($0.id) }
+                                if !models.contains(where: { $0.id == model }) { Text(ChatGPT.label(model)).tag(model) } // a choice the list no longer has
+                            } label: { Row(glyph: "brain", title: "Model") }
+                            .pickerStyle(.menu).tint(.secondary)
+                            Picker(selection: Binding { engine.translator.effort } set: { x in Task { await engine.aiChoice("effort", x) } }) {
+                                ForEach(efforts, id: \.self) { Text(ChatGPT.effortLabel($0)).tag($0) }
+                            } label: { Row(glyph: "sparkle", title: "Thinking") }
+                            .pickerStyle(.menu).tint(.secondary)
+                        }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
                     }
@@ -49,6 +67,7 @@ struct SettingsView: View {
                 }
             }
             .tint(.primary) // the rows in the text colour, not the accent blue, as the ChatGPT app has them
+            .task(id: chatgpt?.accessToken) { models = chatgpt == nil ? [] : (try? await ChatGPT.models()) ?? [] }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Close")

@@ -251,6 +251,14 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard !Self.isSample else { return }
         do { let _: String? = try await call("return await orbital.translateTo(to)", ["to": to ?? NSNull()]) } catch { translator.use(to: was, model: nil); self.error = error.localizedDescription }
     }
+    // Settings' Model and Thinking: used at once, kept if Tana takes it (orbital.aiChoice), as the Mac's Settings page sets them
+    func aiChoice(_ key: String, _ value: String) async {
+        let was = (translator.model, translator.effort)
+        translator.use(to: translator.to, model: key == "model" ? value : nil, effort: key == "effort" ? value : nil)
+        guard !Self.isSample else { return }
+        do { let _: Bool = try await call("return await orbital.aiChoice(key, value)", ["key": key, "value": value]) }
+        catch { translator.use(to: translator.to, model: was.0, effort: was.1); self.error = error.localizedDescription }
+    }
     func markSensitive(_ id: String, _ on: Bool) async { await act("return await orbital.sensitive(id, on)", ["id": id, "on": on]) }
     // Long press, Assign to …: the task whose picker is open (AssignSheet), the people to pick from, and the one picked
     struct Assigning: Identifiable { let id: String; let current: [String]?; let then: () async -> Void }
