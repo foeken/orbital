@@ -16,15 +16,18 @@ const agent = require('../agent');
 const { S } = require('../state');
 
 const claudeBin = () => agent.findBin('claude', [path.join(os.homedir(), '.claude', 'local', 'claude')]);
+// the binary, or an Orbital error: a synced Claude link can be opened on a Mac without Claude Code
+function needClaude() { const bin = claudeBin(); if (!bin) throw new Error('Claude Code is not installed on this Mac'); return bin; }
 const workspace = () => agent.agentWorkspace(S.userData);
 
-// One detached run of `claude -p`. The prompt follows `--`, so words that start with a dash stay words.
+// One detached run of `claude -p`. The prompt follows `--`, so words that start with a dash stay words. It resolves once
+// the process has started and rejects when it could not be, so a handoff that never ran is refused, not left pending.
 function runDetached(args, prompt) {
-  const bin = claudeBin();
-  if (!bin) throw new Error('Claude Code is not installed on this Mac');
-  const child = require('node:child_process').spawn(bin, ['-p', ...args, '--', prompt], { cwd: workspace(), detached: true, stdio: 'ignore' });
-  child.on('error', () => {}); // a run that cannot start leaves no transcript, which reads as pending and then broken
-  child.unref();
+  const child = require('node:child_process').spawn(needClaude(), ['-p', ...args, '--', prompt], { cwd: workspace(), detached: true, stdio: 'ignore' });
+  return new Promise((resolve, reject) => {
+    child.once('spawn', () => { child.unref(); resolve(); });
+    child.once('error', (error) => reject(new Error('Claude Code could not be started: ' + error.message)));
+  });
 }
 
 // ---- reading a session back ----
@@ -66,21 +69,21 @@ async function inTerminal(command) {
 const claude = agent.register({
   id: 'claude', label: 'Claude', icon: 'robot', missing: 'Install Claude Code',
   available: () => !!claudeBin(),
-  start({ nodeUri, title, prompt, rules }) {
+  async start({ nodeUri, title, prompt, rules }) {
     const id = require('node:crypto').randomUUID();
     const name = agent.oneLine(title, 60);
-    runDetached(['--session-id', id, ...(name ? ['-n', 'Tana: ' + name] : []), ...(rules ? ['--append-system-prompt', rules] : [])], nodeUri ? agent.agentPrompt(nodeUri, title) : prompt);
+    await runDetached(['--session-id', id, ...(name ? ['-n', 'Tana: ' + name] : []), ...(rules ? ['--append-system-prompt', rules] : [])], nodeUri ? agent.agentPrompt(nodeUri, title) : prompt);
     return id;
   },
-  resume(taskId, prompt) { if (prompt) runDetached(['--resume', taskId], prompt); },
+  async resume(taskId, prompt) { if (prompt) await runDetached(['--resume', taskId], prompt); },
   statuses: (links) => Object.fromEntries(Object.entries(links || {}).map(([nodeId, id]) => {
     const { state } = sessionState(transcript(id));
     return [nodeId, state];
   })),
-  open: (taskId) => { if (!agent.UUID.test(String(taskId))) throw new Error('Not a Claude session'); return inTerminal(quote(claudeBin()) + ' --resume ' + taskId); },
+  open: async (taskId) => { if (!agent.UUID.test(String(taskId))) throw new Error('Not a Claude session'); return inTerminal(quote(needClaude()) + ' --resume ' + taskId); },
   // A session id, as `claude --resume` takes it, or the command itself pasted whole.
   linkId: (text) => { const m = String(text || '').trim().match(/^(?:claude\s+(?:--resume|-r)\s+)?([0-9a-f-]{36})$/i); return m && agent.UUID.test(m[1]) ? m[1] : null; },
-  openNew: (link) => inTerminal(quote(claudeBin()) + ' -- ' + quote(link)),
+  openNew: async (link) => inTerminal(quote(needClaude()) + ' -- ' + quote(link)),
   read: async (taskIds) => new Map(taskIds.map((id) => {
     const { state, text } = sessionState(transcript(id));
     return [id, { state: state === 'done' && text ? 'done' : state === 'broken' ? 'failed' : 'working', text }];

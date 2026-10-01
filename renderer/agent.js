@@ -67,7 +67,13 @@ function openAIKeyRows() {
 // ↩ on one switches it on or off; the second group picks the default, the agent Assign to Agent starts on. The lists
 // are main's, and each answer is the new list, so the page redraws from what was stored.
 const AGENTS_GROUP = 'Agents · ↩ switches one on or off', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
-const agentsApply = (call) => run(async () => { const list = await call(); if (Array.isArray(list)) agentList = list; renderPalette(); renderSoon(); });
+// the chat's @agents follow the same switches: read again here, since this page is left out of its own settings:changed
+const agentsApply = (call) => run(async () => {
+  const list = await call();
+  if (Array.isArray(list)) agentList = list;
+  if (tana.chatAgents) chatAgents = await tana.chatAgents().catch(() => chatAgents);
+  renderPalette(); renderSoon();
+});
 function agentsRows(q) {
   const rows = agentList.map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
     hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',

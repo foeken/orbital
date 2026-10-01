@@ -926,6 +926,7 @@ async function main() {
     try {
       const none=await ai.chatgptStatus(userData);
       assert.deepEqual([none.available,none.signedIn,serverOptions],[true,false,null],'with no Codex and nothing downloaded, nobody is signed in here: an answer, not "sign-in unavailable", and nothing is spawned');
+      assert.equal(none.apiKey,!!require('../main/settings').get('openaiApiKey'),'every status says whether an API key is stored, so a page replacing its status keeps Set OpenAI API key (#671 review)');
       assert.equal((await ai.logoutChatGPT(userData)).signedIn,false,'and signing out of nothing is nothing');
       const own=require('node:path').join(userData,'codex-app-server');
       fs.writeFileSync(own,''); // stands in for the signed server the first sign-in downloads
@@ -3687,6 +3688,19 @@ async function main() {
     const claude = require('../main/agents/claude');
     const said = (type, extra) => ({ type, message: { role: type, ...extra } });
     assert.equal(claude.sessionState(null).state, 'pending', 'no transcript yet is pending');
+    // A Claude link opened on a Mac without Claude Code is an Orbital error, and a run that cannot start refuses the
+    // handoff rather than leaving a task pending for ever (#671 review).
+    {
+      const realAgent = require('../main/agent'), { S: realS } = require('../main/state'), findBin = realAgent.findBin, keptData = realS.userData;
+      realS.userData = fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'orbital-claude-'));
+      try {
+        realAgent.findBin = () => null;
+        await assert.rejects(claude.claude.open(THREAD), /not installed/, 'no Claude Code: opening says so, no Terminal running null');
+        await assert.rejects(claude.claude.start({ prompt: 'Do it' }), /not installed/, 'and nothing is started');
+        realAgent.findBin = () => require('node:path').join(realS.userData, 'no-claude-here');
+        await assert.rejects(claude.claude.start({ prompt: 'Do it' }), /could not be started/, 'a binary that will not launch rejects the handoff');
+      } finally { realAgent.findBin = findBin; realS.userData = keptData; }
+    }
     assert.equal(claude.sessionState([said('user', { content: 'Do it' })]).state, 'working', 'a question with no answer yet is working');
     assert.deepEqual({ ...claude.sessionState([said('user', {}), said('assistant', { stop_reason: 'tool_use', content: [] })]) }, { state: 'working', text: '' }, 'and so is a turn still using tools');
     assert.deepEqual({ ...claude.sessionState([said('user', {}), said('assistant', { stop_reason: 'end_turn', model: 'claude-x', content: [{ type: 'text', text: 'pong' }] })]) }, { state: 'done', text: 'pong' }, 'a turn that ended is done, with its words');

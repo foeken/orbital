@@ -89,7 +89,7 @@ async function ensureChatGPT(userData, install = false) {
 
 function authView(response) {
   const account = response && response.account;
-  return {
+  return withKey({
     available: true,
     signedIn: account?.type === 'chatgpt',
     email: account?.type === 'chatgpt' ? account.email : null,
@@ -97,8 +97,11 @@ function authView(response) {
     loggingIn: !!activeLogin,
     userCode: activeLogin?.userCode || null,
     error: loginError,
-  };
+  });
 }
+// Every status carries whether an OpenAI API key is stored: the pages replace theirs with each one they hear, and a
+// status without it made Set OpenAI API key disappear after any sign-in event (#671 review)
+const withKey = (status) => ({ ...status, apiKey: !!settings.get('openaiApiKey') });
 
 // A device sign-in ends when Codex says so (account/login/completed) or when a read finds the account signed in,
 // whichever comes first: Codex's own log has that notification reaching no connection at all (2026-09-23,
@@ -120,7 +123,7 @@ async function readChatGPT(rpc, refreshToken = false) {
 function chatgptNote(note) {
   if (note.method === 'account/login/completed' && activeLogin && (!note.params.loginId || note.params.loginId === activeLogin.loginId)) {
     loginDone(note.params.success, note.params.error);
-    if (authRpc) readChatGPT(authRpc).then((status) => send('ai:chatgptChanged', status), () => send('ai:chatgptChanged', { available: false, signedIn: false, error: loginError }));
+    if (authRpc) readChatGPT(authRpc).then((status) => send('ai:chatgptChanged', status), () => send('ai:chatgptChanged', withKey({ available: false, signedIn: false, error: loginError })));
   }
   if (note.method === 'turn/completed' && activeTurn && note.params?.threadId === activeTurn.threadId) {
     const pending = activeTurn; activeTurn = null; clearTimeout(pending.timer);
@@ -131,7 +134,7 @@ function chatgptNote(note) {
 
 async function chatgptStatus(userData, refreshToken = false) {
   try { const rpc = await ensureChatGPT(userData); return rpc ? await readChatGPT(rpc, refreshToken) : authView(null); }
-  catch (error) { return { available: false, signedIn: false, loggingIn: !!activeLogin, error: error.message }; }
+  catch (error) { return withKey({ available: false, signedIn: false, loggingIn: !!activeLogin, error: error.message }); }
 }
 
 async function startChatGPTLogin(userData) {

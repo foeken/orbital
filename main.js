@@ -403,9 +403,11 @@ ipcMain.handle('openai:setKey', (_e, key) => {
   if (typeof key !== 'string') throw new Error('OpenAI API key must be text');
   settings.set('openaiApiKey', key.trim() || null);
   if (key.trim()) autoTypeIcons(); // a key is somebody to ask: the types with no icon need not wait for the next boot
+  // every page hears it, as a sign-in is heard: Set OpenAI API key appears or goes everywhere (ai.js withKey)
+  ai.chatgptStatus(app.getPath('userData')).then((status) => send('ai:chatgptChanged', status), () => {});
   return !!key.trim();
 });
-ipcMain.handle('chatgpt:status', async () => ({ ...await ai.chatgptStatus(app.getPath('userData'), true), apiKey: !!settings.get('openaiApiKey') }));
+ipcMain.handle('chatgpt:status', () => ai.chatgptStatus(app.getPath('userData'), true));
 ipcMain.handle('chatgpt:login', async () => {
   const result = await ai.startChatGPTLogin(app.getPath('userData'));
   if (!result.verificationUrl) return result;

@@ -53,7 +53,8 @@ function settingsEl() {
     ['Language', tana.translate ? [['language', 'Auto-translate', [chip(translateTo() || 'Off', action('autoTranslate'))]]] : []],
     ['AI', [
       ...(tana.chatgptStatus ? [['chatgpt', 'ChatGPT', [...(chatgptAuth ? [hint(signedIn ? (chatgptAuth.email ? demoText(chatgptAuth.email, 'chatgpt') : 'Signed in') : 'Not signed in')] : []), act(signedIn ? 'Sign out' : 'Sign in', action('chatgpt'))], true]] : []),
-      ...(tana.setOpenAIKey ? [['openaiKey', 'OpenAI API key', [act('Set …', action('openaiKey'))], true]] : []),
+      // only for whoever already has a key, as ⌘K offers Set OpenAI API key (renderer/palette.js): ChatGPT is the way in
+      ...(tana.setOpenAIKey && chatgptAuth?.apiKey ? [['openaiKey', 'OpenAI API key', [act('Set …', action('openaiKey'))], true]] : []),
       ...(ai ? [
         ['brain', 'Model', choices(ai.models.map((m) => [m.replace(/^gpt-[\d.]+-/, '').replace(/^./, (c) => c.toUpperCase()), m === ai.model, () => settingsSetAI('model', m), m]))],
         ['sparkle', 'Thinking', choices(ai.efforts.map((x) => [x[0].toUpperCase() + x.slice(1), x === ai.effort, () => settingsSetAI('effort', x)]))],

@@ -25,12 +25,16 @@ const tana = agent.register({
   id: 'tana', label: 'Tana', icon: 'tana', opensHere: true,
   available: () => true,
   async start({ nodeUri, title, prompt }) {
-    const created = await newChat();
+    const created = await newChat(nodeUri); // the chat belongs to the node, as #669 asks, and Tana's reply knows it
     const sent = await sendChat(created.id, (prompt || 'Help me with this.') + '\n\n[' + label(title) + '](' + nodeUri + ')', [nodeUri], { ai: true });
     if (sent.replyError) throw new Error(sent.replyError); // Tana could not be asked (its AI limit, say): no badge for an unanswered chat
     return created.id;
   },
-  resume: (chatId, prompt) => (prompt ? sendChat(chatId, prompt, [], { ai: true }) : null),
+  async resume(chatId, prompt) {
+    if (!prompt) return;
+    const sent = await sendChat(chatId, prompt, [], { ai: true });
+    if (sent && sent.replyError) throw new Error(sent.replyError); // saved but unanswered: say so, as start does, rather than a badge working for ever
+  },
   async statuses(links) {
     const out = {};
     for (const [nodeId, chatId] of Object.entries(links || {})) {

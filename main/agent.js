@@ -46,8 +46,9 @@ const list = () => Object.values(AGENTS).map((a) => ({
 }));
 
 // ---- which task each node became ----
-// nodeId -> { agent, taskId }, kept under the old key so nothing moves: the record follows you between machines, and
-// a node stays linked through an unassign, so reassigning it returns to its task. Two older shapes are still read as
+// nodeId -> { agent, taskId }, kept under the old key so nothing moves: the record follows you between machines.
+// Unassigning drops the link (agents/index.js unassign), so the next assignment starts a new task; the old task stays
+// the user's, untouched. Two older shapes are still read as
 // Codex tasks: a bare thread id, and { host, threadId } from when tasks could run on other machines.
 const tasks = () => { const stored = settings.get('codexTask'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
 function taskLink(id) {
