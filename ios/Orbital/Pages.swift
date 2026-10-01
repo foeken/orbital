@@ -208,7 +208,7 @@ struct ChatView: View {
         let shown = rows.enumerated().map { i, row in (row, Self.named(row, after: rows[..<i].last)) }
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
-                ForEach(shown, id: \.0.id) { Message(row: $0.0, named: $0.1).modifier(Blur(hidden: $0.0.sensitive == true && !reveal)) }
+                ForEach(shown, id: \.0.id) { Message(row: $0.0, named: $0.1, reveal: reveal).modifier(Blur(hidden: $0.0.sensitive == true && !reveal)) }
                 if waiting { Dots().padding(.top, -8) }
             }
             .padding(.horizontal, 20)
@@ -233,12 +233,13 @@ struct ChatView: View {
 struct Message: View {
     let row: Row
     let named: Bool
+    let reveal: Bool // a sensitive block inside a message stays blurred too, until a shake
 
     var body: some View {
         if row.chat?.status == true {
             Text(row.words).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
         } else if row.chat?.mine == true {
-            VStack(alignment: .leading, spacing: 8) { ForEach(row.children ?? []) { ChatBlock(row: $0) } }
+            VStack(alignment: .leading, spacing: 8) { ForEach(row.children ?? []) { ChatBlock(row: $0).modifier(Blur(hidden: $0.sensitive == true && !reveal)) } }
                 .foregroundStyle(Color.pair(0x1b2b41, 0xe8eeff))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
@@ -248,7 +249,7 @@ struct Message: View {
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 if named { Text(row.words).font(.subheadline.weight(.semibold)) }
-                ForEach(row.children ?? []) { ChatBlock(row: $0) }
+                ForEach(row.children ?? []) { ChatBlock(row: $0).modifier(Blur(hidden: $0.sensitive == true && !reveal)) }
             }
         }
     }

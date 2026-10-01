@@ -171,7 +171,11 @@ struct QuickAdd: View {
     // the image read and made into its node, which then opens, as the desktop opens it
     private func process(_ image: UIImage) async {
         working = "Reading the image…"
-        while engine.phase != .ready { try? await Task.sleep(for: .milliseconds(200)) } // shared while Orbital was not running: Tana connects first
+        // shared while Orbital was not running: Tana connects first; signed out or failed, it says so rather than waiting for ever
+        while engine.phase != .ready {
+            guard !Task.isCancelled, engine.phase == .starting else { failure = "Sign in to Tana first, then share it again"; working = nil; return }
+            do { try await Task.sleep(for: .milliseconds(200)) } catch { working = nil; return }
+        }
         do {
             let id = try await engine.processImage(image)
             dismiss()

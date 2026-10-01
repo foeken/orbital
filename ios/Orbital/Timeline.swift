@@ -341,7 +341,7 @@ struct TaskBox: View {
         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 } // centred on the first line, as the markers are
         .sensoryFeedback(.success, trigger: engine.states[task.id]) { _, now in now == "closed" } // your own tick, not a change read from Tana
         .animation(reduceMotion ? nil : .snappy, value: state)
-        .accessibilityLabel(task.words)
+        .accessibilityLabel(task.sensitive == true && !engine.reveal ? "Sensitive task" : task.words) // hidden from VoiceOver as from the eye
         .accessibilityValue(state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed")
         .accessibilityHint("Ticks the task off, or back on")
     }

@@ -44,7 +44,11 @@ final class ShareViewController: UIViewController {
         var next: UIResponder? = self
         while let responder = next {
             if let app = responder as? UIApplication {
-                _ = app.perform(NSSelectorFromString("openURL:options:completionHandler:"), with: url, with: [:])
+                // called through its own three-argument signature: perform(_:with:with:) passes two, and the completion
+                // handler slot read garbage
+                let selector = NSSelectorFromString("openURL:options:completionHandler:")
+                typealias Open = @convention(c) (AnyObject, Selector, URL, [UIApplication.OpenExternalURLOptionsKey: Any], ((Bool) -> Void)?) -> Void
+                unsafeBitCast(app.method(for: selector), to: Open.self)(app, selector, url, [:], nil)
                 return
             }
             next = responder.next

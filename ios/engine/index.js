@@ -247,9 +247,12 @@ async function presetFields(doc, fields) {
 }
 
 // a new document of yours, created as main/documents.js createDocument creates one, answered once Tana has it
+// Tana slow to answer is not a failure: the document is made here at once and its writes wait in the queue, so it is
+// carried on with (as ask does) rather than refused, which would have Quick Add offer to make it a second time
 async function create(title, config) {
   const id = 'tana:text:' + ulid();
-  return { id, doc: await hold(id, (loro) => initDocument(loro, title, S.me.userUri, config)) };
+  const doc = await hold(id, (loro) => initDocument(loro, title, S.me.userUri, config)).catch((e) => S.client.sync.getDocument(id) || Promise.reject(e));
+  return { id, doc };
 }
 
 // no session, or another one: the old client's stream is closed rather than left reconnecting
@@ -288,13 +291,8 @@ const refusedSoon = (id) => new Promise((resolve) => {
   S.client.sync.on('write-denied', on);
 });
 
-// main/documents.js accessContext: the owners read on demand (hold lets them go), and whether you administer the org
-const accessContext = () => {
-  const c = claims(last.accessToken);
-  return { sync: { subscribe: (id) => hold(id) }, graph: S.client.graph, orgDocUri: S.me.orgDocUri, orgAdmin: c.org_id === S.me.orgId && ['admin', 'owner'].includes(c.role) };
-};
 // who of the people assigned cannot open the task (sdk/node.js audienceMetadata hiddenFrom), as the desktop asks after Assign to
-const shutOut = async (doc) => (await audienceMetadata(doc, S.me.userUri, S.client.graph, accessContext().sync)).hiddenFrom || [];
+const shutOut = async (doc) => (await audienceMetadata(doc, S.me.userUri, S.client.graph, (await access()).sync)).hiddenFrom || [];
 
 const LANGS = ['English', 'Dutch', 'German', 'French', 'Spanish']; // renderer/translate.js TRANSLATE_LANGS
 
@@ -359,7 +357,7 @@ window.orbital = {
   // A zoomed node's Assigned to and Visible to, as the desktop's fields show them (doc:taskMeta, doc:accessOptions): who has
   // it, who can see it, the assignees shut out, and the sharing rules you may pick from (sdk/access.js capabilities)
   async access(id) {
-    const doc = await hold(id), n = readNode(doc), direct = taskMeta(doc), ctx = accessContext();
+    const doc = await hold(id), n = readNode(doc), direct = taskMeta(doc), ctx = await access();
     const [meta, options, people] = await Promise.all([audienceMetadata(doc, S.me.userUri, S.client.graph, ctx.sync), capabilities(doc, S.me.userUri, ctx), members().catch(() => [])]);
     const person = (uri) => ({ id: uri, name: demoName((people.find((m) => m.id === uri) || {}).title || 'Someone') });
     const space = (a) => a && a.title ? demoTitle(a.title, a.boundaryUri || a.uri || 'space') : null;
@@ -376,7 +374,7 @@ window.orbital = {
     const doc = await hold(id), n = readNode(doc);
     const participants = rule === 'people' ? uris.map((uri) => ({ uri, role: (n.participants && n.participants[uri] && n.participants[uri].role) || 'editor' })) : undefined;
     const refused = refusedSoon(id);
-    await setSharing(doc, S.me.userUri, { rule, participants, token: token || undefined }, accessContext());
+    await setSharing(doc, S.me.userUri, { rule, participants, token: token || undefined }, await access());
     if (await refused) throw new Error('Tana refused the change: you cannot change who sees this');
     return JSON.stringify(true);
   },
@@ -514,11 +512,12 @@ window.orbital = {
   // Process image (main.js ai:processImage): what the model read from it (QuickAdd.swift ChatGPT.readImage) made a task
   // or a note, its lines under the title and the image under them, uploaded as the desktop uploads a pasted one
   async fromImage(kind, title, notes, base64, mimeType) {
-    const { id, doc } = await create(String(title).slice(0, 200), { kind: kind === 'task' ? 'task' : 'doc' });
-    for (const line of notes || []) insertAfter(doc, null, String(line));
+    // the image uploaded first: one that fails leaves nothing behind, so trying again makes no second note
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     const fetch = (url, init) => globalThis.fetch(url, { ...init, credentials: 'omit' }); // the token alone, as with Tana's AI
     const up = await uploadFile(bytes, { filename: 'image', mimeType, getAccessToken, fetch });
+    const { id, doc } = await create(String(title).slice(0, 200), { kind: kind === 'task' ? 'task' : 'doc' });
+    for (const line of notes || []) insertAfter(doc, null, String(line));
     const uri = 'tana:image:' + ulid();
     await hold(uri, (loro) => initImage(loro, { ownerUri: id, cid: up.cid, width: up.width, height: up.height, blurhash: up.blurhash, filename: 'image', mimeType, fileSize: bytes.length }));
     insertImage(doc, null, uri);
@@ -527,7 +526,7 @@ window.orbital = {
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'assign', 'share', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
+for (const name of ['toggle', 'assign', 'share', 'translateTo', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

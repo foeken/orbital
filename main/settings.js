@@ -102,9 +102,10 @@ async function open() {
     if (doc && !isDeleted(readNode(doc))) {
       if (settled) return use(doc);
       settled = true;
-      if (S.settingsReadOnly) return use(doc); // the phone takes the one it has and merges nothing
       const oldest = await discover(new Set(gaveUp));
       if (!oldest || oldest.id === known) return use(doc);
+      // the phone follows the one a Mac kept, so it hears what is written there from now on, and merges nothing itself
+      if (S.settingsReadOnly) { if (!had) S.client.sync.unsubscribe(known).catch(() => {}); return use(oldest); }
       // the one this machine used is still an app document, not a note of yours: it stays out of the lists (appDocIds), with
       // those it had taken over itself. One key per document, so two machines giving theirs up at once both keep theirs.
       carry(oldest, [known, ...gaveUp]);

@@ -127,10 +127,8 @@ enum ChatGPT {
     static func fresh() async throws -> Account? {
         guard let account = load() else { return nil }
         if account.expires > .now.addingTimeInterval(60) { return account }
-        var request = URLRequest(url: URL(string: issuer + "/oauth/token")!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["client_id": client, "grant_type": "refresh_token", "refresh_token": account.refreshToken, "scope": "openid profile email"])
+        // no scope: the refresh keeps everything the sign-in was granted
+        let request = tokenRequest(["grant_type": "refresh_token", "client_id": client, "refresh_token": account.refreshToken])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.userAuthenticationRequired) }
         struct Renewed: Decodable { let id_token: String?; let access_token: String?; let refresh_token: String? }
@@ -156,15 +154,21 @@ enum ChatGPT {
         return url.url!
     }
 
-    // the code for tokens, as codex-rs/login exchange_code_for_tokens posts it
-    static func exchange(code: String, verifier: String) async throws -> Account {
+    // A form posted to the token endpoint, as codex-rs/login posts both of its grants. A + is encoded too: URLComponents
+    // leaves it, and a form body reads it as a space.
+    static func tokenRequest(_ fields: [String: String]) -> URLRequest {
         var request = URLRequest(url: URL(string: issuer + "/oauth/token")!)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         var form = URLComponents()
-        form.queryItems = [.init(name: "grant_type", value: "authorization_code"), .init(name: "code", value: code), .init(name: "redirect_uri", value: redirect),
-                           .init(name: "client_id", value: client), .init(name: "code_verifier", value: verifier)]
-        request.httpBody = Data((form.percentEncodedQuery ?? "").utf8)
+        form.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = Data((form.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B").utf8)
+        return request
+    }
+
+    // the code for tokens, as codex-rs/login exchange_code_for_tokens posts it
+    static func exchange(code: String, verifier: String) async throws -> Account {
+        let request = tokenRequest(["grant_type": "authorization_code", "code": code, "redirect_uri": redirect, "client_id": client, "code_verifier": verifier])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.userAuthenticationRequired) }
         return try JSONDecoder().decode(Account.self, from: data)
