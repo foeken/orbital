@@ -411,7 +411,8 @@ struct TaskWords: View {
     }
 }
 
-// A meeting still to come today, under Upcoming meetings: its glyph, its name on one line, and when it starts on the right
+// A meeting still to come today, under Upcoming meetings, as the desktop draws one: its glyph, its name, and a grey
+// line with when it is and who else is on it
 struct Meeting: View {
     let row: Row
     let engine: Engine
@@ -426,9 +427,14 @@ struct Meeting: View {
                 // a calendar, or a route for Travel (main/timeline.js meetingIcon)
                 Image(row.icon == "pinRoute" ? "Glyphs/pinRoute" : "Glyphs/calendar").resizable().frame(width: 18, height: 18).foregroundStyle(.secondary)
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
-                Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).lineLimit(1).sensitive(row.sensitive, engine: engine)
-                Spacer(minLength: 8)
-                Text(start).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).sensitive(row.sensitive, engine: engine)
+                    // the desktop's grey line: when (13:10–13:40), then who else is on it as faces
+                    HStack(spacing: 6) {
+                        Text(row.subtext ?? start).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                        if let people = row.people, !people.isEmpty { Text("·").foregroundStyle(.secondary); Faces(people: people, names: false) }
+                    }
+                }
             }
         }
         .onTapGesture { openURL.zoom(row.id) }
@@ -464,6 +470,7 @@ struct FreeLine: View {
 // there are few
 struct Faces: View {
     let people: [Row.Person]
+    var names = true // false: the faces alone, as after a meeting's time
 
     var body: some View {
         HStack(spacing: 8) {
@@ -477,8 +484,10 @@ struct Faces: View {
                         .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
                 }
             }
-            Text(people.count <= 2 ? people.map(\.name).joined(separator: ", ") : "\(people.count) people")
-                .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            if names {
+                Text(people.count <= 2 ? people.map(\.name).joined(separator: ", ") : "\(people.count) people")
+                    .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(people.map(\.name).joined(separator: ", "))
