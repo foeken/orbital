@@ -207,8 +207,8 @@ docs/OUTLINER.md §12 (Fields) for that row. Every fact column can be resized: d
 edge, double-click it to reset; from the keyboard, ⌘K **Column widths …** (View options, while the page is a table) lists
 Title and the columns, ←/→ make the highlighted one 20px narrower or wider while nothing is typed, ↩ resets it. Widths
 are kept per page key and column in the synced `tableWidths` preference (Title's under `title`). A Title nobody resized
-takes what the others leave; a resized one keeps its width and the columns follow it, the spare room left empty before
-the icons. The icons column and the agent badge's slot are only there when a row on the page has them.
+takes what the others leave; a resized one keeps its width and the columns stretch to share the rest of the row
+(`tableCols`). The icons column and the agent badge's slot are only there when a row on the page shows something in them.
 
 **At every width.** A table holds at any pane width the way Alvish Baldha's tables "split, stretch, and snap into
 place" (x.com/alvishbaldha/status/2105538797970809133). A column is its dragged width or 160px. When the page has no

@@ -528,20 +528,17 @@ function tableHeadEl() {
 }
 // A column's width in px, per page and column, synced like the choice of a table itself; Title's is kept as 'title'.
 // A column nobody dragged is COL_W wide. Title nobody dragged takes what the others leave; dragged, it keeps its width
-// and what is left goes to the end of the row, after the icons (applyCols), so the columns and who can see a row follow the title.
+// and the columns stretch to share what is left, so no empty room sits anywhere in the row (the video's "stretch").
 let dragWidths = null; // the widths while a grip is held: drawn as it moves, kept when it is let go (resizeColumn)
 const tableWidths = () => dragWidths || pref('tableWidths', {})[pillKey()] || {};
 const tableCols = (widths = tableWidths()) => {
   // folded, an unsized title takes at most half the row, so a long one does not cut the values after it to a letter
   // unfolded, a title dragged wider gives way down to TITLE_ROOM before a column folds (foldFor)
-  const t = widths.title, lead = tableFold ? ['fit-content(' + (t ? t + 'px' : '50%') + ')', 'minmax(' + FOLD_ROOM + 'px, 1fr)'] : [t ? 'minmax(' + Math.min(t, TITLE_ROOM) + 'px, ' + t + 'px)' : 'minmax(0, 1fr)'];
-  return [...lead, ...tableKeys().slice(tableFold).map((k) => (widths[k] || COL_W) + 'px')].join(' ');
+  const t = widths.title, cols = tableKeys().slice(tableFold).map((k) => (widths[k] || COL_W) + 'px'), stretch = t && !tableFold && cols.length;
+  const lead = tableFold ? ['fit-content(' + (t ? t + 'px' : '50%') + ')', 'minmax(' + FOLD_ROOM + 'px, 1fr)'] : [stretch ? 'minmax(' + Math.min(t, TITLE_ROOM) + 'px, ' + t + 'px)' : 'minmax(0, 1fr)'];
+  return [...lead, ...cols.map((w) => (stretch ? 'minmax(' + w + ', 1fr)' : w))].join(' ');
 };
-// the columns onto the page; .spare: a dragged Title leaves an empty track at the end of the row (styles.css --spare)
-function applyCols(widths = tableWidths()) {
-  outline.style.setProperty('--fcols', tableCols(widths));
-  outline.classList.toggle('spare', !!widths.title && !tableFold);
-}
+const applyCols = (widths = tableWidths()) => outline.style.setProperty('--fcols', tableCols(widths));
 // ---- a table at every width: columns split out of the title's line as the page widens, and fold back in ----
 // After Alvish Baldha's "tables that split, stretch, and snap into place" (x.com/alvishbaldha/status/2105538797970809133).
 // Narrow, a row is its title with its first values after it in grey; wider, each value splits out into its own column,
