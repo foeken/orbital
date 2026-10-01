@@ -18,7 +18,7 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
 // Status in workflow order, newest first, and a row you are no part of left out.
 {
   const { arrange } = require('../ios/engine/arrange.js');
-  const me = 'tana:user-profile:me', other = 'tana:user-profile:sam', t = (h) => new Date(Date.now() - h * 36e5).toISOString();
+  const me = 'tana:user-profile:me', other = 'tana:user-profile:sam', now = Date.now(), t = (h) => new Date(now - h * 36e5).toISOString(); // one now: b and d share a time, kept in query order
   const rows = [
     { id: 'a', title: 'B task', state: 'open', updated: t(5), created: t(9), createdBy: me, assignees: [me] },
     { id: 'b', title: 'A task', state: 'proposed', updated: t(1), created: t(2), createdBy: other, assignees: [me] },
@@ -26,7 +26,7 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
     { id: 'd', title: 'Theirs', state: 'open', updated: t(2), created: t(2), createdBy: other, assignees: [other] },
     { id: 'e', title: 'Pinned one', state: 'open', updated: t(8), created: t(8), createdBy: me, assignees: [me] },
   ];
-  const c = { me, now: Date.now(), names: new Map([[other, 'Sam']]), agent: new Set(['d']), pinned: new Set(['e']), watched: new Set(), silenced: new Set() };
+  const c = { me, now, names: new Map([[other, 'Sam']]), agent: new Set(['d']), pinned: new Set(['e']), watched: new Set(), silenced: new Set() };
   const shown = (view) => arrange(rows, view, c).map(({ n, group }) => (group ? group + ':' : '') + n.id).join(' ');
   assert.strictEqual(shown({ groupBy: 'responsibility', sortBy: '-updated' }), 'Agent:d Pinned:e Mine:a Tracking:c Assigned by others:b', 'a Codex task first, whoever has it');
   assert.strictEqual(shown({ groupBy: 'status', sortBy: 'title' }), 'Inbox:b In Progress:a In Progress:c In Progress:e In Progress:d');

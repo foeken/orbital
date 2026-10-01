@@ -85,11 +85,12 @@ extension OpenURLAction {
 // Long press on a node: pin it to today or take it off, mark it sensitive or not, or delete it to Tana's trash where you
 // may (Engine.pin, markSensitive, remove); done reads the page again
 extension View {
-    // task: the row is a task, which offers Assign to …; assignees: who has it, when known (a saved search's rows)
-    func nodeMenu(_ id: String?, engine: Engine, task: Bool = false, assignees: [String]? = nil, then done: @escaping () async -> Void = {}) -> some View {
+    // task: the task's state, which offers Assign to … and, out of the Inbox, Move to Inbox; assignees: who has it, when known (a saved search's rows)
+    func nodeMenu(_ id: String?, engine: Engine, task: String? = nil, assignees: [String]? = nil, then done: @escaping () async -> Void = {}) -> some View {
         contextMenu {
             if let id, id.hasPrefix("tana:") {
-                if task { Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, then: done) } }
+                if task != nil { Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, then: done) } }
+                if let task, task != "proposed" { Button("Move to Inbox", systemImage: "tray") { Task { await engine.moveToInbox(id); await done() } } }
                 let pinned = engine.pinned.contains(id), secret = engine.sensitiveIds.contains(id)
                 // pinned to any day: only taking the pin off
                 Button(pinned ? "Remove Pin" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin") { Task { await engine.pin(id, !pinned); await done() } }
@@ -106,11 +107,14 @@ extension View {
     }
 }
 
+// Faces read it: under a hidden mark a face's circle would still say someone is there
+extension EnvironmentValues { @Entry var sensitiveHidden = false }
+
 struct Blur: ViewModifier {
     let hidden: Bool
     func body(content: Content) -> some View {
         if hidden {
-            content.textRenderer(Redacted()).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake to show")
+            content.textRenderer(Redacted()).environment(\.sensitiveHidden, true).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake to show")
         } else {
             content
         }
@@ -377,7 +381,7 @@ struct TaskLine: View {
                     .buttonStyle(.plain)
             }
         }
-        .nodeMenu(task.id, engine: engine, task: true, assignees: task.assignees)
+        .nodeMenu(task.id, engine: engine, task: engine.state(of: task), assignees: task.assignees)
     }
 }
 
@@ -450,6 +454,7 @@ struct Meeting: View {
                         Text(row.subtext ?? start).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
                         if let people = row.people, !people.isEmpty { Text("·").foregroundStyle(.secondary); Faces(people: people, names: false) }
                     }
+                    .sensitive(row.sensitive, engine: engine) // the grey line too, as the desktop's .sensitive .meta
                 }
             }
         }
@@ -488,11 +493,12 @@ struct FreeLine: View {
 struct Faces: View {
     let people: [Row.Person]
     var names = true // false: the faces alone, as after a meeting's time
+    @Environment(\.sensitiveHidden) private var hidden // under a sensitive mark: the names barred, no circles
 
     var body: some View {
         HStack(spacing: 8) {
             HStack(spacing: -4) {
-                ForEach(people.prefix(4), id: \.name) { p in
+                ForEach(hidden ? [] : Array(people.prefix(4)), id: \.name) { p in
                     Text(Self.initials(p.name))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)

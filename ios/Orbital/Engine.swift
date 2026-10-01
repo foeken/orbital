@@ -180,7 +180,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             error = nil
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
-                translator.use(to: setup.to, model: setup.model)
+                translator.use(to: setup.to, ai: setup.ai)
+                if translator.catalogue.isEmpty, let list = try? await ChatGPT.models(), !list.isEmpty { translator.catalogue = list } // once: what this account may ask
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
@@ -232,7 +233,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // What a refresh reads besides the rows (orbital.setup)
-    struct Setup: Decodable { let to: String?; let model: String?; let sensitive: [String]; let pinned: [String] }
+    struct Setup: Decodable { let to: String?; let ai: [String: String]; let sensitive: [String]; let pinned: [String] }
 
     // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
     // Remove Pin takes the task out of Today's Tasks at once, collapsing as a deleted row does; the read after says where it
@@ -247,9 +248,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Settings' Auto-translate: the synced preference (orbital.translateTo), shown at once and kept if Tana takes it
     func translate(into to: String?) async {
         let was = translator.to
-        translator.use(to: to, model: nil)
+        translator.use(to: to)
         guard !Self.isSample else { return }
-        do { let _: String? = try await call("return await orbital.translateTo(to)", ["to": to ?? NSNull()]) } catch { translator.use(to: was, model: nil); self.error = error.localizedDescription }
+        do { let _: String? = try await call("return await orbital.translateTo(to)", ["to": to ?? NSNull()]) } catch { translator.use(to: was); self.error = error.localizedDescription }
+    }
+    // Settings' Quick and Regular AI: used at once, kept if Tana takes it (orbital.aiChoice), as the Mac's Settings page sets them
+    func aiChoice(_ key: String, _ value: String) async {
+        let was = translator.ai
+        translator.use(to: translator.to, ai: [key: value])
+        guard !Self.isSample else { return }
+        do { let _: Bool = try await call("return await orbital.aiChoice(key, value)", ["key": key, "value": value]) }
+        catch { translator.use(to: translator.to, ai: was); self.error = error.localizedDescription }
     }
     func markSensitive(_ id: String, _ on: Bool) async { await act("return await orbital.sensitive(id, on)", ["id": id, "on": on]) }
     // Long press, Assign to …: the task whose picker is open (AssignSheet), the people to pick from, and the one picked
@@ -320,12 +329,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
     // The image made smaller (2048 px at most, JPEG) for the model and for Tana, read by ChatGPT, then made into its node
     func processImage(_ image: UIImage) async throws -> String {
-        let side: CGFloat = 2048, scale = min(1, side / max(image.size.width, image.size.height))
-        let small = UIGraphicsImageRenderer(size: CGSize(width: image.size.width * scale, height: image.size.height * scale)).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: CGSize(width: image.size.width * scale, height: image.size.height * scale)))
-        }
-        guard let jpeg = small.jpegData(compressionQuality: 0.8) else { throw Failure(errorDescription: "The image could not be read") }
-        let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.model)
+        guard let jpeg = image.fitted(2048).jpegData(compressionQuality: 0.9) else { throw Failure(errorDescription: "The image could not be read") }
+        let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.ai["model"]!, effort: translator.ai["effort"]!)
         let id: String = try await call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
                                         ["kind": read.kind ?? "doc", "title": read.title ?? "", "notes": read.notes ?? [], "image": jpeg.base64EncodedString()])
         await refresh()
@@ -404,6 +409,15 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             states[task.id] = before
             self.error = error.localizedDescription
         }
+    }
+
+    // Long press, Move to Inbox: the task back to Tana's Inbox state (proposed), drawn so at once and put back if Tana refuses
+    func moveToInbox(_ id: String) async {
+        guard !demo, !Self.isSample else { return }
+        let before = states[id]
+        states[id] = "proposed"
+        do { states[id] = try await call("return await orbital.toggle(id, 'proposed')", ["id": id]) as String }
+        catch { states[id] = before; self.error = error.localizedDescription }
     }
 
     func state(of task: Row) -> String {
@@ -507,4 +521,15 @@ struct WebHost: UIViewRepresentable {
     let web: WKWebView
     func makeUIView(context: Context) -> WKWebView { web }
     func updateUIView(_ view: WKWebView, context: Context) {}
+}
+
+extension UIImage {
+    // At most side pixels on its longest side, drawn in pixels: a renderer's default is the screen's scale (3x on an
+    // iPhone), which blew a shrunk screenshot back up three times over, blurred, before the model read it
+    func fitted(_ side: CGFloat) -> UIImage {
+        let pixels = CGSize(width: size.width * scale, height: size.height * scale), k = min(1, side / max(pixels.width, pixels.height))
+        let target = CGSize(width: (pixels.width * k).rounded(), height: (pixels.height * k).rounded()), format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
+    }
 }

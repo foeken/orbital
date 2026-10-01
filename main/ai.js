@@ -21,6 +21,13 @@ const { send } = require('./state');
 // trip, not the model), and right where Luna was sure and wrong — it typed twelve real documents without a confident
 // mistake, where Luna made one or two in every run (docs/OUTLINER.md, Auto-pick type).
 const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
+// The Quick AI's own start: Luna 6 at low. Measured 2026-10-01 on 69 Dutch note lines and 16 titles through a ChatGPT
+// sign-in, three runs each: as good as Terra 5.6 at low (names kept, English left alone, now and then more natural),
+// as fast (7.0 s for the titles, 42 s for a page, where the wait is the answer's length), and about a twentieth of the
+// API price; at medium it thought on short lists for 3 s more and translated no better.
+const QUICK_MODEL = 'gpt-6-luna', QUICK_EFFORT = 'low';
+// Both the Quick AI (Auto-translate, Discuss with, Classify type, the icon pick) and the Regular AI (reading an image)
+// start here until the Settings page names others (chosen below; the iPhone the same: ios/Orbital/Translator.swift)
 const ENDPOINT = 'https://api.openai.com/v1/responses';
 const TIMEOUT_MS = 20000;
 const INSTRUCTIONS = [
@@ -177,6 +184,7 @@ async function logoutChatGPT(userData) {
     activeLogin = null;
   }
   await rpc.call('account/logout');
+  listed = null; // the next account's own list, not this one's: the app-server outlives the sign-in
   loginError = null;
   const status = await readChatGPT(rpc);
   send('ai:chatgptChanged', status);
@@ -244,13 +252,11 @@ function cleanName(answer) {
 // The model's answer as text, or null when this machine has neither a ChatGPT sign-in nor an API key. image: a data
 // URL the model sees beside the input.
 async function ask(instructions, input, fetchImpl, userData, image, only = {}) { // only: a model, effort or timeout this question uses instead
-  const use = { model: only.model || chosen().model, effort: only.effort || chosen().effort, schema: only.schema }; // schema: the JSON Schema the answer must follow
-  if (userData) {
-    // no forced token refresh per question: it was a 0.7 s round trip before every answer, and the turn's own Codex
-    // refreshes the token it uses (measured 2026-09-28: 739 ms with the refresh, 3 ms without)
-    const status = await chatgptStatus(userData, false);
-    if (status.signedIn) return askChatGPT(instructions, input, userData, use, image, only.timeout); // a signed-in ChatGPT account always wins
-  }
+  // no forced token refresh per question: it was a 0.7 s round trip before every answer, and the turn's own Codex
+  // refreshes the token it uses (measured 2026-09-28: 739 ms with the refresh, 3 ms without)
+  const signedIn = !!userData && (await chatgptStatus(userData, false)).signedIn, choice = chosen(await modelList(userData, signedIn), image ? '' : 'quick');
+  const use = { model: only.model || choice.model, effort: only.effort || choice.effort, schema: only.schema }; // schema: the JSON Schema the answer must follow
+  if (signedIn) return askChatGPT(instructions, input, userData, use, image, only.timeout); // a signed-in ChatGPT account always wins
   const key = settings.get('openaiApiKey');
   if (!key) return null;
   const response = await fetchImpl(ENDPOINT, {
@@ -445,17 +451,49 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
   return list.map(shown);
 }
 
-// The model and effort every question here asks with (ask above), chosen on the Settings page (renderer/settings.js) and
-// synced. The page is input from outside the process: only these choices are stored. A synced value off the lists (an
-// older build's, another Mac's) reads as the default, for the page and for every question alike.
-const MODELS = ['gpt-5.6-luna', DEFAULT_MODEL, 'gpt-5.6-sol'], EFFORTS = ['low', 'medium', 'high'];
-const chosen = () => { const model = settings.get('aiModel'), effort = settings.get('aiEffort'); return { model: MODELS.includes(model) ? model : DEFAULT_MODEL, effort: EFFORTS.includes(effort) ? effort : DEFAULT_EFFORT }; };
-const options = () => ({ ...chosen(), models: MODELS, efforts: EFFORTS });
-function setOption(key, value) {
-  const allowed = key === 'model' ? MODELS : key === 'effort' ? EFFORTS : [];
-  if (!allowed.includes(value)) throw new Error('Not an AI choice: ' + key);
-  settings.set(key === 'model' ? 'aiModel' : 'aiEffort', value);
-  return options();
+// The Regular AI (an image read) and the Quick AI (every other question), each a model and an effort (ask above), chosen on the Settings page (renderer/settings.js) and
+// synced. The choices are what the account can ask: signed in with ChatGPT, ChatGPT's own list of Codex models
+// (MODELS_URL, the one the iPhone reads too: ios/Orbital/Translator.swift ChatGPT.models), each with the reasoning efforts it
+// takes, read once per sign-in; otherwise the three below. The page is input from outside the process: only listed choices are stored, and a
+// synced value off the list (an older build's, another Mac's) reads as the default, for the page and every question alike.
+// ponytail: an API key keeps the three below; GET /v1/models when someone uses one
+const EFFORTS = ['low', 'medium', 'high'];
+const BUILT_IN = [QUICK_MODEL, 'gpt-5.6-luna', DEFAULT_MODEL, 'gpt-6-sol'].map((id) => ({ id, efforts: EFFORTS }));
+// client_version decides which models a client is offered: a high one lists every model, and the questions here are plain
+// Responses requests any listed model answers (a Codex of this Mac's version would not yet see gpt-6.1-sol, live 2026-10-01)
+const MODELS_URL = 'https://chatgpt.com/backend-api/codex/models?client_version=99.0.0';
+const fromCatalogue = (json) => (json?.models || []).filter((m) => m && m.slug && m.visibility !== 'hide')
+  .map((m) => ({ id: m.slug, efforts: (m.supported_reasoning_levels || []).map((l) => l?.effort).filter(Boolean) }));
+let listed = null; // { rpc, list }: the app-server whose sign-in it was read with, so another sign-in reads it again
+async function modelList(userData, signedIn, fetchImpl = globalThis.fetch) {
+  if (!signedIn) return BUILT_IN;
+  const rpc = await ensureChatGPT(userData);
+  if (!rpc) return BUILT_IN;
+  if (listed?.rpc !== rpc) listed = { rpc, list: rpc.call('getAuthStatus', { includeToken: true, refreshToken: false }).then(async ({ authToken } = {}) => {
+    const res = await fetchImpl(MODELS_URL, { headers: { authorization: 'Bearer ' + authToken } });
+    if (!res.ok) throw new Error('model list: HTTP ' + res.status);
+    return fromCatalogue(await res.json());
+  }) };
+  const list = await listed.list.catch(() => []);
+  if (!list.length) listed = null; // asked again next time
+  return list.length ? list : BUILT_IN;
+}
+const aiKey = (kind, what) => settings.AI_KEYS[kind ? kind + what : what.toLowerCase()]; // ('quick', 'Model') -> aiQuickModel, ('', 'Model') -> aiModel
+const chosen = (list, kind) => {
+  const [start, startEffort] = kind ? [QUICK_MODEL, QUICK_EFFORT] : [DEFAULT_MODEL, DEFAULT_EFFORT];
+  const stored = settings.get(aiKey(kind, 'Model')), model = (list.find((m) => m.id === stored) || list.find((m) => m.id === start) || list.find((m) => m.id === DEFAULT_MODEL) || list[0]).id;
+  const found = list.find((m) => m.id === model).efforts, efforts = found.length ? found : EFFORTS, effort = settings.get(aiKey(kind, 'Effort'));
+  return { model, effort: efforts.includes(effort) ? effort : efforts.includes(startEffort) ? startEffort : efforts[0], efforts };
+};
+async function options(userData) {
+  const list = await modelList(userData, !!userData && (await chatgptStatus(userData)).signedIn), main = chosen(list, ''), quick = chosen(list, 'quick');
+  return { ...main, quickModel: quick.model, quickEffort: quick.effort, quickEfforts: quick.efforts, models: list.map((m) => m.id) };
+}
+async function setOption(key, value, userData) {
+  const now = await options(userData), allowed = { model: now.models, quickModel: now.models, effort: now.efforts, quickEffort: now.quickEfforts }[key] || [];
+  if (!Object.hasOwn(settings.AI_KEYS, key) || !allowed.includes(value)) throw new Error('Not an AI choice: ' + key);
+  settings.set(settings.AI_KEYS[key], value);
+  return options(userData);
 }
 
-module.exports = { options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };
+module.exports = { fromCatalogue, MODELS_URL, options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, QUICK_MODEL, QUICK_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };

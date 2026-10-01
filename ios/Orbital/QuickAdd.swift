@@ -198,9 +198,9 @@ extension ChatGPT {
     }
     struct Read: Decodable { let kind: String?; let title: String?; let notes: [String]? }
     // main/ai.js readImage: the image read into { kind, title, notes }
-    static func readImage(_ jpeg: Data, to: String?, model: String) async throws -> Read {
+    static func readImage(_ jpeg: Data, to: String?, model: String, effort: String) async throws -> Read {
         guard let answer = try await respond(imageInstructions(to), [["type": "input_text", "text": "The image is attached."],
-                                                                     ["type": "input_image", "image_url": "data:image/jpeg;base64," + jpeg.base64EncodedString()]], model: model)
+                                                                     ["type": "input_image", "image_url": "data:image/jpeg;base64," + jpeg.base64EncodedString()]], model: model, effort: effort)
         else { throw Failure(errorDescription: "Sign in with ChatGPT in Settings to process images") }
         let json = answer.firstIndex(of: "{").flatMap { from in answer.lastIndex(of: "}").map { String(answer[from...$0]) } } ?? ""
         guard let read = try? JSONDecoder().decode(Read.self, from: Data(json.utf8)), let title = read.title?.trimmingCharacters(in: .whitespaces), !title.isEmpty
@@ -250,18 +250,17 @@ struct AssignSheet: View {
     }
 }
 
-// What the Share extension left on Orbital's own pasteboard (ios/Share/ShareViewController.swift): an image or words, taken
-// once, when Orbital is opened by it or next comes forward
+// What the Share extension left in the Keychain (ios/Share/ShareViewController.swift): an image or words, taken once,
+// when Orbital is opened by it or next comes forward
 struct Shared: Identifiable {
     let id = UUID()
     var text: String?
     var image: UIImage?
 
     static func take() -> Shared? {
-        guard let board = UIPasteboard(name: UIPasteboard.Name("com.dreetje.orbital.shared"), create: false), board.numberOfItems > 0 else { return nil }
-        let image = board.data(forPasteboardType: "com.dreetje.orbital.image").flatMap(UIImage.init(data:))
-        let text = board.data(forPasteboardType: "com.dreetje.orbital.text").map { String(decoding: $0, as: UTF8.self) }
-        board.items = [] // taken once
+        let image = Keychain.load("shared.image").flatMap(UIImage.init(data:))
+        let text = Keychain.load("shared.text").map { String(decoding: $0, as: UTF8.self) }
+        Keychain.delete("shared.image"); Keychain.delete("shared.text") // taken once
         return image != nil || text?.isEmpty == false ? Shared(text: text, image: image) : nil
     }
 }

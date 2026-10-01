@@ -48,6 +48,7 @@ struct ListRow: View {
                         if !people.isEmpty { Faces(people: people) }
                     }
                     .font(.subheadline)
+                    .sensitive(row.sensitive, engine: engine) // when, who: barred with the words, as the desktop's .sensitive .meta
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -55,7 +56,7 @@ struct ListRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 6)
-        .nodeMenu(row.target, engine: engine, task: row.stateType != nil, assignees: row.assignees, then: reload)
+        .nodeMenu(row.target, engine: engine, task: row.stateType != nil ? engine.state(of: row) : nil, assignees: row.assignees, then: reload)
     }
 }
 

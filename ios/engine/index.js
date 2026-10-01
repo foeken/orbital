@@ -337,11 +337,12 @@ window.orbital = {
   // A write only queues, and Tana says no later, as a write-denied event (sdk/sync.js): its answer is waited for a few
   // seconds so a refused box goes back rather than looking ticked until the next read.
   // ponytail: 3 s for Tana's refusal; a slower one shows at the first read half a minute on (Engine.swift settle).
-  async toggle(id) {
+  // to: a state of its own instead (long press Move to Inbox: 'proposed')
+  async toggle(id, to) {
     const doc = await hold(id), n = readNode(doc);
-    if (!STATE_TYPES.includes(n.stateType)) throw new Error('Only a task can be ticked off');
+    if (!STATE_TYPES.includes(n.stateType) || (to != null && !STATE_TYPES.includes(to))) throw new Error('Only a task can be ticked off');
     if (doc.writeDenied || editable(n, S.me.userUri) === false) throw new Error('This task is read-only to you');
-    const next = n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed';
+    const next = to ?? (n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed');
     const refused = refusedSoon(id);
     setState(doc, next, S.me.userUri);
     if (await refused) throw new Error('Tana refused the change: this task is read-only to you');
@@ -440,7 +441,8 @@ window.orbital = {
     return JSON.stringify(id);
   },
   // What the app needs besides rows, read at each refresh: Auto-translate as the desktop has it (renderer/translate.js:
-  // the language chosen there, a synced preference, and the model the AI rows use; the phone asks ChatGPT itself,
+  // the language chosen there, a synced preference, and the model and thinking the AI rows use (the desktop's Settings page,
+  // main/ai.js chosen); the phone asks ChatGPT itself,
   // Translator.swift), what is sensitive, and what is pinned to today (a long press offers to pin or unpin)
   // Settings' Auto-translate: the same synced preference the desktop's Cmd+K Auto-translate … writes (renderer/translate.js
   // setTranslateTo), off as no value; answered once it is in the settings document
@@ -450,9 +452,17 @@ window.orbital = {
     await settings.flush();
     return JSON.stringify(to);
   },
+  // Settings' Quick and Regular AI: the synced choices the Mac's Settings page writes (main/ai.js setOption), checked against
+  // the same remote list there (Settings.swift reads it); here only that it is a model's or effort's name
+  async aiChoice(key, value) {
+    if (!Object.hasOwn(settings.AI_KEYS, key) || typeof value !== 'string' || !/^[\w.-]{1,64}$/.test(value)) throw new Error('Not an AI choice');
+    settings.set(settings.AI_KEYS[key], value);
+    await settings.flush();
+    return JSON.stringify(true);
+  },
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
-    return JSON.stringify({ to: LANGS.includes(to) ? to : null, model: settings.get('aiModel') || null,
+    return JSON.stringify({ to: LANGS.includes(to) ? to : null, ai: Object.fromEntries(Object.entries(settings.AI_KEYS).map(([k, s]) => [k, settings.get(s)]).filter(([, v]) => typeof v === 'string')),
       sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length) }); // pinned to any day
   },
   // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced
@@ -533,7 +543,7 @@ window.orbital = {
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'assign', 'share', 'translateTo', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
+for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var chatgpt = ChatGPT.load()
     @State private var signingIn = false
+    @State private var models: [ChatGPT.Model] = [] // the choices for Model, read when signed in
 
     var body: some View {
         NavigationStack {
@@ -20,6 +21,11 @@ struct SettingsView: View {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
                         if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
+                        if !models.isEmpty {
+                            NavigationLink { Models(engine: engine, models: models) } label: {
+                                LabeledContent { Text(["quickModel", "model"].map { ChatGPT.label(engine.translator.ai[$0] ?? "") }.joined(separator: ", ")) } label: { Row(glyph: "brain", title: "Models") }
+                            }
+                        }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
                     }
@@ -49,6 +55,10 @@ struct SettingsView: View {
                 }
             }
             .tint(.primary) // the rows in the text colour, not the accent blue, as the ChatGPT app has them
+            .task(id: chatgpt?.accessToken) {
+                models = chatgpt == nil ? [] : (try? await ChatGPT.models()) ?? []
+                if !models.isEmpty { engine.translator.catalogue = models } // the choices shown are the ones asked
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Close")
@@ -64,6 +74,41 @@ struct SettingsView: View {
     }
 
     // a row's glyph and words in the text colour: each account by its service's mark (Tana's, OpenAI's)
+    // Settings' Models: the Quick and the Regular AI, a segment each, the Mac Settings page's same synced choices (main/settings.js
+    // AI_KEYS) from the same remote list of models. A new model whose levels lack the effort takes low.
+    struct Models: View {
+        let engine: Engine
+        let models: [ChatGPT.Model]
+        @State private var quick = true
+        var body: some View {
+            let modelKey = quick ? "quickModel" : "model", effortKey = quick ? "quickEffort" : "effort"
+            let model = engine.translator.ai[modelKey] ?? "", efforts = models.first { $0.id == model }?.levels ?? ["low", "medium", "high"]
+            Form {
+                Picker("AI", selection: $quick) { Text("Quick").tag(true); Text("Regular").tag(false) }
+                    .pickerStyle(.segmented).labelsHidden().listRowBackground(Color.clear).listRowInsets(EdgeInsets())
+                Section {
+                    Picker("Model", selection: Binding { model } set: { id in Task {
+                        await engine.aiChoice(modelKey, id)
+                        let next = models.first { $0.id == id }?.levels ?? []
+                        if !next.isEmpty, !next.contains(engine.translator.ai[effortKey] ?? "") { await engine.aiChoice(effortKey, next.contains("low") ? "low" : next[0]) }
+                    } }) {
+                        ForEach(models) { Text(ChatGPT.label($0.id)).tag($0.id) }
+                    }
+                    .pickerStyle(.inline).labelsHidden()
+                } header: { Header("Model") } footer: {
+                    Text(quick ? "For Auto-translate, Discuss with, types and icons: short questions, where a fast model is enough." : "For reading images in Quick Add and Share, where a bigger model reads better.")
+                }
+                Section {
+                    Picker("Thinking", selection: Binding { engine.translator.ai[effortKey] ?? "low" } set: { x in Task { await engine.aiChoice(effortKey, x) } }) {
+                        ForEach(efforts, id: \.self) { Text(ChatGPT.effortLabel($0)).tag($0) }
+                    }
+                    .pickerStyle(.inline).labelsHidden()
+                } header: { Header("Thinking") } footer: { Text("The same on your Mac.") }
+            }
+            .navigationTitle("Models").navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
     struct Row: View {
         let glyph: String
         let title: String

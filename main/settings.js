@@ -35,11 +35,12 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // Everything else is a choice about your own content, which is the same choice wherever you open the app.
 // openaiApiKey is deliberately absent: it must remain on this machine, never in Tana. ChatGPT auth is in a separate
 // local Codex home under userData, not in these settings or in the user's regular Codex home.
-// aiModel/aiEffort are which model the AI rows use ("Discuss with", "Auto-pick type") and how hard it thinks (main/ai.js): a
-// choice about your own content, so it follows you, while the key that pays for it stays put. Neither has UI yet —
-// unset means the defaults in main/ai.js.
+// AI_KEYS are the Regular AI (reading images) and the Quick AI (everything else) and how hard each thinks (main/ai.js), set on
+// the Mac's and the iPhone's Settings alike (ios/engine/index.js aiChoice): a choice about your own content, so it follows
+// you, while the key that pays for it stays put. Unset means the defaults in main/ai.js.
+const AI_KEYS = { model: 'aiModel', effort: 'aiEffort', quickModel: 'aiQuickModel', quickEffort: 'aiQuickEffort' };
 // myTasks is which saved search the Work View's right half is (main/views.js myTasks), by id so a rename keeps it.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^agents$/, /^defaultAgent$/, /^codexPrompt$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^myTasks$/, /^pref:/];
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^agents$/, /^defaultAgent$/, /^codexPrompt$/, /^codexTask$/, /^sensitive$/, /^ai(Quick)?(Model|Effort)$/, /^myTasks$/, /^pref:/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets
@@ -278,4 +279,4 @@ function tellOthers(from, docId) { // from: the page handle that wrote it (main/
 // the preferences now, asked for once the page listens for settings:changed (renderer/app.js; preload's prefs:snapshot is the load-time copy)
 const ipc = { 'prefs:now': () => prefs() };
 
-module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, appDocIds, isSynced, reset, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };
+module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, appDocIds, isSynced, reset, AI_KEYS, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };

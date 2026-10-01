@@ -11,7 +11,9 @@ final class Translator {
     struct Answer: Codable { let lang: String; let text: String } // text "": nothing to translate
 
     private(set) var to: String?
-    private(set) var model = "gpt-5.6-terra" // main/ai.js DEFAULT_MODEL, unless the settings name another (aiModel)
+    // the synced Regular AI (model, effort: reading an image) and Quick AI (quickModel, quickEffort: translating), set on either
+    // app's Settings (main/settings.js AI_KEYS); main/ai.js DEFAULT_MODEL / QUICK_MODEL and their efforts until they name others
+    private(set) var ai = ["model": "gpt-5.6-terra", "effort": "low", "quickModel": "gpt-6-luna", "quickEffort": "low"]
     private(set) var answers: [String: Answer] = (UserDefaults.standard.data(forKey: "translations").flatMap { try? JSONDecoder().decode([String: Answer].self, from: $0) }) ?? [:]
     @ObservationIgnored private var asked = Set<String>()
     @ObservationIgnored private var queue: [(to: String, text: String)] = [] // each with its language: Auto-translate can change while it waits
@@ -19,7 +21,20 @@ final class Translator {
 
     private(set) var problem: String? // why the last question to ChatGPT got no answer
 
-    func use(to: String?, model: String?) { self.to = to; if let model { self.model = model } }
+    func use(to: String?, ai: [String: String] = [:]) { self.to = to; self.ai.merge(ai) { $1 }; fit() }
+
+    // This account's models, once read (Engine, Settings): a synced choice off them — another account's, or one ChatGPT
+    // dropped — is asked as the start choice instead, as main/ai.js chosen does on the Mac
+    @ObservationIgnored var catalogue: [ChatGPT.Model] = [] { didSet { fit() } }
+    private func fit() {
+        guard !catalogue.isEmpty else { return }
+        for (m, e, start, startEffort) in [("model", "effort", "gpt-5.6-terra", "low"), ("quickModel", "quickEffort", "gpt-6-luna", "low")] {
+            let model = catalogue.first { $0.id == ai[m] } ?? catalogue.first { $0.id == start } ?? catalogue[0]
+            let efforts = model.levels
+            ai[m] = model.id
+            if !efforts.contains(ai[e] ?? "") { ai[e] = efforts.contains(startEffort) ? startEffort : efforts[0] }
+        }
+    }
 
     // The words to show and, when they are a translation, the language they were in. Asks for what it does not know yet.
     func words(_ text: String, sensitive: Bool = false) -> (String, String?) {
@@ -56,7 +71,7 @@ final class Translator {
         guard !ask.isEmpty else { return save() }
         let found: [Int: Answer]
         do {
-            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: model) else {
+            guard let answered = try await ChatGPT.translate(Array(ask), to: to, model: ai["quickModel"]!, effort: ai["quickEffort"]!) else {
                 problem = "Sign in with ChatGPT"
                 for text in ask { asked.remove(to + "\n" + text) } // asked again once signed in
                 return save()
@@ -93,14 +108,14 @@ extension ChatGPT {
 
     // One question to ChatGPT as Codex asks it (its Responses endpoint for a ChatGPT sign-in, streamed): the answer's
     // text, or nil without a sign-in. content: the user's parts (input_text, input_image); schema: the answer's shape.
-    static func respond(_ instructions: String, _ content: [[String: Any]], model: String, schema: [String: Any]? = nil, timeout: TimeInterval = 90) async throws -> String? {
+    static func respond(_ instructions: String, _ content: [[String: Any]], model: String, effort: String, schema: [String: Any]? = nil, timeout: TimeInterval = 90) async throws -> String? {
         guard let account = try await fresh() else { return nil }
         var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/codex/responses")!)
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
         for (k, v) in ["authorization": "Bearer " + account.accessToken, "chatgpt-account-id": account.accountId ?? "", "OpenAI-Beta": "responses=experimental",
                        "originator": "codex_cli_rs", "accept": "text/event-stream", "content-type": "application/json"] { request.setValue(v, forHTTPHeaderField: k) }
-        var body: [String: Any] = ["model": model, "instructions": instructions, "store": false, "stream": true, "reasoning": ["effort": "low"],
+        var body: [String: Any] = ["model": model, "instructions": instructions, "store": false, "stream": true, "reasoning": ["effort": effort],
                                    "input": [["type": "message", "role": "user", "content": content]]]
         if let schema { body["text"] = ["format": ["type": "json_schema", "name": "answer", "schema": schema, "strict": true]] }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -133,10 +148,33 @@ extension ChatGPT {
         return try JSONDecoder().decode(Out.self, from: data).text
     }
 
+    // The models to choose from: ChatGPT's own list of Codex models, the one the Mac reads too (main/ai.js MODELS_URL, the
+    // same high client_version so every model is listed), each with the thinking levels it takes. nil without a sign-in.
+    struct Model: Identifiable {
+        let id: String; let efforts: [String]
+        var levels: [String] { efforts.isEmpty ? ["low", "medium", "high"] : efforts } // a model listed without its levels takes these, as main/ai.js EFFORTS
+    }
+    static func models() async throws -> [Model]? {
+        guard let account = try await fresh() else { return nil }
+        var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/codex/models?client_version=99.0.0")!)
+        request.setValue("Bearer " + account.accessToken, forHTTPHeaderField: "authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 { throw Failure(errorDescription: "HTTP \(status)") }
+        struct Out: Decodable { struct M: Decodable { struct L: Decodable { let effort: String }; let slug: String; let visibility: String?; let supported_reasoning_levels: [L]? }; let models: [M] }
+        return try JSONDecoder().decode(Out.self, from: data).models.filter { $0.visibility != "hide" }.map { Model(id: $0.slug, efforts: ($0.supported_reasoning_levels ?? []).map(\.effort)) }
+    }
+    // as the Mac's Settings page names them (renderer/settings.js aiModelLabel): gpt-6-sol Sol 6, gpt-5.5 GPT-5.5
+    static func label(_ id: String) -> String {
+        guard id.hasPrefix("gpt-") else { return id }
+        let parts = id.dropFirst(4).split(separator: "-", maxSplits: 1).map(String.init)
+        return parts.count == 2 ? parts[1].prefix(1).uppercased() + parts[1].dropFirst() + " " + parts[0] : "GPT-" + parts[0]
+    }
+    static func effortLabel(_ effort: String) -> String { effort == "xhigh" ? "Extra high" : effort.prefix(1).uppercased() + effort.dropFirst() }
+
     // Translations by id: id -> { lang, text }, a text already in the language left out. nil without a sign-in.
-    static func translate(_ texts: [String], to: String, model: String) async throws -> [Int: Translator.Answer]? {
+    static func translate(_ texts: [String], to: String, model: String, effort: String) async throws -> [Int: Translator.Answer]? {
         let input = String(decoding: try JSONSerialization.data(withJSONObject: texts.enumerated().map { ["id": $0.offset + 1, "text": $0.element] }), as: UTF8.self)
-        guard let answer = try await respond(instructions(to), [["type": "input_text", "text": input]], model: model, schema: schema) else { return nil }
+        guard let answer = try await respond(instructions(to), [["type": "input_text", "text": input]], model: model, effort: effort, schema: schema) else { return nil }
         struct Out: Decodable { struct One: Decodable { let id: Int; let lang: String?; let text: String? }; let translations: [One] }
         let out = try JSONDecoder().decode(Out.self, from: Data(answer.utf8))
         // a null pair is the schema's "already in that language": kept as nothing to translate, so it is not asked again
