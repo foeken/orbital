@@ -11,24 +11,6 @@ struct SettingsView: View {
     @State private var signingIn = false
     @State private var models: [ChatGPT.Model] = [] // the choices for Model, read when signed in
 
-    // a Model and a Thinking picker for one AI (main/settings.js AI_KEYS); a new model whose levels lack the effort takes low
-    @ViewBuilder private func aiPickers(_ name: String, model modelKey: String, effort effortKey: String) -> some View {
-        let model = engine.translator.ai[modelKey] ?? "", efforts = models.first { $0.id == model }?.efforts ?? ["low", "medium", "high"]
-        Picker(selection: Binding { model } set: { id in Task {
-            await engine.aiChoice(modelKey, id)
-            let next = models.first { $0.id == id }?.efforts ?? []
-            if !next.isEmpty, !next.contains(engine.translator.ai[effortKey] ?? "") { await engine.aiChoice(effortKey, next.contains("low") ? "low" : next[0]) }
-        } }) {
-            ForEach(models) { Text(ChatGPT.label($0.id)).tag($0.id) }
-            if !models.contains(where: { $0.id == model }) { Text(ChatGPT.label(model)).tag(model) } // a choice the list no longer has
-        } label: { Row(glyph: "brain", title: name + " AI") }
-        .pickerStyle(.menu).tint(.secondary)
-        Picker(selection: Binding { engine.translator.ai[effortKey] ?? "low" } set: { x in Task { await engine.aiChoice(effortKey, x) } }) {
-            ForEach(efforts, id: \.self) { Text(ChatGPT.effortLabel($0)).tag($0) }
-        } label: { Row(glyph: "sparkle", title: name + " thinking") }
-        .pickerStyle(.menu).tint(.secondary)
-    }
-
     var body: some View {
         NavigationStack {
             Form {
@@ -39,10 +21,10 @@ struct SettingsView: View {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
                         if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
-                        // the Mac Settings page's Quick and Default AI: the same synced choices, from the same remote list of models
                         if !models.isEmpty {
-                            aiPickers("Quick", model: "quickModel", effort: "quickEffort")
-                            aiPickers("Default", model: "model", effort: "effort")
+                            NavigationLink { Models(engine: engine, models: models) } label: {
+                                LabeledContent { Text(["quickModel", "model"].map { ChatGPT.label(engine.translator.ai[$0] ?? "") }.joined(separator: ", ")) } label: { Row(glyph: "brain", title: "Models") }
+                            }
                         }
                     } else {
                         Button { signingIn = true } label: { Row(glyph: "chatgpt", title: "Sign in with ChatGPT") }
@@ -50,7 +32,7 @@ struct SettingsView: View {
                 } header: {
                     Header("ChatGPT")
                 } footer: {
-                    Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone. Quick AI translates and answers the small questions, Default AI reads images; both are the same on your Mac.")
+                    Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone.")
                 }
                 Section {
                     // the language notes are shown in, the same synced setting as Cmd+K Auto-translate … on the Mac
@@ -89,6 +71,42 @@ struct SettingsView: View {
     }
 
     // a row's glyph and words in the text colour: each account by its service's mark (Tana's, OpenAI's)
+    // Settings' Models: the Quick and the Regular AI, a segment each, the Mac Settings page's same synced choices (main/settings.js
+    // AI_KEYS) from the same remote list of models. A new model whose levels lack the effort takes low.
+    struct Models: View {
+        let engine: Engine
+        let models: [ChatGPT.Model]
+        @State private var quick = true
+        var body: some View {
+            let modelKey = quick ? "quickModel" : "model", effortKey = quick ? "quickEffort" : "effort"
+            let model = engine.translator.ai[modelKey] ?? "", efforts = models.first { $0.id == model }?.efforts ?? ["low", "medium", "high"]
+            Form {
+                Picker("AI", selection: $quick) { Text("Quick").tag(true); Text("Regular").tag(false) }
+                    .pickerStyle(.segmented).labelsHidden().listRowBackground(Color.clear).listRowInsets(EdgeInsets())
+                Section {
+                    Picker("Model", selection: Binding { model } set: { id in Task {
+                        await engine.aiChoice(modelKey, id)
+                        let next = models.first { $0.id == id }?.efforts ?? []
+                        if !next.isEmpty, !next.contains(engine.translator.ai[effortKey] ?? "") { await engine.aiChoice(effortKey, next.contains("low") ? "low" : next[0]) }
+                    } }) {
+                        ForEach(models) { Text(ChatGPT.label($0.id)).tag($0.id) }
+                        if !models.contains(where: { $0.id == model }) { Text(ChatGPT.label(model)).tag(model) } // a choice the list no longer has
+                    }
+                    .pickerStyle(.inline).labelsHidden()
+                } header: { Header("Model") } footer: {
+                    Text(quick ? "For Auto-translate, Discuss with, types and icons: short questions, where a fast model is enough." : "For reading images in Quick Add and Share, where a bigger model reads better.")
+                }
+                Section {
+                    Picker("Thinking", selection: Binding { engine.translator.ai[effortKey] ?? "low" } set: { x in Task { await engine.aiChoice(effortKey, x) } }) {
+                        ForEach(efforts, id: \.self) { Text(ChatGPT.effortLabel($0)).tag($0) }
+                    }
+                    .pickerStyle(.inline).labelsHidden()
+                } header: { Header("Thinking") } footer: { Text("The same on your Mac.") }
+            }
+            .navigationTitle("Models").navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
     struct Row: View {
         let glyph: String
         let title: String

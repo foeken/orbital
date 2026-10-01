@@ -251,7 +251,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard !Self.isSample else { return }
         do { let _: String? = try await call("return await orbital.translateTo(to)", ["to": to ?? NSNull()]) } catch { translator.use(to: was); self.error = error.localizedDescription }
     }
-    // Settings' Default and Quick AI: used at once, kept if Tana takes it (orbital.aiChoice), as the Mac's Settings page sets them
+    // Settings' Quick and Regular AI: used at once, kept if Tana takes it (orbital.aiChoice), as the Mac's Settings page sets them
     func aiChoice(_ key: String, _ value: String) async {
         let was = translator.ai
         translator.use(to: translator.to, ai: [key: value])

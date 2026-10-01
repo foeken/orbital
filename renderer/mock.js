@@ -65,7 +65,7 @@ function mockApi() {
   // the Cmd+K switch is on (mcpOff below; the per-view includeMcp filter is still gone, #247)
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', editable: false, renamable: true, hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
-  const aiPick = { model: 'gpt-6-sol', effort: 'low', quickModel: 'gpt-5.6-terra', quickEffort: 'low' }; // the Settings page's Default and Quick AI (main/ai.js options)
+  const aiPick = { model: 'gpt-6-sol', effort: 'low', quickModel: 'gpt-5.6-terra', quickEffort: 'low' }; // the Settings page's Quick and Regular AI (main/ai.js options)
   const aiOptions = () => ({ ...aiPick, models: ['gpt-6-sol', 'gpt-5.6-luna', 'gpt-5.6-terra'], efforts: ['low', 'medium', 'high'], quickEfforts: ['low', 'medium', 'high'] });
   let mcpOff = false; // the app-local switch, off every launch of the mock
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time

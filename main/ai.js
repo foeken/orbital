@@ -21,7 +21,7 @@ const { send } = require('./state');
 // trip, not the model), and right where Luna was sure and wrong — it typed twelve real documents without a confident
 // mistake, where Luna made one or two in every run (docs/OUTLINER.md, Auto-pick type).
 const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
-// Both the Quick AI (Auto-translate, Discuss with, Classify type, the icon pick) and the Default AI (reading an image)
+// Both the Quick AI (Auto-translate, Discuss with, Classify type, the icon pick) and the Regular AI (reading an image)
 // start here until the Settings page names others (chosen below; the iPhone the same: ios/Orbital/Translator.swift)
 const ENDPOINT = 'https://api.openai.com/v1/responses';
 const TIMEOUT_MS = 20000;
@@ -445,7 +445,7 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
   return list.map(shown);
 }
 
-// The Default AI (an image read) and the Quick AI (every other question), each a model and an effort (ask above), chosen on the Settings page (renderer/settings.js) and
+// The Regular AI (an image read) and the Quick AI (every other question), each a model and an effort (ask above), chosen on the Settings page (renderer/settings.js) and
 // synced. The choices are what the account can ask: signed in with ChatGPT, ChatGPT's own list of Codex models
 // (MODELS_URL, the one the iPhone reads too: ios/Orbital/Translator.swift ChatGPT.models), each with the reasoning efforts it
 // takes, read once per sign-in; otherwise the three below. The page is input from outside the process: only listed choices are stored, and a

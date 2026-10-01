@@ -451,7 +451,7 @@ window.orbital = {
     await settings.flush();
     return JSON.stringify(to);
   },
-  // Settings' Default and Quick AI: the synced choices the Mac's Settings page writes (main/ai.js setOption), checked against
+  // Settings' Quick and Regular AI: the synced choices the Mac's Settings page writes (main/ai.js setOption), checked against
   // the same remote list there (Settings.swift reads it); here only that it is a model's or effort's name
   async aiChoice(key, value) {
     if (!Object.hasOwn(settings.AI_KEYS, key) || typeof value !== 'string' || !/^[\w.-]{1,64}$/.test(value)) throw new Error('Not an AI choice');

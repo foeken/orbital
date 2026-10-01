@@ -35,7 +35,7 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // Everything else is a choice about your own content, which is the same choice wherever you open the app.
 // openaiApiKey is deliberately absent: it must remain on this machine, never in Tana. ChatGPT auth is in a separate
 // local Codex home under userData, not in these settings or in the user's regular Codex home.
-// AI_KEYS are the Default AI (reading images) and the Quick AI (everything else) and how hard each thinks (main/ai.js), set on
+// AI_KEYS are the Regular AI (reading images) and the Quick AI (everything else) and how hard each thinks (main/ai.js), set on
 // the Mac's and the iPhone's Settings alike (ios/engine/index.js aiChoice): a choice about your own content, so it follows
 // you, while the key that pays for it stays put. Unset means the defaults in main/ai.js.
 const AI_KEYS = { model: 'aiModel', effort: 'aiEffort', quickModel: 'aiQuickModel', quickEffort: 'aiQuickEffort' };

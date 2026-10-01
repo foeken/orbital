@@ -150,7 +150,7 @@ contextBridge.exposeInMainWorld('api', {
   prefsNow: () => ipcRenderer.invoke('prefs:now'), // the same, now: what a settings:changed sent before the page listened carried
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
-  aiOptions: () => ipcRenderer.invoke('ai:options'), // { model, effort, efforts, quickModel, quickEffort, quickEfforts, models }: the Default and Quick AI, and the choices
+  aiOptions: () => ipcRenderer.invoke('ai:options'), // { model, effort, efforts, quickModel, quickEffort, quickEfforts, models }: the Quick and Regular AI, and the choices
   setAiOption: (key, value) => ipcRenderer.invoke('ai:setOption', key, value), // 'model' | 'effort' | 'quickModel' | 'quickEffort', one of the choices -> the options again
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),
   chatgptLogin: () => ipcRenderer.invoke('chatgpt:login'),

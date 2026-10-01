@@ -767,7 +767,7 @@ wrong twenty.
   under userData, separate from the user's Codex login, from this Mac's `codex` (`codexBin` in main/agents/codex.js) or,
   failing that, a standalone `codex-app-server` downloaded on first sign-in and kept only when `codesign` shows
   OpenAI's Developer ID. Two synced choices, each a model and an effort (main/settings.js AI_KEYS): the Quick AI (`aiQuickModel`,
-  `aiQuickEffort`) for Auto-translate, Discuss with, Auto-pick type and the icon pick, and the Default AI (`aiModel`,
+  `aiQuickEffort`) for Auto-translate, Discuss with, Auto-pick type and the icon pick, and the Regular AI (`aiModel`,
   `aiEffort`) for reading an image, both defaulting to `gpt-5.6-terra` with low reasoning (main/ai.js), set on the Settings page.
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
@@ -1108,7 +1108,7 @@ app page too, known and remembered the same way, but it has no rows: the rendere
   draws no rows and asks main for no children (renderer/render.js): it is sections of field rows (`.fields`), each a
   glyph, a grey label and its value, and only lasting choices are on it — General (Theme: Light, Dark, System; Home, set
   with ⌘K Set as Home), Language (Auto-translate), AI (ChatGPT sign-in and, only while one is stored, the OpenAI API key, marked **This Mac**; Quick AI
-  and Default AI, each a model and its thinking (the synced settings.AI_KEYS) over `ai:options`/`ai:setOption`,
+  and Regular AI, each a model and its thinking (the synced settings.AI_KEYS) over `ai:options`/`ai:setOption`,
   which take only main/ai.js's own lists; Agents, the ones that are on, over `agentList`) and Lists (hidden titles, Show MCP chats). A control changes its
   setting the way its Cmd+K row does, mostly by running that row (`runAction`: Auto-translate, ChatGPT, the API key,
   Choose agents and hidden titles open their palette pages). The page reads its values again when the palette closes,

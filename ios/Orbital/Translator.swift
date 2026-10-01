@@ -11,7 +11,7 @@ final class Translator {
     struct Answer: Codable { let lang: String; let text: String } // text "": nothing to translate
 
     private(set) var to: String?
-    // the synced Default AI (model, effort: reading an image) and Quick AI (quickModel, quickEffort: translating), set on either
+    // the synced Regular AI (model, effort: reading an image) and Quick AI (quickModel, quickEffort: translating), set on either
     // app's Settings (main/settings.js AI_KEYS); main/ai.js DEFAULT_MODEL and DEFAULT_EFFORT until they name others
     private(set) var ai = ["model": "gpt-5.6-terra", "effort": "low", "quickModel": "gpt-5.6-terra", "quickEffort": "low"]
     private(set) var answers: [String: Answer] = (UserDefaults.standard.data(forKey: "translations").flatMap { try? JSONDecoder().decode([String: Answer].self, from: $0) }) ?? [:]

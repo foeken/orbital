@@ -447,7 +447,7 @@ ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id,
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:translate', (_e, texts, to, opts) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'), { local: !!(opts && opts.local) })); // a note shown in English, never saved (renderer/translate.js); local: this Mac's answers only
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
-// The Settings page's Default and Quick AI (renderer/settings.js): the synced settings.AI_KEYS, only from main's own lists
+// The Settings page's Quick and Regular AI (renderer/settings.js): the synced settings.AI_KEYS, only from main's own lists
 ipcMain.handle('ai:options', () => ai.options(S.userData));
 ipcMain.handle('ai:setOption', async (e, key, value) => { const next = await ai.setOption(key, value, S.userData); tellOthers(pageOf(e)); return next; });
 // "Auto-pick type": the types this document may have, weighed by the model; the write stays doc:setType's

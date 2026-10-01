@@ -56,8 +56,8 @@ function settingsEl() {
       // only for whoever already has a key, as ⌘K offers Set OpenAI API key (renderer/palette.js): ChatGPT is the way in
       ...(tana.setOpenAIKey && chatgptAuth?.apiKey ? [['openaiKey', 'OpenAI API key', [act('Set …', action('openaiKey'))], true]] : []),
       ...(ai ? [
-        // the Quick AI answers the small questions (Auto-translate, Discuss with, Auto-pick type, type icons), the Default AI reads images
-        ...[['quick', 'Quick', 'Translating, Discuss with, types and icons'], ['', 'Default', 'Reading images']].flatMap(([kind, name, what]) => {
+        // the Quick AI answers the small questions (Auto-translate, Discuss with, Auto-pick type, type icons), the Regular AI reads images
+        ...[['quick', 'Quick', 'Translating, Discuss with, types and icons'], ['', 'Regular', 'Reading images']].flatMap(([kind, name, what]) => {
           const k = (w) => (kind ? kind + w : w.toLowerCase()), model = ai[k('Model')], effort = ai[k('Effort')];
           return [
             ['brain', name + ' AI', [...choices(ai.models.map((m) => [aiModelLabel(m), m === model, () => settingsSetAI(k('Model'), m), m])), hint(what)]],

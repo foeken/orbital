@@ -823,7 +823,7 @@ async function main() {
     await ai.readImage(tinyPng,fetchWith(imageAnswer));
     assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-6-sol','high'],'reading an image follows the settings, changeable without a release');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the quick jobs ask the Quick AI, which the Default AI does not change');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the quick jobs ask the Quick AI, which the Regular AI does not change');
     settings.set('aiQuickModel','gpt-5.6-luna'); settings.set('aiQuickEffort','medium');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
     assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-5.6-luna','medium'],'and the Quick AI is a setting of its own');
@@ -832,7 +832,7 @@ async function main() {
     await ai.translate(['Open vraag over het budget'],'English',fetchWith(answer('[]')),undefined,{detect:null});
     assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-5.6-luna','medium'],'and Auto-translate');
     await ai.readImage(tinyPng,fetchWith(imageAnswer));
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-6-sol','high'],'while an image keeps the Default AI');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-6-sol','high'],'while an image keeps the Regular AI');
     assert.equal(['aiModel','aiEffort','aiQuickModel','aiQuickEffort'].every(settings.isSynced),true,'and they follow you, unlike the key that pays for them');
     settings.set('aiModel','gpt-4o'); settings.set('aiEffort','extreme'); settings.set('aiQuickModel','gpt-4o'); // synced from an older build or another Mac: off the Settings page's lists
     await ai.readImage(tinyPng,fetchWith(imageAnswer));
@@ -2602,7 +2602,7 @@ async function main() {
     assert.equal(JSON.stringify(await backend.handlers.get('ai:options')()), before, 'a refused write changes neither choice');
     await backend.handlers.get('ai:setOption')(null, 'effort', 'low');
     const quick = await backend.handlers.get('ai:setOption')(null, 'quickModel', 'gpt-6-sol');
-    assert.deepEqual([quick.quickModel, quick.model], ['gpt-6-sol', 'gpt-5.6-terra'], 'the Quick AI is stored apart from the Default AI');
+    assert.deepEqual([quick.quickModel, quick.model], ['gpt-6-sol', 'gpt-5.6-terra'], 'the Quick AI is stored apart from the Regular AI');
     await backend.handlers.get('ai:setOption')(null, 'quickModel', 'gpt-5.6-terra');
     assert.equal(payload.truncated, true);
     assert.equal('iconSvg' in payload.nodes.find((n) => n.id === doc.id), false, 'rows carry no app-local icon');
