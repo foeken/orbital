@@ -315,6 +315,11 @@ window.orbital = {
         const result = await list(params), app = new Set(settings.appDocIds());
         return { ...result, nodes: visibleGraphNodes(result.nodes).filter((n) => params.nodeIds || !app.has(n.id)) };
       });
+      // what another device writes to the settings document (a mark made sensitive on the Mac) read in as it arrives, as
+      // main/documents.js does, and the app told to read again (S.win below), so nothing stays unblurred until a pull
+      S.client.sync.on('change', (id) => {
+        if (id === settings.settingsDocId()) Promise.resolve(settings.applyRemote(id)).then(() => S.win.webContents.send('outline:changed'));
+      });
       S.client.sync.connect().catch((e) => issues.push('sync: ' + (e && e.message || e)));
     }
     return true;
@@ -519,7 +524,9 @@ window.orbital = {
     const { id, doc } = await create(String(title).slice(0, 200), { kind: kind === 'task' ? 'task' : 'doc' });
     for (const line of notes || []) insertAfter(doc, null, String(line));
     const uri = 'tana:image:' + ulid();
-    await hold(uri, (loro) => initImage(loro, { ownerUri: id, cid: up.cid, width: up.width, height: up.height, blurhash: up.blurhash, filename: 'image', mimeType, fileSize: bytes.length }));
+    // slow to answer, it is carried on with as the note itself is (create): a retry would make a second note
+    await hold(uri, (loro) => initImage(loro, { ownerUri: id, cid: up.cid, width: up.width, height: up.height, blurhash: up.blurhash, filename: 'image', mimeType, fileSize: bytes.length }))
+      .catch((e) => S.client.sync.getDocument(uri) || Promise.reject(e));
     insertImage(doc, null, uri);
     return JSON.stringify(id);
   },

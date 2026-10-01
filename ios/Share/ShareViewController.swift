@@ -43,7 +43,7 @@ final class ShareViewController: UIViewController {
     private func open(_ url: URL) {
         var next: UIResponder? = self
         while let responder = next {
-            if let app = responder as? UIApplication {
+            if let app = responder as? UIApplication, app.responds(to: NSSelectorFromString("openURL:options:completionHandler:")) {
                 // called through its own three-argument signature: perform(_:with:with:) passes two, and the completion
                 // handler slot read garbage
                 let selector = NSSelectorFromString("openURL:options:completionHandler:")

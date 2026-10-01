@@ -119,6 +119,7 @@ struct NodeScreen: View {
                 ProgressView()
             }
         }
+        .onChange(of: engine.sensitiveIds) { Task { await load() } } // marked or unmarked on another device: drawn again
         .navigationTitle(titled && !(page?.sensitive == true && !engine.reveal) ? engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0 : "")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {

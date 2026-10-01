@@ -7,6 +7,7 @@ const open = (id) => [W, { js: "goTo('" + id + "')" }, { wait: 900 }];
 const tag = (rowText, sel, id) => ({ js: "[...document.querySelectorAll('.node')].find((n) => n.textContent.includes(" + JSON.stringify(rowText) + ")).querySelector(" + JSON.stringify(sel) + ").id = " + JSON.stringify(id) });
 module.exports = [
   { name: 'timeline-now', setup: open('orbital:timeline'), clip: [0, 40, 1280, 560] },
+  // its meetings include Travel to Utrecht, drawn with the route marker (main/timeline.js meetingIcon)
   { name: 'timeline-history', size: '1280x1500', setup: open('orbital:timeline'), clip: [0, 600, 1280, 880] },
   { name: 'timeline-end', size: '1280x2000', setup: open('orbital:timeline'), clip: [0, 1480, 1280, 170] },
   { name: 'timeline-addmore', setup: open('orbital:timeline'), steps: [{ click: '.tl-add' }, { wait: 300 }, { type: 'board' }, { wait: 900 }],

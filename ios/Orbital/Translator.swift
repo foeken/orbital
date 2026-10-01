@@ -139,6 +139,7 @@ extension ChatGPT {
         guard let answer = try await respond(instructions(to), [["type": "input_text", "text": input]], model: model, schema: schema) else { return nil }
         struct Out: Decodable { struct One: Decodable { let id: Int; let lang: String?; let text: String? }; let translations: [One] }
         let out = try JSONDecoder().decode(Out.self, from: Data(answer.utf8))
-        return Dictionary(out.translations.compactMap { t in t.lang.flatMap { lang in t.text.map { (t.id, Translator.Answer(lang: lang, text: $0)) } } }, uniquingKeysWith: { a, _ in a })
+        // a null pair is the schema's "already in that language": kept as nothing to translate, so it is not asked again
+        return Dictionary(out.translations.map { t in (t.id, Translator.Answer(lang: t.lang ?? "", text: t.lang == nil ? "" : t.text ?? "")) }, uniquingKeysWith: { a, _ in a })
     }
 }
