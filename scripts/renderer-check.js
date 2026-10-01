@@ -152,6 +152,7 @@ assert.match(source, /check\.disabled = target \? !canEditNode\(display\) : !tic
 assert.match(source, /if \(!canEditItem\(item\) \|\| opensOnClick\(item\)\) \{/);
 assert.match(source, /tana\.taskMeta\(docId\)/);
 assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaAgain = new Set\(\), taskMetaFailed = new Map\(\);/);
+assert.match(source, /if \(taskMetaById\.has\(docId\) \|\| taskMetaLoading\.has\(docId\)\) loadTaskMeta\(docId, true\)/, 'a metadata change during a read in flight reads it once more when it lands (#477)');
 assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| !isRealId\(docId\) \|\| isGone\(docId\) \|\| \(!again && taskMetaById\.has\(docId\)\) \|\| taskMetaLoading\.has\(docId\) \|\| \(backoff && Date\.now\(\) < backoff\.until\)\) return;/);
 assert.match(source, /const isRealId = \(id\) => typeof id === 'string' && id\.startsWith\('tana:'\);/);
 // Tana titles are plain text: the @ picker must not open there, so the key types an ordinary character (#53)

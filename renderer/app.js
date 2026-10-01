@@ -123,7 +123,8 @@ tana.onChanged((docId, info) => {
     }
     // the watch state goes with it: its default follows the assignees, and another page's watch choice arrives this way
     // and the metadata is read again with the old answer kept on screen until the new one lands (loadTaskMeta again)
-    if (!info || info.meta !== false) { notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); if (taskMetaById.has(docId)) loadTaskMeta(docId, true); }
+    // a read still out may predate the change, so it is read once more when it lands (#477)
+    if (!info || info.meta !== false) { notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); if (taskMetaById.has(docId) || taskMetaLoading.has(docId)) loadTaskMeta(docId, true); }
     if (meetingInfos.has(docId)) meetingInfoOf(docId, true); // a meeting's attendees, read again for its page's field
     // and a node linked to an agent task asks what its task is doing: another page may have relinked it to another task
     if (info && info.meta && (agentStates.has(docId) || agentTasks.has(docId))) loadAgentStates();

@@ -1175,7 +1175,7 @@ async function runStalePaletteInvalidationCheck() {
     let zoom = { docId: keptId };
     const agentStates = new Map(), agentTasks = new Map(), loadAgentStates = () => {};
     const listPage = () => false; // a document is zoomed here, never a list page
-    const taskMetaById = new Map(), kids = new Map(), extra = new Map(), fresh = new Map();
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), kids = new Map(), extra = new Map(), fresh = new Map();
     const meetingInfos = new Map(); // no meeting page open here
     const loadRoots = async () => {};
     const reload = async () => {};
@@ -8039,7 +8039,7 @@ async function runLiveUpdateBurstCheck() {
     ${sourceLine('const onSearchPage =')}
     ${sourceLine('const onTypePage =')}
     ${sourceLine('const listPage =')}
-    const taskMetaById = new Map(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
     const meetingInfos = new Map(); // no meeting page open here
     const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
     const patchDoc = async (id) => { patched.push(id); }, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
