@@ -1102,7 +1102,9 @@ app page too, known and remembered the same way, but it has no rows: the rendere
   which take only main/ai.js's own lists; Codex hosts) and Lists (hidden titles, Show MCP chats). A control changes its
   setting the way its Cmd+K row does, mostly by running that row (`runAction`: Auto-translate, ChatGPT, the API key,
   Codex hosts and hidden titles open their palette pages). The page reads its values again when the palette closes,
-  when a setting arrives from another page or Mac and when the ChatGPT status changes. Text size, shortcuts, the
+  when a setting arrives from another page or Mac (hosts edited elsewhere announce themselves too), on a global refresh
+  (hidden titles edited elsewhere) and when the ChatGPT status changes; only the newest read lands, and a redraw gives
+  the keyboard back to the control that had it (drawSettings). Text size, shortcuts, the
   sensitive eye and demo mode keep their own keys and rows and are not on it.
 
 ### Chats

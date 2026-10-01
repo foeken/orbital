@@ -395,7 +395,7 @@ function renderOutline() {
   };
   if (parent && parent.docId === SETTINGS_PAGE) { // a page of controls, not rows: nothing to ask main for (renderer/settings.js)
     list = []; caretOnOpen = false;
-    outline.replaceChildren(settingsEl());
+    drawSettings(outline);
     chatAfterRender(null);
   } else if (parent) {
     if (!parent.node.draft) ensureLoaded(parent);

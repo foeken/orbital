@@ -18,6 +18,7 @@ function settingsRefresh() { settingsAsked = false; if (zoom?.docId === SETTINGS
 // redrawn on the next frame, by when app.js's own handler has applied the new preferences and agent.js stored the new status
 if (tana.onSettings) { tana.onSettings(settingsRefresh); }
 if (tana.onChatGPTStatus) tana.onChatGPTStatus(settingsRefresh);
+if (tana.onChanged) tana.onChanged((docId) => { if (docId == null) settingsRefresh(); }); // a global refresh: hidden titles edited in another pane send one
 new MutationObserver(() => { if (palette.hidden) settingsRefresh(); }).observe(palette, { attributes: true, attributeFilter: ['hidden'] }); // a ⌘K page it opened has closed
 function settingsLoad() {
   if (settingsAsked) return;
@@ -77,6 +78,7 @@ function settingsEl() {
     for (const [icon, label, values, local] of rows) {
       const row = el('div', 'field'), v = el('div', 'fvalues settings-values');
       v.append(...values);
+      for (const b of v.querySelectorAll('button')) b.dataset.skey = label + '/' + (b.textContent || b.getAttribute('aria-label')); // names it again after a redraw (drawSettings)
       if (local) v.append(el('span', 'settings-local', 'This Mac'));
       row.append(addIcon(el('span', 'ricon'), icon), el('span', 'flabel', label), v);
       grid.append(row);
@@ -87,4 +89,10 @@ function settingsEl() {
 }
 function settingsSetAI(key, value) {
   run(async () => { await tana.setAiOption(key, value); settingsRefresh(); }); // read again: a read still out from before the write must not land over it
+}
+// Every redraw builds the page anew, so a control that had the keyboard (Tab, then Space on High) gets it back
+function drawSettings(into) {
+  const had = into.contains(document.activeElement) ? document.activeElement.dataset.skey : null;
+  into.replaceChildren(settingsEl());
+  if (had) [...into.querySelectorAll('button')].find((b) => b.dataset.skey === had)?.focus({ preventScroll: true });
 }

@@ -448,8 +448,9 @@ ipcMain.handle('codex:models', (_e, host) => agent.listModels(undefined, host));
 ipcMain.handle('codex:hosts', () => agent.hosts());
 // Adding and removing machines. The form's three fields are validated here, and an invalid one is refused rather
 // than stored: the renderer can name a host, never reach past this boundary with a command.
-ipcMain.handle('codex:hostAdd', (_e, title, ssh, bin) => agent.addHost({ title, ssh, bin }));
-ipcMain.handle('codex:hostRemove', (_e, id) => agent.removeHost(id));
+// tellOthers: a Settings page in another pane or window lists the hosts too (renderer/settings.js)
+ipcMain.handle('codex:hostAdd', async (e, title, ssh, bin) => { const hosts = await agent.addHost({ title, ssh, bin }); tellOthers(pageOf(e)); return hosts; });
+ipcMain.handle('codex:hostRemove', async (e, id) => { const hosts = await agent.removeHost(id); tellOthers(pageOf(e)); return hosts; });
 // Which machine each linked node's task is on, read with the statuses so the UI knows what it may offer to open.
 ipcMain.handle('codex:taskHosts', () => Object.fromEntries(Object.keys(agent.codexTasks()).map((id) => [id, (agent.taskLink(id) || {}).host]).filter(([, host]) => host)));
 // The badge's destination: the task this node is linked to, opened by id the same way creating one does. The renderer
