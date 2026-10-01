@@ -256,3 +256,5 @@ function typedMark(segs, off) {
 // Pasted text read as markdown (#598, edit.js pasteMarkdown): two lines or more, a line starting with a marker, or an
 // inline mark or link. A plain line pastes as it is.
 const looksMarkdown = (text) => /\S[^\S\n]*\n\s*\S|^\s*(?:[-*+] |\d+[.)] |#{1,6} |> |```|-{3,}\s*$)|\*\*[^*\n]+\*\*|~~[^~\n]+~~|`[^`\n]+`|\[[^\]\n]*\]\((?:https?:|tana:)[^)\s]+\)|(?<![*\w])\*[^*\s][^*\n]*\*/m.test(text);
+// The iPhone app's demo mode masks with these same words (ios/engine/demo.js); in the window there is no module
+if (typeof module === 'object') module.exports = { demoText, demoSegments, demoPersonName, demoWordCount, setDemo: (on) => { demoMode = on; } };

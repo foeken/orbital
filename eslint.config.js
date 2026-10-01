@@ -57,6 +57,16 @@ module.exports = [
     files: ['manual/scenes/**/*.js'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
+  {
+    // The iPhone app's engine (ios/engine): index.js is an ES module that runs in a web view, build.js a Bun script
+    // (top-level await); stand-ins.js stays CommonJS like the main/ files it stands in for.
+    files: ['ios/engine/index.js', 'ios/engine/build.js'],
+    languageOptions: { sourceType: 'module', globals: { ...globals.browser, ...globals.node, Bun: 'readonly' } },
+  },
+  {
+    files: ['ios/engine/stand-ins.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
 ];
 
 function rendererGlobals() {

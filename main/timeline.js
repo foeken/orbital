@@ -40,6 +40,9 @@ const VERB = { closed: 'completed', open: 'accepted', not_now: 'moved to Later',
 // an edit a grey one with a white pen, the other moves Nucleo's grey solid circles (icons.js tl*), and a new task a
 // light dotted ring
 const ICON = { closed: 'apply', open: 'tlAccepted', not_now: 'tlLater', proposed: 'tlInbox' };
+// A meeting's marker: its calendar, or a route between two pins when its title starts with Travel (travel time blocked
+// in the calendar, not a meeting with anyone)
+const meetingIcon = (title) => (/^travel/i.test(String(title || '').trim()) ? 'pinRoute' : 'meeting');
 const TONE = { closed: 'done', open: 'accepted', not_now: 'quiet', proposed: 'quiet' };
 // The state a status summary went to, in the words Tana's AI uses for it ("Task status changed from In Progress to
 // Inbox", "Task marked as completed and a note added …"); null for any other summary.
@@ -276,14 +279,14 @@ async function rows(progress) {
     const events = shown.map((n) => {
       const ev = n.calendarEvent || {}, going = Date.parse(ev.endTime || '') > Date.now(), bare = !going && !String(ev.tagline || ev.summary || '').trim();
       // still under way: joined from Tana (row.join, the meeting's id: renderer/timeline.js opens it there)
-      return { kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev), people: meetingPeople(ev, me, myEmail),
+      return { kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: meetingIcon(n.title), tone: bare ? 'faint' : 'meeting', note: meetingNote(ev), people: meetingPeople(ev, me, myEmail),
         join: going ? n.id : undefined, end: going ? Date.parse(ev.endTime) : undefined, recording: going && recording.has(n.id) };
     });
     // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
     // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
     const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
       .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
-      .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: n.id,
+      .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: meetingIcon(n.title), editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: n.id,
         subtext: meetingNote(n.calendarEvent, true), people: meetingPeople(n.calendarEvent, me, myEmail) }));
     return { events, upcoming };
   }

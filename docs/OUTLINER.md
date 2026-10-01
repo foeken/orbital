@@ -1230,8 +1230,9 @@ main lays two pages over the whole window, above every pane, as a transparent vi
 `openOverlay`), asked for by renderer/overlays.js; each is its own scope outside the outliner. The page that asked
 keeps its caret and gets the keys back when the overlay closes, with what it had to say (`onOverlayClosed`).
 
-- **Help** (help.html): seven short pages of the basics, each with a CSS loop of the keys at work; the rest is found in
-  Cmd+K as you go. The last page offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
+- **Help** (help.html): eight short pages of the basics, each with a CSS loop of the keys at work; the rest is found in
+  Cmd+K as you go. The last page is the iPhone app: a code to scan that joins its TestFlight beta (help-testflight.svg,
+  made by qrencode; iPhone only for now). The page before it offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
   and starts the sign-in (`onOverlayClosed` `chatgpt`); signed in already, it says so instead. Opened by Cmd+K Help, the ?
   in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference): after login, once
   the connection is up and the page the launch came back to is drawn. Main opens it (`api.claimHelp`, main.js

@@ -21,7 +21,7 @@ const UNAVAILABLE_MS = 60000, UNAVAILABLE_ATTEMPTS = 5;
 
 const code = (e) => ConnectError.from(e).code;
 const jitter = (initial, max, factor, attempt) => { const n = Math.min(initial * factor ** attempt, max); return n / 2 + (n / 2) * Math.random(); };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms).unref());
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms).unref?.()); // unref: Node's; a browser's timer is a number (the iPhone engine)
 const timeout = (promise, ms, msg) => new Promise((resolve, reject) => {
   const t = setTimeout(() => reject(new Error(msg)), ms);
   promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });

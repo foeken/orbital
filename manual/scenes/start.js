@@ -22,6 +22,8 @@ module.exports = [
   { name: 'start-help', video: true, clip: [300, 40, 680, 560], setup: [{ wait: 800 }, help, { wait: 300 }], steps: [
     { wait: 1800 }, { key: '→' }, { wait: 2600 }, { key: '→' }, { wait: 2200 }, { key: '→' }, { wait: 2000 }, { key: '→' }, { wait: 2400 },
   ] },
+  // the tour's last page: the iPhone app's TestFlight code
+  { name: 'start-help-iphone', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, help, { wait: 300 }, ...Array.from({ length: 7 }, () => [{ key: '→' }, { wait: 250 }]).flat(), { wait: 600 }] },
   // the loader: the page building itself, then the rows rising in
   { name: 'start-loader', video: true, setup: [{ wait: 800 }, { js: "document.getElementById('skeleton').classList.remove('gone'); document.body.classList.add('building')" }], steps: [
     { wait: 3200 }, { js: "document.getElementById('skeleton').classList.add('gone'); document.body.classList.remove('building')" }, { wait: 600 },

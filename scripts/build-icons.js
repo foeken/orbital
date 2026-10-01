@@ -62,7 +62,7 @@ WANT.proposals = path.join(__dirname, '..', 'build', 'icons', 'file-sparkle.svg'
 WANT.approve = path.join(__dirname, '..', 'build', 'icons', 'circle-check.svg');
 WANT.reject = path.join(__dirname, '..', 'build', 'icons', 'circle-xmark.svg');
 // The Timeline page (renderer/timeline.js), Nucleo UI 18px outline
-WANT.timeline = path.join(__dirname, '..', 'build', 'icons', 'timeline-vertical.svg');
+WANT.timeline = path.join(__dirname, '..', 'build', 'icons', 'calendar-planning.svg');
 // The Timeline's grey markers on its rail: Nucleo UI 18px outline circles, coloured by styles.css .tl-*. Outlines, not
 // solid glyphs: the one filled marker is finished work's green circle (and the edit's pen is a line glyph of its own)
 WANT.tlAccepted = path.join(__dirname, '..', 'build', 'icons', 'circle-plus-outline.svg');
@@ -70,6 +70,8 @@ WANT.tlLater = path.join(__dirname, '..', 'build', 'icons', 'circle-arrow-down-o
 WANT.tlInbox = path.join(__dirname, '..', 'build', 'icons', 'circle-arrow-left-outline.svg');
 WANT.tlNew = path.join(__dirname, '..', 'build', 'icons', 'circle-dotted.svg'); // outline: a new task is the quietest entry
 // Cmd+K rows for the keys the outline answers to
+// a meeting whose title starts with Travel, on the Timeline (main/timeline.js meetingIcon): a route between two pins
+WANT.pinRoute = path.join(__dirname, '..', 'build', 'icons', 'pin-route.svg');
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['graph', 'connected-dots'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'magnifier'], ['filter', 'filter-2'], ['discuss', 'msg'], ['meetingPin', 'calendar-pin'], ['splitPanes', 'split-view'], ['otherPane', 'layout-move-to-right'], ['swapPanes', 'arrows-opposite-direction-x'], ['closePane', 'xmark']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 WANT.outline = path.join(__dirname, '..', 'build', 'icons', 'unordered-list.svg'); // the header's Outliner/Table switch while a list is a table
 WANT.command = path.join(__dirname, '..', 'build', 'icons', 'command.svg'); // the header button that opens Cmd+K

@@ -1,0 +1,329 @@
+[
+ {
+  "id": "s:today",
+  "segments": [
+   {
+    "text": "Today's Tasks"
+   }
+  ],
+  "icon": "todayTasks",
+  "createdAt": "{{min:0}}",
+  "timeline": {
+   "today": true,
+   "tone": "new"
+  },
+  "children": [
+   {
+    "id": "tana:text:0000000000000000000000000a",
+    "title": "Draft the Q4 hiring plan",
+    "done": false,
+    "stateType": "open"
+   },
+   {
+    "id": "tana:text:0000000000000000000000000b",
+    "title": "Send the offsite agenda",
+    "sensitive": true,
+    "done": false,
+    "stateType": "open"
+   },
+   {
+    "id": "tana:text:0000000000000000000000000c",
+    "title": "Review the design crit notes",
+    "done": true,
+    "stateType": "closed"
+   }
+  ]
+ },
+ {
+  "id": "s:free",
+  "segments": [
+   {
+    "text": "Free"
+   }
+  ],
+  "icon": "free",
+  "createdAt": "{{min:0}}",
+  "timeline": {
+   "tone": "new",
+   "free": {
+    "from": "{{ms:+0}}",
+    "until": "{{ms:+44}}"
+   }
+  }
+ },
+ {
+  "id": "s:upcoming",
+  "segments": [
+   {
+    "text": "Upcoming meetings"
+   }
+  ],
+  "icon": "meeting",
+  "createdAt": "{{min:0}}",
+  "timeline": {
+   "upcoming": true,
+   "tone": "new"
+  },
+  "children": [
+   {
+    "id": "tana:event:000000000000000000000000tr",
+    "title": "Travel to Utrecht",
+    "subtext": "14:15–14:45",
+    "start": "{{min:+20}}",
+    "icon": "pinRoute"
+   },
+   {
+    "id": "tana:event:0000000000000000000000000d",
+    "title": "Design review",
+    "subtext": "14:45–15:30",
+    "start": "{{min:+44}}",
+    "people": [
+     {
+      "name": "Priya Shah"
+     },
+     {
+      "name": "Sam Lee"
+     },
+     {
+      "name": "Jordan Park"
+     },
+     {
+      "name": "Alex Kim"
+     },
+     {
+      "name": "Maria Lopez"
+     }
+    ],
+    "icon": "meeting"
+   },
+   {
+    "id": "tana:event:0000000000000000000000000e",
+    "title": "1:1 Sam / Andre",
+    "subtext": "16:00–16:30",
+    "start": "{{min:+120}}",
+    "people": [
+     {
+      "name": "Sam Lee"
+     }
+    ],
+    "icon": "meeting"
+   }
+  ]
+ },
+ {
+  "id": "s:e1",
+  "segments": [
+   {
+    "text": "An AI agent"
+   },
+   {
+    "text": " added 2 tasks to your Inbox"
+   }
+  ],
+  "icon": "robot",
+  "createdAt": "{{min:-12}}",
+  "unread": true,
+  "timeline": {
+   "tone": "new"
+  },
+  "children": [
+   {
+    "id": "tana:text:0000000000000000000000000f",
+    "title": "Upgrade the build agents before 24 November",
+    "done": false,
+    "stateType": "open"
+   },
+   {
+    "id": "tana:text:0000000000000000000000000g",
+    "title": "Rotate the staging API keys",
+    "done": false,
+    "stateType": "proposed"
+   }
+  ]
+ },
+ {
+  "id": "s:e2",
+  "segments": [
+   {
+    "text": "Weekly product sync"
+   }
+  ],
+  "icon": "meeting",
+  "createdAt": "{{min:-40}}",
+  "join": "tana:event:0000000000000000000000000h",
+  "people": [
+   {
+    "name": "Priya Shah"
+   },
+   {
+    "name": "Jordan Park"
+   },
+   {
+    "name": "Alex Kim"
+   }
+  ],
+  "timeline": {
+   "uri": "tana:event:0000000000000000000000000h",
+   "note": "1 h",
+   "tone": "meeting"
+  }
+ },
+ {
+  "id": "s:e3",
+  "segments": [
+   {
+    "text": "Priya Shah ",
+    "person": true
+   },
+   {
+    "text": "completed",
+    "marks": {
+     "bold": true
+    }
+   },
+   {
+    "text": " "
+   },
+   {
+    "text": "Write the launch checklist",
+    "marks": {
+     "strike": true
+    }
+   }
+  ],
+  "icon": "apply",
+  "createdAt": "{{min:-95}}",
+  "unread": true,
+  "timeline": {
+   "uri": "tana:text:0000000000000000000000000i",
+   "tone": "done"
+  }
+ },
+ {
+  "id": "s:e4",
+  "segments": [
+   {
+    "text": "Sam Lee "
+   },
+   {
+    "text": "edited",
+    "marks": {
+     "bold": true
+    }
+   },
+   {
+    "text": " "
+   },
+   {
+    "text": "Onboarding flow"
+   }
+  ],
+  "icon": "updated",
+  "createdAt": "{{min:-150}}",
+  "timeline": {
+   "uri": "tana:text:0000000000000000000000000j",
+   "change": "Added a step for single sign-on setup",
+   "detail": "Sam split account creation in two so admins can connect their identity provider first.",
+   "tone": "edit"
+  }
+ },
+ {
+  "id": "s:e5",
+  "segments": [
+   {
+    "text": "Retro, sprint 42"
+   }
+  ],
+  "icon": "meeting",
+  "createdAt": "{{min:-210}}",
+  "people": [
+   {
+    "name": "Sam Lee"
+   },
+   {
+    "name": "Alex Kim"
+   }
+  ],
+  "timeline": {
+   "uri": "tana:event:0000000000000000000000000k",
+   "note": "45 min",
+   "tone": "faint"
+  }
+ },
+ {
+  "id": "s:e6",
+  "segments": [
+   {
+    "text": "Jordan Park "
+   },
+   {
+    "text": "accepted",
+    "marks": {
+     "bold": true
+    }
+   },
+   {
+    "text": " "
+   },
+   {
+    "text": "Fix the sync retry on flaky networks"
+   }
+  ],
+  "icon": "tlAccepted",
+  "createdAt": "{{min:-1500}}",
+  "timeline": {
+   "uri": "tana:text:0000000000000000000000000l",
+   "tone": "accepted"
+  }
+ },
+ {
+  "id": "s:e7",
+  "segments": [
+   {
+    "text": "Tana's AI"
+   },
+   {
+    "text": " added a task to your Inbox"
+   }
+  ],
+  "icon": "tana",
+  "createdAt": "{{min:-1560}}",
+  "timeline": {
+   "tone": "new"
+  },
+  "children": [
+   {
+    "id": "tana:text:0000000000000000000000000m",
+    "title": "Follow up on the vendor contract",
+    "done": false,
+    "stateType": "open"
+   }
+  ]
+ },
+ {
+  "id": "s:e8",
+  "segments": [
+   {
+    "text": "Alex Kim "
+   },
+   {
+    "text": "moved to Later",
+    "marks": {
+     "bold": true
+    }
+   },
+   {
+    "text": " "
+   },
+   {
+    "text": "Clean up the old dashboards"
+   }
+  ],
+  "icon": "tlLater",
+  "createdAt": "{{min:-1700}}",
+  "timeline": {
+   "uri": "tana:text:0000000000000000000000000n",
+   "tone": "quiet"
+  }
+ }
+]
