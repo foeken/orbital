@@ -472,7 +472,9 @@ function cellPicker(node, k) {
 }
 function tableCells(node, info, sub) {
   sub.className = 'subtext'; sub.textContent = '';
-  for (const k of tableKeys()) {
+  const fold = tableFold ? document.createElement('span') : null; // the columns that ride on the title's line, ahead of the rest so the grid seats it next
+  if (fold) { fold.className = 'fold'; sub.append(fold); }
+  for (const [i, k] of tableKeys().entries()) {
     const cell = document.createElement('span'); cell.className = 'cell';
     if (TABLE_FACTS[k]) cell.append(...[TABLE_FACTS[k](node, info)].flat());
     else {
@@ -487,16 +489,19 @@ function tableCells(node, info, sub) {
       // the row's own click opens the row; ⌘ or ⇧ is a selection (renderer/events.js), as it is on the title
       cell.onclick = (e) => { if (e.metaKey || e.shiftKey) return; e.stopPropagation(); open(); };
     }
-    sub.append(cell);
+    (i < tableFold ? fold : sub).append(cell);
   }
   return sub;
 }
 // The column titles, over the gutter a row keeps for its chevron and marker. Not a row: no key, nothing to land on.
-// Each fact column has a grip on its right edge; Title has none, since it takes whatever the others leave.
+// Each fact column has a grip on its right edge; Title has none, since it takes whatever the others leave. A folded
+// column has no title of its own: Title stretches over the line its values ride on, and with every column folded the
+// header is left out, as a plain list has none (styles.css .thead.folded keeps its width for fitTable to measure).
 function tableHeadEl() {
   const names = new Map(displayList()), el = document.createElement('div');
   el.className = 'thead';
-  for (const [key, label] of [[null, 'Title'], ...tableKeys().map((k) => [k, names.get(k)]), [null, '']]) { // '': over the row's icons
+  el.classList.toggle('folded', tableFold > 0 && tableFold >= tableKeys().length);
+  for (const [key, label] of [[null, 'Title'], ...tableKeys().slice(tableFold).map((k) => [k, names.get(k)]), [null, '']]) { // '': over the row's icons
     const c = document.createElement('span'), words = document.createElement('span');
     words.className = 'tlabel'; words.textContent = label; c.append(words);
     if (key) {
@@ -510,9 +515,48 @@ function tableHeadEl() {
   return el;
 }
 // A column's width in px, per page and column, synced like the choice of a table itself. A column nobody dragged
-// keeps its share of the page (styles.css), and Title takes what is left.
+// is COL_W wide, and Title takes what is left.
 const tableWidths = () => pref('tableWidths', {})[pillKey()] || {};
-const tableCols = (widths = tableWidths()) => ['minmax(0, 1fr)', ...tableKeys().map((k) => (widths[k] ? widths[k] + 'px' : 'min(160px, calc(60cqw / var(--cols)))'))].join(' ');
+const tableCols = (widths = tableWidths()) => [...(tableFold ? ['minmax(0, max-content)', 'minmax(' + FOLD_ROOM + 'px, 1fr)'] : ['minmax(0, 1fr)']), ...tableKeys().slice(tableFold).map((k) => (widths[k] || COL_W) + 'px')].join(' ');
+// ---- a table at every width: columns split out of the title's line as the page widens, and fold back in ----
+// After Alvish Baldha's "tables that split, stretch, and snap into place" (x.com/alvishbaldha/status/2105538797970809133).
+// Narrow, a row is its title with its first values after it in grey; wider, each value splits out into its own column,
+// the last column first, so the facts never change order. What fits is the last columns whose widths, with room for
+// the title (and for the title's line when something still rides on it), fit the page: a function of the widths and
+// the page's width alone, so it snaps at the same width going either way.
+const TITLE_ROOM = 200, FOLD_ROOM = 120, COL_W = 160, COL_GAP = 16; // COL_GAP: styles.css .table-view column-gap
+let tableFold = 0; // how many of the first columns ride on the title's line
+function foldFor(room, keys = tableKeys(), widths = tableWidths()) {
+  let need = TITLE_ROOM;
+  for (let i = keys.length - 1; i >= 0; i--) {
+    need += (widths[keys[i]] || COL_W) + COL_GAP;
+    if (need + (i ? FOLD_ROOM + COL_GAP : 0) > room) return i + 1;
+  }
+  return 0;
+}
+// The page changed width (render.js's ResizeObserver: the window, a pane, the sidebar, the text size), a column did, or
+// the page was drawn: measured on the header, whose content box is the rows' grid. moved: a hand did it, so the
+// columns that moved play into place; a page drawing itself only snaps.
+function fitTable(moved = false) {
+  const head = tableView() && outline.querySelector(':scope > .thead');
+  if (!head || !head.clientWidth) return; // a pane not on screen has no width to fit
+  const cs = getComputedStyle(head), icons = head.lastElementChild.offsetWidth;
+  const fold = foldFor(head.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (icons ? icons + COL_GAP : 0));
+  if (fold === tableFold) return;
+  tableFold = fold;
+  render(true);
+  if (moved) playSplit();
+}
+// Every cell on screen comes in from a little to the left, the way the values slide out of the title in the video.
+function playSplit() {
+  for (const row of outline.querySelectorAll(':scope > .thead, :scope > .node')) {
+    const r = row.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) continue;
+    for (const el of row.querySelectorAll(':scope > span, :scope > .line > .body > .subtext > .cell, :scope > .line > .body > .subtext > .fold')) {
+      play(el, [{ opacity: 0, transform: 'translateX(-8px)' }, { opacity: 1, transform: 'none' }], { duration: MOTION.base, easing: MOTION.out });
+    }
+  }
+}
 function resizeColumn(e, key, cell) {
   e.preventDefault();
   const grip = e.currentTarget, startX = e.clientX, start = cell.getBoundingClientRect().width, widths = { ...tableWidths() };
@@ -531,6 +575,7 @@ function setColumnWidth(key, px) {
   if (!Object.keys(mine).length) delete next[pillKey()];
   setPref('tableWidths', next);
   outline.style.setProperty('--fcols', tableCols());
+  fitTable(true); // a wider column may no longer fit, a narrower one may let another split out
 }
 // The keyboard's way to the same widths: ⌘K Column widths …, a row per column; ←/→ on one make it 20px narrower or
 // wider (while nothing is typed, so the caret still moves in what is), ↩ gives it back its share.
@@ -543,8 +588,8 @@ function columnWidthRows(q) {
 function columnWidthKeys(e) {
   const row = palRows[palIndex];
   if (!row || !row.column || palInput.value || e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
-  const head = outline.querySelector(':scope > .thead'), cell = head && head.children[tableKeys().indexOf(row.column) + 1]; // + 1: past Title
-  const now = tableWidths()[row.column] || (cell ? cell.getBoundingClientRect().width : 160);
+  const at = tableKeys().indexOf(row.column) - tableFold, head = outline.querySelector(':scope > .thead'), cell = head && at >= 0 && head.children[at + 1]; // + 1: past Title; a folded column has no header
+  const now = tableWidths()[row.column] || (cell ? cell.getBoundingClientRect().width : COL_W);
   setColumnWidth(row.column, Math.round(Math.max(40, now + (e.key === 'ArrowRight' ? 20 : -20))));
   renderPalette();
   return true;

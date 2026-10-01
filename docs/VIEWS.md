@@ -209,6 +209,16 @@ the columns, ←/→ make the highlighted one 20px narrower or wider while nothi
 page key and column in the synced `tableWidths` preference; Title takes what the others leave, and the icons column and
 the agent badge's slot are only there when a row on the page has them.
 
+**At every width.** A table holds at any pane width the way Alvish Baldha's tables "split, stretch, and snap into
+place" (x.com/alvishbaldha/status/2105538797970809133). A column is its dragged width or 160px. When the page has no
+room for all of them beside a 200px title, the first columns fold onto the title's line: their values follow the
+title in grey, in column order, each cut on its own. As the page widens they split back out, the last column first,
+so the facts never change order. With every column folded the header goes, as a plain list has none; otherwise Title
+heads the title's line and each column still split out keeps its own header and grip. Where it snaps depends only on
+the widths and the page's width (renderer/views.js `foldFor`), so it snaps at the same width both ways, and it is
+checked on every width change (the window, a pane, the sidebar, the text size) and every column resize
+(`fitTable`). A snap a hand caused plays the cells on screen in from the left; reduced motion snaps without it.
+
 ## 9. Notifications, Proposals and Timeline are pages, not views
 
 Notifications (issue #18, docs/OUTLINER.md) is listed with the views in Cmd+K but is a page, like a saved search: it has no

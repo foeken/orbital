@@ -318,6 +318,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
   if (outline.clientWidth === fitWidth) return;
   fitWidth = outline.clientWidth;
   fitRowMeta();
+  fitTable(true);
 }).observe(outline);
 // A row patched in place (renderer/tasks.js patchMeta) asks for the fit here: metadata arrives one answer per row as
 // the rows scroll in, and fitting after each one forced a layout of the whole outline per answer (#264). The frame
@@ -357,7 +358,7 @@ function rowSig(n) {
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
-    n.proposal ? n.proposal.note : null, n.subtext, n.people, n.join, n.meeting && n.meeting.id, n.timeline && n.timeline.recording, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    n.proposal ? n.proposal.note : null, n.subtext, n.people, n.join, n.meeting && n.meeting.id, n.timeline && n.timeline.recording, tableView(), tableFold, // which facts the row shows, and as a list or a table (and which columns ride on its title's line): without this a reused row would keep the old ones, a proposal's buttons included
     n.timeline?.free && timelineFreeSegs(n.timeline.free), // the Timeline's free time, counting down
     tableView() ? typeDefs() : null, // a table cell's picker is made from the page's field definitions (views.js cellPicker)
     demoMode, // demo mode masks the words and makes every row read-only: a row drawn before the switch shows real titles
@@ -447,9 +448,9 @@ function renderOutline() {
     }
   }
   outline.classList.toggle('table-view', tableView());
-  // ponytail: at least one fact column, because repeat(0) and a division by 0 make the grid invalid; with Display
-  // empty that column is simply blank. A layout of its own if that case ever matters.
-  if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.style.setProperty('--fcols', tableCols()); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
+  outline.classList.toggle('folded', tableView() && tableFold > 0);
+  // a list page shown as a table (renderer/views.js); fitTable then folds or splits its columns for this page's width
+  if (tableView() && list.length) { outline.style.setProperty('--fcols', tableCols()); outline.prepend(tableHeadEl()); requestAnimationFrame(() => fitTable()); }
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   // Empty is an answer the page has been given: no entry at all means it has not been asked yet, which is where a

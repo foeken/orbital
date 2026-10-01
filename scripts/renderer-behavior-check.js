@@ -157,6 +157,7 @@ const withShims = (src) => {
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
   if (/\btableRow\(/.test(src) && !/const tableRow =/.test(src)) src = 'globalThis.tableRow ??= () => false;\n' + src; // and so no row drawn as one
+  if (/\btableFold\b/.test(src) && !/let tableFold\b/.test(src)) src = 'globalThis.tableFold ??= 0;\n' + src; // and no column folded onto a title's line
   if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
     // pinnedOn needs the grouping (views.js) and the date pins (state.js); no row here is in a Pinned section
@@ -9969,6 +9970,18 @@ checks.push(async function runShareAskCheck() {
   await api.assign(DOC, [PETER], []);
   assert.equal(api.mode(), 'cmd', 'someone who can see it is simply assigned: nothing asked, the card closes');
   console.log('ok  assigning someone who cannot see a task asks: grant access, keep private or cancel (#622)');
+});
+checks.push(function runTableFoldCheck() {
+  const foldFor = vm.runInNewContext(sourceLine('const TITLE_ROOM') + '\n' + functionSource('foldFor') + '; foldFor');
+  const keys = ['a', 'b', 'c'], fold = (room, widths = {}) => foldFor(room, keys, widths);
+  // Title 200, each column 160 + 16, the title's line 120 + 16 while anything rides on it
+  assert.equal(fold(728), 0, 'room for Title and every column: nothing folds');
+  assert.equal(fold(727), 1, 'a pixel less and the first column rides on the title\u2019s line');
+  assert.equal(fold(688), 1, 'Title, the line and the last two columns still fit');
+  assert.equal(fold(687), 2, 'then the second folds too, the last column staying');
+  assert.equal(fold(300), 3, 'and on a narrow page all of them ride on the title\u2019s line');
+  assert.equal(fold(727, { a: 40 }), 0, 'a column dragged narrower lets the rest split out sooner');
+  console.log('ok  a table folds its first columns onto the title\u2019s line as the page narrows, the last column last');
 });
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
