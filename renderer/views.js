@@ -360,8 +360,11 @@ function sortRows(list) {
 // ---- display: which of a row's facts it shows ----
 // When it was made, when it last moved and where it lives read as one grey sub-line under the title, because they are
 // all answers to "what is this row"; the rest stay where they already are — the type chips, the assignee, the box.
-const DISPLAY = [['type', 'Type', 'type'], ['space', 'Lives in', 'space'], ['status', 'Status', 'status'], ['assigned', 'Assigned', 'assigned'], ['updated', 'Updated', 'updated'], ['created', 'Created', 'created'], ['creator', 'Created by', 'member']];
-const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
+const DISPLAY = [['type', 'Type', 'type'], ['space', 'Lives in', 'space'], ['status', 'Status', 'status'], ['assigned', 'Assigned', 'assigned'], ['visibility', 'Visible to', 'users'], ['updated', 'Updated', 'updated'], ['created', 'Created', 'created'], ['creator', 'Created by', 'member']];
+const DISPLAY_DEFAULT = ['status', 'assigned', 'visibility', 'updated'];
+// Visible to came with Assigned until it was a fact of its own: a choice stored before then names neither and shows it,
+// and one made since names it or, switched off, 'novisibility' (setDisplay)
+const withVisibility = (keys) => (keys.includes('visibility') || keys.includes('novisibility') ? keys : [...keys, 'visibility']);
 // On a type's page every field it defines can be shown too, keyed by its attribute key; the ones with a closed set of
 // values (the ones that get a pill) and the last change are shown until you choose otherwise, as Tana's type page does.
 // A saved search or a view whose Type pill has picked one workspace type alone lists that type's instances too, so its
@@ -388,13 +391,14 @@ const displayKeys = () => {
   // it, so nothing could turn it off. Until the definitions are in, the page's own type's keys are kept as they are.
   const t = fieldType(), defs = t && (relatedBy.get(t) || {}).definitions;
   // A field kept by name stays on any list, as a field grouping does; a row without it just shows nothing for it.
-  if (Array.isArray(chosen)) return chosen.filter((k) => !isFieldKey(k) || (fieldName(k) !== null ? listPage() : defs ? defs.some((d) => fieldKey(d) === k) : !!t && k.startsWith(t + '?')));
+  if (Array.isArray(chosen)) return withVisibility(chosen.filter((k) => !isFieldKey(k) || (fieldName(k) !== null ? listPage() : defs ? defs.some((d) => fieldKey(d) === k) : !!t && k.startsWith(t + '?'))));
   return onTypePage() ? [...typeDefs().filter((d) => PILL_FIELDS.includes(d.type)).map(fieldKey), 'updated'] : DISPLAY_DEFAULT;
 };
 const displayOn = (id) => displayKeys().includes(id);
 function setDisplay(id) {
   const on = displayKeys(), next = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];
-  displayPref[pillKey()] = displayList().map(([key]) => key).filter((key) => next.includes(key)); // stored in displayList's order: fields first, as the columns run
+  const keys = displayList().map(([key]) => key).filter((key) => next.includes(key)); // stored in displayList's order: fields first, as the columns run
+  displayPref[pillKey()] = next.includes('visibility') ? keys : [...keys, 'novisibility'];
   persistPref('display', displayPref);
   render(true); // every row is built differently now, and rowSig carries the choice so none is reused
 }
@@ -472,8 +476,11 @@ function cellPicker(node, k) {
 }
 function tableCells(node, info, sub) {
   sub.className = 'subtext'; sub.textContent = '';
-  for (const k of tableKeys()) {
+  const fold = tableFold ? document.createElement('span') : null; // the columns that ride on the title's line, ahead of the rest so the grid seats it next
+  if (fold) { fold.className = 'fold'; sub.append(fold); }
+  for (const [i, k] of tableKeys().entries()) {
     const cell = document.createElement('span'); cell.className = 'cell';
+    cell.dataset.col = k; // which column, so a snap can glide it from where it stood (glideCells)
     if (TABLE_FACTS[k]) cell.append(...[TABLE_FACTS[k](node, info)].flat());
     else {
       // plain text, as every other column is; the cell's ellipsis cuts it and the tooltip has the rest — asked at the
@@ -487,18 +494,29 @@ function tableCells(node, info, sub) {
       // the row's own click opens the row; ⌘ or ⇧ is a selection (renderer/events.js), as it is on the title
       cell.onclick = (e) => { if (e.metaKey || e.shiftKey) return; e.stopPropagation(); open(); };
     }
-    sub.append(cell);
+    (i < tableFold ? fold : sub).append(cell);
   }
   return sub;
 }
 // The column titles, over the gutter a row keeps for its chevron and marker. Not a row: no key, nothing to land on.
-// Each fact column has a grip on its right edge; Title has none, since it takes whatever the others leave.
+// Each column has a grip on its right edge, Title too. A folded column has no title of its own: Title stretches over the
+// line its values ride on and names them after its own word, each a click away from its own column (undockColumn).
 function tableHeadEl() {
   const names = new Map(displayList()), el = document.createElement('div');
   el.className = 'thead';
-  for (const [key, label] of [[null, 'Title'], ...tableKeys().map((k) => [k, names.get(k)]), [null, '']]) { // '': over the row's icons
+  // last, over the row's icons: Visible to heads them where who can see a row is their column (unfolded, styles.css)
+  for (const [key, label] of [['title', 'Title'], ...tableKeys().slice(tableFold).map((k) => [k, names.get(k)]), [null, displayOn('visibility') && !tableFold ? 'Visible to' : '']]) {
     const c = document.createElement('span'), words = document.createElement('span');
     words.className = 'tlabel'; words.textContent = label; c.append(words);
+    if (key) c.dataset.col = key;
+    if (key === 'title') {
+      for (const [i, k] of tableKeys().slice(0, tableFold).entries()) {
+        const docked = document.createElement('span'); docked.className = 'tdocked'; docked.textContent = names.get(k);
+        docked.onmouseenter = () => { docked.title = undockTitle(i) < TITLE_MIN ? 'No room for its own column: widen the pane or narrow a column' : 'Give it its own column'; };
+        docked.onclick = () => undockColumn(i);
+        words.append(docked);
+      }
+    }
     if (key) {
       const grip = document.createElement('span'); grip.className = 'tgrip'; grip.title = 'Drag to resize · double-click to reset';
       grip.onpointerdown = (e) => resizeColumn(e, key, c);
@@ -509,20 +527,125 @@ function tableHeadEl() {
   }
   return el;
 }
-// A column's width in px, per page and column, synced like the choice of a table itself. A column nobody dragged
-// keeps its share of the page (styles.css), and Title takes what is left.
-const tableWidths = () => pref('tableWidths', {})[pillKey()] || {};
-const tableCols = (widths = tableWidths()) => ['minmax(0, 1fr)', ...tableKeys().map((k) => (widths[k] ? widths[k] + 'px' : 'min(160px, calc(60cqw / var(--cols)))'))].join(' ');
+// A column's width in px, per page and column, synced like the choice of a table itself; Title's is kept as 'title'.
+// A column nobody dragged is COL_W wide. Title nobody dragged takes what the others leave; dragged, it keeps its width
+// and the columns stretch to share what is left, so no empty room sits anywhere in the row (the video's "stretch").
+let dragWidths = null; // the widths while a grip is held: drawn as it moves, kept when it is let go (resizeColumn)
+const tableWidths = () => dragWidths || pref('tableWidths', {})[pillKey()] || {};
+const tableCols = (widths = tableWidths()) => {
+  // folded, an unsized title takes at most half the row, so a long one does not cut the values after it to a letter
+  // unfolded, a title dragged wider gives way down to TITLE_ROOM before a column folds (foldFor)
+  const t = widths.title, cols = tableKeys().slice(tableFold).map((k) => (widths[k] || COL_W) + 'px'), stretch = t && !tableFold && cols.length;
+  const lead = tableFold ? ['fit-content(' + (t ? t + 'px' : '50%') + ')', 'minmax(' + FOLD_ROOM + 'px, 1fr)'] : [stretch ? 'minmax(' + Math.min(t, TITLE_ROOM) + 'px, ' + t + 'px)' : 'minmax(0, 1fr)'];
+  return [...lead, ...cols.map((w) => (stretch ? 'minmax(' + w + ', 1fr)' : w))].join(' ');
+};
+const applyCols = (widths = tableWidths()) => outline.style.setProperty('--fcols', tableCols(widths));
+// ---- a table at every width: columns split out of the title's line as the page widens, and fold back in ----
+// After Alvish Baldha's "tables that split, stretch, and snap into place" (x.com/alvishbaldha/status/2105538797970809133).
+// Narrow, a row is its title with its first values after it in grey; wider, each value splits out into its own column,
+// the last column first, so the facts never change order. What fits is the last columns whose widths, with room for
+// the title (and for the title's line when something still rides on it), fit the page: a function of the widths and
+// the page's width alone, so it snaps at the same width going either way.
+const TITLE_ROOM = 200, TITLE_MIN = 80, FOLD_ROOM = 120, COL_W = 160, COL_GAP = 16, PEOPLE_W = 190; // COL_GAP, PEOPLE_W: styles.css .table-view
+let tableFold = 0; // how many of the first columns ride on the title's line
+function foldFor(room, keys = tableKeys(), widths = tableWidths()) {
+  // Title holds TITLE_ROOM: dragged narrower it gives the rest to the columns, dragged wider it never folds one
+  let need = Math.min(widths.title || TITLE_ROOM, TITLE_ROOM);
+  for (let i = keys.length - 1; i >= 0; i--) {
+    need += (widths[keys[i]] || COL_W) + COL_GAP;
+    if (need + (i ? FOLD_ROOM + COL_GAP : 0) > room) return i + 1;
+  }
+  return 0;
+}
+// The Title that leaves the i-th column and the ones after it room of their own (the title's line keeping FOLD_ROOM for
+// what still rides on it): a click on a folded name narrows Title to it, as far as TITLE_MIN.
+const undockTitle = (i, room = tableRoom(), keys = tableKeys(), widths = tableWidths()) => Math.floor(room - keys.slice(i).reduce((sum, k) => sum + (widths[k] || COL_W) + COL_GAP, 0) - (i ? FOLD_ROOM + COL_GAP : 0));
+function undockColumn(i) {
+  const title = undockTitle(i);
+  if (title < TITLE_MIN) return showNote('No room for its own column: widen the pane or narrow a column');
+  setColumnWidth('title', title);
+}
+// Title as wide as it is: while columns ride on its line its header spans them too, so then the room it holds (foldFor)
+const titleNow = (cell) => (tableFold ? Math.min(tableWidths().title || TITLE_ROOM, TITLE_ROOM) : cell ? cell.getBoundingClientRect().width : TITLE_ROOM);
+// The width the columns share: the header's content box (the rows' grid) less the icons at the end, 0 off screen.
+function tableRoom() {
+  const head = tableView() && outline.querySelector(':scope > .thead');
+  if (!head || !head.clientWidth) return 0; // a pane not on screen has no width to fit
+  // the icons column as it is with nothing folded (sizeIcons): folded, who can see a row shrinks to its glyph
+  // (styles.css), and measuring that would let the freed room split a column out, which would widen the icons again
+  const cs = getComputedStyle(head), icons = iconsW[pillKey()] || (outline.querySelector(':scope > .node > .line > .body > .tmeta .people') ? PEOPLE_W : head.lastElementChild.offsetWidth);
+  return head.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (icons ? icons + COL_GAP : 0);
+}
+// Visible to (the icons' column) as wide as the widest of it on the page and its header, up to PEOPLE_W: each row is
+// a grid of its own, so no track can size itself to every row's content. Measured unfolded only, where the words show;
+// render.js fitRowMeta asks after every render and every row whose metadata arrived.
+const iconsW = {}; // page key -> px
+function sizeIcons() {
+  if (tableFold) return;
+  const range = document.createRange(), measure = (el) => { range.selectNodeContents(el); return range.getBoundingClientRect().width; };
+  let w = 0;
+  for (const el of outline.querySelectorAll(':scope > .node > .line > .body > .tmeta:not(:empty), :scope > .thead > span:last-child > .tlabel')) w = Math.max(w, measure(el));
+  w = Math.ceil(Math.min(w, PEOPLE_W));
+  if (!w || w === iconsW[pillKey()]) return;
+  iconsW[pillKey()] = w;
+  outline.style.setProperty('--iconw', w + 'px');
+}
+// The page changed width (render.js's ResizeObserver: the window, a pane, the sidebar, the text size), a column did, or
+// the page was drawn. moved: a hand did it, so the columns that moved play into place; a page drawing itself only snaps.
+function fitTable(moved = false) {
+  const room = tableRoom();
+  if (!room) return;
+  const fold = foldFor(room);
+  if (fold === tableFold) return;
+  const before = moved && motionOK() ? new Map(cellsOnScreen().map(([id, el]) => [id, el.getBoundingClientRect()])) : null;
+  tableFold = fold;
+  render(true);
+  if (before) glideCells(before);
+}
+// The cells on screen, each with its row and column, the header's included: what a snap moves.
+function cellsOnScreen() {
+  const out = [];
+  for (const row of outline.querySelectorAll(':scope > .thead, :scope > .node')) {
+    const r = row.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) continue;
+    for (const el of row.querySelectorAll(':scope > [data-col], :scope > .line > .body > .subtext [data-col]')) out.push([(row.dataset.key || 'head') + '|' + el.dataset.col, el]);
+  }
+  return out;
+}
+// A snap redraws the rows; each value then glides from where it stood to where it stands now, out of the title's line
+// into its column or back, as in the video, and a header that was not there fades in. While they move the title's
+// line lets them show past its edge (styles.css .gliding), or a value would only appear once it was inside.
+function glideCells(before) {
+  for (const [id, el] of cellsOnScreen()) {
+    const was = before.get(id), now = el.getBoundingClientRect();
+    if (!was) { play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.base, easing: MOTION.out }); continue; }
+    // sideways only: a value stays on its row, and the rows themselves jump when the header comes or goes
+    const dx = was.left - now.left;
+    if (dx) play(el, [{ transform: 'translateX(' + dx + 'px)' }, { transform: 'none' }], { duration: MOTION.base, easing: MOTION.move });
+  }
+  outline.classList.add('gliding');
+  setTimeout(() => outline.classList.remove('gliding'), MOTION.base);
+}
+// Title dragged narrower lets folded columns snap out as it goes (and back, dragged wider again in the same drag), so
+// the table redraws under the pointer: the moves are heard on the window, which still hears them once the grip they
+// started on has been drawn again.
 function resizeColumn(e, key, cell) {
   e.preventDefault();
-  const grip = e.currentTarget, startX = e.clientX, start = cell.getBoundingClientRect().width, widths = { ...tableWidths() };
+  const grip = e.currentTarget, startX = e.clientX, start = key === 'title' ? titleNow(cell) : cell.getBoundingClientRect().width, widths = { ...tableWidths() }, room = tableRoom();
   grip.setPointerCapture(e.pointerId); grip.classList.add('dragging');
-  const move = (ev) => { widths[key] = Math.round(Math.max(40, start + ev.clientX - startX)); outline.style.setProperty('--fcols', tableCols(widths)); };
+  const move = (ev) => {
+    widths[key] = Math.round(Math.max(key === 'title' ? TITLE_MIN : 40, start + ev.clientX - startX));
+    dragWidths = widths;
+    if (key === 'title' && foldFor(room) !== tableFold) fitTable(true); // drawn again: the new grip shows it is still held
+    outline.querySelector(':scope > .thead > [data-col="title"] > .tgrip')?.classList.toggle('dragging', key === 'title');
+    applyCols(widths);
+  };
   const up = () => {
-    grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.classList.remove('dragging');
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up); dragWidths = null;
+    outline.querySelectorAll(':scope > .thead .tgrip.dragging').forEach((g) => g.classList.remove('dragging'));
     if (widths[key]) setColumnWidth(key, widths[key]); // a click without a move changes nothing
   };
-  grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up);
+  addEventListener('pointermove', move); addEventListener('pointerup', up);
 }
 function setColumnWidth(key, px) {
   const all = pref('tableWidths', {}), mine = { ...all[pillKey()], [key]: px };
@@ -530,22 +653,26 @@ function setColumnWidth(key, px) {
   const next = { ...all, [pillKey()]: mine };
   if (!Object.keys(mine).length) delete next[pillKey()];
   setPref('tableWidths', next);
-  outline.style.setProperty('--fcols', tableCols());
+  applyCols();
+  fitTable(true); // a wider column may no longer fit, a narrower one may let another split out
 }
 // The keyboard's way to the same widths: ⌘K Column widths …, a row per column; ←/→ on one make it 20px narrower or
 // wider (while nothing is typed, so the caret still moves in what is), ↩ gives it back its share.
 function openColumnWidths() { openFieldPage(null, columnWidthRows, 'Column widths', openCommandPalette, '', columnWidthKeys); }
 function columnWidthRows(q) {
   const names = new Map(displayList()), widths = tableWidths();
-  return tableKeys().filter((k) => fuzzyMatch(names.get(k) || '', q)).map((k) => ({ group: 'Column widths', icon: 'table', label: names.get(k) || 'Column', column: k,
+  names.set('title', 'Title');
+  return ['title', ...tableKeys()].filter((k) => fuzzyMatch(names.get(k) || '', q)).map((k) => ({ group: 'Column widths', icon: 'table', label: names.get(k) || 'Column', column: k,
     hint: (widths[k] ? widths[k] + 'px' : 'Auto') + ' · ←→ resizes · ↩ resets', keepOpen: true, run: () => { setColumnWidth(k, undefined); renderPalette(); } }));
 }
 function columnWidthKeys(e) {
   const row = palRows[palIndex];
   if (!row || !row.column || palInput.value || e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
-  const head = outline.querySelector(':scope > .thead'), cell = head && head.children[tableKeys().indexOf(row.column) + 1]; // + 1: past Title
-  const now = tableWidths()[row.column] || (cell ? cell.getBoundingClientRect().width : 160);
-  setColumnWidth(row.column, Math.round(Math.max(40, now + (e.key === 'ArrowRight' ? 20 : -20))));
+  // its header: Title's is the first (over the folded columns' line too, which is what its arrows move), a column's comes after it; a folded column has none
+  const title = row.column === 'title', at = title ? -1 : tableKeys().indexOf(row.column) - tableFold;
+  const head = outline.querySelector(':scope > .thead'), cell = head && at >= -1 && head.children[at + 1];
+  const now = title ? titleNow(cell) : tableWidths()[row.column] || (cell ? cell.getBoundingClientRect().width : COL_W);
+  setColumnWidth(row.column, Math.round(Math.max(title ? TITLE_MIN : 40, now + (e.key === 'ArrowRight' ? 20 : -20))));
   renderPalette();
   return true;
 }

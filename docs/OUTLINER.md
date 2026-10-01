@@ -196,7 +196,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   on hover, only its own colour darkens. The visibility icon (`.audience`) and a warning (assigned to someone who cannot see it,
   `.hiddenfrom`) stay in full. That warning is "Not visible to …" in the subtext after who can see the row, in a soft
   rose rather than the error red, the audience glyph left grey beside it (`peopleEl`, issue #622); where the row shows
-  only the glyph, the glyph itself takes the rose.
+  only the glyph, the glyph itself takes the rose. In a table's Visible to column the words are a rose `userAlert` glyph
+  after who can see the row, "Not visible to …" in its tooltip.
 - **A task's box is its state** (#243). A task in the Inbox (`proposed`) draws a dashed box; In Progress a grey box;
   completed a green tick, with the title struck through and grey, and a short pop (`popSound`, renderer/motion.js;
   a checkbox block pops too, unchecking is silent; it sounds as the mouse button goes down on a box the
@@ -222,7 +223,7 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   sends those four and `peopleCount`, and reads the owners on demand, so they are let go like any read). Each bubble is
   an image named after its person; a guest, whose profile Tana does not let us read, is "Guest". The glyph then leaves
   the facts after the title. A table row, whose subtext is its cells, draws the same line (glyph, bubbles, the rest in
-  words) in its icons at the end, whose column widens to 190px when any row has one, and the bare glyph for a row that names nobody. It shows with the Assigned fact, and never on the Timeline, which shows neither the glyph nor the faces (`audienceShown`).
+  words) in its icons at the end, whose column widens to 190px when any row has one, and the bare glyph for a row that names nobody. It is Display's Visible to fact, on unless switched off (a Display choice stored before it was its own fact shows it; off is stored as `novisibility`, views.js `withVisibility`), and never on the Timeline, which shows neither the glyph nor the faces (`displayKeys`).
   Everyone, only you and a space are the exception: the glyph and **Everyone**, **Private** or the space's name
   ("Space members" when Tana gives no title), no bubbles, since a bubble per member or your own face tells you nothing
   (`AUDIENCES` `word`, `audienceInfo`); the page's Visible to field says the same, and Lives in leaves the space out

@@ -247,7 +247,7 @@ the full set. State classes are set by the renderer, pseudo-classes by the brows
 | Group heading | `.ghead` (a button; its chevron follows `aria-expanded`), `.gmore` for "Show more" | `:hover`, `:focus` |
 | Sidebar | `.rail > .rhead`, `.rrow > .ricon, .rtext > .rtitle, .rsub` | `.rhead.closed`, `.rrow:hover`, `.rrow:focus`, `.rrow.done`, `.rrow.rmeta.fixed` (not clickable) |
 | Fields | `.fields > .field > .ricon, .flabel, .fvalues`; `.fchoice > .fchip`, `.fhint`, `.fkind` | `.fchip.gone`, `.fchip.wrong` |
-| Table | `.outline.table-view` with `.thead`, `.cell`, `.tgrip`; a table block is `.text.table` | `.cell.pick`, `.tgrip.dragging` |
+| Table | `.outline.table-view` with `.thead`, `.cell`, `.tgrip`, and `.fold` for the columns riding on the title's line; a table block is `.text.table` | `.cell.pick`, `.tgrip.dragging`, `.outline.folded`, `.thead.folded` |
 | Agent badge | `.cbadge` | `.pending`, `.working`, `.waiting`, `.done`, `.broken`, `.unavailable`, `.closed`; `[role="button"]` when it opens something |
 | Proposal buttons | `.pbuttons > .pbutton.approve` / `.pbutton.reject` (renderer/proposals.js) | `:hover`, `:disabled` |
 | Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared`; `.skeleton.gone` once the rows have landed, `.skeleton.tail` while the Timeline is still landing in parts, `body.building` while the loader covers the whole page (renderer/render.js sets all three) |

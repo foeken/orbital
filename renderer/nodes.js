@@ -517,7 +517,7 @@ const searchDirty = () => {
   const saved = searchFilters.get(zoom.docId);
   if (!saved) return false;
   return !sameFilter(filters.get(zoom.docId), saved.filter) || sortBy() !== (saved.sort || 'default') || groupBy() !== (saved.group || 'none')
-    || displayKeys().join(',') !== (Array.isArray(saved.display) ? saved.display : DISPLAY_DEFAULT).join(',');
+    || displayKeys().join(',') !== withVisibility(Array.isArray(saved.display) ? saved.display : DISPLAY_DEFAULT).join(',');
 };
 // The rows a saved search shows follow the pills above them, or editing a filter would read as doing nothing. While
 // the staged filter matches the document, the document's own rows are the right answer and keep the parts of a

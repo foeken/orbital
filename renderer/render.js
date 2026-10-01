@@ -293,6 +293,9 @@ function tellTitle(title, renamable, icon = '') {
 const META_SEP = ' · ';
 const META_GAP = 8; // .meta's margin-left in styles.css, which offsetWidth does not carry
 function fitRowMeta() {
+  // a table's icons can widen when metadata lands (a pending glyph becomes who can see the row): Visible to is measured
+  // again and the fold decided again, with no motion — a page settling, not a hand
+  if (tableView()) { sizeIcons(); fitTable(); }
   const plan = [];
   for (const body of outline.querySelectorAll('.node > .line > .body')) {
     if (tableView() && body.matches('.outline.table-view > .node > .line > .body')) continue; // a table row keeps its icons in their own column: its grey line is the other columns
@@ -318,6 +321,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
   if (outline.clientWidth === fitWidth) return;
   fitWidth = outline.clientWidth;
   fitRowMeta();
+  fitTable(true);
 }).observe(outline);
 // A row patched in place (renderer/tasks.js patchMeta) asks for the fit here: metadata arrives one answer per row as
 // the rows scroll in, and fitting after each one forced a layout of the whole outline per answer (#264). The frame
@@ -357,7 +361,7 @@ function rowSig(n) {
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
-    n.proposal ? n.proposal.note : null, n.subtext, n.people, n.join, n.meeting && n.meeting.id, n.timeline && n.timeline.recording, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    n.proposal ? n.proposal.note : null, n.subtext, n.people, n.join, n.meeting && n.meeting.id, n.timeline && n.timeline.recording, tableView(), tableFold, // which facts the row shows, and as a list or a table (and which columns ride on its title's line): without this a reused row would keep the old ones, a proposal's buttons included
     n.timeline?.free && timelineFreeSegs(n.timeline.free), // the Timeline's free time, counting down
     tableView() ? typeDefs() : null, // a table cell's picker is made from the page's field definitions (views.js cellPicker)
     demoMode, // demo mode masks the words and makes every row read-only: a row drawn before the switch shows real titles
@@ -451,9 +455,9 @@ function renderOutline() {
     }
   }
   outline.classList.toggle('table-view', tableView());
-  // ponytail: at least one fact column, because repeat(0) and a division by 0 make the grid invalid; with Display
-  // empty that column is simply blank. A layout of its own if that case ever matters.
-  if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.style.setProperty('--fcols', tableCols()); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
+  outline.classList.toggle('folded', tableView() && tableFold > 0);
+  // a list page shown as a table (renderer/views.js); fitTable then folds or splits its columns for this page's width
+  if (tableView() && list.length) { applyCols(); outline.prepend(tableHeadEl()); requestAnimationFrame(() => fitTable()); }
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   // Empty is an answer the page has been given: no entry at all means it has not been asked yet, which is where a
@@ -909,7 +913,7 @@ function nodeEl(node, docId, parent) {
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
-  if (displayOn('assigned')) {
+  if (displayOn('assigned') || displayOn('visibility')) {
     if (taskInfo) body.append(taskMetaEl(taskInfo, display.id, display));
     else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true }, display.id, display)); // hold the slot: the real icon lands in the same place, so the row never shifts (the meeting link already in it)
   } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out
