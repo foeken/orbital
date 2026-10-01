@@ -9,7 +9,9 @@ final class SampleTests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-sample"]
+        // -demoMode NO: Settings' Demo mode is kept in UserDefaults and makes a box do nothing; the argument overrides
+        // what a simulator kept from an earlier run, for this launch only
+        app.launchArguments = ["-sample", "-demoMode", "NO"]
         app.launch()
         XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 15))
     }
