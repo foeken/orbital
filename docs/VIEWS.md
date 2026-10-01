@@ -216,9 +216,10 @@ room for all of them beside a 200px title, the first columns fold onto the title
 title in grey, in column order, each cut on its own. As the page widens they split back out, the last column first,
 so the facts never change order. Title heads the title's line and names the folded columns after its own word, in a
 quieter grey; a click on one gives it (and the ones after it) its own column by narrowing Title, or says there is no
-room (`undockColumn`). Title's grip is the edge between its line and the columns: dragged left, each folded column
-snaps out as the edge passes where it would start; dragged right, they fold back on, live under the pointer (`titleFor`,
-`resizeColumn`); ←/→ on Title in Column widths move the same edge. Each column still split out keeps its own header
+room (`undockColumn`). Only the page's width folds a column: Title holds 200px (`foldFor`), so dragged wider it only
+widens until the columns reach the end of the row and gives that back first when the page narrows (`tableCols`), and
+dragged narrower than 200px it lets folded columns snap out live under the pointer (`resizeColumn`), as ←/→ on Title in
+Column widths do. Each column still split out keeps its own header
 and grip. An unresized Title takes at most half the row while columns ride on its line, and who can see a row shrinks to
 its glyph (red when someone assigned cannot see it; the words are in its tooltip), as the video's narrow rows end in
 one avatar. Where it snaps depends only on the widths and the page's width (renderer/views.js `foldFor`, which always
