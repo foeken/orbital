@@ -959,10 +959,10 @@ function onChange(docId, info) {
     notifyWatched(docId, doc, n, info).catch(report); // the signature is taken here and now; the audience it may need is not
     sendChanged(docId, { meta, fields: fieldsMoved }); // the renderer patches this one row from doc:info; the page that typed it knows it has it
     // an owner an inherited audience was read through: the rows that read it read their metadata again, which lists them again
-    const readers = audienceReaders.get(docId), osig = readers && ownerSig(n);
+    const readers = audienceReaders.get(docId), osig = readers && ownerSig(docId, n);
     if (readers && ownerSigs.get(docId) !== osig) {
       ownerSigs.set(docId, osig); audienceReaders.delete(docId);
-      for (const id of readers) if (S.client.sync.getDocument(id)) sendChanged(id, { meta: true }); // a row let go reads it when it is read again
+      for (const id of readers) { rowOwners.get(id)?.delete(docId); if (S.client.sync.getDocument(id)) sendChanged(id, { meta: true }); } // a row let go reads it when it is read again
     }
     if (pinsChanged || restored) send('outline:changed', null);
     if (restored) scheduleRefresh(0);
@@ -981,11 +981,17 @@ const fieldSigs = new Map(); // docId -> its field values as last announced (onC
 // The owners a row's inherited audience was read through (#477): owner uri -> the rows that read it, and what of it they
 // read (the boundary's rule and grants, those of the owners in between, the organization's members, a space's name).
 // ponytail: an owner let go (releaseOnDemand) hears no more changes, so its rows keep their audience until read again.
-const audienceReaders = new Map(), ownerSigs = new Map();
-const ownerSig = (n) => JSON.stringify([n.restricted, n.participants, n.memberUserProfileDocUris, n.title]);
+// Each read replaces the row's owners, and a row let go forgets them (views.js refresh), so the index holds live rows only.
+const audienceReaders = new Map(), ownerSigs = new Map(), rowOwners = new Map(); // rowOwners: row -> the owners it was read through
+const ownerSig = (uri, n) => JSON.stringify([n.restricted, n.participants, uri.startsWith('tana:org:') ? n.memberUserProfileDocUris : null, uri.startsWith('tana:space:') ? n.title : null]);
+function forgetOwners(id) { for (const uri of rowOwners.get(id) || []) audienceReaders.get(uri)?.delete(id); rowOwners.delete(id); }
 async function audienceOwner(uri, id) {
   const d = await document(uri);
-  if (d) { ownerSigs.set(uri, ownerSig(readNode(d))); (audienceReaders.get(uri) || audienceReaders.set(uri, new Set()).get(uri)).add(id); }
+  if (d) {
+    ownerSigs.set(uri, ownerSig(uri, readNode(d)));
+    (audienceReaders.get(uri) || audienceReaders.set(uri, new Set()).get(uri)).add(id);
+    (rowOwners.get(id) || rowOwners.set(id, new Set()).get(id)).add(uri);
+  }
   return d;
 }
 
@@ -1312,6 +1318,7 @@ const ipc = {
     // watched rides along: the creator is a graph fact, already cached for anything a view has listed
     // the owners it reads are reads on demand, let go with the rest (releaseOnDemand); a row draws four people and a
     // count, so the organization's whole membership does not travel with every row
+    forgetOwners(id); // this read says which owners the audience comes from now
     const { people, ...audience } = await audienceMetadata(doc, S.me.userUri, S.client.graph, { subscribe: (uri) => audienceOwner(uri, id) });
     return { ...taskMeta(doc), ...audience, ...(people ? { people: people.slice(0, 4), peopleCount: people.length } : {}), linkShared: await linkShared(id), watched: notifyOn(n, await creatorOf(id)) };
   }),
@@ -1376,4 +1383,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

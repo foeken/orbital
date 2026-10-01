@@ -4104,15 +4104,16 @@ async function main() {
     } });
     const asked = backend.handlers.get('doc:taskMeta')(null, row);
     while (!backend.timers.length) await new Promise(setImmediate); // the link-share lookup is batched on a timer, run here by hand
-    backend.timers.shift().fn();
-    const meta = await asked;
-    assert.deepEqual([meta.audience, meta.people.length, meta.people.every((uri) => people.includes(uri)), meta.peopleCount], ['everyone', 4, true, 6], 'four people and how many');
-    // #477: a change to the owner it was read through tells the row its metadata moved; one it did not read through does not
+    // #477, while the read is still out (the renderer reads again when it lands): a change to the owner the audience was
+    // read through tells the row its metadata moved; one the audience does not read (an organization's name) does not
     const toldRow = () => sent.filter(([ch, id, info]) => ch === 'outline:changed' && id === row && info && info.meta === true).length;
-    org.transact((l) => l.getMap('data').set('unrelated', 1)); backend.onChange(org.id, { origin: 'remote' });
+    org.transact((l) => l.getMap('data').set('title', 'Renamed org')); backend.onChange(org.id, { origin: 'remote' });
     assert.equal(toldRow(), 0, 'an owner change the audience does not read leaves the row alone');
     org.transact((l) => l.getMap('data').set('memberUserProfileDocUris', { m0: ME })); backend.onChange(org.id, { origin: 'remote' });
     assert.equal(toldRow(), 1, 'the organization losing members tells the row whose audience it is, so its faces and count are read again');
+    backend.timers.shift().fn();
+    const meta = await asked;
+    assert.deepEqual([meta.audience, meta.people.length, meta.people.every((uri) => people.includes(uri)), meta.peopleCount], ['everyone', 4, true, 6], 'four people and how many');
     for (let i = 0; i <= LIVE_ROWS; i++) await backend.handlers.get('doc:info')(null, make('Row ' + i));
     await backend.handlers.get('view:list')(null, 'library');
     assert.ok(unsubscribed.includes(org.id), 'the organization it read is let go with the older reads');
