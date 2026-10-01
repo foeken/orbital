@@ -69,6 +69,7 @@ struct NodeScreen: View {
     @State private var page: Engine.Page?
     @State private var error: String?
     @State private var waitingSince: Date?
+    @State private var access: Engine.Access? // a document's Assigned to and Visible to (NodeDetails)
 
     var body: some View {
         Group {
@@ -96,7 +97,10 @@ struct NodeScreen: View {
                         .refreshable { await load() }
                         .overlay { if page.rows.isEmpty { ContentUnavailableView(page.kind == "event" ? "No notes yet" : "Nothing found", image: "Glyphs/" + Glyph.of(page.kind)) } }
                 default:
-                    List(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal) }
+                    List {
+                        if let access { NodeDetails(id: id, access: access, engine: engine, reload: load) }
+                        ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal) }
+                    }
                         .listStyle(.plain)
                         .refreshable { await load() }
                         .overlay { if page.rows.isEmpty { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } }
@@ -132,6 +136,7 @@ struct NodeScreen: View {
     // A read keeps what is on screen when it fails, and says why only while there is nothing to show
     private func load() async {
         do { page = try await engine.open(id); error = nil } catch { self.error = error.localizedDescription }
+        if let kind = page?.kind, !["chat", "search", "event"].contains(kind) { access = await engine.access(id) ?? access }
     }
 
     // consecutive rows under one heading; one untitled section when the search is not grouped
@@ -284,6 +289,159 @@ struct ChatBlock: View {
                 .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         } else {
             Text(row.styled).font(row.heading != nil ? .headline : .body)
+        }
+    }
+}
+
+// Zoomed into a document: who has it and who can see it, as the desktop's Assigned to and Visible to fields
+// (renderer/fields.js); a tap changes either, and someone assigned who cannot open it is named, with Grant access where
+// the document's own list is its audience (renderer/access.js hiddenFromFix)
+struct NodeDetails: View {
+    let id: String
+    let access: Engine.Access
+    let engine: Engine
+    let reload: () async -> Void
+    @State private var picking = false
+
+    var body: some View {
+        Section {
+            if access.task {
+                Button { engine.assigning = .init(id: id, current: access.assignees.map(\.id), then: reload) } label: {
+                    LabeledContent("Assigned to") { if access.assignees.isEmpty { Text("Unassigned") } else { Faces(people: access.assignees.persons) } }
+                }
+            }
+            Button { picking = true } label: {
+                LabeledContent("Visible to") {
+                    if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
+                }
+            }
+            if !access.hidden.isEmpty {
+                HStack {
+                    Label("Not visible to " + access.hidden.names, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange)
+                    Spacer()
+                    if access.grants {
+                        Button("Grant access") { Task { await engine.share(id, "people", access.participants + access.hidden.map(\.id)); await reload() } }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                }
+            }
+        }
+        .tint(.primary)
+        .sheet(isPresented: $picking) { VisibilitySheet(id: id, access: access, engine: engine, done: reload) }
+    }
+}
+
+extension Engine.Access {
+    // renderer/tasks.js AUDIENCES: the scope's glyph and its word, a space by its name
+    static func label(_ scope: String, _ space: String?) -> some View {
+        let (word, glyph) = switch scope {
+        case "only-me": ("Only you", "lock")
+        case "people": ("Selected people", "userLock")
+        case "space": (space.map { "Members of " + $0 } ?? "Space members", "houseLock")
+        case "everyone": ("Everyone", "users")
+        default: ("Unknown", "hidden")
+        }
+        return Label { Text(word) } icon: { Image("Glyphs/" + glyph).resizable().frame(width: 18, height: 18) }.foregroundStyle(.secondary)
+    }
+}
+
+extension [Engine.Member] {
+    var persons: [Row.Person] { map { Row.Person(name: $0.name) } }
+    // "Kor", "Kor and Stan", "Kor, Stan and Jeroen" (renderer/access.js namesOf)
+    var names: String { count > 1 ? dropLast().map(\.name).joined(separator: ", ") + " and " + last!.name : first?.name ?? "" }
+}
+
+// Who can see a document (renderer/access.js visibilityRows): only you, the people picked, or whoever sees where it lives,
+// the rule it is shared by now ticked, who that is listed, and why not when you may not change it
+struct VisibilitySheet: View {
+    let id: String
+    let access: Engine.Access
+    let engine: Engine
+    let done: () async -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if access.rules.contains("me") { choice("me", "Only me", "lock") }
+                    if access.rules.contains("people") {
+                        NavigationLink { PeoplePicker(access: access, engine: engine) { uris in dismiss(); Task { await engine.share(id, "people", uris); await done() } } } label: {
+                            row("Selected people …", "userLock", on: access.rule == "people")
+                        }
+                    }
+                    if access.rules.contains("inherit") { choice("inherit", "Inherit", "houseLock", detail: access.inherit) }
+                } footer: { if let reason = access.reason { Text(reason) } }
+                if !access.people.isEmpty {
+                    Section("Who can see it") { ForEach(access.people) { Text($0.name) } }
+                }
+            }
+            .navigationTitle("Visibility")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+    }
+
+    private func choice(_ rule: String, _ title: String, _ glyph: String, detail: Engine.Audience? = nil) -> some View {
+        Button { dismiss(); Task { await engine.share(id, rule, token: access.token); await done() } } label: {
+            row(title, glyph, on: access.rule == rule, detail: detail)
+        }
+        .tint(.primary)
+    }
+    private func row(_ title: String, _ glyph: String, on: Bool, detail: Engine.Audience? = nil) -> some View {
+        HStack {
+            Label { Text(title) } icon: { Image("Glyphs/" + glyph).resizable().frame(width: 20, height: 20) }
+            Spacer()
+            if let detail { Engine.Access.label(detail.scope, detail.space).labelStyle(.titleOnly) }
+            if on { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.blue) }
+        }
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+// Selected people …: the workspace's people, those who can see it now first and ticked, applied together
+struct PeoplePicker: View {
+    let access: Engine.Access
+    let engine: Engine
+    let apply: ([String]) -> Void
+    @State private var people: [Engine.Member] = []
+    @State private var picked: Set<String> = []
+    @State private var query = ""
+
+    var body: some View {
+        List(people.filter { query.isEmpty || $0.name.localizedStandardContains(query) }) { person in
+            Button { if picked.contains(person.id) { picked.remove(person.id) } else { picked.insert(person.id) } } label: {
+                HStack {
+                    Text(person.name).foregroundStyle(.primary)
+                    Spacer()
+                    if picked.contains(person.id) { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.blue) }
+                }
+            }
+        }
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
+        .navigationTitle("Select people")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Apply") { apply(Array(picked)) }.disabled(picked.isEmpty) } }
+        .task {
+            let seeing = Set(access.participants)
+            picked = seeing
+            people = await engine.members().filter { $0.id != access.me }
+                .sorted { seeing.contains($0.id) != seeing.contains($1.id) ? seeing.contains($0.id) : $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
+    }
+}
+
+extension View {
+    // Assigned someone who cannot open it (Engine.assign): Grant access shares it with them, Keep private leaves it as it is
+    func shareAsk(_ engine: Engine) -> some View {
+        alert((engine.asking?.shut.names ?? "") + " can’t see this", isPresented: Binding { engine.asking != nil } set: { if !$0 { engine.asking = nil } }, presenting: engine.asking) { ask in
+            if ask.access.grants {
+                Button("Grant access") { Task { await engine.share(ask.id, "people", ask.access.participants + ask.shut.map(\.id)); await ask.then() } }
+            }
+            Button("Keep private", role: .cancel) {}
+        } message: { ask in
+            Text("“\(ask.access.title)” is assigned to \(ask.shut.names), but they won’t be able to open it unless you grant access or move it somewhere they can see."
+                 + (ask.access.grants ? "" : " It is shared through where it lives, so share that instead."))
         }
     }
 }

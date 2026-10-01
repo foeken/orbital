@@ -249,7 +249,34 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var assigning: Assigning?
     struct Member: Decodable, Identifiable { let id: String; let name: String }
     func members() async -> [Member] { Self.isSample ? [] : (try? await call("return await orbital.members()", [:])) ?? [] }
-    func assign(_ id: String, to uri: String?) async { await act("return await orbital.assign(id, uris)", ["id": id, "uris": uri.map { [$0] } ?? []]) }
+    // Someone just assigned who cannot open the task: asked there and then, Grant access or Keep private (renderer/access.js
+    // openShareAsk), by the alert Shell lays over everything
+    func assign(_ id: String, to uri: String?, then done: @escaping () async -> Void = {}) async {
+        guard !Self.isSample else { return }
+        do {
+            let shut: [String] = try await call("return await orbital.assign(id, uris)", ["id": id, "uris": uri.map { [$0] } ?? []])
+            if !shut.isEmpty, let access = await access(id) { asking = .init(id: id, access: access, shut: access.hidden.filter { shut.contains($0.id) }, then: done) }
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+    struct ShareAsk: Identifiable { let id: String; let access: Access; let shut: [Member]; let then: () async -> Void }
+    var asking: ShareAsk?
+
+    // A zoomed node's Assigned to and Visible to (orbital.access), and who sees it changed (orbital.share)
+    struct Audience: Decodable { let scope: String; let space: String? }
+    struct Access: Decodable {
+        let title: String, me: String, task: Bool, assignees: [Member]
+        let audience: String, space: String?, people: [Member], hidden: [Member]
+        let restricted: Bool, participants: [String], rules: [String], reason: String?, inherit: Audience, token: String?
+        // Grant access is the pill's write (renderer/access.js hiddenFromFix): only where the node's own list is its audience
+        var grants: Bool { restricted && rules.contains("people") }
+        // the rule it is shared by now, as the visibility picker ticks it
+        var rule: String { !restricted ? "inherit" : participants.isEmpty ? "me" : "people" }
+    }
+    func access(_ id: String) async -> Access? { Self.isSample ? nil : try? await call("return await orbital.access(id)", ["id": id]) }
+    func share(_ id: String, _ rule: String, _ uris: [String] = [], token: String? = nil) async {
+        await act("return await orbital.share(id, rule, uris, token)", ["id": id, "rule": rule, "uris": uris, "token": token ?? NSNull()])
+    }
     private func act(_ js: String, _ arguments: [String: Any]) async {
         guard !Self.isSample else { return }
         do { let _: Bool = try await call(js, arguments); await refresh() } catch { self.error = error.localizedDescription }
@@ -278,6 +305,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func createTask(_ title: String, type: String?, search: String? = nil, assignee: String? = nil, values: [String: Value] = [:]) async throws -> String {
         let id: String = try await call("return await orbital.createTask(title, type, search, assignee, values)", ["title": title, "type": type ?? NSNull(), "search": search ?? NSNull(),
                                                                                                         "assignee": assignee ?? NSNull(), "values": values.mapValues(\.json)])
+        // a new task is yours alone: given to someone else, they are asked about as Assign to asks
+        if assignee != nil, let access = await access(id), !access.hidden.isEmpty { asking = .init(id: id, access: access, shut: access.hidden, then: {}) }
         await refresh()
         return id
     }

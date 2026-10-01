@@ -18,6 +18,7 @@ const masked = (r) => ({
 });
 const demo = (rows) => (on ? rows.map(masked) : rows);
 const demoTitle = (title, id) => (on ? demoText(title, id) : title);
+const demoName = (name) => (on ? person(name) : name);
 const demoOn = (value) => { on = !!value; setDemo(on); return on; };
 
-module.exports = { demo, demoTitle, demoOn, isDemo: () => on };
+module.exports = { demo, demoName, demoTitle, demoOn, isDemo: () => on };

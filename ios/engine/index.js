@@ -5,7 +5,7 @@
 // ./stand-ins.js, chosen at bundle time (build.js).
 // An ES module so the bundle runs it (Bun leaves a CommonJS entry of an iife bundle wrapped and never called).
 import { createTanaClient } from '../../sdk';
-import { STATE_TYPES, editable, initDocument, readNode, readSearch, rowLimit, setAssignees, setState, ulid } from '../../sdk/node';
+import { STATE_TYPES, audienceMetadata, editable, initDocument, readNode, readSearch, rowLimit, setAssignees, setState, taskMeta, ulid } from '../../sdk/node';
 import { insertAfter, insertImage, readOutline } from '../../sdk/content';
 import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
@@ -13,14 +13,14 @@ import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
 import { addMeetingChats, completedInWindow, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { dateLabel, isDateUri } from '../../sdk/dates';
-import { canDelete, canWrite, everyoneOnly } from '../../sdk/access';
+import { canDelete, canWrite, capabilities, everyoneOnly, setSharing } from '../../sdk/access';
 import { arrange } from './arrange';
 import { S, isSpace, iso, today, visibleGraphNodes } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
 import { mark } from './sensitive';
-import { demo, demoOn, demoTitle, isDemo } from './demo';
+import { demo, demoName, demoOn, demoTitle, isDemo } from './demo';
 import NUCLEO from 'nucleo-ui';
 
 // The phone reads Orbital's settings document and writes only the keys it sets (Mark as Sensitive): a Mac makes, merges
@@ -288,6 +288,14 @@ const refusedSoon = (id) => new Promise((resolve) => {
   S.client.sync.on('write-denied', on);
 });
 
+// main/documents.js accessContext: the owners read on demand (hold lets them go), and whether you administer the org
+const accessContext = () => {
+  const c = claims(last.accessToken);
+  return { sync: { subscribe: (id) => hold(id) }, graph: S.client.graph, orgDocUri: S.me.orgDocUri, orgAdmin: c.org_id === S.me.orgId && ['admin', 'owner'].includes(c.role) };
+};
+// who of the people assigned cannot open the task (sdk/node.js audienceMetadata hiddenFrom), as the desktop asks after Assign to
+const shutOut = async (doc) => (await audienceMetadata(doc, S.me.userUri, S.client.graph, accessContext().sync)).hiddenFrom || [];
+
 const LANGS = ['English', 'Dutch', 'German', 'French', 'Spanish']; // renderer/translate.js TRANSLATE_LANGS
 
 window.orbital = {
@@ -343,8 +351,33 @@ window.orbital = {
     const doc = await hold(id);
     if (doc.writeDenied || editable(readNode(doc), S.me.userUri) === false) throw new Error('This task is read-only to you');
     const refused = refusedSoon(id);
+    const before = taskMeta(doc).assignees;
     setAssignees(doc, uris, S.me.userUri); // refuses what is not a task
     if (await refused) throw new Error('Tana refused the change: this task is read-only to you');
+    return JSON.stringify((await shutOut(doc)).filter((uri) => !before.includes(uri))); // just given work they cannot open: the app asks (renderer/access.js openShareAsk)
+  },
+  // A zoomed node's Assigned to and Visible to, as the desktop's fields show them (doc:taskMeta, doc:accessOptions): who has
+  // it, who can see it, the assignees shut out, and the sharing rules you may pick from (sdk/access.js capabilities)
+  async access(id) {
+    const doc = await hold(id), n = readNode(doc), direct = taskMeta(doc), ctx = accessContext();
+    const [meta, options, people] = await Promise.all([audienceMetadata(doc, S.me.userUri, S.client.graph, ctx.sync), capabilities(doc, S.me.userUri, ctx), members().catch(() => [])]);
+    const person = (uri) => ({ id: uri, name: demoName((people.find((m) => m.id === uri) || {}).title || 'Someone') });
+    const space = (a) => a && a.title ? demoTitle(a.title, a.boundaryUri || a.uri || 'space') : null;
+    return JSON.stringify({
+      title: demoTitle(n.title || 'Untitled', id), me: S.me.userUri, task: STATE_TYPES.includes(n.stateType), assignees: direct.assignees.map(person),
+      audience: meta.audience, space: space(meta.audienceSpace), people: meta.audience === 'everyone' ? [] : (meta.people || []).map(person), // everyone: the org, named by its word
+      hidden: (meta.hiddenFrom || []).map(person), restricted: direct.restricted === true, participants: direct.participants.map((p) => p.uri).filter((uri) => uri !== S.me.userUri),
+      rules: options.rules, reason: options.reason, inherit: { scope: options.inheritAudience.scope, space: space(options.inheritAudience) }, token: options.sharingToken,
+    });
+  },
+  // Visibility (renderer/access.js applySharing): only you, the people named (each keeping the role they had, editors
+  // otherwise), or where it lives, with the token access() disclosed; Grant access is the people named plus those shut out
+  async share(id, rule, uris, token) {
+    const doc = await hold(id), n = readNode(doc);
+    const participants = rule === 'people' ? uris.map((uri) => ({ uri, role: (n.participants && n.participants[uri] && n.participants[uri].role) || 'editor' })) : undefined;
+    const refused = refusedSoon(id);
+    await setSharing(doc, S.me.userUri, { rule, participants, token: token || undefined }, accessContext());
+    if (await refused) throw new Error('Tana refused the change: you cannot change who sees this');
     return JSON.stringify(true);
   },
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
@@ -494,7 +527,7 @@ window.orbital = {
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'assign', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
+for (const name of ['toggle', 'assign', 'share', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

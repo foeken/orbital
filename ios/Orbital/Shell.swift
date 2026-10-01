@@ -113,6 +113,7 @@ struct Shell: View {
         .onOpenURL { _ in shared = Shared.take() ?? shared }
         .onChange(of: scene, initial: true) { if scene == .active, let found = Shared.take() { adding = false; settings = false; shared = found } }
         .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
+        .shareAsk(engine)
         .task {
             // -zoom <id>: a node open at launch, for design shots
             let args = CommandLine.arguments

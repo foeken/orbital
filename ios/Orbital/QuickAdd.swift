@@ -231,7 +231,7 @@ struct AssignSheet: View {
         let on = task.current.map { now in uri.map { now == [$0] } ?? now.isEmpty } ?? false // not known (a Timeline task): none ticked
         return Button {
             dismiss()
-            Task { await engine.assign(task.id, to: uri); await task.then() }
+            Task { await engine.assign(task.id, to: uri, then: task.then); await task.then() }
         } label: {
             HStack {
                 Text(name).foregroundStyle(.primary)

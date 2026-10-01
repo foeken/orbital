@@ -5,7 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const USED = ['timeline', 'library', 'info', 'chatgpt', 'license', 'task', 'doc', 'space', 'member', 'discuss', 'tlAccepted', 'tlLater', 'tlInbox', 'tlNew', 'updated', 'robot', 'tana', 'calendar', 'free', 'todayTasks', 'search', 'language', 'pinRoute'];
+const USED = ['timeline', 'library', 'info', 'chatgpt', 'license', 'task', 'doc', 'space', 'member', 'discuss', 'tlAccepted', 'tlLater', 'tlInbox', 'tlNew', 'updated', 'robot', 'tana', 'calendar', 'free', 'todayTasks', 'search', 'language', 'pinRoute', 'hidden', 'lock', 'userLock', 'houseLock', 'users'];
 // the check inside finished work's green disc, drawn heavier as styles.css .tl-done does (stroke 2.5 at 12px)
 const HEAVY = { applyDone: ['apply', 2.5], timelineMenu: ['timeline', 1.6], searchMenu: ['search', 1.6] }; // the side menu's glyphs, weighted like its medium text
 

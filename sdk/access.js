@@ -20,7 +20,8 @@ const WRITERS = new Set(['admin', 'editor', 'attendee']);
 const LIBRARY = { id: null, title: 'Library' };
 const isLibrary = target => !target || target.id === null;
 const supported = n => KINDS.has(n.type) && n.id?.split(':')[1] === n.type && !(n.deletedAt > 0);
-const version = doc => Buffer.from(doc.loro.oplogVersion().encode()).toString('hex');
+// hex without Buffer, so the iPhone's engine (ios/engine) runs it in a web page too
+const version = doc => Array.from(doc.loro.oplogVersion().encode(), b => b.toString(16).padStart(2, '0')).join('');
 function observe(ctx, doc) { if (ctx.observed && !ctx.observed.has(doc)) ctx.observed.set(doc, version(doc)); return readNode(doc); }
 const load = async (ctx, id) => observe(ctx, await ctx.sync.subscribe(id));
 const stable = ctx => [...ctx.observed].every(([doc, before]) => version(doc) === before);
