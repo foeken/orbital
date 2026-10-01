@@ -180,11 +180,16 @@ struct TimelineScreen: View {
             if !Task.isCancelled { await engine.refresh() }
         }
         .overlay {
-            if engine.rows.isEmpty {
-                if engine.loading { ProgressView() }
-                else if let error = engine.error { ContentUnavailableView("Timeline didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
+            // connecting and the first read are one build, and it fades as the rows land under it
+            let building = engine.rows.isEmpty && (engine.loading || engine.phase == .starting)
+            ZStack {
+                if building { Building().transition(.opacity) }
+                else if engine.rows.isEmpty {
+                if let error = engine.error { ContentUnavailableView("Timeline didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
                 else { ContentUnavailableView("Nothing yet", systemImage: "clock", description: Text("Changes to your tasks, new Inbox tasks and your meetings show up here.")) }
+                }
             }
+            .animation(.easeOut(duration: 0.3), value: building)
         }
         .safeAreaInset(edge: .bottom) {
             if let error = engine.error, !engine.rows.isEmpty {
