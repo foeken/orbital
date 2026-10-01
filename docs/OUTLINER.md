@@ -1239,7 +1239,8 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
   markdown (release.sh's "Signed and notarized; unzip …" line left out). Later (Esc, a click on the scrim) closes it;
   Update and Restart (Enter) turns the buttons into a progress bar in the accent blue: "Downloading… 47 of 123 MB",
   then "Checking the download…" while it is unpacked and its signature checked, then the app quits and reopens as the
-  new version. While it runs the card stays; a failure says why on the card and offers Try Again.
+  new version. While it runs the card stays; a failure says why on the card and offers Try Again. A window the Help tour
+  or Quick Add Task covers keeps the offer and shows the card once that closes (main.js `updatePending`).
 
 ### Presence (issue #14)
 

@@ -41,7 +41,18 @@ async function newerReleases() {
 // ("Orbital 0.9.1 for Apple Silicon. Signed and notarized; unzip …"), which is for a download by hand.
 const notes = (body) => blocks(body)
   .filter((b, i) => !(i === 0 && b.block === 'paragraph' && /notarized/i.test(b.text)))
-  .map((b) => ({ block: b.block, segments: b.verbatim ? [{ text: b.text }] : segments(b.text) }));
+  .map((b) => ({ block: b.block, ...(b.depth ? { depth: b.depth } : {}), segments: b.verbatim ? [{ text: b.text }] : segments(b.text) }));
+
+// The download's step in its pipeline: every chunk passes through, and progress hears each new whole percent of total.
+const counting = (total, progress) => async function* (chunks) {
+  let got = 0, told = -1;
+  for await (const chunk of chunks) {
+    got += chunk.length;
+    const pct = total ? Math.floor((got * 100) / total) : 0;
+    if (pct !== told) { told = pct; progress({ got, total }); }
+    yield chunk;
+  }
+};
 
 let offer = null, installing = null; // the releases the card shows; the one install under way, whichever card asked
 
@@ -90,17 +101,8 @@ async function install(release, progress = () => {}) {
   const zip = path.join(dir, asset.name);
   const res = await fetch(asset.browser_download_url); // redirects to the asset CDN; fetch follows them
   if (!res.ok) throw new Error(`Download failed with ${res.status}`);
-  const total = asset.size || Number(res.headers.get('content-length')) || 0;
-  let got = 0, told = -1;
-  // streamed: the bundle is well over 100 MB. The card hears each new percent, not each chunk.
-  await pipeline(Readable.fromWeb(res.body), async function* (chunks) {
-    for await (const chunk of chunks) {
-      got += chunk.length;
-      const pct = total ? Math.floor((got * 100) / total) : 0;
-      if (pct !== told) { told = pct; progress({ got, total }); }
-      yield chunk;
-    }
-  }, createWriteStream(zip));
+  // streamed: the bundle is well over 100 MB
+  await pipeline(Readable.fromWeb(res.body), counting(asset.size || Number(res.headers.get('content-length')) || 0, progress), createWriteStream(zip));
   progress({ verifying: true });
   await run('/usr/bin/ditto', ['-xk', zip, dir]);
   const fresh = path.join(dir, 'Orbital.app');
@@ -143,4 +145,4 @@ const signedBy = (team) => {
   return `=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "${team}"`;
 };
 
-module.exports = { check, ipc, isNewer, newer, notes, teamOf, signedBy, canReplace };
+module.exports = { check, ipc, isNewer, newer, notes, counting, teamOf, signedBy, canReplace };

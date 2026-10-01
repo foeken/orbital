@@ -29,7 +29,11 @@ function release(r) {
   const head = document.createElement('h2'); head.textContent = r.version;
   const when = document.createElement('span'); when.textContent = day(r.date); head.append(when);
   out.append(head);
-  for (const b of r.notes) { const el = document.createElement(TAGS[b.block] || 'p'); el.append(...inline(b.segments)); out.append(el); }
+  for (const b of r.notes) {
+    const el = document.createElement(TAGS[b.block] || 'p');
+    if (b.depth) el.style.setProperty('--depth', String(b.depth)); // a sub-bullet keeps its place under its parent
+    el.append(...inline(b.segments)); out.append(el);
+  }
   return out;
 }
 
@@ -37,7 +41,7 @@ function draw(info) {
   if (!info || !info.releases.length) return closeCard();
   const [newest] = info.releases;
   $('updateTitle').textContent = 'Orbital ' + newest.version + ' is available';
-  $('updateSub').textContent = 'You have ' + info.current + (info.releases.length > 1 ? ' · what is new in the ' + info.releases.length + ' versions since' : '') + ' · Orbital restarts to finish';
+  $('updateSub').textContent = 'You have ' + info.current + (info.releases.length > 1 ? ', ' + info.releases.length + ' versions behind' : '') + ' · Orbital restarts to finish';
   $('updateNotes').replaceChildren(...info.releases.map(release));
   go.disabled = false;
 }

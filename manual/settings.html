@@ -172,18 +172,32 @@
   </section>
 
   <section class="topic">
-    <h2 id="help" data-short="Help, updates, About" data-k="help manual check for updates about orbital license version website">Help, the manual, updates and About</h2>
+    <h2 id="help" data-short="Help, updates, About" data-k="help manual check for updates release notes what is new progress download restart about orbital license version website">Help, the manual, updates and About</h2>
     <div class="split">
       <div>
         <p>The <b>Help</b> group sits at the end of <kbd>⌘K</kbd>:</p>
         <ul>
           <li><b>Help</b> opens the short tour of the basics, as the <b>?</b> in the window's header does.</li>
           <li><b>Open Manual</b> opens this manual at orbital.md/manual in your browser, in your theme. It describes the latest release.</li>
-          <li><b>Check for updates</b> looks for a newer Orbital, as the app menu's Check for Updates… does, and says what it found. An update installs when you quit.</li>
+          <li><b>Check for updates</b> looks for a newer Orbital, as the app menu's Check for Updates… does. Orbital also looks by itself when it starts and once a day.</li>
           <li><b>About Orbital</b> is described below.</li>
         </ul>
       </div>
       <figure class="shot"><img data-m="settings-help" alt="The end of Cmd+K: Settings rows, then Help, Open Manual, About Orbital and Check for updates"><figcaption>The end of <kbd>⌘K</kbd>: Settings, then Help.</figcaption></figure>
+    </div>
+    <div class="split flip">
+      <div>
+        <h3>Updating</h3>
+        <p>When there is a newer Orbital, a card opens over the window with what is new: the release notes of every version since yours, newest first. <b>Later</b> (<kbd>esc</kbd>) closes it until the next check. If the Help tour or Quick Add Task is open, the card waits until you close it.</p>
+      </div>
+      <figure class="shot"><img data-m="settings-update" alt="The update card: Orbital 0.10.0 is available, You have 0.9.1, 2 versions behind, then the release notes of 0.10.0 and 0.9.2, with Later and Update and Restart"><figcaption>What is new, before you update.</figcaption></figure>
+    </div>
+    <div class="split">
+      <div>
+        <p><b>Update and Restart</b> (<kbd>↩</kbd>) downloads the new version, with a progress bar where the buttons were. Orbital then checks that the download is signed by the same developer as the copy you have, quits, and opens again as the new version. If something goes wrong, the card says what, and <b>Try Again</b> starts over.</p>
+        <div class="note">Orbital can only replace itself from a folder it can write to. Keep it in Applications.</div>
+      </div>
+      <figure class="shot"><img data-m="settings-updating" alt="The update card while it downloads: a blue progress bar and Downloading… 47 of 123 MB"><figcaption>Downloading, then checking the signature.</figcaption></figure>
     </div>
     <div class="split flip">
       <div>

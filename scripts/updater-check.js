@@ -1,7 +1,7 @@
 // The two branches in the updater: which release counts as newer than the running build, and whose signature a
 // downloaded bundle carries (an ad-hoc signature is nobody's, so it can never replace a signed app).
 const assert = require('node:assert');
-const { isNewer, newer, notes, teamOf, signedBy, canReplace } = require('../updater');
+const { isNewer, newer, notes, counting, teamOf, signedBy, canReplace } = require('../updater');
 
 assert.equal(isNewer('v0.2.1', '0.2.0'), true);
 assert.equal(isNewer('v0.2.0', '0.2.0'), false);
@@ -15,6 +15,16 @@ assert.deepEqual(newer([{ tag_name: 'v0.9.1' }, { tag_name: 'v0.10.0' }, { tag_n
 assert.deepEqual(notes('Orbital 0.9.1 for Apple Silicon. Signed and notarized; unzip and move it to Applications.\n\n## Editing\n- **Markdown** typed (#601).'),
   [{ block: 'heading2', segments: [{ text: 'Editing' }] }, { block: 'bullet', segments: [{ text: 'Markdown', marks: { bold: true } }, { text: ' typed (#601).' }] }],
   'release.sh\'s download line goes, headings and marks stay');
+assert.deepEqual(notes('- Chat\n  - **Thinking** shimmers').map((b) => b.depth), [undefined, 1], 'a sub-bullet keeps its depth');
+// The download's progress: each new whole percent once, the bytes all passed on
+(async () => {
+  const { Readable, Writable } = require('node:stream'), { pipeline } = require('node:stream/promises');
+  const seen = []; let bytes = 0;
+  await pipeline(Readable.from([Buffer.alloc(3), Buffer.alloc(3), Buffer.alloc(10), Buffer.alloc(984)]), counting(1000, (p) => seen.push(p.got)),
+    new Writable({ write(c, _e, cb) { bytes += c.length; cb(); } }));
+  assert.deepEqual(seen, [3, 16, 1000], '0%, then 1%, then 100%: the second 0% chunk says nothing');
+  assert.equal(bytes, 1000, 'every byte reaches the file');
+})().catch((e) => { console.error(e); process.exit(1); });
 assert.equal(teamOf('Executable=/x\nIdentifier=com.dreetje.orbital\nTeamIdentifier=ABCDE12345\nSealed Resources=none'), 'ABCDE12345');
 assert.equal(teamOf('Identifier=com.dreetje.orbital\nSignature=adhoc\nTeamIdentifier=not set'), null, 'an ad-hoc build belongs to no team');
 assert.equal(teamOf('Identifier=com.dreetje.orbital'), null, 'and no line at all is no team either');

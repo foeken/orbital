@@ -172,6 +172,7 @@ function openOverlay(page, which, theme) { // page: the handle that asked (main/
   const view = new WebContentsView({ webPreferences: { preload: PRELOAD } });
   view.setBackgroundColor('#00000000');
   view.opener = page;
+  view.which = which;
   win.overlay = view; win.contentView.addChildView(view); fit(win);
   view.webContents.once('did-finish-load', () => view.webContents.focus());
   view.webContents.loadFile(path.join(__dirname, OVERLAYS[which]), { query: { theme: theme === 'dark' ? 'dark' : 'light' } });
@@ -199,10 +200,18 @@ function closeOverlay(win, result = {}) {
   if (help && note) win.overlay.later = { opener, note, open }; // the task's toast waits for the tour: under it, it would be gone first
   const later = view.later; // this was that tour: the toast it held back is due now
   if (later && later.opener && !later.opener.isDestroyed()) later.opener.send('overlay:closed', { palette: false, note: later.note, open: later.open });
+  // an update a check found while this covered the window (checkUpdates), once nothing else is laid over it
+  if (win.updatePending && !win.overlay && !win.isDestroyed() && main && !main.isDestroyed()) { win.updatePending = false; openOverlay(main, 'update', win.theme || systemTheme()); }
 }
 const frontPane = () => (S.win && !S.win.isDestroyed() ? (S.win.panes.includes(S.pane) ? S.pane : S.win.panes[0]) || null : null);
 // A check that finds a newer release lays the update card over the page that asked (Cmd+K) or the front window.
-const checkUpdates = (manual = false, page = frontPane()) => updater.check({ manual, show: () => !!page && !page.isDestroyed() && openOverlay(page, 'update', page.win.theme || systemTheme()) });
+// A window the Help tour or Quick Add Task covers keeps the offer (updatePending) and closeOverlay opens it after them.
+const checkUpdates = (manual = false, page = frontPane()) => updater.check({ manual, show: () => {
+  if (!page || page.isDestroyed()) return false;
+  const win = page.win;
+  if (win.overlay) { if (win.overlay.which !== 'update') win.updatePending = true; return true; }
+  return openOverlay(page, 'update', win.theme || systemTheme());
+} });
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));

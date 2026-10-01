@@ -1199,7 +1199,7 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .update .unotes h2 span { margin-left: 8px; font-size: 13px; font-weight: 400; color: var(--muted); }
 .update .unotes :is(h3, h4) { margin: 10px 0 2px; font-size: 13px; font-weight: 500; color: var(--muted); }
 .update .unotes :is(p, li, blockquote, pre) { margin: 2px 0; }
-.update .unotes li { margin-left: 18px; }
+.update .unotes li { margin-left: calc(18px * (1 + var(--depth, 0))); }
 .update .unotes li::marker { color: var(--muted); }
 .update .unotes code, .update .unotes pre { font: 12.5px ui-monospace, Menlo, monospace; }
 .update .unotes code { padding: 0 3px; border-radius: 4px; background: rgba(0, 0, 0, .05); }
