@@ -777,7 +777,9 @@ wrong twenty.
   picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
-  badge, which says what the task is doing, read every 30 s while anything is assigned. **Unassign from Agent** takes it
+  badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session
+  lives only on the Mac that ran it, names that Mac in its link and reads **Agent on another Mac** (grey, not a button)
+  anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). **Unassign from Agent** takes it
   back at once. **Go to <agent> task** opens it (Codex in Codex, Claude in Terminal on `claude --resume`, Tana's chat
   here), **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
   node's link and tracks nothing. Every task runs on this Mac.

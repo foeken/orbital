@@ -27,7 +27,8 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
     const open = S.client && S.client.sync.getDocument(id);
     const title = open ? readNode(open).title : '';
     const link = agent.taskLink(id);
-    if (link && link.agent === agentId && a.resume) await a.resume(link.taskId, prompt);
+    // a task on another Mac cannot be handed the request from here: this Mac starts its own
+    if (link && link.agent === agentId && a.resume && !agent.elsewhere(link)) await a.resume(link.taskId, prompt);
     else agent.setTask(id, agentId, await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData }));
     return result;
   } catch (error) {
@@ -49,8 +50,11 @@ async function unassign(id) {
 let reading = null;
 async function readStatuses() {
   const byAgent = {};
-  for (const [nodeId, link] of Object.entries(agent.links())) (byAgent[link.agent] ||= {})[nodeId] = link.taskId;
   const out = {};
+  for (const [nodeId, link] of Object.entries(agent.links())) {
+    if (agent.elsewhere(link)) out[nodeId] = 'elsewhere'; // on the Mac that ran it, where its state lives (renderer AGENT_BADGE)
+    else (byAgent[link.agent] ||= {})[nodeId] = link.taskId;
+  }
   for (const [id, links] of Object.entries(byAgent)) {
     const a = agent.get(id);
     try { Object.assign(out, a.statuses ? await a.statuses(links) : {}); }
@@ -89,6 +93,7 @@ const ipc = {
   'agent:open': async (_e, id) => {
     const link = agent.taskLink(id), a = link && agent.get(link.agent);
     if (!a || !a.open) return false;
+    if (agent.elsewhere(link)) throw new Error('This ' + a.label + ' task is on another Mac: open it there');
     await a.open(link.taskId);
     return true;
   },

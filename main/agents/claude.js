@@ -67,7 +67,8 @@ async function inTerminal(command) {
 }
 
 const claude = agent.register({
-  id: 'claude', label: 'Claude', icon: 'robot', missing: 'Install Claude Code',
+  // local: a session lives in this Mac's ~/.claude only, so its link names this Mac (main/agent.js setTask)
+  id: 'claude', label: 'Claude', icon: 'robot', missing: 'Install Claude Code', local: true,
   available: () => !!claudeBin(),
   async start({ nodeUri, title, prompt, rules }) {
     const id = require('node:crypto').randomUUID();

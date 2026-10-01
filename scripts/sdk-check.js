@@ -3664,6 +3664,10 @@ async function main() {
     assert.deepEqual([settings.isSynced('agents'), settings.isSynced('defaultAgent')], [true, true], 'and both follow you to the next machine');
     cl.available = () => false;
     assert.equal(agent.defaultAgent(), 'tana', 'a default this Mac cannot run falls back to Tana, so Assign to Agent always has somewhere to go');
+    cl.available = () => true;
+    agent.setEnabled('claude', false);
+    agent.setEnabled('claude', true);
+    assert.equal(agent.defaultAgent(), 'tana', 'switching the default off forgets it: switched on again it does not come back as the default unannounced');
     agent.setEnabled('claude', false); agent.setEnabled('codex', false);
     assert.deepEqual([...agent.enabledIds()], ['tana'], 'with everything else off, Tana is left');
     settings.set('agents', undefined); settings.set('defaultAgent', undefined);
@@ -3678,6 +3682,15 @@ async function main() {
     assert.equal(agent.taskLink(NODE), null, 'an agent the app does not know is no link');
     agent.clearTask(NODE);
     assert.equal(agent.tasks()[NODE], undefined, 'a cleared link leaves nothing behind in the map');
+    // A Claude session lives only on the Mac that ran it: its link names that Mac, and another Mac says so (#671 review).
+    assert.deepEqual({ ...agent.setTask(NODE, 'claude', THREAD) }, { agent: 'claude', taskId: THREAD, device: agent.deviceId() }, 'a Claude link names this Mac');
+    assert.equal(agent.elsewhere(agent.taskLink(NODE)), false, 'and here it is not elsewhere');
+    assert.equal(settings.isSynced('deviceId'), false, 'this Mac\'s id stays on this Mac');
+    settings.set('codexTask', { [NODE]: { agent: 'claude', taskId: THREAD, device: 'another-mac' } });
+    assert.equal(agent.elsewhere(agent.taskLink(NODE)), true, 'a link another Mac made is elsewhere');
+    assert.equal((await backend.agents.readStatuses())[NODE], 'elsewhere', 'and its badge says so rather than pending for ever');
+    assert.equal(agent.elsewhere(agent.setTask(NODE, 'codex', THREAD)), false, 'a Codex link names no Mac');
+    agent.clearTask(NODE);
     // What each agent takes as a pasted link.
     assert.equal(cx.linkId('codex://threads/' + THREAD), THREAD, 'Codex takes its Copy link');
     assert.equal(cx.linkId(THREAD), THREAD, 'or the bare id');

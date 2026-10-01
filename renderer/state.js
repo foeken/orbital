@@ -114,7 +114,7 @@ const META_RETRY_MS = 500, META_RETRY_MAX = 30000;
 const accessById = new Map(), accessLoading = new Set();
 const notifyById = new Map(), notifyLoading = new Set(); // docId -> { on, default, explicit }: whether changes to it are announced
 let agentIds = new Set(), agentLoading = null; // documents handed to an agent (app-local mark, not a Tana assignee)
-// docId -> 'pending' | 'working' | 'waiting' | 'done' | 'broken': what the linked task is doing, read on the refresh
+// docId -> 'pending' | 'working' | 'waiting' | 'done' | 'broken' | 'elsewhere': what the linked task is doing, read on the refresh
 // (main/agents/index.js). A node with no entry is pending: assigned, but no task is known for it yet, which is the one
 // thing the badge must never draw as finished.
 const agentStates = new Map();
@@ -124,6 +124,7 @@ const AGENT_BADGE = {
   waiting: { label: 'Agent waiting for you', title: 'The agent\'s task is waiting for approval or input' },
   done: { label: 'Agent completed', title: 'The agent\'s task finished its last turn' },
   broken: { label: 'Agent needs attention', title: 'The agent\'s task failed or cannot be reached — assign again to retry' },
+  elsewhere: { label: 'Agent on another Mac', title: 'The agent\'s task runs on another Mac, where it can be opened; assigning it here starts a new one' },
 };
 const agentStateOf = (id) => (AGENT_BADGE[agentStates.get(id)] ? agentStates.get(id) : 'pending');
 const agentTasks = new Map(); // docId -> { agent, taskId }: which agent's task each linked node is

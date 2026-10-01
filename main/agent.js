@@ -30,6 +30,8 @@ function setEnabled(id, on) {
   const next = enabledIds().filter((x) => x !== 'tana' && x !== id);
   if (on) next.push(id);
   settings.set('agents', next);
+  // the default goes with it: kept, it would come back unannounced the day the agent is switched on again (#671 review)
+  if (!on && settings.get('defaultAgent') === id) settings.set('defaultAgent', null);
   return list();
 }
 // The default, when it can still run; Tana otherwise, so Assign to Agent always has somewhere to go.
@@ -54,15 +56,20 @@ const tasks = () => { const stored = settings.get('codexTask'); return stored &&
 function taskLink(id) {
   const stored = tasks()[id];
   const link = typeof stored === 'string' ? { agent: 'codex', taskId: stored }
-    : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', taskId: stored.taskId || stored.threadId } : null;
+    : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', taskId: stored.taskId || stored.threadId, ...(stored.device ? { device: stored.device } : {}) } : null;
   return link && typeof link.taskId === 'string' && link.taskId && get(link.agent) ? link : null;
 }
 function setTask(id, agentId, taskId) {
   const map = tasks();
-  if (get(agentId) && typeof taskId === 'string' && taskId) map[id] = { agent: agentId, taskId }; else delete map[id];
+  // a plugin whose tasks live only on the Mac that ran them (local: Claude Code's sessions) names that Mac with the link
+  if (get(agentId) && typeof taskId === 'string' && taskId) map[id] = { agent: agentId, taskId, ...(get(agentId).local ? { device: deviceId() } : {}) }; else delete map[id];
   settings.set('codexTask', map);
   return taskLink(id);
 }
+// This Mac, as the links only it can follow name it: an id made once and kept off the sync (main/settings.js SYNCED)
+function deviceId() { let id = settings.get('deviceId'); if (!id) { id = require('node:crypto').randomUUID(); settings.set('deviceId', id); } return id; }
+// a link to a task on another Mac: its state cannot be read here and it cannot be opened or resumed from here
+const elsewhere = (link) => !!(link && link.device && link.device !== deviceId());
 const clearTask = (id) => setTask(id, null);
 // nodeId -> { agent, taskId } for every linked node, for the badge and the rows that open a task
 const links = () => Object.fromEntries(Object.keys(tasks()).map((id) => [id, taskLink(id)]).filter(([, link]) => link));
@@ -116,4 +123,4 @@ function findBin(name, extra = []) {
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-module.exports = { AGENTS, register, get, enabledIds, usable, setEnabled, defaultAgent, setDefault, list, tasks, taskLink, setTask, clearTask, links, oneLine, agentPrompt, agentWorkspace, findBin, UUID };
+module.exports = { AGENTS, register, get, enabledIds, usable, setEnabled, defaultAgent, setDefault, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };

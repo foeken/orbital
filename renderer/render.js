@@ -692,7 +692,7 @@ function agentBadgeEl(id, done = !!docOf(id)?.done) {
   badgeMoved(el, id, state + (done ? ':closed' : '')); // a state that just changed pops, shines or shakes
   // A badge with a task behind it is the way into that task; a pending one has nowhere to go, so it stays a plain
   // image rather than a button that does nothing.
-  const link = agentTasks.get(id), linked = agentStates.has(id) && !!link;
+  const link = agentTasks.get(id), linked = agentStates.has(id) && !!link && state !== 'elsewhere'; // nothing to open from here
   el.setAttribute('role', linked ? 'button' : 'img');
   el.setAttribute('aria-label', linked ? words.label + ', open the ' + ((agentNamed(link.agent) || {}).label || 'agent') + ' task' : words.label);
   el.title = linked ? words.title + ' — click to open the task' : words.title;

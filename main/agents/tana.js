@@ -5,7 +5,7 @@
 // as any chat is. It lives in Tana like every other chat, and its badge opens it here, in Orbital (opensHere).
 const agent = require('../agent');
 const chat = require('../../sdk/chat');
-const { newChat, sendChat, op } = require('../documents');
+const { newChat, sendChat, op, documentAction } = require('../documents');
 
 // A chat's state from its messages: Tana writing (data.streamingMessageId) or not answered yet is working, a question
 // Tana is waiting on is waiting, an error is broken, and an answer is done.
@@ -27,7 +27,12 @@ const tana = agent.register({
   async start({ nodeUri, title, prompt }) {
     const created = await newChat(nodeUri); // the chat belongs to the node, as #669 asks, and Tana's reply knows it
     const sent = await sendChat(created.id, (prompt || 'Help me with this.') + '\n\n[' + label(title) + '](' + nodeUri + ')', [nodeUri], { ai: true });
-    if (sent.replyError) throw new Error(sent.replyError); // Tana could not be asked (its AI limit, say): no badge for an unanswered chat
+    if (sent.replyError) {
+      // Tana could not be asked (its AI limit, say): no badge for an unanswered chat, and no chat left behind on the
+      // node that Orbital no longer links to, one more on every retry (#671 review); not an undo step of yours
+      await documentAction(created.id, 'softDelete', false).catch(() => {});
+      throw new Error(sent.replyError);
+    }
     return created.id;
   },
   async resume(chatId, prompt) {
