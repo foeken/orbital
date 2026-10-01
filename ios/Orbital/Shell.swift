@@ -248,15 +248,17 @@ struct Composer: View {
     @State private var failure: String?
     @State private var noted = false
     @State private var sending = false
+    @State private var dictation = Dictation() // dictating, on the open card (Dictation.swift)
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let empty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         // Codex's composer: a capsule at rest, a card while you type in it (the words on top, send in its corner)
-        let open = focused || !empty
+        let busy = dictation.recording || dictation.transcribing // listening, or writing down what was said
+        let open = focused || !empty || busy
         VStack(spacing: 6) {
-            if let failure {
+            if let failure = failure ?? dictation.problem {
                 Text(failure).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).transition(.opacity)
             }
             // The words set the height: at rest a line of body text with 12 pt above and below it (46 pt, a capsule with
@@ -267,28 +269,23 @@ struct Composer: View {
                 .padding(.trailing, open ? 18 : 52)
                 .padding(.top, open ? 16 : 12)
                 .padding(.bottom, open ? 60 : 12)
-                .overlay(alignment: .bottomTrailing) {
-                    Button {
-                        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        text = ""; focused = false; sending = true
-                        Task {
-                            do { let warning = try await send(words); withAnimation { failure = warning } }
-                            catch {
-                                text = text.isEmpty ? words : words + "\n\n" + text // the unsent words come back, ahead of anything typed since
-                                withAnimation { failure = error.localizedDescription }
-                            }
-                            sending = false
+                .overlay(alignment: .bottom) {
+                    // the card's bottom row: dictating, only while you are in the card (or it still listens), then send;
+                    // while it listens ✕, the dots and ■ take the row, as Codex's own dictation bar
+                    HStack(spacing: 8) {
+                        if !dictation.recording { Spacer(minLength: 0) }
+                        if focused || busy { Dictate(dictation: dictation, into: append) }
+                        Button { Task { await submit() } } label: {
+                            // the Codex app's send: a grey circle while there is nothing to send, blue once there is
+                            Image(systemName: "arrow.up").font(.body.weight(.semibold))
+                                .foregroundStyle(empty && !busy ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.white))
+                                .frame(width: 34, height: 34)
+                                .background(Circle().fill(empty && !busy ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.blue)))
                         }
-                    } label: {
-                        // the Codex app's send: a grey circle while there is nothing to send, blue once there is
-                        Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                            .foregroundStyle(empty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.white))
-                            .frame(width: 34, height: 34)
-                            .background(Circle().fill(empty ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.blue)))
+                        .buttonStyle(.plain)
+                        .disabled((empty && !busy) || sending)
+                        .accessibilityLabel(prompt)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(empty || sending)
-                    .accessibilityLabel(prompt)
                     .padding(open ? 10 : 6)
                 }
                 .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
@@ -297,7 +294,31 @@ struct Composer: View {
         .padding(.bottom, focused ? 14 : 4) // clear of the keyboard while you type, as the Codex app's card is
         .animation(reduceMotion ? nil : .snappy, value: open)
         .animation(reduceMotion ? nil : .snappy, value: focused)
+        .animation(reduceMotion ? nil : .snappy, value: dictation.recording)
+        .onDisappear { dictation.cancel() } // the page left while listening: nothing kept
         .onAppear { if !noted { failure = note; noted = true } }
         .task { if CommandLine.arguments.contains("-typing") { try? await Task.sleep(for: .seconds(1)); focused = true } } // -typing: with the keyboard up
+    }
+
+    // dictated words land after what is typed
+    private func append(_ said: String) { text = text.isEmpty ? said : text + " " + said }
+
+    // Send, while listening or writing down too: listening stops and the words are waited for first, as Add in Quick Add
+    private func submit() async {
+        if dictation.recording || dictation.transcribing {
+            sending = true
+            let heard = await dictation.settle(into: append)
+            sending = false
+            guard heard else { return }
+        }
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        text = ""; focused = false; sending = true
+        do { let warning = try await send(words); withAnimation { failure = warning } }
+        catch {
+            text = text.isEmpty ? words : words + "\n\n" + text // the unsent words come back, ahead of anything typed since
+            withAnimation { failure = error.localizedDescription }
+        }
+        sending = false
     }
 }

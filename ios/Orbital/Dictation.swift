@@ -1,18 +1,52 @@
 import AVFoundation
 import SwiftUI
 
-// Dictation in Quick Add, as Codex dictates: the microphone recorded (AAC, 16 kHz mono, small to send) with its level
-// sampled for the dots that move while you speak, then sent to ChatGPT as a whole (ChatGPT.transcribe) once stopped.
+// Dictation in Quick Add and the Ask Tana composer, as Codex dictates: the microphone recorded (AAC, 16 kHz mono, small
+// to send) with its level sampled for the dots that move while you speak, then sent to ChatGPT as a whole
+// (ChatGPT.transcribe) once stopped, its words handed to whoever is being dictated into.
 @MainActor @Observable
 final class Dictation {
     static let dots = 28
     private(set) var levels = Array(repeating: Float(0), count: dots) // 0...1, newest last
     private(set) var recording = false
+    private(set) var transcribing = false
+    private(set) var problem: String? // why listening or writing down did not work, to show under the box
+    @ObservationIgnored private var heard: Task<Bool, Never>?
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private var meter: Timer?
     private let file = FileManager.default.temporaryDirectory.appending(path: "dictation.m4a")
 
-    func start() throws {
+    // the waveform button: listening, once ChatGPT and the microphone may be used
+    func listen() async {
+        problem = nil
+        guard ChatGPT.load() != nil else { problem = "Sign in with ChatGPT in Settings to dictate"; return }
+        guard await AVAudioApplication.requestRecordPermission() else { problem = "Allow Orbital the microphone in the Settings app to dictate"; return }
+        do { try start() } catch { problem = error.localizedDescription }
+    }
+
+    // ■: listening stops and the recording is written down, its words handed to into once they come
+    func finish(into: @escaping (String) -> Void) {
+        guard let audio = stop() else { return }
+        transcribing = true
+        heard = Task {
+            defer { transcribing = false; heard = nil }
+            do {
+                guard let text = try await ChatGPT.transcribe(audio) else { problem = "Sign in with ChatGPT in Settings to dictate"; return false }
+                let said = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !said.isEmpty { into(said) }
+                return true
+            } catch { problem = "Dictation: " + error.localizedDescription; return false }
+        }
+    }
+
+    // Add or send while listening or writing down: listening stops and the words are waited for; false when they did not
+    // come, so what was said is never lost without a word
+    func settle(into: @escaping (String) -> Void) async -> Bool {
+        if recording { finish(into: into) }
+        return await heard?.value ?? true
+    }
+
+    private func start() throws {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .spokenAudio)
         try session.setActive(true)
@@ -31,7 +65,7 @@ final class Dictation {
     }
 
     // the recording, stopped; nil when there was none
-    func stop() -> Data? {
+    private func stop() -> Data? {
         guard let recorder else { return nil }
         recorder.stop()
         end()
@@ -67,5 +101,42 @@ struct Listening: View {
         .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08), .init(color: .black, location: 0.92), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
         .animation(.linear(duration: 0.06), value: levels)
         .accessibilityLabel("Listening")
+    }
+}
+
+// The controls: a waveform button to start; while listening ✕ to throw the recording away, the dots, and ■ to stop
+// (Codex's own dictation bar); a spinner while the words are being written down
+struct Dictate: View {
+    let dictation: Dictation
+    var blue = false
+    let into: (String) -> Void
+    var body: some View {
+        if dictation.recording {
+            Round(symbol: "xmark", label: "Cancel dictation") { dictation.cancel() }
+            Listening(levels: dictation.levels)
+            Round(symbol: "stop.fill", label: "Stop dictating") { dictation.finish(into: into) }
+        } else if dictation.transcribing {
+            ProgressView().frame(width: 32, height: 32)
+        } else {
+            Round(symbol: "waveform", label: "Dictate", blue: blue) { Task { await dictation.listen() } }
+        }
+    }
+}
+
+// A round button: the blue one to dictate in Quick Add, grey otherwise
+struct Round: View {
+    let symbol: String
+    let label: String
+    var blue = false
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(blue ? .white : .primary)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(blue ? Color.blue : Color(.tertiarySystemFill)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
