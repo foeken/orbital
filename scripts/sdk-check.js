@@ -814,8 +814,8 @@ async function main() {
     assert.equal(calls.length,0,'and still nothing is sent');
     assert.equal(await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan'))),'Stan');
     assert.deepEqual([calls[0].url,calls[0].init.headers.authorization],[ai.ENDPOINT,'Bearer sk-local-only']);
-    assert.deepEqual([calls[0].init.body.model,calls[0].init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT]);
-    assert.deepEqual([ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-5.6-terra','low'],'the fast AI: Terra with a little reasoning, measured no slower than Luna and right where Luna was sure and wrong');
+    assert.deepEqual([calls[0].init.body.model,calls[0].init.body.reasoning.effort],[ai.QUICK_MODEL,ai.QUICK_EFFORT]);
+    assert.deepEqual([ai.QUICK_MODEL,ai.QUICK_EFFORT,ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-6-luna','medium','gpt-5.6-terra','low'],'the Quick AI starts on Luna 6 at medium, the Regular AI on Terra at low');
     assert.deepEqual([calls[0].init.body.input,calls[0].init.body.instructions],['Discuss this with Stan',ai.INSTRUCTIONS],'the title is the input; the rule is the instructions, so a title cannot be one');
     assert.equal(Object.keys(calls[0].init.body).length,4,'the title and nothing else about the document goes out');
     settings.set('aiModel','gpt-6-sol'); settings.set('aiEffort','high');
@@ -823,7 +823,7 @@ async function main() {
     await ai.readImage(tinyPng,fetchWith(imageAnswer));
     assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-6-sol','high'],'reading an image follows the settings, changeable without a release');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the quick jobs ask the Quick AI, which the Regular AI does not change');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.QUICK_MODEL,ai.QUICK_EFFORT],'the quick jobs ask the Quick AI, which the Regular AI does not change');
     settings.set('aiQuickModel','gpt-5.6-luna'); settings.set('aiQuickEffort','medium');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
     assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-5.6-luna','medium'],'and the Quick AI is a setting of its own');
@@ -838,9 +838,9 @@ async function main() {
     await ai.readImage(tinyPng,fetchWith(imageAnswer));
     assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'a stored value off the lists is never sent: the default is');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.DEFAULT_MODEL,'medium'],'for the Quick AI too, keeping an effort the default model takes');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.QUICK_MODEL,'medium'],'for the Quick AI too, keeping an effort its start model takes');
     const shown = await ai.options();
-    assert.deepEqual([shown.model,shown.effort,shown.quickModel],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT,ai.DEFAULT_MODEL],'and the Settings page shows the default too');
+    assert.deepEqual([shown.model,shown.effort,shown.quickModel],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT,ai.QUICK_MODEL],'and the Settings page shows the default too');
     assert.equal(settings.isSynced('openaiApiKey'),false,'which never leaves this machine');
     for (const k of ['aiModel','aiEffort','aiQuickModel','aiQuickEffort']) settings.set(k,undefined);
     // the remote list of models both apps choose from (main/ai.js MODELS_URL): a hidden one left out, each with its thinking levels
@@ -868,7 +868,7 @@ async function main() {
     const sent=calls.at(-1).init.body;
     assert.ok(['Type 1: Decision Record','AI instructions: Return exactly one decision','Type 2: Project','Description: A piece of work with an end','Postgres over Mongo','Agreed: we use Postgres'].every((s)=>sent.input.includes(s)),
       'each type is described by its own description and AI instructions, beside the document title and text');
-    assert.deepEqual([sent.instructions,sent.model,sent.reasoning.effort],[ai.CLASSIFY_INSTRUCTIONS,ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the rules go as instructions, to the same fast AI the suggestion uses');
+    assert.deepEqual([sent.instructions,sent.model,sent.reasoning.effort],[ai.CLASSIFY_INSTRUCTIONS,ai.QUICK_MODEL,ai.QUICK_EFFORT],'the rules go as instructions, to the same fast AI the suggestion uses');
     assert.deepEqual((await ai.classifyType(typed,fetchWith(answer('{"is": "a decision already taken", "odds": {"1": 0.9, "none": 0.1}}')))).choices.map((c)=>[c.title,c.p]),[['Decision Record',0.9],['No type',0.1],['Project',0]],'the odds are read after what the model says the document is');
     assert.deepEqual((await ai.classifyType(typed,fetchWith(answer('{"2": 60, "none": 20, "7": 99}')))).choices.map((c)=>c.p),[0.75,0.25,0],
       'percentages are scaled to odds, and a type the list does not have is ignored');

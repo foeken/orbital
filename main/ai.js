@@ -21,6 +21,10 @@ const { send } = require('./state');
 // trip, not the model), and right where Luna was sure and wrong — it typed twelve real documents without a confident
 // mistake, where Luna made one or two in every run (docs/OUTLINER.md, Auto-pick type).
 const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
+// The Quick AI's own start: Luna 6 at medium. Measured 2026-10-01 on 69 Dutch note lines and 16 titles through a ChatGPT
+// sign-in, three runs each: as good as Terra 5.6 at low (names kept, English left alone, now and then more natural),
+// as fast on a page (41 s against 44 s; the wait is the answer's length), and about a twentieth of the API price.
+const QUICK_MODEL = 'gpt-6-luna', QUICK_EFFORT = 'medium';
 // Both the Quick AI (Auto-translate, Discuss with, Classify type, the icon pick) and the Regular AI (reading an image)
 // start here until the Settings page names others (chosen below; the iPhone the same: ios/Orbital/Translator.swift)
 const ENDPOINT = 'https://api.openai.com/v1/responses';
@@ -452,7 +456,7 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
 // synced value off the list (an older build's, another Mac's) reads as the default, for the page and every question alike.
 // ponytail: an API key keeps the three below; GET /v1/models when someone uses one
 const EFFORTS = ['low', 'medium', 'high'];
-const BUILT_IN = ['gpt-5.6-luna', DEFAULT_MODEL, 'gpt-6-sol'].map((id) => ({ id, efforts: EFFORTS }));
+const BUILT_IN = [QUICK_MODEL, 'gpt-5.6-luna', DEFAULT_MODEL, 'gpt-6-sol'].map((id) => ({ id, efforts: EFFORTS }));
 // client_version decides which models a client is offered: a high one lists every model, and the questions here are plain
 // Responses requests any listed model answers (a Codex of this Mac's version would not yet see gpt-6.1-sol, live 2026-10-01)
 const MODELS_URL = 'https://chatgpt.com/backend-api/codex/models?client_version=99.0.0';
@@ -474,9 +478,10 @@ async function modelList(userData, signedIn, fetchImpl = globalThis.fetch) {
 }
 const aiKey = (kind, what) => settings.AI_KEYS[kind ? kind + what : what.toLowerCase()]; // ('quick', 'Model') -> aiQuickModel, ('', 'Model') -> aiModel
 const chosen = (list, kind) => {
-  const stored = settings.get(aiKey(kind, 'Model')), model = (list.find((m) => m.id === stored) || list.find((m) => m.id === DEFAULT_MODEL) || list[0]).id;
+  const [start, startEffort] = kind ? [QUICK_MODEL, QUICK_EFFORT] : [DEFAULT_MODEL, DEFAULT_EFFORT];
+  const stored = settings.get(aiKey(kind, 'Model')), model = (list.find((m) => m.id === stored) || list.find((m) => m.id === start) || list.find((m) => m.id === DEFAULT_MODEL) || list[0]).id;
   const found = list.find((m) => m.id === model).efforts, efforts = found.length ? found : EFFORTS, effort = settings.get(aiKey(kind, 'Effort'));
-  return { model, effort: efforts.includes(effort) ? effort : efforts.includes(DEFAULT_EFFORT) ? DEFAULT_EFFORT : efforts[0], efforts };
+  return { model, effort: efforts.includes(effort) ? effort : efforts.includes(startEffort) ? startEffort : efforts[0], efforts };
 };
 async function options(userData) {
   const list = await modelList(userData, !!userData && (await chatgptStatus(userData)).signedIn), main = chosen(list, ''), quick = chosen(list, 'quick');
@@ -489,4 +494,4 @@ async function setOption(key, value, userData) {
   return options(userData);
 }
 
-module.exports = { fromCatalogue, MODELS_URL, options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };
+module.exports = { fromCatalogue, MODELS_URL, options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, QUICK_MODEL, QUICK_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };
