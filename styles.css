@@ -241,7 +241,8 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 /* on the title's line, not centred on both; the title placed too, or the grid seats the row-1 cells first and it lands last */
 .outline.table-view > .node > .line > .body > .text { grid-column: 1; grid-row: 1; }
 .outline.table-view > .node > .line > .body .cell, .outline.table-view > .node > .line > .body > .tmeta { grid-row: 1; }
-.outline.table-view > .node > .line > .body > .tmeta { order: 1; grid-column: -2; margin: 0; text-align: right; line-height: 18px; }
+.outline.table-view > .node > .line > .body > .tmeta { order: 1; grid-column: -2; min-width: 0; overflow: hidden; white-space: nowrap; margin: 0; text-align: right; line-height: 18px; } /* cut at its column: "Not visible to …" ran past the row */
+.outline.table-view:not(.folded) > .node > .line > .body > .tmeta { text-align: left; } /* a column like the others, under its Visible to (renderer/views.js tableHeadEl) */
 .outline.table-view > .node > .line > .body > .tmeta > .mtext { display: none; }
 .outline.table-view > .node > .line > .body > .tmeta > :not(.mtext) ~ :not(.mtext) { margin-left: 10px; } /* wider than .ticon's 6px: alone in a column they read as cramped */
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

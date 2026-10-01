@@ -504,10 +504,11 @@ function tableCells(node, info, sub) {
 function tableHeadEl() {
   const names = new Map(displayList()), el = document.createElement('div');
   el.className = 'thead';
-  for (const [key, label] of [['title', 'Title'], ...tableKeys().slice(tableFold).map((k) => [k, names.get(k)]), [null, '']]) { // '': over the row's icons
+  // last, over the row's icons: Visible to heads them where who can see a row is their column (unfolded, styles.css)
+  for (const [key, label] of [['title', 'Title'], ...tableKeys().slice(tableFold).map((k) => [k, names.get(k)]), [null, displayOn('visibility') && !tableFold ? 'Visible to' : '']]) {
     const c = document.createElement('span'), words = document.createElement('span');
     words.className = 'tlabel'; words.textContent = label; c.append(words);
-    if (label) c.dataset.col = key;
+    if (key) c.dataset.col = key;
     if (key === 'title') {
       for (const [i, k] of tableKeys().slice(0, tableFold).entries()) {
         const docked = document.createElement('span'); docked.className = 'tdocked'; docked.textContent = names.get(k);
