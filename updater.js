@@ -3,6 +3,8 @@
 // Developer ID signature and the stapled ticket intact. Releases live in their own public repo (the source repo is
 // private), so the check is an unauthenticated GitHub API call: no token, no gh CLI, and anyone can update.
 // scripts/release.sh publishes exactly what this downloads.
+// What a check finds is shown on the update card (update.html, #667): the notes of every release since this one, then
+// a progress bar while the newest downloads and is checked, until the app quits to swap itself.
 const { app, dialog } = require('electron');
 const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
@@ -12,6 +14,7 @@ const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
 const os = require('node:os');
 const path = require('node:path');
+const { blocks, segments } = require('./sdk/chat'); // the markdown the chat draws: release notes are the same kind
 
 const REPO = 'foeken/orbital-releases';
 const run = promisify(execFile);
@@ -24,38 +27,58 @@ function isNewer(latest, current) {
   return false;
 }
 
-async function latestRelease() {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { accept: 'application/vnd.github+json' } });
-  if (!res.ok) throw new Error(`GitHub returned ${res.status} for the latest release`);
-  return res.json();
+// The published releases newer than `current`, newest first: [0] is what installs, all of them are the notes.
+const newer = (releases, current) => releases.filter((r) => r && !r.draft && !r.prerelease && isNewer(r.tag_name, current))
+  .sort((a, b) => (isNewer(a.tag_name, b.tag_name) ? -1 : 1));
+// ponytail: the last 30 releases; a copy further behind than that sees only their notes, and still gets the newest
+async function newerReleases() {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`GitHub returned ${res.status} for the releases`);
+  return newer(await res.json(), app.getVersion());
 }
 
-// manual = the menu item, which reports "up to date" and failures; the launch and daily checks stay silent.
-async function check({ manual = false } = {}) {
+// A release's notes as the card draws them: markdown blocks with their inline marks, without release.sh's opening line
+// ("Orbital 0.9.1 for Apple Silicon. Signed and notarized; unzip …"), which is for a download by hand.
+const notes = (body) => blocks(body)
+  .filter((b, i) => !(i === 0 && b.block === 'paragraph' && /notarized/i.test(b.text)))
+  .map((b) => ({ block: b.block, segments: b.verbatim ? [{ text: b.text }] : segments(b.text) }));
+
+let offer = null, installing = null; // the releases the card shows; the one install under way, whichever card asked
+
+// manual = the menu item or Cmd+K, which report "up to date" and failures; the launch and daily checks stay silent.
+// show() lays the update card over a window (main.js), false when it cannot (no window, or an overlay already there).
+async function check({ manual = false, show = () => false } = {}) {
   try {
     if (!app.isPackaged) {
       if (manual) await dialog.showMessageBox({ message: 'This is a development run.', detail: 'Updates only apply to the packaged app.' });
       return;
     }
-    const release = await latestRelease();
-    if (!isNewer(release.tag_name, app.getVersion())) {
+    const releases = await newerReleases();
+    if (!releases.length) {
       if (manual) await dialog.showMessageBox({ message: `Orbital ${app.getVersion()} is up to date.` });
       return;
     }
-    const { response } = await dialog.showMessageBox({
-      type: 'question',
-      message: `Orbital ${release.tag_name.replace(/^v/, '')} is available.`,
-      detail: `You have ${app.getVersion()}. The app restarts to finish updating.`,
-      buttons: ['Update and Restart', 'Later'], defaultId: 0, cancelId: 1,
-    });
-    // Past this point the user asked for the update, so a failure is theirs to see even on the silent launch check.
-    if (response === 0) await install(release).catch((e) => dialog.showErrorBox('Could not update Orbital', String((e && e.message) || e)));
+    if (installing) return;
+    offer = releases;
+    if (!show() && manual) await dialog.showMessageBox({ message: `Orbital ${releases[0].tag_name.replace(/^v/, '')} is available.`, detail: 'Close what is open over the window and check for updates again.' });
   } catch (e) {
     if (manual) dialog.showErrorBox('Could not check for updates', String((e && e.message) || e));
   }
 }
 
-async function install(release) {
+// The card's two calls (preload.js updateInfo, installUpdate). A failure goes back to the card, which says it and
+// offers the button again; success never answers, because the app quits.
+const ipc = {
+  'update:info': () => offer && { current: app.getVersion(), releases: offer.map((r) => ({ version: r.tag_name.replace(/^v/, ''), date: r.published_at, notes: notes(r.body) })) },
+  'update:install': (e) => {
+    if (!offer) throw new Error('There is no update to install');
+    const tell = (p) => { if (!e.sender.isDestroyed()) e.sender.send('update:progress', p); };
+    return (installing ||= install(offer[0], tell).finally(() => { installing = null; }));
+  },
+};
+
+// progress({ got, total }) while the zip downloads, { verifying: true } once it is unpacked and checked
+async function install(release, progress = () => {}) {
   const target = path.resolve(app.getPath('exe'), '../../..'); // …/Orbital.app/Contents/MacOS/<exe>
   if (!target.endsWith('.app')) throw new Error('Cannot locate the running app bundle');
   // A copy opened straight from Downloads runs from macOS's read-only App Translocation mount, and one in a folder
@@ -67,7 +90,18 @@ async function install(release) {
   const zip = path.join(dir, asset.name);
   const res = await fetch(asset.browser_download_url); // redirects to the asset CDN; fetch follows them
   if (!res.ok) throw new Error(`Download failed with ${res.status}`);
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(zip)); // streamed: the bundle is well over 100 MB
+  const total = asset.size || Number(res.headers.get('content-length')) || 0;
+  let got = 0, told = -1;
+  // streamed: the bundle is well over 100 MB. The card hears each new percent, not each chunk.
+  await pipeline(Readable.fromWeb(res.body), async function* (chunks) {
+    for await (const chunk of chunks) {
+      got += chunk.length;
+      const pct = total ? Math.floor((got * 100) / total) : 0;
+      if (pct !== told) { told = pct; progress({ got, total }); }
+      yield chunk;
+    }
+  }, createWriteStream(zip));
+  progress({ verifying: true });
   await run('/usr/bin/ditto', ['-xk', zip, dir]);
   const fresh = path.join(dir, 'Orbital.app');
   await fs.access(path.join(fresh, 'Contents', 'Info.plist')); // a half-downloaded zip must not reach the rm below
@@ -109,4 +143,4 @@ const signedBy = (team) => {
   return `=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "${team}"`;
 };
 
-module.exports = { check, isNewer, teamOf, signedBy, canReplace };
+module.exports = { check, ipc, isNewer, newer, notes, teamOf, signedBy, canReplace };

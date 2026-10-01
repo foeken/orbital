@@ -534,7 +534,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
   key. **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
-  release), Check for updates (the app menu's Check for Updates…, whose dialogs answer), and About Orbital: a page with the website and the licence as links, the big dependencies
+  release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
   not affiliated with Tana (renderer/palette.js `openAboutPalette`, the same words as the README's License section).
 
@@ -1233,6 +1233,13 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
   why in the note, which the asking page shows as a toast. Enter on nothing does nothing, a refusal stays on the card
   with the text kept, Escape closes, ⌘K closes and opens the palette. Demo mode refuses it before it opens. The key
   works in Orbital's windows only.
+- **The update card** (update.html, updater.js, #667): what a check finds — at launch, once a day, the app menu's Check
+  for Updates… or ⌘K Check for updates — laid over the page that asked or the front window. The palette's card: "Orbital
+  0.9.2 is available", the running version, then the GitHub release notes of every version since it, newest first, as
+  markdown (release.sh's "Signed and notarized; unzip …" line left out). Later (Esc, a click on the scrim) closes it;
+  Update and Restart (Enter) turns the buttons into a progress bar in the accent blue: "Downloading… 47 of 123 MB",
+  then "Checking the download…" while it is unpacked and its signature checked, then the app quits and reopens as the
+  new version. While it runs the card stays; a failure says why on the card and offers Try Again.
 
 ### Presence (issue #14)
 

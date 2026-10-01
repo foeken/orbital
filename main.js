@@ -30,7 +30,7 @@ const presence = require('./main/presence');
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
 // sent to the other pages; plus outline:children, which routes between several modules.
-for (const m of [require('./main/documents'), require('./main/chatagents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings]) {
+for (const m of [require('./main/documents'), require('./main/chatagents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, updater]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -161,11 +161,11 @@ function openPage(win, { id = freeId(), where = 'right', from, focus = true }) {
 }
 // Signed in or out: the saved layout comes back, or waits while every page is the login button.
 const relayout = () => { for (const w of S.windows) if (!w.isDestroyed() && w.signedOut !== signedOut()) { w.signedOut = signedOut(); tellShell(w, 'auth', { signedOut: w.signedOut }); } };
-// The Help tour (help.html, issue #230) and Quick Add Task (task.html, issue #237): a transparent page of its own laid
-// over the whole window, so it sits above both halves of a split rather than inside the one that asked. Added last, it
+// The Help tour (help.html, issue #230), Quick Add Task (task.html, issue #237) and the update card (update.html, #667): a
+// transparent page of its own laid over the whole window, so it sits above both halves of a split rather than inside the one that asked. Added last, it
 // is on top, and there is one at a time. Closing it hands the keys back to the page that asked, whose caret is where it
 // was, with what it has to say: open the palette (⌘K closed the tour), or a note for its toast (the task it made).
-const OVERLAYS = { help: 'help.html', task: 'task.html' };
+const OVERLAYS = { help: 'help.html', task: 'task.html', update: 'update.html' };
 function openOverlay(page, which, theme) { // page: the handle that asked (main/state.js pageOf)
   const win = page && page.win;
   if (!win || win.overlay || !Object.hasOwn(OVERLAYS, which)) return false;
@@ -201,6 +201,8 @@ function closeOverlay(win, result = {}) {
   if (later && later.opener && !later.opener.isDestroyed()) later.opener.send('overlay:closed', { palette: false, note: later.note, open: later.open });
 }
 const frontPane = () => (S.win && !S.win.isDestroyed() ? (S.win.panes.includes(S.pane) ? S.pane : S.win.panes[0]) || null : null);
+// A check that finds a newer release lays the update card over the page that asked (Cmd+K) or the front window.
+const checkUpdates = (manual = false, page = frontPane()) => updater.check({ manual, show: () => !!page && !page.isDestroyed() && openOverlay(page, 'update', page.win.theme || systemTheme()) });
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
@@ -264,7 +266,7 @@ function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [
       { role: 'about' },
-      { label: 'Check for Updates…', click: () => updater.check({ manual: true }) },
+      { label: 'Check for Updates…', click: () => checkUpdates(true) },
       { type: 'separator' }, { role: 'services' }, { type: 'separator' },
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
@@ -365,7 +367,7 @@ ipcMain.on('window:theme', (e, theme) => {
 });
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
-ipcMain.on('app:checkUpdates', () => updater.check({ manual: true })); // Cmd+K Check for updates: the menu item's check, its dialogs saying what it found
+ipcMain.on('app:checkUpdates', (e) => checkUpdates(true, pageOf(e) || undefined)); // Cmd+K Check for updates: the menu item's check, over the page that asked
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 // The Help tour's first start (renderer/overlays.js helpOnce), opened here, by main, once. Only after this session has
 // read the settings document — the snapshot above is this machine's last copy, which on a new machine knows nothing yet,
@@ -702,8 +704,8 @@ if (process.env.TANA_MAIN_TEST) {
     // push that never arrived — a dropped connection, a query Tana refused — at a tenth of the old 30 s poll.
     setInterval(refresh, 5 * 60 * 1000);
     // Updates: at launch and once a day, silent unless there is one (updater.js swaps the bundle and relaunches).
-    updater.check();
-    setInterval(() => updater.check(), 24 * 60 * 60 * 1000);
+    checkUpdates();
+    setInterval(() => checkUpdates(), 24 * 60 * 60 * 1000);
   });
 
   app.on('window-all-closed', () => {}); // stay in the Dock (activate above)

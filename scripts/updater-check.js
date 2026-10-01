@@ -1,7 +1,7 @@
 // The two branches in the updater: which release counts as newer than the running build, and whose signature a
 // downloaded bundle carries (an ad-hoc signature is nobody's, so it can never replace a signed app).
 const assert = require('node:assert');
-const { isNewer, teamOf, signedBy, canReplace } = require('../updater');
+const { isNewer, newer, notes, teamOf, signedBy, canReplace } = require('../updater');
 
 assert.equal(isNewer('v0.2.1', '0.2.0'), true);
 assert.equal(isNewer('v0.2.0', '0.2.0'), false);
@@ -9,6 +9,12 @@ assert.equal(isNewer('v0.1.9', '0.2.0'), false, 'a higher patch in a lower minor
 assert.equal(isNewer('v0.2.10', '0.2.9'), true, 'versions are numbers, not strings');
 assert.equal(isNewer('v1.0.0', '0.9.9'), true);
 assert.equal(isNewer('0.2.1', '0.2.0'), true, 'the v prefix is optional');
+// The update card (#667): every published release since this one, newest first, and its notes as markdown blocks
+assert.deepEqual(newer([{ tag_name: 'v0.9.1' }, { tag_name: 'v0.10.0' }, { tag_name: 'v0.9.0' }, { tag_name: 'v0.11.0', draft: true }, { tag_name: 'v0.12.0', prerelease: true }], '0.9.0').map((r) => r.tag_name),
+  ['v0.10.0', 'v0.9.1'], 'newer, published, newest first');
+assert.deepEqual(notes('Orbital 0.9.1 for Apple Silicon. Signed and notarized; unzip and move it to Applications.\n\n## Editing\n- **Markdown** typed (#601).'),
+  [{ block: 'heading2', segments: [{ text: 'Editing' }] }, { block: 'bullet', segments: [{ text: 'Markdown', marks: { bold: true } }, { text: ' typed (#601).' }] }],
+  'release.sh\'s download line goes, headings and marks stay');
 assert.equal(teamOf('Executable=/x\nIdentifier=com.dreetje.orbital\nTeamIdentifier=ABCDE12345\nSealed Resources=none'), 'ABCDE12345');
 assert.equal(teamOf('Identifier=com.dreetje.orbital\nSignature=adhoc\nTeamIdentifier=not set'), null, 'an ad-hoc build belongs to no team');
 assert.equal(teamOf('Identifier=com.dreetje.orbital'), null, 'and no line at all is no team either');
@@ -44,7 +50,7 @@ if (process.platform === 'darwin') {
   const ignore = new RegExp(require('../package.json').scripts.package.match(/--ignore='([^']+)'/)[1]);
   const shipped = (file) => !ignore.test('/' + path.relative(root, file).split(path.sep).join('/'));
   for (const file of [require.resolve('loro-crdt'), path.join(path.dirname(require.resolve('loro-crdt')), 'loro_wasm_bg.wasm'),
-    'main.js', 'preload.js', 'canvas-preload.js', 'index.html', 'shell.html', 'shell.js', 'shell.css', 'node_modules/@danfessler/trellis/dist/index.js',
+    'main.js', 'preload.js', 'canvas-preload.js', 'index.html', 'update.html', 'update.js', 'shell.html', 'shell.js', 'shell.css', 'node_modules/@danfessler/trellis/dist/index.js',
     'node_modules/@danfessler/trellis/dist/style.css', 'node_modules/@danfessler/trellis/LICENSE.md', 'build/nucleo-ui.json.gz', 'scripts/agent-link.js', 'scripts/codex-host.js', 'scripts/platform-cli.js']) {
     assert.ok(shipped(path.resolve(root, file)), file + ' is shipped: the app requires or runs it');
   }
