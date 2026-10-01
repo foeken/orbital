@@ -133,6 +133,7 @@ struct Redacted: TextRenderer {
 // means something): Orbital's green for done, blue for new and for a meeting under way.
 struct TimelineScreen: View {
     let engine: Engine
+    @State private var shown = true // the rows: hidden while the skeleton is up, and in only once it has gone
 
     var body: some View {
         List {
@@ -171,6 +172,11 @@ struct TimelineScreen: View {
             }
         }
         .listStyle(.plain)
+        // never the skeleton and the words on screen together: it goes in 0.15 s, then the rows come in
+        .opacity(shown ? 1 : 0)
+        .onChange(of: building, initial: true) { _, now in
+            if now { shown = false } else { withAnimation(.easeIn(duration: 0.25).delay(0.15)) { shown = true } }
+        }
         .scrollDismissesKeyboard(.interactively) // scrolling the Timeline tucks the composer's keyboard away
         .refreshable { await engine.refresh() }
         // the free time ends when the next meeting starts: read the page again then, so neither stays on screen past it
@@ -181,7 +187,6 @@ struct TimelineScreen: View {
         }
         .overlay {
             // connecting and the first read are one build, and it fades as the rows land under it
-            let building = engine.rows.isEmpty && (engine.loading || engine.phase == .starting)
             ZStack {
                 if building { Building().transition(.opacity) }
                 else if engine.rows.isEmpty {
@@ -189,7 +194,7 @@ struct TimelineScreen: View {
                 else { ContentUnavailableView("Nothing yet", systemImage: "clock", description: Text("Changes to your tasks, new Inbox tasks and your meetings show up here.")) }
                 }
             }
-            .animation(.easeOut(duration: 0.3), value: building)
+            .animation(.easeOut(duration: 0.15), value: building)
         }
         .safeAreaInset(edge: .bottom) {
             if let error = engine.error, !engine.rows.isEmpty {
@@ -198,6 +203,8 @@ struct TimelineScreen: View {
         }
     }
 
+    // connecting and the first read are one build (Building)
+    private var building: Bool { engine.rows.isEmpty && (engine.loading || engine.phase == .starting) }
     private var today: [Row] { engine.shown(engine.rows.first { $0.timeline?.today == true }?.children) }
     private var upcoming: [Row] { engine.shown(engine.rows.first { $0.timeline?.upcoming == true }?.children) }
     private var free: Row.Free? { engine.rows.first { $0.timeline?.free != nil }?.timeline?.free }
