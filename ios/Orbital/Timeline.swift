@@ -106,11 +106,14 @@ extension View {
     }
 }
 
+// Faces read it: under a hidden mark a face's circle would still say someone is there
+extension EnvironmentValues { @Entry var sensitiveHidden = false }
+
 struct Blur: ViewModifier {
     let hidden: Bool
     func body(content: Content) -> some View {
         if hidden {
-            content.textRenderer(Redacted()).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake to show")
+            content.textRenderer(Redacted()).environment(\.sensitiveHidden, true).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake to show")
         } else {
             content
         }
@@ -450,6 +453,7 @@ struct Meeting: View {
                         Text(row.subtext ?? start).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
                         if let people = row.people, !people.isEmpty { Text("·").foregroundStyle(.secondary); Faces(people: people, names: false) }
                     }
+                    .sensitive(row.sensitive, engine: engine) // the grey line too, as the desktop's .sensitive .meta
                 }
             }
         }
@@ -488,11 +492,12 @@ struct FreeLine: View {
 struct Faces: View {
     let people: [Row.Person]
     var names = true // false: the faces alone, as after a meeting's time
+    @Environment(\.sensitiveHidden) private var hidden // under a sensitive mark: the names barred, no circles
 
     var body: some View {
         HStack(spacing: 8) {
             HStack(spacing: -4) {
-                ForEach(people.prefix(4), id: \.name) { p in
+                ForEach(hidden ? [] : Array(people.prefix(4)), id: \.name) { p in
                     Text(Self.initials(p.name))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
