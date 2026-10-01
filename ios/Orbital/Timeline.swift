@@ -399,13 +399,15 @@ struct Tick: Shape {
     }
 }
 
-// A task's words, struck and grey once done; in the chosen language when they are in another (a globe says so)
+// A task's words, struck and grey once done; in the chosen language when they are in another (a globe says so, after
+// them, or on the row's grey line where it has one: globe false)
 struct TaskWords: View {
     let row: Row
     let engine: Engine
+    var globe = true
     var body: some View {
         let done = engine.state(of: row) == "closed", (words, from) = engine.translator.words(row.words, sensitive: row.sensitive == true)
-        (Text(words) + Text(from == nil ? "" : "  \(Image(systemName: "globe"))").font(.footnote).foregroundStyle(.tertiary))
+        (Text(words) + Text(from == nil || !globe ? "" : "  \(Image(systemName: "globe"))").font(.footnote).foregroundStyle(.tertiary))
             .strikethrough(done).foregroundStyle(done ? .secondary : .primary)
             .accessibilityHint(from.map { "Translated from " + $0 } ?? "")
             .sensitive(row.sensitive, engine: engine)

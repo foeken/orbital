@@ -35,9 +35,12 @@ struct ListRow: View {
             }
             Button { openURL.zoom(row.target) } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    if row.stateType != nil { TaskWords(row: row, engine: engine) } else { Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).sensitive(row.sensitive, engine: engine) }
+                    let (words, from) = engine.translator.words(row.words, sensitive: row.sensitive == true)
+                    if row.stateType != nil { TaskWords(row: row, engine: engine, globe: false) } else { Text(words).sensitive(row.sensitive, engine: engine) }
                     // when, then who a task is assigned to, on one grey line as the desktop's subtext has them
                     HStack(spacing: 8) {
+                        // translated: the globe first on the grey line, before when it changed
+                        if from != nil { Image(systemName: "globe").font(.footnote).foregroundStyle(.tertiary).accessibilityLabel("Translated from " + (from ?? "")) }
                         if let at = row.createdAt.flatMap(Row.parse) {
                             Text(at, format: .relative(presentation: .named)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                         }
