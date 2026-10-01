@@ -145,6 +145,13 @@ struct TimelineScreen: View {
                 Heading(title: "Coming up")
                 if let free { FreeLine(free: free, time: today.isEmpty ? "Now" : "") }
                 ForEach(upcoming) { Meeting(row: $0, engine: engine) }
+                // a line across under what is still to come, before what has happened
+                if !days.isEmpty {
+                    Color(.separator).frame(maxWidth: .infinity).frame(height: 1) // a List row lays a Divider out upright
+                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .accessibilityHidden(true)
+                }
             }
             ForEach(days, id: \.0) { title, rows in
                 Heading(title: title)
