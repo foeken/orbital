@@ -205,19 +205,24 @@ tooltip (none while the row is hidden as sensitive). On a type's page an options
 on the cell (without ⌘ or ⇧, which select) or ⌘K **Set <field> …** on the focused row opens the options picker of
 docs/OUTLINER.md §12 (Fields) for that row. Every fact column can be resized: drag the grip on its header's right
 edge, double-click it to reset; from the keyboard, ⌘K **Column widths …** (View options, while the page is a table) lists
-the columns, ←/→ make the highlighted one 20px narrower or wider while nothing is typed, ↩ resets it. Widths are kept per
-page key and column in the synced `tableWidths` preference; Title takes what the others leave, and the icons column and
-the agent badge's slot are only there when a row on the page has them.
+Title and the columns, ←/→ make the highlighted one 20px narrower or wider while nothing is typed, ↩ resets it. Widths
+are kept per page key and column in the synced `tableWidths` preference (Title's under `title`). A Title nobody resized
+takes what the others leave; a resized one keeps its width and the columns follow it, the spare room left empty before
+the icons. The icons column and the agent badge's slot are only there when a row on the page has them.
 
 **At every width.** A table holds at any pane width the way Alvish Baldha's tables "split, stretch, and snap into
 place" (x.com/alvishbaldha/status/2105538797970809133). A column is its dragged width or 160px. When the page has no
 room for all of them beside a 200px title, the first columns fold onto the title's line: their values follow the
 title in grey, in column order, each cut on its own. As the page widens they split back out, the last column first,
 so the facts never change order. With every column folded the header goes, as a plain list has none; otherwise Title
-heads the title's line and each column still split out keeps its own header and grip. Where it snaps depends only on
-the widths and the page's width (renderer/views.js `foldFor`), so it snaps at the same width both ways, and it is
-checked on every width change (the window, a pane, the sidebar, the text size) and every column resize
-(`fitTable`). A snap a hand caused plays the cells on screen in from the left; reduced motion snaps without it.
+heads the title's line (with no grip then: it heads both) and each column still split out keeps its own header and
+grip. An unresized Title takes at most half the row while columns ride on its line, and who can see a row shrinks to
+its glyph (red when someone assigned cannot see it; the words are in its tooltip), as the video's narrow rows end in
+one avatar. Where it snaps depends only on the widths and the page's width (renderer/views.js `foldFor`, which always
+reserves the unfolded icons column), so it snaps at the same width both ways, and it is checked on every width change
+(the window, a pane, the sidebar, the text size) and every column resize (`fitTable`). A snap a hand caused glides
+every value on screen sideways from where it stood to where it stands, onto the title's line or out of it
+(`glideCells`); a header that appears fades in. Reduced motion snaps without it.
 
 ## 9. Notifications, Proposals and Timeline are pages, not views
 

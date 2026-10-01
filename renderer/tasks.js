@@ -166,7 +166,9 @@ function peopleEl(summary, node) {
   const word = summary.audience.word; // everyone and only you: a word, not the whole organization or your own face
   const icon = audienceIcon(summary, node);
   if (summary.hiddenFrom) icon.classList.remove('hiddenfrom'); // the words after it say who is shut out (#622): the lock stays as it is
-  el.append(icon, ...(word ? [word] : facesEls(uris, summary.peopleCount || uris.length)));
+  const said = word && document.createElement('span');
+  if (said) { said.className = 'pword'; said.textContent = word; } // its own element, so a narrow table can leave it out (styles.css .table-view.folded)
+  el.append(icon, ...(said ? [said] : facesEls(uris, summary.peopleCount || uris.length)));
   // assigned to someone who cannot see it: said in words after who can, as the page's Visible to field says it (#622)
   if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'hiddenfrom'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
   return el;

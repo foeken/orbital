@@ -210,6 +210,13 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .outline.table-view { --slot: 0px; --tcols: var(--fcols); } /* px: the header's type is smaller than a row's */
 .outline.table-view:has(> .node > .line > .body > .tmeta) { --tcols: var(--fcols) 90px; }
 .outline.table-view:has(> .node > .line > .body > .tmeta .people) { --tcols: var(--fcols) 190px; } /* room for who can see a row: glyph, faces, the rest in words */
+/* while columns ride on the title's line the row reads as a list, and who can see it is its glyph alone, as the
+   video's narrow rows end in one small avatar: the words are in the glyph's tooltip, and it turns red when someone
+   assigned cannot see the row. renderer/views.js fitTable reserves the full 190px all the same. */
+.outline.table-view.folded:has(> .node > .line > .body > .tmeta .people) { --tcols: var(--fcols) 90px; }
+.outline.table-view.folded > .node > .line > .body > .tmeta .people > :not(.audience) { display: none; }
+.outline.table-view.folded > .node > .line > .body > .tmeta .people:has(> .hiddenfrom) > .audience { color: #b35068; }
+[data-theme="dark"] .outline.table-view.folded > .node > .line > .body > .tmeta .people:has(> .hiddenfrom) > .audience { color: #de8499; }
 .outline.table-view:not(:has(> .node > .line > .body > .tmeta)) > .thead > span:last-child { display: none; } /* the header's blank over the icons */
 .outline.table-view:has(> .node > .line > .cbadge) { --slot: 40px; }
 .outline.table-view > .node > .line > .body, .outline.table-view > .thead { display: grid; grid-template-columns: var(--tcols); column-gap: 16px; align-items: center; }
@@ -228,6 +235,7 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .outline.table-view > .node > .line > .body .fold { grid-row: 1; display: flex; gap: 12px; min-width: 0; margin-left: -6px; overflow: hidden; color: var(--muted); }
 .outline.table-view > .node > .line > .body .fold > .cell { flex: 0 1 auto; min-width: 0; }
 .outline.table-view > .node > .line > .body .fold > .cell:empty { display: none; }
+.outline.table-view.gliding > .node > .line > .body .fold { overflow: visible; } /* a value gliding in from its column is seen on its way (renderer/views.js glideCells) */
 /* on the title's line, not centred on both; the title placed too, or the grid seats the row-1 cells first and it lands last */
 .outline.table-view > .node > .line > .body > .text { grid-column: 1; grid-row: 1; }
 .outline.table-view > .node > .line > .body .cell, .outline.table-view > .node > .line > .body > .tmeta { grid-row: 1; }
@@ -240,6 +248,7 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .outline.table-view > .thead { margin-top: 16px; padding: 0 var(--slot) 6px 70px; border-bottom: 1px solid #ececec; color: var(--muted); font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; --slot: the badge's; 16px: clear of the title above */
 .outline.table-view > .thead.folded { height: 0; margin-top: 0; padding-bottom: 0; border: 0; overflow: hidden; visibility: hidden; } /* every column folded: no header, but its width is still what fitTable measures */
 .outline.table-view.folded > .thead > span:first-child { grid-column: span 2; } /* Title over the title's line too: a folded column has no header of its own */
+.outline.table-view > .thead > span:last-child { grid-column: -2; } /* the blank over the icons, past the empty track a dragged Title leaves (renderer/views.js tableCols) */
 .outline.table-view > .thead > span { position: relative; min-width: 0; }
 .outline.table-view > .thead .tlabel { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* in the middle of the 16px gap after its column, as wide as the gap so it is easy to catch */

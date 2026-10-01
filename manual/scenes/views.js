@@ -5,6 +5,9 @@
 const SEED = "Promise.all(shownDocs().map(async (d) => { try { taskMetaById.set(d.id, await tana.taskMeta(d.id)); } catch { /* not a task */ } })).then(() => render(true))";
 const library = (group = 'status') => [{ js: "setView('library')" }, { wait: 600 }, { js: "setGroupBy('" + group + "')" }, { js: SEED }, { wait: 500 }];
 const card = { sel: '#palette .card', pad: 24 };
+// the first pane's frame from one width to another over 2.4 s, eased like a hand's drag
+const PANE = (from, to) => "new Promise((done) => { const f = document.querySelector('iframe'), t0 = performance.now(); f.style.flex = 'none'; f.style.boxShadow = '1px 0 0 rgba(128, 128, 128, 0.35)'; " +
+  "const step = (t) => { const k = Math.min(1, (t - t0) / 2400), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2; f.style.width = (" + from + " + (" + (to - from) + ") * e) + 'px'; if (k < 1) requestAnimationFrame(step); else done(); }; requestAnimationFrame(step); })";
 module.exports = [
   // the pills over the Library, for the annotated picture
   { name: 'views-pills', setup: library(), clip: [0, 96, 1200, 84] },
@@ -30,6 +33,11 @@ module.exports = [
   { name: 'views-table', video: true, size: '1000x640', setup: library(), clip: [0, 30, 1000, 560], steps: [
     { wait: 400 }, { key: '⌘K' }, { type: 'switch to table', delay: 60 }, { wait: 300 }, { key: '↩' }, { wait: 1400 }] },
   { name: 'views-widths', setup: [...library(), { js: 'setTableView(true)' }, { wait: 500 }, { key: '⌘K' }, { type: 'column widths' }, { key: '↩' }, { wait: 500 }], clip: card },
+  // a pane narrowing and widening again: the first columns glide onto the title's line and back out (the pane's frame
+  // is resized from the window, as a drag on its edge does)
+  { name: 'views-split', video: true, size: '1280x720', clip: [0, 0, 1280, 620], hold: 1200,
+    setup: [...library(), { js: 'setTableView(true)' }, { js: "if (!displayOn('type')) setDisplay('type')" }, { js: 'if (pillsShown()) pillsToggle.onclick()' }, { wait: 900 }],
+    steps: [{ wait: 600 }, { page: 'shell', js: PANE(1280, 720) }, { wait: 900 }, { page: 'shell', js: PANE(720, 1280) }, { wait: 600 }] },
   // Save as search: the query becomes a document, opened at once
   { name: 'views-save', video: true, size: '1000x640', setup: [...library(), { js: "setViewF({ states: ['open'] })" }, { wait: 600 }], clip: [0, 30, 1000, 560], steps: [
     { wait: 400 }, { click: '.pill.savesearch' }, { wait: 1800 }] },
@@ -40,6 +48,7 @@ module.exports = [
   // saved window views
   { name: 'views-savedview', setup: [...library(), { key: '⌘K' }, { type: 'save view' }, { key: '↩' }, { type: 'Planning' }, { wait: 400 }], clip: card },
 ];
+
 
 
 

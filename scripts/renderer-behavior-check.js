@@ -4230,7 +4230,7 @@ function runRowAudienceCheck() {
         // the gap is styles.css's .tmeta > .ticon:not(:first-child) (renderer-check pins the rule): 6px after anything
         const sub = body.children.find((child) => child.className === 'subtext') || { children: [] }, people = sub.children.find((child) => child.className === 'people');
         return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className.split(' ').includes('ticon') ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: sub.value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor),
-          people: people ? [people.children[0].attrs['aria-label'], ...(typeof people.children[1] === 'string' ? [people.children[1]] : people.children[1].children.map((face) => face.value)), people.children[2] || null] : null, // a string: the audience's word (Everyone, Private)
+          people: people ? [people.children[0].attrs['aria-label'], ...(people.children[1].className === 'pword' ? [people.children[1].textContent] : people.children[1].children.map((face) => face.value)), people.children[2] || null] : null, // .pword: the audience's word (Everyone, Private)
           names: people && typeof people.children[1] !== 'string' ? people.children[1].children.map((face) => face.attrs['aria-label'] || null) : null,
           after: people ? sub.children.filter((child) => typeof child === 'string').join('') : null }; // the words after who can see it
       },
@@ -9981,6 +9981,7 @@ checks.push(function runTableFoldCheck() {
   assert.equal(fold(687), 2, 'then the second folds too, the last column staying');
   assert.equal(fold(300), 3, 'and on a narrow page all of them ride on the title\u2019s line');
   assert.equal(fold(727, { a: 40 }), 0, 'a column dragged narrower lets the rest split out sooner');
+  assert.equal(fold(728, { title: 300 }), 2, 'a title dragged wider keeps its room, so columns fold sooner');
   console.log('ok  a table folds its first columns onto the title\u2019s line as the page narrows, the last column last');
 });
 process.exitCode = 1;
