@@ -201,7 +201,7 @@ function taskMetaEl(summary, docId, node) {
   const writable = node && canEditNode(node) && isRealId(node.id);
   // .mtext: the words, which a table row leaves out (its Assigned column has the name; styles.css .table-view)
   const who = document.createElement('span'); who.className = 'mtext'; who.textContent = summary.assignees;
-  if (summary.assignees && displayOn('assigned')) el.append(who);
+  if (summary.assignees && displayOn('assigned') && !tableView()) el.append(who); // a table has an Assigned column for them
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
   if (summary.assignees === 'Unassigned') { const icon = iconEl('unassigned', null); icon.title = 'Unassigned'; who.prepend(icon); }

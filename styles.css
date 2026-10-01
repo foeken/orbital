@@ -210,7 +210,9 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 /* --spare: a dragged Title's leftover room, at the very end of the row so the icons follow the columns; --icol: the icons' track, before it */
 .outline.table-view { --slot: 0px; --icol: -2; --tcols: var(--fcols) var(--spare,); } /* px: the header's type is smaller than a row's */
 .outline.table-view.spare { --spare: minmax(0, 1fr); --icol: -3; }
-.outline.table-view:has(> .node > .line > .body > .tmeta) { --tcols: var(--fcols) 90px var(--spare,); }
+/* only a row with something in its icons keeps their column: Display can leave every row's empty (no Assigned words in a table, Visible to off) */
+.outline.table-view:has(> .node > .line > .body > .tmeta:not(:empty)) { --tcols: var(--fcols) 90px var(--spare,); }
+.outline.table-view > .node > .line > .body > .tmeta:empty { display: none; }
 .outline.table-view:has(> .node > .line > .body > .tmeta .people) { --tcols: var(--fcols) 190px var(--spare,); } /* room for who can see a row: glyph, faces, the rest in words */
 /* while columns ride on the title's line the row reads as a list, and who can see it is its glyph alone, as the
    video's narrow rows end in one small avatar: the words are in the glyph's tooltip, and it turns red when someone
@@ -219,7 +221,7 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .outline.table-view.folded > .node > .line > .body > .tmeta .people > :not(.audience) { display: none; }
 .outline.table-view.folded > .node > .line > .body > .tmeta .people:has(> .hiddenfrom) > .audience { color: #b35068; }
 [data-theme="dark"] .outline.table-view.folded > .node > .line > .body > .tmeta .people:has(> .hiddenfrom) > .audience { color: #de8499; }
-.outline.table-view:not(:has(> .node > .line > .body > .tmeta)) > .thead > span:last-child { display: none; } /* the header's blank over the icons */
+.outline.table-view:not(:has(> .node > .line > .body > .tmeta:not(:empty))) > .thead > span:last-child { display: none; } /* the header's blank over the icons */
 .outline.table-view:has(> .node > .line > .cbadge) { --slot: 40px; }
 .outline.table-view > .node > .line > .body, .outline.table-view > .thead { display: grid; grid-template-columns: var(--tcols); column-gap: 16px; align-items: center; }
 /* The local agent's badge ends a row (renderer/render.js codexBadgeEl). Taking its width from that row's grid shifted
