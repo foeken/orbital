@@ -144,7 +144,7 @@ struct TimelineScreen: View {
                 // line saying so, as the desktop keeps the block
                 RailRow(time: "Now", railTop: 24, bottom: 0) { Marker(icon: "todayTasks", tone: "new", now: false) } content: { Text("Today's Tasks") }
                 if today.isEmpty {
-                    RailRow(time: "", top: 10, bottom: 16) { Color.clear.frame(height: 1) } content: {
+                    RailRow(time: "", top: 10, bottom: 2) { Color.clear.frame(height: 1) } content: { // as much room under it as over it (measured)
                         Text("Nothing pinned to today. Long-press a task to pin it.").font(.subheadline).foregroundStyle(.secondary)
                     }
                 } else {
@@ -156,7 +156,8 @@ struct TimelineScreen: View {
             if let free { FreeLine(free: free, time: hasToday ? "" : "Now") }
             if !upcoming.isEmpty {
                 RailRow(time: "", top: 14, bottom: 0) { Marker(icon: "meeting", tone: nil, now: false) } content: { Text("Upcoming meetings") }
-                ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, m in Meeting(row: m, engine: engine, top: i == 0 ? 20 : 14, bottom: i == upcoming.count - 1 ? 16 : 0) }
+                // the last one as far from the line under it as the first is from the heading (measured)
+                ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, m in Meeting(row: m, engine: engine, top: i == 0 ? 20 : 14, bottom: 0) }
             }
             if !upcoming.isEmpty || free != nil {
                 // a line across under what is still to come, before what has happened
