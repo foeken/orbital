@@ -78,7 +78,9 @@ function settingsEl() {
     for (const [icon, label, values, local] of rows) {
       const row = el('div', 'field'), v = el('div', 'fvalues settings-values');
       v.append(...values);
-      for (const b of v.querySelectorAll('button')) b.dataset.skey = label + '/' + (b.textContent || b.getAttribute('aria-label')); // names it again after a redraw (drawSettings)
+      // names it again after a redraw (drawSettings): a choice by its own words, which never change; the row's action, chip
+      // or switch by its kind, since its words and state do (Sign in becomes Sign out, Off becomes Dutch)
+      for (const b of v.querySelectorAll('button')) b.dataset.skey = label + '/' + (b.classList.contains('sopt') ? b.textContent : b.classList[b.classList.contains('fchip') ? 1 : 0]);
       if (local) v.append(el('span', 'settings-local', 'This Mac'));
       row.append(addIcon(el('span', 'ricon'), icon), el('span', 'flabel', label), v);
       grid.append(row);
