@@ -246,8 +246,11 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .outline.table-view .cell.pick { min-height: 18px; cursor: pointer; } /* an options value: a click picks it (renderer/fields.js openCellChooser) */
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
 .outline.table-view > .thead { margin-top: 16px; padding: 0 var(--slot) 6px 70px; border-bottom: 1px solid #ececec; color: var(--muted); font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; --slot: the badge's; 16px: clear of the title above */
-.outline.table-view > .thead.folded { height: 0; margin-top: 0; padding-bottom: 0; border: 0; overflow: hidden; visibility: hidden; } /* every column folded: no header, but its width is still what fitTable measures */
 .outline.table-view.folded > .thead > span:first-child { grid-column: span 2; } /* Title over the title's line too: a folded column has no header of its own */
+/* the folded columns named after Title, quieter than it; a click gives one its own column (renderer/views.js undockColumn) */
+.outline.table-view > .thead .tdocked { opacity: .6; cursor: pointer; }
+.outline.table-view > .thead .tdocked::before { content: '·'; margin: 0 6px; }
+.outline.table-view > .thead .tdocked:hover { opacity: 1; }
 .outline.table-view > .thead > span:last-child { grid-column: -2; } /* the blank over the icons, past the empty track a dragged Title leaves (renderer/views.js tableCols) */
 .outline.table-view > .thead > span { position: relative; min-width: 0; }
 .outline.table-view > .thead .tlabel { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

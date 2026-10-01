@@ -214,9 +214,12 @@ the icons. The icons column and the agent badge's slot are only there when a row
 place" (x.com/alvishbaldha/status/2105538797970809133). A column is its dragged width or 160px. When the page has no
 room for all of them beside a 200px title, the first columns fold onto the title's line: their values follow the
 title in grey, in column order, each cut on its own. As the page widens they split back out, the last column first,
-so the facts never change order. With every column folded the header goes, as a plain list has none; otherwise Title
-heads the title's line (with no grip then: it heads both) and each column still split out keeps its own header and
-grip. An unresized Title takes at most half the row while columns ride on its line, and who can see a row shrinks to
+so the facts never change order. Title heads the title's line and names the folded columns after its own word, in a
+quieter grey; a click on one gives it (and the ones after it) its own column by narrowing Title, or says there is no
+room (`undockColumn`). Title's grip is the edge between its line and the columns: dragged left, each folded column
+snaps out as the edge passes where it would start; dragged right, they fold back on, live under the pointer (`titleFor`,
+`resizeColumn`); ←/→ on Title in Column widths move the same edge. Each column still split out keeps its own header
+and grip. An unresized Title takes at most half the row while columns ride on its line, and who can see a row shrinks to
 its glyph (red when someone assigned cannot see it; the words are in its tooltip), as the video's narrow rows end in
 one avatar. Where it snaps depends only on the widths and the page's width (renderer/views.js `foldFor`, which always
 reserves the unfolded icons column), so it snaps at the same width both ways, and it is checked on every width change

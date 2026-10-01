@@ -9988,6 +9988,13 @@ checks.push(function runTableFoldCheck() {
   assert.equal(fold(300), 3, 'and on a narrow page all of them ride on the title\u2019s line');
   assert.equal(fold(727, { a: 40 }), 0, 'a column dragged narrower lets the rest split out sooner');
   assert.equal(fold(728, { title: 300 }), 2, 'a title dragged wider keeps its room, so columns fold sooner');
+  // Title's grip is the edge between its line and the columns: wherever it is put, foldFor gives that split back
+  const fns = vm.runInNewContext(sourceLine('const TITLE_ROOM') + '\n' + functionSource('foldFor') + '\n' + functionSource('titleFor') + '\n' + sourceLine('const tableLine') + '; ({ foldFor, titleFor, tableLine })');
+  const edge = (line) => { const title = fns.titleFor(line, 728, keys, {}); return [title, fns.foldFor(728, keys, { title })]; };
+  assert.deepEqual(edge(200), [200, 0], 'an edge that leaves room for every column keeps them all out');
+  assert.deepEqual(edge(400), [264, 2], 'dragged past two columns, both ride on the line, Title keeping the line less the folded values\u2019 room');
+  assert.deepEqual(edge(fns.tableLine(1, 728, keys, {})), [240, 1], 'a click on a folded name puts the edge where that column and the ones after it fit');
+  assert.ok(fns.titleFor(fns.tableLine(0, 300, keys, {}), 300, keys, {}) < 80, 'and on a page too narrow for it, the title left would be too small: no room');
   console.log('ok  a table folds its first columns onto the title\u2019s line as the page narrows, the last column last');
 });
 process.exitCode = 1;
