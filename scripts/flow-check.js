@@ -237,6 +237,60 @@ flow('Copy link on a Timeline meeting copies the meeting', async (p) => {
   assert.equal(await p.js('window.__copied'), await p.js('tana.nodeLink(' + J(uri) + ')'), 'Copy link copied the meeting\u2019s link');
   await p.key('esc');
 });
+// 9. The Settings window (settings.html): each control makes its call, an answer older than a newer one is dropped
+// (#673 review), the keyboard stays on the control that had it, and demo mode masks your email and hidden titles
+const SETTINGS_API = String.raw`(() => {
+  window.__calls = []; window.__slow = [];
+  const call = (name, answer) => (...a) => { __calls.push([name, ...a]); return Promise.resolve(typeof answer === 'function' ? answer(...a) : answer); };
+  const AI = { models: ['gpt-6-luna', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'high'] };
+  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true }];
+  start({ prefs: { theme: 'light' }, translate: () => {}, onSettings: (fn) => { window.__settings = fn; },
+    aiOptions: () => new Promise((resolve) => __slow.push(() => resolve(AI))), setAiOption: call('setAiOption', (k, v) => ({ ...AI, [k]: v })),
+    chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@private.example' }), chatgptLogout: call('chatgptLogout', { available: true, signedIn: false }),
+    agentList: async () => agents, enableAgent: call('enableAgent', (id, on) => (agents = agents.map((a) => (a.id === id ? { ...a, enabled: on } : a)))),
+    setDefaultAgent: call('setDefaultAgent', () => agents), filters: async () => hidden,
+    addFilter: call('addFilter', (p) => (hidden = [...hidden, p])), removeFilter: call('removeFilter', (p) => (hidden = hidden.filter((h) => h !== p))),
+    mcpHidden: async () => true, setMcpHidden: call('setMcpHidden', (on) => on), setPref: call('setPref'), settingsSize: (h) => { __calls.push(['settingsSize', h]); } });
+})()`;
+flow('the Settings window writes what you pick and shows what is newest', async (p) => {
+  await p.start();
+  const open = async (demo) => {
+    await p.js('localStorage.setItem("demoMode", ' + J(demo ? '1' : '0') + '); localStorage.removeItem("settingsTab"); location.href = "/settings.html"; 1');
+    await p.waitFor('document.readyState === "complete" && typeof start === "function"', 'the Settings window', 8000);
+    await p.js(SETTINGS_API);
+  };
+  const tab = (id) => p.js('document.querySelector(\'[data-key="tab/' + id + '"]\').click(); 1');
+  const shown = () => p.js('document.body.innerText');
+  await open(false);
+  assert.equal(await p.js('document.title'), 'General', 'the window opens on General, titled by its tab');
+  await p.js('document.querySelector(\'[data-key="theme/dark"]\').click(); 1');
+  assert.deepEqual(await p.js('[document.documentElement.dataset.theme, __calls.find((c) => c[0] === "setPref")]'), ['dark', ['setPref', 'theme', 'dark']], 'Dark is stored and the window follows it');
+  // the AI tab: a read still out when a model is picked lands last, and must not put the old model back
+  await tab('ai'); await p.js('__slow.shift()(); 1'); await settle(p, 100);
+  await p.js('__settings({ theme: "dark" }); 1'); // something changed elsewhere: the window reads again, and that read is slow
+  await p.js('(() => { const s = document.querySelector(\'[data-key="quickModel"]\'); s.value = "gpt-5.6-terra"; s.dispatchEvent(new Event("change")); })()'); await settle(p, 100);
+  await p.js('__slow.shift()(); 1'); await settle(p, 100);
+  assert.equal(await p.js('document.querySelector(\'[data-key="quickModel"]\').value'), 'gpt-5.6-terra', 'the newest answer stands');
+  assert.deepEqual(await p.js('__calls.find((c) => c[0] === "setAiOption")'), ['setAiOption', 'quickModel', 'gpt-5.6-terra'], 'the pick is stored as Cmd+K Choose models stores it');
+  // the Agents tab, by keyboard: the switch keeps the keyboard through the redraw its answer brings
+  await tab('agents');
+  await p.js('document.querySelector(\'[data-key="agent/codex"]\').focus(); 1'); await p.key('Space'); await settle(p, 150);
+  assert.deepEqual(await p.js('[__calls.find((c) => c[0] === "enableAgent"), document.activeElement.dataset.key, document.activeElement.getAttribute("aria-checked")]'),
+    [['enableAgent', 'codex', false], 'agent/codex', 'false'], 'Space switches Codex off, and the keyboard is still on its switch');
+  // the Lists tab: + and a title hides it, ⌫ on a selected one unhides it
+  await tab('lists');
+  await p.js('document.querySelector(\'[data-key="hidden+"]\').click(); 1'); await p.type('Lunch*'); await p.key('↩'); await settle(p, 150);
+  await p.js('document.querySelector(\'[data-key="hidden/Secret project"]\').click(); document.querySelector(\'[data-key="hidden/Secret project"]\').focus(); 1'); await p.key('⌫'); await settle(p, 150);
+  assert.deepEqual(await p.js('__calls.filter((c) => /Filter$/.test(c[0]))'), [['addFilter', 'Lunch*'], ['removeFilter', 'Secret project']], 'a title hidden and one unhidden');
+  assert.deepEqual(await p.js('[...document.querySelectorAll(".item")].map((b) => b.textContent)'), ['Lunch*'], 'the list shows what main answered');
+  assert.ok(await p.js('__calls.filter((c) => c[0] === "settingsSize").length >= 3'), 'the window was told each tab\u2019s height');
+  // demo mode: the email and the hidden titles are masked
+  await open(true);
+  await tab('ai'); await p.js('__slow.shift()(); 1'); await settle(p, 100);
+  assert.ok(!(await shown()).includes('robin@private'), 'demo mode shows no real email');
+  await tab('lists'); await settle(p, 100);
+  assert.ok(!(await shown()).includes('Secret project'), 'demo mode shows no real hidden title');
+});
 
 (async () => {
   if (process.env.CODEX_SANDBOX) { console.error('flow-check: the agent sandbox refuses the loopback port and Chromium this needs; run it escalated'); process.exit(3); }

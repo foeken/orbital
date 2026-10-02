@@ -149,6 +149,8 @@ contextBridge.exposeInMainWorld('api', {
   claimHelp: (theme) => ipcRenderer.invoke('help:claim', theme), // main opens the Help tour over this window, once, if the settings document says it was never seen; true when it did
   prefsNow: () => ipcRenderer.invoke('prefs:now'), // the same, now: what a settings:changed sent before the page listened carried
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
+  openSettings: () => ipcRenderer.invoke('settings:open'), // Orbital's Settings window (settings.html): opened, or brought forward
+  settingsSize: (height) => ipcRenderer.send('settings:size', height), // the Settings window's page, measured: the window takes its height
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
   aiOptions: () => ipcRenderer.invoke('ai:options'), // { model, effort, efforts, quickModel, quickEffort, quickEfforts, models }: the Quick and Regular AI, and the choices
   setAiOption: (key, value) => ipcRenderer.invoke('ai:setOption', key, value), // 'model' | 'effort' | 'quickModel' | 'quickEffort', one of the choices -> the options again

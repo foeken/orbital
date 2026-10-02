@@ -211,6 +211,28 @@ const checkUpdates = (manual = false, page = frontPane()) => updater.check({ man
   if (win.overlay) { if (win.overlay.which !== 'update') win.updatePending = true; return true; }
   return openOverlay(page, 'update', win.theme || systemTheme());
 } });
+// Orbital's Settings window (settings.html, settings.js): a window of its own, as a Mac app's settings are.
+// One at a time, brought forward when it is open; a fixed width that takes the height of the tab it shows (settings:size,
+// from its own page only); closed by ⌘W (closeFront), never minimised, zoomed or resized by hand. Main's pushes reach it
+// with the pages' (main/state.js send, main/settings.js tellOthers).
+const SETTINGS_WIDTH = 600;
+function openSettings() {
+  if (S.settings && !S.settings.isDestroyed()) return S.settings.focus();
+  const theme = settings.prefs().theme, dark = theme === 'dark' || (theme !== 'light' && systemTheme() === 'dark');
+  const win = new BrowserWindow({ width: SETTINGS_WIDTH, height: 400, useContentSize: true, show: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    title: 'Settings', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 13 }, // centred on the title's 38px line (settings.css #title)
+    backgroundColor: dark ? '#262628' : '#f6f6f6', webPreferences: { preload: PRELOAD } }); // settings.css --bg
+  S.settings = win;
+  win.once('ready-to-show', () => win.show());
+  win.on('closed', () => { if (S.settings === win) S.settings = null; });
+  win.loadFile(path.join(__dirname, 'settings.html'));
+}
+ipcMain.handle('settings:open', () => { openSettings(); });
+ipcMain.on('settings:size', (e, height) => {
+  const win = S.settings;
+  if (!win || win.isDestroyed() || e.sender !== win.webContents || !Number.isFinite(height)) return;
+  win.setContentSize(SETTINGS_WIDTH, Math.round(Math.min(Math.max(height, 160), 900)), win.isVisible()); // animated once it shows, as a tab switch is
+});
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
@@ -275,8 +297,8 @@ function createMenu() {
     { label: app.name, submenu: [
       { role: 'about' },
       { label: 'Check for Updates…', click: () => checkUpdates(true) },
-      // the key is the renderer's Open settings row (DEFAULT_HOTKEYS), so it can be re-recorded; the menu runs that row in the front pane
-      { type: 'separator' }, { label: 'Settings…', accelerator: 'CmdOrCtrl+,', registerAccelerator: false, click: () => { if (S.win && !S.win.isDestroyed()) tellShell(S.win, 'action', 'openSettings'); } },
+      // the key is the renderer's Open settings row (DEFAULT_HOTKEYS), so it can be re-recorded; the menu shows it and opens the window itself
+      { type: 'separator' }, { label: 'Settings…', accelerator: 'CmdOrCtrl+,', registerAccelerator: false, click: () => openSettings() },
       { type: 'separator' }, { role: 'services' }, { type: 'separator' },
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },

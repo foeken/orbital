@@ -462,6 +462,10 @@ function readStoredPlace() {
 // Read at load, before the first paint: renderOutline records the place it drew, and on boot that is the view with no
 // zoom, which clears the stored place. Reading it here means the first render can no longer erase what we reopen.
 let savedPlace = readStoredPlace();
+// Settings was an app page before it was a window: a pane or Recent still holding it lets go of it, rather than
+// asking Tana for a node by an id that was only ever the app's
+if (savedPlace?.docId === 'orbital:settings') savedPlace = null;
+forgetRecent('orbital:settings');
 // Nothing stored for this half: a first launch, which opens on the Work View (renderer/timeline.js) — the Timeline
 // here, and My Tasks in the pane main opens beside it. Every later render stores a place, so from then on a
 // launch reopens the last one. My Tasks has no id until main has found or made it, so that half asks once connected

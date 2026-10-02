@@ -286,6 +286,7 @@ function tellOthers(from, docId) { // from: the page handle that wrote it (main/
     p.send('settings:changed', next);
     if (docId) p.send('outline:changed', docId, { meta: true });
   }
+  if (S.settings && !S.settings.isDestroyed()) S.settings.webContents.send('settings:changed', next); // the Settings window (main.js openSettings), a write of its own included: it reads again
 }
 
 // the preferences now, asked for once the page listens for settings:changed (renderer/app.js; preload's prefs:snapshot is the load-time copy)

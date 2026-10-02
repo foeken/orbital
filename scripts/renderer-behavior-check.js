@@ -115,8 +115,6 @@ const withShims = (src) => {
   if (/\bzoomable\(/.test(src) && !/const zoomable =/.test(src)) src = 'globalThis.zoomable ??= (node) => !!node;\n' + src;
   // the Timeline's page id (renderer/timeline.js): a row asks whether it is drawn there
   if (/\bTIMELINE_PAGE\b/.test(src) && !/const TIMELINE_PAGE =/.test(src)) src = "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n" + src;
-  // the Settings page's id (renderer/settings.js): a render asks whether it is drawing that page
-  if (/\bSETTINGS_PAGE\b/.test(src) && !/const SETTINGS_PAGE =/.test(src)) src = "globalThis.SETTINGS_PAGE ??= 'orbital:settings';\n" + src;
   // a related answer draws the page's fields and sidebar at once when a render would wait (renderer/rail.js loadRelated): a harness with no page has nothing to draw
   if (/\b(loadRelated|accessOptions)\b/.test(src) && !/let zoom\b/.test(src) && !/const zoom\b/.test(src)) src = 'globalThis.zoom ??= null;\n' + src;
   // Deleted nodes (renderer/nodes.js) are one Set the whole app shares. A harness that is not about deletion gets
@@ -7535,47 +7533,6 @@ function runPrefsStoreCheck() {
 
 // Another page stored a view filter, a watch choice or an agent mark (main/settings.js tellOthers): this page's copies
 // follow. A page left with the old filter drew stale pills and wrote that filter back over the new one with its next pill.
-// A redraw of the Settings page builds every control anew: the one that had the keyboard gets it back (renderer/settings.js drawSettings, #673 review)
-async function runSettingsFocusCheck() {
-  const api = vm.runInNewContext(`
-    let focused = null, page = null;
-    const button = (skey) => ({ dataset: { skey }, focus() { focused = this; } });
-    const settingsEl = () => ({ buttons: [button('Theme/Light'), button('Thinking/High')] });
-    const into = { contains: (el) => !!el && el.old === true, replaceChildren: (p) => { page = p; }, querySelectorAll: () => page.buttons };
-    const document = { activeElement: { old: true, dataset: { skey: 'Thinking/High' } } };
-    ${functionSource('drawSettings')}
-    ({ draw: () => { drawSettings(into); return focused && focused === page.buttons[1]; }, away: () => { document.activeElement = { dataset: {} }; focused = null; drawSettings(into); return focused; } });
-  `);
-  assert.equal(api.draw(), true, 'the control that had the keyboard has it again after the redraw');
-  assert.equal(api.away(), null, 'and with the keyboard elsewhere, the redraw takes it from nowhere');
-}
-// The Settings page's values (renderer/settings.js settingsLoad): a refresh while a read is out starts a newer one, and the
-// older answer, landing last, must not put its stale values back over the newer ones (#673 review)
-async function runSettingsReadOrderCheck() {
-  const api = vm.runInNewContext(`
-    const SETTINGS_PAGE = 'orbital:settings';
-    let zoom = { docId: SETTINGS_PAGE }, draws = 0, chatgptAuthLoading = null;
-    const answers = [];
-    const ask = (name) => () => new Promise((resolve) => answers.push({ name, resolve }));
-    const tana = { aiOptions: ask('ai'), filters: ask('hidden') };
-    const refreshChatGPTStatus = () => {}, renderSoon = () => { draws++; };
-    ${sourceLine('let settingsAI')}
-    ${functionSource('settingsRefresh')}
-    ${functionSource('settingsLoad')}
-    ({ load: () => settingsLoad(), refresh: () => settingsRefresh(), answers, state: () => ({ ai: settingsAI, hidden: settingsHidden }) });
-  `);
-  const first = api.load();
-  api.refresh(); // a setting arrived while the first read is out
-  const second = api.load();
-  assert.equal(api.answers.length, 4, 'the refresh started a second read');
-  const answer = (from, ai, hidden) => { api.answers[from].resolve(ai); api.answers[from + 1].resolve(hidden); };
-  answer(2, { model: 'gpt-5.6-sol' }, ['New']);
-  await second;
-  answer(0, { model: 'gpt-5.6-luna' }, ['Old']);
-  await first;
-  assert.deepEqual(JSON.parse(JSON.stringify(api.state())), { ai: { model: 'gpt-5.6-sol' }, hidden: ['New'] }, 'the newer read stands: the older one landing last is dropped');
-  assert.equal(api.load(), undefined, 'and nothing is read again until the next refresh');
-}
 async function runSettingsElsewhereCheck() {
   const api = vm.runInNewContext(`
     ${sourceLine('const themeChoice')}
@@ -7896,7 +7853,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runTimelineCopyLinkCheck, runSettingsFocusCheck, runSettingsReadOrderCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

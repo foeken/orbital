@@ -196,29 +196,6 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 /* a row's field values on its grey line (renderer/views.js subtextEl): the same chip, a step quieter */
 [data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }
 [data-theme="dark"] .fields .fchip.fref { background: none; }
-/* The Settings page (renderer/settings.js): its sections are field rows; the values are choices, links and a switch */
-.settings-note { margin: 6px 0 4px; font-size: 14px; color: var(--muted); }
-.settings-head { margin: 26px 0 0; padding: 0 0 8px 3px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.settings .fields { margin-top: 0; }
-.fields .settings-values { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding-left: 10px; }
-.settings button { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
-.settings button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus); }
-.settings .sopt { padding: 0 7px; border-radius: 4px; line-height: 22px; color: var(--muted); }
-.settings .sopt.on { background: rgba(0, 0, 0, 0.06); color: #1a1a1a; font-weight: 600; cursor: default; }
-.settings .sopt:not(.on):hover, .settings .sact:hover, .settings .fchip.sbtn:hover { color: #1a1a1a; }
-.settings .fchip { line-height: 22px; }
-.settings .sact { color: var(--muted); line-height: 22px; text-decoration: underline; text-underline-offset: 2px; }
-.settings-local { margin-left: auto; padding: 0 6px; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 4px; font-size: 12px; line-height: 18px; color: var(--muted); }
-.settings .sswitch { position: relative; width: 28px; height: 16px; margin: 3px 0; border-radius: 8px; background: rgba(0, 0, 0, 0.14); transition: background var(--dur-quick) var(--ease-out); }
-.settings .sswitch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: left var(--dur-quick) var(--ease-out); }
-.settings .sswitch.on { background: #1a1a1a; }
-.settings .sswitch.on::after { left: 14px; }
-[data-theme="dark"] .settings .sopt.on { background: rgba(255, 255, 255, 0.1); color: #e6e8e9; }
-[data-theme="dark"] .settings .sopt:not(.on):hover, [data-theme="dark"] .settings .sact:hover, [data-theme="dark"] .settings .fchip.sbtn:hover { color: #e6e8e9; }
-[data-theme="dark"] .settings-local { border-color: rgba(255, 255, 255, 0.16); }
-[data-theme="dark"] .settings .sswitch { background: rgba(255, 255, 255, 0.18); }
-[data-theme="dark"] .settings .sswitch.on { background: #e6e8e9; }
-[data-theme="dark"] .settings .sswitch.on::after { background: #242729; }
 /* ==== Table view (renderer/views.js) ==== */
 /* a list page as a table (renderer/views.js tableCells): each row's body is a grid, its grey line's cells are the
    columns after the title, and the header uses the same columns. The body starts at one fixed gutter on every row —
@@ -1577,9 +1554,9 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
    inherit, so what sits inside a button (a pill's menu) is not one. A press inside a pill's menu is the menu's, so the
    pill does not shrink under it. */
 @property --press { syntax: '<number>'; inherits: false; initial-value: 0; }
-:is(.navbtn, .pill, .settings button, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear) {
+:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear) {
   --press: 1; transition: transform var(--dur-slow) var(--ease-settle); }
-:is(.navbtn, .pill, .settings button, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
+:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
   transform: scale(.95); transition: transform var(--dur-quick) var(--ease-out); }
 
 /* Surface for what is built again on every key: a pill's menu and the toolbar's style menu (renderer/motion.js
