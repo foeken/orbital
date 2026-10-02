@@ -3779,7 +3779,8 @@ async function main() {
       await until(() => sendTimers().length > waits, 'the wait before ↩');
       const url = backend.opened.at(-1), prefix = 'codex://threads/' + CHAT + '?hostId=durable&prompt=';
       assert.ok(url.startsWith(prefix), 'the conversation opens on the dot\'s host');
-      assert.equal(decodeURIComponent(url.slice(prefix.length)), 'Book a venue\n\nTana: Plan the offsite (' + NODE + ')', 'with the request typed in, then the node by name and uri');
+      assert.equal(decodeURIComponent(url.slice(prefix.length)), 'Book a venue\n\nTana: Plan the offsite (' + NODE + ')\nKeep this Tana task updated with what you do, and check it off when you are done.',
+        'with the request typed in, then the node by name and uri, and asking the dot to keep it updated and check it off');
       assert.equal(pressed, 0, 'and ↩ waits for the app to have it');
       sendTimers().at(-1).fn();
       assert.equal(await sending, undefined, 'no task id: every node goes to the one conversation, dotChat');

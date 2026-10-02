@@ -24,8 +24,10 @@ const appInstalled = () => ['/Applications/ChatGPT.app', require('node:os').home
 const chatUrl = (id, text) => 'codex://threads/' + id + '?hostId=' + HOST + (text ? '&prompt=' + encodeURIComponent(text) : '');
 // codex://threads/<id>, with or without its query, or the bare id
 const linkId = (text) => { const m = String(text || '').trim().match(/^(?:codex:\/\/threads\/)?([0-9a-f-]{36})\/?(?:\?.*)?$/i); return m && agent.UUID.test(m[1]) ? m[1] : null; };
-// What the dot reads: what to do, then the node, by name and by the uri its Tana connection reads.
-const message = (prompt, nodeUri, title) => [prompt || 'Help me with this.', '', 'Tana: ' + (agent.oneLine(title) || 'this node') + ' (' + nodeUri + ')'].join('\n');
+// What the dot reads: what to do, the node by name and by the uri its Tana connection reads, and to report back there:
+// its progress lives out of this Mac's reach, so the node is where it shows.
+const message = (prompt, nodeUri, title) => [prompt || 'Help me with this.', '', 'Tana: ' + (agent.oneLine(title) || 'this node') + ' (' + nodeUri + ')',
+  'Keep this Tana task updated with what you do, and check it off when you are done.'].join('\n');
 
 const openUrl = (url) => require('electron').shell.openExternal(url);
 // ↩ in the frontmost app, only when that is ChatGPT
