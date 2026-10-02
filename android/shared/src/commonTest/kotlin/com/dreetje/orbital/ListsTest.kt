@@ -1,0 +1,102 @@
+package com.dreetje.orbital
+
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
+
+class ListsTest {
+    private val now = Instant.parse("2026-10-02T12:00:00Z")
+    private val utc = TimeZone.UTC
+
+    @Test fun freeTimeCountsDownAndSaysWhenAMeetingIsStillOn() {
+        val ms = now.toEpochMilliseconds().toDouble()
+        assertEquals(Triple("No meetings for ", "44 more min", ""), Lists.free(Row.Free(ms, ms + 44 * 60000), ms))
+        assertEquals(Triple("No meetings for ", "1 h 30 min", " after this one"), Lists.free(Row.Free(ms + 60000, ms + 91 * 60000), ms))
+        assertEquals("2 h", Lists.free(Row.Free(ms, ms + 120 * 60000), ms).second)
+        assertEquals("1 more min", Lists.free(Row.Free(ms, ms + 1), ms).second) // never "0 min"
+    }
+
+    @Test fun daysGroupByTheRowsOwnTimeAndLeaveTheBlocksAbove() {
+        val rows = listOf(
+            Row("today", timeline = Row.Info(today = true)),
+            Row("a", createdAt = "2026-10-02T09:00:00Z"),
+            Row("b", createdAt = "2026-10-01T09:00:00.000Z"),
+            Row("c", createdAt = "2026-09-29T09:00:00Z"),
+        )
+        val days = Lists.days(rows, now)
+        assertEquals(3, days.size)
+        assertEquals(listOf("a"), days[0].second.map { it.id })
+        assertTrue(days[2].first.endsWith("29 September"), days[2].first)
+    }
+
+    @Test fun sectionsFollowTheSearchsGroups() {
+        val s = Lists.sections(listOf(Row("1", group = "Today"), Row("2", group = "Today"), Row("3", group = "Later"), Row("4")))
+        assertEquals(listOf("Today", "Later", null), s.map { it.first })
+        assertEquals(2, s[0].second.size)
+    }
+
+    @Test fun anOutlineFlattensWithDepthAndDropsBlankLines() {
+        val flat = Lists.flat(listOf(Row("1", text = "One", children = listOf(Row("1.1", text = "Deeper"))), Row("2", text = " ")))
+        assertEquals(listOf("1" to 0, "1.1" to 1), flat.map { it.first.id to it.second })
+    }
+
+    @Test fun aNameHeadsEachRunOfReplies() {
+        val a = Row("1", text = "Tana", chat = Row.Chat(author = "tana"))
+        val b = Row("2", text = "Tana", chat = Row.Chat(author = "tana"))
+        val mine = Row("3", chat = Row.Chat(mine = true))
+        assertTrue(Lists.named(a, null))
+        assertFalse(Lists.named(b, a))
+        assertFalse(Lists.named(mine, b))
+        assertTrue(Lists.named(b, Row("s", chat = Row.Chat(status = true))))
+    }
+
+    @Test fun dotsWaitTwoMinutesForAnAnswerAtMost() {
+        val mine = listOf(Row("1", chat = Row.Chat(mine = true)))
+        assertTrue(Lists.waiting(mine, now - 1.minutes, now))
+        assertFalse(Lists.waiting(mine, now - 3.minutes, now))
+        assertTrue(Lists.waiting(listOf(Row("2", chat = Row.Chat(streaming = true))), null, now))
+        assertFalse(Lists.waiting(listOf(Row("2", chat = Row.Chat(streaming = true), children = listOf(Row("w", text = "Hi")))), null, now))
+    }
+
+    @Test fun timesInWordsAsTheiPhoneSaysThem() {
+        assertEquals("9:05", Times.hm(Instant.parse("2026-10-02T09:05:00Z"), utc))
+        assertEquals("Today", Times.day(now - 1.hours, now, utc))
+        assertEquals("Yesterday", Times.day(now - 1.days, now, utc))
+        assertEquals("Thursday 1 October", Times.long(LocalDate(2026, 10, 1)))
+        assertEquals("now", Times.relative(now, now, utc))
+        assertEquals("5 minutes ago", Times.relative(now - 5.minutes, now, utc))
+        assertEquals("1 hour ago", Times.relative(now - 1.hours, now, utc))
+        assertEquals("yesterday", Times.relative(now - 1.days, now, utc))
+        assertEquals("last week", Times.relative(now - 8.days, now, utc))
+    }
+
+    @Test fun plainDatesRoundTrip() {
+        assertEquals("tana:plaindate:2026-03-04", Lists.plainDate(2026, 3, 4))
+        assertEquals(Triple(2026, 3, 4), Lists.parsePlainDate("tana:plaindate:2026-03-04"))
+        assertNull(Lists.parsePlainDate("tana:zoneddate:2026-03-04"))
+    }
+
+    @Test fun modelsAreNamedAsTheMacNamesThem() {
+        assertEquals("Sol 6", ChatGPTText.label("gpt-6-sol"))
+        assertEquals("Terra 5.6", ChatGPTText.label("gpt-5.6-terra"))
+        assertEquals("GPT-5.5", ChatGPTText.label("gpt-5.5"))
+        assertEquals("Extra high", ChatGPTText.effortLabel("xhigh"))
+    }
+
+    @Test fun accessNamesItsRuleAndWhetherItGrants() {
+        val shared = Access("T", "me", true, audience = "people", restricted = true, participants = listOf("p"), rules = listOf("me", "people"))
+        assertEquals("people", shared.rule)
+        assertTrue(shared.grants)
+        assertEquals("inherit", shared.copy(restricted = false).rule)
+        assertEquals("me", shared.copy(participants = emptyList()).rule)
+        assertEquals("Kor, Stan and Jeroen", listOf(Member("1", "Kor"), Member("2", "Stan"), Member("3", "Jeroen")).names)
+    }
+}
