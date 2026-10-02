@@ -792,7 +792,9 @@ wrong twenty.
   (main/documents.js `agentStatus`): working, done or broken) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
   Orbital never signs in to Anthropic). Codex, Dot and Claude are offered only once this Mac has them. **Choose agents …**
   (Settings) lists all four, greyed with what to install when missing: ↩ switches one on or off, one that needs a paste
-  first (Dot: its chat link, `dotChat`, synced) asks for it on a page of its own, and the second group
+  first asks for it on a page of its own (Dot's chat link, `dotChat`, synced, but only where the ChatGPT app on this Mac
+  has no dot: main/agents/dot.js `appDot` reads the dot that app picked, `primary-aeon-selection-v1` in
+  `~/.codex/.codex-global-state.json`, stores it as `dotChat` and follows it when it changes), and the second group
   picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
@@ -1139,8 +1141,8 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     Out), the OpenAI API key only while one is stored (Remove), both **On this Mac**; the Quick and the Regular AI, a model
     and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
   - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
-    another Mac switched it on) and the default agent. One that needs a paste first (Dot's chat link, `setup` in
-    `agentList`) opens a field under its row instead of switching on: ↩ or Switch On hands the paste to `enableAgent`,
+    another Mac switched it on) and the default agent. One that needs a paste first (Dot's chat link, when the ChatGPT app
+    here has no dot; `setup` in `agentList`) opens a field under its row instead of switching on: ↩ or Switch On hands the paste to `enableAgent`,
     main refuses what it cannot read, and only then is it on; Esc or another tab drops the field.
   - **Lists**: the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
     it) and Show MCP chats.

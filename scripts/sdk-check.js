@@ -58,7 +58,10 @@ function mainHelpers(childProcess) {
   };
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
-  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
+  const loaded = load(nodePath.join(root, 'main.js'));
+  // the ChatGPT app's state file, where Dot finds your dot (main/agents/dot.js appDot): none in the checks unless one hands it one
+  load(nodePath.join(root, 'main', 'agents', 'dot.js')).dot.stateFile = nodePath.join(require('node:os').tmpdir(), 'orbital-check-no-codex-state.json');
+  return { ...loaded, handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
 }
 
 async function main() {
@@ -3821,6 +3824,15 @@ async function main() {
       assert.equal(agent.setTask(NODE, 'codex'), null, 'an agent with a task per node still needs its id');
       settings.set('dotChat', undefined);
       await assert.rejects(dt.start({ nodeUri: NODE, prompt: 'Do it' }), /Link your dot first/, 'with no conversation linked nothing is sent');
+      // nobody has to find that link: the ChatGPT app on this Mac knows which conversation is your dot, and Dot reads it there
+      const nodePath = require("node:path"), stateDir = fs.mkdtempSync(nodePath.join(require('node:os').tmpdir(), 'dot-state-')), noState = dt.stateFile, FOUND = '6abf3de2-abe4-81a4-9796-1c3d5e7f9a0b';
+      dt.stateFile = nodePath.join(stateDir, 'state.json');
+      fs.writeFileSync(dt.stateFile, JSON.stringify({ 'electron-persisted-atom-state': { 'primary-aeon-selection-v1': { response: { selection: { thread_id: FOUND, available: true }, profile: { active_root_thread_id: FOUND } } } } }));
+      await dt.open();
+      assert.deepEqual([settings.get('dotChat'), backend.opened.at(-1)], [FOUND, 'codex://threads/' + FOUND + '?hostId=durable'], 'the app\'s dot is found, opened, and stored to follow you');
+      settings.set('dotChat', undefined); fs.writeFileSync(dt.stateFile, '{ half written'); fs.utimesSync(dt.stateFile, new Date(), new Date(Date.now() + 5000));
+      await assert.rejects(dt.start({ nodeUri: NODE, prompt: 'Do it' }), /Link your dot first/, 'a state file that cannot be read finds nothing, and the link can still be pasted');
+      dt.stateFile = noState; fs.rmSync(stateDir, { recursive: true });
       agent.setEnabled('dot', false); dt.available = () => false;
       assert.equal(settings.get('defaultAgent'), null, 'switched off, it stops being the default');
     }

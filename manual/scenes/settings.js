@@ -25,7 +25,7 @@ const hidePage = { js: "(() => { const s = document.createElement('style'); s.te
 const card = [310, 76, 660, 556];
 // Orbital's Settings window (settings.html) is a window of its own (main.js openSettings), which the runner has none of:
 // an iframe in a drawn window frame over the app does what main does, as page 'settings', handed what main would answer
-// (fictional: Robin's sign-in, four agents with Dot waiting for its link and Claude not installed, three hidden titles). Its traffic lights are drawn
+// (fictional: Robin's sign-in, four agents with Dot found in the ChatGPT app and Claude not installed, three hidden titles). Its traffic lights are drawn
 // where main.js insets them; close is the only live one, as a settings window has it.
 const SETTINGS_API = "start({ prefs: { theme: new URLSearchParams(location.search).get('theme') }, translate: () => {}, filters: async () => ['Daily standup', 'Lunch*', 'Focus time'],"
   + " aiOptions: async () => ({ models: ['gpt-6-luna', 'gpt-6-sol', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'medium', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'medium', 'high', 'xhigh'] }),"
@@ -33,7 +33,7 @@ const SETTINGS_API = "start({ prefs: { theme: new URLSearchParams(location.searc
   + " agentList: async () => window.agents, enableAgent: async (id, on, setup) => (window.agents = window.agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a))), setDefaultAgent: async () => window.agents,"
   + " settingsSize: (h) => { frameElement.style.height = h + 'px'; } }); 1";
 const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
-  { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: false, enabled: false, missing: 'Install the ChatGPT app', setup: 'Paste your dot\'s chat link' },
+  { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: false, missing: 'Install the ChatGPT app', setup: '' },
   { id: 'claude', label: 'Claude', icon: 'robot', installed: false, enabled: false, missing: 'Install Claude Code' }];
 const settingsWindow = (tab = 'general') => ({ page: 'shell', js: "(() => { const theme = window.shell.state().theme, w = document.createElement('div'), f = document.createElement('iframe'), s = document.createElement('style');"
   + " s.textContent = '#mc-settings { position: fixed; z-index: 9999; left: 50%; top: 70px; width: 600px; transform: translateX(-50%); border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 0.5px rgba(0,0,0,.3), 0 22px 70px rgba(0,0,0,.35); }"
@@ -51,7 +51,7 @@ module.exports = [
   { name: 'settings-tabs', video: true, size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }, settingsWindow('general'), { wait: 300 }], steps: [
     { click: '[data-key="tab/ai"]', page: 'settings' }, { wait: 1200 }, { click: '[data-key="tab/agents"]', page: 'settings' }, { wait: 900 },
     { click: '[data-key="agent/codex"]', page: 'settings' }, { wait: 700 }, { click: '[data-key="agent/codex"]', page: 'settings' }, { wait: 700 },
-    { click: '[data-key="agent/dot"]', page: 'settings' }, { wait: 500 }, { type: 'codex://threads/0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b', delay: 25, page: 'settings' }, { wait: 400 }, { key: '↩', page: 'settings' }, { wait: 1000 },
+    { click: '[data-key="agent/dot"]', page: 'settings' }, { wait: 1000 },
     { click: '[data-key="tab/lists"]', page: 'settings' }, { wait: 1000 }], clip: [300, 40, 680, 620] },
   // ---- how it looks ----
   { name: 'settings-theme', video: true, size: '1000x640', setup: [stubs, open('mockdoc0'), { wait: 900 }, { click: '#title' }], steps: [
