@@ -124,8 +124,9 @@ const plainRow = (id, title, updatedAt, typeUri, hue, createdAt) => (isSpace(id)
   // a typed document without its own icon shows the generic type glyph, tinted with its type's hue
   // A type can be given a glyph of its own (main/icons.js), and a document wears its type's: the row's icon is what
   // every other surface reads — the bullet, the rail, a breadcrumb, and the chip an inline mention of it draws
-  // (resolveReferences hands the target's icon to the mention) — so one name here reaches all of them.
-  : { id, title, done: 0, icon: typeUri ? typeIconName(typeUri) || 'type' : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt, createdAt });
+  // (resolveReferences hands the target's icon to the mention) — so one name here reaches all of them. A document given
+  // a glyph of its own wears that one instead.
+  : { id, title, done: 0, icon: typeIconName(id) || (typeUri ? typeIconName(typeUri) || 'type' : 'doc'), hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt, createdAt });
 const memberRow = (id, title, updatedAt, hue, createdAt) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt, createdAt });
 // chat, canvas, agent and skill each have their own glyph in the renderer's icon set, so the kind is the icon
 // A chat started here has no title until Tana's AI names it after the first answer (main/documents.js newChat): "New

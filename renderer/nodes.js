@@ -222,9 +222,9 @@ const zoomable = (node) => !!node && !/^tana:user-profile:/.test(node.id || '');
 // status, its metadata are unchanged), it only says at a glance that it is asleep.
 // A task keeps 'task' as its icon (that is what isTask reads), so its type's glyph — the one a typed document wears
 // (main/rows.js) — is chosen here at draw time; Later's own glyph still wins, it says what the task is doing.
-// A type or a saved search wears the glyph chosen for it now (typeGlyphs), not the one on the copy a page opened with:
-// Set icon changes it under the open page, its title and its tab (#523).
-const iconOf = (node) => (isTypeDoc(node) || isSearchDoc(node) ? typeGlyph(node.id) : isTask(node) && node.stateType === 'not_now' ? 'later' : (isTask(node) && typeGlyphs.get((node.tags || []).map((t) => t && t.uri).find(Boolean))) || node.icon);
+// A type, a saved search or a document wears the glyph chosen for it now (typeGlyphs), not the one on the copy a page
+// opened with: Set icon changes it under the open page, its title and its tab (#523).
+const iconOf = (node) => (isTypeDoc(node) || isSearchDoc(node) ? typeGlyph(node.id) : isTask(node) && node.stateType === 'not_now' ? 'later' : (isTask(node) ? typeGlyphs.get((node.tags || []).map((t) => t && t.uri).find(Boolean)) : typeGlyphs.get(node.id)) || node.icon);
 // an unchecked Inbox task: its (dashed) box accepts it, In Progress, before a second click completes it
 const acceptsFirst = (node) => isTask(node) && !node.done && node.stateType === 'proposed';
 const isCheckboxBlock = (node) => node?.kind === 'block' && node.done != null;

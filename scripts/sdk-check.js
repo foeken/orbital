@@ -1012,7 +1012,7 @@ async function main() {
     // The choice, and what wears it.
     assert.equal(icons.typeIcons().length, 0, 'nothing is chosen to begin with');
     assert.equal(icons.typeIconName(TYPE), null);
-    assert.throws(() => icons.setTypeIcon('tana:text:' + ulid(), 'nc-rocket'), /set on a type/, 'an icon belongs to a type, not to one document');
+    assert.throws(() => icons.setTypeIcon('tana:event:' + ulid(), 'nc-rocket'), /set on a type/, 'a meeting keeps its own glyph');
     assert.throws(() => icons.setTypeIcon(TYPE, 'nc-nothinglikethis'), /No icon called/, 'and it has to be one of the glyphs built in');
     const chosen = icons.setTypeIcon(TYPE, 'nc-rocket');
     assert.equal([chosen.uri, chosen.name, chosen.svg.startsWith('<svg')].join('|'), [TYPE, 'nc-rocket', true].join('|'), 'choosing answers with the glyph, so the renderer can draw it without asking again');
@@ -1045,6 +1045,17 @@ async function main() {
       assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'nc-rocket', 'and its row is drawn with it');
       icons.setTypeIcon(SEARCH, null);
       assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'search', 'No icon puts the search glyph back');
+    }
+    { // and one document, for itself: worn instead of its type's, and gone again with No icon
+      const DOC = 'tana:text:' + ulid();
+      icons.setTypeIcon(TYPE, 'nc-rocket');
+      assert.equal(icons.setTypeIcon(DOC, 'nc-flask').name, 'nc-flask', 'a document takes an icon');
+      assert.equal(backend.graphRow({ id: DOC, title: 'Plan', entityType: TYPE, updateTime: '2026-09-20T10:00:00Z' }).icon, 'nc-flask', 'its own glyph wins over its type\u2019s');
+      assert.ok(icons.typeIcons().some((i) => i.uri === DOC && i.name === 'nc-flask'), 'and the renderer is told it with the type glyphs');
+      icons.setTypeIcon(DOC, null);
+      assert.equal(backend.graphRow({ id: DOC, title: 'Plan', entityType: TYPE, updateTime: '2026-09-20T10:00:00Z' }).icon, 'nc-rocket', 'No icon puts its type\u2019s back');
+      assert.equal(backend.graphRow({ id: DOC, title: 'Plan', updateTime: '2026-09-20T10:00:00Z' }).icon, 'doc', 'or the doc glyph when it has no type');
+      icons.setTypeIcon(TYPE, null);
     }
     { // and a type's field, under its own key, sent with the rest of the glyphs (#606)
       const FIELD = TYPE + '?attribute=ab12cd34';

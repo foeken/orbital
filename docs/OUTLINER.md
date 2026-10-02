@@ -732,7 +732,8 @@ wrong twenty.
   says "Type set to Decision Record (91%)" ("Already …" and no write when it has it). Otherwise the page lists every
   option with its odds. No type is never applied on its own. `node scripts/platform-cli.js classify <id...>` prints the
   odds and writes nothing; a type's description and AI instructions in Tana are how its answers improve.
-- **Set icon** (`setIcon`, on a type or a saved search, #521) gives a saved search a glyph of its own (its row, its page,
+- **Set icon** (`setIcon`, on a type, a saved search (#521) or a document that is not a task) gives a document its own glyph,
+  worn instead of its type's (main/rows.js `plainRow`, renderer/nodes.js `iconOf`), gives a saved search a glyph of its own (its row, its page,
   its line under Searches in Cmd+K; No icon puts the magnifier back), and gives the type a glyph that every document of that type is then drawn with —
   its bullet, its sidebar row, the chip a mention of it draws — because all of them read the row's `icon`, which main
   fills with the type's icon name (main/rows.js). A task and a meeting keep their own. The page searches the Nucleo UI
