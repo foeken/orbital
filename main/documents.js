@@ -602,6 +602,28 @@ function builtRow(doc, n) {
   });
 }
 
+// Waiting (main/settings.js stateName): the one workflow of ours with the one state, made the first time a task is put
+// in it — in the Library, written as Tana writes a type's board (sdk/node.js initDocument) — and kept in the settings
+// document, so every machine and the phone read the same one.
+// ponytail: two machines that both make one before either has synced keep the first writer's; tasks put in the other
+// read as In Progress until set again. A lookup of your workflows by name would close that if it ever happens.
+async function waitingState() {
+  const known = settings.get('waiting');
+  if (known && /^tana:workflow:[0-9a-z]{26}$/.test(known.workflowUri) && known.workflowStateId) return known;
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  const workflowUri = 'tana:workflow:' + ulid(), workflowStateId = require('node:crypto').randomUUID();
+  if (!await subscribe(workflowUri, (loro) => initDocument(loro, '', S.me.userUri, { kind: 'workflow', states: [{ id: workflowStateId, name: 'Waiting' }] }))) throw new Error(S.status.error || 'could not create the Waiting workflow');
+  return settings.set('waiting', { workflowUri, workflowStateId });
+}
+// Set status, for one task or a selection: Tana's four, or Waiting, which is In Progress in that workflow.
+async function setStates(ids, state) {
+  const to = state === 'waiting' ? await waitingState() : state;
+  const count = await mutTasks(ids, (doc) => setState(doc, to, S.me.userUri));
+  for (const id of ids) docStates.set(id, state);
+  scheduleRefresh(2000);
+  return count;
+}
+
 function setSensitive(id, on) {
   if (typeof id !== 'string' || !DOC_URI.test(id)) throw new Error('Not a Tana document id');
   if (typeof on !== 'boolean') throw new Error('Sensitive state must be true or false');
@@ -1326,8 +1348,8 @@ const ipc = {
   }),
   // The state is recorded here, where it is known, rather than left to whatever reads the document next: the refresh
   // two seconds from now asks the search index, which can still be answering with the state from before this write.
-  'doc:setState': (_e, id, state) => mutTasks([id], (doc) => setState(doc, state, S.me.userUri)).then((count) => { docStates.set(id, state); scheduleRefresh(2000); return count; }),
-  'doc:setStateMany': (_e, ids, state) => mutTasks(ids, (doc) => setState(doc, state, S.me.userUri)).then((count) => { for (const id of ids) docStates.set(id, state); scheduleRefresh(2000); return count; }),
+  'doc:setState': (_e, id, state) => setStates([id], state),
+  'doc:setStateMany': (_e, ids, state) => setStates(ids, state),
   // linkSharing lives on the graph node, never in the document, so public-to-the-internet needs its own lookup
   'doc:taskMeta': (_e, id) => op(id, async doc => {
     const n = readNode(doc);

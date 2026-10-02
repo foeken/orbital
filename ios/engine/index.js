@@ -128,7 +128,7 @@ async function searchRows(doc) {
   const typeTitles = new Map(typeNodes.map((t) => [t.id, t.title])), notify = settings.get('notify') || {};
   const choice = (on) => new Set(Object.keys(notify).filter((id) => notify[id] === on));
   const byId = new Map(found.map((n) => [n.id, n]));
-  const rows = arrange(found.map((n) => ({ id: n.id, title: n.title, state: (n.state && n.state.type) || null, updated: iso(n.updateTime), created: iso(n.createTime),
+  const rows = arrange(found.map((n) => ({ id: n.id, title: n.title, state: (n.state && settings.stateName(n.state.type, n.state.workflowUri)) || null, updated: iso(n.updateTime), created: iso(n.createTime),
     createdBy: n.createdBy, assignees: n.assignedTo || [], type: typeTitles.get(n.entityType) })), view,
   { me: S.me.userUri, now: Date.now(), names: new Map(people.map((m) => [m.id, m.title])), agent: new Set(Object.keys(settings.get('codexTask') || {})), pinned: new Set(Object.keys(pinned)), watched: choice(true), silenced: choice(false) });
   const name = (uri) => ({ name: (people.find((m) => m.id === uri) || {}).title || 'Someone' }); // who a task is assigned to, drawn as faces (Faces)

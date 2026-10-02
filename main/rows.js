@@ -5,6 +5,9 @@ const { typeIconName } = require('./icons');
 const settings = require('./settings');
 const { PLAIN_KINDS, S, TAG, docStates, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeCreators, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
 
+// Tana's four states and Waiting (main/settings.js stateName), which is Tana's open in our own workflow: a row says which.
+const TASK_STATES = [...STATE_TYPES, 'waiting'];
+const indexState = (n) => settings.stateName(n.state.type, n.state.workflowUri);
 // The search index can trail a write by seconds, and every index result becomes a row through graphRow and records its
 // state in rememberMeta. A task this app holds live already has the newer state, so that one wins: a list refresh, a
 // search, a reference target or a sidebar row must not put back the state from before (set to Inbox, grey again two
@@ -16,8 +19,9 @@ function liveState(n) {
   // The handle is not always there to ask — a task changed from a list is not necessarily one sync still hands back —
   // and then the index's older answer used to win, putting In Progress back a couple of seconds after Set status to
   // Inbox. docStates remembers what the document itself last said, so the write survives either way.
-  const live = doc ? readNode(doc).stateType : docStates.get(n.id);
-  return STATE_TYPES.includes(live) && live !== n.state.type ? { ...n, state: { ...n.state, type: live } } : n;
+  const d = doc && readNode(doc), live = d ? settings.stateName(d.stateType, d.stateWorkflowUri) : docStates.get(n.id);
+  // the workflow goes with the index's answer: the state the document holds is already named (waiting, or not)
+  return TASK_STATES.includes(live) && live !== indexState(n) ? { ...n, state: { ...n.state, type: live, workflowUri: undefined } } : n;
 }
 // The later of two update times, either possibly missing: update times only move forward.
 const newer = (a, b) => (a && b ? (Date.parse(b) > Date.parse(a) ? b : a) : a || b);
@@ -31,8 +35,8 @@ function rememberMeta(n) {
   // not take the edit back. A document nothing has told us an update time for — one just created here, before the
   // graph has indexed it — was last updated no later than it was made.
   const updatedAt = newer(iso(n.updateTime), (nodeMeta.get(n.id) || {}).updatedAt) || createdAt;
-  const state = (n.state && n.state.type) || n.stateType;
-  const stateType = STATE_TYPES.includes(state) ? state : undefined;
+  const state = n.state ? indexState(n) : settings.stateName(n.stateType, n.stateWorkflowUri);
+  const stateType = TASK_STATES.includes(state) ? state : undefined;
   // n.stateType means this came from a Loro data map rather than the search index: the document is the source of
   // truth, so that answer is kept apart from nodeMeta, which any lagging index row overwrites.
   if (stateType && n.stateType !== undefined) docStates.set(n.id, stateType);
@@ -138,7 +142,7 @@ async function typesByTitle() {
 
 // rows for db.replaceSection from graph Node JSON
 const taskRow = (n) => ({
-  id: n.id, title: n.title || '', done: n.state && n.state.type === 'closed' ? 1 : 0, icon: 'task', stateType: n.state && n.state.type, createdAt: n.createTime,
+  id: n.id, title: n.title || '', done: n.state && n.state.type === 'closed' ? 1 : 0, icon: 'task', stateType: n.state && indexState(n), createdAt: n.createTime,
   hue: hueWithType(hueOf(n), n.entityType), tags: [nodeTag(TAG.task, n), ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
 });
 const meetingRow = (n, withDate) => {

@@ -25,14 +25,26 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
     { id: 'c', title: 'Handed over', state: 'open', updated: t(3), created: t(3), createdBy: me, assignees: [other] },
     { id: 'd', title: 'Theirs', state: 'open', updated: t(2), created: t(2), createdBy: other, assignees: [other] },
     { id: 'e', title: 'Pinned one', state: 'open', updated: t(8), created: t(8), createdBy: me, assignees: [me] },
+    { id: 'f', title: 'Waiting on Sam', state: 'waiting', updated: t(7), created: t(7), createdBy: me, assignees: [me] },
   ];
   const c = { me, now, names: new Map([[other, 'Sam']]), agent: new Set(['d']), pinned: new Set(['e']), watched: new Set(), silenced: new Set() };
   const shown = (view) => arrange(rows, view, c).map(({ n, group }) => (group ? group + ':' : '') + n.id).join(' ');
-  assert.strictEqual(shown({ groupBy: 'responsibility', sortBy: '-updated' }), 'Agent:d Pinned:e Mine:a Tracking:c Assigned by others:b', 'a Codex task first, whoever has it');
-  assert.strictEqual(shown({ groupBy: 'status', sortBy: 'title' }), 'Inbox:b In Progress:a In Progress:c In Progress:e In Progress:d');
-  assert.strictEqual(shown({ sortBy: '-created' }), 'b d c e a');
-  assert.strictEqual(shown({ groupBy: 'assignee' }), 'Sam:c Sam:d Someone:a Someone:b Someone:e', 'named by the member list, unknown as Someone');
-  assert.strictEqual(shown({}), 'a b c d e', 'no sort: the query order');
+  assert.strictEqual(shown({ groupBy: 'responsibility', sortBy: '-updated' }), 'Pinned:e Agent:d Mine:a Waiting:f Tracking:c Assigned by others:b', 'Pinned first, then a Codex task whoever has it, and Waiting after Mine');
+  assert.strictEqual(shown({ groupBy: 'status', sortBy: 'title' }), 'Inbox:b In Progress:a In Progress:c In Progress:e In Progress:d Waiting:f');
+  assert.strictEqual(shown({ sortBy: '-created' }), 'b d c f e a');
+  assert.strictEqual(shown({ groupBy: 'assignee' }), 'Sam:c Sam:d Someone:a Someone:b Someone:e Someone:f', 'named by the member list, unknown as Someone');
+  assert.strictEqual(shown({}), 'a b c d e f', 'no sort: the query order');
+  assert.strictEqual(arrange([{ ...rows[5], id: 'g' }], { groupBy: 'responsibility' }, { ...c, pinned: new Set(['g']) })[0].group, 'Waiting', 'one you are waiting on leaves Pinned for Waiting');
+}
+
+// The phone's Timeline reads a task in the Waiting workflow as waiting too (stand-ins graphRow, over the settings mirror),
+// which is what keeps it out of Today's Tasks there (main/timeline.js)
+{
+  const store = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i], get length() { return store.size; } } });
+  standIns.setSetting('waiting', { workflowUri: 'tana:workflow:w', workflowStateId: 's' });
+  assert.deepStrictEqual(['tana:workflow:w', 'tana:workflow:other', undefined].map((workflowUri) => standIns.graphRow({ id: 'x', state: { type: 'open', workflowUri } }).stateType), ['waiting', 'open', 'open']);
+  delete globalThis.localStorage;
 }
 
 // Demo mode (ios/engine/demo.js) masks as the desktop does, with its words: a node's title and an attendee one for one,

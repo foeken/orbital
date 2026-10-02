@@ -294,7 +294,8 @@ async function rows(progress) {
   // never made here): whatever its outline references, a full reference (Tana's embed block, or a line that is one
   // mention, as Add to Today writes it) or a mention among words. Reading it keeps it live, so a change to it reads the
   // page again (renderer/app.js). Completed tasks age out after their pinned day; a pin for today, or a place on
-  // today's node, still keeps them here.
+  // today's node, still keeps them here. A task you are waiting on (main/settings.js stateName) is not today's to do,
+  // so it stays out until it is set back to In Progress.
   async function today() {
     const [pinDates, day] = await Promise.all([pinnedDates(), todayNode(0, true).catch(() => null)]);
     const pinDatesById = new Map(Object.entries(pinDates));
@@ -307,6 +308,7 @@ async function rows(progress) {
     const rows = ids.map((id) => byId.get(id)).filter(Boolean).map((n) => {
       rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
       const row = toNode(graphRow(n));
+      if (row.stateType === 'waiting') return null;
       return row.done && !onDay.has(n.id) && !pinDatesById.get(n.id).includes(date) ? null : { ...row, editable: false, checkable: row.editable !== false }; // unknown (null) ticks, as a log row's box and every other row does; Tana refuses what it refuses (#545)
     }).filter(Boolean);
     return { rows, day };

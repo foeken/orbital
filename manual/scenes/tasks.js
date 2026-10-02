@@ -22,6 +22,9 @@ const qaData = "people = [['robin', 'Robin Vega', true], ['sam', 'Sam Okafor'], 
 const top = [0, 0, 1280, 440];
 module.exports = [
   { name: 'tasks-states', setup: list('ag'), clip: [0, 0, 1280, 440] },
+  // the offsite agenda set to Waiting before the list is drawn (a row changed on screen stays put until Clean up): under
+  // Status it has a section of its own, after In Progress
+  { name: 'tasks-waiting', setup: [W, { js: "tana.setState('tana:text:mockpin0', 'waiting')" }, ...list('ag')], clip: [0, 0, 1280, 440] },
   { name: 'tasks-tick', video: true, setup: list('ag'), clip: top, steps: [
     { click: '.node .text', text: 'Prepare the offsite agenda', at: [0.9, 0.5] }, { wait: 300 }, { key: '⌘↩' }, { wait: 1300 },
     { caption: 'The row stays put until you clean up' }, { wait: 1400 }, { caption: '' }, { key: '⌘K' }, { type: 'clean up' }, { wait: 400 }, { key: '↩' }, { wait: 1000 }] },
@@ -40,6 +43,4 @@ module.exports = [
     { key: '⌘K' }, { type: 'edit assignees' }, { wait: 300 }, { key: '↩' }, { wait: 500 },
     { type: 'priya' }, { wait: 400 }, { key: '↩' }, { wait: 900 }, { key: 'esc' }, { wait: 1400 }] },
 ];
-
-
 
