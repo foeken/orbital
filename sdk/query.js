@@ -98,9 +98,10 @@ const USER = /^tana:user-profile:[0-9a-z]{26}$/;
 // entityTypes, which the graph ORs among themselves and ANDs with the kinds (verified live 2026-09-25: Risk 18 +
 // Project 5 = 23 together). Only types chosen means what they are, whatever kind, so the task-only filters stay off:
 // a risk has no state, and the Library's "every state" would otherwise have emptied the list.
+// Unless every type chosen has a workflow (`workflows`, the uris main read a workflowUri on): their nodes are tasks.
 const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
 const splitTypes = (types) => { const all = Array.isArray(types) ? types : []; return { kinds: all.filter((t) => !TYPE_URI.test(t)), typeUris: all.filter((t) => TYPE_URI.test(t)) }; };
-const tasksInScope = (types) => { const { kinds, typeUris } = splitTypes(types); return kinds.length ? kinds.includes('tasks') : !typeUris.length; };
+const tasksInScope = (types, workflows = new Set()) => { const { kinds, typeUris } = splitTypes(types); return kinds.length ? kinds.includes('tasks') : typeUris.every((u) => workflows.has(u)); };
 // When meetings take place (#492): Tana's four presets (timeRange), offered by the When pill while meetings are the only
 // kind, and 'week', a week either side of today, which only Cmd+K's meeting picker asks for. Like a state, a window only
 // means something while meetings are all that is listed, so it is applied (and stored) only then.
@@ -151,7 +152,7 @@ function typeFields(f) {
   return Object.keys(own).length ? own : null;
 }
 
-function viewParams(f, me, limit = rowLimit(f && f.limit)) {
+function viewParams(f, me, limit = rowLimit(f && f.limit), workflows) {
   if (!validViewFilter(f)) throw new Error('invalid view filter');
   // No kinds selected is "any kind we list", never an unconstrained query: nodeTypes: [] is no filter at all to the
   // graph, which answers with images, calls and transcripts that no view can render.
@@ -169,7 +170,7 @@ function viewParams(f, me, limit = rowLimit(f && f.limit)) {
   // A state and an assignee only mean something while tasks are in the selection, which is exactly when those two
   // pills are shown. Applying a hidden filter is how picking People in the Library returned nothing: no person has
   // a task state, so the saved "Inbox, In Progress" quietly emptied the list.
-  if (tasksInScope(f.types)) {
+  if (tasksInScope(f.types, workflows)) {
     if (f.states !== undefined && f.states !== null) p.stateTypes = f.states;
     Object.assign(p, assigneeParams(f.assignee, me));
   }
@@ -296,14 +297,14 @@ function attributeFilters(attributes, now) {
 //     from Meetings therefore names you rather than "whoever is viewing" — correct for a personal search.
 //   - `window: 'week'` becomes a concrete eventTime range at save time: Tana's presets (recent/upcoming/today/past)
 //     are stored as presets, and 'week' is not one of them.
-function filterToSearchQuery(filter = {}, me) {
+function filterToSearchQuery(filter = {}, me, workflows) {
   const q = {};
   const kinds = Array.isArray(filter.types) && filter.types.length ? filter.types : null;
   const { kinds: chosen, typeUris } = splitTypes(kinds);
   if (chosen.length) q.types = [...new Set(chosen.map((k) => KIND_NODE_TYPE[k]).filter(Boolean))];
   if (typeUris.length) q.entityTypeUris = typeUris;
   // the view's rule (viewParams): a state or an assignee is only stored while tasks are in scope
-  const tasks = tasksInScope(filter.types);
+  const tasks = tasksInScope(filter.types, workflows);
   if (tasks && Array.isArray(filter.states) && filter.states.length) q.stateTypes = [...filter.states];
   if (typeof filter.text === 'string' && filter.text.trim()) q.textQuery = filter.text.trim();
   const fields = typeFields(filter);

@@ -4494,6 +4494,15 @@ async function main() {
     assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, types: [RISK], assignee: 'me' }, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], entityTypes: [RISK], limit: 200, sortOptions: UPD, mode: COUNT });
     assert.equal(validViewFilter({ types: ['tana:type:nope'] }), false, 'only a real type uri joins the kinds');
     assert.deepEqual(filterToSearchQuery({ ...VIEW_PRESETS.library, types: [RISK] }, ME), { entityTypeUris: [RISK] }, 'a saved search stores it the way Tana does, without the task filters');
+    // A type with a workflow is a kind of task (main/documents.js workflowTypes): a list of such types alone keeps them,
+    // or a saved search of Orbital Tasks could not leave out the completed ones.
+    const flowParams = viewParams({ ...VIEW_PRESETS.library, types: [RISK], assignee: 'me' }, ME, undefined, new Set([RISK]));
+    assert.deepEqual([flowParams.stateTypes, flowParams.assignedTo], [VIEW_PRESETS.library.states, [ME]], 'a workflow type keeps the state and the assignee');
+    const flowQuery = filterToSearchQuery({ types: [RISK], states: ['open'], assignee: 'me' }, ME, new Set([RISK]));
+    assert.deepEqual(flowQuery, { entityTypeUris: [RISK], stateTypes: ['open'], assignedToViewer: true }, 'and a saved search stores them');
+    assert.deepEqual([searchQueryToFilter(flowQuery, ME).states, searchQueryToFilter(flowQuery, ME).assignee], [['open'], 'me'], 'and reads them back');
+    const OTHER_FLOW = 'tana:type:01m1e3nthqj48b8drqb1fmma9e';
+    assert.equal(viewParams({ types: [RISK, OTHER_FLOW], states: ['open'] }, ME, undefined, new Set([RISK])).stateTypes, undefined, 'one type without a workflow among them: not a list of tasks');
     // A type page's field pills (#type-page): Tana's stored attributes, run as the attributeFilters verified live on Goal.
     const STATUS = RISK + '?attribute=hpgqd4jv', fielded = { types: [RISK], fields: { [STATUS]: { textMatches: [{ value: 'On track' }, { value: 'Unknown' }] } } };
     assert.equal(validViewFilter(fielded), true);

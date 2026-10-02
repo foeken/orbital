@@ -9,7 +9,7 @@ const { readSearch, rowLimit } = require('../sdk/node');
 const { callOf, writeUpOf } = require('../sdk/events');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, pageKey, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveMeetings, resolveTypes, toNode } = require('./rows');
-const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe } = require('./documents');
+const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe, workflowTypes } = require('./documents');
 const { rows: proposalRows } = require('./proposals');
 
 // A space's "content" is the documents it owns (graph query), returned as document Nodes.
@@ -79,7 +79,7 @@ async function searchPreview(filter) {
   if (!validViewFilter(filter)) throw new Error('invalid view filter');
   // A type page is this too (renderer/nodes.js reload), a whole list rather than a preview: it gets a view's 1000 rows.
   // a filter that names a limit (a saved search's pills) gets it; the app's own lists (skills, chats, link targets) keep 1,000
-  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri), filter, filter.limit || 1000); // as the saved page will show it
+  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri, await workflowTypes(filter.types || [])), filter, filter.limit || 1000); // as the saved page will show it
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // The one runner behind both: a stored query's rows, completed ones outside the window dropped. A search scoped to a
