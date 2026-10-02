@@ -130,6 +130,7 @@
       <tr><td>Icons for your types, picked for you</td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
       <tr><td><b>Assign to Agent</b> with Tana</td><td>Nothing: Tana is always there</td></tr>
       <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with Codex or Claude</td><td>The Codex app or CLI, or Claude Code, on this Mac</td></tr>
+      <tr><td><b>Assign to Agent</b> with Dot</td><td>The ChatGPT app on this Mac, and your dot's chat linked once</td></tr>
     </table>
     <div class="tip">The moment you sign in or save a key, Orbital gives every type that has no icon one that fits its name, and does the same for their fields. You see the new glyphs on bullets and chips. An icon you chose yourself, or <b>No icon</b>, is never touched.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>chatgpt</b> <i>→</i><kbd>↩</kbd></span></div>
@@ -212,21 +213,29 @@
   </section>
 
   <section class="topic">
-    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents default agent tana codex claude install">Choose your agents</h2>
-    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows three. <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in.</p>
+    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents default agent tana codex dot claude install chat link">Choose your agents</h2>
+    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows four. <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in. <b>Dot</b> is your dot, OpenAI's always-on assistant: a task for it is a message in your one chat with it, sent from the ChatGPT app.</p>
     <div class="split">
       <div>
-        <p>Run <b>Choose agents …</b> to see all three. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat.</p>
+        <p>Run <b>Choose agents …</b> to see all four. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat.</p>
         <p>Under <b>Default agent</b>, <kbd>↩</kbd> picks the one <b>Assign to Agent</b> starts on. Tana is the default until you choose another. Both choices follow you to your other Macs.</p>
       </div>
-      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, Codex on, Claude off, and the default agent"><figcaption>Which agents are on, and which one is the default.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, Codex on, Dot asking for its chat link, Claude off, and the default agent"><figcaption>Which agents are on, and which one is the default.</figcaption></figure>
+    </div>
+    <h3>Link your dot</h3>
+    <div class="split">
+      <div>
+        <p>Dot needs to know which chat is yours, once. Its row says <b>Paste your dot's chat link</b>. In the ChatGPT app, open your dot's chat and copy its link. Then <kbd>↩</kbd> on Dot, paste the link, and <kbd>↩</kbd> on <b>Switch on Dot</b>. The link follows you to your other Macs.</p>
+        <p>When you assign a node to Dot, Orbital opens that chat in ChatGPT with your request and the node's name and link typed in, and presses <kbd>↩</kbd> there for you. Your dot gets it as if you had typed it, and answers where it always does. The message also asks it to add its updates at the end of the task in Tana, each ending with a line <b>Agent status: Working</b>, <b>Completed</b> or <b>Failed</b>, and to leave the task's own status to you. The first time, macOS asks you to allow Orbital under <b>Privacy &amp; Security → Accessibility</b>; until you do, the message waits in ChatGPT for you to press <kbd>↩</kbd>.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-dot-link" alt="Choose agents, Dot: a chat link pasted, and Switch on Dot"><figcaption>Your dot's chat link, pasted once.</figcaption></figure>
     </div>
     <div class="note">Claude runs as your own Claude Code on this Mac, signed in with your own account. Orbital never signs in to Anthropic and never sees a Claude login.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>choose agents</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
 
   <section class="topic">
-    <h2 id="agent" data-short="Assign to Agent" data-k="agent assign unassign prompt robot tana codex claude">Hand a node to an agent</h2>
+    <h2 id="agent" data-short="Assign to Agent" data-k="agent assign unassign prompt robot tana codex dot claude">Hand a node to an agent</h2>
     <p><b>Assign to Agent</b> gives the node you are on to a new task, with the node as its context. You only say what to do with it. Its hint says which agent it goes to.</p>
     <h3>Assign to Agent</h3>
     <p>Run <b>Assign to Agent</b>. The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. With more than one agent on, they are listed under the prompt, the default ticked; <kbd>⇥</kbd> moves between the prompt and that list. The agent's own default model does the work.</p>
@@ -243,12 +252,12 @@
     </ol>
     <figure class="clip wide"><video data-m="ai-assign"></video><figcaption>Assigned: the badge appears beside the title, grey while the task starts, then blue as it works.</figcaption></figure>
     <p>The node now carries the agent badge. Under <b>Group by Responsibility</b> it belongs in the <b>Agent</b> section, but it stays where it is until you press <b>Clean up</b>, so nothing jumps under your pointer. Dropping a task into the Agent section opens the same prompt.</p>
-    <p><b>Unassign from Agent</b> takes the node back at once. The task itself stays where it ran: a Tana chat, a Codex task, a Claude session.</p>
+    <p><b>Unassign from Agent</b> takes the node back at once. The task itself stays where it ran: a Tana chat, a Codex task, a Claude session, a message to your dot.</p>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>assign to agent</b> <i>→</i><kbd>↩</kbd></span>, write a line, then <kbd>⌘↩</kbd>.</div>
   </section>
 
   <section class="topic">
-    <h2 id="states" data-short="The agent badge" data-k="agent pending working waiting needs attention completed badge state">Read the agent badge</h2>
+    <h2 id="states" data-short="The agent badge" data-k="agent pending working waiting needs attention completed sent badge state">Read the agent badge</h2>
     <p>The robot at the end of a row says what its agent's task is doing. Orbital asks every 30 seconds while anything is assigned. The colour and the tooltip say the same thing, so you never need colour alone.</p>
     <figure class="anno wide">
       <img data-m="ai-badges" alt="Six tasks in the Agent section of the Library, each badge in a different state">
@@ -268,7 +277,8 @@
       <li><b>Agent on another Mac</b> Grey. A Claude task lives on the Mac that started it: open it there. Assigning the node here starts a new one on this Mac.</li>
       <li><b>A completed task</b> The badge drops to a grey outline: a record that there was a task.</li>
     </ol>
-    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, a Codex task in Codex, a Claude session in Terminal.</p>
+    <p>A node handed to Dot follows the last <b>Agent status:</b> line in it. Orbital adds <b>Agent status: Working</b> when the message is sent; your dot ends each update with Working, Completed or Failed, and the badge turns blue, green or red with it. The lines are ordinary text in the task, so anyone who opens it in Tana sees them too, and the task's own status stays yours: <b>Agent completed</b> means your turn to look, not done.</p>
+    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, a Codex task in Codex, a Claude session in Terminal, your dot's chat in ChatGPT.</p>
   </section>
 
   <section class="topic">

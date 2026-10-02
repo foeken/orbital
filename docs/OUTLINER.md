@@ -783,9 +783,16 @@ wrong twenty.
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
-  Codex's app-server) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
-  Orbital never signs in to Anthropic). Codex and Claude are offered only once this Mac has them. **Choose agents …**
-  (Settings) lists all three, greyed with what to install when missing: ↩ switches one on or off, and the second group
+  Codex's app-server), **Dot** (the user's dot, OpenAI's always-on agent: a message in their one conversation with it,
+  opened in the ChatGPT app by its `codex://threads/<id>?hostId=durable&prompt=` link and sent by pressing ↩ there
+  through System Events, only while ChatGPT is frontmost; one conversation for every node, so a node keeps no task id,
+  only that Dot has it; since what the dot does next is out of this Mac's reach and Tana's connector offers it only
+  Tana's four statuses, it reports in the node: Orbital adds "Agent status: Working" at the end once the message is
+  sent, the dot ends each update with Working, Completed or Failed, and the badge follows the last such line
+  (main/documents.js `agentStatus`): working, done or broken) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
+  Orbital never signs in to Anthropic). Codex, Dot and Claude are offered only once this Mac has them. **Choose agents …**
+  (Settings) lists all four, greyed with what to install when missing: ↩ switches one on or off, one that needs a paste
+  first (Dot: its chat link, `dotChat`, synced) asks for it on a page of its own, and the second group
   picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent

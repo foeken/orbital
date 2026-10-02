@@ -36,8 +36,8 @@ module.exports = [
   { name: 'ai-prompt', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'assign to agent' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'Draft a one-page brief for each pilot from the notes' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-badges', size: '900x560', setup: [translateOff, { js: "setView('library')" }, { wait: 800 }, agent([['mockdoc1', 'pending'], ['mockdoc2', 'working'], ['mockdoc3', 'waiting'], ['mockdoc4', 'done'], ['mockdoc5', 'broken'], ['mockdoc12', 'done']]), { wait: 600 }], clip: [0, 215, 900, 225] },
   { name: 'ai-agents', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'choose agents' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, blank], clip: pal },
+  { name: 'ai-dot-link', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'choose agents' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'dot' }, { wait: 300 }, { key: '↩' }, { wait: 300 }, { type: 'codex://threads/6f1c2d3e-4b5a-4c7d-8e9f-0a1b2c3d4e5f' }, { wait: 300 }, blank], clip: pal },
   { name: 'ai-codex-rows', setup: [translateOff, open(NOTE), { wait: 400 }, agent([[NOTE, 'working']])], steps: [{ key: '⌘K' }, { type: 'codex' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-link', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'link codex' }, { wait: 300 }, { key: '↩' }, { wait: 300 }, { type: 'codex://threads/3f2a9c1e-7b44-4d0e-9a51-2c8e6f0b7d13' }, { wait: 300 }, blank], clip: pal },
   { name: 'ai-chat-codex', video: true, size: '1000x700', setup: [translateOff, open('tana:chat:mockchat0'), { wait: 900 }], steps: [{ click: '#composerText' }, { type: '@Codex', delay: 80 }, { wait: 500 }, { key: '↓' }, { wait: 300 }, { key: '↩' }, { type: ' what did we decide about the pilots?', delay: 35 }, { wait: 300 }, { key: '↩' }, { wait: 3400 }], hold: 1800, clip: { page: '' } },
 ];
-

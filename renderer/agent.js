@@ -63,9 +63,10 @@ function openAIKeyRows() {
     run: () => run(async () => { await tana.setOpenAIKey(key); closePalette(); }) }];
 }
 // ---- Choose agents ----
-// Every agent the app knows: Tana always on, Codex and Claude greyed with what to install until this Mac has them.
-// ↩ on one switches it on or off; the second group picks the default, the agent Assign to Agent starts on. The lists
-// are main's, and each answer is the new list, so the page redraws from what was stored.
+// Every agent the app knows: Tana always on, Codex, Dot and Claude greyed with what to install until this Mac has them.
+// ↩ on one switches it on or off; one that needs something pasted first (Dot: its chat link) asks for it on a page of
+// its own. The second group picks the default, the agent Assign to Agent starts on. The lists are main's, and each
+// answer is the new list, so the page redraws from what was stored.
 const AGENTS_GROUP = 'Agents · ↩ switches one on or off', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
 // the chat's @agents follow the same switches: read again here, since this page is left out of its own settings:changed
 const agentsApply = (call) => run(async () => {
@@ -75,10 +76,11 @@ const agentsApply = (call) => run(async () => {
   renderPalette(); renderSoon();
 });
 function agentsRows(q) {
+  const asks = (a) => !!a.setup && !a.enabled; // switching it on starts with the paste it asked for
   const rows = agentList.map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
-    hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
+    hint: a.id === 'tana' ? 'Always on' : asks(a) ? a.setup : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
     // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
-    disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
+    disabled: a.id === 'tana' || (!a.installed && !a.enabled && !asks(a)), run: () => (asks(a) ? openAgentSetup(a) : agentsApply(() => tana.enableAgent(a.id, !a.enabled))) }));
   for (const a of agentsOn()) rows.push({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
     run: () => agentsApply(() => tana.setDefaultAgent(a.id)) });
   return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
@@ -86,6 +88,21 @@ function agentsRows(q) {
 function openAgentsPalette() {
   loadAgentList().then(() => { if (palMode === 'agents') renderPalette(); });
   openPage('agents', 'Choose agents', { rows: agentsRows, back: BACK_TO_COMMANDS });
+}
+// The paste an agent asks for before it can be switched on: main reads it (the agent knows its own shape) and refuses
+// what it cannot use, and the agent comes back on Choose agents, switched on.
+let agentSetupCtx = null; // the agent the paste is for, while this page is up
+function agentSetupRows(q, typed) {
+  const a = agentSetupCtx, group = a.label + ' · ' + a.setup;
+  if (!typed.trim()) return [{ group, icon: a.icon, label: a.setup, disabled: true }];
+  return [{ group, icon: a.icon, label: 'Switch on ' + a.label, keepOpen: true, run: () => run(async () => {
+    agentList = await tana.enableAgent(a.id, true, typed.trim());
+    openAgentsPalette();
+  }) }];
+}
+function openAgentSetup(a) {
+  agentSetupCtx = a;
+  openPage('agentSetup', a.id === 'dot' ? 'codex://threads/…' : a.setup, { rows: agentSetupRows, back: openAgentsPalette, typed: true });
 }
 // ---- linking a node to a task that already exists in an agent's app (#143) ----
 // Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, Claude's session is its id. Main reads the
