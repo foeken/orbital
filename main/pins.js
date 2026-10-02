@@ -17,7 +17,7 @@ function weekTitle(d) {
   return 'Week ' + Math.ceil(((t - Date.UTC(year, 0, 1)) / 864e5 + 1) / 7) + ' (' + year + ')';
 }
 // A plain document beside the day nodes, like today's node and with no link between them.
-// findOnly (demo mode, renderer/state.js): the existing node or a refusal, never a write.
+// findOnly (a lookup: Save view, the Timeline, demo mode in renderer/state.js): the existing node or null, never a write.
 // The day and week nodes are yours: found among the documents you made, since a colleague's node with the same title is
 // theirs, and a search that fails is an error rather than "there is none", which made a second one in your Tana. The
 // text index lists a new document seconds late, so one made here is remembered for the session (#393).
@@ -39,10 +39,8 @@ async function weekNode(date = new Date(), findOnly = false) {
   const title = weekTitle(date);
   // Searched without the bracketed year, which is punctuation to a text index; the match below is the exact title.
   const existing = await ownNode(title, title.split(' (')[0]);
-  if (!existing && findOnly) throw new Error(DEMO_READ_ONLY);
-  return existing || makeOwn(title);
+  return existing || (findOnly ? null : makeOwn(title));
 }
-const DEMO_READ_ONLY = 'Demo mode is on: nothing is saved to Tana';
 const pinTarget = (target) => { if (target !== 'sidebar' && target !== 'today') throw new Error('pin target must be sidebar or today: ' + target); return target; };
 
 // Sidebar pins as Nodes, in sidebar order; pinned items we cannot subscribe (spaces, types, ...) are skipped quietly.
@@ -124,12 +122,12 @@ async function nodePin(hubId, uri, on) {
   return pins.items(doc).map((p) => p.uri);
 }
 // offset 0 is today, 1 tomorrow, or a 'YYYY-MM-DD' day (a date mention's): the document titled with that date, pinned to it.
-// findOnly (demo mode): the existing node as it is, unpinned or not, and a refusal where one would have been created.
+// findOnly (a lookup): the existing node as it is, unpinned or not, and null where one would have been created.
 async function todayNode(offset = 0, findOnly = false) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const date = typeof offset === 'string' ? offset : today(offset);
   const existing = await ownNode(date, date);
-  if (findOnly) { if (existing) return existing.id; throw new Error(DEMO_READ_ONLY); }
+  if (findOnly) return existing ? existing.id : null;
   if (existing) {
     const pinnedDates = await pins.dates(S.client.sync, S.me.userUri, existing.id).catch(() => []);
     if (!pinnedDates.includes(date)) await setPin(existing.id, 'today', true, date);
@@ -154,7 +152,7 @@ const ipc = {
   // so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
   // A 'YYYY-MM-DD' day instead of the offset is the page a date mention opens.
   'doc:todayNode': (_e, offset, findOnly) => todayNode(isDateUri('tana:plaindate:' + offset) ? offset : offset === 1 ? 1 : 0, findOnly === true),
-  'doc:weekNode': async (_e, findOnly) => (await weekNode(new Date(), findOnly === true)).id,
+  'doc:weekNode': async (_e, findOnly) => (await weekNode(new Date(), findOnly === true))?.id ?? null,
 };
 
 module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinnedUris, pinnedDates, pinHubs, pinTree, pinState, setPin, nodePin, todayNode, ipc };
