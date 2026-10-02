@@ -31,7 +31,8 @@ From fastest to slowest. Each catches what the one before it cannot.
    renderer function and run it against a fake DOM. Most were written after one bug and guard that bug.
    `scripts/renderer-check.js` also holds the **API contract**: every call `preload.js` hands the page is either refused in
    demo mode (`DEMO_WRITES`, renderer/state.js) or listed as writing no content (`DEMO_SAFE`), and either answered by the
-   mock or listed in `NOT_MOCKED`. A new call fails until both are decided.
+   mock or listed in `NOT_MOCKED`. A new call fails until both are decided. Demo mode lets the synced settings through on
+   purpose (view filters, hidden titles, agents, preferences): they are settings, not content.
 2. **`npm run flows`** (about 20 s, Chromium on the mock, `scripts/flow-check.js`). Whole journeys in the real page, each on a
    fresh page that fails on any uncaught error, unhandled rejection or `console.error`:
    - sensitive titles stay hidden on every page, in Cmd+K, in tooltips, labels and the window title;
@@ -44,7 +45,7 @@ From fastest to slowest. Each catches what the one before it cannot.
 
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; CI runs it on every PR.
-3. **iPhone UI tests** (about a minute, `ios/OrbitalUITests`, landing with #681). The app on `-sample`, driven by the labels VoiceOver reads; the
+3. **iPhone UI tests** (about a minute, `ios/OrbitalUITests`). The app on `-sample`, driven by the labels VoiceOver reads; the
    iOS workflow runs them on a simulator when `ios/`, `sdk/` or `main/` change. `scripts/ios-engine-check.js` covers the engine.
 4. **The running app**, only for what the mock cannot reach: main's live subscriptions, real Tana answers, a restart.
    Read-only first (`node scripts/platform-cli.js`), escalated. Say in the PR what was and was not tried there.
@@ -78,6 +79,4 @@ the same dependency-free DevTools protocol as `shoot.js` and the manual. Worth a
 - A sweep invariant in `sdk-check`: after every page closes, the fake SyncService holds no subscription (#436, #452).
 - Stale Cmd+K results while typing.
 - The gaps in `NOT_MOCKED`: `indentMany`, `outdentMany`, `pasteMarkdown`, `archiveDocument`, `taskTypes`.
-- Demo mode lets the synced settings through (`setViewFilter`, `addFilter`, `setMcpHidden`, `enableAgent`, `setPref`): they write the
-  settings document in Tana, not content. Decide whether "nothing is saved to Tana" covers them.
 - The iPhone engine's privacy: `ios-engine-check` could assert a sensitive row reaches Swift without its title (#659).

@@ -425,7 +425,8 @@ async function mockCreationPermissionCheck() {
 }
 
 // Every call preload.js hands the page is decided twice, so a new one cannot slip past either. Demo mode refuses it
-// (DEMO_WRITES, renderer/state.js) or it writes no content to Tana (DEMO_SAFE); reviews found sendChat, translateTo and
+// (DEMO_WRITES, renderer/state.js) or it writes no content to Tana (DEMO_SAFE: the synced settings count as settings, not
+// content, so filters, hidden titles, agents and preferences stay changeable in demo mode); reviews found sendChat, translateTo and
 // the date-node creators missing from DEMO_WRITES. And the mock answers it or NOT_MOCKED says it does not; a mock that
 // fell behind broke the manual's scenes (#671, #607). A new call fails here until it is put in one list of each pair.
 // docs/TESTING.md has the reasoning.
