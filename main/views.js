@@ -8,7 +8,7 @@ const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completed
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView, rowLimit } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { agentIds, createDocument, creatorOf, document, forgetOwners, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe } = require('./documents');
+const { agentIds, createDocument, creatorOf, document, forgetOwners, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe, workflowTypes } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
 const settings = require('./settings');
@@ -42,7 +42,7 @@ async function viewRows(id, filter) {
   if (!S.client) return { nodes: [], truncated: false };
   const f = effectiveFilter(id, filter);
   if (!validViewFilter(f)) throw new Error('invalid view filter');
-  const result = await S.client.graph.listNodes(viewParams(f, S.me.userUri));
+  const result = await S.client.graph.listNodes(viewParams(f, S.me.userUri, undefined, await workflowTypes(f.types || [])));
   const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');
   const rules = hiddenRules();
   let nodes = result.nodes.filter((n) => !(docsWithoutTasks && idKind(n.id) === 'text' && n.state && n.state.type))
@@ -188,7 +188,7 @@ function searchTitle(id, filter) {
 async function searchCreate(id, title) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const filter = viewFilter(id); // throws on an unknown view before anything is created
-  const query = filterToSearchQuery(filter, S.me && S.me.userUri);
+  const query = filterToSearchQuery(filter, S.me && S.me.userUri, await workflowTypes(filter.types || []));
   const name = typeof title === 'string' && title.trim() ? title.trim() : searchTitle(id, filter);
   return createDocument(name, { kind: 'search', query, view: { completedWithin: filter.completedWithin, audience: filter.audience, limit: filter.limit } });
 }
@@ -527,10 +527,11 @@ const ipc = {
       display: searchDisplay(arrangement.display),
     };
   }),
-  'search:setFilter': (_e, id, filter, sort, group, display) => {
+  'search:setFilter': async (_e, id, filter, sort, group, display) => {
     if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
+    const flows = await workflowTypes(filter.types || []);
     return mut(id, (doc) => {
-      setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri));
+      setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri, flows));
       setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin, audience: filter.audience, limit: filter.limit }); // saved together: one press, one state of the page
     });
   },

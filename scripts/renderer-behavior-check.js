@@ -2446,7 +2446,10 @@ function runPaletteSkipCheck() {
   const emptyText = vm.runInNewContext(`
     const TIMELINE_PAGE = 'orbital:timeline', INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', SEARCH_ID = 'tana:search:';
     const isTypeDoc = (n) => n.id.startsWith('tana:type:'), hotkeys = {}, DEFAULT_HOTKEYS = { createTask: '⇧⌘Space' };
-    const filters = new Map([['tana:search:mine', { types: ['tasks'] }], ['tana:search:meet', { types: ['meetings'] }]]);
+    const typeListCache = [{ uri: 'tana:type:flow', workflow: true }, { uri: 'tana:type:risk', workflow: false }];
+    const filters = new Map([['tana:search:mine', { types: ['tasks'] }], ['tana:search:meet', { types: ['meetings'] }],
+      ['tana:search:flow', { types: ['tana:type:flow'] }], ['tana:search:risk', { types: ['tana:type:flow', 'tana:type:risk'] }]]);
+    ${sourceLine('const isTypeId =')}
     ${sourceLine('const isSearchDoc =')}
     ${sourceLine('const isChatPage =')}
     ${sourceLine('const hotkeyFor =')}
@@ -2457,6 +2460,9 @@ function runPaletteSkipCheck() {
   assert.match(emptyText.text('orbital:timeline'), /^Nothing yet\./, 'an empty Timeline says what shows up there');
   assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⇧⌘Space creates a task.', 'an empty My Tasks names the key that makes one');
   assert.equal(emptyText.text('tana:search:meet'), 'Nothing matches.', 'a search that lists no tasks does not');
+  // a workflow type's documents are tasks, so a search of it alone is a list of tasks: its Status and Assigned to pills show
+  assert.equal(emptyText.text('tana:search:flow'), 'Nothing matches. ⇧⌘Space creates a task.', 'a search of a workflow type lists tasks');
+  assert.equal(emptyText.text('tana:search:risk'), 'Nothing matches.', 'one that also names a type without a workflow does not');
   assert.equal(emptyText.text('tana:text:doc'), 'No content', 'a document still has no content');
   assert.match(emptyText.text('tana:chat:c'), /^No messages yet\./, 'an empty chat points at its composer');
   emptyText.record('⌃⌥T');

@@ -350,7 +350,17 @@ async function typeList() {
   // ponytail: one page of 200 (ListNodes has no paging); a workspace had 10 on 2026-09-26. Page by createTimeMin if one outgrows it.
   const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 });
   nodes.forEach(rememberType);
-  return nodes.map((t) => ({ uri: t.id, title: t.title || '', hue: hueOf(t) })).sort((a, b) => a.title.localeCompare(b.title));
+  const flows = await workflowTypes(nodes.map((t) => t.id)); // the Type pill: a list of these alone is a list of tasks
+  return nodes.map((t) => ({ uri: t.id, title: t.title || '', hue: hueOf(t), workflow: flows.has(t.id) })).sort((a, b) => a.title.localeCompare(b.title));
+}
+// Which of these types have a workflow (data.workflowUri): their documents are tasks, so a list of them alone keeps the
+// Status and Assigned to filters (sdk/query.js tasksInScope). The graph's typeDef does not say, so each type is read.
+// ponytail: remembered for the session, as the phone does (ios/engine listsTasks); a type given a workflow later counts after a relaunch.
+const workflowKnown = new Map(); // type uri -> has a workflow
+async function workflowTypes(uris = []) {
+  const types = [...new Set(uris)].filter((u) => typeof u === 'string' && TYPE_URI.test(u));
+  await Promise.all(types.filter((u) => !workflowKnown.has(u)).map((u) => document(u).then((d) => workflowKnown.set(u, !!readNode(d).workflowUri), () => {}))); // unread: asked again next time
+  return new Set(types.filter((u) => workflowKnown.get(u)));
 }
 async function setType(id, typeUri) {
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -1390,4 +1400,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

@@ -160,7 +160,8 @@ const fieldOrder = (key) => {
 // Responsibility is about your tasks, and leaves out every row that is not yours: with no tasks in the filter (only
 // Risk picked in the Type pill, #139) it would hide the other people's risks, so such a list is not sectioned and the
 // Group menu does not offer it. The choice is kept: ticking Tasks again brings the sections back.
-const tasksInFilter = (f) => !f || !f.types || f.types.includes('tasks');
+// A list of workspace types that all have a workflow is a list of tasks too (sdk/query.js tasksInScope): typeList says which.
+const tasksInFilter = (f) => !f || !f.types || f.types.includes('tasks') || (!!f.types.length && f.types.every((t) => isTypeId(t) && !!((typeListCache || []).find((x) => x.uri === t) || {}).workflow));
 const groupBy = () => { const g = groupOf(pillKey()); return g === 'responsibility' && !tasksInFilter(filters.get(pillKey())) ? 'none' : g; };
 // A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
 // blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
