@@ -1,5 +1,5 @@
 'use strict';
-// The icon a type or a saved search is drawn with (a search's since #521). Tana has nowhere to keep an icon — `appearance` holds an image uri and a hue and
+// The icon a type, a saved search (#521) or one document is drawn with. Tana has nowhere to keep an icon — `appearance` holds an image uri and a hue and
 // nothing else (docs/sdk/05-gotchas.md) — and an SVG does not belong in somebody else's CRDT, so the choice is kept
 // here, app-local, the way sensitive marks and agent assignments are: one setting, type uri -> Nucleo label. A type's
 // field is kept in the same setting under its own key ("<type uri>?attribute=<key>"), since the field belongs to the type.
@@ -63,8 +63,9 @@ const typeIcons = () => Object.entries(stored())
 // Choosing one: a label from the set, or null to go back to the generic type glyph. Stored under the type, so every
 // document of that type follows it. The generic glyph is kept as a null entry rather than no entry: it is a choice
 // too, and fillTypeIcons only picks for types nobody has chosen for.
+// A document (tana:text:) can take one of its own too, which it wears instead of its type's (main/rows.js plainRow).
 function setTypeIcon(typeUri, name) {
-  if (typeof typeUri !== 'string' || !/^tana:(type:[0-9a-z]{26}(\?attribute=[0-9a-z]{8})?|search:[0-9a-z]{26})$/.test(typeUri)) throw new Error('Icons are set on a type, a field or a saved search');
+  if (typeof typeUri !== 'string' || !/^tana:(type:[0-9a-z]{26}(\?attribute=[0-9a-z]{8})?|(search|text):[0-9a-z]{26})$/.test(typeUri)) throw new Error('Icons are set on a type, a field, a saved search or a document');
   const next = { ...stored() };
   if (name == null) next[typeUri] = null;
   else {

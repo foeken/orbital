@@ -255,10 +255,11 @@ function paletteRows(q, typed = q) {
   // the same way, for itself: its row, its page and its line under Searches (#521).
   // On a saved search's page it is the search's, wherever the caret is: its rows are other documents (a goal, a task),
   // which have no icon of their own to set, and the search is what the page is (#551).
-  const iconDoc = !tana.searchIcons || !tana.setTypeIcon ? null : palDoc && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc)) ? palDoc : onSearchPage() ? docOf(zoom.docId) || extra.get(zoom.docId) || { id: zoom.docId, text: titleEl.textContent } : null;
+  // A document takes one for itself, worn instead of its type's; a task keeps its box.
+  const iconDoc = !tana.searchIcons || !tana.setTypeIcon ? null : palDoc && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc) || (DOC_KIND.test(palDoc.id) && isRealId(palDoc.id) && !isTask(palDoc))) ? palDoc : onSearchPage() ? docOf(zoom.docId) || extra.get(zoom.docId) || { id: zoom.docId, text: titleEl.textContent } : null;
   if (iconDoc) {
     const doc = iconDoc;
-    rows.push({ id: 'setIcon', group: doc === palDoc ? docGroup : 'Current page', icon: typeGlyph(doc.id), label: 'Set icon',
+    rows.push({ id: 'setIcon', group: doc === palDoc ? docGroup : 'Current page', icon: iconOf(doc), label: 'Set icon',
       hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
   }
   // And what colour it is here: our own hue or grey for the type, kept with the glyph in the settings document, so

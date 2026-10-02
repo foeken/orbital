@@ -8424,6 +8424,9 @@ async function runSetIconCheck() {
     const pinInfo = null, isRealId = () => true;
     ${sourceLine('const SEARCH_ID =')}
     ${sourceLine('const isSearchDoc =')}
+    ${sourceLine('const isTypeId =')}
+    ${sourceLine('const isTypeDoc =')}
+    ${sourceLine('const isTask =')}
     const accessById = new Map(), loadAccess = () => {}, localDate = () => '2026-09-18', setTheme = () => {};
     const sectionOf = () => null, visibleTags = () => [];
     const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
@@ -8446,6 +8449,7 @@ async function runSetIconCheck() {
     const render = () => {};
     const iconTemplates = new Map(); // the registry drops parsed copies here when markup is replaced
     ${sourceBetween('const customIcons = new Map()', 'const iconSvg = (icon)')}
+    ${sourceLine('const iconOf =')}
     const glyph = (name) => ({ name, label: name.slice(3), svg: '<svg viewBox="0 0 18 18"><path d="M1 1"></path></svg>' });
     let answer = [glyph('nc-rocket'), glyph('nc-flask')], searchFails = null; const asked = [], written = [];
     const tana = { refresh: async () => {}, filters: {}, sensitiveIds: () => {},
@@ -8483,10 +8487,17 @@ async function runSetIconCheck() {
   api.wearing(TYPE, 'nc-rocket');
   assert.deepEqual(plain([api.row().hint, api.row().icon]), ['Chosen', 'nc-rocket'], 'and once one is chosen the row wears it');
   api.wearing(TYPE, null);
-  for (const id of [DOC, 'tana:event:01j0event00000000000000000', 'tana:space:01j0space00000000000000000', 'b12']) {
+  for (const id of ['tana:event:01j0event00000000000000000', 'tana:space:01j0space00000000000000000', 'b12']) {
     api.node({ id, tags: [] });
-    assert.equal(api.row(), undefined, (id.split(':')[1] || 'a block') + ' has no icon to set: the glyph belongs to a type');
+    assert.equal(api.row(), undefined, (id.split(':')[1] || 'a block') + ' has no icon to set');
   }
+  api.node({ id: DOC, kind: 'document', icon: 'task', tags: [] });
+  assert.equal(api.row(), undefined, 'a task keeps its box');
+  api.node({ id: DOC, kind: 'document', icon: 'doc', tags: [] });
+  assert.deepEqual(plain([api.row().label, api.row().icon]), ['Set icon', 'doc'], 'a document offers the row under the glyph it wears now');
+  api.wearing(DOC, 'nc-flask');
+  assert.equal(api.row().icon, 'nc-flask', 'and once it has one of its own, wears it');
+  api.wearing(DOC, null);
   const SEARCH = 'tana:search:01j0search0000000000000000';
   api.node({ id: SEARCH, tags: [] });
   assert.deepEqual(plain([api.row().label, api.row().icon]), ['Set icon', 'search'], 'a saved search offers the row too, under the magnifier it is drawn with (#521)');
