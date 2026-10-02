@@ -45,7 +45,7 @@ const pinch = (x, y, dy) => ({ cdp: 'Input.dispatchMouseEvent', params: { type: 
 module.exports = [
   // ---- the window ----
   { name: 'windows-window', size: '1440x900', layout: anatomy, setup: [open('mockdoc0'), { js: "setView('library')", page: '3' }, open('tana:text:mockai0', '2'), { wait: 900 }, { js: "document.querySelector('[data-trellis-part=\"tab\"][data-view=\"page\"], [data-view=\"page\"][data-trellis-part=\"tab\"]')?.click()", page: 'shell' }], steps: [{ hover: '#title' }, { wait: 500 }] },
-  { name: 'windows-newpane', video: true, setup: [live(), open('mockdoc0'), { wait: 800 }, { click: '#title' }], steps: [{ wait: 300 }, { key: '⌘N' }, { wait: 1800 }] },
+  { name: 'windows-newpane', video: true, setup: [live(), open('mockdoc0'), { wait: 800 }, { click: '#title' }], steps: [{ wait: 300 }, { key: '⇧⌘N' }, { wait: 1800 }] },
   { name: 'windows-float', video: true, setup: [live(), open('mockdoc0'), { wait: 800 }, { click: '#title' }], steps: [{ key: '⌘K' }, { type: 'floating', delay: 70 }, { wait: 300 }, { key: '↩' }, { wait: 1800 }] },
   { name: 'windows-elsewhere', video: true, setup: [live(), open('mockdoc0'), { wait: 800 }, { click: '#title' }], steps: [
     { key: '⌘S' }, { type: 'offsite agenda', delay: 60 }, { wait: 700 }, { caption: '⌘↩ opens it in a new tab' }, { key: '⌘↩' }, { wait: 1700 },

@@ -420,7 +420,7 @@ audience disclosure and preview token are the gate (§14).
 
 **Opening elsewhere** (issues #443, #608): ⌘ opens a place as a new tab in this pane (as browsers and Obsidian do), ⇧ in
 a new pane beside this one (as Roam's and Logseq's sidebar), ⌥ in a new floating pane (renderer/palette.js `elsewhere` and
-`openElsewhere`, which stores the place under the id main gives the new page, as ⌘N does). In Cmd+K
+`openElsewhere`, which stores the place under the id main gives the new page, as ⇧⌘N does). In Cmd+K
 and Cmd+S that is ⌘↩ / ⇧↩ / ⌥↩, or ⌘- / ⇧- / ⌥-click, on a row that opens a place (search results, saved searches, types, Today and This week:
 rows with `opens`, an id or a function finding it), also when pressed before the search has answered; while an @ link
 is being made ⌘↩ still creates. On the outline it is ⌘-click / ⇧-click / ⌥-click on a bullet, and ⌥-click on a
@@ -579,8 +579,8 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Today | ⌃⇧D |
 | Reload (the window, every pane) | ⌘R |
 | Go to Home | ⇧⌘H |
-| New window | ⌥⌘N |
-| New pane (to the right) | ⌘N |
+| New window | ⌃⌘N |
+| New tab / New pane (to the right) / New floating pane | ⌘N / ⇧⌘N / ⌥⌘N (the modifiers that open a link there) |
 | Next / Previous pane | ⌘/ / ⇧⌘/ |
 | Next / Previous tab | ⇧⌘] / ⇧⌘[ |
 | Maximize or restore pane | ⌥⌘↓ |
@@ -1206,7 +1206,7 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   the Timeline what shows up there, Notifications and Proposals that there are none, a saved search or a type's page
   "Nothing matches.", with the Quick Add Task key after it when the search lists tasks, so an empty My Tasks is where the
   first task starts. Only a document says "No content".
-- **Windows** (issue #137). File › New Window, ⌥⌘N or Cmd+K New window opens another outliner window 24px down and right
+- **Windows** (issue #137). File › New Window, ⌃⌘N or Cmd+K New window opens another outliner window 24px down and right
   of the front one, with one page on the place the page that asked was on (`window:new` answers its id). A page's id is
   unique across windows, since its view and place are stored under it. Only the main window (`win.primary`, the first;
   the one left when it closes) saves its bounds and layout, so another window never leaves the next launch its single
@@ -1222,8 +1222,9 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **One pane per place** (issue #533):
   a document, a node or a view already shown in another pane of the window is not opened a second time; going there (a
   row, a link, ⌘K, ⌘-click) takes you to that pane instead (renderer/edit.js `inOtherPane`, over the places each page tells
-  the shell). The Library alone may be open in any number of panes. **New pane** (⌘N) opens the Library in a
-  page to the right of yours, **New tab** one in your panel and **Float pane** a floating one: main gives the id
+  the shell). The Library alone may be open in any number of panes. **New pane** (⇧⌘N) opens the Library in a
+  page to the right of yours, **New tab** (⌘N) one in your panel and **New floating pane** (⌥⌘N) a floating one, the
+  same modifiers ⌘-, ⇧- and ⌥-click open a link with: main gives the id
   (`api.splitWindow(where)` answers it) and tells the shell (`shell:command` 'open'), the page that asked stores its
   view and place under that id, and the new page opens there and takes the keyboard. Panes are docked, tabbed or
   floating and dragged between those by their tabs; the tab's title is the page's (renderer/render.js `tellTitle`

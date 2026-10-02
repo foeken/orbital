@@ -50,7 +50,7 @@ function restoredBounds(saved, workAreas) {
   return onScreen ? { x, y, width, height } : DEFAULT_WINDOW;
 }
 
-// Outliner windows (issue #137): ⌥⌘N opens another, a little down and right of the one in front. A window is a
+// Outliner windows (issue #137): ⌃⌘N opens another, a little down and right of the one in front. A window is a
 // BaseWindow with one WebContentsView, its shell (shell.html), which lays out its pages with Trellis: any number, docked,
 // tabbed or floating (issue #159), each an iframe of index.html and a whole outliner with its own view, place and
 // history. Main keys a page by its frame (main/state.js pageOf), so a page beside another is to it what a page in
@@ -131,7 +131,7 @@ function addPage(e) {
     // the window's keys to the shell, and the shell's to this page's panel and iframe
     focus: () => { const wc = win.shell.webContents; if (!wc.isDestroyed()) wc.focus(); tellShell(win, 'focus', page.side); } };
   win.panes.push(page);
-  // ⌘N gives the new page the keys: it is the page ⌘W and a notification click aim at from now, even before its
+  // A new pane, tab or floating pane gives the new page the keys: it is the page ⌘W and a notification click aim at from now, even before its
   // document has taken the focus (the shell focuses its iframe once it has loaded).
   if (win.focusNext === side) { win.focusNext = null; S.win = win; S.pane = page; }
   return page;
@@ -150,7 +150,7 @@ function fit(win) {
   const { width, height } = win.getContentBounds();
   for (const v of [win.shell, win.overlay]) if (v) v.setBounds({ x: 0, y: 0, width, height });
 }
-// A new page (⌘N to the right, a tab, a floating pane; the Work View's '2'), beside the page that asked (from). Its id
+// A new page (⇧⌘N to the right, ⌘N a tab, ⌥⌘N a floating pane; the Work View's '2'), beside the page that asked (from). Its id
 // is main's to give, so the page asking can store its place under it first; the layout report that follows saves it.
 function openPage(win, { id = freeId(), where = 'right', from, focus = true }) {
   win.pages.push(id);
@@ -303,7 +303,7 @@ function createMenu() {
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
     ] },
-    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'Alt+CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => closeFront(BaseWindow.getFocusedWindow()) }] },
+    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'Ctrl+Cmd+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => closeFront(BaseWindow.getFocusedWindow()) }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -313,9 +313,9 @@ function createMenu() {
 ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (page) page.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id, page ? page.id : 'main') : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))); });
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
-// the menu shows ⌥⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
+// the menu shows ⌃⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
 ipcMain.handle('window:new', (e, start) => { const id = createWindow().pages[0]; setStart(id, { view: null, place: null, ...(start && typeof start === 'object' ? start : {}) }); return id; });
-// ⌘N (issue #159) and Cmd+K New tab / New floating pane: a new page beside the one that asked, taking the keys. Answers the
+// New tab ⌘N, New pane ⇧⌘N, New floating pane ⌥⌘N (issue #159; the modifiers ⌘-, ⇧- and ⌥-click open a link with): a new page beside the one that asked, taking the keys. Answers the
 // new page's id, so the page asking can store its view and place under it for the new one to open on.
 ipcMain.handle('window:split', (e, where, start) => {
   const page = pageOf(e);

@@ -64,7 +64,7 @@ contextBridge.exposeInMainWorld('api', {
   setDemoMode: (on) => ipcRenderer.send('app:demoMode', on === true), // demo mode is on in the outliner: main posts no notification banners
   weekNode: (findOnly) => ipcRenderer.invoke('doc:weekNode', findOnly === true), // the "Week 38 (2026)" document (ISO week), created if missing unless findOnly; not linked to the day nodes
   newWindow: (start) => ipcRenderer.invoke('window:new', start), // another outliner window (File › New Window), starting on { view, place }
-  // a new page in this window, taking the keys: 'right' of this one (⌘N, the default), a 'tab' beside it, or 'float'.
+  // a new page in this window, taking the keys: 'right' of this one (⇧⌘N), a 'tab' (⌘N) beside it, or 'float' (⌥⌘N).
   // Answers its id (null signed out), for storing its view and place under before it loads.
   splitWindow: (where, start) => ipcRenderer.invoke('window:split', where, start),
   windowLayout: () => ipcRenderer.invoke('window:layout'), // this window's layout (Trellis's document), null for one page never rearranged

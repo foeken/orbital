@@ -296,7 +296,7 @@ function toggleReference(node) {
 // ---- one pane per place (#533) ----
 // A place already on screen in another pane of this window is gone to there rather than opened a second time: each page
 // tells the shell where it is (tellPlace) and the shell hands every page the others' places (renderer/app.js 'panes').
-// The Library alone may be open in any number of panes, and New pane (⌘N) opens one.
+// The Library alone may be open in any number of panes, and New pane (⇧⌘N) opens one.
 const placeKey = (docId, nodeId) => (docId ? String(docId) + (nodeId ? '#' + nodeId : '') : null);
 const viewKey = (id) => (id === 'library' ? null : 'view:' + id);
 let otherPanes = {}; // place key -> the pane (the shell's view id) showing it

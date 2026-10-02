@@ -1213,7 +1213,7 @@ async function main() {
     assert.equal(shown.panes.length, 2);
     assert.equal(ask('window:getSide', frame('twin', '2')).side, '3', 'an id already taken gets the smallest free one');
     shown.panes.pop();
-    // ⌘N: a new page to the right of the one that asked, with an id main gives and the keys. It starts where the asking
+    // ⇧⌘N: a new page to the right of the one that asked, with an id main gives and the keys. It starts where the asking
     // page is: main hands it that view and place with its id, for its preload to store before the page reads them.
     assert.equal(ask('window:split', rightPage, 'right', { view: 'library', place: '{}', other: 'x' }), '3');
     assert.deepEqual(toShell.splice(0), [['open', { id: '3', where: 'right', from: '2', focus: true }]]);
