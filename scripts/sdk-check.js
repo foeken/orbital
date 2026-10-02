@@ -843,9 +843,9 @@ async function main() {
     assert.deepEqual([shown.model,shown.effort,shown.quickModel],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT,ai.QUICK_MODEL],'and the Settings page shows the default too');
     assert.equal(settings.isSynced('openaiApiKey'),false,'which never leaves this machine');
     for (const k of ['aiModel','aiEffort','aiQuickModel','aiQuickEffort']) settings.set(k,undefined);
-    // the remote list of models both apps choose from (main/ai.js MODELS_URL): a hidden one left out, each with its thinking levels
-    assert.deepEqual(ai.fromCatalogue({models:[{slug:'gpt-6-sol',visibility:'list',supported_reasoning_levels:[{effort:'low'},{effort:'ultra'}]},{slug:'codex-auto-review',visibility:'hide',supported_reasoning_levels:[{effort:'low'}]}]}),
-      [{id:'gpt-6-sol',efforts:['low','ultra']}],'the models to choose from, as ChatGPT lists them');
+    // the models to choose from, as the app-server lists them (model/list): a hidden one left out, each with its thinking levels
+    assert.deepEqual(ai.fromCatalogue({data:[{id:'gpt-5.6-luna',model:'gpt-5.6-luna',hidden:false,supportedReasoningEfforts:[{reasoningEffort:'low'},{reasoningEffort:'max'}]},{id:'codex-auto-review',model:'codex-auto-review',hidden:true,supportedReasoningEfforts:[{reasoningEffort:'low'}]}],nextCursor:null}),
+      [{id:'gpt-5.6-luna',efforts:['low','max']}],'the models to choose from, as the app-server answering lists them');
     // What comes back, in the shapes the Responses API answers in, and the answers that are not a name.
     assert.equal(await ai.suggestDiscussWith('t',fetchWith({ok:true,status:200,json:async()=>({output_text:'Heads of Tech'})})),'Heads of Tech','the convenience field is read too');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('  \u201CStan and Peter\u201D  '))),'Stan and Peter','trimmed, and the quotes a model likes to add are taken off');

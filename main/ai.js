@@ -452,28 +452,23 @@ async function translate(texts, to = 'English', fetchImpl = globalThis.fetch, us
 }
 
 // The Regular AI (an image read) and the Quick AI (every other question), each a model and an effort (ask above), chosen on the Settings page (renderer/settings.js) and
-// synced. The choices are what the account can ask: signed in with ChatGPT, ChatGPT's own list of Codex models
-// (MODELS_URL, the one the iPhone reads too: ios/Orbital/Translator.swift ChatGPT.models), each with the reasoning efforts it
-// takes, read once per sign-in; otherwise the three below. The page is input from outside the process: only listed choices are stored, and a
+// synced. The choices are what the account can ask: signed in with ChatGPT, the models the app-server answering here
+// lists (model/list), each with the reasoning efforts it takes, read once per sign-in; otherwise the ones below. Not
+// ChatGPT's catalogue at a high client_version: that lists models this Codex is refused (gpt-6-luna on 0.154.0, live
+// 2026-10-02: "not supported when using Codex with a ChatGPT account"). The page is input from outside the process: only listed choices are stored, and a
 // synced value off the list (an older build's, another Mac's) reads as the default, for the page and every question alike.
 // ponytail: an API key keeps the three below; GET /v1/models when someone uses one
 const EFFORTS = ['low', 'medium', 'high'];
 const BUILT_IN = [QUICK_MODEL, 'gpt-5.6-luna', DEFAULT_MODEL, 'gpt-6-sol'].map((id) => ({ id, efforts: EFFORTS }));
-// client_version decides which models a client is offered: a high one lists every model, and the questions here are plain
-// Responses requests any listed model answers (a Codex of this Mac's version would not yet see gpt-6.1-sol, live 2026-10-01)
-const MODELS_URL = 'https://chatgpt.com/backend-api/codex/models?client_version=99.0.0';
-const fromCatalogue = (json) => (json?.models || []).filter((m) => m && m.slug && m.visibility !== 'hide')
-  .map((m) => ({ id: m.slug, efforts: (m.supported_reasoning_levels || []).map((l) => l?.effort).filter(Boolean) }));
+// ponytail: the first page of model/list only; follow nextCursor if a list ever outgrows it
+const fromCatalogue = (answer) => (answer?.data || []).filter((m) => m && m.model && !m.hidden)
+  .map((m) => ({ id: m.model, efforts: (m.supportedReasoningEfforts || []).map((e) => e?.reasoningEffort).filter(Boolean) }));
 let listed = null; // { rpc, list }: the app-server whose sign-in it was read with, so another sign-in reads it again
-async function modelList(userData, signedIn, fetchImpl = globalThis.fetch) {
+async function modelList(userData, signedIn) {
   if (!signedIn) return BUILT_IN;
   const rpc = await ensureChatGPT(userData);
   if (!rpc) return BUILT_IN;
-  if (listed?.rpc !== rpc) listed = { rpc, list: rpc.call('getAuthStatus', { includeToken: true, refreshToken: false }).then(async ({ authToken } = {}) => {
-    const res = await fetchImpl(MODELS_URL, { headers: { authorization: 'Bearer ' + authToken } });
-    if (!res.ok) throw new Error('model list: HTTP ' + res.status);
-    return fromCatalogue(await res.json());
-  }) };
+  if (listed?.rpc !== rpc) listed = { rpc, list: rpc.call('model/list', {}).then(fromCatalogue) };
   const list = await listed.list.catch(() => []);
   if (!list.length) listed = null; // asked again next time
   return list.length ? list : BUILT_IN;
@@ -496,4 +491,4 @@ async function setOption(key, value, userData) {
   return options(userData);
 }
 
-module.exports = { fromCatalogue, MODELS_URL, options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, QUICK_MODEL, QUICK_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };
+module.exports = { fromCatalogue, options, setOption, suggestDiscussWith, classifyType, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, QUICK_MODEL, QUICK_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };
