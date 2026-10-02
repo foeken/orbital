@@ -148,8 +148,9 @@ extension ChatGPT {
         return try JSONDecoder().decode(Out.self, from: data).text
     }
 
-    // The models to choose from: ChatGPT's own list of Codex models, the one the Mac reads too (main/ai.js MODELS_URL, the
-    // same high client_version so every model is listed), each with the thinking levels it takes. nil without a sign-in.
+    // The models to choose from: ChatGPT's own list of Codex models at a high client_version, so every model is listed,
+    // each with the thinking levels it takes. nil without a sign-in. (The Mac asks its Codex app-server instead, main/ai.js
+    // modelList: that catalogue offered it models its Codex was refused.)
     struct Model: Identifiable {
         let id: String; let efforts: [String]
         var levels: [String] { efforts.isEmpty ? ["low", "medium", "high"] : efforts } // a model listed without its levels takes these, as main/ai.js EFFORTS
