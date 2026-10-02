@@ -532,7 +532,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   A page on your day node for today or your node for this week (known by id, found at Save view and never made: renderer/palette.js
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
-- **Settings**: Open settings (⌘,, the Settings page: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
+- **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
@@ -779,7 +779,7 @@ wrong twenty.
   failing that, a standalone `codex-app-server` downloaded on first sign-in and kept only when `codesign` shows
   OpenAI's Developer ID. Two synced choices, each a model and an effort (main/settings.js AI_KEYS): the Quick AI (`aiQuickModel`,
   `aiQuickEffort`) for Auto-translate, Discuss with, Auto-pick type and the icon pick, and the Regular AI (`aiModel`,
-  `aiEffort`) for reading an image, starting on `gpt-6-luna` at low and `gpt-5.6-terra` at low (main/ai.js QUICK_MODEL, DEFAULT_MODEL), set on the Settings page.
+  `aiEffort`) for reading an image, starting on `gpt-6-luna` at low and `gpt-5.6-terra` at low (main/ai.js QUICK_MODEL, DEFAULT_MODEL), set in the Settings window.
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
@@ -792,7 +792,9 @@ wrong twenty.
   (main/documents.js `agentStatus`): working, done or broken) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
   Orbital never signs in to Anthropic). Codex, Dot and Claude are offered only once this Mac has them. **Choose agents …**
   (Settings) lists all four, greyed with what to install when missing: ↩ switches one on or off, one that needs a paste
-  first (Dot: its chat link, `dotChat`, synced) asks for it on a page of its own, and the second group
+  first asks for it on a page of its own (Dot's chat link, `dotChat`, synced, but only where the ChatGPT app on this Mac
+  has no dot: main/agents/dot.js `appDot` reads the dot that app picked, `primary-aeon-selection-v1` in
+  `~/.codex/.codex-global-state.json`, stores it as `dotChat` and follows it when it changes), and the second group
   picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
@@ -1050,8 +1052,9 @@ A row is picked up by its marker and dropped where a line says it will land (ren
 Notifications, Proposals and the Timeline are pages of the app's own: an `orbital:` id no Tana node can have, known to
 the renderer from boot (`extra` with `appPage: true`), so `goTo`, Back and Recent reach them without asking main. Their
 rows are `outline:children` of that id. They have no pills, filter, draft row, presence room or pins, and Cmd+K offers
-nothing about them as documents. Each is a place the app remembers, so ⌘R on one reloads onto it. Settings is an
-app page too, known and remembered the same way, but it has no rows: the renderer draws its controls itself (below).
+nothing about them as documents. Each is a place the app remembers, so ⌘R on one reloads onto it. Settings is not one:
+it is a window of its own (below), and a pane or Recent that an older version left on `orbital:settings` lets go of it
+at load (renderer/edit.js), so nothing asks Tana for that id.
 
 - **Notifications** (issue #18; `orbital:notifications`, Views after Inbox, hinted "2 unread"). main/inbox.js reads the
   user's `tana:user-inbox` document (sdk/inbox.js) into one read-only row per notification, newest first. A row is
@@ -1123,23 +1126,32 @@ app page too, known and remembered the same way, but it has no rows: the rendere
     the two days before, and reads three days further back when its end comes within a screen (an
     IntersectionObserver on "Show three more days", which also works pressed and reads "Loading…"), up to 120 pages
     (`setPages`); a page too short to scroll keeps reading until it fills the screen. Watched nodes last updated before
-    the window are not asked for history. No filters.
-- **Settings** (issue #672; `orbital:settings`, renderer/settings.js). Opened by Cmd+K **Open settings** (first under
-  Settings), its key ⌘, (`DEFAULT_HOTKEYS`, recordable) and the app menu's **Settings…** (main.js `createMenu`, which shows
-  ⌘, but leaves the key to the row and asks the shell to run the row in the front pane: shell.js `action`). It opens
-  in a pane to the right (`openElsewhere('right')`); one already on screen in another pane is focused instead. The page
-  draws no rows and asks main for no children (renderer/render.js): it is sections of field rows (`.fields`), each a
-  glyph, a grey label and its value, and only lasting choices are on it — General (Theme: Light, Dark, System; Home, set
-  with ⌘K Set as Home), Language (Auto-translate), AI (ChatGPT sign-in and, only while one is stored, the OpenAI API key, marked **This Mac**; Models
-  (the Quick and the Regular AI, each a model and its thinking, the synced settings.AI_KEYS, changed on ⌘K Choose models, where ⇥
-  switches between the two) over `ai:options`/`ai:setOption`,
-  which take only main/ai.js's own lists; Agents, the ones that are on, over `agentList`) and Lists (hidden titles, Show MCP chats). A control changes its
-  setting the way its Cmd+K row does, mostly by running that row (`runAction`: Auto-translate, ChatGPT, the API key,
-  Choose agents and hidden titles open their palette pages). The page reads its values again when the palette closes,
-  when a setting arrives from another page or Mac, on a global refresh
-  (hidden titles edited elsewhere) and when the ChatGPT status changes; only the newest read lands, and a redraw gives
-  the keyboard back to the control that had it (drawSettings). Text size, shortcuts, the
-  sensitive eye and demo mode keep their own keys and rows and are not on it.
+- **Settings** (issue #672; settings.html, settings.js, settings.css). A window of its own, as a Mac app's settings
+  are (main.js `openSettings`): opened by Cmd+K **Open settings** (first under Settings), its key ⌘, (`DEFAULT_HOTKEYS`,
+  recordable; renderer/settings.js asks main over `settings:open`) and the app menu's **Settings…** (main.js `createMenu`,
+  which shows ⌘, and opens the window itself). One at a time: asked again, the open one comes forward. 600px wide, not
+  resizable, minimisable or zoomable, closed with ⌘W; the window takes the height of the tab it shows (`settings:size`,
+  from its own page only, animated once it is on screen). The title bar is the page's (`hiddenInset`, the traffic lights
+  inset at 18,13): the tab's name as the title, then a toolbar of four tabs, a grey glyph over a label, the one you are on
+  tinted with the accent and remembered on this Mac (localStorage `settingsTab`). Under it, groups of rows, each a grey
+  glyph, a label with a grey line under it, and its control at the right, in macOS's sizes: a segmented control, pop-up
+  buttons (their menu is macOS's own), push buttons and switches.
+  - **General**: Theme (Light, Dark, System), Auto-translate (Off or a language) and a footnote on what syncs.
+  - **AI**: the ChatGPT sign-in (Sign In… opens the browser and shows the code to enter, with Copy Code and Cancel; Sign
+    Out), the OpenAI API key only while one is stored (Remove), both **On this Mac**; the Quick and the Regular AI, a model
+    and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
+  - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
+    another Mac switched it on) and the default agent. One that needs a paste first (Dot's chat link, when the ChatGPT app
+    here has no dot; `setup` in `agentList`) opens a field under its row instead of switching on: ↩ or Switch On hands the paste to `enableAgent`,
+    main refuses what it cannot read, and only then is it on; Esc or another tab drops the field.
+  - **Lists**: the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
+    it) and Show MCP chats.
+  Every control makes the call its Cmd+K row makes, so a choice made there and one made here are the same write. Main
+  sends the window what it sends the pages (main/state.js `send`, main/settings.js `tellOthers`): a setting changed in a
+  page, another window or another Mac reads the window again, and only the newest answer for each part lands (`load`).
+  A redraw gives the keyboard back to the control that had it. Demo mode (this Mac's, from localStorage) masks the
+  email and the hidden titles with renderer/segments.js. Text size, shortcuts, the sensitive eye and demo mode keep
+  their own keys and rows and are not in it, and neither is Home, which ⌘K Set as Home sets where you stand.
 
 ### Chats
 

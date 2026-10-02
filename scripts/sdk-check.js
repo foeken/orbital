@@ -37,7 +37,7 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
+  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; this.once = this.on; this.loadFile = (file) => { this.file = file; }; this.sizes = []; this.setContentSize = (...size) => { this.sizes.push(size); }; this.isVisible = () => false; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } },
     clipboard: { items: [], read: async () => electron.clipboard.items } }; // items: what a check puts on it, as clipboard.read() hands them over
   const context = vm.createContext({
@@ -58,7 +58,10 @@ function mainHelpers(childProcess) {
   };
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
-  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
+  const loaded = load(nodePath.join(root, 'main.js'));
+  // the ChatGPT app's state file, where Dot finds your dot (main/agents/dot.js appDot): none in the checks unless one hands it one
+  load(nodePath.join(root, 'main', 'agents', 'dot.js')).dot.stateFile = nodePath.join(require('node:os').tmpdir(), 'orbital-check-no-codex-state.json');
+  return { ...loaded, handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
 }
 
 async function main() {
@@ -1323,6 +1326,17 @@ async function main() {
     assert.ok(made.at(-1).isDestroyed(), 'signing out closes every open canvas window, so no board outlives its session');
     await openCanvas(null, canvas);
     assert.equal(made.length, 3, 'and the canvas opens anew after the next sign-in');
+    // ⌘, opens Orbital's Settings window, one at a time, and it takes the height its own page measures (main.js openSettings)
+    const openSettings = backend.handlers.get('settings:open'), sizeSettings = backend.handlers.get('settings:size'), before = made.length;
+    await openSettings(); await openSettings();
+    const sw = made.at(-1);
+    assert.deepEqual([made.length - before, sw.focused, sw.file.endsWith('settings.html'), sw.options.resizable], [1, 1, true, false], 'one Settings window, of a fixed size, brought forward when asked again');
+    sizeSettings({ sender: sw.webContents }, 333.4); sizeSettings({ sender: {} }, 999); sizeSettings({ sender: sw.webContents }, 'tall');
+    assert.deepEqual(sw.sizes, [[600, 333, false]], 'it takes the height its page measured, and nothing else sets it');
+    sw.webContents.handlers['window:closed']();
+    await openSettings();
+    assert.equal(made.length - before, 2, 'and a closed one opens anew');
+    made.at(-1).webContents.handlers['window:closed']();
     // It is app plumbing rather than a note, so no list or search offers it.
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: doc.id, title: settings.TITLE, updateTime: '2026-09-20T10:00:00Z' }, { id: 'tana:text:' + ulid(), title: 'A real note', updateTime: '2026-09-20T10:00:00Z' }] }) } } });
     const rows = await backend.handlers.get('view:list')(null, 'library', { types: ['docs'], states: null, assignee: 'anyone' });
@@ -3810,6 +3824,15 @@ async function main() {
       assert.equal(agent.setTask(NODE, 'codex'), null, 'an agent with a task per node still needs its id');
       settings.set('dotChat', undefined);
       await assert.rejects(dt.start({ nodeUri: NODE, prompt: 'Do it' }), /Link your dot first/, 'with no conversation linked nothing is sent');
+      // nobody has to find that link: the ChatGPT app on this Mac knows which conversation is your dot, and Dot reads it there
+      const nodePath = require("node:path"), stateDir = fs.mkdtempSync(nodePath.join(require('node:os').tmpdir(), 'dot-state-')), noState = dt.stateFile, FOUND = '6abf3de2-abe4-81a4-9796-1c3d5e7f9a0b';
+      dt.stateFile = nodePath.join(stateDir, 'state.json');
+      fs.writeFileSync(dt.stateFile, JSON.stringify({ 'electron-persisted-atom-state': { 'primary-aeon-selection-v1': { response: { selection: { thread_id: FOUND, available: true }, profile: { active_root_thread_id: FOUND } } } } }));
+      await dt.open();
+      assert.deepEqual([settings.get('dotChat'), backend.opened.at(-1)], [FOUND, 'codex://threads/' + FOUND + '?hostId=durable'], 'the app\'s dot is found, opened, and stored to follow you');
+      settings.set('dotChat', undefined); fs.writeFileSync(dt.stateFile, '{ half written'); fs.utimesSync(dt.stateFile, new Date(), new Date(Date.now() + 5000));
+      await assert.rejects(dt.start({ nodeUri: NODE, prompt: 'Do it' }), /Link your dot first/, 'a state file that cannot be read finds nothing, and the link can still be pasted');
+      dt.stateFile = noState; fs.rmSync(stateDir, { recursive: true });
       agent.setEnabled('dot', false); dt.available = () => false;
       assert.equal(settings.get('defaultAgent'), null, 'switched off, it stops being the default');
     }

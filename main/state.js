@@ -23,6 +23,7 @@ const S = {
   activeView: 'inbox', activeFilter: undefined, refreshing: null, refreshTimer: null, historyBusy: false, typesLoaded: null, membersLoaded: null,
   refresh: null, // views.js sets this: the one place a refresh runs, reached from here so documents.js and pins.js need no cycle
   writer: null, // the page whose typed text is being written right now (main.js typed): its echo is its own (#265)
+  settings: null, // the Settings window while it is open (main.js openSettings)
   badge: null, // main.js sets this: the app icon's badge belongs to electron, the counting to views.js (same split as refresh)
 };
 const subscribed = new Set(); // ids the view refresh subscribed, which its list sweep lets go of (reads: documents.js onDemand)
@@ -81,7 +82,11 @@ function pageOf(e) {
   return null;
 }
 const pageKey = (e) => (pageOf(e) || { id: 'main' }).id; // what a per-page watch is keyed by; 'main' for the checks and overlays
-function send(channel, ...payload) { for (const p of pages()) p.send(channel, ...payload); }
+// and the Settings window (main.js openSettings), which shows some of that shared state too
+function send(channel, ...payload) {
+  for (const p of pages()) p.send(channel, ...payload);
+  if (S.settings && !S.settings.isDestroyed()) S.settings.webContents.send(channel, ...payload);
+}
 // One document changed. The page that typed the change already shows it, so it hears it as its own and skips
 // re-reading the page (renderer/app.js); every other page, the other half of a split included, hears it as before (#265).
 function sendChanged(docId, info) { for (const p of pages()) p.send('outline:changed', docId, p === S.writer ? { ...info, own: true } : info); }

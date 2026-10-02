@@ -23,13 +23,36 @@ const updateCard = (then = '') => kit.overlay('update.html', 'f.contentWindow.ev
 const updating = "go.hidden = later.hidden = true; $('updateProgress').hidden = false; progress({ got: 47.2e6, total: 122.9e6 });";
 const hidePage = { js: "(() => { const s = document.createElement('style'); s.textContent = 'body > * { visibility: hidden !important; }'; document.head.append(s); })()" }; // the card alone over the scrim
 const card = [310, 76, 660, 556];
+// Orbital's Settings window (settings.html) is a window of its own (main.js openSettings), which the runner has none of:
+// an iframe in a drawn window frame over the app does what main does, as page 'settings', handed what main would answer
+// (fictional: Robin's sign-in, four agents with Dot found in the ChatGPT app and Claude not installed, three hidden titles). Its traffic lights are drawn
+// where main.js insets them; close is the only live one, as a settings window has it.
+const SETTINGS_API = "start({ prefs: { theme: new URLSearchParams(location.search).get('theme') }, translate: () => {}, filters: async () => ['Daily standup', 'Lunch*', 'Focus time'],"
+  + " aiOptions: async () => ({ models: ['gpt-6-luna', 'gpt-6-sol', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'medium', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'medium', 'high', 'xhigh'] }),"
+  + " chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@example.com' }), mcpHidden: async () => true, setMcpHidden: async (on) => on, setPref: async () => {},"
+  + " agentList: async () => window.agents, enableAgent: async (id, on, setup) => (window.agents = window.agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a))), setDefaultAgent: async () => window.agents,"
+  + " settingsSize: (h) => { frameElement.style.height = h + 'px'; } }); 1";
+const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
+  { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: false, missing: 'Install the ChatGPT app', setup: '' },
+  { id: 'claude', label: 'Claude', icon: 'robot', installed: false, enabled: false, missing: 'Install Claude Code' }];
+const settingsWindow = (tab = 'general') => ({ page: 'shell', js: "(() => { const theme = window.shell.state().theme, w = document.createElement('div'), f = document.createElement('iframe'), s = document.createElement('style');"
+  + " s.textContent = '#mc-settings { position: fixed; z-index: 9999; left: 50%; top: 70px; width: 600px; transform: translateX(-50%); border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 0.5px rgba(0,0,0,.3), 0 22px 70px rgba(0,0,0,.35); }"
+  + " #mc-settings iframe { display: block; width: 600px; height: 300px; border: 0; } #mc-settings i { position: absolute; top: 13px; width: 12px; height: 12px; border-radius: 50%; background: rgba(128,128,128,.35); } #mc-settings i:first-of-type { background: #ff5f57; }';"
+  + " w.id = 'mc-settings'; w.innerHTML = '<i style=\"left:18px\"></i><i style=\"left:38px\"></i><i style=\"left:58px\"></i>'; document.head.append(s);"
+  + " localStorage.setItem('settingsTab', " + JSON.stringify(tab) + "); f.src = 'settings.html?side=settings&theme=' + theme; w.prepend(f); document.body.append(w);"
+  + " return new Promise((r) => { f.onload = () => { f.contentWindow.agents = " + JSON.stringify(AGENTS) + "; f.contentWindow.eval(" + JSON.stringify(SETTINGS_API) + "); setTimeout(r, 300); }; }); })()" });
+const settingsFrame = { sel: '#mc-settings', page: 'shell', pad: 36 };
 
 
 module.exports = [
-  // ---- the Settings page: ⌘, opens it in a pane to the right (live: real Trellis panes); its first new page is '4' ----
-  { name: 'settings-panel', size: '1440x900', setup: [kit.live(), open('mockdoc0'), { wait: 800 }, { click: '#title' }], steps: [{ key: '⌘,' }, { wait: 2400 }] },
-  { name: 'settings-open', video: true, size: '1440x900', setup: [kit.live(), open('mockdoc0'), { wait: 800 }, { click: '#title' }], steps: [
-    { key: '⌘K' }, { type: 'settings', delay: 70 }, { wait: 400 }, { key: '↩' }, { wait: 2000 }, { click: '.settings .sact', text: 'Choose …', page: '4' }, { wait: 1400 }, { key: '⇥' }, { wait: 1600 }] },
+  // ---- the Settings window: ⌘, opens it over the app (drawn here as main would, settingsWindow above) ----
+  { name: 'settings-window', size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }], steps: [settingsWindow('general'), { wait: 300 }], clip: settingsFrame },
+  { name: 'settings-ai', size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }], steps: [settingsWindow('ai'), { wait: 300 }], clip: settingsFrame },
+  { name: 'settings-tabs', video: true, size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }, settingsWindow('general'), { wait: 300 }], steps: [
+    { click: '[data-key="tab/ai"]', page: 'settings' }, { wait: 1200 }, { click: '[data-key="tab/agents"]', page: 'settings' }, { wait: 900 },
+    { click: '[data-key="agent/codex"]', page: 'settings' }, { wait: 700 }, { click: '[data-key="agent/codex"]', page: 'settings' }, { wait: 700 },
+    { click: '[data-key="agent/dot"]', page: 'settings' }, { wait: 1000 },
+    { click: '[data-key="tab/lists"]', page: 'settings' }, { wait: 1000 }], clip: [300, 40, 680, 620] },
   // ---- how it looks ----
   { name: 'settings-theme', video: true, size: '1000x640', setup: [stubs, open('mockdoc0'), { wait: 900 }, { click: '#title' }], steps: [
     { key: '⌘K' }, { type: 'toggle dark', delay: 60 }, { wait: 400 }, { key: '↩' }, { wait: 1300 }, { key: '⌘K' }, { type: 'toggle light', delay: 60 }, { wait: 400 }, { key: '↩' }, { wait: 1000 }], clip: { page: '' } },

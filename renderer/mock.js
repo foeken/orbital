@@ -303,7 +303,7 @@ function mockApi() {
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true },
-    { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: false, enabled: false, isDefault: false, missing: 'Install the ChatGPT app', setup: 'Paste your dot\'s chat link' },
+    { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: false, isDefault: false, missing: 'Install the ChatGPT app', setup: '' }, // found in the ChatGPT app (main/agents/dot.js appDot)
     { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true }];
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
@@ -682,7 +682,7 @@ function mockApi() {
       return !!on;
     },
     linkAgentTask: async (docId) => { codexAssigned.add(docId); return true; },
-    // the agents (main/agent.js): Tana and Codex on, Dot waiting for its chat link, Claude installed and off, enough to draw their Cmd+K pages
+    // the agents (main/agent.js): Tana and Codex on, Dot found and off, Claude installed and off, enough to draw their Cmd+K pages
     agentList: async () => mockAgents.map((a) => ({ ...a })),
     enableAgent: async (id, on, setup) => {
       const a = mockAgents.find((x) => x.id === id);

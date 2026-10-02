@@ -6,6 +6,13 @@ const vm = require('node:vm');
 
 const { files, source, tops } = require('./renderer-source');
 
+// window.api, from contextBridge, is a global that cannot be declared again: a page with a top-level `api` of its own
+// dies at load on "Identifier 'api' has already been declared", which a browser without the bridge never shows (the
+// Settings window did, before it shipped). The renderer calls it `tana`; the pages main loads on their own pick theirs.
+for (const file of ['help.js', 'task.js', 'update.js', 'settings.js']) {
+  assert.doesNotMatch(fs.readFileSync(require('node:path').join(__dirname, '..', file), 'utf8'), /^(?:const|let|var|function|class)\s+api\b/m, file + ' declares a top-level api, which window.api already is');
+}
+assert.ok(!tops.some(({ names }) => names.includes('api')), 'the renderer declares a top-level api, which window.api already is');
 // Every element the renderer looks up by id with $('…') is in index.html: a lookup of one that was taken out returns
 // null, and the first use at load throws, which stops every script after it and leaves the window loading forever
 // (a Refresh button removed from index.html while pills.js still wired it up, 2026-09-29).
@@ -439,10 +446,10 @@ const DEMO_SAFE = new Set([
   'mcpHidden', 'meetingInfo', 'members', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
   'onChatGPTStatus', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
   'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
-  'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'pinDates', 'pinIds',
+  'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',
   'pinState', 'prefs', 'prefsNow', 'presenceClose', 'presenceOpen', 'presenceSet', 'presenceView', 'previewMove',
   'refresh', 'related', 'relatedWatch', 'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
-  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent',
+  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'settingsSize',
   'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
   'status', 'suggestDiscussWith', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
   'translate', 'typeIcons', 'typeList', 'updateInfo', 'viewFilter', 'viewList', 'weekNode', 'windowLayout',
@@ -453,8 +460,8 @@ const DEMO_SAFE = new Set([
 const NOT_MOCKED = new Set([
   'activateWindow', 'agentStatus', 'archiveDocument', 'cancelUpload', 'checkUpdates', 'claimHelp', 'closeOverlay',
   'exportPdf', 'indentMany', 'installUpdate', 'onChatGPTStatus', 'onNotifyOpen', 'onOverlayClosed', 'onPresenceAsk',
-  'onReleased', 'onSettings', 'onTimelinePart', 'onUpdateProgress', 'openOverlay', 'outdentMany', 'pasteMarkdown',
-  'prefs', 'prefsNow', 'rememberPlace', 'setDemoMode', 'setPref', 'summaryUri', 'taskTypes', 'updateInfo',
+  'onReleased', 'onSettings', 'onTimelinePart', 'onUpdateProgress', 'openOverlay', 'openSettings', 'outdentMany', 'pasteMarkdown',
+  'prefs', 'prefsNow', 'rememberPlace', 'setDemoMode', 'setPref', 'settingsSize', 'summaryUri', 'taskTypes', 'updateInfo',
   'windowTheme', 'zoom']);
 function apiContractCheck() {
   const preload = fs.readFileSync(require.resolve('../preload.js'), 'utf8');

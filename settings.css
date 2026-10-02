@@ -1,0 +1,88 @@
+/* Orbital's Settings window (settings.html, settings.js): a Mac app's settings as macOS 27 draws them — a toolbar of
+   tabs under the title, grouped rows of a label and its control, pop-up buttons, switches and a segmented control in the
+   system's proportions. Grey glyphs as everywhere in Orbital; the accent marks the tab you are on and what is switched on. */
+:root {
+  --bg: #f6f6f6; --box: #fff; --boxline: rgba(0, 0, 0, 0.07); --sep: rgba(0, 0, 0, 0.08); --fg: #1d1d1f; --muted: #6e6e73;
+  --accent: #007aff; --ctl: #fff; --ctlline: rgba(0, 0, 0, 0.13); --sel: rgba(0, 0, 0, 0.07); --red: #d70015; --stripe: rgba(0, 0, 0, 0.03);
+  --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23007aff'/%3E%3Cpath d='M5 6.5 8 4l3 2.5M5 9.5 8 12l3-2.5' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --bg: #262628; --box: rgba(255, 255, 255, 0.055); --boxline: rgba(255, 255, 255, 0.06); --sep: rgba(255, 255, 255, 0.08); --fg: #f2f2f4; --muted: #a1a1a6;
+  --accent: #0a84ff; --ctl: rgba(255, 255, 255, 0.12); --ctlline: rgba(255, 255, 255, 0.08); --sel: rgba(255, 255, 255, 0.1); --red: #ff6961; --stripe: rgba(255, 255, 255, 0.04);
+  --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%230a84ff'/%3E%3Cpath d='M5 6.5 8 4l3 2.5M5 9.5 8 12l3-2.5' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  color-scheme: dark;
+}
+/* Increase Contrast: the hairlines and control edges a step firmer, as the system's own get */
+@media (prefers-contrast: more) {
+  :root { --boxline: rgba(0, 0, 0, 0.3); --ctlline: rgba(0, 0, 0, 0.45); --sep: rgba(0, 0, 0, 0.25); }
+  [data-theme="dark"] { --boxline: rgba(255, 255, 255, 0.3); --ctlline: rgba(255, 255, 255, 0.45); --sep: rgba(255, 255, 255, 0.25); }
+}
+html, body { margin: 0; background: var(--bg); }
+body { font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: var(--fg); -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none; cursor: default; overflow: hidden; }
+button, select, input { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 1px; }
+button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: none; }
+
+/* the title bar and its toolbar: the window is dragged by it; the traffic lights sit inset at its top left */
+#bar { -webkit-app-region: drag; border-bottom: 1px solid var(--sep); }
+#title { margin: 0; height: 38px; line-height: 38px; font-size: 13px; font-weight: 600; text-align: center; }
+#tabs { display: flex; justify-content: center; gap: 2px; padding: 0 0 10px; }
+.tab { -webkit-app-region: no-drag; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 68px; padding: 5px 0 4px; border: 0; border-radius: 9px; background: none; font-size: 11px; color: var(--muted); }
+.tab svg { width: 22px; height: 22px; }
+.tab.on { background: var(--sel); color: var(--fg); }
+.tab.on svg { color: var(--accent); }
+
+/* the tab: groups of rows, each a glyph, a label (a grey line under it) and its control at the right */
+#pane { padding: 20px 22px 22px; }
+.head { margin: 18px 10px 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.head:first-child { margin-top: 0; }
+.head .note { font-weight: 400; }
+.box { border-radius: 10px; background: var(--box); box-shadow: 0 0 0 0.5px var(--boxline); }
+.box + .box { margin-top: 12px; }
+.row { position: relative; display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 12px; box-sizing: border-box; }
+.row + .row::before { content: ''; position: absolute; top: 0; left: 12px; right: 12px; border-top: 1px solid var(--sep); }
+.row .icon { flex: none; width: 18px; height: 18px; margin-right: 2px; color: var(--muted); }
+.row .icon svg { width: 18px; height: 18px; }
+.row .label { flex: 1; min-width: 0; }
+.sub { margin-top: 1px; font-size: 11px; color: var(--muted); }
+.row.dim .icon, .row.dim .label { opacity: 0.5; }
+.row.block { display: block; padding: 10px 12px; }
+.row.block .sub { margin: 7px 2px 0; }
+/* the field an agent's switch opens when it needs a paste first (Dot's chat link), under its row and in line with its label */
+.row.field { gap: 8px; min-height: 0; padding: 0 12px 10px 40px; }
+.row.field::before { display: none; }
+.link { flex: 1; min-width: 0; height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline); font-size: 12px; -webkit-user-select: text; user-select: text; }
+.foot, .error { margin: 12px 10px 0; font-size: 11px; color: var(--muted); }
+.error { color: var(--red); }
+
+/* the controls, in the system's sizes: a push button, a pop-up button (its menu is macOS's own), a segmented control, a switch */
+.btn { flex: none; height: 22px; padding: 0 11px; border: 0; border-radius: 6px; background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline), 0 1px 1.5px rgba(0, 0, 0, 0.08); white-space: nowrap; }
+.btn:active { background: var(--sel); }
+.popup { flex: none; max-width: 220px; height: 22px; padding: 0 26px 0 9px; border: 0; border-radius: 6px; appearance: none; background: var(--chev) right 3px center / 16px 16px no-repeat, var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline), 0 1px 1.5px rgba(0, 0, 0, 0.08); text-overflow: ellipsis; }
+.popup:disabled { opacity: 0.5; }
+.seg { display: inline-flex; flex: none; padding: 2px; border-radius: 7px; background: var(--sel); }
+.seg button { padding: 2px 12px; border: 0; border-radius: 5px; background: none; font-size: 12px; }
+.seg button.on { background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline), 0 1px 2px rgba(0, 0, 0, 0.12); }
+[data-theme="dark"] .seg button.on { background: rgba(255, 255, 255, 0.22); }
+.switch { position: relative; flex: none; width: 32px; height: 18px; padding: 0; border: 0; border-radius: 9px; background: rgba(0, 0, 0, 0.12); transition: background 0.15s ease-out; }
+[data-theme="dark"] .switch { background: rgba(255, 255, 255, 0.16); }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: left 0.15s ease-out; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { left: 16px; }
+.switch:disabled { opacity: 0.5; }
+.switch:disabled[aria-checked="true"] { opacity: 1; background: color-mix(in srgb, var(--accent) 45%, var(--bg)); } /* on and locked (Tana): the knob stays white */
+@media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
+
+/* a list with + and − under it, as a Mac app edits one: click a title to select it, − or ⌫ unhides it */
+.listbox { overflow: hidden; border-radius: 7px; background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline); }
+[data-theme="dark"] .listbox { background: rgba(0, 0, 0, 0.15); }
+.items { max-height: 168px; overflow-y: auto; }
+.item, .add, .empty { display: block; width: 100%; box-sizing: border-box; padding: 4px 9px; border: 0; background: none; font-size: 12.5px; text-align: left; }
+.item:nth-child(even) { background: var(--stripe); }
+.item.on { background: var(--accent); color: #fff; }
+.add { outline: none; -webkit-user-select: text; user-select: text; }
+.empty { color: var(--muted); }
+.bar { display: flex; border-top: 1px solid var(--sep); }
+.tool { width: 26px; height: 22px; padding: 0; border: 0; border-right: 1px solid var(--sep); background: none; font-size: 15px; line-height: 20px; }
+.tool:disabled { color: var(--muted); opacity: 0.5; }

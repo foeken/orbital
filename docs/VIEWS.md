@@ -242,5 +242,4 @@ Tana on every read, sent in parts on `timeline:part` while the rest is read, and
 query over your meetings. Each of the three is an `orbital:` id the renderer knows from boot (`extra` with
 `appPage: true`), so `goTo`, Back and Recent reach it without asking main for a node.
 
-Settings (issue #672, `orbital:settings`) is an app page too, but of controls rather than rows: the renderer draws it
-itself (renderer/settings.js) and never asks `outline:children` for it.
+Settings is not an app page: it is a window of its own (settings.html; docs/OUTLINER.md Settings).
