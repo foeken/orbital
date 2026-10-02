@@ -697,9 +697,10 @@ wrong twenty.
   Waiting holds your own tasks set to Waiting — your part done, the next step someone else's — and takes a waiting
   task from Pinned too, since it is not today's to do.
 - **Waiting** is the app's fifth status (Set status to Waiting, the Waiting section, a drop on it). Tana has only its
-  four, so a waiting task is Tana's In Progress in one workflow of ours with the one state "Waiting"
-  (main/documents.js `waitingState`: made on first use in the Library, its uri kept in the settings document as
-  `waiting`; main/settings.js `stateName` reads it back for the Mac and the phone). Tana keeps it, but its web app
+  four, so a waiting task is Tana's In Progress in the workspace's one Waiting workflow, with the one state "Waiting"
+  (main/settings.js `waitingWorkflow`: its id computed from the workspace's, its state's id fixed, so every Orbital user
+  in the workspace shares it; main/documents.js `waitingState` makes it in the Library the first time the index has
+  none; `stateName` reads a task back for the Mac and the phone). Tana keeps it, but its web app
   shows such a task as In Progress and offers only its four (2026-10-02); choosing one there clears Waiting. The Status
   filter leaves it out (to a search it is In Progress), and Today's Tasks leaves waiting tasks out.
 - **Tracking** — work you made and handed to somebody else — opens short: on the rows updated in the last three days,

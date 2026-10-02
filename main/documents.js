@@ -602,18 +602,21 @@ function builtRow(doc, n) {
   });
 }
 
-// Waiting (main/settings.js stateName): the one workflow of ours with the one state, made the first time a task is put
-// in it — in the Library, written as Tana writes a type's board (sdk/node.js initDocument) — and kept in the settings
-// document, so every machine and the phone read the same one.
-// ponytail: two machines that both make one before either has synced keep the first writer's; tasks put in the other
-// read as In Progress until set again. A lookup of your workflows by name would close that if it ever happens.
+// Waiting (main/settings.js stateName): the workspace's one workflow with the one state, its id computed rather than
+// stored, so it only has to exist. The index is asked once a session; when it has none it is made — in the Library, which
+// everyone in the workspace reads, written as Tana writes a type's board (sdk/node.js initDocument). Never made blind:
+// sync applies an initializer to a document that exists too, which would add a state to it every session. Two made at
+// once (or one the index has not caught up with) write the same keys with the same values, so they merge into one.
+let waitingKnown = null; // the workflow this session has seen or made
 async function waitingState() {
-  const known = settings.get('waiting');
-  if (known && /^tana:workflow:[0-9a-z]{26}$/.test(known.workflowUri) && known.workflowStateId) return known;
-  if (!S.client) throw new Error(NOT_CONNECTED);
-  const workflowUri = 'tana:workflow:' + ulid(), workflowStateId = require('node:crypto').randomUUID();
-  if (!await subscribe(workflowUri, (loro) => initDocument(loro, '', S.me.userUri, { kind: 'workflow', states: [{ id: workflowStateId, name: 'Waiting' }] }))) throw new Error(S.status.error || 'could not create the Waiting workflow');
-  return settings.set('waiting', { workflowUri, workflowStateId });
+  const workflowUri = settings.waitingWorkflow(), workflowStateId = settings.WAITING_STATE;
+  if (!S.client || !workflowUri) throw new Error(NOT_CONNECTED);
+  if (waitingKnown !== workflowUri) {
+    const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: [workflowUri], limit: 1 });
+    if (!nodes.length && !await subscribe(workflowUri, (loro) => initDocument(loro, '', S.me.userUri, { kind: 'workflow', states: [{ id: workflowStateId, name: 'Waiting' }] }))) throw new Error(S.status.error || 'could not create the Waiting workflow');
+    waitingKnown = workflowUri;
+  }
+  return { workflowUri, workflowStateId };
 }
 // Set status, for one task or a selection: Tana's four, or Waiting, which is In Progress in that workflow.
 async function setStates(ids, state) {

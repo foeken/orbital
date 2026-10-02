@@ -37,14 +37,14 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   assert.strictEqual(arrange([{ ...rows[5], id: 'g' }], { groupBy: 'responsibility' }, { ...c, pinned: new Set(['g']) })[0].group, 'Waiting', 'one you are waiting on leaves Pinned for Waiting');
 }
 
-// The phone's Timeline reads a task in the Waiting workflow as waiting too (stand-ins graphRow, over the settings mirror),
-// which is what keeps it out of Today's Tasks there (main/timeline.js)
+// The phone's Timeline reads a task in the workspace's Waiting workflow as waiting too (stand-ins graphRow, main/settings.js
+// stateName), which is what keeps it out of Today's Tasks there (main/timeline.js)
 {
-  const store = new Map();
-  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i], get length() { return store.size; } } });
-  standIns.setSetting('waiting', { workflowUri: 'tana:workflow:w', workflowStateId: 's' });
-  assert.deepStrictEqual(['tana:workflow:w', 'tana:workflow:other', undefined].map((workflowUri) => standIns.graphRow({ id: 'x', state: { type: 'open', workflowUri } }).stateType), ['waiting', 'open', 'open']);
-  delete globalThis.localStorage;
+  const { S } = require('../main/state'), was = S.me;
+  S.me = { userUri: 'tana:user-profile:me', orgDocUri: 'tana:org:01aaaaaaaaaaaaaaaaaaaaaaaa' };
+  const waiting = 'tana:workflow:' + require('../sdk/chat').deterministicId('orbital:waiting:' + S.me.orgDocUri);
+  assert.deepStrictEqual([waiting, 'tana:workflow:other', undefined].map((workflowUri) => standIns.graphRow({ id: 'x', state: { type: 'open', workflowUri } }).stateType), ['waiting', 'open', 'open']);
+  S.me = was;
 }
 
 // Demo mode (ios/engine/demo.js) masks as the desktop does, with its words: a node's title and an attendee one for one,

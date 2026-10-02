@@ -73,11 +73,11 @@ module.exports = {
     return out;
   },
   generation: () => ns(),
-  // ./rows: a task under a row needs its id, words and state (ios/Orbital/Timeline.swift); Waiting as main/settings.js
-  // stateName names it, read from the mirror below, since settings.js itself is loaded through this file
+  // ./rows: a task under a row needs its id, words and state (ios/Orbital/Timeline.swift), Waiting named as main/settings.js
+  // stateName names it — required when a row is made, since settings.js itself is loaded through this file
   graphRow(n) {
-    const s = n.state || {}, waiting = s.type === 'open' && !!s.workflowUri && s.workflowUri === (module.exports.setting('waiting') || {}).workflowUri;
-    return { id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: s.type === 'closed', stateType: waiting ? 'waiting' : s.type };
+    const s = n.state || {};
+    return { id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: s.type === 'closed', stateType: require('../../main/settings').stateName(s.type, s.workflowUri) };
   },
   toNode: (row) => row,
   rememberNodeHue() {},
