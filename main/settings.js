@@ -40,7 +40,8 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // you, while the key that pays for it stays put. Unset means the defaults in main/ai.js.
 const AI_KEYS = { model: 'aiModel', effort: 'aiEffort', quickModel: 'aiQuickModel', quickEffort: 'aiQuickEffort' };
 // myTasks is which saved search the Work View's right half is (main/views.js myTasks), by id so a rename keeps it.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^agents$/, /^defaultAgent$/, /^codexPrompt$/, /^codexTask$/, /^sensitive$/, /^ai(Quick)?(Model|Effort)$/, /^myTasks$/, /^pref:/];
+// waiting is the one workflow behind the Waiting status (stateName below), so every machine puts tasks in the same one.
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^agents$/, /^defaultAgent$/, /^codexPrompt$/, /^codexTask$/, /^sensitive$/, /^ai(Quick)?(Model|Effort)$/, /^myTasks$/, /^waiting$/, /^pref:/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets
@@ -62,6 +63,12 @@ function load() {
   return cache;
 }
 const get = (key) => load()[key];
+// A task's status as the app names it: Tana's own four, and Waiting — your part done, the next step someone else's.
+// Tana has no such state, but a task's status may name a workflow of its own (stateWorkflowUri, read before its type's),
+// so Waiting is an open task in the one workflow kept under `waiting` (main/documents.js waitingState). Tana keeps it,
+// but its web app shows an untyped task as In Progress and offers only its own four (checked 2026-10-02); choosing one
+// there clears Waiting. The phone reads it as the Mac does (ios/engine), so it lives here, which both of them load.
+const stateName = (type, workflowUri) => (type === 'open' && !!workflowUri && workflowUri === (get('waiting') || {}).workflowUri ? 'waiting' : type);
 function set(key, value) {
   load();
   if (value === undefined) delete cache[key]; else cache[key] = value;
@@ -279,4 +286,4 @@ function tellOthers(from, docId) { // from: the page handle that wrote it (main/
 // the preferences now, asked for once the page listens for settings:changed (renderer/app.js; preload's prefs:snapshot is the load-time copy)
 const ipc = { 'prefs:now': () => prefs() };
 
-module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, appDocIds, isSynced, reset, AI_KEYS, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };
+module.exports = { get, set, stateName, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, appDocIds, isSynced, reset, AI_KEYS, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };

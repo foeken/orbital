@@ -28,14 +28,21 @@ function ulid(now = Date.now()) {
 // task fields); 'task': plus the open state assigned to byUri; 'meeting': a 'tana:event:' document laid out like a
 // Tana-created event (tana:event:01exampley0000000000000000, without the calendar-provider fields), starting at
 // the next half hour for 30 minutes.
-function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri, query, view } = {}) {
-  if (!['doc', 'task', 'meeting', 'chat', 'search', 'type', 'canvas'].includes(kind)) throw new Error('unknown kind ' + kind);
+function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri, query, view, states } = {}) {
+  if (!['doc', 'task', 'meeting', 'chat', 'search', 'type', 'canvas', 'workflow'].includes(kind)) throw new Error('unknown kind ' + kind);
   if (entityTypeUri !== undefined && (!/^tana:type:[0-9a-z]{26}$/.test(entityTypeUri) || kind === 'chat' || kind === 'canvas')) throw new Error('Invalid custom type');
   if (ownerUri !== undefined && !/^tana:space:[0-9a-z]{26}$/.test(ownerUri)) throw new Error('Invalid type home space');
   const data = loro.getMap('data');
-  data.set('type', kind === 'meeting' ? 'event' : ['chat', 'search', 'type', 'canvas'].includes(kind) ? kind : 'text');
+  data.set('type', kind === 'meeting' ? 'event' : ['chat', 'search', 'type', 'canvas', 'workflow'].includes(kind) ? kind : 'text');
   if (entityTypeUri) data.set('entityTypeUri', entityTypeUri);
   if (ownerUri) data.set('ownerUri', ownerUri);
+  // A workflow as Tana keeps one (a type's board, raw dump 2026-10-02): data{type, ownerUri, states}, the states a list
+  // of { id, name } maps, and nothing else — no title, no access fields. One with no ownerUri is a Library workflow.
+  if (kind === 'workflow') {
+    const list = data.setContainer('states', new LoroList());
+    for (const { id, name } of states || []) { const state = list.insertContainer(list.length, new LoroMap()); state.set('id', id); state.set('name', name); }
+    return;
+  }
   data.set('title', title);
   // A type carries none of what a document carries: four real types (raw container dumps, 2026-09-20) hold exactly
   // data{type,title,sharedPinDates,template} — plus instructions and ownerUri when they have them — an empty

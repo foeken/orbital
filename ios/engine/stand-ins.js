@@ -73,8 +73,12 @@ module.exports = {
     return out;
   },
   generation: () => ns(),
-  // ./rows: a task under a row needs its id, words and state (ios/Orbital/Timeline.swift)
-  graphRow: (n) => ({ id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: (n.state && n.state.type) === 'closed', stateType: n.state && n.state.type }),
+  // ./rows: a task under a row needs its id, words and state (ios/Orbital/Timeline.swift); Waiting as main/settings.js
+  // stateName names it, read from the mirror below, since settings.js itself is loaded through this file
+  graphRow(n) {
+    const s = n.state || {}, waiting = s.type === 'open' && !!s.workflowUri && s.workflowUri === (module.exports.setting('waiting') || {}).workflowUri;
+    return { id: n.id, title: n.title || 'Untitled', text: n.title || 'Untitled', done: s.type === 'closed', stateType: waiting ? 'waiting' : s.type };
+  },
   toNode: (row) => row,
   rememberNodeHue() {},
   hm: (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }, // sdk/chat.js hm

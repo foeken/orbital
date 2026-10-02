@@ -2721,6 +2721,32 @@ async function main() {
     console.log('ok  the remembered state gives way to the document once the document has moved on');
   }
 
+  // Waiting (main/documents.js waitingState, main/settings.js stateName): the first task set to it makes the one workflow
+  // of ours, as Tana writes a type's board, and keeps it in the settings; the task is Tana's open in that workflow, and
+  // every row reads it as waiting. Set back to In Progress it is a plain open task again, and the next one reuses the workflow.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const taskId = 'tana:text:' + ulid(), live = new Document(taskId), made = [];
+    live.transact((l) => initDocument(l, 'Chase the vendor', ME, { kind: 'task' }));
+    backend.testRuntime({ me: { userUri: ME }, win: null, activeView: 'library', client: {
+      graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: taskId, title: 'Chase the vendor', state: { type: 'open' }, updateTime: '2026-10-02T12:00:00Z' }], totalCount: 1 }) },
+      sync: { subscribe: async (id, init) => { if (id === taskId) return live; const doc = new Document(id); if (init) doc.transact(init); made.push(doc); return doc; }, unsubscribe: async () => {}, getDocument: () => undefined },
+    } });
+    const rowState = async () => ((await backend.handlers.get('view:list')(null, 'library')).nodes.find((n) => n.id === taskId) || {}).stateType;
+    const flows = () => made.filter((d) => readNode(d).type === 'workflow');
+    await backend.handlers.get('doc:setState')(null, taskId, 'waiting');
+    const [flow] = flows(), kept = backend.settings.get('waiting'), n = readNode(live);
+    assert.deepEqual(workflowStates(flow).map((s) => s.name), ['Waiting'], 'the first Waiting makes a workflow with that one state');
+    assert.deepEqual([kept.workflowUri, kept.workflowStateId], [flow.id, readNode(flow).states[0].id], 'and keeps it in the settings document');
+    assert.deepEqual([n.stateType, n.stateWorkflowUri, n.stateWorkflowStateId], ['open', flow.id, kept.workflowStateId], 'the task is Tana\u2019s open, in that state');
+    assert.equal(await rowState(), 'waiting', 'and its row reads Waiting, even while the index still says In Progress');
+    await backend.handlers.get('doc:setState')(null, taskId, 'open');
+    assert.deepEqual([readNode(live).stateWorkflowUri, await rowState()], [undefined, 'open'], 'In Progress again drops the workflow');
+    await backend.handlers.get('doc:setState')(null, taskId, 'waiting');
+    assert.equal(flows().length, 1, 'and the next Waiting reuses the one workflow');
+    console.log('ok  Waiting: one workflow of ours, made once, and a task in it reads as waiting');
+  }
+
   // The real IPC handlers put every preset through that path; roots is cache-only and refresh repeats only the
   // last listed view.
   {

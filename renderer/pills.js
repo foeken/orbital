@@ -54,9 +54,10 @@ function pillDefs() {
     defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: fieldGlyph(key), value: 'Filtered', rows: () => [{ label: 'Any', reset: true, checked: false, run: () => putField(f, save, key, null) }] });
   }
   if (tasksInFilter(f)) {
-    defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
+    const states = STATES.filter(([v]) => v !== 'waiting'); // Tana's own four: to a search a waiting task is In Progress (views.js STATES)
+    defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: names(states, f.states) || 'Any', rows: () => [
       { label: 'Any status', reset: true, checked: !f.states, run: () => save({ states: null }) },
-      ...STATES.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
+      ...states.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(states.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
     ] });
     // Only while the Status filter lets completed tasks in, and never as a second way to keep them out: this says
     // how old a completed task may be and still count (renderer/views.js). Taking Completed out of Status hides the

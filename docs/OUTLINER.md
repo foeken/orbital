@@ -400,7 +400,7 @@ owned by the page and the block (main/images.js), outside the renderer's write q
 - **A new task in a Responsibility section** (issue #548). Enter at the end of a task in My Tasks (or any list grouped
   by Responsibility) drafts a task under it in the same section (drag.js `groupDraft`), and creates it with what puts a
   task there: the same writes as a task dropped on that heading (`groupDropWrites`, #169) read off a new task, which
-  starts open and yours. Unassigned takes you off, My inbox / My later / My completed set the state, Pinned pins it to
+  starts open and yours. Unassigned takes you off, My inbox / Waiting / My later / My completed set the state, Pinned pins it to
   today. Agent opens the Assign to Agent prompt once it exists, and Tracking takes you off, watches it and opens the
   assignee picker for who you are waiting on. Assigned by others drafts nothing: only somebody else puts a task there.
 - **`api.createDocument(title, { kind, typeUri? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
@@ -692,8 +692,16 @@ wrong twenty.
   `collapsedGroups` preference written by `toggleGroup`: each entry is page key, grouping and section key joined by
   newlines — the page key a view id or a saved search's id, the section key the heading's words only where they are
   fixed (Status, Updated, Responsibility), a member uri or a type uri otherwise. Only folded sections are stored.
-- **Responsibility sections** run Unassigned, Agent, My inbox, Pinned, Mine, Tracking, My later, My completed,
-  Assigned by others (`RESPONSIBILITY`, renderer/views.js).
+- **Responsibility sections** run Pinned, Unassigned, Agent, My inbox, Mine, Waiting, Tracking, My later, My completed,
+  Assigned by others (`RESPONSIBILITY`, renderer/views.js; the phone's ios/engine/arrange.js keeps the same order).
+  Waiting holds your own tasks set to Waiting — your part done, the next step someone else's — and takes a waiting
+  task from Pinned too, since it is not today's to do.
+- **Waiting** is the app's fifth status (Set status to Waiting, the Waiting section, a drop on it). Tana has only its
+  four, so a waiting task is Tana's In Progress in one workflow of ours with the one state "Waiting"
+  (main/documents.js `waitingState`: made on first use in the Library, its uri kept in the settings document as
+  `waiting`; main/settings.js `stateName` reads it back for the Mac and the phone). Tana keeps it, but its web app
+  shows such a task as In Progress and offers only its four (2026-10-02); choosing one there clears Waiting. The Status
+  filter leaves it out (to a search it is In Progress), and Today's Tasks leaves waiting tasks out.
 - **Tracking** — work you made and handed to somebody else — opens short: on the rows updated in the last three days,
   with the rest behind `button.gmore` ("Show 19 more tasks"). Pressing it shows the whole section while it stays open;
   folding forgets (`trackingShown`, session state). A row with no update time counts as tail. `trimTracking` does it
@@ -954,10 +962,10 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   | Unassigned | Off the agent, every day pin removed, no assignees | a task you did not make |
   | Tracking | Off the agent, every day pin removed, watched | unless you made it and it is someone else's |
   | Agent | the Assign to Agent prompt; nothing until it is sent | — |
-  | My inbox, Mine, My completed, My later | Off the agent, every day pin removed, you as the only assignee, the status; a watch on a task you were not assigned is forgotten | a task you did not make |
-  | Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens, one in the Inbox is accepted (In Progress) | — |
+  | My inbox, Mine, Waiting, My completed, My later | Off the agent, every day pin removed, you as the only assignee, the status; a watch on a task you were not assigned is forgotten | a task you did not make |
+  | Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens, one in the Inbox or Waiting is In Progress | — |
   | Assigned by others | — | always: it is about who made it |
-  | Today's Tasks | Pinned to today unless it is on Today already; one in the Inbox is accepted (In Progress), where its status may be changed (a read-only one is pinned only) | anything but a task |
+  | Today's Tasks | Pinned to today unless it is on Today already; one in the Inbox or Waiting is In Progress, where its status may be changed (a read-only one is pinned only) | anything but a task |
 
   A drop in its own section writes nothing. A drop inside a task is offered only once that task is expanded. A task
   you cannot edit is refused before anything is written wherever the drop would change its assignees or status. While
@@ -1069,7 +1077,8 @@ app page too, known and remembered the same way, but it has no rows: the rendere
   came from (`EDGE_TYPE_CREATED_IN`). It reads in parts and sends them on `timeline:part`.
   Its task rows show their box and assignee and nothing else, whatever any view's Display chose (`displayKeys`): the
   page has no Display pill, and borrowing the last list view's made them change with it.
-  - **Now**: first **Today's Tasks** (tasks-2 icon): incomplete tasks pinned to today or earlier and completed ones
+  - **Now**: first **Today's Tasks** (tasks-2 icon): incomplete tasks pinned to today or earlier, except those set to
+    Waiting, and completed ones
     pinned to today, future pins excluded, then the tasks on today's node (the `YYYY-MM-DD` document, found and never
     made here: the tasks its outline references, as a full reference (Tana's `embed` block or a line that is one
     mention) or among words, done ones included; reading it keeps it live, so a change to it reads the page again); with none, "All done - Add more", where Add more opens a search of your

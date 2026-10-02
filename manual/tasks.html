@@ -114,10 +114,18 @@
 
   <section class="topic">
     <h2 id="status" data-k="set status later inbox progress">Set status</h2>
-          <p>For any state other than done, use <kbd>⌘K</kbd> <b>Set status</b>. Its hint shows the state the task is in now. It opens a short page of the four states, the current one ticked; type a few letters and press <kbd>↩</kbd>.</p>
-      <p>You can skip the page: the four choices are also folded into <kbd>⌘K</kbd> itself, so typing <b>status later</b> finds <b>Set status to Later</b> directly.</p>
+          <p>For any state other than done, use <kbd>⌘K</kbd> <b>Set status</b>. Its hint shows the state the task is in now. It opens a short page of the states, the four above and <a href="#waiting">Waiting</a>, the current one ticked; type a few letters and press <kbd>↩</kbd>.</p>
+      <p>You can skip the page: the choices are also folded into <kbd>⌘K</kbd> itself, so typing <b>status later</b> finds <b>Set status to Later</b> directly.</p>
     <figure class="clip wide"><video data-m="tasks-status"></video><figcaption>An Inbox task accepted with <b>Set status</b>: the dashed box turns grey.</figcaption></figure>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>status later</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="waiting" data-k="waiting wait blocked someone else today responsibility">Waiting on someone else</h2>
+    <p>Some tasks stop on someone else: you did your part, and the next step is theirs. <b>Set status to Waiting</b> takes such a task out of your way. It leaves Today's Tasks on the <a href="timeline.html">Timeline</a>, and a list grouped by <b>Responsibility</b> puts it in its own <b>Waiting</b> section, after Mine. When it is back with you, set it to In Progress, or drop it on Today's Tasks.</p>
+    <figure class="shot wide"><img data-m="tasks-waiting" alt="A task list grouped by status with a Waiting section holding Prepare the offsite agenda"><figcaption>Waiting, a section of its own.</figcaption></figure>
+    <div class="note">Tana itself has only the four states, so to Tana a waiting task is In Progress, and the Tana app shows it that way. Choosing a state there takes Waiting away. For the same reason the <b>Status</b> filter offers only the four.</div>
+    <div class="try"><span class="seq">Click a task <i>→</i><kbd>⌘K</kbd><i>→</i> type <b>status waiting</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
 
   <section class="topic">
@@ -226,6 +234,5 @@
 </main>
 </body>
 </html>
-
 
 

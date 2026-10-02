@@ -194,13 +194,13 @@ function dropOnMeeting(meeting, segs) {
 // dataTransfer crosses — decides the same way. Each group adds what it needs and takes away what would keep the
 // task elsewhere, in the order responsibilityOf reads them: Agent, then a day pin. null: it cannot go there.
 const TASK_DRAG_TYPE = 'application/x-orbital-task'; // { id, text, kind, icon, createdBy, stateType, writable }, set for a task
-const GROUP_STATES = { 'My inbox': 'proposed', Mine: 'open', 'My completed': 'closed', 'My later': 'not_now' };
+const GROUP_STATES = { 'My inbox': 'proposed', Mine: 'open', Waiting: 'waiting', 'My completed': 'closed', 'My later': 'not_now' };
 function groupDropWrites(target, t, me, today) {
   const mine = !!me && t.createdBy === me, assigned = t.assignees.includes(me);
   const unagent = t.agent ? [['agent', false]] : [], clear = [...unagent, ...t.dates.map((date) => ['unpin', date])];
-  // a task given a day is being worked on: one still in the Inbox is accepted (In Progress) as it lands, where you may
-  // change its status (writable false: it is pinned all the same, its status left alone)
-  const accept = t.stateType === 'proposed' && t.writable !== false ? [['state', 'open']] : [];
+  // a task given a day is being worked on: one still in the Inbox, or one you were waiting on, is In Progress as it
+  // lands, where you may change its status (writable false: it is pinned all the same, its status left alone)
+  const accept = (t.stateType === 'proposed' || t.stateType === 'waiting') && t.writable !== false ? [['state', 'open']] : [];
   // on Today already: pinned to it, or an open task pinned to a day before it (main/timeline.js ages completed ones out)
   if (target === 'Today') return [...(t.dates.includes(today) || (t.stateType !== 'closed' && t.dates.some((date) => date < today)) ? [] : [['pin', today]]), ...accept];
   if (target === 'Pinned') return [...unagent, ...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : accept)];

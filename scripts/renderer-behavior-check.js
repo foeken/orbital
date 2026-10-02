@@ -3308,13 +3308,15 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(titles(agents, 'responsibility'), [['Agent', ['ta1', 'ta2', 'ta3']]],
     'a node handed to the local agent is in the Agent section and in no other: whoever Tana has it assigned to, and even with no metadata read yet — asking for it by name is enough to list it');
   api.dragging(true);
-  assert.deepEqual(titles(agents, 'responsibility').map(([title]) => title), ['Unassigned', 'Agent', 'My inbox', 'Pinned', 'Mine', 'Tracking', 'My later', 'My completed'],
+  assert.deepEqual(titles(agents, 'responsibility').map(([title]) => title), ['Pinned', 'Unassigned', 'Agent', 'My inbox', 'Mine', 'Waiting', 'Tracking', 'My later', 'My completed'],
     'while a task is dragged, every section a drop can land in is drawn, empty or not');
   api.dragging(false);
   const pinnedTask = { id: 'tp1', icon: 'task', tags: [], createdBy: 'sam' };
-  assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(1, 4),
-    ['My inbox:t8', 'Pinned:tp1', 'Mine:t10'],
-    'a task pinned to a day sits in Pinned, under My inbox and above Mine, whoever has it and with no metadata read');
+  assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(0, 2),
+    ['Pinned:tp1', 'Unassigned:t6'],
+    'a task pinned to a day sits in Pinned, which heads the list, whoever has it and with no metadata read');
+  assert.deepEqual(titles([{ ...pinnedTask, stateType: 'waiting' }], 'responsibility'), [['Waiting', ['tp1']]],
+    'but one you are waiting on is not today\u2019s to do: it sits in Waiting, pin and all');
   assert.deepEqual(titles(responsibility, 'responsibility'),
     [['Unassigned', ['t6']], ['My inbox', ['t8']], ['Mine', ['t10']], ['Tracking', ['t1']], ['My later', ['t9']], ['My completed', ['t2']], ['Assigned by others', ['t5']]],
     'and with nothing handed to the agent the other sections are exactly as they were');
@@ -3323,11 +3325,11 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(titles([{ ...rows[0], id: 't11', createdBy: 'me' }], 'responsibility'), [],
     'a task you made and handed over with notifications off is not Tracking, and is left out like anything else this grouping has no section for');
   const owned = (extra) => titles([{ id: 't2', tags: [], createdBy: 'me', ...extra }], 'responsibility')[0][0];
-  assert.deepEqual(['proposed', 'open', 'closed', 'not_now'].map((stateType) => owned({ stateType })), ['My inbox', 'Mine', 'My completed', 'My later'],
-    'a task you made and hold sits in exactly one of the four state sections, in the order the Status menu lists them');
+  assert.deepEqual(['proposed', 'open', 'waiting', 'closed', 'not_now'].map((stateType) => owned({ stateType })), ['My inbox', 'Mine', 'Waiting', 'My completed', 'My later'],
+    'a task you made and hold sits in exactly one of the five state sections, Waiting among them');
   assert.deepEqual([owned({ done: 1 }), owned({ done: 0 }), owned({})], ['My completed', 'Mine', 'Mine'],
     'and a row carrying only the older done flag reads the same way, while one with no state at all is under way');
-  assert.deepEqual(titles([...responsibility, ...agents, pinnedTask], 'responsibility').map(([title]) => title), plain(api.RESPONSIBILITY),
+  assert.deepEqual(titles([...responsibility, ...agents, pinnedTask, { ...pinnedTask, id: 'tp2', stateType: 'waiting' }], 'responsibility').map(([title]) => title), plain(api.RESPONSIBILITY),
     'and nothing else is filed: a row you neither made nor hold, and one whose assignees have not arrived, are left out rather than collected under a heading');
   // Every section holds rows: the grouping's leftovers are not listed at all, under no heading and with no note.
   api.set('tasks', 'responsibility', 'default');
@@ -9149,6 +9151,8 @@ function runGroupDropCheck() {
   assert.deepEqual(at('Pinned', { stateType: 'proposed' }), [['pin', DAY], ['state', 'open']], 'and so on Pinned');
   assert.deepEqual(at('Today', { stateType: 'proposed', writable: false }), [['pin', DAY]], 'a read-only one is pinned all the same, its status left alone');
   assert.deepEqual(at('Mine', { assignees: [ME] }), [], 'a drop in its own group writes nothing');
+  assert.deepEqual(at('Waiting', { assignees: [ME] }), [['state', 'waiting']], 'Waiting sets your task to Waiting');
+  assert.deepEqual(at('Today', { stateType: 'waiting', dates: [DAY] }), [['state', 'open']], 'and one you were waiting on, dropped on Today, is In Progress again');
   console.log('ok  group drop: each group writes what puts a task there, lets go of what held it elsewhere, and refuses what a drop cannot say');
 }
 

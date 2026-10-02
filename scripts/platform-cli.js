@@ -772,6 +772,20 @@ commands.discusswith = async () => {
   out('type: ' + (readNode(doc).entityTypeUri || 'none'));
   out(require('../sdk/fields').readFields(doc));
 };
+// setstate <state> <id…>: Set status through main, for one task or several — proposed, open, closed, not_now, or waiting
+// (the Waiting workflow, made on first use and kept in the settings document, main/documents.js waitingState). WRITES.
+commands.setstate = async () => {
+  const [state, ...ids] = positional;
+  if (!state || !ids.length) throw new Error('usage: setstate <proposed|open|closed|not_now|waiting> <id…>  (WRITES)');
+  const main = backend(await connect());
+  await client.sync.connect();
+  await main.settings.hydrate(); // the Waiting workflow another machine made, before one is made here
+  out(await require('../main/documents').ipc['doc:setStateMany'](null, ids, state) + ' changed');
+  await main.settings.flush();
+  await new Promise((r) => setTimeout(r, 1500)); // the local updates leave with the stream
+  out('waiting: ' + JSON.stringify(main.settings.get('waiting') || null));
+  for (const id of ids) { const doc = await client.sync.subscribe(id); out({ id, ...(await workflowOf(doc)), stateType: readNode(doc).stateType, stateWorkflowStateId: readNode(doc).stateWorkflowStateId }); }
+};
 // setfield <id> <type-uri?attribute=key> <line…>: write a field value, one argument per line, the way the page's
 // field editor does (sdk/fields.js). A line written as "- words" is a bullet, as typing "- " in the page makes one.
 // A line written as "[label](tana:…)" is a reference. The value is checked against the field's definition first, as

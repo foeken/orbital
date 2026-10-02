@@ -2,7 +2,9 @@
 // The filter vocabulary every view shares (states, types), and group-by and sort over rows already loaded.
 
 // ---- filter pills shared by every view ----
-const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
+// Waiting is the app's own status: your part done, the next step someone else's (main/settings.js stateName). To Tana it is
+// In Progress in a workflow of ours, so a filter cannot ask for it (pills.js) — but it is set, grouped and sorted like the rest.
+const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['waiting', 'Waiting'], ['closed', 'Completed'], ['not_now', 'Later']];
 // How far back a completed task still counts. Whether completed tasks appear at all is the Status filter's business
 // and only its, so this has no "off": it ages them out, which is why the pill is shown only while Completed is in
 // Status, and why its value is kept when Completed is taken out — putting Completed back reads the same as before.
@@ -39,10 +41,11 @@ const NO_FIELD = '\u0000no value';
 // and one that is filtered out never gets there, so this asks for what it is missing itself.
 // ponytail: that is one doc:taskMeta per row of the open view while this grouping is chosen; the graph node a view
 // lists already carries assignedTo, so a row could be told at list time instead if it ever costs too much.
-// The headings run in the order the work wants attention: nobody has taken it, then your own work — waiting, pinned,
-// under way — then what you are waiting on somebody for (Tracking), then your own set aside and done, then what was
+// The headings run in the order the work wants attention: what you pinned to a day first, then what nobody has taken,
+// what an agent is doing, then your own work — not yet accepted, under way, and Waiting (your part done, the next step
+// someone else's) — then what you handed to somebody (Tracking), then your own set aside and done, then what was
 // handed to you. Your own — made by you and assigned to you — splits
-// across the four states the Status menu lists, so each such task sits in exactly one of them. The state is
+// across the five states the Status menu lists, so each such task sits in exactly one of them. The state is
 // stateOf, the reading the Status pill and the Status grouping already use, so a row carrying only the old done
 // flag lands in My completed or Mine as that flag says, and one with no state at all reads as under way. The rows
 // the grouping leaves out are simply not listed: an empty Other section explaining them was tried and removed.
@@ -54,16 +57,17 @@ const NO_FIELD = '\u0000no value';
 // Tracking is what you are still following, so it reads the same watch state the bell does (meta.watched, the
 // effective answer: an explicit Cmd+K choice, else the default rule). Silencing a task you handed over takes it out
 // of the section and out of the list, like every other row this grouping has no section for.
-const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed', not_now: 'My later' };
+const MINE_STATES = { proposed: 'My inbox', open: 'Mine', waiting: 'Waiting', closed: 'My completed', not_now: 'My later' };
 // Pinned: a task you pinned to a day is one you asked to see then, whoever has it and whatever its state, so like
 // Agent it decides the section on its own (after Agent, which stays first). Date pins are personal (the pin-map), so
-// nobody else's pins land here. It sits under My inbox and above Mine, and its rows say the day (pinnedOn below).
-// Once completed it is done asking for attention, so it goes to My completed (yours, like the pin) and keeps its pin.
-const RESPONSIBILITY = ['Unassigned', 'Agent', 'My inbox', 'Pinned', 'Mine', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
+// nobody else's pins land here. It heads the list, and its rows say the day (pinnedOn below). Once completed it is done
+// asking for attention, so it goes to My completed (yours, like the pin) and keeps its pin; one you are waiting on is
+// not yours to do today either, so it goes to Waiting.
+const RESPONSIBILITY = ['Pinned', 'Unassigned', 'Agent', 'My inbox', 'Mine', 'Waiting', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
 function responsibilityOf(n) {
   if (n.draft) return n.group || null; // a new task drafted under a section (renderer/drag.js groupDraft) stays in it while it is typed
   if (agentIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadAgentIds)
-  if (isTask(n) && datePinsById.has(n.id)) return stateOf(n) === 'closed' ? 'My completed' : 'Pinned';
+  if (isTask(n) && datePinsById.has(n.id)) return stateOf(n) === 'closed' ? 'My completed' : stateOf(n) === 'waiting' ? 'Waiting' : 'Pinned';
   const uri = me() && me().id, meta = taskMetaById.get(n.id);
   if (!uri) return null; // the member list has not landed, so "you" is not known yet
   if (!meta) { loadTaskMeta(n.id); return null; } // it takes its section once the answer arrives

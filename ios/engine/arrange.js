@@ -4,10 +4,10 @@
 // on the phone. n: { id, state, updated, created, title, createdBy, assignees, type }; c: { me, now, names (uri ->
 // name), agent / pinned / watched / silenced (sets of ids) }. Answers [{ n, group }] in order, group null when ungrouped.
 // ponytail: a field as the sort or the grouping reads as the query's order, ungrouped; add the field values when wanted.
-const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
+const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['waiting', 'Waiting'], ['closed', 'Completed'], ['not_now', 'Later']];
 const UPDATED = [[36e5, 'Last hour'], [864e5, 'Last day'], [7 * 864e5, 'Last week'], [30 * 864e5, 'Last month']];
-const MINE = { proposed: 'My inbox', open: 'Mine', closed: 'My completed', not_now: 'My later' };
-const RESPONSIBILITY = ['Unassigned', 'Agent', 'My inbox', 'Pinned', 'Mine', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
+const MINE = { proposed: 'My inbox', open: 'Mine', waiting: 'Waiting', closed: 'My completed', not_now: 'My later' };
+const RESPONSIBILITY = ['Pinned', 'Unassigned', 'Agent', 'My inbox', 'Mine', 'Waiting', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
 const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type' };
 const FIXED = { status: STATES.map((s) => s[1]), updated: UPDATED.map((b) => b[1]), responsibility: RESPONSIBILITY };
 
@@ -18,7 +18,7 @@ function groupOf(n, by, c) {
   if (by === 'type') return n.type || FALLBACK.type;
   // what a row is to you (renderer/views.js responsibilityOf); a row you are no part of has no section and is left out
   if (c.agent.has(n.id)) return 'Agent'; // a node handed to a Codex task (the synced codexTask), before anything else
-  if (n.state && c.pinned.has(n.id)) return n.state === 'closed' ? 'My completed' : 'Pinned';
+  if (n.state && c.pinned.has(n.id)) return n.state === 'closed' ? 'My completed' : n.state === 'waiting' ? 'Waiting' : 'Pinned';
   const mine = n.createdBy === c.me, assigned = n.assignees.includes(c.me);
   if (!n.assignees.length) return mine ? 'Unassigned' : null;
   // yours on someone else: watched unless you silenced it (main/documents.js notifyDefault)
