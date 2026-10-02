@@ -13,6 +13,12 @@ function openTimeline(node, where = null) { // where: 'tab' or 'float' for a ⌘
   if (zoomable({ id: uri })) { if (where) run(() => openElsewhere(where, uri)); else goTo(uri); }
   else if (tana.nodeLink && tana.openExternal) run(async () => tana.openExternal(await tana.nodeLink(uri)));
 }
+// The node a Timeline row is about (a meeting, the task someone completed), for ⌘K's Copy link on it: the one selected
+// row, or the row under the caret. The row itself is the Timeline's own and has no link (renderer/palette.js copyLink).
+function timelineUriAt() {
+  const s = selKeys(), key = s.length ? s.length === 1 && s[0] : (palette.hidden ? focused() : palReturn)?.key;
+  return (key && items.get(key)?.node.timeline?.uri) || null;
+}
 function timelineViewRow() {
   return { id: 'timeline', group: 'Views', icon: 'timeline', label: 'Timeline', run: () => goTo(TIMELINE_PAGE) };
 }
