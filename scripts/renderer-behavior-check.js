@@ -5180,12 +5180,15 @@ async function runSearchPageRowUpdateCheck() {
     const kids = new Map([[SEARCH, [{ id: TASK, kind: 'document', icon: 'task', text: 'old title', done: 0, stateType: 'proposed' }]],
       ['tana:text:01j0host000000000000000000', [{ id: 'b1', kind: 'block', reference: { uri: NOTE, node: { id: NOTE, kind: 'document', icon: 'doc', text: 'old name', title: 'old name' } } }]]]);
     const extra = new Map(), fresh = new Map(), taskMetaById = new Map(), relatedBy = new Map();
+    const TIMELINE_PAGE = 'orbital:timeline', reloaded = [];
+    const reload = async (id) => { reloaded.push(id); };
+    let nextState = 'closed';
     const railGroups = () => [], localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
     const isTask = (node) => node.kind === 'document' && node.icon === 'task';
     const asDoc = (node) => ({ ...node, text: node.text ?? node.title ?? '', kind: 'document' });
     let rootsLoads = 0;
     const loadRoots = async () => { rootsLoads++; };
-    const tana = { node: async (id) => (id === NOTE ? { id: NOTE, title: 'new name', kind: 'document', icon: 'doc' } : { id: TASK, title: 'new title', kind: 'document', icon: 'task', done: 1, stateType: 'closed' }) };
+    const tana = { node: async (id) => (id === NOTE ? { id: NOTE, title: 'new name', kind: 'document', icon: 'doc' } : { id: TASK, title: 'new title', kind: 'document', icon: 'task', done: nextState === 'closed' ? 1 : 0, stateType: nextState }) };
     // what shownDocs reads besides the rows: which page is in front of you, and the (empty) ⌘F box
     const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith('tana:search:');
     const viewOf = () => views.find((section) => section.id === view);
@@ -5204,6 +5207,9 @@ async function runSearchPageRowUpdateCheck() {
       shown: () => shownDocs().map((node) => node.id),
       shownInView: () => { zoom = null; return shownDocs().map((node) => node.id); },
       loads: () => rootsLoads,
+      // the Timeline in front of you, the task under its Today's Tasks, and the state the change brings
+      onTimeline: (state) => { zoom = { docId: TIMELINE_PAGE, nodeId: null }; nextState = state; reloaded.length = 0;
+        kids.set(TIMELINE_PAGE, [{ id: 'orbital:timeline:today:2026-10-02', timeline: { today: true }, children: [{ id: TASK, kind: 'document', icon: 'task', stateType: 'open' }] }]); return patchDoc(TASK).then(() => [...reloaded]); },
     });
   `, context);
   await context.patch();
@@ -5217,6 +5223,8 @@ async function runSearchPageRowUpdateCheck() {
   context.drop();
   assert.deepEqual(plain(context.rows()), [], 'a deleted document leaves the saved search that listed it');
   assert.deepEqual(plain(context.shownInView()), [], "back on a view, the same helper answers with the view's own rows");
+  assert.deepEqual(plain(await context.onTimeline('waiting')), ['orbital:timeline'], 'a task under Today\u2019s Tasks set to Waiting reads the Timeline again, so it leaves at once rather than after a refresh');
+  assert.deepEqual(plain(await context.onTimeline('closed')), [], 'while one ticked off is only patched where it is: it stays there, struck through');
 }
 
 

@@ -181,6 +181,10 @@ async function patchDoc(docId) {
   try { fresh = asDoc(await tana.node(docId, true)); } catch (e) { noteGone(docId, e); return loadRoots(); } // deleted or unreadable: the lists decide
   deletedIds.delete(docId); // it answered, so it is not gone: an undo of a delete brings the rows and the chips back
   patchCopies(docId, { text: fresh.text, title: fresh.title, done: fresh.done, stateType: fresh.stateType });
+  // A task under Today's Tasks set to Waiting leaves it (main/timeline.js), which only a fresh build of the page says:
+  // the Timeline in front of you is read again, wherever the change came from (⌘K here, another pane, the phone).
+  const timeline = zoom?.docId === TIMELINE_PAGE ? kids.get(TIMELINE_PAGE) || [] : [];
+  if (fresh.stateType === 'waiting' && timeline.some((n) => n.timeline?.today && (n.children || []).some((c) => c.id === docId))) await reload(TIMELINE_PAGE);
   if (extra.has(docId)) Object.assign(extra.get(docId), fresh);
   for (const s of views) for (const n of s.nodes) if (n.id === docId) Object.assign(n, fresh);
   // A zoomed page that lists documents — a saved search, a space — holds its rows in kids, not in any view, so a

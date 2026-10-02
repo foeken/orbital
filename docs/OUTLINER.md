@@ -1079,7 +1079,8 @@ app page too, known and remembered the same way, but it has no rows: the rendere
   Its task rows show their box and assignee and nothing else, whatever any view's Display chose (`displayKeys`): the
   page has no Display pill, and borrowing the last list view's made them change with it.
   - **Now**: first **Today's Tasks** (tasks-2 icon): incomplete tasks pinned to today or earlier, except those set to
-    Waiting, and completed ones
+    Waiting (one set to Waiting while the page is open reads the page again, renderer/app.js `patchDoc`, so it leaves
+    at once), and completed ones
     pinned to today, future pins excluded, then the tasks on today's node (the `YYYY-MM-DD` document, found and never
     made here: the tasks its outline references, as a full reference (Tana's `embed` block or a line that is one
     mention) or among words, done ones included; reading it keeps it live, so a change to it reads the page again); with none, "All done - Add more", where Add more opens a search of your
