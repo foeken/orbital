@@ -1715,7 +1715,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
   .hpage.on .hv-at5 { animation-delay: .3s; } .hpage.on .hv-at10 { animation-delay: .6s; } .hpage.on .hv-at30 { animation-delay: 1.8s; }
   .hpage.on .hv-at35 { animation-delay: 2.1s; } .hpage.on .hv-at42 { animation-delay: 2.52s; } .hpage.on .hv-at50 { animation-delay: 3s; }
   .hpage.on .hv-at55 { animation-delay: 3.3s; } .hpage.on .hv-at60 { animation-delay: 3.6s; } .hpage.on .hv-at70 { animation-delay: 4.2s; }
-  .hpage.on .hv-pn-b { animation: hv-panes-b var(--hv-loop) var(--ease-out) infinite both; } /* ⌘N opens it, ⌥⌘↓ fills the window, esc steps back */
+  .hpage.on .hv-pn-b { animation: hv-panes-b var(--hv-loop) var(--ease-out) infinite both; } /* ⇧⌘N opens it, ⌥⌘↓ fills the window, esc steps back */
   .hpage.on .hv-caret { animation: blink 1s steps(1) infinite; }
   /* 1 */
   .hpage.on .hv-moon { animation: hv-moon 7s linear infinite; }

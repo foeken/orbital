@@ -10023,6 +10023,17 @@ checks.push(function runTableFoldCheck() {
   assert.deepEqual(calls, ['size', 'fit'], 'a table\u2019s rows fitted again measure Visible to and refit the fold, without motion');
   console.log('ok  a table folds its first columns onto the title\u2019s line as the page narrows, the last column last');
 });
+// New tab, New pane and New floating pane default to ⌘N with the modifier that opens a link there (⌘-, ⇧-, ⌥-click).
+checks.push(function runNewPageKeysCheck() {
+  const keys = vm.runInNewContext('(' + DEFAULT_HOTKEYS_SRC + ')'), elsewhere = vm.runInNewContext(sourceLine('const elsewhere =') + '; elsewhere');
+  for (const [id, where] of [['newTab', 'tab'], ['splitView', 'right'], ['floatPane', 'float']]) {
+    const k = keys[id], extra = k.replace(/⌘N$/, '');
+    assert.ok(k.endsWith('⌘N'), id + ' is ⌘N with a modifier');
+    assert.equal(elsewhere({ metaKey: !extra, shiftKey: extra === '⇧', altKey: extra === '⌥' }), where, id + ' adds the modifier a click uses to open a link as ' + where);
+  }
+  assert.equal(new Set(Object.values(keys)).size, Object.values(keys).length, 'no two rows share a default key');
+  console.log('ok  the new-page keys use the modifiers that open a link there');
+});
 process.exitCode = 1;
 // Cmd+K Copy link on a Timeline row copies the node the row is about: the row under the caret, or the one selected
 async function runTimelineCopyLinkCheck() {

@@ -9,7 +9,7 @@
 <script src="search-index.js"></script>
 <script src="manual.js"></script>
 <style>
-  /* ---- hero: ⌘N opens a pane beside, Show graph adds the Graph, and the Graph follows the pane you click into ---- */
+  /* ---- hero: ⇧⌘N opens a pane beside, Show graph adds the Graph, and the Graph follows the pane you click into ---- */
   .windows-hero { --loop: 10s; flex-direction: column; gap: 18px; }
   .windows-stage { position: relative; }
   .windows-win { width: 600px; height: 230px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; display: flex; flex-direction: column; }
@@ -98,7 +98,7 @@
             </div>
           </div>
         </div>
-        <span class="cap press" style="--at:.17">⌘N</span>
+        <span class="cap press" style="--at:.17">⇧⌘N</span>
         <div class="win windows-say">Show graph</div>
         <span class="ptr"></span>
       </div>
@@ -135,21 +135,21 @@
     <h2 id="open" data-short="Open panes, tabs, windows" data-k="new pane new tab new floating pane new window float command n option">Open a pane, a tab or a window</h2>
     <div class="split">
       <div>
-        <h3>New pane <kbd>⌘N</kbd></h3>
+        <h3>New pane <kbd>⇧⌘N</kbd></h3>
         <p>Opens the Library in a new pane to the right of the one you are in, and puts the keys there. The Library is where a new pane starts, because it is the one place two panes may both show.</p>
       </div>
-      <figure class="clip"><video data-m="windows-newpane"></video><figcaption><kbd>⌘N</kbd> splits the window: the Library opens beside the page.</figcaption></figure>
+      <figure class="clip"><video data-m="windows-newpane"></video><figcaption><kbd>⇧⌘N</kbd> splits the window: the Library opens beside the page.</figcaption></figure>
     </div>
     <div class="split flip">
       <div>
-        <h3>New tab and New floating pane</h3>
-        <p><b>New tab</b> (hint “Beside this page”) opens the Library as a tab in the pane you are in. <b>New floating pane</b> opens it in a pane that floats over the others, which you can drag anywhere and dock later. Neither has a key out of the box; record one with <kbd>⇧⌘K</kbd> on the row.</p>
+        <h3>New tab <kbd>⌘N</kbd> and New floating pane <kbd>⌥⌘N</kbd></h3>
+        <p><b>New tab</b> (hint “Beside this page”) opens the Library as a tab in the pane you are in. <b>New floating pane</b> opens it in a pane that floats over the others, which you can drag anywhere and dock later. The keys match opening a link: <kbd>⌘</kbd> a tab, <kbd>⇧</kbd> a pane beside, <kbd>⌥</kbd> a floating pane.</p>
       </div>
       <figure class="clip"><video data-m="windows-float"></video><figcaption><kbd>⌘K</kbd> <b>New floating pane</b>.</figcaption></figure>
     </div>
     <div class="split">
       <div>
-        <h3>New window <kbd>⌥⌘N</kbd></h3>
+        <h3>New window <kbd>⌃⌘N</kbd></h3>
         <p>Opens another window, a little down and to the right of this one, on the page you were on. File › New Window does the same. Each window has its own panes. Only the first window remembers its size and layout for the next launch, so a spare window never replaces your usual one.</p>
         <p>Closing the last window keeps Orbital in the Dock. Click the Dock icon, or a notification, to get a window back; <kbd>⌘Q</kbd> quits.</p>
       </div>
@@ -158,7 +158,7 @@
     <h3>Open something straight into a new page</h3>
     <p>Hold a key while you open a node and it lands beside what you have: <kbd>⌘</kbd> in a new tab, <kbd>⇧</kbd> in a pane beside, <kbd>⌥</kbd> in a floating pane. In <kbd>⌘K</kbd> and <kbd>⌘S</kbd> press <kbd>⌘↩</kbd>, <kbd>⇧↩</kbd> or <kbd>⌥↩</kbd> on a result; in the outline, hold the key and click a bullet. <a href="navigating.html#elsewhere">Finding your way</a> has the details.</p>
     <figure class="clip wide"><video data-m="windows-elsewhere"></video><figcaption>From search: <kbd>⌘↩</kbd> opens a task as a new tab, then <kbd>⇧↩</kbd> opens another task in a pane beside it.</figcaption></figure>
-    <div class="try"><span class="seq"><kbd>⌘N</kbd><i>→</i><kbd>⌘/</kbd><i>→</i><kbd>⌘/</kbd></span> opens a pane and moves between the two.</div>
+    <div class="try"><span class="seq"><kbd>⇧⌘N</kbd><i>→</i><kbd>⌘/</kbd><i>→</i><kbd>⌘/</kbd></span> opens a pane and moves between the two.</div>
   </section>
 
   <section class="topic">
@@ -308,8 +308,10 @@
     <h2 id="keys">Keys in this chapter</h2>
     <table class="keys">
       <tr><th>Action</th><th>Keys</th></tr>
-      <tr><td>New pane (the Library, to the right)</td><td><kbd>⌘N</kbd></td></tr>
-      <tr><td>New window</td><td><kbd>⌥⌘N</kbd></td></tr>
+      <tr><td>New tab</td><td><kbd>⌘N</kbd></td></tr>
+      <tr><td>New pane (the Library, to the right)</td><td><kbd>⇧⌘N</kbd></td></tr>
+      <tr><td>New floating pane</td><td><kbd>⌥⌘N</kbd></td></tr>
+      <tr><td>New window</td><td><kbd>⌃⌘N</kbd></td></tr>
       <tr><td>Open a result in a new tab, a pane beside, a floating pane</td><td><kbd>⌘↩</kbd> <kbd>⇧↩</kbd> <kbd>⌥↩</kbd></td></tr>
       <tr><td>Next pane / Previous pane</td><td><kbd>⌘/</kbd> <kbd>⇧⌘/</kbd></td></tr>
       <tr><td>Next tab / Previous tab</td><td><kbd>⇧⌘]</kbd> <kbd>⇧⌘[</kbd></td></tr>
@@ -325,4 +327,3 @@
 </main>
 </body>
 </html>
-
