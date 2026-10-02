@@ -786,8 +786,10 @@ wrong twenty.
   Codex's app-server), **Dot** (the user's dot, OpenAI's always-on agent: a message in their one conversation with it,
   opened in the ChatGPT app by its `codex://threads/<id>?hostId=durable&prompt=` link and sent by pressing ↩ there
   through System Events, only while ChatGPT is frontmost; one conversation for every node, so a node keeps no task id,
-  only that Dot has it; its badge reads **Sent to agent**, grey, since what the dot
-  does next is out of this Mac's reach) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
+  only that Dot has it; since what the dot does next is out of this Mac's reach and Tana's connector offers it only
+  Tana's four statuses, it reports in the node: Orbital adds "Agent status: Working" at the end once the message is
+  sent, the dot ends each update with Working, Completed or Failed, and the badge follows the last such line
+  (main/documents.js `agentStatus`): working, done or broken) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
   Orbital never signs in to Anthropic). Codex, Dot and Claude are offered only once this Mac has them. **Choose agents …**
   (Settings) lists all four, greyed with what to install when missing: ↩ switches one on or off, one that needs a paste
   first (Dot: its chat link, `dotChat`, synced) asks for it on a page of its own, and the second group

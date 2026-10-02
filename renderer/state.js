@@ -125,7 +125,6 @@ const AGENT_BADGE = {
   done: { label: 'Agent completed', title: 'The agent\'s task finished its last turn' },
   broken: { label: 'Agent needs attention', title: 'The agent\'s task failed or cannot be reached — assign again to retry' },
   elsewhere: { label: 'Agent on another Mac', title: 'The agent\'s task runs on another Mac, where it can be opened; assigning it here starts a new one' },
-  sent: { label: 'Sent to agent', title: 'Sent to the agent; what it does next shows in its own app' },
 };
 const agentStateOf = (id) => (AGENT_BADGE[agentStates.get(id)] ? agentStates.get(id) : 'pending');
 const agentTasks = new Map(); // docId -> { agent, taskId }: which agent's task each linked node is
