@@ -7,6 +7,7 @@
 //     (System Events, which asks for Accessibility the first time). Sent from its composer it reaches the dot exactly as
 //     a message you typed would, tagged as from ChatGPT, and the dot answers where it always does.
 //   - What it does next lives in that conversation, out of this Mac's reach: the badge says it was sent, and opens it.
+//   - One conversation for every node (oneChat): a node keeps no task id, only that Dot has it; the conversation is dotChat.
 const fs = require('node:fs');
 const agent = require('../agent');
 const settings = require('../settings');
@@ -38,17 +39,15 @@ const press = () => new Promise((resolve, reject) => require('node:child_process
 }));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function linked() { const id = chatId(); if (!id) throw new Error('Link your dot first: Choose agents → Dot'); return id; }
 async function send(text) {
-  const id = chatId();
-  if (!id) throw new Error('Link your dot first: Choose agents → Dot');
-  await openUrl(chatUrl(id, text));
+  await openUrl(chatUrl(linked(), text));
   await wait(dot.sendAfter);
   await dot.press();
-  return id;
 }
 
 const dot = agent.register({
-  id: 'dot', label: 'Dot', icon: 'chatgpt', missing: 'Install the ChatGPT app',
+  id: 'dot', label: 'Dot', icon: 'chatgpt', missing: 'Install the ChatGPT app', oneChat: true,
   // usable once the app is here and the conversation is linked; until it is linked, Choose agents asks for the link
   available: () => appInstalled() && !!chatId(),
   setupHint: () => (appInstalled() && !chatId() ? 'Paste your dot\'s chat link' : ''),
@@ -56,7 +55,7 @@ const dot = agent.register({
   start: ({ nodeUri, title, prompt }) => send(message(prompt, nodeUri, title)),
   // every node handed over is a message in the one conversation: sent, and from here on the dot's
   statuses: async (links) => Object.fromEntries(Object.keys(links || {}).map((nodeId) => [nodeId, 'sent'])),
-  open: (taskId) => openUrl(chatUrl(linkId(taskId) || chatId())),
+  open: () => openUrl(chatUrl(linked())),
   sendAfter: SEND_AFTER, press, // replaced by the checks
 });
 

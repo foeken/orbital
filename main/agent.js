@@ -6,6 +6,7 @@
 //   available()             whether this Mac can run it; one that cannot shows greyed in Choose agents
 //   missing                 what to install, for that grey row
 //   setupHint(), setup(text)  what to paste before it can run ("Paste your dot's chat link"), and taking that paste
+//   oneChat                 one conversation for every node (Dot): a node keeps no task id, only which agent has it
 //   start({ key, nodeUri, title, prompt, rules, userData })   begins a task and answers its id
 //   resume(taskId, prompt)  hands an existing task the new request (a reassignment)
 //   statuses({ nodeId: taskId })  nodeId -> pending | working | waiting | done | broken
@@ -59,13 +60,15 @@ const tasks = () => { const stored = settings.get('codexTask'); return stored &&
 function taskLink(id) {
   const stored = tasks()[id];
   const link = typeof stored === 'string' ? { agent: 'codex', taskId: stored }
-    : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', taskId: stored.taskId || stored.threadId, ...(stored.device ? { device: stored.device } : {}) } : null;
-  return link && typeof link.taskId === 'string' && link.taskId && get(link.agent) ? link : null;
+    : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', ...(stored.taskId || stored.threadId ? { taskId: stored.taskId || stored.threadId } : {}), ...(stored.device ? { device: stored.device } : {}) } : null;
+  const a = link && get(link.agent);
+  return a && (a.oneChat || (typeof link.taskId === 'string' && link.taskId)) ? link : null;
 }
 function setTask(id, agentId, taskId) {
   const map = tasks();
   // a plugin whose tasks live only on the Mac that ran them (local: Claude Code's sessions) names that Mac with the link
-  if (get(agentId) && typeof taskId === 'string' && taskId) map[id] = { agent: agentId, taskId, ...(get(agentId).local ? { device: deviceId() } : {}) }; else delete map[id];
+  const a = get(agentId), hasId = typeof taskId === 'string' && !!taskId;
+  if (a && (hasId || a.oneChat)) map[id] = { agent: agentId, ...(hasId ? { taskId } : {}), ...(a.local ? { device: deviceId() } : {}) }; else delete map[id];
   settings.set('codexTask', map);
   return taskLink(id);
 }
