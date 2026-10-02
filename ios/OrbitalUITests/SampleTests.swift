@@ -8,6 +8,7 @@ final class SampleTests: XCTestCase {
 
     override func setUp() {
         continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
         app = XCUIApplication()
         // -demoMode NO: Settings' Demo mode is kept in UserDefaults and makes a box do nothing; the argument overrides
         // what a simulator kept from an earlier run, for this launch only
@@ -84,5 +85,69 @@ final class SampleTests: XCTestCase {
         XCTAssert(app.staticTexts["Demo mode"].waitForExistence(timeout: 5))
         app.buttons["Close"].tap()
         XCTAssert(app.staticTexts["Demo mode"].waitForNonExistence(timeout: 5))
+    }
+
+    func testLandscapeKeepsTimelineMenuAndSavedSearch() {
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 5))
+        XCTAssert(box("Draft the Q4 hiring plan").exists)
+
+        app.buttons["Menu"].tap()
+        XCTAssert(app.buttons["My open tasks"].waitForExistence(timeout: 5))
+        app.buttons["My open tasks"].tap()
+        let offsite = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Book the offsite venue'")).firstMatch
+        XCTAssert(offsite.waitForExistence(timeout: 5))
+
+        XCUIDevice.shared.orientation = .landscapeRight
+        XCTAssert(offsite.exists)
+
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssert(offsite.waitForExistence(timeout: 5))
+    }
+
+    func testLandscapeKeepsTaskDetailsThroughRotation() {
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let designReview = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Design review'")).firstMatch
+        XCTAssert(designReview.waitForExistence(timeout: 5))
+        designReview.tap()
+        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 5))
+
+        XCUIDevice.shared.orientation = .landscapeRight
+        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 5))
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 5))
+    }
+
+    func testLandscapeKeepsComposerAndSheetsUsable() {
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let composer = app.textFields["Ask Tana"]
+        composer.tap()
+        composer.typeText("Prepare the landscape review")
+        XCTAssert(app.buttons["Ask Tana"].exists)
+
+        XCUIDevice.shared.orientation = .landscapeRight
+        XCTAssert(app.buttons["Ask Tana"].exists)
+
+        app.buttons["Quick Add Task"].tap()
+        let quickAdd = app.navigationBars["Quick Add"]
+        XCTAssert(quickAdd.waitForExistence(timeout: 5))
+        let title = app.textFields["New task"]
+        title.tap()
+        title.typeText("Review landscape layout")
+        XCTAssert(quickAdd.buttons["Add"].isEnabled)
+        quickAdd.buttons["Cancel"].tap()
+        XCTAssert(quickAdd.waitForNonExistence(timeout: 5))
+
+        app.buttons["Menu"].tap()
+        app.buttons["Settings"].tap()
+        XCTAssert(app.buttons["Close"].waitForExistence(timeout: 5))
+        app.buttons["Close"].tap()
+        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 5))
+
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 5))
     }
 }
