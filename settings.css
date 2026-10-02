@@ -49,6 +49,10 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 .row.dim .icon, .row.dim .label { opacity: 0.5; }
 .row.block { display: block; padding: 10px 12px; }
 .row.block .sub { margin: 7px 2px 0; }
+/* the field an agent's switch opens when it needs a paste first (Dot's chat link), under its row and in line with its label */
+.row.field { gap: 8px; min-height: 0; padding: 0 12px 10px 40px; }
+.row.field::before { display: none; }
+.link { flex: 1; min-width: 0; height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline); font-size: 12px; -webkit-user-select: text; user-select: text; }
 .foot, .error { margin: 12px 10px 0; font-size: 11px; color: var(--muted); }
 .error { color: var(--red); }
 

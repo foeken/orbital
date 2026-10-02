@@ -16,6 +16,7 @@ const st = { prefs: {}, ai: null, chatgpt: null, agents: null, hidden: null, mcp
 const asked = {};
 let host = null, tab = TABS.some(([id]) => id === localStorage.getItem('settingsTab')) ? localStorage.getItem('settingsTab') : 'general';
 let failure = null, hiddenPick = null, adding = null, sized = 0; // the last call that failed; the hidden title − removes; the + field's words while it shows
+let linking = null, linkText = ''; // the agent whose link is being pasted before it can be switched on (Dot), and what is typed
 demoMode = localStorage.getItem('demoMode') === '1';
 addEventListener('storage', (e) => { if (e.key === 'demoMode') { demoMode = e.newValue === '1'; draw(); } });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => draw());
@@ -134,6 +135,25 @@ function hiddenList() {
   return r;
 }
 function unhide(pattern) { if (pattern == null) return; hiddenPick = null; load('hidden', () => host.removeFilter(pattern)); }
+// An agent that needs something pasted before it can run (Dot: its chat link, main/agents/dot.js setupHint) asks for it
+// in its own row when switched on, as ⌘K Choose agents asks on a page of its own; main reads the paste and refuses what
+// it cannot use, and only then is the agent on.
+const asks = (a) => !!a.setup && !a.enabled;
+function agentRows(a) {
+  const flip = () => { if (asks(a)) { linking = a.id; linkText = ''; draw(); $('pane').querySelector('input.link').focus(); } else load('agents', () => host.enableAgent(a.id, !a.enabled)); };
+  // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
+  const out = [row(a.icon, a.label, toggle('agent/' + a.id, a.label, a.enabled, flip, a.id === 'tana' || (!a.installed && !a.enabled && !asks(a))), // off until the paste is taken
+    a.id === 'tana' ? 'Always on' : asks(a) ? a.setup : !a.installed ? a.missing || 'Not installed' : null, !a.installed && !asks(a))];
+  if (linking !== a.id) return out;
+  const f = el('input', 'link'), go = button('link/' + a.id, 'Switch On', () => submit());
+  const submit = () => { const text = f.value.trim(); if (text) load('agents', async () => { const list = await host.enableAgent(a.id, true, text); linking = null; linkText = ''; return list; }); };
+  f.dataset.key = 'linkField/' + a.id; f.value = linkText; f.placeholder = a.id === 'dot' ? 'codex://threads/…' : a.setup; f.setAttribute('aria-label', a.setup);
+  f.oninput = () => { linkText = f.value; };
+  f.onkeydown = (e) => { if (e.key === 'Enter') submit(); else if (e.key === 'Escape') { linking = null; draw(); } };
+  const r = el('div', 'row field');
+  r.append(f, go);
+  return [...out, r];
+}
 const SECTIONS = {
   general: () => [
     ...group('Appearance', null, [row('darkLight', 'Theme', segmented('theme', 'Theme', ['light', 'dark'].includes(st.prefs.theme) ? st.prefs.theme : 'system',
@@ -162,9 +182,7 @@ const SECTIONS = {
     const choose = popup('defaultAgent', 'Default agent', pick, on.map((a) => [a.id, a.label]), (v) => load('agents', () => host.setDefaultAgent(v)));
     choose.disabled = on.length < 2;
     return [
-      // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
-      ...group('Agents', 'who a node can be handed to', list.map((a) => row(a.icon, a.label, toggle('agent/' + a.id, a.label, a.enabled, () => load('agents', () => host.enableAgent(a.id, !a.enabled)), a.id === 'tana' || (!a.installed && !a.enabled)),
-        a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : null, !a.installed))),
+      ...group('Agents', 'who a node can be handed to', list.flatMap(agentRows)),
       ...group(null, null, list.length ? [row('robot', 'Default agent', choose, 'Assign to Agent starts with it')] : []),
     ];
   },
@@ -182,7 +200,7 @@ function draw() {
   const had = document.activeElement?.dataset?.key, name = TABS.find(([id]) => id === tab)[1];
   document.title = name; $('title').textContent = name;
   $('tabs').replaceChildren(...TABS.map(([id, label, icon]) => {
-    const b = button('tab/' + id, null, () => { if (id !== tab) { tab = id; hiddenPick = null; adding = null; localStorage.setItem('settingsTab', id); draw(); } }, 'tab' + (id === tab ? ' on' : ''));
+    const b = button('tab/' + id, null, () => { if (id !== tab) { tab = id; hiddenPick = null; adding = null; linking = null; localStorage.setItem('settingsTab', id); draw(); } }, 'tab' + (id === tab ? ' on' : ''));
     b.innerHTML = GLYPHS[icon] || ''; b.append(el('span', null, label));
     b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(id === tab));
     return b;

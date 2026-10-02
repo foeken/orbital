@@ -1139,7 +1139,9 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     Out), the OpenAI API key only while one is stored (Remove), both **On this Mac**; the Quick and the Regular AI, a model
     and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
   - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
-    another Mac switched it on) and the default agent.
+    another Mac switched it on) and the default agent. One that needs a paste first (Dot's chat link, `setup` in
+    `agentList`) opens a field under its row instead of switching on: ↩ or Switch On hands the paste to `enableAgent`,
+    main refuses what it cannot read, and only then is it on; Esc or another tab drops the field.
   - **Lists**: the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
     it) and Show MCP chats.
   Every control makes the call its Cmd+K row makes, so a choice made there and one made here are the same write. Main

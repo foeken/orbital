@@ -243,11 +243,12 @@ const SETTINGS_API = String.raw`(() => {
   window.__calls = []; window.__slow = [];
   const call = (name, answer) => (...a) => { __calls.push([name, ...a]); return Promise.resolve(typeof answer === 'function' ? answer(...a) : answer); };
   const AI = { models: ['gpt-6-luna', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'high'] };
-  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true }];
+  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
+    { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: false, enabled: false, missing: 'Install the ChatGPT app', setup: "Paste your dot's chat link" }];
   start({ prefs: { theme: 'light' }, translate: () => {}, onSettings: (fn) => { window.__settings = fn; },
     aiOptions: () => new Promise((resolve) => __slow.push(() => resolve(AI))), setAiOption: call('setAiOption', (k, v) => ({ ...AI, [k]: v })),
     chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@private.example' }), chatgptLogout: call('chatgptLogout', { available: true, signedIn: false }),
-    agentList: async () => agents, enableAgent: call('enableAgent', (id, on) => (agents = agents.map((a) => (a.id === id ? { ...a, enabled: on } : a)))),
+    agentList: async () => agents, enableAgent: call('enableAgent', (id, on, setup) => (agents = agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a)))),
     setDefaultAgent: call('setDefaultAgent', () => agents), filters: async () => hidden,
     addFilter: call('addFilter', (p) => (hidden = [...hidden, p])), removeFilter: call('removeFilter', (p) => (hidden = hidden.filter((h) => h !== p))),
     mcpHidden: async () => true, setMcpHidden: call('setMcpHidden', (on) => on), setPref: call('setPref'), settingsSize: (h) => { __calls.push(['settingsSize', h]); } });
@@ -277,6 +278,12 @@ flow('the Settings window writes what you pick and shows what is newest', async 
   await p.js('document.querySelector(\'[data-key="agent/codex"]\').focus(); 1'); await p.key('Space'); await settle(p, 150);
   assert.deepEqual(await p.js('[__calls.find((c) => c[0] === "enableAgent"), document.activeElement.dataset.key, document.activeElement.getAttribute("aria-checked")]'),
     [['enableAgent', 'codex', false], 'agent/codex', 'false'], 'Space switches Codex off, and the keyboard is still on its switch');
+  // Dot needs its chat link before it can be on: its switch asks for the link in its row, and only the paste switches it on
+  await p.js('document.querySelector(\'[data-key="agent/dot"]\').click(); 1'); await settle(p, 100);
+  assert.equal(await p.js('__calls.filter((c) => c[0] === "enableAgent").length'), 1, 'Dot is not switched on without its link');
+  await p.type('codex://threads/0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b'); await p.key('↩'); await settle(p, 150);
+  assert.deepEqual(await p.js('[__calls.filter((c) => c[0] === "enableAgent").at(-1), document.querySelector(\'[data-key="agent/dot"]\').getAttribute("aria-checked"), !!document.querySelector("input.link")]'),
+    [['enableAgent', 'dot', true, 'codex://threads/0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b'], 'true', false], 'the pasted link switches Dot on, and the field goes');
   // the Lists tab: + and a title hides it, ⌫ on a selected one unhides it
   await tab('lists');
   await p.js('document.querySelector(\'[data-key="hidden+"]\').click(); 1'); await p.type('Lunch*'); await p.key('↩'); await settle(p, 150);
