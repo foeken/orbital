@@ -16,10 +16,12 @@ function readOnlyInDemo(api) {
     get: (own, key) => {
       if (!demoMode || typeof own[key] !== 'function') return own[key];
       if (DEMO_WRITES.has(key)) return () => Promise.reject(new Error('Demo mode is on: nothing is saved to Tana'));
-      // the day and week nodes are made (and pinned) the first time they are asked for: in demo mode only found
-      if (key === 'todayNode') return (offset) => own.todayNode(offset, true);
-      if (key === 'weekNode') return () => own.weekNode(true);
-      if (key === 'myTasks') return () => own.myTasks(true); // the Work View's My Tasks, found and never made
+      // the day and week nodes are made (and pinned) the first time they are asked for: in demo mode only found, and a
+      // missing one refused here (main's lookup answers null, which is not an error outside demo mode)
+      const found = (p) => p.then((v) => v || Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')));
+      if (key === 'todayNode') return (offset) => found(own.todayNode(offset, true));
+      if (key === 'weekNode') return () => found(own.weekNode(true));
+      if (key === 'myTasks') return () => found(own.myTasks(true)); // the Work View's My Tasks, found and never made
       return own[key];
     },
   });

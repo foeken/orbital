@@ -218,7 +218,7 @@ async function findMyTasks() {
   return myTasksMade && myTasksMade.client === S.client && !deletedNodes.has(myTasksMade.node.id) ? myTasksMade.node : null;
 }
 function myTasks(findOnly) {
-  if (findOnly) return findMyTasks().then((n) => { if (!n) throw new Error('There is no My Tasks search yet'); return n; });
+  if (findOnly) return findMyTasks(); // null when there is none yet
   myTasksAsk ||= (async () => {
     const found = await findMyTasks();
     if (found) return found;
