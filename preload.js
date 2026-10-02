@@ -90,9 +90,9 @@ contextBridge.exposeInMainWorld('api', {
   proposalAnswer: (chatUri, proposedUri, approve) => ipcRenderer.invoke('proposals:answer', chatUri, proposedUri, approve),
   timelinePages: (n) => ipcRenderer.invoke('timeline:pages', n), // how many pages of three days back children('orbital:timeline') reads; resolves to the number it took
   onTimelinePart: (cb) => ipcRenderer.on('timeline:part', (_e, rows) => cb(rows)), // the Timeline so far, while children('orbital:timeline') is still reading the rest
-  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, Claude
-  agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, isDefault, link, openNew, chat, opensHere }]
-  enableAgent: (id, on) => ipcRenderer.invoke('agent:enable', id, on), // the new list
+  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, Dot, Claude
+  agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, isDefault, link, openNew, chat, opensHere, setup }]
+  enableAgent: (id, on, setup) => ipcRenderer.invoke('agent:enable', id, on, setup), // the new list; setup: the paste the agent asked for (its setup hint)
   setDefaultAgent: (id) => ipcRenderer.invoke('agent:default', id), // the new list
   agentIds: () => ipcRenderer.invoke('agent:ids'), // nodes handed to an agent; app-local, not a Tana assignee
   setAgent: (docId, on, prompt, agent) => ipcRenderer.invoke('agent:set', docId, on, prompt, agent), // agent: its id, the default when absent

@@ -7,6 +7,7 @@
 const agent = require('../agent');
 require('./tana');
 require('./codex');
+require('./dot');
 require('./claude');
 const { agentIds, setAgentMark } = require('../documents');
 const { readNode } = require('../../sdk/node');
@@ -86,7 +87,7 @@ async function readStatuses() {
 const changed = (e, id) => { settings.tellOthers(pageOf(e), id); };
 const ipc = {
   'agent:list': () => agent.list(),
-  'agent:enable': (e, id, on) => { const out = agent.setEnabled(id, !!on); changed(e); return out; },
+  'agent:enable': (e, id, on, setup) => { const out = agent.setEnabled(id, !!on, setup); changed(e); return out; },
   'agent:default': (e, id) => { const out = agent.setDefault(id); changed(e); return out; },
   'agent:ids': () => agentIds(),
   'agent:set': async (e, id, on, prompt, agentId) => {

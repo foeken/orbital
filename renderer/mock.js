@@ -302,7 +302,9 @@ function mockApi() {
   ] };
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
-  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true }, { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true }];
+  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true },
+    { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: false, enabled: false, isDefault: false, missing: 'Install the ChatGPT app', setup: 'Paste your dot\'s chat link' },
+    { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true }];
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   const hiddenTitles = new Set(['Daily Brief Delivery', 'Private AI chat for*']); // Edit hidden items: an exact title and a prefix
@@ -680,9 +682,14 @@ function mockApi() {
       return !!on;
     },
     linkAgentTask: async (docId) => { codexAssigned.add(docId); return true; },
-    // the agents (main/agent.js): Tana and Codex on, Claude installed and off, enough to draw their Cmd+K pages
+    // the agents (main/agent.js): Tana and Codex on, Dot waiting for its chat link, Claude installed and off, enough to draw their Cmd+K pages
     agentList: async () => mockAgents.map((a) => ({ ...a })),
-    enableAgent: async (id, on) => { const a = mockAgents.find((x) => x.id === id); if (a && a.installed && id !== 'tana') { a.enabled = !!on; if (!on && a.isDefault) { a.isDefault = false; mockAgents[0].isDefault = true; } } return mockAgents.map((x) => ({ ...x })); },
+    enableAgent: async (id, on, setup) => {
+      const a = mockAgents.find((x) => x.id === id);
+      if (a && on && a.setup && setup) { if (!/^(codex:\/\/threads\/)?[0-9a-f-]{36}/i.test(setup)) throw new Error('Paste your dot\'s chat link: codex://threads/…'); a.installed = true; a.setup = ''; }
+      if (a && a.installed && id !== 'tana') { a.enabled = !!on; if (!on && a.isDefault) { a.isDefault = false; mockAgents[0].isDefault = true; } }
+      return mockAgents.map((x) => ({ ...x }));
+    },
     setDefaultAgent: async (id) => { for (const a of mockAgents) a.isDefault = a.id === id; return mockAgents.map((x) => ({ ...x })); },
     agentTasks: async () => Object.fromEntries([...codexAssigned].map((id) => [id, { agent: 'codex', taskId: '00000000-0000-4000-8000-000000000000' }])),
     openAgentTask: async () => true, openInAgent: async () => true,

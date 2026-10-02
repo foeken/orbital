@@ -1,10 +1,11 @@
 'use strict';
 // The agents a Tana node can be handed to, and the link from each node to the task it became (issue #669). Each agent
 // is a plugin in main/agents/ that registers itself here (main/agents/index.js loads them): Tana, always there and the
-// default until you choose another; Codex and Claude, when this Mac has them. A plugin answers:
+// default until you choose another; Codex, Dot and Claude, when this Mac has them. A plugin answers:
 //   id, label, icon         how the app names and draws it ("Codex", the robot glyph)
 //   available()             whether this Mac can run it; one that cannot shows greyed in Choose agents
 //   missing                 what to install, for that grey row
+//   setupHint(), setup(text)  what to paste before it can run ("Paste your dot's chat link"), and taking that paste
 //   start({ key, nodeUri, title, prompt, rules, userData })   begins a task and answers its id
 //   resume(taskId, prompt)  hands an existing task the new request (a reassignment)
 //   statuses({ nodeId: taskId })  nodeId -> pending | working | waiting | done | broken
@@ -25,8 +26,10 @@ const get = (id) => (typeof id === 'string' && Object.hasOwn(AGENTS, id) ? AGENT
 // and waits to be switched on. Tana cannot be switched off: it needs nothing installed and is the one agent everybody has.
 const enabledIds = () => { const stored = settings.get('agents'); return ['tana', ...(Array.isArray(stored) ? stored : ['codex']).filter((id) => id !== 'tana' && get(id))]; };
 const usable = (id) => !!get(id) && enabledIds().includes(id) && get(id).available();
-function setEnabled(id, on) {
+// setup: the paste the agent asked for (setupHint), taken before it is switched on; one it cannot read switches nothing
+function setEnabled(id, on, setup) {
   if (!get(id) || id === 'tana') throw new Error('No such agent');
+  if (on && setup !== undefined && get(id).setup) get(id).setup(setup);
   const next = enabledIds().filter((x) => x !== 'tana' && x !== id);
   if (on) next.push(id);
   settings.set('agents', next);
@@ -44,7 +47,7 @@ function setDefault(id) {
 // What the renderer draws: every agent, installed or not, and what each can do. Names and flags only.
 const list = () => Object.values(AGENTS).map((a) => ({
   id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id), isDefault: defaultAgent() === a.id,
-  link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere,
+  link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere, setup: (a.setupHint && a.setupHint()) || '',
 }));
 
 // ---- which task each node became ----

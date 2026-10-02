@@ -3719,15 +3719,15 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const agent = backend.agent, settings = backend.settings, NODE = 'tana:text:' + ulid(), THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
-    const cx = agent.get('codex'), cl = agent.get('claude');
-    cx.available = () => true; cl.available = () => false;
+    const cx = agent.get('codex'), cl = agent.get('claude'), dt = agent.get('dot');
+    cx.available = () => true; cl.available = () => false; dt.available = () => false;
     const view = () => agent.list().map((a) => a.id + (a.installed ? '' : '?') + (a.enabled ? '+' : '') + (a.isDefault ? '*' : '')).join(' ');
-    assert.equal(view(), 'tana+* codex+ claude?', 'Tana, Codex and Claude are known; Tana is on and the default, Codex is on as before, Claude waits');
+    assert.equal(view(), 'tana+* codex+ dot? claude?', 'Tana, Codex, Dot and Claude are known, in that order; Tana is on and the default, Codex is on as before, Dot and Claude wait');
     assert.throws(() => agent.setEnabled('tana', false), 'Tana cannot be switched off');
     assert.throws(() => agent.setDefault('claude'), /Switch that agent on first/, 'an agent that is off cannot be the default');
     cl.available = () => true;
     agent.setEnabled('claude', true); agent.setDefault('claude');
-    assert.equal(view(), 'tana+ codex+ claude+*', 'switched on and chosen');
+    assert.equal(view(), 'tana+ codex+ dot? claude+*', 'switched on and chosen');
     assert.deepEqual([settings.isSynced('agents'), settings.isSynced('defaultAgent')], [true, true], 'and both follow you to the next machine');
     cl.available = () => false;
     assert.equal(agent.defaultAgent(), 'tana', 'a default this Mac cannot run falls back to Tana, so Assign to Agent always has somewhere to go');
@@ -3764,6 +3764,39 @@ async function main() {
     assert.equal(cx.linkId('not-a-thread'), null, 'and nothing else');
     assert.equal(cl.linkId('claude --resume ' + THREAD), THREAD, 'Claude takes its resume command');
     assert.equal(cl.linkId('codex://threads/' + THREAD), null, 'but not a Codex link');
+    // Dot: your one conversation with your dot, linked once, and a message in it for every node (main/agents/dot.js).
+    {
+      const CHAT = '6abf3de2-abe4-81a4-9796-103cc1f3f0d4', sendTimers = () => backend.timers.filter((t) => t.ms === dt.sendAfter);
+      assert.throws(() => agent.setEnabled('dot', true, 'https://chatgpt.com'), /chat link/, 'a paste that is no chat link is refused');
+      assert.equal(agent.enabledIds().includes('dot'), false, 'and switches nothing on');
+      agent.setEnabled('dot', true, 'codex://threads/' + CHAT + '?hostId=durable');
+      assert.deepEqual([settings.get('dotChat'), settings.isSynced('dotChat')], [CHAT, true], 'the app\'s link, query and all, is the conversation, and it follows you');
+      dt.available = () => true; agent.setDefault('dot');
+      assert.equal(agent.defaultAgent(), 'dot', 'and Dot can be the default');
+      let pressed = 0;
+      dt.press = async () => { pressed++; };
+      const sending = dt.start({ nodeUri: NODE, title: 'Plan the\noffsite', prompt: 'Book a venue' }), waits = sendTimers().length;
+      await until(() => sendTimers().length > waits, 'the wait before ↩');
+      const url = backend.opened.at(-1), prefix = 'codex://threads/' + CHAT + '?hostId=durable&prompt=';
+      assert.ok(url.startsWith(prefix), 'the conversation opens on the dot\'s host');
+      assert.equal(decodeURIComponent(url.slice(prefix.length)), 'Book a venue\n\nTana: Plan the offsite (' + NODE + ')', 'with the request typed in, then the node by name and uri');
+      assert.equal(pressed, 0, 'and ↩ waits for the app to have it');
+      sendTimers().at(-1).fn();
+      assert.equal(await sending, CHAT, 'the task is the conversation');
+      assert.equal(pressed, 1, '↩ is pressed once');
+      dt.press = async () => { throw new Error('Your message is typed in ChatGPT: press ↩ there to send it'); };
+      const unsent = dt.start({ nodeUri: NODE, title: 'x', prompt: 'y' }), waits2 = sendTimers().length;
+      await until(() => sendTimers().length > waits2, 'the second wait');
+      sendTimers().at(-1).fn();
+      await assert.rejects(unsent, /press ↩ there/, 'a ↩ that could not be pressed refuses the handoff and says what to do');
+      assert.deepEqual({ ...(await dt.statuses({ [NODE]: CHAT })) }, { [NODE]: 'sent' }, 'its progress is the dot\'s: the badge says it was sent');
+      await dt.open(CHAT);
+      assert.equal(backend.opened.at(-1), 'codex://threads/' + CHAT + '?hostId=durable', 'and opens the conversation');
+      settings.set('dotChat', undefined);
+      await assert.rejects(dt.start({ nodeUri: NODE, prompt: 'Do it' }), /Link your dot first/, 'with no conversation linked nothing is sent');
+      agent.setEnabled('dot', false); dt.available = () => false;
+      assert.equal(settings.get('defaultAgent'), null, 'switched off, it stops being the default');
+    }
     // Claude's state is read from its transcript (main/agents/claude.js): the last turn decides.
     const claude = require('../main/agents/claude');
     const said = (type, extra) => ({ type, message: { role: type, ...extra } });

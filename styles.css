@@ -1019,7 +1019,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
    shine rather than as work still going on; broken work shakes. */
 .cbadge.done.shine:not(.closed)::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 28%, var(--cbadge-sheen) 50%, transparent 72%); transform: translateX(-130%); animation: cbadge-sweep var(--dur-flash) var(--ease-out) var(--dur-quick) backwards; }
 /* one colour per state, and the label says the same thing in words (renderer/state.js AGENT_BADGE) */
-.cbadge.pending, .cbadge.elsewhere { background: #ececec; color: #5a5a5a; } /* elsewhere: a task on another Mac, quiet as one not started */
+.cbadge.pending, .cbadge.elsewhere, .cbadge.sent { background: #ececec; color: #5a5a5a; } /* elsewhere: a task on another Mac; sent: a dot's, whose progress lives in ChatGPT — both quiet as one not started */
 .cbadge.working, .cbadge.waiting { background: #dde8fb; color: var(--working-ink); --cbadge-sheen: rgba(255, 255, 255, .9); }
 .cbadge.done { background: #d9f0de; color: #17652f; }
 .cbadge.broken { background: #fbdede; color: #8f1b1b; }
@@ -1525,7 +1525,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .fields a { color: #7fb8dd; }
 [data-theme="dark"] .meta.pending { color: #454b4e; }
 [data-theme="dark"] .cbadge { --cbadge-sheen: rgba(200, 225, 255, .45); }
-[data-theme="dark"] .cbadge.pending, [data-theme="dark"] .cbadge.elsewhere { background: #33383a; color: #b6bbbd; }
+[data-theme="dark"] .cbadge.pending, [data-theme="dark"] .cbadge.elsewhere, [data-theme="dark"] .cbadge.sent { background: #33383a; color: #b6bbbd; }
 [data-theme="dark"] .cbadge.working, [data-theme="dark"] .cbadge.waiting { background: #1e3050; }
 [data-theme="dark"] .cbadge.done { background: #1d3c27; color: #7fd396; }
 [data-theme="dark"] .cbadge.broken { background: #45201f; color: #f0a3a0; }
