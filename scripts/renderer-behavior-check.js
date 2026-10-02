@@ -431,7 +431,8 @@ function runSensitiveBlurCheck() {
     'the frequently used Mark/Unmark command (a selection row, current node included) ranks before the visibility toggle');
   assert.doesNotMatch(source, /label: marked \? 'Unmark as sensitive' : 'Mark as sensitive'/, 'the palette has no second, single-document copy of the sensitive row');
   for (const [surface, pattern] of [
-    ['outline rows', /blurSensitive\(body, docId, target && target\.id\)/],
+    ['outline rows', /blurSensitive\(body, docId, target && target\.id, node\.timeline && node\.timeline\.uri\)/], // a Timeline row says its node's title
+    ['mentions', /blurSensitive\(a, s\.mention\.uri\)/],
     ['zoomed title', /blurSensitive\(titleEl, parent && parent\.docId\)/],
     ['zoomed chips', /blurSensitive\(taskInfoEl, parent && parent\.docId\)/],
     ['zoomed fields', /blurSensitive\(el, parent && parent\.docId\)/],
@@ -2567,6 +2568,7 @@ function runFormattingChecks() {
     ${FAKE_DOM}
     const iconNode = (icon) => { const el = document.createElement('svg'); el.dataset.icon = icon; return el; };
     const deletedIds = new Set();
+    const blurSensitive = () => {}; // renderer/nodes.js: a mention's mark, nothing to hide here
     ${sourceBetween('const isGone = (uri)', 'function noteGone')}
     ${segments}
     ({ renderSegs, readSegs, markRange, hasMark, saveValue, blank: () => document.createElement('span'),
@@ -6534,6 +6536,7 @@ function runReferenceCaretCheck() {
       toString() { return this.end ? upTo(this.root, this.end[0], this.end[1]) : ''; },
     });
     const getSelection = () => ({ rangeCount: focus ? 1 : 0, focusNode: focus && focus[0], focusOffset: focus && focus[1], isCollapsed: true, removeAllRanges() {}, addRange() {} });
+    const blurSensitive = () => {}; // renderer/nodes.js: a mention's mark, nothing to hide here
     ${segments}
     ${sourceBetween('function caretOffset', 'function focused')}
     const build = (segs) => {

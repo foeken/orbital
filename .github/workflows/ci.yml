@@ -26,3 +26,5 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: npm run lint
       - run: npm run check
+      # whole user flows in Chromium on the mock (scripts/flow-check.js, docs/TESTING.md); the runner image has Chrome
+      - run: npm run flows
