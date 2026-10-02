@@ -206,9 +206,10 @@ function paletteRows(q, typed = q) {
     rows.push({ id: 'editPins', group: docGroup, icon: 'pinned', label: 'Edit pins',
       hint: info ? where.join(' · ') || 'Not pinned' : '', keepOpen: true, run: () => openPinsPalette(doc) });
   }
-  // the node's web link, for pasting into Slack or a doc
-  if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
-    rows.push({ id: 'copyLink', group: docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
+  // the node's web link, for pasting into Slack or a doc; on a Timeline row, the link of the node it is about
+  const tlUri = timelineUriAt(), linkId = tlUri || (palDoc && isRealId(palDoc.id) ? palDoc.id : null);
+  if (linkId && tana.nodeLink) {
+    rows.push({ id: 'copyLink', group: tlUri && selKeys().length ? 'Selection' : docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(linkId), 'Link copied')) });
   }
   // the node in Tana's own web app (what Show in Tana in the Graph pane's Details did)
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ id: 'openInTana', group: docGroup, icon: 'tana', label: 'Open in Tana', run: () => run(async () => tana.openExternal(await tana.nodeLink(doc.id))) }); }

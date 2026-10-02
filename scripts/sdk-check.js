@@ -4432,6 +4432,10 @@ async function main() {
     assert.deepEqual(searchParams(parseQuery('#meeting'), types).nodeTypes, ['event']);
     assert.equal(searchParams(parseQuery('#meeting'), types).textQuery, undefined);
     assert.deepEqual(searchParams(parseQuery('#PROJECT'), types).entityTypes, ['tana:type:p'], 'type title matched case-insensitively');
+    // a #tag lists newest first: a meeting by its time, a task or a typed node by when it was made
+    const order = (q) => searchParams(parseQuery(q), types).sortOptions;
+    assert.deepEqual(order('#meeting'), [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }]);
+    assert.deepEqual([order('sam #task')[0].field, order('#Project')[0].field], ['SORT_FIELD_CREATE_TIME', 'SORT_FIELD_CREATE_TIME']);
     assert.equal(searchParams(parseQuery('x #Nope'), types), null, 'unknown type = no results');
     assert.deepEqual([needsTypes(parseQuery('#task #meeting')), needsTypes(parseQuery('#Project'))], [false, true]);
     assert.deepEqual(searchParams(parseQuery('#member'), types).nodeTypes, ['user-profile']);

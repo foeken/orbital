@@ -220,6 +220,24 @@ flow('a change from elsewhere shows live and keeps your typing', async (p) => {
   await p.waitFor('!' + T('Check out the new editor'), 'a document deleted elsewhere to leave the Library', 3000);
 });
 
+// 8. Timeline Copy link: a right-click on a meeting that has been is ⌘K on that row, and Copy link copies the meeting's
+// link, not the Timeline's (which has none)
+flow('Copy link on a Timeline meeting copies the meeting', async (p) => {
+  await p.start({ real: true });
+  await p.js("goTo('orbital:timeline')");
+  const row = '[...document.querySelectorAll("#outline .node.tl-meeting")].find((n) => items.get(n.dataset.key)?.node.timeline?.uri)';
+  await p.waitFor(row, 'a meeting on the Timeline');
+  const uri = await p.js(row + '.querySelector(".text") && items.get(' + row + '.dataset.key).node.timeline.uri');
+  await p.js('(() => { const t = ' + row + '.querySelector(".text"), r = t.getBoundingClientRect(), at = { bubbles: true, cancelable: true, button: 2, clientX: r.left + 4, clientY: r.top + r.height / 2 };' +
+    ' t.dispatchEvent(new MouseEvent("mousedown", at)); t.dispatchEvent(new MouseEvent("contextmenu", at)); })()');
+  await p.waitFor('!document.getElementById("palette").hidden', 'Cmd+K on the right-clicked row');
+  await p.js('window.copyText = (text) => { window.__copied = text; }');
+  await p.js('palRows.find((r) => r.id === "copyLink").run()');
+  await p.waitFor('window.__copied', 'the link copied');
+  assert.equal(await p.js('window.__copied'), await p.js('tana.nodeLink(' + J(uri) + ')'), 'Copy link copied the meeting\u2019s link');
+  await p.key('esc');
+});
+
 (async () => {
   if (process.env.CODEX_SANDBOX) { console.error('flow-check: the agent sandbox refuses the loopback port and Chromium this needs; run it escalated'); process.exit(3); }
   const chrome = findChrome();
@@ -309,4 +327,3 @@ flow('a change from elsewhere shows live and keeps your typing', async (p) => {
   if (failed) { console.log(failed + ' flow(s) failed'); process.exit(1); }
   console.log('flow-check passed');
 })().catch((e) => { console.error(e.stack || e); process.exit(1); });
-

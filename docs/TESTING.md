@@ -42,6 +42,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    - Cmd+K, the / menu and Escape give the caret back where it was;
    - a slow answer for a page you left does not replace the one you are on;
    - a change made elsewhere shows live and leaves what you are typing alone.
+   - a right-click on a Timeline meeting is Cmd+K on it, and Copy link copies the meeting's link.
 
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; CI runs it on every PR.

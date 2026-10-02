@@ -616,7 +616,9 @@ muted grey (renderer/palette.js `keyHint`); on any other row, and on every other
 The same card with one list: "Search Tana", `api.search` debounced 150 ms (stale answers ignored), rows with icon,
 title, chips and grey meta; "No results" for an empty answer. From four characters on, documents only Tana's semantic
 search found follow under "Related" in its order (issue #20). `#task`, `#meeting`, `#member` and `#<type name>`
-tokens anywhere in the query become filters (an unknown type gives no results); an event's meta shows its date.
+tokens anywhere in the query become filters (an unknown type gives no results); an event's meta shows its date. A
+query with a filter lists newest first: `#meeting` by the meeting's start time, any other by when the node was made
+(sdk/query.js `searchParams`), and the title re-sort below keeps that order among equals.
 Tana's order does not weigh the title, so `searchNow` re-sorts by `titleHits`: most typed words in the title first
 (filter tokens left out), then most that begin a word, then Tana's order; only those words are bold. Enter opens the
 result wherever it lives. ⌘S toggles it and opening one palette closes the other. An empty query shows Recently
@@ -989,6 +991,9 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   Neither enters the undo stack.
 - **Copy link** (`copyLink`) copies the node's home.tana.inc url, which takes the route Tana's own resolver picks for
   the kind: `/t/` a type, `/u/` a person, `/e/` a meeting, `/s/` a space, `/l/` every other document (issue #88).
+  On a Timeline row (under the caret, right-clicked, or the one selected) it is the link of the node the row is
+  about — the meeting, the task someone completed — since the row is the Timeline's own (renderer/timeline.js
+  `timelineUriAt`).
   **Open in Tana** (`openInTana`, the Tana glyph) opens that url in Tana's web app, and on a meeting or its write-up
   **Join call** (`joinCall`, `callRow`) opens its call link, the readable link as the row's hint.
 

@@ -30,6 +30,8 @@ function searchParams({ text, tags }, types, limit = 20) {
     else if (types.has(t)) p.entityTypes = [...(p.entityTypes || []), types.get(t)];
     else return null;
   }
+  // a #tag lists a kind, newest first: meetings by when they were, anything else by when it was made
+  if (tags.length) p.sortOptions = [{ field: p.nodeTypes.join() === 'event' ? 'SORT_FIELD_EVENT_START_TIME' : 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
   return p;
 }
 
