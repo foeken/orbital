@@ -116,8 +116,9 @@ async function linkCode() {
   // that everything else happens in Tana (the status lines included), and what goes through orbital.md, so the Dot can explain it when asked.
   return { code, expiresAt, url: relay.base, tana: TANA_MCP,
     prompt: 'Call Orbital\'s link_orbital tool with the code ' + code + ' and your own name (Dot if you have none). Then subscribe to Orbital\'s task.assigned event, and each time it '
-      + 'fires, read the Tana node its data names with your Tana tools, do what its "Agent context" block asks, and write what you did into the node, ending each '
-      + 'update with a line "Agent status: Working", or "Agent status: Completed" when you are done, or "Agent status: Failed" if you cannot finish. Leave the task\'s own status as it is. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
+      + 'fires, read the Tana node its data names with your Tana tools; it can be a task, a note, anything. Do your part as its "Agent context" block asks and write '
+      + 'what you did into the node, ending each update with a line "Agent status: Working", or "Agent status: Completed" when your part is done, or "Agent status: '
+      + 'Failed" if you cannot do it. That line marks your role; leave the node itself as it is (a task stays open) unless the request asks you to change it. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
       + 'I add them in ChatGPT as custom MCP servers, Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. If I ask what goes through Orbital: only ids: '
       + 'each event carries a Tana node\'s id, and nothing comes back through Orbital. The words stay in Tana, where you read them with your own Tana access.' };
 }

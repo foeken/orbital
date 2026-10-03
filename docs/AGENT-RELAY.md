@@ -21,9 +21,10 @@ your words never pass through it.
    its own (OAuth below; it connects at once, there is nothing to approve).
 3. Then **Copy the message for your Dot** copies what you send it: *Call Orbital's link_orbital tool with the code
    7KQX-M2PD and your own name (Dot if you have none). Then subscribe to Orbital's task.assigned event, and each time it fires, read the Tana
-   node its data names with your Tana tools, do what its "Agent context" block asks, and write what you did into the
-   node, ending each update with a line "Agent status: Working", or "Agent status: Completed" when you are done, or
-   "Agent status: Failed" if you cannot finish. Leave the task's own status as it is*, what to say if either server's tools are missing, and
+   node its data names with your Tana tools; it can be a task, a note, anything. Do your part as its "Agent context"
+   block asks and write what you did into the node, ending each update with a line "Agent status: Working", or "Agent
+   status: Completed" when your part is done, or "Agent status: Failed" if you cannot do it. That line marks your role;
+   leave the node itself as it is (a task stays open) unless the request asks you to change it*, what to say if either server's tools are missing, and
    that only ids go through Orbital, so the Dot can explain it when asked. The page says the same under it. The code
    works once and for fifteen minutes.
 4. The page, asking every two seconds, sees the code used, closes on "Linked Dot · ChatGPT", and the agent is one of
