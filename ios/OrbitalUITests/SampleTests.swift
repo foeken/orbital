@@ -23,9 +23,11 @@ final class SampleTests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label == %@ AND value IN %@", words, ["Completed", "Not completed", "In your Inbox"])).firstMatch
     }
 
+    // Every wait gives up after 15 s: a CI simulator once took longer than 5 to tick a box, and a wait that is met
+    // returns at once, so the limit only lengthens a run that fails
     private func wait(_ element: XCUIElement, value: String) {
         let done = expectation(for: NSPredicate(format: "value == %@", value), evaluatedWith: element)
-        wait(for: [done], timeout: 5)
+        wait(for: [done], timeout: 15)
     }
 
     func testTimelineShowsTodaysTasks() {
@@ -53,13 +55,13 @@ final class SampleTests: XCTestCase {
         app.buttons["Menu"].tap()
         app.buttons["My open tasks"].tap()
         // a saved search's page is untitled (NodeScreen titled: false): its rows say which it is
-        XCTAssert(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Book the offsite venue'")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssert(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Book the offsite venue'")).firstMatch.waitForExistence(timeout: 15))
         XCTAssertFalse(app.navigationBars["Timeline"].exists)
     }
 
     func testMeetingOpensItsPage() {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Design review'")).firstMatch.tap()
-        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 5))
+        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 15))
     }
 
     func testAskTanaOpensTheChat() {
@@ -67,57 +69,57 @@ final class SampleTests: XCTestCase {
         field.tap()
         field.typeText("Summarise this week")
         app.buttons["Ask Tana"].tap()
-        XCTAssert(app.navigationBars["Summarise this week’s meetings"].waitForExistence(timeout: 5))
+        XCTAssert(app.navigationBars["Summarise this week’s meetings"].waitForExistence(timeout: 15))
     }
 
     func testQuickAddWaitsForATitle() {
         app.buttons["Quick Add Task"].tap()
         let sheet = app.navigationBars["Quick Add"]
-        XCTAssert(sheet.waitForExistence(timeout: 5))
+        XCTAssert(sheet.waitForExistence(timeout: 15))
         XCTAssertFalse(sheet.buttons["Add"].isEnabled)
         sheet.buttons["Cancel"].tap()
-        XCTAssert(sheet.waitForNonExistence(timeout: 5))
+        XCTAssert(sheet.waitForNonExistence(timeout: 15))
     }
 
     func testSettingsOpenFromTheMenu() {
         app.buttons["Menu"].tap()
         app.buttons["Settings"].tap()
-        XCTAssert(app.staticTexts["Demo mode"].waitForExistence(timeout: 5))
+        XCTAssert(app.staticTexts["Demo mode"].waitForExistence(timeout: 15))
         app.buttons["Close"].tap()
-        XCTAssert(app.staticTexts["Demo mode"].waitForNonExistence(timeout: 5))
+        XCTAssert(app.staticTexts["Demo mode"].waitForNonExistence(timeout: 15))
     }
 
     func testLandscapeKeepsTimelineMenuAndSavedSearch() {
         defer { XCUIDevice.shared.orientation = .portrait }
         XCUIDevice.shared.orientation = .landscapeLeft
-        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 5))
+        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 15))
         XCTAssert(box("Draft the Q4 hiring plan").exists)
 
         app.buttons["Menu"].tap()
-        XCTAssert(app.buttons["My open tasks"].waitForExistence(timeout: 5))
+        XCTAssert(app.buttons["My open tasks"].waitForExistence(timeout: 15))
         app.buttons["My open tasks"].tap()
         let offsite = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Book the offsite venue'")).firstMatch
-        XCTAssert(offsite.waitForExistence(timeout: 5))
+        XCTAssert(offsite.waitForExistence(timeout: 15))
 
         XCUIDevice.shared.orientation = .landscapeRight
         XCTAssert(offsite.exists)
 
         XCUIDevice.shared.orientation = .portrait
-        XCTAssert(offsite.waitForExistence(timeout: 5))
+        XCTAssert(offsite.waitForExistence(timeout: 15))
     }
 
     func testLandscapeKeepsTaskDetailsThroughRotation() {
         defer { XCUIDevice.shared.orientation = .portrait }
         XCUIDevice.shared.orientation = .landscapeLeft
         let designReview = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Design review'")).firstMatch
-        XCTAssert(designReview.waitForExistence(timeout: 5))
+        XCTAssert(designReview.waitForExistence(timeout: 15))
         designReview.tap()
-        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 5))
+        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 15))
 
         XCUIDevice.shared.orientation = .landscapeRight
-        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 5))
+        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 15))
         XCUIDevice.shared.orientation = .portrait
-        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 5))
+        XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 15))
     }
 
     func testLandscapeKeepsComposerAndSheetsUsable() {
@@ -133,21 +135,21 @@ final class SampleTests: XCTestCase {
 
         app.buttons["Quick Add Task"].tap()
         let quickAdd = app.navigationBars["Quick Add"]
-        XCTAssert(quickAdd.waitForExistence(timeout: 5))
+        XCTAssert(quickAdd.waitForExistence(timeout: 15))
         let title = app.textFields["New task"]
         title.tap()
         title.typeText("Review landscape layout")
         XCTAssert(quickAdd.buttons["Add"].isEnabled)
         quickAdd.buttons["Cancel"].tap()
-        XCTAssert(quickAdd.waitForNonExistence(timeout: 5))
+        XCTAssert(quickAdd.waitForNonExistence(timeout: 15))
 
         app.buttons["Menu"].tap()
         app.buttons["Settings"].tap()
-        XCTAssert(app.buttons["Close"].waitForExistence(timeout: 5))
+        XCTAssert(app.buttons["Close"].waitForExistence(timeout: 15))
         app.buttons["Close"].tap()
-        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 5))
+        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 15))
 
         XCUIDevice.shared.orientation = .portrait
-        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 5))
+        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 15))
     }
 }

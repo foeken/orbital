@@ -35,7 +35,7 @@ itself, driven in a vm made to look like the session page.
 
 `OrbitalUITests` drives the app itself on `-sample`, finding everything by the label VoiceOver reads: the Timeline, ticking a
 task, a sensitive task's hidden words, the menu and a saved search, a meeting's page, Ask Tana, Quick Add and Settings. The
-iOS workflow runs it on a simulator when the app or its engine changes; locally:
+iOS workflow runs it on a simulator when anything under `ios/` changes; locally:
 
 ```sh
 cd ios
