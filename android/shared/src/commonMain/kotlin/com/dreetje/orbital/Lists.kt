@@ -2,23 +2,25 @@ package com.dreetje.orbital
 
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlinx.datetime.TimeZone
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 // How the screens lay rows out, apart from drawing them: the Timeline's days, a search's sections, an outline
 // flattened, a chat's names and its waiting dots, and the free time's words (ios/Orbital Timeline.swift, Pages.swift)
 object Lists {
-    // Today, Yesterday and each day before, by the rows' own time (renderer/timeline.js timelineGroups); the blocks
-    // above the days (today's tasks, the free time, the meetings to come) are drawn apart
-    fun days(rows: List<Row>, now: Instant): List<Pair<String, List<Row>>> {
-        val out = mutableListOf<Pair<String, MutableList<Row>>>()
+    // Today, Yesterday and each day before, by the day the engine put each row under (renderer/timeline.js
+    // timelineGroups, ios/engine/labels.js); the blocks above the days (today's tasks, the free time, the meetings to
+    // come) are drawn apart
+    fun days(rows: List<Row>, now: Instant, zone: TimeZone = TimeZone.currentSystemDefault()): List<Pair<String, List<Row>>> {
+        val out = mutableListOf<Triple<String, String, MutableList<Row>>>() // the day, its heading, its rows
         for (row in rows) {
             val t = row.timeline
             if (t?.today == true || t?.upcoming == true || t?.free != null) continue
-            val title = Times.day(row.instant, now)
-            if (out.lastOrNull()?.first == title) out.last().second.add(row) else out.add(title to mutableListOf(row))
+            val key = t?.day ?: ""
+            if (out.lastOrNull()?.first == key) out.last().third.add(row) else out.add(Triple(key, Times.day(key, t?.dayTitle, now, zone), mutableListOf(row)))
         }
-        return out
+        return out.map { it.second to it.third }
     }
 
     // consecutive rows under one heading; one untitled section when the search is not grouped

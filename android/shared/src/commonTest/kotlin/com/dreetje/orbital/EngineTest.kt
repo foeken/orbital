@@ -1,9 +1,12 @@
 package com.dreetje.orbital
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
@@ -21,16 +24,17 @@ class EngineTest {
     private var clock = Instant.parse("2026-10-02T10:00:00Z")
 
     // a page that is signed in and answers the Timeline; toggle answers what it is told to
-    private fun page(toggle: () -> String = { "\"closed\"" }) = FakeHost { body, _ ->
+    private fun page(setup: suspend () -> JsonElement = { text("""{"sensitive":["tana:text:a"],"pinned":[]}""") }, toggle: () -> String = { "\"closed\"" }) = FakeHost { body, _ ->
         when {
             "orbital.connect()" in body -> JsonPrimitive(true)
             "orbital.why()" in body -> text("200 signed in")
             "orbital.email()" in body -> text("me@example.com")
             "orbital.timeline" in body -> text(timeline)
-            "orbital.setup()" in body -> text("""{"sensitive":["tana:text:a"],"pinned":[]}""")
+            "orbital.setup()" in body -> setup()
             "orbital.issues()" in body -> kotlinx.serialization.json.JsonArray(emptyList())
             "orbital.toggle" in body -> text(toggle())
             "orbital.remove" in body -> throw Exception("You cannot delete this")
+            "orbital.open" in body -> text("""{"title":"Plan","kind":"text","rows":[]}""")
             else -> JsonNull
         }
     }
@@ -93,6 +97,43 @@ class EngineTest {
         engine.toggle(task)
         assertEquals("open", engine.state(task))
         assertEquals("Tana refused the change: this task is read-only to you", engine.error)
+    }
+
+    // the screen that asked for a read went away halfway through it (a LaunchedEffect restarted, a row left the list):
+    // the next refresh still reads, where a loading flag left set made every later one only say "again"
+    @Test fun aReadCutOffMidwayLeavesTheNextOneFree() = runTest {
+        var stall = false
+        val host = page(setup = { if (stall) awaitCancellation(); text("""{"sensitive":[],"pinned":[]}""") })
+        val engine = ready(host)
+        stall = true
+        val cut = launch { engine.refresh() }
+        runCurrent()
+        assertTrue(engine.loading)
+        cut.cancel()
+        runCurrent()
+        assertFalse(engine.loading)
+        stall = false
+        val reads = host.calls.count { "orbital.timeline" in it.first }
+        engine.refresh()
+        assertEquals(reads + 1, host.calls.count { "orbital.timeline" in it.first })
+    }
+
+    @Test fun aPageOpenedBeforeIsThereAtOnceUntilSigningOut() = runTest {
+        val engine = ready(page())
+        assertNull(engine.cached("tana:text:p"))
+        engine.open("tana:text:p")
+        assertEquals("Plan", engine.cached("tana:text:p")?.title)
+        engine.demo = true // its words were read as they are: gone with demo mode turned on
+        assertNull(engine.cached("tana:text:p"))
+        engine.open("tana:text:p")
+        engine.signOut()
+        assertNull(engine.cached("tana:text:p"))
+    }
+
+    @Test fun sharedWordsComeOnceEachALineApiece() {
+        assertEquals("Offsite venues\nhttps://example.com/v", Engine.Shared.words(" Offsite venues ", "https://example.com/v"))
+        assertEquals("https://example.com/v", Engine.Shared.words("https://example.com/v", "https://example.com/v"))
+        assertNull(Engine.Shared.words(null, "  "))
     }
 
     @Test fun demoModeTicksNothing() = runTest {

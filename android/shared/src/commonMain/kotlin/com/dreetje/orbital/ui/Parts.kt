@@ -10,12 +10,10 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -36,11 +34,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -51,6 +49,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -60,9 +59,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Row as Node
 import kotlinx.coroutines.launch
@@ -97,11 +94,11 @@ private inline fun androidx.compose.ui.graphics.drawscope.DrawScope.scaleAround(
     drawContext.transform.let { t -> t.scale(k, k, center); block(); t.scale(1 / k, 1 / k, center) }
 
 // A task's box: a tap ticks it off or back on (Engine.toggle, the desktop's rule), with the success haptic; the words
-// beside it open the task. TalkBack reads its words and its state.
+// beside it open the task. TalkBack reads its words and its state. The write runs on the engine's scope, as the
+// iPhone's Task does, so a row leaving the list (a tick that moves it) never cancels its own write.
 @Composable
 fun TaskBox(task: Node, engine: Engine, modifier: Modifier = Modifier) {
     val state = engine.state(task)
-    val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val hidden = task.sensitive == true && !engine.reveal
     CheckBox(state, engine.platform.reduceMotion, modifier
@@ -110,10 +107,10 @@ fun TaskBox(task: Node, engine: Engine, modifier: Modifier = Modifier) {
             contentDescription = if (hidden) "Sensitive task" else task.words
             stateDescription = when (state) { "closed" -> "Completed"; "proposed" -> "In your Inbox"; else -> "Not completed" }
             role = androidx.compose.ui.semantics.Role.Checkbox
-            onClick("Ticks the task off, or back on") { scope.launch { engine.toggle(task) }; true }
+            onClick("Ticks the task off, or back on") { engine.scope.launch { engine.toggle(task) }; true }
         }
         .combinedClickable(onClick = {
-            scope.launch {
+            engine.scope.launch {
                 engine.toggle(task)
                 if (engine.states[task.id] == "closed") haptic.performHapticFeedback(HapticFeedbackType.Confirm) // your own tick, not a change read from Tana
             }
@@ -152,17 +149,20 @@ fun Pulse(still: Boolean) {
     Box(Modifier.size(24.dp).scale(1f + 1.2f * t).alpha(0.45f * (1 - t)).background(c.accent, CircleShape))
 }
 
-// People as faces (#461): initials in grey circles, overlapping, four at most; the names follow when there are few
+// People as faces (#461): initials in grey circles, overlapping, four at most; the names follow when there are few.
+// Each circle's ring is the page's colour and sits on its edge, half outside it, as SwiftUI's stroke overlay does, so
+// each face cuts into the one before; the initials are 10 whatever the font size, as the iPhone's .system(size: 10).
 @Composable
 fun Faces(people: List<Node.Person>, names: Boolean = true, modifier: Modifier = Modifier) {
     val c = Theme.colors
     val hidden = LocalHidden.current // under a sensitive mark: the names barred, no circles
+    val ten = with(LocalDensity.current) { 10.dp.toSp() }
     Row(modifier.semantics(mergeDescendants = true) {}.clearAndSetSemantics { contentDescription = if (hidden) "Sensitive, shake to show" else people.joinToString(", ") { it.name } },
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (!hidden) Row(horizontalArrangement = Arrangement.spacedBy((-4).dp)) {
             for (p in people.take(4)) {
-                Box(Modifier.size(24.dp).background(c.face, CircleShape).border(1.5.dp, c.page, CircleShape), contentAlignment = Alignment.Center) {
-                    Text(initials(p.name), color = c.secondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                Box(Modifier.size(24.dp).drawBehind { drawCircle(c.face); drawCircle(c.page, style = Stroke(1.5.dp.toPx())) }, contentAlignment = Alignment.Center) {
+                    Text(initials(p.name), color = c.secondary, fontSize = ten, lineHeight = ten, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
             }
         }
@@ -187,7 +187,8 @@ fun Dots(still: Boolean, modifier: Modifier = Modifier) {
 
 // Long press on a node: assign it, move it back to the Inbox, pin it to today or take it off, mark it sensitive or
 // not, or delete it to Tana's trash where you may (Engine.pin, markSensitive, remove); done reads the page again.
-// task: the task's state, which offers Assign to … and, out of the Inbox, Move to Inbox.
+// task: the task's state, which offers Assign to … and, out of the Inbox, Move to Inbox. Each runs on the engine's
+// scope: Delete and Remove Pin take the row away, which must not cancel them (and their rollback) half way.
 @Composable
 fun NodeMenu(
     id: String?,
@@ -201,7 +202,6 @@ fun NodeMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
     val node = id?.takeIf { it.startsWith("tana:") }
     Box(modifier.combinedClickable(
         enabled = onClick != null || node != null,
@@ -211,23 +211,22 @@ fun NodeMenu(
     )) {
         content()
         if (node != null) DropdownMenu(open, { open = false }) {
-            fun item(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, red: Boolean = false, act: suspend () -> Unit) =
-                @Composable { MenuItem(title, icon, red) { open = false; scope.launch { act() } } }
-            if (task != null) item("Assign to …", Icons.Outlined.AccountCircle) { engine.assigning = Engine.Assigning(node, assignees, then) }()
-            if (task != null && task != "proposed") item("Move to Inbox", Icons.Outlined.MoveToInbox) { engine.moveToInbox(node); then() }()
+            val run: (suspend () -> Unit) -> () -> Unit = { act -> { open = false; engine.scope.launch { act() } } }
+            if (task != null) MenuItem("Assign to …", Icons.Outlined.AccountCircle, onClick = run { engine.assigning = Engine.Assigning(node, assignees, then) })
+            if (task != null && task != "proposed") MenuItem("Move to Inbox", Icons.Outlined.MoveToInbox, onClick = run { engine.moveToInbox(node); then() })
             val pinned = node in engine.pinned
             val secret = node in engine.sensitiveIds
             // pinned to any day: only taking the pin off
-            item(if (pinned) "Remove Pin" else "Pin to Today", Icons.Outlined.PushPin) { engine.pin(node, !pinned); then() }()
-            item(if (secret) "Not Sensitive" else "Mark as Sensitive", if (secret) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff) { engine.markSensitive(node, !secret); then() }()
+            MenuItem(if (pinned) "Remove Pin" else "Pin to Today", Icons.Outlined.PushPin, onClick = run { engine.pin(node, !pinned); then() })
+            MenuItem(if (secret) "Not Sensitive" else "Mark as Sensitive", if (secret) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, onClick = run { engine.markSensitive(node, !secret); then() })
             HorizontalDivider()
-            item("Delete", Icons.Outlined.Delete, red = true) { if (engine.remove(node)) then() }()
+            MenuItem("Delete", Icons.Outlined.Delete, red = true, onClick = run { if (engine.remove(node)) then() })
         }
     }
 }
 
 @Composable
-private fun MenuItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, red: Boolean, onClick: () -> Unit) {
+private fun MenuItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, red: Boolean = false, onClick: () -> Unit) {
     val color = if (red) Theme.colors.danger else Theme.colors.text
     DropdownMenuItem(text = { Text(title, color = color) }, onClick = onClick, leadingIcon = { Icon(icon, null, tint = color) })
 }
@@ -238,5 +237,3 @@ fun Heading(title: String, modifier: Modifier = Modifier) {
     Text(title, modifier.padding(start = 20.dp, end = 16.dp, top = 11.dp, bottom = 17.dp).semantics { heading() },
         style = Type.headline, color = Theme.colors.secondary)
 }
-
-fun Modifier.nudge(y: Dp) = offset(y = y)

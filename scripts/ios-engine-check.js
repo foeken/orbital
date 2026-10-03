@@ -91,6 +91,34 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   assert.strictEqual(rows[0].title, 'Salary review', 'the words stay: the phone blurs them');
 }
 
+// The words for a Timeline row's times (ios/engine/labels.js) are the desktop's own: renderer/timeline.js timelineTime,
+// dayKey and timelineDay, sliced out of its source and run beside them. An entry gets its time, its day and that day in
+// words; the blocks above the days keep main/timeline.js's 'Now' and ''; a meeting to come with no end is timed by its start.
+{
+  const labels = require('../ios/engine/labels.js');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../renderer/timeline.js'), 'utf8');
+  const slice = (re) => { const m = src.match(re); assert.ok(m, 'renderer/timeline.js still has ' + re); return m[0]; };
+  const desktop = new Function([slice(/^const dayKey = .*$/m), slice(/^function timelineDay\(key\) \{[\s\S]*?\n\}/m), slice(/^const timelineTime = .*$/m),
+    'return { dayKey, timelineDay, timelineTime };'].join('\n'))();
+  const week = Date.now() - 5 * 864e5;
+  for (const at of ['2026-10-02T07:05:00Z', '2026-10-02T21:59:00.000Z', new Date(week).toISOString()]) {
+    assert.strictEqual(labels.time(at), desktop.timelineTime(at), 'the time of ' + at);
+    assert.strictEqual(labels.dayKey(at), desktop.dayKey(at), 'the day of ' + at);
+  }
+  const old = desktop.dayKey(new Date(week).toISOString());
+  assert.strictEqual(labels.dayTitle(old), desktop.timelineDay(old), 'a day before yesterday in the desktop\u2019s words');
+  const at = new Date(week).toISOString(), start = new Date(Date.now() + 36e5).toISOString();
+  const [today, free, upcoming, entry] = labels.times([
+    { id: 't', createdAt: at, timeline: { time: 'Now', today: true } },
+    { id: 'f', createdAt: at, timeline: { time: '', free: { from: 0, until: 1 } } },
+    { id: 'u', createdAt: at, timeline: { time: '', upcoming: true }, children: [{ id: 'm1', start, subtext: '13:10–13:40' }, { id: 'm2', start, subtext: null }] },
+    { id: 'e', createdAt: at, timeline: { uri: 'tana:text:a', tone: 'edit' } },
+  ]);
+  assert.deepStrictEqual([today.timeline, free.timeline], [{ time: 'Now', today: true }, { time: '', free: { from: 0, until: 1 } }], 'the blocks above the days as they came');
+  assert.deepStrictEqual(upcoming.children.map((m) => m.subtext), ['13:10–13:40', desktop.timelineTime(start)], 'a meeting with no end timed by its start');
+  assert.deepStrictEqual(entry.timeline, { uri: 'tana:text:a', tone: 'edit', time: desktop.timelineTime(at), day: old, dayTitle: desktop.timelineDay(old) });
+}
+
 // The bundle itself, built with Bun: built as the Xcode phase builds it, then run in a vm
 // made to look like the session page, with a fake Tana that signs in and answers every call empty. It must say ready,
 // connect with a bearer token, and answer the Timeline in the desktop's row shape. Its 8 s give-ups (stand-ins.js within)
@@ -141,6 +169,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.match(today.id, /^orbital:timeline:today:/);
   assert.strictEqual(today.icon, 'todayTasks');
   assert.ok(Array.isArray(today.children) && typeof today.createdAt === 'string' && today.segments[0].text === "Today's Tasks");
+  assert.strictEqual(today.timeline.time, 'Now', 'the Today stop keeps its own time through labels.js');
   assert.ok(page.calls.some((c) => c.includes('GraphService/ListNodes')), 'the Timeline asks the graph');
   assert.strictEqual(page.orbital.email(), 'a@b.c');
   fs.rmSync(out, { force: true });

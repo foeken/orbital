@@ -164,11 +164,12 @@ extension ChatGPT {
         struct Out: Decodable { struct M: Decodable { struct L: Decodable { let effort: String }; let slug: String; let visibility: String?; let supported_reasoning_levels: [L]? }; let models: [M] }
         return try JSONDecoder().decode(Out.self, from: data).models.filter { $0.visibility != "hide" }.map { Model(id: $0.slug, efforts: ($0.supported_reasoning_levels ?? []).map(\.effort)) }
     }
-    // as the Mac's Settings page names them (renderer/settings.js aiModelLabel): gpt-6-sol Sol 6, gpt-5.5 GPT-5.5
+    // as the Mac's Settings page names them, by its own pattern (renderer/settings.js aiModelLabel): gpt-6-sol Sol 6,
+    // gpt-5.5 GPT-5.5, and an id that is not a version and a name (gpt-oss-120b) as it is (ChatGPTText.kt label)
     static func label(_ id: String) -> String {
-        guard id.hasPrefix("gpt-") else { return id }
-        let parts = id.dropFirst(4).split(separator: "-", maxSplits: 1).map(String.init)
-        return parts.count == 2 ? parts[1].prefix(1).uppercased() + parts[1].dropFirst() + " " + parts[0] : "GPT-" + parts[0]
+        guard let m = id.wholeMatch(of: /gpt-([\d.]+)-?(.*)/) else { return id }
+        let (version, name) = (String(m.1), String(m.2))
+        return name.isEmpty ? "GPT-" + version : name.prefix(1).uppercased() + name.dropFirst() + " " + version
     }
     static func effortLabel(_ effort: String) -> String { effort == "xhigh" ? "Extra high" : effort.prefix(1).uppercased() + effort.dropFirst() }
 

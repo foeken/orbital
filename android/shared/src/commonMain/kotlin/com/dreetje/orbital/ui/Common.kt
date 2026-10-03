@@ -30,3 +30,11 @@ fun Empty(title: String, message: String? = null, modifier: Modifier = Modifier,
         actions()
     }
 }
+
+// Keys for a lazy list from what each row shows, as the iPhone's ForEach is by id, so a row added above keeps the
+// rest (an open menu, a write in flight, the scroll); one shown twice gets a count after it, where a repeated key
+// would crash the list
+fun uniqueKeys(): (String) -> String {
+    val seen = mutableMapOf<String, Int>()
+    return { k -> val n = (seen[k] ?: 0) + 1; seen[k] = n; if (n == 1) k else "$k#$n" }
+}

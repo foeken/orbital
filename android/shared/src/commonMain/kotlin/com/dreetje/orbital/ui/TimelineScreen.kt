@@ -63,8 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Lists
-import com.dreetje.orbital.Times
-import com.dreetje.orbital.parseTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -93,16 +91,18 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val timeWidth = remember(density) { maxOf(Rail.time, with(density) { measurer.measure("00:00", TimeStyle).size.width.toDp() } + 2.dp) }
 
-    // the free time ends when the next meeting starts: read the page again then, so neither stays on screen past it
+    // the free time ends when the next meeting starts: read the page again then, so neither stays on screen past it.
+    // On the engine's scope: the read changes free, which restarts this effect, and must not cancel the read itself.
     LaunchedEffect(free?.until) {
         val until = free?.until ?: return@LaunchedEffect
         delay(maxOf(1000L, (until - Clock.System.now().toEpochMilliseconds()).toLong()))
-        engine.refresh()
+        engine.scope.launch { engine.refresh() }
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalRailTime provides timeWidth) { Box(modifier) {
         PullToRefreshBox(refreshing, { scope.launch { refreshing = true; engine.refresh(); refreshing = false } }, Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize().alpha(shown), contentPadding = PaddingValues(bottom = 12.dp)) {
+                val key = uniqueKeys()
                 if (hasToday) {
                     // one stop on the rail: Now, the Today glyph, its words, the tasks hanging under them
                     item("today") { RailRow("Now", railTop = 24.dp, bottom = 0.dp, marker = { Marker("todayTasks", "new", false, still) }) { Text("Today's Tasks", style = Type.body, color = c.text) } }
@@ -110,28 +110,28 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
                         RailRow("", top = 30.dp, bottom = 16.dp, marker = { Spacer(Modifier.height(1.dp)) }) {
                             Text("Nothing pinned to today. Long-press a task to pin it.", style = Type.subheadline, color = c.secondary)
                         }
-                    } else taskLines(today, engine, "today")
+                    } else taskLines(today, engine, "today", key)
                 }
                 // the free time, then one stop for the meetings still to come, each hanging under it like a task
                 if (free != null) item("free") { FreeLine(free, if (hasToday) "" else "Now", if (upcoming.isEmpty()) 0.dp else 14.dp, still) }
                 if (upcoming.isNotEmpty()) {
                     item("upcoming") { RailRow("", top = 14.dp, bottom = 0.dp, marker = { Marker("meeting", null, false, still) }) { Text("Upcoming meetings", style = Type.body, color = c.text) } }
-                    upcoming.forEachIndexed { i, m -> item("up$i:" + m.id) { Meeting(m, engine, if (i == 0) 28.dp else 14.dp, 0.dp) } }
+                    upcoming.forEachIndexed { i, m -> item(key("up:" + m.id)) { Meeting(m, engine, if (i == 0) 28.dp else 14.dp, 0.dp) } }
                 }
                 // a line across under what is still to come, before what has happened
                 if ((upcoming.isNotEmpty() || free != null) && days.isNotEmpty()) item("line") {
                     HorizontalDivider(Modifier.padding(start = 20.dp, end = 16.dp, top = 28.dp, bottom = 19.dp), color = c.separator)
                 }
-                days.forEachIndexed { d, (title, list) ->
-                    item("day$d") { Heading(title) }
-                    list.forEachIndexed { r, row ->
-                        item("e$d.$r:" + row.id) { Entry(row, engine) }
-                        taskLines(row.children ?: emptyList(), engine, "e$d.$r")
+                days.forEach { (title, list) ->
+                    item(key("day:$title")) { Heading(title) }
+                    list.forEach { row ->
+                        item(key("entry:" + row.id)) { Entry(row, engine) }
+                        taskLines(row.children ?: emptyList(), engine, "entry:" + row.id, key)
                     }
                 }
                 // always, as the desktop has it: a quiet three days must not hide the days before them
                 if (rows.isNotEmpty()) item("more") {
-                    TextButton({ scope.launch { engine.more() } }, Modifier.fillMaxWidth().padding(top = 6.dp), enabled = !engine.loading) {
+                    TextButton({ engine.scope.launch { engine.more() } }, Modifier.fillMaxWidth().padding(top = 6.dp), enabled = !engine.loading) {
                         Text(if (engine.loading) "Loading…" else "Show three more days", color = c.secondary)
                     }
                 }
@@ -195,7 +195,7 @@ fun Entry(row: Node, engine: Engine) {
     val uri = row.timeline?.uri
     val quiet = row.tone == "faint"
     NodeMenu(uri, engine, Modifier.semantics { if (uri != null) role = Role.Button }, onClick = uri?.let { { zoom(it) } }) {
-        RailRow(Times.hm(row.instant), bottom = if (engine.shown(row.children).isEmpty()) 14.dp else 0.dp,
+        RailRow(row.timeline?.time ?: "", bottom = if (engine.shown(row.children).isEmpty()) 14.dp else 0.dp,
             marker = { Marker(row.icon, row.tone, row.timeline?.recording == true, engine.platform.reduceMotion) }) {
             Sensitive(row.sensitive == true && !engine.reveal, Modifier.padding(end = if (row.unread == true) 18.dp else 0.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -211,11 +211,12 @@ fun Entry(row: Node, engine: Engine) {
 }
 
 // The tasks an entry lists, hanging under its words, each a row of its own on the rail, so a long press is about that
-// task alone: as much room above the first as under the last, more between them
-fun LazyListScope.taskLines(tasks: List<Node>, engine: Engine, key: String) {
+// task alone: as much room above the first as under the last, more between them. Keyed under their entry: one task
+// can hang under two.
+fun LazyListScope.taskLines(tasks: List<Node>, engine: Engine, parent: String, key: (String) -> String) {
     val shown = engine.shown(tasks)
     shown.forEachIndexed { i, task ->
-        item("$key/$i:" + task.id) { TaskLine(task, engine, if (i == 0) 30.dp else 16.dp, if (i == shown.size - 1) 16.dp else 0.dp) }
+        item(key("$parent/" + task.id)) { TaskLine(task, engine, if (i == 0) 30.dp else 16.dp, if (i == shown.size - 1) 16.dp else 0.dp) }
     }
 }
 
@@ -257,7 +258,6 @@ fun Meeting(row: Node, engine: Engine, top: Dp, bottom: Dp) {
     val c = Theme.colors
     val zoom = LocalZoom.current
     val three = with(LocalDensity.current) { 3.dp.roundToPx() }
-    val start = row.start?.let(::parseTime)?.let { Times.hm(it) } ?: ""
     NodeMenu(row.id, engine, Modifier.semantics { role = Role.Button }, onClick = { zoom(row.id) }) {
         RailRow("", top = top, bottom = bottom, marker = { Spacer(Modifier.height(1.dp)) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -267,7 +267,7 @@ fun Meeting(row: Node, engine: Engine, top: Dp, bottom: Dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Words(engine.translator.words(row.words, row.sensitive == true).first)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Words(row.subtext ?: start, style = Type.subheadline, color = c.secondary)
+                            Words(row.subtext ?: "", style = Type.subheadline, color = c.secondary) // when it is: the engine's words
                             val people = row.people
                             if (!people.isNullOrEmpty()) { Text("·", color = c.secondary); Faces(people, names = false) }
                         }

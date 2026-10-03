@@ -16,7 +16,7 @@ class SampleTest {
         assertEquals(listOf("open", "open", "closed"), today.children!!.map { it.stateType })
         val free = rows.first { it.timeline?.free != null }.timeline!!.free!!
         assertEquals(44 * 60_000.0, free.until - free.from)
-        assertTrue(rows.all { it.createdAt == null || parseTime(it.createdAt!!) != null })
+        assertTrue(rows.all { row -> row.createdAt.let { it == null || parseTime(it) != null } })
     }
 
     @Test fun thePagesSampleHasTheFirstSavedSearchsPage() {
@@ -27,4 +27,5 @@ class SampleTest {
     }
 }
 
-fun sampleFile(name: String) = File("../../ios/Orbital/" + name).readText()
+// the repository, as shared/build.gradle.kts hands it to the tests (orbital.repo), whatever directory they run in
+fun sampleFile(name: String) = File(System.getProperty("orbital.repo") ?: "../..", "ios/Orbital/$name").readText()

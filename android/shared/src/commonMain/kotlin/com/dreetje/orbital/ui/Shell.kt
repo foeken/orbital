@@ -167,6 +167,8 @@ fun Shell(engine: Engine, start: Start = Start()) {
     // however it opens, the saved searches are read again, so one pinned or given an icon on the Mac since shows up
     LaunchedEffect(menu) { if (menu) loadSearches() }
     LaunchedEffect(Unit) { if (start.menuDemo) { delay(2000); show(true); delay(2000); show(false) } }
+    // something shared to Orbital opens Quick Add on its own, over nothing else (Shell.swift: adding and settings shut)
+    LaunchedEffect(engine.shared) { if (engine.shared != null) { adding = false; settings = false } }
     PlatformBack(menu || path.isNotEmpty()) { if (menu) show(false) else path.removeAt(path.lastIndex) }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(c.page)) {
@@ -186,7 +188,8 @@ fun Shell(engine: Engine, start: Start = Start()) {
                     else if (forward) (slideInHorizontally(tween(260)) { it } + fadeIn(tween(200))) togetherWith (slideOutHorizontally(tween(260)) { -it / 4 } + fadeOut(tween(200)))
                     else (slideInHorizontally(tween(260)) { -it / 4 } + fadeIn(tween(200))) togetherWith (slideOutHorizontally(tween(260)) { it } + fadeOut(tween(200)))
                 }) { top ->
-                    pages.SaveableStateProvider(top ?: page.key) {
+                    // a node zoomed into and the menu's page are kept apart: a saved search can be both
+                    pages.SaveableStateProvider(top?.let { "node:$it" } ?: "page:" + page.key) {
                         if (top == null) Column(Modifier.fillMaxSize().imePadding().navigationBarsPadding()) {
                             PageBar(page.title, onMenu = if (wide) null else ({ show(true) }), onAdd = { adding = true })
                             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -275,7 +278,7 @@ fun PageBar(title: String, onBack: (() -> Unit)? = null, onMenu: (() -> Unit)? =
             }
         },
         actions = { if (onAdd != null) IconButton(onAdd) { Icon(Icons.Filled.Add, "Quick Add Task") } },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = c.page, scrolledContainerColor = c.page, titleContentColor = c.text, navigationIconContentColor = c.text, actionIconContentColor = c.text),
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = c.page, scrolledContainerColor = c.page, titleContentColor = c.text, navigationIconContentColor = c.text, actionIconContentColor = c.text),
     )
 }
 

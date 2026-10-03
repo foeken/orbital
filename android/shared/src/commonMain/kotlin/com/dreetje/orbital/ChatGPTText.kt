@@ -72,11 +72,11 @@ object ChatGPTText {
 
     private fun part(type: String, key: String, value: String) = buildJsonObject { put("type", type); put(key, value) }
 
-    // as the Mac's Settings page names them (renderer/settings.js aiModelLabel): gpt-6-sol Sol 6, gpt-5.5 GPT-5.5
+    // as the Mac's Settings page names them, by its own pattern (renderer/settings.js aiModelLabel): gpt-6-sol Sol 6,
+    // gpt-5.5 GPT-5.5, and an id that is not a version and a name (gpt-oss-120b) as it is
     fun label(id: String): String {
-        if (!id.startsWith("gpt-")) return id
-        val parts = id.drop(4).split("-", limit = 2)
-        return if (parts.size == 2) parts[1].replaceFirstChar { it.uppercase() } + " " + parts[0] else "GPT-" + parts[0]
+        val (version, name) = Regex("^gpt-([\\d.]+)-?(.*)$").find(id)?.destructured ?: return id
+        return if (name.isEmpty()) "GPT-$version" else name.replaceFirstChar { it.uppercase() } + " " + version
     }
 
     fun effortLabel(effort: String) = if (effort == "xhigh") "Extra high" else effort.replaceFirstChar { it.uppercase() }

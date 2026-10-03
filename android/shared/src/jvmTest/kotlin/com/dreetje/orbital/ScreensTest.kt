@@ -17,6 +17,7 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.DesktopComposeUiTest
 import com.dreetje.orbital.ui.OrbitalApp
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -26,10 +27,15 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class ScreensTest {
     private fun sample(width: Int = 412, height: Int = 915, test: DesktopComposeUiTest.(Engine) -> Unit) = runDesktopComposeUiTest(width, height) {
-        val engine = Engine(null, FakePlatform(), MainScope(), sample = sampleFile("timeline-sample.json") to sampleFile("pages-sample.json"), demoMode = false)
-        setContent { OrbitalApp(engine) }
-        waitUntil(timeoutMillis = 5000) { onAllWithText("Today's Tasks").isNotEmpty() }
-        test(engine)
+        val scope = MainScope() // the Activity's viewModelScope here: ended with the test, so no work outlives it into the next
+        try {
+            val engine = Engine(null, FakePlatform(), scope, sample = sampleFile("timeline-sample.json") to sampleFile("pages-sample.json"), demoMode = false)
+            setContent { OrbitalApp(engine) }
+            waitUntil(timeoutMillis = 5000) { onAllWithText("Today's Tasks").isNotEmpty() }
+            test(engine)
+        } finally {
+            scope.cancel()
+        }
     }
 
     private fun DesktopComposeUiTest.onAllWithText(t: String) = onAllNodes(hasText(t, substring = true), useUnmergedTree = true).fetchSemanticsNodes()

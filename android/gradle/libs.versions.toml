@@ -1,4 +1,9 @@
-# The Android app (android/README.md): the versions Swiftly's KMP build proved on this toolchain (Gradle 9.6, JDK 25)
+# The Android app's versions (docs/ANDROID.md has the research behind them). They are not that page's first pick (AGP
+# 9.3.1, Kotlin 2.4.20, webkit 1.17.1), which was for a plain KMP module: the screens here are Compose Multiplatform,
+# and this is the set it was first built and tested with on Gradle 9.6 and this Mac's JDK, Compose 1.10.3 with Kotlin
+# 2.3.20, its Material 3 and AGP 9.4.0. webkit stays at 1.14.0, the last release before
+# setRequestedWithHeaderOriginAllowList (EngineWeb) became a deprecated no-op. Move them together, against Kotlin's
+# and Compose Multiplatform's compatibility tables, rather than one alone.
 [versions]
 agp = "9.4.0"
 kotlin = "2.3.20"

@@ -82,7 +82,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                         a.plan?.let { GroupRow(last = models.isEmpty()) { Label("license", "Plan"); Text(it.replaceFirstChar { ch -> ch.uppercase() }, color = c.secondary) } }
                         if (models.isNotEmpty()) GroupRow(last = true, onClick = { showModels = true }) {
                             Label("brain", "Models")
-                            Text(listOf("quickModel", "model").joinToString(", ") { ChatGPTText.label(engine.translator.choices[it] ?: "") }, color = c.secondary, maxLines = 1)
+                            Text(listOf("quickModel", "model").joinToString(", ") { ChatGPTText.label(engine.translator.ai[it] ?: "") }, color = c.secondary, maxLines = 1)
                         }
                     }
                 }
@@ -144,7 +144,7 @@ fun Models(engine: Engine, models: List<AI.Model>, back: () -> Unit) {
     var quick by remember { mutableStateOf(true) }
     val modelKey = if (quick) "quickModel" else "model"
     val effortKey = if (quick) "quickEffort" else "effort"
-    val model = engine.translator.choices[modelKey] ?: ""
+    val model = engine.translator.ai[modelKey] ?: ""
     val efforts = models.firstOrNull { it.id == model }?.levels ?: listOf("low", "medium", "high")
     SheetBar("Models", back = back)
     LazyColumn {
@@ -162,7 +162,7 @@ fun Models(engine: Engine, models: List<AI.Model>, back: () -> Unit) {
                         engine.scope.launch {
                             engine.aiChoice(modelKey, m.id)
                             val next = m.levels
-                            if (next.isNotEmpty() && engine.translator.choices[effortKey] !in next) engine.aiChoice(effortKey, if ("low" in next) "low" else next[0])
+                            if (next.isNotEmpty() && engine.translator.ai[effortKey] !in next) engine.aiChoice(effortKey, if ("low" in next) "low" else next[0])
                         }
                     }) { Text(ChatGPTText.label(m.id), Modifier.weight(1f), color = c.text); RadioButton(m.id == model, null) }
                 }
@@ -171,7 +171,7 @@ fun Models(engine: Engine, models: List<AI.Model>, back: () -> Unit) {
         item {
             Group("Thinking", footer = "The same on your Mac.") {
                 efforts.forEachIndexed { i, e ->
-                    val on = (engine.translator.choices[effortKey] ?: "low") == e
+                    val on = (engine.translator.ai[effortKey] ?: "low") == e
                     GroupRow(last = i == efforts.size - 1, selected = on, onClick = { engine.scope.launch { engine.aiChoice(effortKey, e) } }) {
                         Text(ChatGPTText.effortLabel(e), Modifier.weight(1f), color = c.text); RadioButton(on, null)
                     }

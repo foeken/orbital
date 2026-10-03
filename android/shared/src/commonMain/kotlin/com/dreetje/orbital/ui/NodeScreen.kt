@@ -79,7 +79,7 @@ fun NodeScreen(
 ) {
     val c = Theme.colors
     val scope = rememberCoroutineScope()
-    var page by remember(id) { mutableStateOf<Page?>(null) }
+    var page by remember(id) { mutableStateOf(engine.cached(id)) } // back to a page: the last read of it at once, as NavigationStack keeps it
     var error by remember(id) { mutableStateOf<String?>(null) }
     var waitingSince by remember(id) { mutableStateOf<Instant?>(null) }
     var access by remember(id) { mutableStateOf<Access?>(null) }
@@ -121,9 +121,10 @@ fun NodeScreen(
                         val rows = engine.shown(current.rows)
                         // in the sections the search was saved with (Row.group), as the desktop shows it
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) {
+                            val key = uniqueKeys()
                             Lists.sections(rows).forEachIndexed { s, (title, list) ->
                                 if (title != null) item("h$s") { Text(title, Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp).semantics { heading() }, style = Type.headline, color = c.secondary) }
-                                list.forEachIndexed { i, row -> item("r$s.$i:" + row.id) { ListRow(row, engine) { load() } } }
+                                list.forEach { row -> item(key("row:" + row.id)) { ListRow(row, engine) { load() } } }
                             }
                         }
                         if (current.rows.isEmpty()) Empty(if (current.kind == "event") "No notes yet" else "Nothing found", glyph = Glyphs.of(current.kind))
@@ -131,8 +132,9 @@ fun NodeScreen(
                     else -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                         val flat = Lists.flat(current.rows)
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
+                            val key = uniqueKeys()
                             access?.let { a -> item("details") { NodeDetails(id, a, engine, open = { assigningVisibility = true }) { load() } } }
-                            flat.forEachIndexed { i, (row, depth) -> item("o$i:" + row.id) { OutlineRow(row, depth, engine.reveal) } }
+                            flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine.reveal) } }
                         }
                         // a document with fields shows them alone
                         if (flat.isEmpty() && access == null) Empty("Nothing in here yet", glyph = "doc")
@@ -210,14 +212,16 @@ fun OutlineRow(row: Node, depth: Int, reveal: Boolean) {
 
 // A chat as the desktop draws one (renderer/chat.js, styles.css .chat-msg): your messages in a blue bubble on the right,
 // everyone else's as plain text across the page with their name over each run of them, what Tana did while thinking
-// in grey over a hairline, and three dots while an answer is on its way (since: when the last message was sent)
+// in grey over a hairline, and three dots while an answer is on its way (since: when the last message was sent).
+// A short conversation sits at the bottom, over the composer, as the iPhone's .defaultScrollAnchor(.bottom) has it.
 @Composable
 fun ChatView(rows: List<Node>, since: Instant?, engine: Engine, modifier: Modifier = Modifier) {
     val list = rememberLazyListState()
     val waiting = Lists.waiting(rows, since, Clock.System.now())
     LaunchedEffect(rows.size, waiting) { if (rows.isNotEmpty()) list.scrollToItem(rows.size - 1 + if (waiting) 1 else 0) }
-    LazyColumn(modifier.fillMaxWidth(), list, PaddingValues(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        itemsIndexed(rows, key = { i, r -> "$i:" + r.id }) { i, row ->
+    val keys = remember(rows) { val key = uniqueKeys(); rows.map { key(it.id) } }
+    LazyColumn(modifier.fillMaxWidth(), list, PaddingValues(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.Bottom)) {
+        itemsIndexed(rows, key = { i, _ -> keys[i] }) { i, row ->
             Sensitive(row.sensitive == true && !engine.reveal) { Message(row, Lists.named(row, rows.getOrNull(i - 1)), engine.reveal) }
         }
         if (waiting) item("dots") { Dots(engine.platform.reduceMotion) }

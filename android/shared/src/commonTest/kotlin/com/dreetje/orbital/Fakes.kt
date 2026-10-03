@@ -8,8 +8,9 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-// The engine's page, faked: each call answered by what answer says for its body, every call kept
-class FakeHost(var answer: (String, Map<String, Any?>) -> JsonElement = { _, _ -> JsonNull }) : EngineHost {
+// The engine's page, faked: each call answered by what answer says for its body (which may wait, as the page does),
+// every call kept
+class FakeHost(var answer: suspend (String, Map<String, Any?>) -> JsonElement = { _, _ -> JsonNull }) : EngineHost {
     override var listener: EngineHost.Listener? = null
     val calls = mutableListOf<Pair<String, Map<String, Any?>>>()
     val loaded = mutableListOf<String>()
@@ -25,26 +26,38 @@ class FakeHost(var answer: (String, Map<String, Any?>) -> JsonElement = { _, _ -
 // engine.js answers a JSON string for most calls: as the page would
 fun text(value: String) = JsonPrimitive(value)
 
-class FakeAI : AI {
-    override fun account(): AI.Account? = null
+class FakeAI(private val signedIn: Boolean = false) : AI {
+    override fun account(): AI.Account? = if (signedIn) AI.Account("me@example.com", "plus") else null
     override fun forget() {}
     override suspend fun models(): List<AI.Model>? = null
     override suspend fun respond(instructions: String, content: List<JsonObject>, model: String, effort: String, schema: JsonObject?): String? = null
     override suspend fun transcribe(audio: ByteArray): String? = null
 }
 
-class FakePlatform(override val store: Store = MemoryStore()) : Platform {
-    override val ai: AI = FakeAI()
+// The microphone, faked: whether it started, and nothing recorded
+class FakeRecorder : Recorder {
+    var started = 0
+    override fun start() { started++ }
+    override fun level() = 0f
+    override fun stop(): ByteArray? = null
+    override fun cancel() {}
+}
+
+class FakePlatform(
+    override val store: Store = MemoryStore(),
+    override val ai: AI = FakeAI(),
+    override val recorder: Recorder? = null,
+    private val allowed: suspend () -> Boolean = { false }, // what Android's microphone question answers
+) : Platform {
     override val version = "test"
-    override val recorder: Recorder? = null
     override val reduceMotion = true
     var shared = mutableListOf<String>()
-    override suspend fun microphone() = false
+    override suspend fun microphone() = allowed()
     override suspend fun language(text: String): Pair<String, Float>? = null
     override fun decode(image: ByteArray): ImageBitmap? = null
     override fun share(text: String) { shared += text }
     override fun open(url: String) {}
-    override fun clipboardImage(): ByteArray? = null
+    override suspend fun pasteImage(): ByteArray? = null
     override fun hasClipboardImage() = false
     @Composable override fun rememberPhotoPicker(picked: (ByteArray) -> Unit): () -> Unit = {}
     @Composable override fun EngineView(modifier: Modifier) {}

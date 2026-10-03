@@ -12,6 +12,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -58,7 +59,8 @@ class Engine(
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value. A line is added only
     // when it differs from the one before.
     val log = mutableStateListOf<String>()
-    val translator = Translator(platform.store, platform.ai, platform::language, scope)
+    // its answers kept in a file of their own (Platform.files): one ever-growing string, rewritten on every flush
+    val translator = Translator(platform.files, platform.ai, platform::language, scope)
     var sensitiveIds by mutableStateOf(setOf<String>()) // marked sensitive in Orbital (synced), for the long-press menu
         private set
     var pinned by mutableStateOf(setOf<String>()) // pinned to a day, any day, for the long-press menu
@@ -79,12 +81,20 @@ class Engine(
         set(on) {
             demoOn = on
             platform.store.set("demoMode", if (on) "true" else null)
+            opened.clear() // a page read before it was turned on or off shows its words as they were then
             scope.launch { refresh() }
         }
 
     data class Assigning(val id: String, val current: List<String>?, val then: suspend () -> Unit)
     data class ShareAsk(val id: String, val access: Access, val shut: List<Member>, val then: suspend () -> Unit)
-    class Shared(val text: String?, val image: ByteArray?)
+    class Shared(val text: String?, val image: ByteArray?) {
+        companion object {
+            // the words that came with it, each once, a line apiece (ios/Share/ShareViewController.swift): on Android a
+            // share's subject (a page's title), then its text (often the link); null when there are none
+            fun words(vararg parts: String?): String? =
+                parts.mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }.distinct().joinToString("\n").ifEmpty { null }
+        }
+    }
 
     val isSample = host == null
     private val pagesSample: Sample? = sample?.let { json.decodeFromString<Sample>(it.second) }
@@ -92,6 +102,9 @@ class Engine(
     private var justSignedIn = false
     private var session = 0 // counts sign-outs: a read that began before one never saves or shows what it got
     private var again = false // a change told while a read is under way: one more read follows it
+    // the last read of each node opened, newest last: a page gone back to shows it at once while it is read again, as
+    // the iPhone's NavigationStack keeps the page under the one on top (NodeScreen starts from cached(id))
+    private val opened = LinkedHashMap<String, Page>()
 
     init {
         host?.listener = this
@@ -129,6 +142,13 @@ class Engine(
         note("load failed: " + message)
         watch?.cancel()
         phase = Phase.Failed(message)
+    }
+
+    // Android stopped Tana's page to free memory and EngineWeb made a new one (onRenderProcessGone; the iPhone has no
+    // such moment): started again on it, the rows kept on screen until the new read lands
+    override fun restarted(why: String) {
+        note(why)
+        start()
     }
 
     private suspend fun connect() {
@@ -176,7 +196,8 @@ class Engine(
                 if (name != "home.tana.inc") { note("$name · cookies: $cookies"); continue }
                 var answer = "no answer"
                 try {
-                    answer = host.run(PROBE).jsonPrimitive.contentOrNull ?: answer
+                    // a page that never answers (it was replaced under the call) must not stop the asking
+                    answer = withTimeoutOrNull(10.seconds) { host.run(PROBE) }?.jsonPrimitive?.contentOrNull ?: answer
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -196,8 +217,9 @@ class Engine(
         if (phase != Phase.Ready || isSample) return
         if (loading) { again = true; return }
         loading = true
-        read()
-        loading = false
+        // a read cut off midway (the screen that asked went away) still lets the next one through: with loading left
+        // set, every refresh after it only said "again" and the Timeline never moved
+        try { read() } finally { loading = false }
         if (again) { again = false; refresh() }
     }
 
@@ -240,7 +262,7 @@ class Engine(
         session += 1
         maybe { host.run("await orbital.signOut()") }
         host.forgetCookies()
-        rows = emptyList(); states.clear(); removed = emptySet(); email = null; pages = 1
+        rows = emptyList(); states.clear(); removed = emptySet(); email = null; pages = 1; opened.clear()
         note("signed out")
         start()
     }
@@ -250,10 +272,19 @@ class Engine(
 
     suspend fun open(id: String): Page {
         pagesSample?.let { return it.pages[id] ?: throw Failure("Not in the sample") }
+        val started = session
         val page: Page = call("return await orbital.open(id)", mapOf("id" to id))
         settle(page.rows) // a search's tasks ticked here, once Tana agrees
+        if (started == session) {
+            opened.remove(id)
+            opened[id] = page
+            if (opened.size > 30) opened.remove(opened.keys.first())
+        }
         return page
     }
+
+    // what open(id) last read, to draw until it reads again; null when never opened (or since signing out)
+    fun cached(id: String): Page? = pagesSample?.pages?.get(id) ?: opened[id]
 
     // Long press: Pin to Today and Mark as Sensitive, then the Timeline read again. Remove Pin takes the task out of
     // Today's Tasks at once; the read after says where it is now.
@@ -273,7 +304,7 @@ class Engine(
 
     // Settings' Quick and Regular AI: used at once, kept if Tana takes it (orbital.aiChoice)
     suspend fun aiChoice(key: String, value: String) {
-        val was = translator.choices
+        val was = translator.ai
         translator.use(translator.to, mapOf(key to value))
         if (isSample) return
         try { call<Boolean>("return await orbital.aiChoice(key, value)", mapOf("key" to key, "value" to value)) } catch (e: Failure) { translator.use(translator.to, was); error = e.message }
@@ -322,7 +353,7 @@ class Engine(
     // The image, already a JPEG of 2048 px at most, read by ChatGPT, then made into its node (orbital.fromImage)
     suspend fun processImage(jpeg: ByteArray): String {
         if (isSample) throw Failure("The sample saves nothing")
-        val read = ChatGPTText.readImage(platform.ai, jpeg, translator.to, translator.choices.getValue("model"), translator.choices.getValue("effort"))
+        val read = ChatGPTText.readImage(platform.ai, jpeg, translator.to, translator.ai.getValue("model"), translator.ai.getValue("effort"))
         val id: String = call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
             mapOf("kind" to (read.kind ?: "doc"), "title" to (read.title ?: ""), "notes" to (read.notes ?: emptyList()), "image" to Base64.encode(jpeg)))
         refresh()
@@ -434,9 +465,10 @@ class Engine(
             return m.groupValues[1] to m.groupValues[2]
         }
 
-        // timeline-sample.json, its times minutes from now ("{{min:-40}}", "{{ms:+44}}") so the page always reads as today's
+        // timeline-sample.json, its times minutes from now ("{{min:-40}}", "{{ms:+44}}") so the page always reads as today's,
+        // and its words' times and days (Times.sample: {{hm:N}}, {{day:N}}, {{date:N}}) as the iPhone's showSample fills them
         fun sampleRows(text: String, now: Instant): List<Row> {
-            val filled = Regex("\"\\{\\{(min|ms):([+-]?\\d+)\\}\\}\"").replace(text) { m ->
+            val filled = Regex("\"\\{\\{(min|ms):([+-]?\\d+)\\}\\}\"").replace(Times.sample(text, now)) { m ->
                 val at = now + (m.groupValues[2].toLong() * 60).seconds
                 if (m.groupValues[1] == "ms") at.toEpochMilliseconds().toString() else "\"" + at + "\""
             }

@@ -17,6 +17,8 @@ interface EngineHost {
     interface Listener {
         fun said(message: String)
         fun failed(message: String)
+        // the page was replaced by a new one (Android ended the old one's renderer to free memory): start again on it
+        fun restarted(why: String) {}
     }
 
     // body run as an async function's in the page, args bound by name (callAsyncJavaScript on the iPhone): what it
@@ -68,6 +70,9 @@ interface Recorder {
 // What only the platform can do, for the shared screens
 interface Platform {
     val store: Store
+    // what is kept on this phone in files of its own rather than in store: a value that grows (the translations), read
+    // and written whole. The same as store unless the platform has better.
+    val files: Store get() = store
     val ai: AI
     val version: String
     val recorder: Recorder?
@@ -78,7 +83,8 @@ interface Platform {
     fun decode(image: ByteArray): ImageBitmap?
     fun share(text: String)
     fun open(url: String)
-    fun clipboardImage(): ByteArray? // as a JPEG, 2048 px at most, or null
+    // the clipboard's image as a JPEG, 2048 px at most, or null; read and made smaller off the main thread
+    suspend fun pasteImage(): ByteArray?
     fun hasClipboardImage(): Boolean // what the clipboard holds, by its kind only: reading it would tell the user so
     @Composable fun rememberPhotoPicker(picked: (ByteArray) -> Unit): () -> Unit // a JPEG, 2048 px at most
     @Composable fun EngineView(modifier: Modifier) // the engine's web view: Tana's sign-in while signed out
@@ -102,6 +108,26 @@ fun toJson(value: Any?): JsonElement = when (value) {
 // listener allowed only on Tana's origin). The arguments go in as one JSON string literal, so nothing in them is code.
 object Bridge {
     const val LISTENER = "orbitalAndroid"
+    const val ORIGIN = "https://home.tana.inc"
+
+    // A message the listener may act on: from Tana's own origin, and from the page itself rather than a frame in it
+    // (docs/ANDROID.md: the origin rule is the first check, not the only one)
+    fun trusted(origin: String?, mainFrame: Boolean): Boolean = mainFrame && origin?.trimEnd('/') == ORIGIN
+
+    // What the page posted: a word of engine.js's own ('ready', 'changed'), or a call's answer by its number
+    sealed interface Heard {
+        data class Said(val message: String) : Heard
+        data class Answer(val id: Int, val value: JsonElement?, val error: String?) : Heard // value when it returned, error when it threw
+    }
+
+    fun read(data: String): Heard? {
+        if (!data.startsWith("{")) return Heard.Said(data)
+        val answer = runCatching { json.parseToJsonElement(data) as? JsonObject }.getOrNull() ?: return null
+        val id = (answer["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: return null
+        val ok = (answer["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
+        return if (ok) Heard.Answer(id, answer["value"] ?: kotlinx.serialization.json.JsonNull, null)
+        else Heard.Answer(id, null, (answer["error"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content ?: "The engine failed")
+    }
 
     fun script(id: Int, body: String, args: Map<String, Any?>): String {
         val names = args.keys.onEach { require(Regex("[A-Za-z_][A-Za-z0-9_]*").matches(it)) { "not a name: " + it } }.joinToString(", ")

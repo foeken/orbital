@@ -137,10 +137,14 @@ class SampleJourneyTest {
         listOf("Assign to …", "Mark as Sensitive", "Delete").forEach { compose.onNodeWithText(it).assertExists() }
     }
 
-    // shared from another app (the iPhone's Share extension): Quick Add opens with the words
+    // shared from another app (the iPhone's Share extension): ShareActivity leaves the words and brings this Orbital
+    // forward, its subject and text a line each, on Quick Add
     @Test fun sharedWordsOpenQuickAdd() {
-        launch { action = Intent.ACTION_SEND; type = "text/plain"; putExtra(Intent.EXTRA_TEXT, "Call the venue about Thursday") }
-        compose.waitUntil(5000) { seen("Quick Add") && seen("Call the venue about Thursday") }
+        launch()
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        context.startActivity(Intent(context, ShareActivity::class.java).setAction(Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, "Offsite venue").putExtra(Intent.EXTRA_TEXT, "Call the venue about Thursday").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        compose.waitUntil(10_000) { seen("Quick Add") && seen("Offsite venue\nCall the venue about Thursday") }
     }
 }
 

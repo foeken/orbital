@@ -28,12 +28,16 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
         private set
     private var heard: Deferred<Boolean>? = null
     private var meter: Job? = null
+    private var wanted = false // listening asked for and not cancelled since: Android's question can outlast the page
 
     // the microphone button: listening, once ChatGPT and the microphone may be used
     suspend fun listen() {
         problem = null
+        wanted = true
         if (platform.ai.account() == null) { problem = "Sign in with ChatGPT in Settings to dictate"; return }
         if (!platform.microphone()) { problem = "Allow Orbital the microphone in Android's settings to dictate"; return }
+        // cancelled while Android asked (the page left, or ✕): no recording that nothing would stop
+        if (!wanted) return
         val recorder = platform.recorder ?: run { problem = "This phone has no microphone"; return }
         try { recorder.start() } catch (e: Exception) { problem = e.message ?: "The microphone did not start"; return }
         recording = true
@@ -76,6 +80,7 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
     }
 
     fun cancel() {
+        wanted = false
         if (recording) platform.recorder?.cancel()
         end()
     }

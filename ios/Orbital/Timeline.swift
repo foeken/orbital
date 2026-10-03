@@ -46,9 +46,13 @@ struct Row: Decodable, Identifiable {
         let upcoming: Bool?
         let free: Free?
         let recording: Bool? // a meeting under way whose call is being recorded or transcribed (main/timeline.js)
+        // an entry's time on the rail, the day it is under (YYYY-MM-DD) and that day in words, in the desktop's own
+        // formatting (ios/engine/labels.js); the blocks above the days have a time of their own ('Now', '') and no day
+        let time: String?
+        let day: String?
+        let dayTitle: String?
     }
 
-    var date: Date { createdAt.flatMap(Self.parse) ?? .now }
     // Tana's times, with or without fractional seconds ("2026-09-30T13:00:00Z", "…:00.000Z")
     static func parse(_ s: String) -> Date? {
         (try? Date(s, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true))) ?? (try? Date(s, strategy: .iso8601))
@@ -230,22 +234,26 @@ struct TimelineScreen: View {
     private var upcoming: [Row] { engine.shown(engine.rows.first { $0.timeline?.upcoming == true }?.children) }
     private var free: Row.Free? { engine.rows.first { $0.timeline?.free != nil }?.timeline?.free }
 
-    // Today, Yesterday and each day before, by the rows' own time (renderer/timeline.js timelineGroups)
+    // Today, Yesterday and each day before, by the day the engine put each row under (renderer/timeline.js
+    // timelineGroups, ios/engine/labels.js)
     private var days: [(String, [Row])] {
-        var out: [(String, [Row])] = []
+        var out: [(key: String, title: String, rows: [Row])] = []
         for row in engine.shown(engine.rows) where row.timeline?.today != true && row.timeline?.upcoming != true && row.timeline?.free == nil {
-            let title = Self.day(row.date)
-            if out.last?.0 == title { out[out.count - 1].1.append(row) } else { out.append((title, [row])) }
+            let key = row.timeline?.day ?? ""
+            if out.last?.key == key { out[out.count - 1].rows.append(row) } else { out.append((key, Self.day(key, row.timeline?.dayTitle), [row])) }
         }
-        return out
+        return out.map { ($0.title, $0.rows) }
     }
 
-    private static func day(_ d: Date) -> String {
-        let cal = Calendar.current
-        if cal.isDateInToday(d) { return "Today" }
-        if cal.isDateInYesterday(d) { return "Yesterday" }
-        return d.formatted(.dateTime.weekday(.wide).day().month(.wide))
+    // A day's heading (renderer/timeline.js timelineDay): Today and Yesterday said here against this phone's date, so they
+    // are right past midnight before the next read; any other day in the engine's words for it (Times.kt day)
+    private static func day(_ key: String, _ title: String?) -> String {
+        if key == Self.key(.now) { return "Today" }
+        if let before = Calendar.current.date(byAdding: .day, value: -1, to: .now), key == Self.key(before) { return "Yesterday" }
+        return title ?? key
     }
+    // a day as the engine keys it: YYYY-MM-DD in this phone's time zone
+    static func key(_ d: Date) -> String { d.formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day()) }
 }
 
 // A section's heading: a row of its own between two stretches of rail, its words in the middle of the gap. Not a
@@ -304,7 +312,7 @@ struct Entry: View {
 
     var body: some View {
         let quiet = row.tone == "faint"
-        RailRow(time: row.date.formatted(.dateTime.hour().minute()), bottom: engine.shown(row.children).isEmpty ? 14 : 0) {
+        RailRow(time: row.timeline?.time ?? "", bottom: engine.shown(row.children).isEmpty ? 14 : 0) { // the desktop's 24-hour time (ios/engine/labels.js)
             Marker(icon: row.icon, tone: row.tone, now: row.timeline?.recording == true)
         } content: {
             VStack(alignment: .leading, spacing: 3) {
@@ -441,7 +449,6 @@ struct Meeting: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        let start = row.start.flatMap(Row.parse)?.formatted(.dateTime.hour().minute()) ?? ""
         RailRow(time: "", top: top, bottom: bottom) { Color.clear.frame(height: 1) } content: {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 // a calendar, or a route for Travel (main/timeline.js meetingIcon)
@@ -449,9 +456,10 @@ struct Meeting: View {
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(engine.translator.words(row.words, sensitive: row.sensitive == true).0).sensitive(row.sensitive, engine: engine)
-                    // the desktop's grey line: when (13:10–13:40), then who else is on it as faces
+                    // the desktop's grey line: when (13:10–13:40, or its start when it has no end: ios/engine/labels.js),
+                    // then who else is on it as faces
                     HStack(spacing: 6) {
-                        Text(row.subtext ?? start).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                        Text(row.subtext ?? "").font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
                         if let people = row.people, !people.isEmpty { Text("·").foregroundStyle(.secondary); Faces(people: people, names: false) }
                     }
                     .sensitive(row.sensitive, engine: engine) // the grey line too, as the desktop's .sensitive .meta

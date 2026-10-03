@@ -24,17 +24,20 @@ class ListsTest {
         assertEquals("1 more min", Lists.free(Row.Free(ms, ms + 1), ms).second) // never "0 min"
     }
 
-    @Test fun daysGroupByTheRowsOwnTimeAndLeaveTheBlocksAbove() {
+    // the day the engine put each row under (ios/engine/labels.js), not one the phone works out from its time: d has no
+    // time of its own, and was drawn under Today
+    @Test fun daysGroupByTheEnginesDayAndLeaveTheBlocksAbove() {
+        fun entry(id: String, day: String, title: String) = Row(id, createdAt = "2026-10-02T09:00:00Z", timeline = Row.Info(day = day, dayTitle = title))
         val rows = listOf(
             Row("today", timeline = Row.Info(today = true)),
-            Row("a", createdAt = "2026-10-02T09:00:00Z"),
-            Row("b", createdAt = "2026-10-01T09:00:00.000Z"),
-            Row("c", createdAt = "2026-09-29T09:00:00Z"),
+            entry("a", "2026-10-02", "Friday 2 October"),
+            entry("b", "2026-10-01", "Thursday 1 October"),
+            entry("c", "2026-09-29", "Tuesday 29 September"),
+            Row("d", timeline = Row.Info(day = "2026-09-29", dayTitle = "Tuesday 29 September")),
         )
-        val days = Lists.days(rows, now)
-        assertEquals(3, days.size)
-        assertEquals(listOf("a"), days[0].second.map { it.id })
-        assertTrue(days[2].first.endsWith("29 September"), days[2].first)
+        val days = Lists.days(rows, now, utc)
+        assertEquals(listOf("Today", "Yesterday", "Tuesday 29 September"), days.map { it.first })
+        assertEquals(listOf("c", "d"), days[2].second.map { it.id })
     }
 
     @Test fun sectionsFollowTheSearchsGroups() {
@@ -67,15 +70,22 @@ class ListsTest {
     }
 
     @Test fun timesInWordsAsTheiPhoneSaysThem() {
-        assertEquals("9:05", Times.hm(Instant.parse("2026-10-02T09:05:00Z"), utc))
-        assertEquals("Today", Times.day(now - 1.hours, now, utc))
-        assertEquals("Yesterday", Times.day(now - 1.days, now, utc))
+        assertEquals("09:05", Times.hm(Instant.parse("2026-10-02T09:05:00Z"), utc)) // as the desktop's rail (renderer/timeline.js timelineTime)
+        assertEquals("Today", Times.day("2026-10-02", "Friday 2 October", now, utc))
+        assertEquals("Yesterday", Times.day("2026-10-01", "Thursday 1 October", now, utc))
+        assertEquals("Tuesday 29 September", Times.day("2026-09-29", "Tuesday 29 September", now, utc))
         assertEquals("Thursday 1 October", Times.long(LocalDate(2026, 10, 1)))
         assertEquals("now", Times.relative(now, now, utc))
         assertEquals("5 minutes ago", Times.relative(now - 5.minutes, now, utc))
         assertEquals("1 hour ago", Times.relative(now - 1.hours, now, utc))
         assertEquals("yesterday", Times.relative(now - 1.days, now, utc))
         assertEquals("last week", Times.relative(now - 8.days, now, utc))
+    }
+
+    // -sample: the invented rows worded as the engine words a real one, minutes from now
+    @Test fun theSampleIsWordedAsTheEngineWouldWordIt() {
+        assertEquals("""["11:20","2026-10-02","2026-10-01","Thursday 1 October",{"x":"{{min:-40}}"}]""",
+            Times.sample("""["{{hm:-40}}","{{day:-40}}","{{day:-1500}}","{{date:-1500}}",{"x":"{{min:-40}}"}]""", now, utc))
     }
 
     @Test fun plainDatesRoundTrip() {
@@ -88,6 +98,8 @@ class ListsTest {
         assertEquals("Sol 6", ChatGPTText.label("gpt-6-sol"))
         assertEquals("Terra 5.6", ChatGPTText.label("gpt-5.6-terra"))
         assertEquals("GPT-5.5", ChatGPTText.label("gpt-5.5"))
+        assertEquals("gpt-oss-120b", ChatGPTText.label("gpt-oss-120b")) // not a version and a name: as it is, as on the Mac
+        assertEquals("o3", ChatGPTText.label("o3"))
         assertEquals("Extra high", ChatGPTText.effortLabel("xhigh"))
     }
 

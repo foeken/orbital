@@ -124,7 +124,10 @@
   "createdAt": "{{min:-12}}",
   "unread": true,
   "timeline": {
-   "tone": "new"
+   "tone": "new",
+   "time": "{{hm:-12}}",
+   "day": "{{day:-12}}",
+   "dayTitle": "{{date:-12}}"
   },
   "children": [
    {
@@ -165,7 +168,10 @@
   "timeline": {
    "uri": "tana:event:0000000000000000000000000h",
    "note": "1 h",
-   "tone": "meeting"
+   "tone": "meeting",
+   "time": "{{hm:-40}}",
+   "day": "{{day:-40}}",
+   "dayTitle": "{{date:-40}}"
   }
  },
  {
@@ -196,7 +202,10 @@
   "unread": true,
   "timeline": {
    "uri": "tana:text:0000000000000000000000000i",
-   "tone": "done"
+   "tone": "done",
+   "time": "{{hm:-95}}",
+   "day": "{{day:-95}}",
+   "dayTitle": "{{date:-95}}"
   }
  },
  {
@@ -224,7 +233,10 @@
    "uri": "tana:text:0000000000000000000000000j",
    "change": "Added a step for single sign-on setup",
    "detail": "Sam split account creation in two so admins can connect their identity provider first.",
-   "tone": "edit"
+   "tone": "edit",
+   "time": "{{hm:-150}}",
+   "day": "{{day:-150}}",
+   "dayTitle": "{{date:-150}}"
   }
  },
  {
@@ -247,7 +259,10 @@
   "timeline": {
    "uri": "tana:event:0000000000000000000000000k",
    "note": "45 min",
-   "tone": "faint"
+   "tone": "faint",
+   "time": "{{hm:-210}}",
+   "day": "{{day:-210}}",
+   "dayTitle": "{{date:-210}}"
   }
  },
  {
@@ -273,7 +288,10 @@
   "createdAt": "{{min:-1500}}",
   "timeline": {
    "uri": "tana:text:0000000000000000000000000l",
-   "tone": "accepted"
+   "tone": "accepted",
+   "time": "{{hm:-1500}}",
+   "day": "{{day:-1500}}",
+   "dayTitle": "{{date:-1500}}"
   }
  },
  {
@@ -289,7 +307,10 @@
   "icon": "tana",
   "createdAt": "{{min:-1560}}",
   "timeline": {
-   "tone": "new"
+   "tone": "new",
+   "time": "{{hm:-1560}}",
+   "day": "{{day:-1560}}",
+   "dayTitle": "{{date:-1560}}"
   },
   "children": [
    {
@@ -323,7 +344,10 @@
   "createdAt": "{{min:-1700}}",
   "timeline": {
    "uri": "tana:text:0000000000000000000000000n",
-   "tone": "quiet"
+   "tone": "quiet",
+   "time": "{{hm:-1700}}",
+   "day": "{{day:-1700}}",
+   "dayTitle": "{{date:-1700}}"
   }
  }
 ]

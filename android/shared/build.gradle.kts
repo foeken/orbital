@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 // Orbital's Kotlin Multiplatform module: the rows the engine answers with, the Engine that asks for them, and every
 // screen in Compose Multiplatform. android is the app; jvm (desktop) runs the same screens headless in jvmTest.
 plugins {
@@ -9,7 +11,9 @@ plugins {
 }
 
 kotlin {
-    jvm()
+    // The desktop target's bytecode fixed at 17 whatever JDK runs Gradle (this Mac has only 27, which Kotlin cannot
+    // target yet and fell back from). Not a jvmToolchain: that would need a second JDK found or downloaded here.
+    jvm { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
     android {
         namespace = "com.dreetje.orbital.shared"
@@ -46,3 +50,8 @@ kotlin {
         }
     }
 }
+
+tasks.withType<JavaCompile>().configureEach { options.release.set(17) } // the same target as Kotlin's, as Gradle checks
+
+// the repository the tests read the iPhone's samples from (SampleTest sampleFile), whatever directory they run in
+tasks.withType<Test>().configureEach { systemProperty("orbital.repo", rootDir.parentFile.absolutePath) }

@@ -9,11 +9,14 @@ import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.Settings
+import android.view.ViewGroup
 import android.view.textclassifier.TextClassificationManager
 import android.view.textclassifier.TextLanguage
+import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
+import android.widget.FrameLayout
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,22 +29,33 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.webkit.ProfileStore
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.dreetje.orbital.AI
 import com.dreetje.orbital.Platform
 import com.dreetje.orbital.Recorder
 import com.dreetje.orbital.Store
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 // What only Android can do, for the shared screens (com.dreetje.orbital.Platform)
 class AndroidPlatform(private val context: Context) : Platform {
     var web: EngineWeb? = null
     var activity: Activity? = null // the screen showing now, for what has to be asked of it (the microphone, sharing)
-    var askMicrophone: (suspend () -> Boolean)? = null
+    var askMicrophone: (() -> Unit)? = null // the screen's: puts Android's microphone question (MainActivity)
+    private var asking: CompletableDeferred<Boolean>? = null // that question, open: kept here, so a new screen's answer reaches it
+    private val scope = MainScope() // as long as the platform is: the screens' Holder
 
     override val store: Store = Prefs(context)
+    // the translations once kept in store, moved to their file the first time
+    override val files: Store = Files(context).also { files -> store.get("translations")?.let { files.set("translations", it); store.set("translations", null) } }
     override val ai: AI = ChatGPTClient(Secrets(context))
     override val version: String = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
     override val recorder: Recorder = MicRecorder(context)
@@ -49,8 +63,21 @@ class AndroidPlatform(private val context: Context) : Platform {
 
     override suspend fun microphone(): Boolean {
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) return true
-        return askMicrophone?.invoke() ?: false
+        val answer = asking ?: CompletableDeferred<Boolean>().also { d ->
+            val ask = askMicrophone ?: return false
+            asking = d
+            ask()
+        }
+        return answer.await()
     }
+
+    // what Android's question was answered (MainActivity's launcher, the screen that asked or the one after it)
+    fun microphoneAnswered(granted: Boolean) {
+        asking?.complete(granted)
+        asking = null
+    }
+
+    fun close() = scope.cancel()
 
     // Android's own language detection (renderer/translate.js asks the Mac's, the iPhone NaturalLanguage): off the main thread
     override suspend fun language(text: String): Pair<String, Float>? = withContext(Dispatchers.Default) {
@@ -76,9 +103,10 @@ class AndroidPlatform(private val context: Context) : Platform {
 
     override fun hasClipboardImage(): Boolean = clipboard?.primaryClipDescription?.hasMimeType("image/*") == true
 
-    override fun clipboardImage(): ByteArray? {
+    // the clip read where the tap was (Android lets the app in front read it), the image made smaller off the main thread
+    override suspend fun pasteImage(): ByteArray? {
         val uri = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri ?: return null
-        return runCatching { Images.jpegNow(context.contentResolver, uri) }.getOrNull()
+        return Images.jpeg(context.contentResolver, uri)
     }
 
     @Composable
@@ -90,14 +118,25 @@ class AndroidPlatform(private val context: Context) : Platform {
         return remember(launcher) { { launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } }
     }
 
+    // The engine's view, in a frame of the screen's own: the page EngineWeb has now (state: a new one, should Android
+    // have ended the last), taken from wherever it was (the screen before)
     @Composable
     override fun EngineView(modifier: Modifier) {
-        val web = web ?: return
-        AndroidView({ web.attach() }, modifier)
+        val engine = web ?: return
+        AndroidView({ FrameLayout(it) }, modifier, onRelease = { it.removeAllViews() }, update = { frame ->
+            val view = engine.web
+            if (view.parent !== frame) {
+                (view.parent as? ViewGroup)?.removeView(view)
+                frame.removeAllViews()
+                frame.addView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }
+        })
     }
 
     // Sign in with ChatGPT as Codex does it (ChatGPTClient): OpenAI's page in a web view of its own, which catches the
-    // answer sent to Codex's local callback before it loads, as the iPhone's does
+    // answer sent to Codex's local callback before it loads, as the iPhone's does. Its cookies are its own (a WebView
+    // profile, the iPhone's .nonPersistent() store) and are emptied once it closes: OpenAI's session is not needed once
+    // the tokens are here, and Log out of ChatGPT then really asks again.
     @SuppressLint("SetJavaScriptEnabled")
     @Composable
     override fun ChatGPTSignIn(done: () -> Unit, failed: (String) -> Unit) {
@@ -107,6 +146,7 @@ class AndroidPlatform(private val context: Context) : Platform {
         val state = remember { ChatGPTClient.random() }
         AndroidView({ ctx ->
             WebView(ctx).apply {
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) WebViewCompat.setProfile(this, OPENAI_PROFILE) // before anything loads
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.userAgentString = EngineWeb.chrome(settings.userAgentString)
@@ -133,7 +173,26 @@ class AndroidPlatform(private val context: Context) : Platform {
                 }
                 loadUrl(ChatGPTClient.authorize(verifier, state))
             }
-        }, Modifier.fillMaxSize())
+        }, Modifier.fillMaxSize(), onRelease = { web ->
+            web.stopLoading()
+            web.destroy()
+            forgetOpenAI()
+        })
+    }
+
+    // OpenAI's sign-in left nothing behind: its profile emptied, or, on a WebView without profiles, its sites' cookies
+    // expired from the jar it shares with Tana's page
+    private fun forgetOpenAI() {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+            ProfileStore.getInstance().getOrCreateProfile(OPENAI_PROFILE).let { it.cookieManager.removeAllCookies(null); it.webStorage.deleteAllData() }
+        } else scope.launch {
+            Cookies.expire(CookieManager.getInstance(), listOf("https://auth.openai.com", "https://chatgpt.com", "https://openai.com"))
+            CookieManager.getInstance().flush()
+        }
+    }
+
+    private companion object {
+        const val OPENAI_PROFILE = "chatgpt-sign-in"
     }
 }
 
@@ -142,4 +201,17 @@ private class Prefs(context: Context) : Store {
     private val prefs = context.getSharedPreferences("orbital", Context.MODE_PRIVATE)
     override fun get(key: String): String? = prefs.getString(key, null)
     override fun set(key: String, value: String?) = prefs.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
+}
+
+// Files as the shared module's Platform.files: a file a key, written whole beside it first and moved over it, so a value
+// is never half written. SharedPreferences rewrites and reads every key at once, where the translations grow for ever.
+private class Files(context: Context) : Store {
+    private val dir = File(context.filesDir, "store").apply { mkdirs() }
+    override fun get(key: String): String? = File(dir, key).takeIf { it.exists() }?.let { runCatching { it.readText() }.getOrNull() }
+    override fun set(key: String, value: String?) {
+        if (value == null) { File(dir, key).delete(); return }
+        val next = File(dir, "$key.next")
+        next.writeText(value)
+        if (!next.renameTo(File(dir, key))) next.delete()
+    }
 }

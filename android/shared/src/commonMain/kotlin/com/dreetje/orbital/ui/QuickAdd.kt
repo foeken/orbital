@@ -30,10 +30,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,7 +73,7 @@ import kotlin.time.Instant
 fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = null, onDismiss: () -> Unit) {
     val c = Theme.colors
     val zoom = LocalZoom.current
-    var title by remember { mutableStateOf("") }
+    var title by rememberSaveable { mutableStateOf("") } // what you typed survives a rotation
     var types by remember { mutableStateOf(listOf<TaskType>()) }
     var type by remember { mutableStateOf<String?>(null) } // null: plain Task
     var preset by remember { mutableStateOf<Preset?>(null) }
@@ -83,6 +85,8 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
     var picking by remember { mutableStateOf<Field?>(null) } // a person or link field's list open; assignee when key is ""
     var dating by remember { mutableStateOf<Field?>(null) } // a date field's picker open
     val dictation = remember { Dictation(engine.platform, engine.scope) }
+    DisposableEffect(Unit) { onDispose { dictation.cancel() } } // closed or rotated while listening: the microphone stops
+    var taken by rememberSaveable { mutableStateOf(false) } // what was shared is read once, not again after a rotation
     val focus = remember { FocusRequester() }
     val hasClip = remember { engine.platform.hasClipboardImage() }
     // a task is assigned; a document of a type without a workflow (a Goal) is not
@@ -120,8 +124,10 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
         val pickPhoto = engine.platform.rememberPhotoPicker { jpeg -> engine.scope.launch { process(jpeg) } }
 
         LaunchedEffect(Unit) {
-            shared?.image?.let { process(it); return@LaunchedEffect }
-            if (title.isEmpty()) shared?.text?.let { title = it }
+            val first = !taken
+            taken = true
+            if (first) shared?.image?.let { process(it); return@LaunchedEffect }
+            if (first && title.isEmpty()) shared?.text?.let { title = it }
             runCatching { focus.requestFocus() }
             types = engine.taskTypes()
             // a saved search of one type: that type, chosen, and listed even when it is no task type (a Goal is a document)
@@ -189,7 +195,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
                 item("image") {
                     Group("Image", footer = "Read with your ChatGPT account into a task or a note, with the image under it.") {
                         GroupRow(last = !hasClip, onClick = pickPhoto) { Icon(Icons.Outlined.Image, null, tint = c.text); Text("Process image from Photos", color = c.text) }
-                        if (hasClip) GroupRow(last = true, onClick = { engine.platform.clipboardImage()?.let { engine.scope.launch { process(it) } } ?: run { failure = "The clipboard holds no image" } }) {
+                        if (hasClip) GroupRow(last = true, onClick = { engine.scope.launch { engine.platform.pasteImage()?.let { process(it) } ?: run { failure = "The clipboard holds no image" } } }) {
                             Icon(Icons.Outlined.ContentPaste, null, tint = c.text); Text("Process image from clipboard", color = c.text)
                         }
                     }

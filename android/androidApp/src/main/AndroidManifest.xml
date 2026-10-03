@@ -15,8 +15,12 @@
         android:label="Orbital"
         android:supportsRtl="true"
         android:theme="@style/Orbital">
+        <!-- a turn, a fold, a window resized or a keyboard is laid out by Compose in place, not a new screen: the web
+             view holding Tana's page stays in its window and what is open and typed stays. Dark mode (uiMode) still
+             makes the screen again, so the window's own theme (values-night) and the system bars follow it. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="true"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
@@ -24,8 +28,20 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- shared to Orbital: words or an image, opened in Quick Add (the iPhone's Share extension) -->
-            <intent-filter android:label="Orbital">
+        </activity>
+        <!-- shared to Orbital: words or an image, opened in Quick Add (the iPhone's Share extension). It runs in the
+             sharing app's task with no screen of its own (no task of ours to join: taskAffinity ""), leaves what was
+             shared and brings Orbital forward in its own task. -->
+        <activity
+            android:name=".ShareActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="Orbital"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />

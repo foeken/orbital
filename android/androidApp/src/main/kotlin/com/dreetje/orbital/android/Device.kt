@@ -45,6 +45,7 @@ class MicRecorder(private val context: Context) : Recorder {
     private val file = File(context.cacheDir, "dictation.m4a")
 
     override fun start() {
+        cancel() // one recording at a time: a recorder left running (its screen gone) would hold the microphone for ever
         val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(context) else @Suppress("DEPRECATION") MediaRecorder()
         try {
             r.setAudioSource(MediaRecorder.AudioSource.MIC)

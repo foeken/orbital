@@ -56,6 +56,11 @@ data class Row(
         val upcoming: Boolean? = null,
         val free: Free? = null,
         val recording: Boolean? = null, // a meeting under way whose call is being recorded or transcribed (main/timeline.js)
+        // an entry's time on the rail, the day it is under (YYYY-MM-DD) and that day in words, in the desktop's own
+        // formatting (ios/engine/labels.js); the blocks above the days have a time of their own ('Now', '') and no day
+        val time: String? = null,
+        val day: String? = null,
+        val dayTitle: String? = null,
     )
 
     val instant: Instant get() = createdAt?.let(::parseTime) ?: Clock.System.now()

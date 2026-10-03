@@ -14,16 +14,17 @@ import kotlinx.serialization.Serializable
 // Auto-translate as the desktop has it (#547; renderer/translate.js, main/ai.js translate): titles in another language
 // shown in the language chosen in Orbital (a synced preference), on screen only; nothing is ever saved over them. The
 // phone tells which are in another language itself (Platform.language) and asks ChatGPT for those only. Every answer
-// is kept on this phone, so a title is asked once. What is marked sensitive is never sent to the model.
+// is kept on this phone (store: Platform.files), so a title is asked once. What is marked sensitive is never sent to
+// the model.
 @Stable
-class Translator(private val store: Store, private val ai: AI, private val detect: suspend (String) -> Pair<String, Float>?, private val scope: CoroutineScope) {
+class Translator(private val store: Store, private val chatgpt: AI, private val detect: suspend (String) -> Pair<String, Float>?, private val scope: CoroutineScope) {
     @Serializable data class Answer(val lang: String, val text: String) // text "": nothing to translate
 
     var to by mutableStateOf<String?>(null)
         private set
     // the synced Regular AI (model, effort: reading an image) and Quick AI (quickModel, quickEffort: translating)
     // (main/settings.js AI_KEYS); main/ai.js DEFAULT_MODEL / QUICK_MODEL and their efforts until they name others
-    var choices by mutableStateOf(mapOf("model" to "gpt-5.6-terra", "effort" to "low", "quickModel" to "gpt-6-luna", "quickEffort" to "low"))
+    var ai by mutableStateOf(mapOf("model" to "gpt-5.6-terra", "effort" to "low", "quickModel" to "gpt-6-luna", "quickEffort" to "low"))
         private set
     private val answers = mutableStateMapOf<String, Answer>().apply {
         store.get("translations")?.let { saved -> maybeDecode(saved)?.let { putAll(it) } }
@@ -36,7 +37,7 @@ class Translator(private val store: Store, private val ai: AI, private val detec
 
     fun use(to: String?, ai: Map<String, String> = emptyMap()) {
         this.to = to
-        choices = choices + ai
+        this.ai = this.ai + ai
         fit()
     }
 
@@ -46,13 +47,13 @@ class Translator(private val store: Store, private val ai: AI, private val detec
 
     private fun fit() {
         if (catalogue.isEmpty()) return
-        val next = choices.toMutableMap()
+        val next = ai.toMutableMap()
         for ((m, e, start, startEffort) in listOf(listOf("model", "effort", "gpt-5.6-terra", "low"), listOf("quickModel", "quickEffort", "gpt-6-luna", "low"))) {
             val model = catalogue.firstOrNull { it.id == next[m] } ?: catalogue.firstOrNull { it.id == start } ?: catalogue[0]
             next[m] = model.id
             if (next[e] !in model.levels) next[e] = if (startEffort in model.levels) startEffort else model.levels[0]
         }
-        choices = next
+        ai = next
     }
 
     // The words to show and, when they are a translation, the language they were in. Asks for what it does not know yet.
@@ -86,7 +87,7 @@ class Translator(private val store: Store, private val ai: AI, private val detec
         val ask = batch.filter { answers[to + "\n" + it] == null }
         if (ask.isEmpty()) return save()
         val found = try {
-            ChatGPTText.translate(ai, ask, to, choices.getValue("quickModel"), choices.getValue("quickEffort")) ?: run {
+            ChatGPTText.translate(chatgpt, ask, to, ai.getValue("quickModel"), ai.getValue("quickEffort")) ?: run {
                 problem = "Sign in with ChatGPT"
                 ask.forEach { asked.remove(to + "\n" + it) } // asked again once signed in
                 return save()

@@ -35,6 +35,9 @@ val orbitalAssets = tasks.register<OrbitalAssets>("orbitalAssets") {
     sources.from(fileTree(root.resolve("ios/engine")), fileTree(root.resolve("sdk")), fileTree(root.resolve("main")),
         root.resolve("renderer/segments.js"), root.resolve("ios/Orbital/timeline-sample.json"), root.resolve("ios/Orbital/pages-sample.json"),
         root.resolve("package-lock.json"))
+    // the Nucleo set behind Set icon, which the engine takes in when it is there (ios/engine/build.js; scripts/build-nucleo.js
+    // makes it from the local Nucleo library): a tree, so its turning up later builds the engine again, and none is fine
+    sources.from(fileTree(root.resolve("build")) { include("nucleo-ui.json.gz") })
     output.set(layout.buildDirectory.dir("generated/orbital"))
 }
 
