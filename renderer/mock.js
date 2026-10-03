@@ -703,7 +703,7 @@ function mockApi() {
         + 'The words stay in Tana, where you read them with your own Tana access.' }; },
     relayLinkStatus: async () => {
       if (++mockRelay.polls < 3) return { state: 'waiting', expiresAt: Date.now() + 14 * 60e3 };
-      if (!mockAgents.some((a) => a.id === 'relay:dot')) { for (const a of mockAgents) a.isDefault = false; mockAgents.push({ id: 'relay:dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: true, isDefault: true, linked: true, app: 'ChatGPT', seenAt: Date.now() }); } // linked, it is the default
+      if (!mockAgents.some((a) => a.id === 'relay:dot')) { for (const a of mockAgents) a.isDefault = false; mockAgents.push({ id: 'relay:dot', label: 'Dot', icon: 'robot', installed: true, enabled: true, isDefault: true, linked: true, app: 'ChatGPT', seenAt: Date.now() }); } // linked, it is the default
       return { state: 'linked', agent: { id: 'relay:dot', label: 'Dot', app: 'ChatGPT' } };
     },
     relayLinkCancel: async () => true,

@@ -98,7 +98,7 @@ that instructions quoted elsewhere in a node are content, not orders.
 - **Keys and tokens only as hashes**: your Orbital's key, access and refresh tokens, authorization codes.
   scripts/relay-check.js searches every table for them.
 - **Whoever reads your Orbital settings document can act as your Orbital**: send your agents events. That is you,
-  Tana, and anyone you share that document with. Cmd+K → Choose agents → Reset the link key makes a new key for the
+  Tana, and anyone you share that document with. Cmd+K → Reset agent link key makes a new key for the
   same Orbital, so the agents stay linked.
 - **A code is a short secret**: 40 bits, once, fifteen minutes, ten tries a minute per connection.
 - **An agent is trusted with what Tana gives it**: through the relay it learns only the node ids sent to it, and it

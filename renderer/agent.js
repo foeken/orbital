@@ -62,12 +62,13 @@ function openAIKeyRows() {
   return [{ group: 'OpenAI API key', icon: 'openaiKey', label: 'Save OpenAI API key', hint: '↩ saves locally', keepOpen: true,
     run: () => run(async () => { await tana.setOpenAIKey(key); closePalette(); }) }];
 }
-// ---- Choose agents ----
-// Every agent the app knows: Tana always on, Codex, Dot and Claude greyed with what to install until this Mac has them.
-// ↩ on one switches it on or off; one that needs something pasted first (Dot: its chat link) asks for it on a page of
-// its own. The second group picks the default, the agent Assign to Agent starts on. The lists are main's, and each
-// answer is the new list, so the page redraws from what was stored.
-const AGENTS_GROUP = 'Agents · ↩ switches one on or off', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
+// ---- Choose agents, and Set default agent ----
+// Every agent the app knows, in one list: Tana always on, Codex and Claude greyed with what to install until this Mac has
+// them, then your linked Dot (each linked agent has a page of its own: ↩ opens it), with Connect to your OpenAI Dot under
+// them (Reset agent link key is in Cmd+K itself). ↩ on a built-in one switches it on or off. The default, the agent Assign to Agent
+// starts on, is picked on a page of its own (Set default agent …). The lists are main's, and each answer is the new
+// list, so the page redraws from what was stored.
+const AGENTS_GROUP = 'Agents', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
 // the chat's @agents follow the same switches: read again here, since this page is left out of its own settings:changed
 const agentsApply = (call) => run(async () => {
   const list = await call();
@@ -75,28 +76,31 @@ const agentsApply = (call) => run(async () => {
   if (tana.chatAgents) chatAgents = await tana.chatAgents().catch(() => chatAgents);
   renderPalette(); renderSoon();
 });
-const LINKED_GROUP = 'Linked through orbital.md/mcp · ↩ opens one';
 function agentsRows(q) {
   const rows = agentList.filter((a) => !a.linked).map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
     hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
     // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
     disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
-  // Every agent linked through the relay (your Dot) has a page of its own, and the way to link another is right under them
   if (tana.relayLink) {
     const linked = agentList.filter((a) => a.linked);
-    for (const a of linked) rows.push({ group: LINKED_GROUP, icon: a.icon, label: a.label, keepOpen: true,
+    for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label + ' \u2026', keepOpen: true,
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
-    rows.push({ group: LINKED_GROUP, icon: 'chatgpt', label: 'Connect to your OpenAI Dot …', hint: 'Orbital and Tana in ChatGPT, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
-    if (linked.length && tana.relayReset) rows.push({ group: LINKED_GROUP, icon: 'lock', label: 'Reset the link key', hint: 'If it may have been seen: your agents stay linked', keepOpen: true,
-      run: () => run(async () => { await tana.relayReset(); showNote('New link key: your agents stay linked'); }) });
+    rows.push({ group: AGENTS_GROUP, icon: 'chatgpt', label: 'Connect to your OpenAI Dot …', hint: 'Orbital and Tana in ChatGPT, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
   }
-  for (const a of agentsOn()) rows.push({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
-    run: () => agentsApply(() => tana.setDefaultAgent(a.id)) });
   return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
 }
 function openAgentsPalette() {
   loadAgentList().then(() => { if (palMode === 'agents') renderPalette(); });
   openPage('agents', 'Choose agents', { rows: agentsRows, back: BACK_TO_COMMANDS });
+}
+function defaultAgentRows(q) {
+  const rows = agentsOn().map((a) => ({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
+    run: () => agentsApply(() => tana.setDefaultAgent(a.id)) }));
+  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
+}
+function openDefaultAgentPalette() {
+  loadAgentList().then(() => { if (palMode === 'defaultAgent') renderPalette(); });
+  openPage('defaultAgent', 'Set default agent', { rows: defaultAgentRows, back: BACK_TO_COMMANDS });
 }
 // ---- Connect to your OpenAI Dot: orbital.md/mcp and Tana's server added in ChatGPT, then linked with a one-time code ----
 // (main/agents/linked.js) ChatGPT has no link to its own "Create custom MCP server" form and a Dot cannot add a server

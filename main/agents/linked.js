@@ -57,7 +57,7 @@ function load() {
   shown = sig;
   for (const id of Object.keys(agent.AGENTS)) if (id.startsWith(ID) && !list.some((a) => ID + a.id === id)) agent.unregister(id);
   for (const a of list) agent.register({
-    id: ID + a.id, label: a.name, icon: 'chatgpt', linked: true, app: a.app || '', seenAt: a.seenAt || null,
+    id: ID + a.id, label: a.name, icon: 'robot', linked: true, app: a.app || '', seenAt: a.seenAt || null,
     available: () => true, // nothing to install: the agent is wherever it runs
     start: (task) => send(a, task),
     statuses: (links) => statuses(links),

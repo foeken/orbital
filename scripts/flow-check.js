@@ -610,18 +610,22 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   await p.waitFor('Math.abs(' + offset + ') <= 1', 'the wait to start where the heading\u2019s words do (' + await p.js(offset) + 'px off at first)');
   assert.match(await p.js('palRows[5].hint'), /^Works once · \d+:\d\d left$/, 'saying how long the code lasts');
   await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked Dot · ChatGPT"', 'the palette to close on the agent that linked', 10000);
+  await command(p, 'set default agent', 'Set default agent \u2026');
+  await p.waitFor('palMode === "defaultAgent" && palRows.some((r) => r.label === "Dot")', 'Set default agent');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.hint === "✓").map((r) => r.label)'), ['Dot'], 'linking your Dot made it the default');
+  await closePalette(p);
   await command(p, 'choose agents', 'Choose agents \u2026');
-  await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "Dot")', 'your Dot among your agents');
-  assert.equal(await p.js('palRows.find((r) => r.label === "Dot").icon'), 'chatgpt', 'drawn with the OpenAI logo');
-  assert.deepEqual(await p.js('(({ group, hint }) => [group, hint])(palRows.find((r) => r.label === "Dot"))'), ['Linked through orbital.md/mcp · ↩ opens one', 'On · ChatGPT · seen just now'], 'linked, on, and where it runs');
-  assert.ok(await p.js('palRows.some((r) => r.group === "Default agent · ↩ makes it the default" && r.label === "Dot")'), 'and it can be the default');
+  await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "Dot \u2026")', 'your Dot among your agents');
+  assert.equal(await p.js('palRows.find((r) => r.label === "Dot \u2026").icon'), 'robot', 'drawn with the same glyph as the other agents');
+  assert.deepEqual(await p.js('(({ group, hint }) => [group, hint])(palRows.find((r) => r.label === "Dot \u2026"))'), ['Agents', 'On · ChatGPT · seen just now'], 'among the agents, on, and where it runs');
+  assert.equal(await p.js('palRows.some((r) => /default/i.test(r.group))'), false, 'the default is picked elsewhere');
   await p.type('dot');
-  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Dot"', 'its row');
+  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Dot \u2026"', 'its row');
   await p.key('↩');
   await p.waitFor('palMode === "linkedAgent"', 'its page');
   assert.deepEqual(await p.js('palRows.map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
   await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink"', 'Unlink'); await p.key('↩');
-  await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot")', 'Choose agents without it');
+  await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot \u2026")', 'Choose agents without it');
   await closePalette(p);
 });
 
