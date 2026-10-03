@@ -153,8 +153,11 @@ function relayRows() {
   if (c.state === 'asking') return [{ group: 'Link to agent', icon: 'link', label: 'Getting a code…', disabled: true, spin: true, match: [] }];
   if (c.state === 'failed') return [{ group: 'Link to agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Link to agent', label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
-  const rows = [{ group: 'Give this to the agent · it adds the server, names itself and links', icon: 'link', label: c.prompt, wrap: true, hint: '↩ copies', keepOpen: true, match: [],
-    run: () => run(() => copyText(c.prompt, 'Copied: give it to your agent')) }];
+  // the row says what ↩ does; the words themselves sit under it, so you can see what your agent will be told
+  const group = 'Give these to the agent · it adds the server, names itself and links';
+  const rows = [{ group, icon: 'link', label: 'Copy instructions for your agent', hint: '↩', keepOpen: true, match: [],
+    run: () => run(() => copyText(c.prompt, 'Copied: give them to your agent')) },
+  { group, label: c.prompt, note: true, wrap: true, disabled: true, match: [] }];
   if (c.state === 'expired' || !left) return [...rows, { group: 'Waiting', icon: 'link', label: 'The code expired', hint: 'Nobody used it', disabled: true, match: [] }, { ...again, group: 'Waiting', label: 'Get a new code', match: [] }];
   return [...rows,
     { group: 'Waiting', icon: 'robot', label: 'Waiting for an agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, spin: true, match: [] },

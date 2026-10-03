@@ -10,8 +10,8 @@ the MCP server at **orbital.md/mcp** (relay/server.js), and the only thing betwe
    a random id and a random secret, kept in the Orbital settings document in Tana (`relayAccount`, docs/SETTINGS.md),
    so every device signed into your Tana account is the same Orbital. Main tells the relay the id, the secret (which
    the relay keeps only as a hash) and the public key the secret stands for (`POST /orbital/register`).
-2. The page shows one prompt: *Add the MCP server https://orbital.md/mcp to yourself, then call its link_orbital tool
-   with the code 7KQX-M2PD and a short name for yourself.* ↩ copies it; you give it to the agent.
+2. The page's first row, **Copy instructions for your agent**, copies them, and shows them under it: *Add the MCP server https://orbital.md/mcp to yourself, then call its link_orbital tool
+   with the code 7KQX-M2PD and a short name for yourself.* You give them to the agent.
 3. The agent adds the server. Its MCP client signs in on its own (OAuth below), calls `link_orbital` with the code and
    a name it chose, and is linked. The code works once and for ten minutes.
 4. The page, asking every two seconds, sees the code used, closes on "Linked GrokBot · Grok", and the agent is one of
