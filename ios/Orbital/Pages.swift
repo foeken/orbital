@@ -78,7 +78,7 @@ struct NodeScreen: View {
         Group {
             // a node you marked sensitive: what it is, and how to see it, until a shake shows it (the title says Hidden, as the desktop's tab does)
             if let page, page.sensitive == true, !engine.reveal {
-                ContentUnavailableView { Label { Text("Hidden") } icon: { Image("Glyphs/hidden").resizable().frame(width: 48, height: 48) } } description: { Text("You marked this sensitive in Orbital. Shake your iPhone to show sensitive items, and shake it again to hide them.") }
+                ContentUnavailableView { Label { Text("Hidden") } icon: { Image("Glyphs/hidden").resizable().frame(width: 48, height: 48) } } description: { Text("You marked this sensitive in Orbital. Shake your iPhone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.") }
             } else if let page {
                 switch page.kind {
                 case "chat":
@@ -121,6 +121,8 @@ struct NodeScreen: View {
             }
         }
         .onChange(of: engine.sensitiveIds) { Task { await load() } } // marked or unmarked on another device: drawn again
+        // Demo mode turned on or off with this page open: read again, and none of the words read before it shown meanwhile
+        .onChange(of: engine.demo) { page = nil; Task { await load() } }
         .navigationTitle(titled && !(page?.sensitive == true && !engine.reveal) ? engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0 : "")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {

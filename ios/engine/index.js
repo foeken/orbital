@@ -20,6 +20,7 @@ import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
 import { mark } from './sensitive';
+import { times } from './labels';
 import { demo, demoName, demoOn, demoTitle, isDemo } from './demo';
 import NUCLEO from 'nucleo-ui';
 
@@ -324,12 +325,12 @@ window.orbital = {
     }
     return true;
   },
-  // the Timeline page, three days per page, as the rows the desktop renderer gets
-  demo: (on) => demoOn(on), // Settings' Demo mode, told before each read (Engine.swift refresh)
+  // the Timeline page, three days per page, as the rows the desktop renderer gets, with the words for their times (labels.js)
+  demo: (on) => demoOn(on), // Settings' Demo mode, told before every call (Engine.swift and Engine.kt call)
   async timeline(pages = 1) {
     timeline.setPages(pages);
     await settled(); // the watch choices and what is sensitive
-    return JSON.stringify(redact(await timeline.rows()));
+    return JSON.stringify(times(redact(await timeline.rows())));
   },
   // A task's box, as the desktop's does it (renderer/edit.js toggleDone, main/documents.js doc:setDone and mutTasks): an
   // Inbox task is accepted first (In Progress), a finished one is reopened, anything else is completed. Answers the state

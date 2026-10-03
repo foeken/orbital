@@ -174,7 +174,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private func read() async {
         let started = session
         do {
-            let read: [Row] = try await call("orbital.demo(demo); return await orbital.timeline(pages)", ["pages": pages, "demo": demo])
+            let read: [Row] = try await call("return await orbital.timeline(pages)", ["pages": pages])
             guard started == session else { return } // signed out meanwhile
             rows = read
             error = nil
@@ -381,7 +381,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     struct Failure: LocalizedError { let errorDescription: String? }
     private func call<T: Decodable>(_ js: String, _ arguments: [String: Any]) async throws -> T {
         do {
-            let json = try await web.callAsyncJavaScript(js, arguments: arguments, contentWorld: .page) as? String ?? "null"
+            // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
+            // moment it is turned on, not from the next Timeline read, which a read already under way puts off
+            let json = try await web.callAsyncJavaScript("orbital.demo(demo); " + js, arguments: arguments.merging(["demo": demo]) { _, now in now },
+                                                         contentWorld: .page) as? String ?? "null"
             return try JSONDecoder().decode(T.self, from: Data(json.utf8))
         } catch {
             note("\(js.firstMatch(of: /orbital\.(\w+)/)?.1 ?? "engine") failed: \(Self.message(error))")
@@ -444,12 +447,22 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // Launched with -sample: timeline-sample.json in place of Tana, for screenshots of the design. Invented content only;
-    // its times are minutes from now ("{{min:-40}}", "{{ms:+44}}") so the page always reads as today's.
+    // its times are minutes from now ("{{min:-40}}", "{{ms:+44}}") so the page always reads as today's, and so are the
+    // words the engine would put on them (ios/engine/labels.js; Times.kt sample): "{{hm:-40}}" the time, "{{day:-40}}"
+    // the day, "{{date:-40}}" that day in words.
     private func showSample() {
         guard let url = Bundle.main.url(forResource: "timeline-sample", withExtension: "json"), var json = try? String(contentsOf: url, encoding: .utf8) else { return }
-        for match in json.matches(of: /"\{\{(min|ms):([+-]?\d+)\}\}"/).reversed() {
+        let gb = Date.FormatStyle(locale: Locale(identifier: "en_GB")) // 24-hour, and the day as the desktop words it in English
+        for match in json.matches(of: /"\{\{(min|ms|hm|day|date):([+-]?\d+)\}\}"/).reversed() {
             let at = Date.now.addingTimeInterval(Double(match.2)! * 60)
-            json.replaceSubrange(match.range, with: match.1 == "ms" ? String(Int(at.timeIntervalSince1970 * 1000)) : "\"" + at.ISO8601Format(.iso8601.year().month().day().time(includingFractionalSeconds: true)) + "\"")
+            let filled = switch match.1 {
+            case "ms": String(Int(at.timeIntervalSince1970 * 1000))
+            case "hm": "\"" + at.formatted(gb.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)) + "\""
+            case "day": "\"" + TimelineScreen.key(at) + "\""
+            case "date": "\"" + at.formatted(gb.weekday(.wide).day().month(.wide)) + "\""
+            default: "\"" + at.ISO8601Format(.iso8601.year().month().day().time(includingFractionalSeconds: true)) + "\""
+            }
+            json.replaceSubrange(match.range, with: filled)
         }
         rows = (try? JSONDecoder().decode([Row].self, from: Data(json.utf8))) ?? []
         // -history: the day's entries only, so a shot of them needs no scrolling

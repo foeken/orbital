@@ -52,3 +52,30 @@ jobs:
       - run: npm run check
       # whole user flows in Chromium on the mock (scripts/flow-check.js, docs/TESTING.md); the runner image has Chrome
       - run: npm run flows
+
+  # The Android app (android/): the shared module's tests, the screens among them drawn headless on the desktop target,
+  # and a debug build of the app. The glyphs it draws are checked fresh by npm run check above (scripts/glyph-check.js).
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      # loro-crdt and friends for the engine bundle; the Electron download is not needed (as in check above)
+      - run: npm ci --ignore-scripts
+      # Bun bundles the engine into the app's assets (androidApp's orbitalAssets task runs ios/engine/build.js)
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # compileSdk 37 (android/gradle/libs.versions.toml), which the runner's own SDK may not have yet; the licences are
+      # accepted by the action
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :shared:jvmTest :androidApp:assembleDebug --console=plain
+        working-directory: android
