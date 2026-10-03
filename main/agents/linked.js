@@ -68,7 +68,8 @@ function store(list) {
   const seen = new Set(settings.get('relaySeen') || []), fresh = list.filter((a) => !seen.has(a.id));
   settings.set('relayAgents', list.map(({ id, name, app, linkedAt, seenAt }) => ({ id, name, app, linkedAt, seenAt })));
   load();
-  for (const a of fresh) agent.setEnabled(ID + a.id, true); // a new agent is on, once; switched off later it stays off
+  // a new agent is on, once, and the default: linking your Dot is choosing it (switched off or another picked later, that stays)
+  for (const a of fresh) { agent.setEnabled(ID + a.id, true); agent.setDefault(ID + a.id); }
   if (fresh.length || seen.size !== list.length) settings.set('relaySeen', list.map((a) => a.id));
 }
 async function refresh() { if (orbitalKey(false)) store((await call('GET', '/orbital/agents')).agents); }
@@ -114,7 +115,7 @@ async function linkCode() {
   // The message links, subscribes the Dot to task.assigned so a node handed over wakes it (relay/server.js EVENTS), says
   // that everything else happens in Tana (the status lines included), and what goes through orbital.md, so the Dot can explain it when asked.
   return { code, expiresAt, url: relay.base, tana: TANA_MCP,
-    prompt: 'Call Orbital\'s link_orbital tool with the code ' + code + ' and the name Dot. Then subscribe to Orbital\'s task.assigned event, and each time it '
+    prompt: 'Call Orbital\'s link_orbital tool with the code ' + code + ' and your own name (Dot if you have none). Then subscribe to Orbital\'s task.assigned event, and each time it '
       + 'fires, read the Tana node its data names with your Tana tools, do what its "Agent context" block asks, and write what you did into the node, ending each '
       + 'update with a line "Agent status: Working", or "Agent status: Completed" when you are done, or "Agent status: Failed" if you cannot finish. Leave the task\'s own status as it is. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
       + 'I add them in ChatGPT as custom MCP servers, Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. If I ask what goes through Orbital: only ids: '

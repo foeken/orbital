@@ -791,12 +791,14 @@ wrong twenty.
   `defaultAgent`); unset is Tana and Codex on, Tana the default.
   **Connect to your OpenAI Dot …** (Settings, and under the linked agents in Choose agents) links your Dot through the MCP
   server orbital.md/mcp: where to add it and Tana's in ChatGPT (Open ChatGPT plugins, then each server's name with its
-  URL, ↩ copies it), then a message carrying a one-time code that links it as Dot and subscribes it to the task.assigned
+  URL, ↩ copies it), then a message carrying a one-time code that links it by its own name (Dot if it has none), makes it the default
+  agent, and subscribes it to the task.assigned
   event (a node handed to it is that event, with the node's id; its badge follows the last "Agent status: Working |
   Completed | Failed" line in the node, which Orbital starts with Working and the Dot ends each update with); each linked agent is one more agent,
   with a page of its own (Rename …, Switch off, Unlink) and Reset the link key beside them (docs/AGENT-RELAY.md).
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
-  default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
+  default ticked; beside it **Assign to <agent> …** for each agent that is on, Assign to Codex …, Assign to Echo …, opens
+  the same page with that agent picked) and hands the node over; the agent's own default model does the work. The node then carries the agent
   badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session
   lives only on the Mac that ran it, names that Mac in its link and reads **Agent on another Mac** (grey, not a button)
   anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). **Unassign from Agent** takes it

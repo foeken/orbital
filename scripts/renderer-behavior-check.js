@@ -5440,6 +5440,8 @@ function runCodexAssignCheck() {
       other: (kids.get(OTHER) || []).map((n) => n.text) });
     ({
       label: () => paletteRows('').find((r) => r.rank === 'codex').label,
+      byName: () => paletteRows('').filter((r) => r.rank === 'codexTo').map((r) => [r.label, r.hint]),
+      pressTo: async (label) => { await paletteRows('').find((r) => r.label === label).run(); await tick(); return { mode: palMode, agent: agentPick, sent: sent.length }; },
       pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codex').run(); await tick(); return state(); },
       type: (text) => { palText.value = text; },
       submitKey: async (name, mod) => { sent.length = 0; errors.length = 0; const e = key(name, mod); const handled = agentPromptKey(e); await tick(); return { handled, stopped: e.stopped, ...state() }; },
@@ -5474,6 +5476,8 @@ function runCodexAssignCheck() {
   `);
   return (async () => {
     assert.equal(api.label(), 'Assign to Agent', 'an unassigned node offers to hand itself to the agent');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'Default'], ['Assign to Codex …', '']], 'and to each agent that is on by its name, the default said');
+    assert.deepEqual(plain(await api.pressTo('Assign to Codex …')), { mode: 'agentPrompt', agent: 'codex', sent: 0 }, 'which opens the same prompt page with that agent picked, and assigns nothing yet');
     const opened = plain(await api.pressRow());
     assert.equal(opened.mode, 'agentPrompt', 'choosing it advances to the prompt page inside the palette');
     assert.deepEqual(opened.sent, [], 'and assigns nothing yet: the page is the question, not the answer');

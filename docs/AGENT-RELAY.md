@@ -20,14 +20,15 @@ your words never pass through it.
    https://orbital.md/mcp and **Tana** https://home.tana.inc/mcp (↩ copies the URL). ChatGPT signs in to Orbital's on
    its own (OAuth below; it connects at once, there is nothing to approve).
 3. Then **Copy the message for your Dot** copies what you send it: *Call Orbital's link_orbital tool with the code
-   7KQX-M2PD and the name Dot. Then subscribe to Orbital's task.assigned event, and each time it fires, read the Tana
+   7KQX-M2PD and your own name (Dot if you have none). Then subscribe to Orbital's task.assigned event, and each time it fires, read the Tana
    node its data names with your Tana tools, do what its "Agent context" block asks, and write what you did into the
    node, ending each update with a line "Agent status: Working", or "Agent status: Completed" when you are done, or
    "Agent status: Failed" if you cannot finish. Leave the task's own status as it is*, what to say if either server's tools are missing, and
    that only ids go through Orbital, so the Dot can explain it when asked. The page says the same under it. The code
    works once and for fifteen minutes.
 4. The page, asking every two seconds, sees the code used, closes on "Linked Dot · ChatGPT", and the agent is one of
-   yours: `relay:<id>` in main/agent.js, on from the start, in Choose agents, Assign to Agent and Settings.
+   yours: `relay:<id>` in main/agent.js, by the name it gave itself (Echo, say), on from the start and the default agent (linking
+   your Dot is choosing it), in Choose agents, Assign to Agent, Assign to <its name> … and Settings.
 5. **Assign to Agent** writes the request into the node's `Agent context` block, as for every agent, then sends the
    event `task.assigned` with `{ node }` for that agent (main/agents/linked.js send). The relay POSTs it to the Dot's
    callback at once, which wakes it, and adds the line "Agent status: Working" at the end of the node, so a Completed

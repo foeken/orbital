@@ -285,6 +285,9 @@ function paletteRows(q, typed = q) {
   if (palDoc && tana.setAgent && isRealId(palDoc.id)) {
     const assigned = agentIds.has(palDoc.id), doc = palDoc;
     const holder = agentNamed((agentTasks.get(doc.id) || {}).agent), fallback = agentsOn().find((a) => a.isDefault) || agentNamed('tana');
+    // and one row per agent that is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked
+    if (!assigned) for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: a.isDefault ? 'Default' : '',
+      keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
     rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: assigned ? 'Unassign from Agent' : 'Assign to Agent',
       hint: assigned ? (holder ? holder.label : '') : 'To ' + ((fallback && fallback.label) || 'Tana'),
       keepOpen: !assigned,

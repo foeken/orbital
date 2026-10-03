@@ -600,7 +600,7 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
     'first where to go in ChatGPT, then both servers as its form asks for them: a name and a URL');
   assert.equal(await p.js('palIndex'), 0, '↩ starts at ChatGPT');
   assert.deepEqual(await p.js('[palRows[3].label, palRows[3].group, !!palRows[3].disabled]'), ['Copy the message for your Dot', 'Then ask your Dot to link', false], 'then the message');
-  assert.match(await p.js('relayCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and the name Dot\. Then subscribe to Orbital's task\.assigned event.*only ids/, 'what it copies: the code, the event that wakes it, and what goes through orbital.md');
+  assert.match(await p.js('relayCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned event.*only ids/, 'what it copies: the code, the event that wakes it, and what goes through orbital.md');
   assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
   assert.match(await p.js('palRows[4].label'), /^Only ids go through orbital\.md: your words stay in Tana/, 'it says what goes through orbital.md');
   assert.deepEqual(await p.js('[palRows[5].label, !!palRows[5].icon, palRows[5].group === palRows[3].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your Dot to use the code…', false, true, true],

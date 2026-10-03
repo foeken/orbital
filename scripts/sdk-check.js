@@ -3862,7 +3862,7 @@ async function main() {
     const link = await h('relay:link');
     assert.match(link.code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/, 'Connect to your OpenAI Dot gets a code');
     assert.deepEqual([link.url, link.tana], [base + '/mcp', 'https://home.tana.inc/mcp'], 'and both servers\' URLs, for the page to name');
-    assert.ok(link.prompt.startsWith('Call Orbital\'s link_orbital tool with the code ' + link.code + ' and the name Dot. Then subscribe to Orbital\'s task.assigned event'), 'the message links, as Dot, and subscribes it to the event that wakes it');
+    assert.ok(link.prompt.startsWith('Call Orbital\'s link_orbital tool with the code ' + link.code + ' and your own name (Dot if you have none). Then subscribe to Orbital\'s task.assigned event'), 'the message links, by its own name, and subscribes it to the event that wakes it');
     assert.ok(link.prompt.includes(base + '/mcp') && link.prompt.includes('home.tana.inc/mcp') && /only ids/.test(link.prompt), 'naming both servers if one is missing, and what goes through orbital.md, for the Dot to explain');
     const key = settings.get('relayKey');
     assert.match(key, /^[\w-]{43}$/, 'the first link makes your Orbital: one random key');
@@ -3875,7 +3875,7 @@ async function main() {
     const status = await h('relay:linkStatus', link.code), id = status.agent.id;
     assert.deepEqual([status.state, status.agent.label, status.agent.app], ['linked', 'GrokBot', 'Grok'], 'the agent linked, by the name it chose, through the app it runs in');
     const entry = () => agent.list().find((a) => a.id === id);
-    assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled], ['GrokBot', true, true, true], 'and is an agent like any other, on from the start');
+    assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled, entry().isDefault], ['GrokBot', true, true, true, true], 'and is an agent like any other, on from the start and the default: linking it is choosing it');
     // a node handed over: the event task.assigned with the node's id, nothing else; the words stay in Tana
     const NODE = 'tana:text:' + ulid(), realMut = docs.mut, realOp = docs.op, realWrite = docs.writeAgentStatus, realStatus = docs.agentStatus, wrote = [];
     docs.op = docs.mut = async () => { throw new Error('a linked agent reads the node with its own Tana tools: Orbital sends no words'); };

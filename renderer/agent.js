@@ -218,13 +218,14 @@ function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
   if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
 }
-function openAgentPrompt(doc) {
+function openAgentPrompt(doc, pick) {
   // No back: Escape cancels the whole thing rather than stepping back a level. The page was opened to answer one
   // question, and abandoning that question is abandoning the assignment. Nothing is written either way.
   showPage('agentPrompt', '', { rows: agentPromptRows, typed: true }); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
   agentCtx = { id: doc.id, doc }; // the row itself, so the assignment can hold it where it sits
-  agentPick = (agentsOn().find((a) => a.isDefault) || agentsOn()[0] || { id: 'tana' }).id; // every assignment starts on the default
+  // it starts on the agent its row named (Assign to Echo …), or else on the default
+  agentPick = (agentsOn().find((a) => a.id === pick) || agentsOn().find((a) => a.isDefault) || agentsOn()[0] || { id: 'tana' }).id;
   renderPalette(); palText.focus();
 }
 function agentPromptRows() {
