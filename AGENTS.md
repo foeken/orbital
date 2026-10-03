@@ -38,6 +38,27 @@ Adding something — an IPC call, a `main/` module, a view or an app page, a Cmd
 - **Not supported by Tana**: SVG/emoji icons on nodes (only `appearance.imageUri`/`hue`); the app no longer keeps icons of its own either. Event documents have empty content; meeting notes live in linked documents.
 - **Chats** have no `content` outline either: the conversation is a LoroList at `data.messages` on the chat document, text is plain markdown in one LoroText with no marks, and mentions are `[label](tana:…)` links, so a chip needs no lookup. "Thought for N seconds" is `completedAt - sentAt` computed client-side, and "X accepted 1 change" is a human status-update message whose `attachmentUris` are the changed documents. Read only `data.messages`: a whole chat bootstraps to megabytes because tool output and the rendered system prompt are stored inline. `listNodes({ nodeTypes: ['chat'] })` returns only chats with no owner unless the request sets `includeOwnedChats: true`, and then every owned one (live 2026-09-23: 48 without, 417 with, nine in ten of the owned ones Tana's own background work). Every list that includes chats adds the owned `meeting` chats with a second query and leaves the other owned ones out, as Tana's own chat search does (`main/views.js` `listFilter`, issue #39). Details in `docs/CHATS.md`.
 
+## Every platform
+
+Orbital is the desktop app, the iPhone app (`ios/`), the Android app (`android/`) and the manual (`manual/`). A
+change does not have to land everywhere, but it is never left out of one by forgetting: each PR's description says
+under **Platforms**, one line each, "updated" or why it did not need to (`.github/pull_request_template.md`). The
+Platforms workflow holds those lines to the diff (`scripts/platform-check.js`; `node scripts/platform-check.js
+--body-file pr.md` before pushing): it fails on a missing line, an answer the diff contradicts, or "not needed" with
+no reason, and notes where something usually follows.
+
+- **The iPhone and Android mirror each other.** A change to one is made to the other in the same PR, with the same
+  names and structure (each Kotlin screen names its Swift file on its first line), unless it is about something only
+  one platform has, and the line says what.
+- **The phones follow the desktop features they carry.** When the Timeline, chats and Ask Tana, Quick Add, Assigned to
+  and Visible to, sensitive marks, demo mode, settings and the AI models, Auto-translate or pins change on the desktop,
+  the phones change with them, or the line says why not (`MIRRORED` in the script lists them).
+- **A new desktop feature does not come to the phones by itself.** The phone lines say "not needed: new desktop
+  feature" unless the phones were asked for.
+- **What both phones run changes both at once:** `ios/engine`, and the SDK and the desktop modules it bundles
+  (`sdk/`, `main/timeline.js`, `main/settings.js`, `renderer/segments.js`). Check both phones.
+- **The manual** follows anything a user can see or do on the desktop (Every PR updates the manual, above).
+
 ## Working rules that saved us time
 
 - Verify against Tana read-only first: `node scripts/platform-cli.js …` (**not** `./node_modules/.bin/electron …`). Electron's GUI process aborts inside AppKit's `_RegisterApplication` whenever it starts under the agent sandbox, because LaunchServices is unreachable there, and every such run left a macOS crash dialog behind; the CLI now re-execs Electron itself and refuses with exit 3 when `CODEX_SANDBOX` is set, so real data needs an escalated (unsandboxed) run. `npm start` and the packaged app are GUI Electron too and need the same escalation. Details and measurements: `docs/ELECTRON-SANDBOX.md`. Only write to the user's real data when the user asked for it, and prefer scratch documents (`create` + `delete`) or the user's own test items ("Test Pin").

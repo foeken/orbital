@@ -37,7 +37,9 @@ ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
 # and server-side by GitHub), so the version bump lands through a pull request; the tag is pushed on its own.
 git switch -c "release/v$version"
 git push -u origin "release/v$version"
-gh pr create --title "v$version" --body "Version bump for v$version."
+# the Platforms lines every PR carries (AGENTS.md, Every platform): a version bump lands on none of them
+body=$(printf 'Version bump for v%s.\n\n## Platforms\n- **Desktop**: not needed: the version number only\n- **iOS**: not needed: the version number only\n- **Android**: not needed: the version number only\n- **Manual**: nothing user-visible\n' "$version")
+gh pr create --title "v$version" --body "$body"
 gh pr merge --merge --delete-branch # a merge commit keeps the tagged commit reachable from main; squash would not
 git switch main
 git pull --ff-only
