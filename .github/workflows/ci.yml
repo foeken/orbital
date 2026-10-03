@@ -7,7 +7,8 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # a newer push to a pull request replaces its run; every merge to main finishes its own, so main shows each commit's result
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Keys, tokens and real work content (.gitleaks.toml) in the commits this pull request or push adds; the history

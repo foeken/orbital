@@ -50,7 +50,8 @@ From fastest to slowest. Each catches what the one before it cannot.
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; CI runs it on every PR.
 3. **iPhone UI tests** (about a minute, `ios/OrbitalUITests`). The app on `-sample`, driven by the labels VoiceOver reads; the
-   iOS workflow runs them on a simulator when `ios/`, `sdk/` or `main/` change. `scripts/ios-engine-check.js` covers the engine.
+   iOS workflow runs them on a simulator when `ios/` changes. `scripts/ios-engine-check.js` covers the engine, and the desktop
+   code it bundles, on every PR.
 4. **The running app**, only for what the mock cannot reach: main's live subscriptions, real Tana answers, a restart.
    Read-only first (`node scripts/platform-cli.js`), escalated. Say in the PR what was and was not tried there.
 
