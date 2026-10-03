@@ -1,0 +1,26 @@
+name: Platforms
+
+# Every pull request says, for the desktop app, the iPhone, Android and the manual, whether it updated each or why it
+# did not need to (AGENTS.md, Every platform; scripts/platform-check.js holds those lines to the diff). Its own
+# workflow so that editing the description runs this again without running the rest of CI.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: platforms-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platforms:
+    if: github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: node scripts/platform-check.js --base "$BASE"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}

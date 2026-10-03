@@ -13,7 +13,7 @@
     "start": "electron .",
     "tana": "electron scripts/platform-cli.js",
     "lint": "eslint .",
-    "check": "node scripts/db-check.js && node scripts/sdk-check.js && node scripts/renderer-check.js && node scripts/renderer-behavior-check.js && node scripts/updater-check.js && node scripts/pdf-check.js && node scripts/livequery-check.js && node scripts/presence-check.js && node scripts/ios-engine-check.js",
+    "check": "node scripts/platform-check.js --self && node scripts/db-check.js && node scripts/sdk-check.js && node scripts/renderer-check.js && node scripts/renderer-behavior-check.js && node scripts/updater-check.js && node scripts/pdf-check.js && node scripts/livequery-check.js && node scripts/presence-check.js && node scripts/ios-engine-check.js",
     "flows": "node scripts/flow-check.js",
     "secrets": "gitleaks git --redact --no-banner --log-opts=origin/main..HEAD .",
     "icon": "electron scripts/build-icon.js",
