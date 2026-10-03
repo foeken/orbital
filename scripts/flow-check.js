@@ -370,9 +370,12 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   assert.deepEqual([await state(), await p.js(box + '.checked')], ['closed', true], 'a task ticked on the Timeline is saved as done');
   await p.js(box + '.click()'); await settle(p, 400);
   assert.deepEqual([await state(), await p.js(box + '.checked')], ['open', false], 'ticked again, it is open again');
-  // the end of the page reads three days more
+  // the end of the page reads three days more. Counted from where it stands: scrolling near the end reads on by
+  // itself (timelineEnd), so the rows opened above may already have brought more days in
+  await p.waitFor('!timelineLoading', 'any read already under way');
+  const pages = await p.js('timelinePages');
   await p.js('document.querySelector(".tl-older").click()');
-  await p.waitFor('timelinePages === 2 && document.querySelector(".tl-older")?.textContent === "Show three more days"', 'three more days read');
+  await p.waitFor('timelinePages > ' + pages + ' && !timelineLoading && document.querySelector(".tl-older")?.textContent === "Show three more days"', 'three more days read');
 });
 
 // 11. Pins (docs/PINNING.md): pinned to today it is on the Timeline's Today's Tasks; pinned to the sidebar and on a
