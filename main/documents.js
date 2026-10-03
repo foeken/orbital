@@ -746,12 +746,11 @@ function writeAgentContext(id, prompt) {
   });
 }
 // How a handed-over node is going, in the agent's own words: the last "Agent status: Working | Completed | Failed" line
-// in it. Orbital adds Working at the end when it hands a node over, and an agent that cannot set a status of ours (Dot,
-// whose Tana connector offers only Tana's four) ends each update with one. Ordinary content, so whoever opens the node
-// sees it, in Tana too; the last one wins, so a handoff added after an old Completed is the current one.
+// in it. An agent that cannot set a status of ours (Dot, whose Tana connector offers only Tana's four) ends each update
+// with one; until the first, the node counts as working. Ordinary content, so whoever opens the node sees it, in Tana
+// too; the last one wins, so a handoff added after an old Completed is the current one.
 const AGENT_STATUS = /^\s*Agent status:\s*(Working|Completed|Failed)\b/i;
 const lastAgentStatus = (text) => { let last = null; for (const line of String(text || '').split('\n')) { const m = line.match(AGENT_STATUS); if (m) last = m[1].toLowerCase(); } return last; };
-const writeAgentStatus = (id, status) => mut(id, (doc) => content.insertAfter(doc, null, 'Agent status: ' + status));
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
 async function setAgentMark(id, on, prompt) {
   const next = agentIds().filter((x) => x !== id);
@@ -1433,4 +1432,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
