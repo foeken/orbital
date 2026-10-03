@@ -983,7 +983,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* a node handed to the local Codex agent: the robot glyph at the end of the row, on a green tag */
 .cbadge { position: relative; overflow: hidden; flex: none; display: inline-flex; align-items: center; margin: 2px 0 0 8px; padding: 2px 5px; border-radius: 6px; background: #d9f0de; color: #17652f; --cbadge-sheen: rgba(255, 255, 255, .85); }
 .cbadge svg { display: block; }
-.cbadge.inline { vertical-align: -3px; margin: 0 0 0 6px; } /* on the Timeline, in line after the title (renderer/render.js placeAgentBadge) */
+.cbadge.inline { vertical-align: -2px; margin: 0 0 0 6px; } /* on the Timeline, in line after the title (renderer/render.js placeAgentBadge) */
 .cbadge[role="button"] { cursor: pointer; }
 .cbadge:focus-visible { outline: 2px solid #4f8ad9; outline-offset: 1px; } /* reachable by keyboard, and visibly so */
 /* the agent is working on it: a sheen crosses the tag left to right, clipped to its corners. The badge itself never
