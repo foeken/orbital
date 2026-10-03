@@ -6906,18 +6906,22 @@ function runAgentStatusBootCheck() {
     const agentStates = new Map(), agentTasks = new Map();
     const renderSoon = () => {};
     const showError = () => {};
+    const patched = [];
+    const patchAgent = (id) => patched.push(id); // renderer/render.js: the badge swapped in place
     const tana = {
       agentStatus: async () => { asked.push('status'); return { 'tana:text:01examplea0000000000000000': 'working' }; },
       agentTasks: async () => { asked.push('tasks'); return { 'tana:text:01examplea0000000000000000': { agent: 'codex', taskId: 't1' } }; },
     };
     ${functionSource('loadAgentStates')}
-    ({ boot: async () => { loadAgentStates(); for (let i = 0; i < 5; i++) await Promise.resolve(); return { asked: [...asked], states: [...agentStates], hosts: [...agentTasks] }; } });
+    ({ boot: async () => { loadAgentStates(); for (let i = 0; i < 5; i++) await Promise.resolve(); return { asked: [...asked], states: [...agentStates], hosts: [...agentTasks], patched: patched.splice(0) }; } });
   `);
   return (async () => {
     const after = plain(await api.boot());
     assert.deepEqual(after.asked, ['status', 'tasks'], 'the status is asked for on load, even before the assigned ids have arrived');
     assert.deepEqual(after.states, [['tana:text:01examplea0000000000000000', 'working']], 'so a linked task is not grey after a reload');
     assert.deepEqual(after.hosts, [['tana:text:01examplea0000000000000000', { agent: 'codex', taskId: 't1' }]], 'and whose task it is is known with it');
+    assert.deepEqual(after.patched, ['tana:text:01examplea0000000000000000'], 'a badge whose state moved is swapped in place, the header too, even while a render waits on the caret');
+    assert.deepEqual(plain(await api.boot()).patched, [], 'and one that did not move is left alone, so its sweep does not restart');
   })();
 }
 
