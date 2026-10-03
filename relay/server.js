@@ -94,7 +94,7 @@ const TOOLS = [
 // most 8 KB, described to the agent here. A new event is one more entry. No filters: a connection hears only about its
 // own agent.
 const EVENTS = [{ name: 'task.assigned', title: 'Node handed to you in Orbital',
-  description: 'The person you work for handed you a Tana node in Orbital (data.node is its id): a task, a note, anything. ' + HOW,
+  description: 'The person you work for handed you a Tana node in Orbital: data.node is its id. ' + HOW,
   delivery: ['webhook'],
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   payloadSchema: { type: 'object', properties: { node: { type: 'string', description: 'The Tana node id, tana:<kind>:<id>' } }, additionalProperties: true } }];
