@@ -74,6 +74,9 @@ const HOW = 'Each task is a Tana node and an action. For "assign", read the node
 const INSTRUCTIONS = 'Orbital is an outliner over Tana. Its owner hands you Tana nodes to work on. You need two MCP servers: this one, and Tana\'s at '
   + TANA_MCP + '. Link once with link_orbital and the code they give you, then call get_tasks to see what they handed you. ' + HOW
   + ' Only ids pass through Orbital: the words are in Tana.';
+// Every tool needs the connection signed in (OpenAI's securitySchemes, at the top and mirrored in _meta). The list itself
+// does not: ChatGPT reads it before anyone signs in, and it holds nothing private.
+const SIGNED_IN = [{ type: 'oauth2', scopes: [] }];
 // Every tool says what it does (annotations): ChatGPT expects all three hints stated, and asks before running one that
 // writes. get_tasks only marks the tasks it hands out as fetched, so it counts as reading: checking for work needs no
 // confirmation. link_orbital and update_task write, harmlessly and only to Orbital.
@@ -93,7 +96,7 @@ const TOOLS = [
       + 'Your first update also tells Orbital you received the task.',
     inputSchema: { type: 'object', properties: { task_id: { type: 'string' }, status: { type: 'string', enum: STATUSES } }, required: ['task_id', 'status'], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
-];
+].map((tool) => ({ ...tool, securitySchemes: SIGNED_IN, _meta: { securitySchemes: SIGNED_IN } }));
 
 function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now } = {}) {
   const PATH = '/' + String(path).replace(/^\/+|\/+$/g, '');
@@ -171,6 +174,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   const metadata = () => ({
     issuer: ISSUER, authorization_endpoint: ISSUER + '/oauth/authorize', token_endpoint: ISSUER + '/oauth/token', registration_endpoint: ISSUER + '/oauth/register',
     response_types_supported: ['code'], grant_types_supported: ['authorization_code', 'refresh_token'], code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['none'],
+    authorization_response_iss_parameter_supported: true, // every redirect back carries iss (authorize below)
   });
   const safeRedirect = (uri) => { try { const u = new URL(uri); return !['javascript:', 'data:', 'file:', 'vbscript:'].includes(u.protocol) && !u.hash && (u.protocol !== 'http:' || ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)); } catch { return false; } };
   async function register(req, res) {
@@ -222,18 +226,24 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   }
 
   // ---- MCP over streamable HTTP: one JSON-RPC message in, one JSON answer out ----
+  // Saying hello and listing the tools need no sign-in: ChatGPT lists them before it signs in, and found none while
+  // every request without a token was turned away. Calling a tool does: without a valid token the answer is a 401 whose
+  // WWW-Authenticate starts the sign-in (any MCP client), with the same challenge in the result's _meta (ChatGPT's way).
+  const OPEN = ['initialize', 'ping', 'tools/list'];
   async function mcp(req, res) {
     const m = /^Bearer (\S+)$/.exec(req.headers.authorization || '');
-    const row = m && await one("SELECT * FROM tokens WHERE hash = ? AND kind = 'access'", hash(m[1]));
-    if (!row || row.expires < now()) {
-      return send(res, 401, { error: 'invalid_token', error_description: 'Sign in to the Orbital MCP server' }, { 'www-authenticate': 'Bearer resource_metadata="' + publicUrl.replace(/\/+$/, '') + '/.well-known/oauth-protected-resource' + PATH + '"' });
-    }
-    limit('i:' + row.install);
+    const found = m && await one("SELECT * FROM tokens WHERE hash = ? AND kind = 'access'", hash(m[1]));
+    const row = found && found.expires >= now() ? found : null;
+    if (row) limit('i:' + row.install); // not per address without one: ChatGPT lists tools for everyone from a few
     const msg = await body(req);
     if (!msg || Array.isArray(msg) || msg.jsonrpc !== '2.0') throw fail(400, 'invalid_request', 'One JSON-RPC message at a time');
     if (msg.id === undefined || msg.id === null) return send(res, 202); // a notification wants no answer
-    const install = await one('SELECT * FROM installs WHERE id = ?', row.install);
-    const agent = await one('SELECT * FROM agents WHERE install = ?', install.id);
+    if (!row && !OPEN.includes(msg.method)) {
+      const challenge = 'Bearer resource_metadata="' + publicUrl.replace(/\/+$/, '') + '/.well-known/oauth-protected-resource' + PATH + '", error="invalid_token", error_description="Sign in to the Orbital MCP server"';
+      return send(res, 401, { jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: 'Sign in to the Orbital MCP server first.' }], isError: true, _meta: { 'mcp/www_authenticate': [challenge] } } }, { 'www-authenticate': challenge });
+    }
+    const install = row && await one('SELECT * FROM installs WHERE id = ?', row.install);
+    const agent = install && await one('SELECT * FROM agents WHERE install = ?', install.id);
     if (agent) await run('UPDATE agents SET seen = ? WHERE id = ?', now(), agent.id);
     try {
       return send(res, 200, { jsonrpc: '2.0', id: msg.id, result: await rpc(install, agent, msg.method, msg.params || {}) });
@@ -246,7 +256,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   async function rpc(install, agent, method, params) {
     if (method === 'initialize') {
       const app = text(params.clientInfo && (params.clientInfo.title || params.clientInfo.name), LIMITS.name);
-      if (app) await run('UPDATE installs SET app = ? WHERE id = ?', app, install.id);
+      if (app && install) await run('UPDATE installs SET app = ? WHERE id = ?', app, install.id);
       return { protocolVersion: PROTOCOLS.includes(params.protocolVersion) ? params.protocolVersion : PROTOCOLS[1], capabilities: { tools: {} }, serverInfo: { name: 'orbital', title: 'Orbital', version: '1.0.0' }, instructions: INSTRUCTIONS };
     }
     if (method === 'ping') return {};

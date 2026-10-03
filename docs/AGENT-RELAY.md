@@ -42,7 +42,7 @@ agents' badges (main/agents/index.js readStatuses, every 30 s and on each refres
 
 | Door | Path | Who | Auth |
 |---|---|---|---|
-| MCP | `POST /mcp` (JSON-RPC over streamable HTTP, one message, one JSON answer) | an agent | OAuth bearer token |
+| MCP | `POST /mcp` (JSON-RPC over streamable HTTP, one message, one JSON answer) | an agent | OAuth bearer token to call a tool; none for `initialize`, `ping`, `tools/list` |
 | OAuth | `/mcp/oauth/register`, `/authorize`, `/token`; `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server/mcp` | an agent's MCP client | dynamic client registration, PKCE (S256), refresh with rotation |
 | Orbital | `/mcp/orbital/*` | Orbital | `Authorization: Orbital <key>` |
 
@@ -50,6 +50,12 @@ agents' badges (main/agents/index.js readStatuses, every 30 s and on each refres
 becomes names a fresh *installation*, an identity that can do nothing until a link code ties it to an Orbital. That
 is what tells two agents apart: each MCP connection is its own installation, whichever app it runs in. An app that
 shares one connection between several bots is one agent to Orbital.
+
+**The tool list is open.** ChatGPT reads it before it signs in (OpenAI's plugin auth guide), and showed no tools at all
+while every request without a token got a 401. So hello and the list need none, and hold nothing private; each tool
+says it needs the sign-in (`securitySchemes: [{ type: 'oauth2' }]`, mirrored in `_meta`), and calling one without a
+valid token answers 401 with the `WWW-Authenticate` challenge (how any MCP client starts the sign-in, and refreshes an
+expired token), the same challenge in the result's `_meta["mcp/www_authenticate"]` (how ChatGPT does).
 
 **MCP tools.** `link_orbital { code, name }`, `get_tasks {}` (`{ task_id, node, action, sent_at }` each, and how to
 handle them; a fetched task is leased for ten minutes, then offered again), `update_task { task_id, status:
@@ -103,4 +109,3 @@ Still to try:
 
 - Testing with each agent you mean to link (ChatGPT, Grok, Claude): their MCP clients must accept an authorize step
   that asks nothing, and they must call `get_tasks` — on a schedule, or when asked.
-

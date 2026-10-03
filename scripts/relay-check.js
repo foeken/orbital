@@ -31,9 +31,20 @@ const server = http.createServer(relay.handle);
   const meta = await call('GET', '/.well-known/oauth-authorization-server/mcp');
   assert.equal(meta.json.issuer, 'http://127.0.0.1/mcp');
   assert.deepEqual(meta.json.code_challenge_methods_supported, ['S256']);
-  const unauth = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} } });
-  assert.equal(unauth.status, 401, 'MCP needs a token');
-  assert.match(unauth.headers.get('www-authenticate'), /resource_metadata="http:\/\/127\.0\.0\.1\/\.well-known\/oauth-protected-resource\/mcp"/, 'and says where to sign in');
+  assert.equal(meta.json.authorization_response_iss_parameter_supported, true, 'every redirect back names the issuer');
+  // ChatGPT lists the tools before it signs in, so hello and the list need no token (it found none when they did)
+  const hello = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'ChatGPT', version: '1' } } } });
+  assert.equal(hello.status, 200, 'hello needs no sign-in');
+  assert.deepEqual(hello.json.result.capabilities, { tools: {} });
+  const open = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'tools/list' } });
+  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital', 'get_tasks', 'update_task'], 'nor does the list');
+  assert.ok(open.json.result.tools.every((t) => t.securitySchemes[0].type === 'oauth2' && t._meta.securitySchemes[0].type === 'oauth2'), 'and each tool says it needs a sign-in');
+  for (const auth of [undefined, 'Bearer not-a-token']) {
+    const unauth = await call('POST', '/mcp', { auth, body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'get_tasks', arguments: {} } } });
+    assert.equal(unauth.status, 401, 'calling a tool needs a token');
+    assert.match(unauth.headers.get('www-authenticate'), /resource_metadata="http:\/\/127\.0\.0\.1\/\.well-known\/oauth-protected-resource\/mcp"/, 'and says where to sign in');
+    assert.match(unauth.json.result._meta['mcp/www_authenticate'][0], /resource_metadata=.*error="invalid_token".*error_description=/, 'in the result too, as ChatGPT reads it');
+  }
   assert.equal((await call('POST', '/mcp/oauth/register', { body: { redirect_uris: ['javascript:alert(1)'] } })).status, 400, 'no script redirects');
   assert.equal((await call('POST', '/mcp/oauth/register', { body: { redirect_uris: ['http://evil.example/cb'] } })).status, 400, 'plain http only to loopback');
 
@@ -145,7 +156,7 @@ const server = http.createServer(relay.handle);
   const late = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json.code;
   clock += TTL.message + 1;
   await relay.sweep();
-  assert.equal((await grok.rpc('ping')).error, 'invalid_token', 'a day on, the hour-long access token has run out');
+  assert.match((await grok.rpc('tools/call', { name: 'get_tasks', arguments: {} })).result._meta['mcp/www_authenticate'][0], /invalid_token/, 'a day on, the hour-long access token has run out');
   for (const a of [grok, dot]) a.tokens = (await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: a.tokens.refresh_token, client_id: a.client } })).json;
   assert.match((await grok.tool('get_tasks')).text, /No tasks/, 'a task nobody fetched for a day is gone');
   assert.equal((await call('GET', '/mcp/orbital/codes/' + late, { auth: as(orbital) })).status, 404, 'and so is a code nobody used');
