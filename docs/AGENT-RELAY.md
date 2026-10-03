@@ -100,12 +100,19 @@ is set (32 bytes, base64url; then `RELAY_DB` names the SQLite file, `relay.sqlit
 is where it is reached (`https://orbital.md`), `RELAY_PATH` its path (`/mcp`). Point Orbital at another one with
 `ORBITAL_RELAY_URL` (`http://localhost:8787/mcp`). It needs Node 22.5 or later and nothing from npm.
 
-Before it serves real agents at orbital.md/mcp:
+With `DATABASE_URL` it keeps its rows in PostgreSQL instead, through the host's own `pg` module, and then refuses to
+start without `RELAY_MASTER_KEY`: a host whose disk is replaced on every deploy (Replit's) would otherwise forget every
+linked agent at each release. Every query is written once for both (`?` placeholders, BIGINT times), and
+`RELAY_CHECK_DATABASE_URL=… node scripts/relay-check.js` runs the whole check on a PostgreSQL database.
 
-- orbital.md is a static Replit deployment today; the relay needs a server deployment (a reserved VM or
-  autoscale with one instance: the rate limits and leases are in memory), with `/mcp` and `/.well-known/oauth-*`
-  routed to it and the manual left where it is.
-- A master key kept as a deployment secret, and the database on a persistent disk that is not backed up into plain
-  snapshots.
+At orbital.md (the Replit App behind it, the same one the manual is published to) the website stays a static service,
+and the relay is a service of its own that takes `/mcp` and the `/.well-known/` OAuth paths, running `relay/server.js` and
+`relay/seal.js` as copied from this repository, with Replit's PostgreSQL (`DATABASE_URL`) and a master key kept as a
+deployment secret. The leases are in the database; the rate limits are per instance. A database dump holds only
+ciphertext, hashes and wrapped keys, but PostgreSQL keeps deleted rows until it vacuums and its host keeps backups:
+what is gone from the relay may still be in those, sealed.
+
+Still to try:
+
 - Testing with each agent you mean to link (ChatGPT, Grok, Claude): their MCP clients must accept an authorize step
   that asks nothing, and they must call `get_tasks` — on a schedule, or when asked.

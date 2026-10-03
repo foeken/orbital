@@ -3918,7 +3918,7 @@ async function main() {
     const account = settings.get('relayAccount');
     assert.ok(agent.UUID.test(account.id) && agent.UUID.test(account.secret), 'the first link makes your Orbital: an id and a secret');
     assert.deepEqual(['relayAccount', 'relaySeen', 'relayTasks', 'relayAgents'].map(settings.isSynced), [true, true, true, false], 'which follow you in the settings document; the agents\' list is this machine\'s mirror of the relay');
-    assert.equal(relay.dump().includes(account.secret), false, 'the relay never holds the secret itself');
+    assert.equal((await relay.dump()).includes(account.secret), false, 'the relay never holds the secret itself');
     assert.equal((await h('relay:linkStatus', link.code)).state, 'waiting', 'nobody has used the code yet');
     await assert.rejects(h('relay:linkStatus', 'nonsense'), /Not a link code/, 'and only a code is asked about');
     const grok = await relayAgent(base, 'Grok');
@@ -3936,7 +3936,7 @@ async function main() {
     const [task] = JSON.parse(await grok.tool('get_tasks')).tasks;
     assert.deepEqual([task.task_id, task.title, task.request, task.node], [taskId, 'Pilot brief', 'Draft the brief', d.id], 'the agent reads the request and which node it is about');
     assert.match(task.content, /^- Two pilots in Q4$/m, 'and the node\'s words, for an agent with no Tana of its own');
-    assert.equal(relay.dump().includes('Draft the brief'), false, 'which the relay holds only sealed');
+    assert.equal((await relay.dump()).includes('Draft the brief'), false, 'which the relay holds only sealed');
     assert.deepEqual(plain(await agent.get(id).statuses({ [d.id]: taskId })), { [d.id]: 'pending' }, 'pending until the agent says something');
     // its answer: into the node under its name, with the line the badge follows, wherever it is read first
     await grok.tool('update_task', { task_id: taskId, status: 'completed', note: 'Drafted the brief\nTwo pages, one per pilot' });
@@ -3960,7 +3960,7 @@ async function main() {
     assert.equal((await h('relay:unlink', id)).some((a) => a.id === id), false, 'unlinked, it leaves the list');
     assert.equal(agent.links()[d.id], undefined, 'and the node lets go of its task');
     assert.match(await grok.tool('get_tasks'), /Not linked/, 'and the agent is told');
-    docs.mut = realMut; docs.op = realOp; relay.close(); server.close();
+    docs.mut = realMut; docs.op = realOp; await relay.close(); server.close();
     console.log('ok  linked agents: linked with a code, named by themselves, a sealed task out and its answer written into the node, renamed, off, a new secret, unlinked');
   }
   // What the badge is allowed to say: the linked task's own status, one read for every linked node.

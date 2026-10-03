@@ -7,11 +7,13 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { createRelay, TTL } = require('../relay/server');
+const { createRelay, postgresStore, TTL } = require('../relay/server');
 const seal = require('../relay/seal');
 
 let clock = Date.UTC(2026, 9, 3, 12);
-const relay = createRelay({ publicUrl: 'http://127.0.0.1', now: () => clock });
+// RELAY_CHECK_DATABASE_URL runs the same check on PostgreSQL (an empty database: it makes its tables), as a host would
+const store = process.env.RELAY_CHECK_DATABASE_URL ? postgresStore(process.env.RELAY_CHECK_DATABASE_URL) : undefined;
+const relay = createRelay({ store, publicUrl: 'http://127.0.0.1', now: () => clock });
 const server = http.createServer(relay.handle);
 
 (async () => {
@@ -141,7 +143,7 @@ const server = http.createServer(relay.handle);
   await send(G, t4, { prompt: 'later' });
   const late = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json.code;
   clock += TTL.message + 1;
-  relay.sweep();
+  await relay.sweep();
   assert.equal((await grok.rpc('ping')).error, 'invalid_token', 'a day on, the hour-long access token has run out');
   for (const a of [grok, dot]) a.tokens = (await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: a.tokens.refresh_token, client_id: a.client } })).json;
   assert.match((await grok.tool('get_tasks')).text, /No tasks/, 'a task nobody fetched for a day is gone');
@@ -159,9 +161,9 @@ const server = http.createServer(relay.handle);
   assert.deepEqual((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).json.agents.map((a) => a.name), ['My dot'], 'and the agents stay linked');
 
   // ---- what the database holds: no words of any message, no secret, no token ----
-  const rows = relay.dump();
+  const rows = await relay.dump();
   for (const secret of [PLAN, 'Brief drafted', 'On it', orbital.secret, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
 
   console.log('relay-check: ok');
-  relay.close(); server.close();
+  await relay.close(); server.close();
 })().catch((e) => { console.error(e); process.exit(1); });
