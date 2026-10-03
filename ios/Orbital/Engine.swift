@@ -82,9 +82,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it, and
-    // { part } with the first rows of a Timeline read still under way
+    // 'part:' with the first rows of a Timeline read still under way
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        if let part = (message.body as? [String: Any])?["part"] as? String { show(part: part); return }
+        if let said = message.body as? String, said.hasPrefix("part:") { show(part: String(said.dropFirst(5))); return }
         if message.body as? String == "changed" { Task { await refresh() }; return }
         guard message.body as? String == "ready" else { return }
         Task { await connect() }

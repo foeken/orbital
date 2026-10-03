@@ -218,6 +218,8 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   const page = boot(new Map([['orbital:tana:user-profile:u1@org_1:settingsRead', 'true']]));
   assert.strictEqual(await page.orbital.connect(), true);
   const rows = JSON.parse(await page.orbital.timeline(1));
+  // what the page tells the app is a string, as both phones' bridges carry it: a first part as 'part:' and its rows
+  for (const m of page.posted) assert.ok(typeof m === 'string' && (['ready', 'changed'].includes(m) || (m.startsWith('part:') && Array.isArray(JSON.parse(m.slice(5))))), 'told as a string: ' + String(m).slice(0, 80));
   // the graph answers nothing here, so the page is its Today's Tasks stop alone, in the shape Timeline.swift reads
   const today = rows.find((r) => r.timeline && r.timeline.today);
   assert.ok(today, 'the Timeline answers its Today stop: ' + JSON.stringify(rows).slice(0, 200));
