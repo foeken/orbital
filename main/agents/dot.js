@@ -8,9 +8,9 @@
 //     send it. Orbital presses no keys (no System Events, no Accessibility): sent from the composer it reaches the dot
 //     exactly as a message you typed would, and the dot answers where it always does.
 //   - What it does next lives in that conversation, out of this Mac's reach, so it reports in the node: Orbital adds
-//     no status of its own, since it cannot tell whether you sent it; the dot ends each update with Working, Completed
-//     or Failed, and the badge follows the last one (main/documents.js agentStatus), working until there is one. The
-//     badge opens the conversation.
+//     "Agent status: Working" at the end as it hands the node over, so a Completed or Failed from an earlier handoff no
+//     longer counts; the dot ends each update with Working, Completed or Failed, and the badge follows the last one
+//     (main/documents.js agentStatus). The badge opens the conversation.
 //   - One conversation for every node (oneChat): a node keeps no task id, only that Dot has it; the conversation is dotChat.
 const fs = require('node:fs');
 const agent = require('../agent');
@@ -66,6 +66,9 @@ const dot = agent.register({
   async start({ nodeUri, title, prompt }) {
     // typed in, for you to send: the conversation is in front, with the message in its composer
     await openUrl(chatUrl(linked(), message(prompt, nodeUri, title)));
+    // this handoff is the current one, whatever an earlier one ended with; a line that will not write loses only the
+    // badge's first state, never the handoff
+    await documents.writeAgentStatus(nodeUri, 'Working').catch(() => {});
   },
   // the last status line in each node; none (written away) is still with the dot, and a node that cannot be read needs you
   statuses: async (links) => Object.fromEntries(await Promise.all(Object.keys(links || {}).map(async (nodeId) =>

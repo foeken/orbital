@@ -3798,7 +3798,8 @@ async function main() {
       assert.deepEqual([settings.get('dotChat'), settings.isSynced('dotChat')], [CHAT, true], 'the app\'s link, query and all, is the conversation, and it follows you');
       dt.available = () => true; agent.setDefault('dot');
       assert.equal(agent.defaultAgent(), 'dot', 'and Dot can be the default');
-      const docs = backend.documents, realStatus = docs.agentStatus;
+      const docs = backend.documents, realWrite = docs.writeAgentStatus, realStatus = docs.agentStatus, wrote = [];
+      docs.writeAgentStatus = async (id, status) => { wrote.push([id, status]); };
       const opened = backend.opened.length, timers = backend.timers.length;
       // the handoff is the conversation opening with the message typed in, and nothing more: no wait, no key pressed
       // (the old ↩ waited on a timer and pressed it with System Events, which needed Accessibility)
@@ -3812,6 +3813,8 @@ async function main() {
         + 'or "Agent status: Completed" when you are done, or "Agent status: Failed" if you cannot finish. Leave the task\'s own status as it is.',
       'with the request typed in, then the node by name and uri, and how to report back in it without touching its status');
       assert.equal('press' in dt || 'sendAfter' in dt, false, 'Dot has no key to press');
+      // a node handed back to Dot after an earlier Completed or Failed is working again, not done or broken (#713 review)
+      assert.deepEqual(wrote, [[NODE, 'Working']], 'the handoff ends the node with Working, so an old status line no longer counts');
       assert.deepEqual({ ...agent.setTask(NODE, 'dot') }, { agent: 'dot' }, 'so the node keeps only that Dot has it');
       // the badge follows the node's last status line (main/documents.js lastAgentStatus)
       const badge = async (status) => { docs.agentStatus = async () => { if (status instanceof Error) throw status; return status; }; return (await backend.agents.readStatuses())[NODE]; };
@@ -3820,7 +3823,7 @@ async function main() {
       assert.equal(docs.lastAgentStatus('Agent context\nBook a venue\nAgent status: Working\nBooked De Hoge Veluwe\nagent status: completed.'), 'completed', 'the last line wins, in any case, with a full stop');
       assert.equal(docs.lastAgentStatus('Agent status: Completed\nAgent status: Working'), 'working', 'so a handoff after an old Completed is the current one');
       assert.equal(docs.lastAgentStatus('The agent status: Failed was a guess\nAgent status: maybe'), null, 'and only a line that starts with it and names one of the three counts');
-      docs.agentStatus = realStatus;
+      docs.writeAgentStatus = realWrite; docs.agentStatus = realStatus;
       await backend.handlers.get('agent:open')(null, NODE);
       assert.equal(backend.opened.at(-1), 'codex://threads/' + CHAT + '?hostId=durable', 'and opens the conversation');
       agent.clearTask(NODE);
