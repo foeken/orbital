@@ -42,7 +42,7 @@ const server = http.createServer(relay.handle);
   assert.equal(hello.status, 200, 'hello needs no sign-in');
   assert.deepEqual(hello.json.result.capabilities, { tools: {}, events: {} }, 'tools, and the task.assigned event');
   const open = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'tools/list' } });
-  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital'], 'nor does the list');
+  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital', 'get_instructions'], 'nor does the list');
   assert.ok(open.json.result.tools.every((t) => t.securitySchemes[0].type === 'oauth2' && t._meta.securitySchemes[0].type === 'oauth2'), 'and each tool says it needs a sign-in');
   for (const auth of [undefined, 'Bearer not-a-token']) {
     const unauth = await call('POST', '/mcp', { auth, body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'link_orbital', arguments: {} } } });
@@ -79,9 +79,12 @@ const server = http.createServer(relay.handle);
   }
   const grok = await signIn('Grok');
   const listed = (await grok.rpc('tools/list')).result.tools;
-  assert.deepEqual(listed.map((t) => t.name), ['link_orbital'], 'one tool: the rest happens in Tana');
-  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false]],
-    'it says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three)');
+  assert.deepEqual(listed.map((t) => t.name), ['link_orbital', 'get_instructions'], 'linking, and how to handle an event: the rest happens in Tana');
+  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false], [true, false, false]],
+    'each says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three): only get_instructions reads');
+  const how = await grok.tool('get_instructions', { event: 'task.assigned' });
+  assert.match(how.text, /Agent status: Assigned.*Agent status: Working.*above the "Agent context" block.*Agent status: Completed/s, 'the instructions an event comes with are served here, so changing them is a deploy: the status line, and where to write');
+  assert.equal((await grok.tool('get_instructions', { event: 'nothing.happened' })).error, true, 'an event Orbital does not have is said to be one');
 
   // a refresh token turns once: the new pair works, the old refresh token does not
   const refreshed = (await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: grok.tokens.refresh_token, client_id: grok.client } })).json;
@@ -151,7 +154,7 @@ const server = http.createServer(relay.handle);
   const old = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '1900-01-01' } } } });
   assert.deepEqual([old.json.error.code, old.json.error.data.supported[0]], [-32022, '2026-07-28'], 'a version Orbital does not speak is refused, naming those it does');
   const listedTools = (await modern('tools/list')).json.result;
-  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.length], ['complete', 'public', 'number', 1], 'the tools, cacheable, in the new shape');
+  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.length], ['complete', 'public', 'number', 2], 'the tools, cacheable, in the new shape');
   const events = (await modern('events/list')).json.result.events;
   assert.deepEqual(events.map((e) => [e.name, e.delivery, Object.keys(e.payloadSchema.properties), e.payloadSchema.additionalProperties]), [['task.assigned', ['webhook'], ['node'], true]],
     'task.assigned, by webhook, its data the node and whatever else Orbital sends');

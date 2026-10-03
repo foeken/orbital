@@ -114,17 +114,15 @@ async function statuses(links) {
 async function linkCode() {
   const { code, expiresAt } = await call('POST', '/orbital/codes', undefined, orbitalKey(true)); // the relay makes your Orbital the first time
   // ChatGPT has no way for a Dot to add a server itself: you add both in ChatGPT (the page names them and their URLs).
-  // The message links, subscribes the Dot to task.assigned so a node handed over wakes it (relay/server.js EVENTS), says
-  // that everything else happens in Tana (the status lines included), and what goes through orbital.md, so the Dot can explain it when asked.
+  // The message links and subscribes the Dot to task.assigned (relay/server.js EVENTS), and says no more about handling
+  // an event than to ask get_instructions each time: how to handle one lives in relay/server.js HOW, so changing it is a
+  // deploy, not a message to paste again. It also says what goes through orbital.md, so the Dot can explain it.
   return { code, expiresAt, url: relay.base, tana: TANA_MCP,
-    prompt: 'Call Orbital\'s link_orbital tool with the code ' + code + ' and your own name (Dot if you have none). Then subscribe to Orbital\'s task.assigned event, and each time it '
-      + 'fires, read the Tana node its data names with your Tana tools; it can be a task, a note, anything. As soon as you start, add a line "Agent status: Working" '
-      + 'at the end of the node, so I see you picked it up. Do your part as its "Agent context" block asks and write what you did into the node, and make the last '
-      + 'line you write "Agent status: Completed" when your part is done and it is my turn (a draft ready for my review is Completed), or "Agent status: Failed" '
-      + 'if you cannot do it. Never stop without one of those two: Orbital shows the last such line. Leave the node itself as it is (a task stays open) unless the '
-      + 'request asks you to change it. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
-      + 'I add them in ChatGPT as custom MCP servers, Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. If I ask what goes through Orbital: only ids: '
-      + 'each event carries a Tana node\'s id, and nothing comes back through Orbital. The words stay in Tana, where you read them with your own Tana access.' };
+    prompt: 'Call Orbital\'s link_orbital tool with the code ' + code + ' and your own name (Dot if you have none). Then subscribe to Orbital\'s task.assigned '
+      + 'event. Each time an Orbital event fires, first call Orbital\'s get_instructions tool with the event\'s name and do exactly what it returns: Orbital keeps '
+      + 'those instructions current, so never work from a copy of them. If you cannot find Orbital\'s or Tana\'s tools, tell me which: I add them in ChatGPT as '
+      + 'custom MCP servers, Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. If I ask what goes through Orbital: only ids: each event carries a Tana '
+      + 'node\'s id, and nothing comes back through Orbital. The words stay in Tana, where you read them with your own Tana access.' };
 }
 async function codeStatus(code) {
   if (typeof code !== 'string' || !CODE.test(code)) throw new Error('Not a link code');

@@ -738,6 +738,9 @@ function writeAgentContext(id, prompt) {
     const heading = content.readOutline(doc).find((n) => (n.text || '').trim() === AGENT_HEADING);
     if (heading) for (const child of heading.children || []) content.remove(doc, child.id); // this prompt replaces the last one
     const headId = heading ? heading.id : content.insertAfter(doc, null, AGENT_HEADING);
+    // the block is the last of the node: the agent writes above it, and its status is the block's last line
+    const last = content.readOutline(doc).at(-1);
+    if (heading && last && last.id !== headId) content.moveTo(doc, headId, { afterId: last.id });
     // insertChild always lands at the top of the child list, so only the first line goes in that way and the rest
     // follow their predecessor — the same pair of operations the day-node rows are written with.
     let prev = content.insertChild(doc, headId, lines[0]);
@@ -745,15 +748,23 @@ function writeAgentContext(id, prompt) {
     return headId;
   });
 }
-// How a handed-over node is going: the last "Agent status: Assigned | Working | Completed | Failed" line in it. Orbital
-// adds Assigned at the end when it hands a node over; the agent, which reports nowhere else (your Dot, through orbital.md,
-// whose Tana connector offers only Tana's four statuses), adds Working as it starts, so its pickup shows, and ends each
-// update with one. Ordinary content,
+// How a handed-over node is going: the last "Agent status: Assigned | Working | Completed | Failed" line in it, which is
+// the last line of its Agent context block. Orbital writes Assigned when it hands a node over; the agent, which reports
+// nowhere else (your Dot, through orbital.md, whose Tana connector offers only Tana's four statuses), changes it to
+// Working as it starts, so its pickup shows, and to Completed or Failed when it is done. Ordinary content,
 // so whoever opens the node sees it, in Tana too; the last one wins, so a handoff added after an old Completed is the
 // current one.
 const AGENT_STATUS = /^\s*Agent status:\s*(Assigned|Working|Completed|Failed)\b/i;
 const lastAgentStatus = (text) => { let last = null; for (const line of String(text || '').split('\n')) { const m = line.match(AGENT_STATUS); if (m) last = m[1].toLowerCase(); } return last; };
-const writeAgentStatus = (id, status) => mut(id, (doc) => content.insertAfter(doc, null, 'Agent status: ' + status));
+// The status is one line, the last inside the Agent context block (writeAgentContext keeps that block last): what was
+// there is replaced. A node with no block gets it at its end.
+const writeAgentStatus = (id, status) => mut(id, (doc) => {
+  const line = 'Agent status: ' + status, heading = content.readOutline(doc).find((n) => (n.text || '').trim() === AGENT_HEADING);
+  if (!heading) return content.insertAfter(doc, null, line);
+  for (const child of heading.children || []) if (AGENT_STATUS.test(child.text || '')) content.remove(doc, child.id);
+  const kids = content.readOutline(doc).find((n) => n.id === heading.id).children || [];
+  return kids.length ? content.insertAfter(doc, kids.at(-1).id, line) : content.insertChild(doc, heading.id, line);
+});
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
 async function setAgentMark(id, on, prompt) {
   const next = agentIds().filter((x) => x !== id);

@@ -3704,6 +3704,16 @@ async function main() {
     assert.equal(context().length, 1, 'reassigning reuses the block rather than adding a second one');
     assert.deepEqual(context()[0].children.map((n) => n.text), ['One line only', 'and a third'],
       'its children are replaced by the new prompt, and a blank line is not an empty row');
+    // The block stays the last of the node: an agent writes above it, and the status is its last line, one line, replaced
+    const docs = backend.documents, last = () => outline.readOutline(task).at(-1).text;
+    await docs.writeAgentStatus(task.id, 'Assigned');
+    await docs.mut(task.id, (doc) => outline.insertAfter(doc, null, 'What the agent wrote'));
+    assert.equal(last(), 'What the agent wrote', 'something written after the block');
+    await set(task.id, true, 'Again');
+    assert.equal(last(), 'Agent context', 'puts the block back at the end on the next handoff');
+    await docs.writeAgentStatus(task.id, 'Assigned'); await docs.writeAgentStatus(task.id, 'Working');
+    assert.deepEqual(context()[0].children.map((n) => n.text), ['Again', 'Agent status: Working'], 'the status is the block\'s last line, and one line: a new one replaces it');
+    assert.equal(await docs.agentStatus(task.id), 'working', 'which is the status read back');
     // A document that cannot be written must leave nothing behind locally: a badge would claim a handoff the node
     // knows nothing about. The visible half goes first, so there is nothing to roll back.
     const unreachable = 'tana:text:' + ulid();

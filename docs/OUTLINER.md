@@ -794,7 +794,8 @@ wrong twenty.
   URL, ↩ copies it), then a message carrying a one-time code that links it by its own name (Dot if it has none), makes it the default
   agent, and subscribes it to the task.assigned
   event (a node handed to it is that event, with the node's id; its badge follows the last "Agent status: Assigned |
-  Working | Completed | Failed" line in the node: Orbital writes Assigned, grey until the Dot writes Working as it starts); each linked agent is one more agent,
+  Working | Completed | Failed" line, the last of the node's Agent context block, which stays the node's last block: Orbital writes Assigned, grey
+  until the Dot changes it to Working as it starts; how to handle the event comes from the get_instructions tool); each linked agent is one more agent,
   listed with the other agents in Choose agents, with a page of its own (Rename …, Switch off, Unlink); **Set default agent …** picks the default on a page of its own, and **Reset agent link key** makes a new key for your Orbital at orbital.md (docs/AGENT-RELAY.md).
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked; beside it **Assign to <agent> …** for each agent that is on, Assign to Codex …, Assign to Echo …, opens
