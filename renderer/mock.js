@@ -254,8 +254,13 @@ function mockApi() {
   const nowRow = (key, text, icon, timeline, children = []) => ({ id: 'orbital:timeline:' + key, text, segments: [{ text }], kind: 'block', block: 'bullet', icon, editable: false,
     hasChildren: children.length > 0, children, createdAt: at(0), unread: false, timeline: { uri: null, time: '', tone: 'new', ...timeline } });
   const meetingEvent = (m, people, note) => ({ ...event('meet' + m.id, (Date.now() - Date.parse(m.start)) / 36e5, 'meeting', 'meeting', [{ text: m.text, content: true }], note, false, m.id), people: people.map(face) });
+  // Today's Tasks, as main/timeline.js today() reads it: the three below stand for tasks already on today, and a task
+  // pinned to today since (api.pin) joins them on the next read and leaves with its pin, as it does in the app
+  const todayBase = [tlTask(docs[2]), tlTask(docs[5]), tlTask(dutch)];
+  const todayRow = nowRow('today:' + localDate(), "Today's Tasks", 'todayTasks', { time: 'Now', today: true, day: null }, todayBase);
+  const readToday = () => { todayRow.children = [...todayBase, ...all.filter((d) => d.icon === 'task' && (datePins[d.id] || []).includes(localDate()) && !todayBase.some((b) => b.id === d.id)).map(tlTask)]; };
   content['orbital:timeline'].unshift(
-    nowRow('today:' + localDate(), "Today's Tasks", 'todayTasks', { time: 'Now', today: true, day: null }, [tlTask(docs[2]), tlTask(docs[5]), tlTask(dutch)]),
+    todayRow,
     nowRow('free', 'Free', 'free', { free: { from: Date.now(), until: Date.parse(upcoming[0].start) } }),
     nowRow('upcoming', 'Upcoming meetings', 'meeting', { upcoming: true }, upcoming));
   const timeline = content['orbital:timeline'], past = [meetingEvent(meetings[2], ['Sam Okafor', 'Priya Raman', 'Tomas Ilves', 'Noor Haddad', 'Jonas Berg'], '1 h')];
@@ -385,12 +390,12 @@ function mockApi() {
     // references resolve on read, as main does: the row always shows the target's current title and state, and a
     // block whose whole content is one mention is resolved the same way
     // a saved search's page is the rows its stored query finds, as main answers it
-    children: async (docId) => (String(docId).startsWith('tana:search:') ? structuredClone(preview((searchQueries[docId] || { filter: filters.library }).filter)).map((n) => ({ ...n, text: n.title, hasChildren: true })) : structuredClone(content[docId] || []).map((n) => {
+    children: async (docId) => { if (docId === 'orbital:timeline') readToday(); return String(docId).startsWith('tana:search:') ? structuredClone(preview((searchQueries[docId] || { filter: filters.library }).filter)).map((n) => ({ ...n, text: n.title, hasChildren: true })) : structuredClone(content[docId] || []).map((n) => {
       const one = n.type !== 'reference' && !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
       const ref = n.type === 'reference' ? n.reference : one ? { uri: one.uri, label: one.label } : null;
       const target = ref && [...all, ...members].find((d) => d.id === ref.uri);
       return target ? { ...n, reference: { ...ref, node: info(target) } } : n;
-    })),
+    }); },
     node: async (docId) => {
       const d = [...all, ...members].find((x) => x.id === docId);
       if (d) return info(d);

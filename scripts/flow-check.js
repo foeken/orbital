@@ -78,6 +78,19 @@ const HELPERS = String.raw`(() => {
   // the same document as the mock keeps it
   window.__saved = async (docId) => { const out = [], walk = (rows, d) => { for (const r of rows || []) { if (r.text) out.push('  '.repeat(d) + r.text); walk(r.children, d + 1); } }; walk(await tana.children(docId), 0); return out; };
   window.__caret = () => { const s = getSelection(), el = document.activeElement; return { key: el && el.isContentEditable ? keyOfEl(el) : null, offset: s.rangeCount ? s.getRangeAt(0).startOffset : null, editable: !!(el && el.isContentEditable) }; };
+  // a drag as Chromium delivers one (renderer/drag.js): dragstart on the row's grip, dragover and drop where the
+  // pointer is, dragend on the grip. The grip is what the row offers to be picked up by (draggable="true"), none when
+  // it offers nothing. line: the drop line was drawn while the row hung over the place
+  window.__drag = (row, x, y) => {
+    const grip = row.querySelector('.line[draggable="true"], .bullet[draggable="true"]');
+    if (!grip) return { grip: false };
+    const dt = new DataTransfer(), fire = (type, el) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, dataTransfer: dt }));
+    fire('dragstart', grip);
+    const accepted = !fire('dragover', document.elementFromPoint(x, y)), drop = document.getElementById('dropline'), line = !!drop && !drop.hidden;
+    if (accepted) fire('drop', document.elementFromPoint(x, y));
+    fire('dragend', grip);
+    return { grip: true, accepted, line };
+  };
   1;
 })()`;
 const settle = (p, ms = 350) => p.sleep(ms);
@@ -88,6 +101,30 @@ const clickRow = async (p, words) => {
   const [x, y] = await p.js('(() => { const r = ' + T(words) + '.getBoundingClientRect(); return [r.right - 2, r.top + r.height / 2]; })()');
   await p.click(x, y);
 };
+// a click on a row's first words, where a click on a Timeline row opens what it is about: the rest of a long row's
+// line is blank space, which opens nothing (render.js onRowBlank)
+const clickWords = async (p, words) => {
+  await p.waitFor(T(words), 'a row with ' + J(words));
+  await p.js(T(words) + '.scrollIntoView({ block: "center", behavior: "instant" })'); await settle(p, 150); // measured once the page is still
+  const [x, y] = await p.js('(() => { const r = document.createRange(); r.selectNodeContents(' + T(words) + '); const b = r.getClientRects()[0]; return [b.left + Math.min(20, b.width / 2), b.top + b.height / 2]; })()');
+  await p.click(x, y);
+};
+// the row holding words, and the box of its line, scrolled into view so the pointer can reach it
+const rowOf = (words) => '(' + T(words) + ').closest(".node")';
+const lineOf = async (p, words) => {
+  await p.js(rowOf(words) + '.scrollIntoView({ block: "center", behavior: "instant" })'); await settle(p, 150);
+  return p.js('(() => { const b = ' + rowOf(words) + '.querySelector(".line").getBoundingClientRect(); return { left: b.left, top: b.top, bottom: b.bottom, mid: b.top + b.height / 2 }; })()');
+};
+// Cmd+K (or another palette key), the words typed, and Enter once the row it should run is the active one
+const command = async (p, words, label, key = '⌘K') => {
+  if (key) { await p.key(key); await p.waitFor('!document.getElementById("palette").hidden', 'the palette'); }
+  await p.type(words);
+  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === ' + J(label), J(label) + ' as the active row');
+  await p.key('↩');
+};
+const at = (p, docId) => p.waitFor('zoom && zoom.docId === ' + J(docId) + ' && document.getElementById("title").textContent', 'the page ' + docId);
+// Escape until the palette is closed: on a page of it (Edit pins) the first goes back to Cmd+K
+const closePalette = async (p) => { for (let i = 0; i < 3 && !(await p.js('document.getElementById("palette").hidden')); i++) await p.key('esc'); };
 
 // 1. Sensitive marks (#157, #203, #435, #659): a title marked sensitive is hidden wherever Orbital draws it. A new
 // surface that shows a title is covered here without anyone writing a test for it, as long as the mock reaches it.
@@ -297,6 +334,145 @@ flow('the Settings window writes what you pick and shows what is newest', async 
   assert.ok(!(await shown()).includes('robin@private'), 'demo mode shows no real email');
   await tab('lists'); await settle(p, 100);
   assert.ok(!(await shown()).includes('Secret project'), 'demo mode shows no real hidden title');
+});
+
+// ---- Golden paths: what someone does every day, start to end, by key and by pointer as they would ----
+// The flows above guard the kinds of break that came back PR after PR; these guard the paths themselves, so a change
+// that breaks opening the Timeline, pinning, getting around or dragging fails here even when it is a new kind of break.
+
+// 10. The Timeline (#135): a first launch opens on it, a row opens what it is about by click or Enter, ⌘[ comes back,
+// a task ticked under Today's Tasks is saved as done, and its end reads three more days
+flow('golden path: the Timeline opens first and leads to what each row is about', async (p) => {
+  await p.start();
+  await settle(p, 400); // the first read of the page lands in parts (renderer/timeline.js): clicked once it is whole
+  assert.equal(await p.js('zoom && zoom.docId'), 'orbital:timeline', 'a first launch opens on the Timeline');
+  const top = await p.js('__screen()');
+  assert.equal(top[0], "Today's Tasks", 'Today\u2019s Tasks leads the page');
+  assert.ok(top.includes('Upcoming meetings'), 'today\u2019s meetings to come are listed');
+  assert.deepEqual(await p.js('[...document.querySelectorAll("#outline .ghead")].map((h) => h.textContent.trim())'), ['Today', 'Yesterday'], 'the history in day sections');
+  const back = async () => { await p.key('⌘['); await at(p, 'orbital:timeline'); };
+  // a click on an edit opens the task edited
+  await clickWords(p, 'Sam Okafor edited');
+  await at(p, 'mockdoc0');
+  assert.equal(await p.js('document.getElementById("title").textContent'), await p.js('tana.node("mockdoc0").then((n) => n.title)'), 'the edited task opened');
+  await back();
+  // Enter on a row opens it too
+  await p.js('(' + T('Tomas Ilves accepted') + ').focus()'); await p.key('↩');
+  await at(p, 'mockdoc5');
+  await back();
+  // a meeting still to come opens its page
+  await clickWords(p, '1-1 with Priya');
+  await at(p, 'mockmeeting7');
+  await back();
+  // ticked under Today's Tasks: saved as done, and ticked again it is open again
+  const box = rowOf('Organise working sessions') + '.querySelector(".check")', state = () => p.js('tana.node("mockdoc5").then((n) => n.stateType)');
+  await p.js(box + '.click()'); await settle(p, 400);
+  assert.deepEqual([await state(), await p.js(box + '.checked')], ['closed', true], 'a task ticked on the Timeline is saved as done');
+  await p.js(box + '.click()'); await settle(p, 400);
+  assert.deepEqual([await state(), await p.js(box + '.checked')], ['open', false], 'ticked again, it is open again');
+  // the end of the page reads three days more. Counted from where it stands: scrolling near the end reads on by
+  // itself (timelineEnd), so the rows opened above may already have brought more days in
+  await p.waitFor('!timelineLoading', 'any read already under way');
+  const pages = await p.js('timelinePages');
+  await p.js('document.querySelector(".tl-older").click()');
+  await p.waitFor('timelinePages > ' + pages + ' && !timelineLoading && document.querySelector(".tl-older")?.textContent === "Show three more days"', 'three more days read');
+});
+
+// 11. Pins (docs/PINNING.md): pinned to today it is on the Timeline's Today's Tasks; pinned to the sidebar and on a
+// meeting it is listed in Edit pins, where each ↩ takes one off, until it is pinned nowhere and gone from the Timeline.
+// Typed into Edit pins, ↩ runs the row the words found, not the "No pin matches" note above it
+flow('golden path: pin to today, the sidebar and a meeting, then unpin each in Edit pins', async (p) => {
+  await p.start();
+  const doc = 'tana:text:mockpin0', title = 'Prepare the offsite agenda', pins = () => p.js('tana.pinState(' + J(doc) + ')');
+  const onToday = async () => { await p.js("goTo('orbital:timeline')"); await at(p, 'orbital:timeline'); await settle(p, 300);
+    const s = await p.js('__screen()'); return s.indexOf('  ' + title) > 0 && s.indexOf('  ' + title) < s.indexOf('Upcoming meetings'); };
+  await p.js('goTo(' + J(doc) + ')'); await at(p, doc);
+  await command(p, 'pin to today', 'Pin to today');
+  await p.waitFor('tana.pinState(' + J(doc) + ').then((s) => s.dates.includes(localDate()))', 'the pin for today');
+  assert.ok(await onToday(), 'a task pinned to today is under Today\u2019s Tasks');
+  await p.js('goTo(' + J(doc) + ')'); await at(p, doc);
+  await command(p, 'edit pins', 'Edit pins');
+  await p.waitFor('palRows.some((r) => r.label === "Pin to sidebar")', 'Edit pins');
+  await command(p, 'sidebar', 'Pin to sidebar', null);
+  await p.waitFor('palRows.some((r) => r.group === PIN_GROUP && r.label === "Sidebar")', 'Sidebar listed as pinned');
+  await closePalette(p);
+  await command(p, 'pin to meeting', 'Pin to meeting \u2026');
+  await command(p, 'Leadership', 'Leadership sync', null);
+  await p.waitFor('tana.pinState(' + J(doc) + ').then((s) => s.hubs.some((h) => h.id === "mockmeeting2"))', 'the pin on Leadership sync');
+  assert.deepEqual(await pins(), { sidebar: true, dates: [await p.js('localDate()')], hubs: [{ id: 'mockmeeting2', title: 'Leadership sync', kind: 'meeting' }] }, 'pinned in all three places');
+  // Edit pins lists the three, and ↩ on each takes it off
+  await closePalette(p);
+  await command(p, 'edit pins', 'Edit pins');
+  await p.waitFor('palRows.filter((r) => r.group === PIN_GROUP && r.run).length === 3', 'three pins listed');
+  for (let left = 2; left >= 0; left--) {
+    await p.key('↩');
+    await p.waitFor('palRows.filter((r) => r.group === PIN_GROUP && r.run).length === ' + left, left + ' pins left');
+  }
+  await closePalette(p);
+  assert.deepEqual(await pins(), { sidebar: false, dates: [], hubs: [] }, 'pinned nowhere');
+  assert.equal(await onToday(), false, 'unpinned from today, it left Today\u2019s Tasks');
+});
+
+// 12. Getting around (#657): ⌘S finds a page, a bullet zooms into its row and a child's bullet into that, ⌘[ walks
+// back through each to where it started and ⌘] forward again
+flow('golden path: find a page, zoom in twice, and walk back and forward', async (p) => {
+  await p.start();
+  const where = () => p.js('[zoom.docId, zoom.nodeId ? document.getElementById("title").textContent : null]');
+  await command(p, 'Schedule something', 'Schedule something with Sam Okafor and Dana Brooks', '⌘s');
+  await at(p, 'mockdoc0');
+  await p.js(rowOf('Walk through both') + '.querySelector(".bullet").click()');
+  await p.waitFor('zoom.nodeId && document.getElementById("title").textContent === "Walk through both Studio pilots"', 'the zoom into the row');
+  assert.deepEqual(await p.js('__screen()'), ['Onboarding buddies', 'Shared cost tracking', '  Finance joins for this part'], 'the zoomed row\u2019s children');
+  await p.js(rowOf('Shared cost tracking') + '.querySelector(".bullet").click()');
+  await p.waitFor('document.getElementById("title").textContent === "Shared cost tracking"', 'the zoom into the child');
+  assert.deepEqual(await p.js('__screen()'), ['Finance joins for this part'], 'a child\u2019s bullet redraws the page on that child (#657)');
+  const walk = [['mockdoc0', 'Walk through both Studio pilots'], ['mockdoc0', null], ['orbital:timeline', null]];
+  for (const place of walk) { await p.key('⌘['); await settle(p, 300); assert.deepEqual(await where(), place, '⌘[ back to ' + J(place)); }
+  await p.key('⌘]'); await settle(p, 300);
+  assert.deepEqual(await where(), ['mockdoc0', null], '⌘] forward again');
+});
+
+// 13. Dragging a row (renderer/drag.js): the drop line shows where it will land, the row lands there on screen and in
+// what is saved alike, one level in when the pointer is a step to the right, and ⌘Z puts it back
+flow('golden path: drag a row to reorder it, nest it, and undo', async (p) => {
+  await p.start();
+  const same = async (docId, step) => {
+    await p.js('flushAll()'); await settle(p, 450);
+    const [screen, saved] = [await p.js('__screen()'), await p.js('__saved(' + J(docId) + ')')];
+    assert.deepEqual(screen, saved, 'screen and saved outline differ after ' + step);
+    return saved;
+  };
+  const id = await p.js("tana.createDocument('Drag test').then((n) => { goTo(n.id); return n.id; })");
+  await p.waitFor('document.activeElement && document.activeElement.isContentEditable', 'the caret in the new page');
+  await p.type('one'); await p.key('↩'); await p.type('two'); await p.key('↩'); await p.type('three');
+  await same(id, 'typing');
+  let to = await lineOf(p, 'one');
+  assert.deepEqual(await p.js('__drag(' + rowOf('three') + ', ' + (to.left + 30) + ', ' + (to.top + 3) + ')'), { grip: true, accepted: true, line: true }, 'three picked up, the line drawn above one, the drop taken');
+  assert.deepEqual(await same(id, 'a drag to the top'), ['three', 'one', 'two']);
+  await p.key('⌘z');
+  assert.deepEqual(await same(id, '⌘Z after the drag'), ['one', 'two', 'three']);
+  // one level in: dropped under a row with children, the pointer a step to the right, it becomes its first child
+  await p.js("goTo('mockdoc0')"); await p.waitFor(T('Walk through both'), 'the page with the pilots');
+  to = await lineOf(p, 'Walk through both');
+  assert.equal((await p.js('__drag(' + rowOf('Book a room on the fourth') + ', ' + (to.left + 33 + 12) + ', ' + (to.bottom - 2) + ')')).accepted, true, 'the drop inside taken');
+  await p.js('flushAll()'); await settle(p, 450);
+  const from = (lines, first, n) => lines.slice(lines.indexOf(first), lines.indexOf(first) + n);
+  const nested = ['Walk through both Studio pilots', '  Book a room on the fourth floor', '  Onboarding buddies', '  Shared cost tracking', '    Finance joins for this part'];
+  assert.deepEqual(from(await p.js('__saved("mockdoc0")'), nested[0], 5), nested, 'saved as the first child');
+  assert.deepEqual(from(await p.js('__screen()'), nested[0], 5), nested, 'drawn as the first child');
+  assert.deepEqual(from(await p.js('__saved("mockdoc0")'), 'Next steps', 3), ['Next steps', '  Send both slots to Sam and Dana'], 'gone from where it was');
+});
+
+// 14. Dragging onto a meeting (#520): a task under Today's Tasks dropped on a meeting on the Timeline is pinned to it,
+// and the Timeline's own record rows offer nothing to pick up
+flow('golden path: a task dragged onto a meeting is pinned there', async (p) => {
+  await p.start({ real: true }); // a meeting takes a drop by its tana:event: id, and only a real node can be pinned
+  await p.waitFor(T('Leadership sync'), 'the meeting on the Timeline');
+  assert.equal((await p.js('__drag(' + rowOf('Sam Okafor edited') + ', 0, 0)')).grip, false, 'a Timeline record row is not something to pick up');
+  const to = await lineOf(p, 'Leadership sync');
+  assert.deepEqual(await p.js('__drag(' + rowOf('Check out the new editor') + ', ' + (to.left + 120) + ', ' + to.mid + ')'), { grip: true, accepted: true, line: false }, 'the task taken by the meeting, with no outline line');
+  await p.waitFor('tana.pinState("tana:text:mockdoc2").then((s) => s.hubs.some((h) => h.id === "tana:event:mockmeeting2"))', 'the task pinned to Leadership sync');
+  await p.waitFor('[...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("Pinned to Leadership sync"))', 'the note that says so');
 });
 
 (async () => {
