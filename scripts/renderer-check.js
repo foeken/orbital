@@ -707,7 +707,7 @@ assert.match(source, /const keys = rowsBeside\(el\)\.map\(keyOfEl\)\.filter\(Boo
 // are the family every "it works on the page but not in a field" bug came through.
 assert.match(source, /const rowRoots = \(\) => \[outline, \$\('fields'\)\];/, 'rows live in two places, named once');
 assert.match(source, /const nodeElOf = \(key\) => queryRow\(/, 'a row is found in either of them');
-assert.match(source, /for \(const n of eachRow\('\.node\.selected'\)\) n\.classList\.remove\('selected'\);/, 'a selection is painted and cleared in both');
+assert.match(source, /for \(const n of eachRow\('\.node\.selected'\)\) n\.classList\.remove\('selected', 'picked'\);/, 'a selection is painted and cleared in both, a clicked row\u2019s ring with it');
 assert.match(source, /return el && el\.classList\.contains\('text'\) && inRows\(el\) \? \{ key: keyOfEl\(el\), offset: caretOffset\(el\) \} : null;/,
   'and the focused row is the focused row in either of them');
 assert.match(source, /const all = rowsBeside\(el\), prev = all\[all\.indexOf\(el\) - 1\], above = prev && items\.get\(keyOfEl\(prev\)\);/,

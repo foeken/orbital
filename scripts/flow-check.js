@@ -607,6 +607,39 @@ flow('golden path: send a chat message and read the answer', async (p) => {
   await p.waitFor('[...document.querySelectorAll(".chat-msg.theirs")].at(-1)?.textContent.includes("Mock answer to: Summarise the pilots")', 'Tana\u2019s answer', 6000);
 });
 
+// 20b. A list's own rows (renderer/nodes.js topListRow): a first click selects the row, a click on it once selected
+// goes in — the caret where it was clicked when its title can be typed in, the row's page when it cannot — and the
+// bullet zooms in at once. Before, a first click put the caret in an editable row and did nothing on a read-only one.
+flow('golden path: a list row is selected by a click, edited or opened by the next, zoomed by its bullet', async (p) => {
+  await p.start();
+  const locked = 'mockdoc2'; // read-only, as main lists a document you may not write
+  await p.js('(() => { const f = tana.viewList; tana.viewList = async (...a) => { const r = await f(...a); return { ...r, nodes: (r.nodes || []).map((n) => (n.id === ' + J(locked) + ' ? { ...n, editable: false } : n)) }; }; 1; })()');
+  await p.js('setView("library")'); await p.js('loadView("library")'); await p.waitFor(T('Check out the new editor'), 'the Library row');
+  await p.waitFor('!' + T('Check out the new editor') + '.isContentEditable', 'the locked row drawn read-only');
+  const row = await p.js('(() => { const it = [...document.querySelectorAll("#outline .node")].map((n) => items.get(n.dataset.key)).find((it) => it && topListRow(it) && typesInto(it) && it.node.id !== ' + J(locked) + ' && (it.node.text || "").length > 8); return it && { id: it.node.id, key: it.key, words: textEl(it.key).textContent.slice(0, 8) }; })()');
+  assert.ok(row, 'an editable Library row');
+  const selected = () => p.js('selKeys()');
+  await clickWords(p, row.words); await settle(p, 150);
+  assert.deepEqual(await selected(), [row.key], 'the first click selects the editable row');
+  assert.equal((await p.js('__caret()')).editable, false, 'and puts no caret in it');
+  const ring = (words) => p.js('getComputedStyle(' + T(words) + ').outlineStyle');
+  assert.equal(await ring(row.words), 'solid', 'the selected editable row is ringed in blue, as a focused read-only row is');
+  await p.key('⇧↓'); await settle(p, 100);
+  assert.equal(await ring(row.words), 'none', 'a range made with ⇧ is a band, not rings');
+  await p.key('esc'); await p.js('leaveText(); sel = null; applySel()'); await settle(p, 100);
+  await clickWords(p, row.words); await settle(p, 150);
+  await clickWords(p, row.words); await settle(p, 150);
+  assert.deepEqual(await p.js('[__caret().key, __caret().editable, selKeys().length]'), [row.key, true, 0], 'the second click puts the caret in its title');
+  await clickWords(p, 'Check out the new editor'); await settle(p, 150);
+  assert.deepEqual(await p.js('[selKeys().map((k) => items.get(k).node.id), zoom && zoom.docId]'), [[locked], null], 'the first click selects the read-only row and opens nothing');
+  assert.equal(await ring('Check out the new editor'), 'solid', 'and rings it');
+  await clickWords(p, 'Check out the new editor');
+  await at(p, locked);
+  await p.js('setView("library")'); await p.waitFor(T(row.words), 'the Library again');
+  await p.js(rowOf(row.words) + '.querySelector(".bullet").click()');
+  await at(p, row.id);
+});
+
 // 21. Panes and tabs (#138, #435, #463; shell.html): the window's shell on a stand-in for main that opens a page the way
 // main.js window:split does. ⌘↩ on a search result opens it in a new tab, ⇧↩ in a pane beside, ⇧⌘N a new pane on the
 // Library; the keys stay with the page just opened, and every page keeps its own place.

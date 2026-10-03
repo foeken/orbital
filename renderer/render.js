@@ -893,7 +893,7 @@ function nodeEl(node, docId, parent) {
     text.append(tableEl(item));
   } else {
     const english = !pending.has(item.key) && translated && !translated.pending && !translated.original && caretBefore?.key !== item.key ? translated : null; // shown translated (renderer/translate.js), never while typed in, as the title
-    if (!demoMode && !clickOpens && canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
+    if (typesInto(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
     const shown = (label) => (reference ? [{ text: label }] : fullref ? [{ mention: { uri: node.reference.uri, label } }] : null); // a translated reference keeps its chip
@@ -958,6 +958,29 @@ function nodeEl(node, docId, parent) {
     if (selKeys().includes(item.key) && canEditText(item)) { if (fullref) { e.preventDefault(); setCaret(text, text.textContent.length); } return; }
     e.preventDefault(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key }; leaveText(); applySel();
   };
+  // A top-level row of a list (topListRow, renderer/nodes.js): the first click selects it, and a click on the selected
+  // row goes in — the caret where it was clicked on a row that can be typed in, its page on one that cannot. The
+  // bullet zooms in at once (above); the box, the chevron, a chip, a link and a button answer their own clicks, and a
+  // row already being typed in takes its clicks as any text does.
+  if (topListRow(item)) {
+    const caretClick = line.onclick;
+    let pressed = null; // what the press decided, for the click that ends it
+    line.onmousedown = (e) => {
+      pressed = null;
+      if (e.button !== 0 || e.metaKey || e.shiftKey || e.ctrlKey || e.altKey || document.activeElement === text) return;
+      if (e.target.closest('.check, .bullet, .chev, .mention, a, button, input, [role="button"], .cell')) return;
+      const keys = selKeys();
+      if (keys.length !== 1 || keys[0] !== item.key) { e.preventDefault(); pressed = 'select'; sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key, picked: true }; leaveText(); applySel(); return; }
+      if (!text.isContentEditable) { e.preventDefault(); pressed = 'open'; return; }
+      pressed = 'edit'; // in the words the browser puts the caret where they were pressed (and a drag selects them); beside them it is ours to put
+      if (!text.contains(e.target)) { e.preventDefault(); setCaret(text, caretAt(text, e.clientX, e.clientY)); }
+    };
+    line.onclick = (e) => {
+      const was = pressed; pressed = null;
+      if (was === 'open') { const it = items.get(item.key) || item; sel = null; if (zoomable(it.node)) zoomTo(it); }
+      else if (!was && document.activeElement === text && caretClick) caretClick(e);
+    };
+  }
   el.append(line);
   // expanded = real children shown, or an explicitly opened empty node (which shows one draft child)
   const expanded = expandable && (has ? opened : !node.draft && open.get(item.key) === true);

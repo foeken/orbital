@@ -972,6 +972,10 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .selected { background: #e8f1fb; } /* the whole node: a selected parent takes its children with it, so they show as selected too */
 .selected .line { border-radius: 0; }
 .selected .text { caret-color: transparent; }
+/* a list row selected by a click on it (render.js topListRow): the blue ring a focused read-only row has, editable or
+   not, in place of the band; a selection made with ⇧ or ⌘ keeps the band */
+.node.selected.picked, [data-theme="dark"] .node.selected.picked { background: transparent; }
+.node.selected.picked > .line > .body > .text { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
 /* A row arriving in or dropping out of a view (Flash): the room for it opens first and it fades in over a green tint;
    one that left fades over a red tint and then the gap closes, so the rows below slide instead of jumping. A row you
    are still editing only dims, and leaves for real once the caret does. --tint is the colour: a proposal approved

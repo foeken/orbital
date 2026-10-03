@@ -143,6 +143,10 @@ const withShims = (src) => {
   if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
   // the fields a mixed list's rows carry (renderer/views.js pageFieldDefs): a harness that is not about them lists none
   if (/\bfunction pageFieldDefs\(/.test(src)) src = (/const listPage =/.test(src) ? '' : 'globalThis.listPage ??= () => false;\n') + (/const viewOf =/.test(src) ? '' : 'globalThis.viewOf ??= () => null;\n') + (/\bconst kids =/.test(src) ? '' : 'globalThis.kids ??= new Map();\n') + (/const relatedBy =/.test(src) ? '' : 'globalThis.relatedBy ??= new Map();\n') + (/function loadRelated\(/.test(src) ? '' : 'globalThis.loadRelated ??= () => {};\n') + src;
+  // a list's own rows, selected by a first click, and whether a row's text takes the caret (renderer/nodes.js): the real
+  // rules, which read what the lines below supply when the harness has not
+  if (/\btopListRow\(/.test(src) && !/const topListRow =/.test(src)) src = sourceLine('const topListRow =') + '\n' + src;
+  if (/\btypesInto\(/.test(src) && !/const typesInto =/.test(src)) src = sourceLine('const typesInto =') + '\nglobalThis.demoMode ??= false;\n' + src;
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
   if (/\bonRowBlank\(/.test(src) && !/const onRowBlank =/.test(src)) src = sourceBetween('const onRowBlank =', '// `texts()`') + '\n' + src;
   // a type's or a saved search's own glyph (renderer/nodes.js iconOf): a harness that draws neither only needs the names

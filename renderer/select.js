@@ -17,8 +17,9 @@ function selKeys() { // visible selected keys in outline order; stale rows simpl
   return keys;
 }
 function applySel() {
-  for (const n of eachRow('.node.selected')) n.classList.remove('selected');
-  for (const k of selKeys()) nodeElOf(k).classList.add('selected');
+  for (const n of eachRow('.node.selected')) n.classList.remove('selected', 'picked');
+  // picked: a list row selected by a click on it (render.js topListRow) is ringed as a focused read-only row is, editable or not
+  for (const k of selKeys()) nodeElOf(k).classList.add('selected', ...(sel.picked ? ['picked'] : []));
 }
 function leaveText() { const el = document.activeElement; if ((inRows(el) || el === titleEl) && (el.isContentEditable || el.classList.contains('text'))) { flush(keyOfEl(el)); el.blur(); } }
 // ⌘A twice: every row of the editor the caret is in — the page's rows, or the rows of the field it is in, never
@@ -42,7 +43,7 @@ function rangeSelTo(key, anchor) {
   if (!sel) sel = { keys: new Set([anchor]), anchor, focus: anchor };
   const extras = new Set(sel.keys);
   for (const old of rangeKeys(sel.anchor, sel.focus)) extras.delete(old);
-  sel.anchor = anchor; sel.focus = key;
+  sel.anchor = anchor; sel.focus = key; sel.picked = false; // a range is drawn as a band, the clicked row's ring with it
   sel.keys = new Set([...extras, ...rangeKeys(anchor, key)]);
   leaveText(); applySel();
 }
@@ -123,7 +124,8 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   else if (mod && e.shiftKey && vert) { if (blockSelection(keys, true, 'Move')) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'Tab' && !mod) { if (blockSelection(keys, true, e.shiftKey ? 'Outdent' : 'Indent')) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
   else if (e.key === ' ' && !mod && keys.length === 1) { const it = items.get(keys[0]); sel = null; if (referenceTarget(it.node)) openReference(it.node); else zoomTo(it); } // Space on one selected row zooms into it, or opens what it references
-  else if (e.key === 'Enter' && !mod && keys.length === 1 && canEditText(items.get(keys[0]))) clearSel(keys[0]); // Enter starts editing the selected row, caret at the end — the way a second click on it does
+  else if (e.key === 'Enter' && !mod && keys.length === 1 && canEditText(items.get(keys[0])) && (!topListRow(items.get(keys[0])) || typesInto(items.get(keys[0])))) clearSel(keys[0]); // Enter starts editing the selected row, caret at the end — the way a second click on it does
+  else if (e.key === 'Enter' && !mod && keys.length === 1 && topListRow(items.get(keys[0])) && zoomable(items.get(keys[0]).node)) { const it = items.get(keys[0]); sel = null; zoomTo(it); } // a list row that cannot be typed in: Enter goes in, as a second click on it does
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;
