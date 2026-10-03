@@ -976,6 +976,11 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
    not, in place of the band; a selection made with ⇧ or ⌘ keeps the band */
 .node.selected.picked, [data-theme="dark"] .node.selected.picked { background: transparent; }
 .node.selected.picked > .line > .body > .text { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+/* a list's or the Timeline's row before it is selected (render.js .selectfirst): a press on its words is a press on the
+   row, which selects it or picks it up for a drag, so the words take none of their own; a link or chip in them still
+   answers at once, and once selected (or typed in) they are words to click into */
+.node.selectfirst:not(.picked) > .line > .body > .text:not(:focus) { pointer-events: none; }
+.node.selectfirst:not(.picked) > .line > .body > .text:not(:focus) :is(a, .mention, [role="button"]) { pointer-events: auto; }
 /* A row arriving in or dropping out of a view (Flash): the room for it opens first and it fades in over a green tint;
    one that left fades over a red tint and then the gap closes, so the rows below slide instead of jumping. A row you
    are still editing only dims, and leaves for real once the caret does. --tint is the colour: a proposal approved

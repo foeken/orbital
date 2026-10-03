@@ -939,6 +939,11 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   row's dot is the thing to grab. An empty line is nothing to pick up (`dragEmpty`); an image and a divider are. A
   draft row never is. The dragged row dims; the drag carries our own dataTransfer flavour, so a drop on a text field
   elsewhere pastes nothing, and a drag that is not ours (text out of a row, a file) is left to the browser.
+- **A list's or the Timeline's row is picked up anywhere on it** (`.selectfirst`, render.js; styles.css). Until it is
+  selected such a row is one thing to press (Rows, above), so its whole line is `draggable` and its words take no
+  press of their own (`pointer-events: none`, a link or chip in them excepted): a press neither focuses them nor
+  puts a caret in them, and is left undefaulted so Chromium can start the drag from it. Selected and editable, or typed
+  in, the line stops being draggable on the next press, and a drag across the words selects them.
 - **A drag names the place.** `moveTo(document, id, { parentId, afterId, from })` (sdk/content.js) moves the row whole,
   children, checkbox and block ids included (Loro cannot move a container, so it is copied and the original deleted,
   and a list or quote it leaves empty is pruned). `from` is the outline it came from, so a row crosses between a page

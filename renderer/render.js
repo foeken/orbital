@@ -970,18 +970,24 @@ function nodeEl(node, docId, parent) {
     if (node.timeline) openTimeline(node, where); else if (where) run(() => openElsewhere(where, node.id)); else goTo(node.id);
   };
   if (onTimeline || topListRow(item)) {
+    // Until it is selected the row is one thing to press, so its whole line picks it up (renderer/drag.js), not only its
+    // bullet: its words take no press of their own then (styles.css .selectfirst), so a press neither puts a caret in
+    // them nor focuses them. Selected and editable, or typed in, its words are words again, to click into and select.
+    el.classList.add('selectfirst');
+    const grab = canDragItem(item);
+    if (grab) line.draggable = true;
     const before = line.onclick; // a list row: the caret beside its words while typed in; a Timeline row: ⌘ and ⌥ opening it elsewhere
     let pressed = null; // what the press decided, for the click that ends it
     line.onmousedown = (e) => {
       pressed = null;
+      const keys = selKeys(), mine = keys.length === 1 && keys[0] === item.key;
+      if (grab) line.draggable = document.activeElement !== text && !(mine && text.isContentEditable);
       if (e.button !== 0 || e.metaKey || e.shiftKey || e.ctrlKey || e.altKey || document.activeElement === text) return;
       if (e.target.closest('.check, .bullet, .chev, .mention, a, button, input, [role="button"], .cell')) return;
-      const keys = selKeys();
-      pressed = keys.length !== 1 || keys[0] !== item.key ? 'select' : text.isContentEditable ? 'edit' : 'open';
+      pressed = !mine ? 'select' : text.isContentEditable ? 'edit' : 'open';
       // in the words the browser puts the caret where they were pressed (and a drag selects them); beside them it is ours to put
       if (pressed === 'edit') { if (!text.contains(e.target)) { e.preventDefault(); setCaret(text, caretAt(text, e.clientX, e.clientY)); } }
-      // a task under Today's Tasks is picked up by its whole line, and Chromium starts that drag from this very default
-      // (the grab, above), so there the press focuses the row and the click below takes the focus back as it selects
+      // a row picked up by its whole line: Chromium starts that drag from this very default, so it is left alone
       else if (!line.draggable) e.preventDefault();
     };
     line.onclick = (e) => {
