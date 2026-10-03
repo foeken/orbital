@@ -2,20 +2,30 @@
 
 **[orbital.md](https://orbital.md)** · **[Manual](https://orbital.md/manual)**
 
-A small macOS app for the new Tana (home.tana.inc), rendered the way Tana's own outliner reads: every
-line is a node, top-level rows are documents and their children are the document's content blocks.
-It is not a wrapper around the web app — it talks to Tana's platform sync directly (Connect-RPC plus
-Loro CRDTs), so edits are written back as you type and changes made anywhere else arrive within a
-second.
+Small apps for the new Tana (home.tana.inc): a keyboard-first outliner on the Mac, and the same
+Timeline, saved searches and Quick Add on the iPhone and on Android. None of them is a wrapper around
+the web app — they talk to Tana's platform sync directly (Connect-RPC plus Loro CRDTs), so edits are
+written back as you type and changes made anywhere else arrive within a second.
+
+On the Mac, Orbital reads the way Tana's own outliner does: every line is a node, top-level rows are
+documents and their children are the document's content blocks.
 
 It exists because a keyboard-first outline over your own tasks, meetings and notes is a different
 thing from a browser tab, and because the round trip through a web view makes a list feel slow.
+
+| Platform | Where | Built with | Status |
+|----------|-------|------------|--------|
+| Mac | the repository root | Electron, plain JavaScript | Released; signed, notarized and updating itself (Apple Silicon) |
+| iPhone | [`ios/`](ios/README.md) | SwiftUI | Beta in TestFlight: join from the last page of the Mac app's Help tour |
+| Android | `android/` | Kotlin Multiplatform, Jetpack Compose | Builds and passes its tests in CI; not distributed yet |
+
+There is no iPad, Windows, Linux or web version.
 
 ![The Timeline: what others changed in the nodes you watch, day by day](docs/images/timeline.png)
 
 ![Cmd+K over the Timeline, in the dark theme](docs/images/palette.png)
 
-## What it does
+## What it does on the Mac
 
 **One screen, three presets, your own searches.** Inbox, Library and Types are the same list with a
 different filter on it: a kind, a status, an assignee, a text query, a window. The pills that edit
@@ -70,7 +80,37 @@ follows you between machines and what stays local is spelled out in
 SQLite, so a choice about your content is the same choice everywhere, while the row cache, the
 window and the API key stay on the machine.
 
+## On your phone
+
+The phone apps are for the moments away from the desk, not a second outliner. Both open on the
+Timeline — what others changed in the nodes you watch, your meetings, the tasks that landed in your
+Inbox — with a side menu for your saved searches, and pull to refresh. Opening a node shows its
+outline, its chat or its meeting, with who it is assigned to and who can see it; both can be changed
+there, and Orbital asks to grant access when a new assignee could not see the node. A long press on a
+row assigns it, moves it back to the Inbox, pins it to today, marks it sensitive or deletes it. The +
+at the top right is Quick Add: a task with a title and a type, or a photo that ChatGPT reads into a
+task or a note; words or an image shared to Orbital from another app open there too. Ask Tana starts a
+chat, typed or dictated.
+
+Auto-translate, sensitive marks (blurred until you shake the phone, or turn on Show sensitive items in
+Settings), demo mode and the two AI models are the desktop's own, and they follow you between devices
+through the same settings document in Tana. The AI features use the phone's own ChatGPT sign-in.
+Editing an outline's text is the Mac's job; the phones read outlines and act on nodes.
+
+<p>
+<img src="docs/images/android/timeline-galaxy-z-flip5.png" width="280" alt="The Timeline on Android, on a Galaxy Z Flip5">
+<img src="docs/images/android/outline-galaxy-z-flip5.png" width="280" alt="A document's outline on Android, on a Galaxy Z Flip5">
+</p>
+
+Android has every screen the iPhone has, and on a wide window (a tablet, an unfolded phone) the menu
+stays beside the page. It has been tried on a Galaxy Z Flip5 and on emulators with invented content,
+but not yet signed in to a real Tana account, so reading and writing real data there is unchecked.
+Tana's **Sign in with Google** may be refused inside the phones' web view, because Google does not
+allow its sign-in in an embedded browser.
+
 ## Running it
+
+### Mac
 
 macOS on Apple Silicon, Node 22.5 or later, and a Tana account.
 
@@ -91,10 +131,34 @@ the sync peer identity and the login partition. Deleting that folder resets the 
 anything in Tana. An install from before the rename keeps its data: the older `tana-tasks` folder is
 moved to the new name the first time the app or the CLI starts (`userdata.js`).
 
-## Releasing
+### iPhone
 
-Releases are signed, notarized and published to a public repo, so the source repo can stay private
-and the updater needs no token:
+To use it, join the TestFlight beta: Cmd+K **Help** in the Mac app, and scan the code on its last page
+with the iPhone's camera. To build it, you need Xcode 26 or later, [Bun](https://bun.sh) (it bundles the
+engine in an Xcode build phase) and this repository's `node_modules`. [ios/README.md](ios/README.md) has
+the build and install commands, the simulator's launch arguments on invented content, and the UI tests.
+
+### Android
+
+There is no build to install yet; to build one, you need the Android SDK with API 37, a JDK 17 or later,
+[Bun](https://bun.sh) and this repository's `node_modules` (`npm install`, or `npm run modules` in a
+worktree). The Gradle build bundles the phones' engine into the app itself.
+
+```sh
+cd android
+./gradlew :androidApp:installDebug                # build and install on a connected phone or emulator
+./gradlew :shared:jvmTest                         # the shared module's tests, its screens drawn headless
+./gradlew :androidApp:connectedDebugAndroidTest   # on a device: the journeys, Back, rotation, sharing, the engine
+adb shell am start -n com.dreetje.orbital/com.dreetje.orbital.android.MainActivity --ez sample true   # invented content, no Tana
+```
+
+[docs/ANDROID.md](docs/ANDROID.md) records the research behind the Android choices (the web view bridge,
+sign-in, WebAssembly limits, versions), with a source for each.
+
+## Releasing the Mac app
+
+Mac releases are signed, notarized and published to a public repo, so the source repo can stay private
+and the updater needs no token. The iPhone beta goes out through TestFlight; Android has no release yet.
 
 ```sh
 npm run release            # patch; also accepts minor, major or an explicit version
@@ -129,8 +193,15 @@ is a dozen lines ([updater.js](updater.js)).
 `npm run lint` and `npm run check` must both pass before a commit, and CI runs the same two on every
 pull request and every push to main. The linter is ESLint's recommended set and nothing else, no
 formatter; the checks run everything offline: the SQLite cache, the SDK against a fake sync service
-and a synthetic task snapshot, and the renderer's auth and behaviour checks. Every non-trivial
+and a synthetic task snapshot, the renderer's auth and behaviour checks, the phones' engine bundle,
+and that the iPhone's and Android's row models and glyphs have not drifted apart. Every non-trivial
 change is expected to leave a check behind that fails when the logic breaks.
+
+CI also builds the Android app and runs its tests on every pull request, and runs the iPhone's UI
+tests on a simulator when `ios/` changes. Each pull request says under **Platforms** whether it
+landed on the desktop, the iPhone, Android and the manual, or why it did not need to, and a check
+holds those lines to the diff (`scripts/platform-check.js`; the rules are in AGENTS.md, Every
+platform). The two phones mirror each other in the same pull request.
 
 ```sh
 npm run lint                        # ESLint over main, sdk, scripts and the renderer
@@ -167,8 +238,16 @@ global scope, loaded in the order `index.html` lists them, no framework and no b
 generic, Electron-independent Tana client (graph queries, the sync stream, Loro documents, outline
 operations, typed fields, chats, pins, access rules, who is in a call, change summaries);
 `tana-session.js` is the login and token layer; `db.js` is the local SQLite cache and settings mirror.
-A window is a shell page (`shell.html`) that lays one or two outliner pages out side by side with
-[Trellis](https://github.com/DanFessler/trellis).
+A window is a shell page (`shell.html`) that lays any number of outliner pages out side by side, as
+tabs or floating, with [Trellis](https://github.com/DanFessler/trellis).
+
+The phones share one engine with each other and with the Mac: `ios/engine` bundles `sdk/`, the
+desktop's `main/timeline.js` and `main/settings.js` and demo mode's masks into one script with Bun,
+and each phone runs it in a hidden web view on home.tana.inc, which is also where you sign in to Tana.
+SwiftUI (`ios/Orbital`) and Compose (`android/shared` for the screens and the engine bridge,
+`android/androidApp` for what only Android provides: the web view host, ChatGPT sign-in, the
+microphone, the shake, the photo picker and sharing) ask it for rows and draw them. Each Kotlin screen
+names its Swift counterpart on its first line, so a change to one is easy to carry to the other.
 
 Uses Trellis by DanFessler — github.com/DanFessler/trellis. Trellis is free for non-commercial use; commercial use
 needs a GitHub Sponsorship or an enterprise licence, see `node_modules/@danfessler/trellis/LICENSE.md`.
@@ -178,7 +257,7 @@ Start with [AGENTS.md](AGENTS.md) for the map and the working rules, then the do
 and keyboard contract), [PLATFORM-PROTOCOL.md](docs/PLATFORM-PROTOCOL.md) (the wire protocol, the
 source of truth), [sdk/01–05](docs/sdk) (overview, data model, API reference, recipes, gotchas),
 [MEETINGS.md](docs/MEETINGS.md), [CHATS.md](docs/CHATS.md), [PINNING.md](docs/PINNING.md),
-[SETTINGS.md](docs/SETTINGS.md) and
+[SETTINGS.md](docs/SETTINGS.md), [ios/README.md](ios/README.md), [ANDROID.md](docs/ANDROID.md) and
 [VERIFICATION.md](docs/VERIFICATION.md) (what was checked against real data, and how).
 
 ## The caveat
