@@ -1283,6 +1283,10 @@ palInput.addEventListener('input', () => {
   if (palMode === 'pinToday') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(todayPickerSearchNow, 150); return; }
   if (palMode === 'search') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150); return; }
   renderPalette();
+  // what was typed narrowed the page to something to do: a note leading it ("No pin matches" in Edit pins) is not
+  // where Enter lands, so the highlight starts on the first row that does something. Only on typing: a page drawn
+  // again after its own Enter (the last pin taken off) keeps the note, so a quick second Enter adds nothing.
+  if (palRows[palIndex]?.disabled && !palRows[palIndex].id && nextPalIndex(palRows, palIndex, 1) !== palIndex) movePalIndex(1);
 });
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;

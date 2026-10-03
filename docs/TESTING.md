@@ -47,6 +47,22 @@ From fastest to slowest. Each catches what the one before it cannot.
      older read lands after it, keeps the keyboard on a switch through its redraw, and masks your email and hidden
      titles in demo mode.
 
+   Then the **golden paths**, what someone does every day from start to end, by key and by pointer as they would. They
+   guard the paths themselves, so a change that breaks one fails even when it is a new kind of break:
+   - the Timeline: a first launch opens on it; a row opens what it is about by click or ↩, and ⌘[ comes back; a task
+     ticked under Today's Tasks is saved as done; its end reads three more days;
+   - pins: pinned to today it is under Today's Tasks; pinned to the sidebar and on a meeting it is listed in Edit pins,
+     where each ↩ takes one off, until it is pinned nowhere;
+   - getting around: ⌘S finds a page, a bullet zooms in and a child's bullet zooms further (#657), ⌘[ walks back
+     through each and ⌘] forward;
+   - dragging a row: the drop line shows, the row lands above another or one level in, on screen and saved alike,
+     and ⌘Z puts it back;
+   - dragging a task from Today's Tasks onto a meeting pins it there, and the Timeline's record rows offer nothing to
+     pick up.
+
+   A drag is dispatched in the page as Chromium delivers one (`__drag`: dragstart on the row's grip, dragover and drop
+   where the pointer is), since the DevTools protocol cannot start a native drag in a headless page.
+
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; CI runs it on every PR marked ready for review (a draft is tested on the machine that writes it, AGENTS.md).
 3. **iPhone UI tests** (about a minute, `ios/OrbitalUITests`). The app on `-sample`, driven by the labels VoiceOver reads; the
@@ -67,6 +83,8 @@ The manual's scenes (`manual/scenes`) play the same mock in the same Chromium, b
   it. A new page goes into the privacy flow's list of places.
 - **Anything that draws an async answer**: a generation guard, and the page in the out-of-order flow when it reads per id.
 - **A new key or palette page**: the caret comes back on Escape; extend the focus flow when it opens over a row.
+- **A change to a golden path** (the Timeline, pins, getting around, dragging): its flow passes, and a step that is new
+  there joins it. A path the flows do not walk yet is listed under Open.
 - **An iPhone screen**: an accessibility label for everything you can tap, and a step in `SampleTests`.
 - **Before the first push**: read the whole diff and trace every caller of what changed; walk missing and empty values, a
   rename or retype, async ordering, cache and restart, masking, and the labels. Review bots are a second opinion.
@@ -81,6 +99,9 @@ the same dependency-free DevTools protocol as `shoot.js` and the manual. Worth a
 ## Open
 
 - Flows over the shell: two panes, tabs, the Graph pane following (#138, #435, #463). `manual/scenes/kit.js` `live` has the bridge.
+- Golden paths not walked yet: Quick Add Task (task.html, on a stand-in as the Settings flow does), sending in a chat,
+  a table, and dragging a task between the sections of My Tasks by Responsibility, which needs the mock's tasks to
+  carry `createdBy`.
 - A sweep invariant in `sdk-check`: after every page closes, the fake SyncService holds no subscription (#436, #452).
 - Stale Cmd+K results while typing.
 - The gaps in `NOT_MOCKED`: `indentMany`, `outdentMany`, `pasteMarkdown`, `archiveDocument`, `taskTypes`.

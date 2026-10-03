@@ -2516,13 +2516,17 @@ function runPaletteSkipCheck() {
   // key and send a Tana search nobody read.
   const typing = vm.runInNewContext(`
     let palMode = 'cmd', palIndex = 3, palEnter = 'pick', palBusy = false, palSeq = 0, palTimer = null, renders = 0;
+    let palRows = []; // what the page drew from the words: renderPalette is a stand-in, so a check sets them (typeOn.rows)
     const asked = [], setTimeout = (fn) => { asked.push(fn.name); return 1; }, clearTimeout = () => {};
     const renderPalette = () => { renders++; }, searchNow = function searchNow() {}, searchIconsNow = function searchIconsNow() {};
     const searchSpacesNow = function searchSpacesNow() {}, todayPickerSearchNow = function todayPickerSearchNow() {};
     let listener; const palInput = { addEventListener: (type, fn) => { if (type === 'input') listener = fn; } };
+    ${functionSource('nextPalIndex')}
+    const movePalIndex = (step) => { palIndex = nextPalIndex(palRows, palIndex, step); };
     ${sourceBetween("palInput.addEventListener('input'", "palInput.addEventListener('keydown'")}
     const typeOn = (mode) => { palMode = mode; renders = 0; asked.length = 0; listener(); return { renders, asked: [...asked], palIndex, palEnter }; };
     typeOn.seq = () => palSeq;
+    typeOn.rows = (rows) => { palRows = rows; };
     typeOn;
   `);
   for (const mode of ['pinDate', 'moveConfirm', 'cmd', 'field', 'meetingTime']) {
@@ -2530,6 +2534,12 @@ function runPaletteSkipCheck() {
   }
   assert.deepEqual(plain(typing('search')), { renders: 0, asked: ['searchNow'], palIndex: 0, palEnter: null }, 'the document search asks Tana, debounced');
   assert.deepEqual(plain(typing('setIcon').asked), ['searchIconsNow'], 'and Set icon asks main for its glyphs');
+  // Edit pins with words typed leads with a note ("No pin matches") above what the words found: ↩ runs what they found
+  typing.rows([{ group: 'Pinned · ↩ unpins', label: 'No pin matches', disabled: true }, { group: 'Pin it', label: 'Pin to sidebar' }]);
+  assert.equal(typing('pins').palIndex, 1, 'typing past a note highlights the first row that does something, so ↩ runs it');
+  typing.rows([{ label: 'No pin matches', disabled: true }]);
+  assert.equal(typing('pins').palIndex, 0, 'with nothing to run, the note stays highlighted and ↩ does nothing');
+  typing.rows([]);
   for (const mode of ['search', 'spaces', 'setIcon', 'pinToday']) {
     const seq = typing.seq();
     typing(mode);
