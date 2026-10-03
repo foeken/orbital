@@ -4,24 +4,21 @@
 //   - Your dot is one conversation for everything, found in the ChatGPT app on this Mac (appDot below), kept as dotChat
 //     and following you to your other Macs. Only when the app has no dot does Choose agents → Dot ask for its link (the
 //     app's Copy link, codex://threads/<id>).
-//   - A task is a message: the app's own link opens that conversation with the message typed in, and ↩ is pressed in it
-//     (System Events, which asks for Accessibility the first time). Sent from its composer it reaches the dot exactly as
-//     a message you typed would, tagged as from ChatGPT, and the dot answers where it always does.
+//   - A task is a message: the app's own link opens that conversation with the message typed in, and you press ↩ to
+//     send it. Orbital presses no keys (no System Events, no Accessibility): sent from the composer it reaches the dot
+//     exactly as a message you typed would, and the dot answers where it always does.
 //   - What it does next lives in that conversation, out of this Mac's reach, so it reports in the node: Orbital adds
-//     "Agent status: Working" at the end once the message is sent, the dot ends each update with Working, Completed or
-//     Failed, and the badge follows the last one (main/documents.js agentStatus). The badge opens the conversation.
+//     "Agent status: Working" at the end as it hands the node over, so a Completed or Failed from an earlier handoff no
+//     longer counts; the dot ends each update with Working, Completed or Failed, and the badge follows the last one
+//     (main/documents.js agentStatus). The badge opens the conversation.
 //   - One conversation for every node (oneChat): a node keeps no task id, only that Dot has it; the conversation is dotChat.
 const fs = require('node:fs');
 const agent = require('../agent');
 const settings = require('../settings');
 const documents = require('../documents'); // as a whole, so the checks can stand in for a node's status
 
-const APP = 'com.openai.codex'; // the ChatGPT desktop app, which answers codex:// links
 // ponytail: every dot seen so far lives on this host, and the app's Copy link leaves it out; read it from the link if a dot ever lives elsewhere
 const HOST = 'durable';
-// ponytail: a fixed wait for the app to open the conversation and fill its composer (3 s was ample on a warm app);
-// ↩ is pressed only once ChatGPT is in front, so a slow start fails loudly rather than pressing ↩ in another app
-const SEND_AFTER = 3000;
 
 // Your dot as the ChatGPT app on this Mac knows it: the dot it picked for your account ("primary-aeon-selection-v1" in
 // its state file, its root conversation), read again only once that file has changed. ponytail: the app's own state
@@ -57,23 +54,8 @@ const message = (prompt, nodeUri, title) => [prompt || 'Help me with this.', '',
 const BADGE = { working: 'working', completed: 'done', failed: 'broken' };
 
 const openUrl = (url) => require('electron').shell.openExternal(url);
-// ↩ in the frontmost app, only when that is ChatGPT
-const PRESS = 'tell application "System Events"\n' +
-  '  if bundle identifier of first application process whose frontmost is true is not "' + APP + '" then error "ChatGPT is not in front"\n' +
-  '  key code 36\n' +
-  'end tell';
-const press = () => new Promise((resolve, reject) => require('node:child_process').execFile('osascript', ['-e', PRESS], { timeout: 10000 }, (error) => {
-  if (error) reject(new Error('Your message is typed in ChatGPT: press ↩ there to send it. To let Orbital send it, allow Orbital under Privacy & Security → Accessibility'));
-  else resolve();
-}));
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function linked() { const id = chatId(); if (!id) throw new Error('Link your dot first: Choose agents → Dot'); return id; }
-async function send(text) {
-  await openUrl(chatUrl(linked(), text));
-  await wait(dot.sendAfter);
-  await dot.press();
-}
 
 const dot = agent.register({
   id: 'dot', label: 'Dot', icon: 'chatgpt', missing: 'Install the ChatGPT app', oneChat: true,
@@ -82,15 +64,16 @@ const dot = agent.register({
   setupHint: () => (appInstalled() && !chatId() ? 'No dot in the ChatGPT app: paste its chat link' : ''),
   setup(text) { const id = linkId(text); if (!id) throw new Error('Paste your dot\'s chat link: codex://threads/…'); settings.set('dotChat', id); },
   async start({ nodeUri, title, prompt }) {
-    await send(message(prompt, nodeUri, title));
-    // the dot has it once the message is sent; a line that will not write loses only the badge's first state, never the handoff
+    // typed in, for you to send: the conversation is in front, with the message in its composer
+    await openUrl(chatUrl(linked(), message(prompt, nodeUri, title)));
+    // this handoff is the current one, whatever an earlier one ended with; a line that will not write loses only the
+    // badge's first state, never the handoff
     await documents.writeAgentStatus(nodeUri, 'Working').catch(() => {});
   },
   // the last status line in each node; none (written away) is still with the dot, and a node that cannot be read needs you
   statuses: async (links) => Object.fromEntries(await Promise.all(Object.keys(links || {}).map(async (nodeId) =>
     [nodeId, BADGE[await documents.agentStatus(nodeId).catch(() => 'failed')] || 'working']))),
   open: () => openUrl(chatUrl(linked())),
-  sendAfter: SEND_AFTER, press, // replaced by the checks
   stateFile: require('node:path').join(require('node:os').homedir(), '.codex', '.codex-global-state.json'), // the ChatGPT app's; replaced by the checks
 });
 
