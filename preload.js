@@ -102,7 +102,7 @@ contextBridge.exposeInMainWorld('api', {
   openAgentTask: (docId) => ipcRenderer.invoke('agent:open', docId), // open the task this node is linked to, in its agent's app
   openInAgent: (agent, link) => ipcRenderer.invoke('agent:openNew', agent, link), // a fresh, untracked task carrying the node's link
   agentStatus: () => ipcRenderer.invoke('agent:status'), // docId -> pending|working|waiting|done|broken for every linked node
-  // Link to agent … (main/agents/linked.js, docs/AGENT-RELAY.md): a one-time code and the prompt that carries it
+  // Connect to new agent … (main/agents/linked.js, docs/AGENT-RELAY.md): a one-time code and the prompt that carries it
   relayLink: () => ipcRenderer.invoke('relay:link'), // { code, expiresAt, url, prompt }
   relayLinkStatus: (code) => ipcRenderer.invoke('relay:linkStatus', code), // { state: waiting|expired, expiresAt } or { state: 'linked', agent: { id, label, app } }
   relayLinkCancel: (code) => ipcRenderer.invoke('relay:linkCancel', code), // the code stops working

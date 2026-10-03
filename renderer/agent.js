@@ -87,7 +87,7 @@ function agentsRows(q) {
     const linked = agentList.filter((a) => a.linked);
     for (const a of linked) rows.push({ group: LINKED_GROUP, icon: a.icon, label: a.label, keepOpen: true,
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
-    rows.push({ group: LINKED_GROUP, icon: 'createNew', label: 'Link to agent …', hint: 'Any agent that takes an MCP server', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
+    rows.push({ group: LINKED_GROUP, icon: 'createNew', label: 'Connect to new agent …', hint: 'Any agent that takes an MCP server', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
     if (linked.length && tana.relayReset) rows.push({ group: LINKED_GROUP, icon: 'lock', label: 'Reset the link key', hint: 'If it may have been seen: your agents stay linked', keepOpen: true,
       run: () => run(async () => { await tana.relayReset(); showNote('New link key: your agents stay linked'); }) });
   }
@@ -114,7 +114,7 @@ function openAgentSetup(a) {
   agentSetupCtx = a;
   openPage('agentSetup', a.id === 'dot' ? 'codex://threads/…' : a.setup, { rows: agentSetupRows, back: openAgentsPalette, typed: true });
 }
-// ---- Link to agent: any agent that adds orbital.md/mcp, linked with a one-time code (main/agents/linked.js) ----
+// ---- Connect to new agent: any agent that adds orbital.md/mcp, linked with a one-time code (main/agents/linked.js) ----
 // The page asks main for a code and shows the prompt that carries it: ↩ copies it, and you give it to the agent, which
 // adds the server, names itself and links. The page asks every two seconds whether that happened; once it has, the
 // palette closes on a toast naming the agent. Leaving the page does not stop the code: an agent that uses it later
@@ -124,7 +124,7 @@ let relayTimer = null;
 const unwrapError = (e) => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 function openLinkPalette(back = BACK_TO_COMMANDS) {
   const ctx = relayCtx = { state: 'asking', back };
-  openPage('linkAgent', 'Link to agent', { rows: relayRows, back, typed: true });
+  openPage('linkAgent', 'Connect to new agent', { rows: relayRows, back, typed: true });
   Promise.resolve(tana.relayLink()).then((r) => { if (relayCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawRelay(); pollRelay(ctx); },
     (e) => { if (relayCtx !== ctx) return; ctx.state = 'failed'; ctx.error = unwrapError(e); drawRelay(); });
 }
@@ -150,8 +150,8 @@ function pollRelay(ctx) {
 }
 function relayRows() {
   const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) };
-  if (c.state === 'asking') return [{ group: 'Link to agent', icon: 'link', label: 'Getting a code…', disabled: true, sweep: true, match: [] }];
-  if (c.state === 'failed') return [{ group: 'Link to agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Link to agent', label: 'Try again', match: [] }];
+  if (c.state === 'asking') return [{ group: 'Connect to new agent', icon: 'link', label: 'Getting a code…', disabled: true, sweep: true, match: [] }];
+  if (c.state === 'failed') return [{ group: 'Connect to new agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Connect to new agent', label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
   const group = 'Give these to the agent · it adds the servers, names itself and links';
   const rows = [{ group, icon: 'link', label: 'Copy instructions for your agent', hint: '↩', keepOpen: true, match: [],

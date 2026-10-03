@@ -76,7 +76,7 @@ const INSTRUCTIONS = 'Orbital is an outliner over Tana. Its owner hands you Tana
   + ' Only ids pass through Orbital: the words are in Tana.';
 const TOOLS = [
   { name: 'link_orbital', title: 'Link with Orbital',
-    description: 'Link yourself to the Orbital of the person you work for, with the one-time code they gave you (Orbital: Cmd+K, Link to agent). '
+    description: 'Link yourself to the Orbital of the person you work for, with the one-time code they gave you (Orbital: Cmd+K, Connect to new agent). '
       + 'Choose a short name for yourself: it is how you are shown in Orbital. Linking again with a new code moves you to that Orbital.',
     inputSchema: { type: 'object', properties: { code: { type: 'string', description: 'The link code, like 7KQX-M2PD' }, name: { type: 'string', description: 'A short name for yourself, shown in Orbital' } }, required: ['code', 'name'], additionalProperties: false } },
   { name: 'get_tasks', title: 'Get tasks from Orbital',
@@ -260,10 +260,10 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     }
     throw fail(400, 'unknown_method', 'Method not found', -32601);
   }
-  const NOT_LINKED = 'Not linked to an Orbital yet: ask the person you work for to run "Link to agent" in Orbital (Cmd+K), then call link_orbital with the code it gives them.';
+  const NOT_LINKED = 'Not linked to an Orbital yet: ask the person you work for to run "Connect to new agent" in Orbital (Cmd+K), then call link_orbital with the code it gives them.';
   async function linkOrbital(install, agent, args) {
     limit('link:' + install.id, LIMITS.links);
-    const code = text(args.code, 20).toUpperCase(), name = text(args.name, LIMITS.name), used = 'That code is unknown, used or expired: ask for a new one (Orbital: Cmd+K, Link to agent).';
+    const code = text(args.code, 20).toUpperCase(), name = text(args.name, LIMITS.name), used = 'That code is unknown, used or expired: ask for a new one (Orbital: Cmd+K, Connect to new agent).';
     if (!CODE.test(code)) throw fail(400, 'bad_code', 'That is not an Orbital link code: it looks like 7KQX-M2PD.');
     if (!name) throw fail(400, 'bad_name', 'Give yourself a short name: it is how you are shown in Orbital.');
     const row = await one('SELECT * FROM codes WHERE code = ?', code);

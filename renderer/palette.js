@@ -415,7 +415,7 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'demoMode', group: 'Settings', icon: 'demo', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
   if (tana.aiOptions) rows.push({ id: 'models', group: 'Settings', icon: 'brain', label: 'Choose models …', hint: 'Quick and Regular AI', keepOpen: true, run: openModelsPalette }); // renderer/settings.js
   if (tana.agentList) rows.push({ id: 'agents', group: 'Settings', icon: 'robot', label: 'Choose agents …', hint: agentsOn().map((a) => a.label).join(', '), keepOpen: true, run: openAgentsPalette });
-  if (tana.relayLink) rows.push({ id: 'linkAgent', group: 'Settings', icon: 'link', label: 'Link to agent …', hint: 'Any agent that takes an MCP server', keepOpen: true, run: () => openLinkPalette() }); // renderer/agent.js
+  if (tana.relayLink) rows.push({ id: 'linkAgent', group: 'Settings', icon: 'link', label: 'Connect to new agent …', hint: 'Any agent that takes an MCP server', keepOpen: true, run: () => openLinkPalette() }); // renderer/agent.js
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Turns on translation, Discuss with and more' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });

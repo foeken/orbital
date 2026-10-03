@@ -3913,7 +3913,7 @@ async function main() {
     assert.equal(agent.list().some((a) => a.linked), false, 'no agent is linked until one is');
     assert.equal(settings.get('relayKey'), undefined, 'and there is no Orbital at the relay until the first link');
     const link = await h('relay:link');
-    assert.match(link.code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/, 'Link to agent gets a code');
+    assert.match(link.code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/, 'Connect to new agent gets a code');
     assert.ok(link.prompt.includes(base + '/mcp') && link.prompt.includes(link.code), 'and a prompt carrying the server and the code, for the agent');
     const key = settings.get('relayKey');
     assert.match(key, /^[\w-]{43}$/, 'the first link makes your Orbital: one random key');

@@ -310,7 +310,7 @@ function mockApi() {
   const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true },
     { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: false, isDefault: false, missing: 'Install the ChatGPT app', setup: '' }, // found in the ChatGPT app (main/agents/dot.js appDot)
     { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true }];
-  const mockRelay = { polls: 0 }; // how often the Link to agent page has asked, since its code was made
+  const mockRelay = { polls: 0 }; // how often the Connect to new agent page has asked, since its code was made
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   const hiddenTitles = new Set(['Daily Brief Delivery', 'Private AI chat for*']); // Edit hidden items: an exact title and a prefix
@@ -697,7 +697,7 @@ function mockApi() {
       return mockAgents.map((x) => ({ ...x }));
     },
     setDefaultAgent: async (id) => { for (const a of mockAgents) a.isDefault = a.id === id; return mockAgents.map((x) => ({ ...x })); },
-    // Link to agent (main/agents/linked.js): a code, then GrokBot links itself on the third time the page asks
+    // Connect to new agent (main/agents/linked.js): a code, then GrokBot links itself on the third time the page asks
     relayLink: async () => { mockRelay.polls = 0; return { code: '7KQX-M2PD', expiresAt: Date.now() + 9 * 60e3 + 42e3, url: 'https://orbital.md/mcp',
       prompt: 'Add two MCP servers to yourself: Orbital at https://orbital.md/mcp and Tana at https://home.tana.inc/mcp. Then call Orbital\'s link_orbital tool with the code 7KQX-M2PD and a short name for yourself.' }; },
     relayLinkStatus: async () => {

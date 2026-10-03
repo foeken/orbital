@@ -9,7 +9,7 @@ task's id and a status. Your words never leave Tana.
 
 ## The flow
 
-1. **Cmd+K → Link to agent …** (renderer/agent.js) asks main for a code. The first time, main makes *your Orbital*:
+1. **Cmd+K → Connect to new agent …** (renderer/agent.js) asks main for a code. The first time, main makes *your Orbital*:
    one random key, kept in the Orbital settings document in Tana (`relayKey`, docs/SETTINGS.md), so every device
    signed into your Tana account is the same Orbital. The relay keeps only the key's hash, and makes the Orbital the
    first time that key asks for a code.

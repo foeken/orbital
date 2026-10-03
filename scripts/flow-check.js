@@ -595,12 +595,12 @@ flow('golden path: read notifications and settle proposals', async (p) => {
   assert.deepEqual(await p.js('__screen()'), before.filter((t) => !/^(Check out the new editor|Studio LT charter)$/.test(t)), 'the others stay');
 });
 
-// Link to agent (main/agents/linked.js, docs/AGENT-RELAY.md): ⌘K Link to agent shows the prompt that carries a one-time
+// Connect to new agent (main/agents/linked.js, docs/AGENT-RELAY.md): ⌘K Connect to new agent shows the prompt that carries a one-time
 // code; while the page waits the agent links itself (the mock's GrokBot, on the third time the page asks), the palette
 // closes on its name, and from then on it is one of your agents, with a page of its own to rename or unlink it
 flow('golden path: link an agent with a code, and it joins your agents', async (p) => {
   await p.start();
-  await command(p, 'link to agent', 'Link to agent \u2026');
+  await command(p, 'connect to new agent', 'Connect to new agent \u2026');
   await p.waitFor('palMode === "linkAgent" && palRows.length === 4', 'the instructions and the wait');
   assert.deepEqual(await p.js('[palRows[0].label, !!palRows[0].disabled, palIndex]'), ['Copy instructions for your agent', false, 0], 'the first row copies the instructions, and ↩ is on it');
   assert.match(await p.js('relayCtx.prompt'), /^Add two MCP servers to yourself: Orbital at https:\/\/orbital\.md\/mcp and Tana at https:\/\/home\.tana\.inc\/mcp\. Then .* 7KQX-M2PD and a short name for yourself\.$/, 'what it copies: both servers, and the code');
