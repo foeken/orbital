@@ -15,8 +15,8 @@ object Lists {
     fun days(rows: List<Row>, now: Instant, zone: TimeZone = TimeZone.currentSystemDefault()): List<Pair<String, List<Row>>> {
         val out = mutableListOf<Triple<String, String, MutableList<Row>>>() // the day, its heading, its rows
         for (row in rows) {
+            if (row.top) continue
             val t = row.timeline
-            if (t?.today == true || t?.upcoming == true || t?.free != null) continue
             val key = t?.day ?: ""
             if (out.lastOrNull()?.first == key) out.last().third.add(row) else out.add(Triple(key, Times.day(key, t?.dayTitle, now, zone), mutableListOf(row)))
         }

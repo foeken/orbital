@@ -66,6 +66,8 @@ data class Row(
     val instant: Instant get() = createdAt?.let(::parseTime) ?: Clock.System.now()
     val words: String get() = listOfNotNull(title, text, reference?.label).firstOrNull { it.isNotEmpty() } ?: ""
     val tone: String? get() = timeline?.tone
+    // above the days: Today's Tasks, the free time and Upcoming meetings (main/timeline.js pageOf)
+    val top: Boolean get() = timeline?.today == true || timeline?.upcoming == true || timeline?.free != null
     // the node a tap on this row zooms into: what it refers to, or the row itself when it is a node (an outline
     // block's own id is not)
     val target: String? get() = reference?.uri ?: id.takeIf { it.startsWith("tana:") }

@@ -1,9 +1,11 @@
 package com.dreetje.orbital
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonElement
@@ -14,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -175,12 +178,115 @@ class EngineTest {
 
     @Test fun signingOutForgetsTheSessionAndStartsOver() = runTest {
         val host = page()
-        val engine = ready(host)
+        val platform = FakePlatform()
+        val engine = ready(host, platform)
+        assertTrue(SavedTimeline.load(platform.files, clock) != null)
         engine.signOut()
         assertEquals(1, host.cookiesForgotten)
         assertTrue(engine.rows.isEmpty())
         assertNull(engine.email)
+        assertNull(SavedTimeline.load(platform.files, clock), "the saved Timeline goes with the session")
         assertEquals(Engine.SESSION, host.loaded.last())
+    }
+
+    // The last Timeline read (SavedTimeline): Today's Tasks above a day of entries, as the engine answered them
+    private val saved = """[{"id":"today","timeline":{"today":true},"children":[]},{"id":"free","timeline":{"free":{"from":0,"until":1}}},
+        {"id":"s:old","segments":[{"text":"Priya completed the plan"}],"timeline":{"tone":"done","day":"2026-10-02"}}]"""
+
+    private fun launched(host: FakeHost, platform: FakePlatform, demoMode: Boolean? = null, scope: TestScope) =
+        Engine(host, platform, scope.backgroundScope, demoMode = demoMode, now = { clock })
+
+    @Test fun theLastTimelineIsThereAtLaunchUntilTheReadLands() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        val host = page()
+        val engine = launched(host, platform, scope = this)
+        assertEquals(listOf("today", "s:old"), engine.rows.map { it.id }, "drawn before Tana answers, without a free time that has ended")
+        engine.start()
+        host.listener!!.said("ready")
+        runCurrent()
+        assertEquals(listOf("s:e1"), engine.rows.map { it.id })
+        assertEquals(listOf("s:e1"), SavedTimeline.load(platform.files, clock)!!.second.map { it.id }, "the read is what the next launch shows")
+    }
+
+    @Test fun aDayGoneByKeepsOnlyWhatHappened() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, "me@example.com", clock - 1.days)
+        assertEquals(listOf("s:old"), SavedTimeline.load(platform.files, clock)!!.second.map { it.id })
+    }
+
+    @Test fun anotherAccountsTimelineGoesOnceTanaSaysWhoIsSignedIn() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, "someone@example.com", clock)
+        val answers = page()
+        val host = FakeHost { body, args -> if ("orbital.timeline" in body) throw Exception("slow") else answers.answer(body, args) }
+        val engine = launched(host, platform, scope = this)
+        engine.start()
+        host.listener!!.said("ready")
+        runCurrent()
+        assertTrue(engine.rows.isEmpty())
+    }
+
+    @Test fun demoModeNeitherShowsNorKeepsTheTimeline() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        val host = page()
+        val engine = launched(host, platform, demoMode = true, scope = this)
+        assertTrue(engine.rows.isEmpty())
+        engine.start()
+        host.listener!!.said("ready")
+        runCurrent()
+        assertEquals(listOf("today", "s:old"), SavedTimeline.load(platform.files, clock)!!.second.map { it.id }, "a masked read is not kept")
+    }
+
+    @Test fun theFirstPartShowsAheadOfThePage() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        val whole = CompletableDeferred<String>()
+        val answers = page()
+        val host = FakeHost { body, args -> if ("orbital.timeline" in body) text(whole.await()) else answers.answer(body, args) }
+        val engine = launched(host, platform, scope = this)
+        engine.start()
+        host.listener!!.said("ready")
+        runCurrent()
+        host.listener!!.said("""part:[{"id":"today","timeline":{"today":true},"children":[{"id":"tana:text:n","title":"New today"}]}]""")
+        assertEquals(listOf("today", "s:old"), engine.rows.map { it.id }, "the part in place of Today's Tasks, the days under it kept")
+        assertEquals("tana:text:n", engine.rows.first().children!!.single().id)
+        whole.complete(timeline)
+        runCurrent()
+        assertEquals(listOf("s:e1"), engine.rows.map { it.id })
+        host.listener!!.said("""part:[{"id":"today","timeline":{"today":true}}]""")
+        assertEquals(listOf("s:e1"), engine.rows.map { it.id }, "a part told after the page is older than it")
+    }
+
+    @Test fun tanaOutOfReachKeepsTheSavedTimelineAndTriesAgain() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        val host = page()
+        val engine = launched(host, platform, scope = this)
+        engine.start()
+        host.listener!!.failed("net::ERR_INTERNET_DISCONNECTED")
+        assertEquals(listOf("today", "s:old"), engine.rows.map { it.id })
+        assertEquals("net::ERR_INTERNET_DISCONNECTED", engine.error)
+        engine.refresh() // pulled, or the app came back
+        assertEquals(Engine.Phase.Starting, engine.phase)
+        assertEquals(listOf(Engine.SESSION, Engine.SESSION), host.loaded)
+    }
+
+    @Test fun aWriteBeforeTanaConnectsWaitsForIt() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        val host = page()
+        val engine = launched(host, platform, scope = this)
+        engine.start()
+        launch { engine.markSensitive("tana:text:a", true) }
+        advanceTimeBy(500)
+        assertTrue(host.calls.none { "orbital.sensitive" in it.first }, "nothing asked of a page that is not there yet")
+        host.listener!!.said("ready")
+        runCurrent()
+        advanceTimeBy(200)
+        runCurrent()
+        assertTrue(host.calls.any { "orbital.sensitive" in it.first })
     }
 
     @Test fun theDemoChoiceIsKeptOnThisPhone() = runTest {
