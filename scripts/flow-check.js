@@ -314,7 +314,8 @@ flow('the Settings window writes what you pick and shows what is newest', async 
     '--user-data-dir=' + fs.mkdtempSync(path.join(os.tmpdir(), 'orbflow-')), 'about:blank'], { stdio: 'ignore' });
   let failed = 0;
   try {
-    let t; for (let i = 0; i < 60 && !t; i++) { await sleep(200); try { t = (await (await fetch('http://127.0.0.1:' + port + '/json')).json()).find((x) => x.type === 'page'); } catch { /* not up yet */ } }
+    // up to 30 s: a CI runner once took longer than 12 to start Chrome; a Chrome that is up answers on the first tries
+    let t; for (let i = 0; i < 150 && !t; i++) { await sleep(200); try { t = (await (await fetch('http://127.0.0.1:' + port + '/json')).json()).find((x) => x.type === 'page'); } catch { /* not up yet */ } }
     if (!t) throw new Error('Chromium did not start: ' + chrome);
     const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => { ws.onopen = r; });
     let id = 0; const waiting = new Map();

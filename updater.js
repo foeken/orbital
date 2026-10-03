@@ -1,8 +1,9 @@
 // Updates, without Squirrel. Squirrel.Mac verifies that the incoming bundle's signature matches the running one and
 // re-launches through its own helper; swapping the bundle after we quit is a dozen lines and `ditto` keeps both the
-// Developer ID signature and the stapled ticket intact. Releases live in their own public repo (the source repo is
-// private), so the check is an unauthenticated GitHub API call: no token, no gh CLI, and anyone can update.
-// scripts/release.sh publishes exactly what this downloads.
+// Developer ID signature and the stapled ticket intact. Releases live in this public repo, so the check is an
+// unauthenticated GitHub API call: no token, no gh CLI, and anyone can update. scripts/release.sh publishes exactly
+// what this downloads. Copies up to 0.9.1 read foeken/orbital-releases instead, where release.sh mirrors each release
+// until they have all moved: one update from there brings them to a copy that reads this repo.
 // What a check finds is shown on the update card (update.html, #667): the notes of every release since this one, then
 // a progress bar while the newest downloads and is checked, until the app quits to swap itself.
 const { app, dialog } = require('electron');
@@ -16,7 +17,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { blocks, segments } = require('./sdk/chat'); // the markdown the chat draws: release notes are the same kind
 
-const REPO = 'foeken/orbital-releases';
+const REPO = 'foeken/orbital';
 const run = promisify(execFile);
 
 // Release tags are npm versions ("v0.2.10"), which is all release.sh ever writes, so three integers decide it.

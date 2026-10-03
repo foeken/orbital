@@ -1,0 +1,12 @@
+# What may not land in a commit, checked by gitleaks (the secrets job in .github/workflows/ci.yml, npm run secrets):
+# gitleaks' own rules for keys and tokens, and one of Orbital's. Nobody's real Tana content belongs in this repo
+# (AGENTS.md), and the usual way it gets in is a real meeting, space or document quoted in a test or a comment: use
+# invented ones (renderer/mock.js, ios/Orbital/*-sample.json).
+[extend]
+useDefault = true
+
+[[rules]]
+id = "real-work-content"
+description = "A real workplace named in code, a test or a doc: use invented content"
+regex = '''(?i)\bnedap\b'''
+keywords = ["nedap"]
