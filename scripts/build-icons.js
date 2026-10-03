@@ -86,7 +86,7 @@ WANT.imageSparkle = path.join(__dirname, '..', 'build', 'icons', 'image-sparkle-
 WANT.language = path.join(__dirname, '..', 'build', 'icons', 'language.svg'); // Cmd+K Replace with translation (renderer/palette.js)
 WANT.checklist = path.join(__dirname, '..', 'build', 'icons', 'checkbox-checked.svg'); // the "/" menu's Checklist row (#602), Nucleo UI 18px outline
 WANT.filterPlus = path.join(__dirname, '..', 'build', 'icons', 'filter-2-plus.svg'); // the field pills' "Add filter" (renderer/pills.js foldFields, #624): the filter glyph with a plus, Nucleo UI 18px outline
-WANT.demo = path.join(__dirname, '..', 'build', 'icons', 'gaming-blocks.svg'); // Demo mode, on the desktop's Cmd+K row and in both phones' Settings: toy blocks, playing with made-up words. Nucleo UI 18px outline
+WANT.demo = path.join(__dirname, '..', 'build', 'icons', 'pinwheel.svg'); // Demo mode, on the desktop's Cmd+K row and in both phones' Settings: a toy, playing with made-up words. Nucleo UI 18px outline
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   if (!SRC && !path.isAbsolute(file)) { if (!current[name]) throw new Error(name + ' needs the icon set: node scripts/build-icons.js <dir>'); out[name] = current[name]; continue; }
