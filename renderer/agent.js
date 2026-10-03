@@ -83,7 +83,7 @@ function agentsRows(q) {
     disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
   if (tana.relayLink) {
     const linked = agentList.filter((a) => a.linked);
-    for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label + ' \u2026', keepOpen: true,
+    for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
     rows.push({ group: AGENTS_GROUP, icon: 'chatgpt', label: 'Connect to your OpenAI Dot …', hint: 'Orbital and Tana in ChatGPT, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
   }

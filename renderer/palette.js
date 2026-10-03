@@ -420,7 +420,7 @@ function paletteRows(q, typed = q) {
   if (tana.agentList) rows.push({ id: 'agents', group: 'Settings', icon: 'robot', label: 'Choose agents …', hint: agentsOn().map((a) => a.label).join(', '), keepOpen: true, run: openAgentsPalette });
   if (tana.agentList && tana.setDefaultAgent) { const d = agentsOn().find((x) => x.isDefault) || agentNamed('tana'); rows.push({ id: 'defaultAgent', group: 'Settings', icon: (d && d.icon) || 'robot', label: 'Set default agent …', hint: (d && d.label) || 'Tana', keepOpen: true, run: openDefaultAgentPalette }); } // renderer/agent.js
   // a new key for your Orbital at orbital.md, when the old one may have been seen: the agents stay linked (main/agents/linked.js resetKey)
-  if (tana.relayReset && agentList.some((x) => x.linked)) rows.push({ id: 'relayReset', group: 'Settings', icon: 'lock', label: 'Reset agent link key', hint: 'If it may have been seen: your agents stay linked',
+  if (tana.relayReset && agentList.some((x) => x.linked)) rows.push({ id: 'relayReset', group: 'Settings', icon: 'linkReset', label: 'Reset agent link key', hint: 'If it may have been seen: your agents stay linked',
     run: () => run(async () => { await tana.relayReset(); showNote('New link key: your agents stay linked'); }) });
   if (tana.relayLink) rows.push({ id: 'linkAgent', group: 'Settings', icon: 'chatgpt', label: 'Connect to your OpenAI Dot …', hint: 'Orbital and Tana in ChatGPT, then a code', keepOpen: true, run: () => openLinkPalette() }); // renderer/agent.js
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',

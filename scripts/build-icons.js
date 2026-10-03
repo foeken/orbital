@@ -89,6 +89,7 @@ WANT.filterPlus = path.join(__dirname, '..', 'build', 'icons', 'filter-2-plus.sv
 WANT.demo = path.join(__dirname, '..', 'build', 'icons', 'pinwheel.svg'); // Demo mode, on the desktop's Cmd+K row and in both phones' Settings: a toy, playing with made-up words. Nucleo UI 18px outline
 WANT.prompt = path.join(__dirname, '..', 'build', 'icons', 'chat-task.svg'); // Connect to your OpenAI Dot's "Copy the message for your Dot": a chat bubble holding a prompt. Nucleo UI 18px outline
 WANT.orbital = path.join(__dirname, '..', 'build', 'icons', 'orbital.svg'); // Orbital's own planet (build/orbital-symbol.svg), on the row with its MCP server's URL. Nucleo UI 18px outline
+WANT.linkReset = path.join(__dirname, '..', 'build', 'icons', 'link-slash.svg'); // Cmd+K Reset agent link key: the old link cut. Nucleo UI 18px outline
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   if (!SRC && !path.isAbsolute(file)) { if (!current[name]) throw new Error(name + ' needs the icon set: node scripts/build-icons.js <dir>'); out[name] = current[name]; continue; }

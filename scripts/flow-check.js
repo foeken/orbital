@@ -615,17 +615,17 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   assert.deepEqual(await p.js('palRows.filter((r) => r.hint === "✓").map((r) => r.label)'), ['Dot'], 'linking your Dot made it the default');
   await closePalette(p);
   await command(p, 'choose agents', 'Choose agents \u2026');
-  await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "Dot \u2026")', 'your Dot among your agents');
-  assert.equal(await p.js('palRows.find((r) => r.label === "Dot \u2026").icon'), 'robot', 'drawn with the same glyph as the other agents');
-  assert.deepEqual(await p.js('(({ group, hint }) => [group, hint])(palRows.find((r) => r.label === "Dot \u2026"))'), ['Agents', 'On · ChatGPT · seen just now'], 'among the agents, on, and where it runs');
+  await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "Dot")', 'your Dot among your agents');
+  assert.equal(await p.js('palRows.find((r) => r.label === "Dot").icon'), 'robot', 'drawn with the same glyph as the other agents');
+  assert.deepEqual(await p.js('(({ group, hint }) => [group, hint])(palRows.find((r) => r.label === "Dot"))'), ['Agents', 'On · ChatGPT · seen just now'], 'among the agents, on, and where it runs');
   assert.equal(await p.js('palRows.some((r) => /default/i.test(r.group))'), false, 'the default is picked elsewhere');
   await p.type('dot');
-  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Dot \u2026"', 'its row');
+  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Dot"', 'its row');
   await p.key('↩');
   await p.waitFor('palMode === "linkedAgent"', 'its page');
   assert.deepEqual(await p.js('palRows.map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
   await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink"', 'Unlink'); await p.key('↩');
-  await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot \u2026")', 'Choose agents without it');
+  await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot")', 'Choose agents without it');
   await closePalette(p);
 });
 
