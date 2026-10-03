@@ -111,8 +111,13 @@ hold a deploy (or a change nobody meant) against this repository.
 - **Lifetimes**: a subscription as long as granted; a code an hour after it ran out; access tokens last an hour, refresh
   tokens 90 days; a connection with no token and no link goes after an hour, and a registered client that never signed
   in after a day. Nothing is logged but the kind of an unexpected failure.
-- **Limits**: 32 KB a request, 16 KB of data an event, 50 agents, ten subscriptions a connection, five open codes, 120
-  calls a minute per caller.
+- **Limits**: 32 KB a request, 16 KB of data an event (in UTF-8 bytes, as it goes over the wire), 50 agents, ten
+  subscriptions a connection, five open codes, 120 calls a minute per caller.
+- **Callbacks reach public addresses only**: every address a callback's name resolves to, and an IP literal itself, is
+  checked against loopback, private, link-local and metadata ranges, an IPv4 address written as IPv6 in any spelling
+  included (`::ffff:7f00:1` is how the URL parser writes `[::ffff:127.0.0.1]`). No redirects are followed.
+- **One Orbital per key**: a unique index on the key's hash, and creation that reads the one row back, so two first asks
+  at once cannot split a key's agents over two Orbitals.
 
 ## Running and deploying
 
@@ -129,4 +134,3 @@ At orbital.md (the Replit App behind it, the same one the manual is published to
 and the relay is a service of its own that takes `/mcp` and the `/.well-known/` OAuth paths, running `relay/server.js`
 as copied from this repository, with Replit's PostgreSQL (`DATABASE_URL`). A schema change (a table made or dropped)
 needs that App published once from the Replit website, which reviews schema changes. The rate limits are per instance.
-

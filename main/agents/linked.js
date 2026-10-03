@@ -161,7 +161,8 @@ async function unlink(id) {
   const a = linkedOf(id);
   await call('DELETE', '/orbital/agents/' + a.id);
   if (agent.enabledIds().includes(id)) agent.setEnabled(id, false);
-  for (const [nodeId, link] of Object.entries(agent.links())) if (link.agent === id) agent.clearTask(nodeId);
+  // its nodes are unassigned as well, status line and all: an agent that is gone keeps no badge
+  for (const [nodeId, link] of Object.entries(agent.links())) if (link.agent === id) { await documents.setAgentMark(nodeId, false); agent.clearTask(nodeId); }
   await refresh();
   return agent.list();
 }

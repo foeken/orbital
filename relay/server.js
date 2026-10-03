@@ -56,6 +56,8 @@ const TABLES = {
 };
 const SCHEMA = [...Object.entries(TABLES).map(([name, cols]) => 'CREATE TABLE IF NOT EXISTS ' + name + ' (' + cols + ')'),
   'CREATE INDEX IF NOT EXISTS subscriptions_install ON subscriptions (install)',
+  // one Orbital per key: two first asks at once must not make two (orbitalFrom inserts, then reads the one row back)
+  'CREATE UNIQUE INDEX IF NOT EXISTS orbitals_secret ON orbitals (secret)',
   // the queue and the statuses an earlier relay kept (node ids, task ids, statuses): nothing reads them any more
   'DROP TABLE IF EXISTS messages', 'DROP TABLE IF EXISTS tasks', 'DROP TABLE IF EXISTS updates'];
 
@@ -109,12 +111,23 @@ const BLOCKED = new net.BlockList();
 for (const [a, p] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24],
   ['192.88.99.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4]]) BLOCKED.addSubnet(a, p, 'ipv4');
 for (const [a, p] of [['::', 96], ['::1', 128], ['64:ff9b::', 96], ['100::', 64], ['2001::', 32], ['2001:db8::', 32], ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]]) BLOCKED.addSubnet(a, p, 'ipv6');
+// An IPv4 address written as IPv6 (::ffff:a.b.c.d, or ::ffff:7f00:1 as the URL parser rewrites it, or the translated
+// ::ffff:0:…), in any spelling: the IPv4 address inside, or null. (No ::ffff:0:0/96 rule in BLOCKED: BlockList would
+// match every IPv4 address against it.)
+function mappedIPv4(ip) {
+  let s = ip.toLowerCase().replace(/%.*$/, '');
+  const dotted = /^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(s);
+  if (dotted) { const [a, b, c, d] = dotted.slice(2).map(Number); s = dotted[1] + ((a << 8) | b).toString(16) + ':' + ((c << 8) | d).toString(16); }
+  const [head, tail] = s.split('::'), h = head ? head.split(':') : [], t = tail ? tail.split(':') : [];
+  const g = (tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t]).map((x) => parseInt(x, 16));
+  if (g.length !== 8 || g.slice(0, 4).some(Boolean) || !((g[4] === 0 && g[5] === 0xffff) || (g[4] === 0xffff && g[5] === 0))) return null;
+  return [g[6] >> 8, g[6] & 255, g[7] >> 8, g[7] & 255].join('.');
+}
 function isPublicAddress(ip) {
   const family = net.isIP(ip);
   if (!family) return false;
-  // (no ::ffff:0:0/96 rule in BLOCKED: BlockList would match every IPv4 address against it)
-  const mapped = family === 6 && /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip); // an IPv4 address written as IPv6 is that IPv4 address
-  return mapped ? isPublicAddress(mapped[1]) : !BLOCKED.check(ip, family === 4 ? 'ipv4' : 'ipv6');
+  const v4 = family === 6 && mappedIPv4(ip);
+  return v4 ? isPublicAddress(v4) : !BLOCKED.check(ip, family === 4 ? 'ipv4' : 'ipv6');
 }
 // every address the name resolves to must be public, or the call is not made
 function publicLookup(hostname, options, callback) {
@@ -447,12 +460,13 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     if (!m) throw fail(401, 'unauthorized', 'No Orbital key');
     const keyHash = hash(m[1]);
     limit('o:' + keyHash);
-    const row = await one('SELECT * FROM orbitals WHERE secret = ?', keyHash);
+    const find = () => one('SELECT * FROM orbitals WHERE secret = ? ORDER BY created, id LIMIT 1', keyHash);
+    const row = await find();
     if (row) return row;
     if (!mayCreate) throw fail(401, 'unauthorized', 'Unknown Orbital key');
-    const made = { id: crypto.randomUUID(), secret: keyHash, created: now() };
-    await run('INSERT INTO orbitals VALUES (?, ?, ?)', made.id, made.secret, made.created);
-    return made;
+    // a twin request may make it first: the one row the key has is the Orbital, whichever request wrote it
+    await run('INSERT INTO orbitals VALUES (?, ?, ?) ON CONFLICT DO NOTHING', crypto.randomUUID(), keyHash, now());
+    return find();
   }
   const agentView = (a) => ({ id: a.id, name: a.name, app: a.app || '', linkedAt: Number(a.linked), seenAt: a.seen == null ? null : Number(a.seen) });
   async function orbitalApi(req, res, route) {
@@ -498,7 +512,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
         const b = await body(req), data = b.data;
         if (!UUID.test(String(b.id || ''))) throw fail(400, 'bad_id', 'id: a UUID');
         if (!EVENTS.some((e) => e.name === b.name)) throw fail(400, 'bad_event', 'name is one of: ' + EVENTS.map((e) => e.name).join(', '));
-        if (!data || typeof data !== 'object' || Array.isArray(data) || JSON.stringify(data).length > LIMITS.eventData) throw fail(400, 'bad_data', 'data: an object, up to 8 KB');
+        if (!data || typeof data !== 'object' || Array.isArray(data) || Buffer.byteLength(JSON.stringify(data)) > LIMITS.eventData) throw fail(400, 'bad_data', 'data: an object, up to 16 KB');
         return send(res, 200, await announce(a, { id: b.id, name: b.name, data, at: now() }));
       }
     }

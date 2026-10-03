@@ -9,7 +9,7 @@ require('./tana');
 require('./codex');
 require('./claude');
 const linked = require('./linked'); // the agents linked through orbital.md/mcp (your Dot), one plugin each, as they come and go
-const { agentIds, setAgentMark } = require('../documents');
+const { agentIds, setAgentMark, agentPrompt, agentStatus, writeAgentStatus } = require('../documents');
 const { readNode } = require('../../sdk/node');
 const { S, pageOf } = require('../state');
 const settings = require('../settings');
@@ -19,9 +19,13 @@ const ready = (id) => { const a = agent.get(id); if (!a || !agent.usable(id)) th
 
 // Handing a node to an agent. A node already linked to a task of this agent hands that task the new request; anything
 // else starts a new task. A handoff that fails leaves no mark behind on a node that had none: the mark is a synced
-// setting, so it would reach the other machines as a pending badge for work nobody took.
+// setting, so it would reach the other machines as a pending badge for work nobody took. On a node that had one, it
+// puts back what was there (restore below): its task link still names the earlier request.
 async function assign(id, prompt, agentId = agent.defaultAgent()) {
   const a = ready(agentId), was = agentIds().includes(id);
+  const held = was && agent.taskLink(id), heldBy = held && agent.get(held.agent);
+  const before = was ? { prompt: agentPrompt(id), linked: !!(heldBy && heldBy.linked) } : null;
+  if (before && before.linked) before.status = await agentStatus(id).catch(() => null);
   let started = false; // a new task was begun: on failure it is let go (a Codex writer otherwise runs on, hidden), a resumed one is not
   try {
     // an agent linked through orbital.md (your Dot) gets the request in its event, not in the node: the node stays content
@@ -44,8 +48,16 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
   } catch (error) {
     if (started && a.release) await a.release(id).catch(() => {});
     if (!was && agentIds().includes(id)) { await setAgentMark(id, false); agent.clearTask(id); }
+    else if (before) await restore(id, before).catch(() => {});
     throw error;
   }
+}
+// The node as its earlier handoff left it: that request, as an Agent context block or, for an agent linked through
+// orbital.md, in the mark alone, with the status line that agent last wrote
+async function restore(id, { prompt, linked, status }) {
+  await setAgentMark(id, false);
+  await setAgentMark(id, true, prompt, !linked);
+  if (linked && status) await writeAgentStatus(id, status[0].toUpperCase() + status.slice(1));
 }
 // What a plugin still holds for a node's previous task (a Codex writer) is let go before the link moves on: a later
 // unassign releases only the agent the link then names (#671 review)

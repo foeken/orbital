@@ -7,11 +7,14 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { createRelay, postgresStore, TTL, LIMITS, isPublicAddress } = require('../relay/server');
+const { createRelay, sqliteStore, postgresStore, TTL, LIMITS, isPublicAddress } = require('../relay/server');
 
 let clock = Date.UTC(2026, 9, 3, 12);
 // RELAY_CHECK_DATABASE_URL runs the same check on PostgreSQL (an empty database: it makes its tables), as a host would
-const store = process.env.RELAY_CHECK_DATABASE_URL ? postgresStore(process.env.RELAY_CHECK_DATABASE_URL) : undefined;
+const base = process.env.RELAY_CHECK_DATABASE_URL ? postgresStore(process.env.RELAY_CHECK_DATABASE_URL) : sqliteStore();
+// slow: an Orbital's lookup answered late while it is set, so two requests both miss it before either writes (the twin test below)
+let slow = false;
+const store = { ...base, one: async (sql, ...a) => { const row = await base.one(sql, ...a); if (slow && /FROM orbitals/.test(sql)) await new Promise((r) => setTimeout(r, 30)); return row; } };
 // the agents' event callbacks (MCP Events): every POST the relay makes is kept here, and answered as a receiver would
 const posted = [];
 const echo = (body) => ({ status: 200, text: JSON.parse(body).type === 'verification' ? JSON.stringify({ challenge: JSON.parse(body).challenge }) : '' });
@@ -121,6 +124,7 @@ const server = http.createServer(relay.handle);
   assert.equal((await send(G, crypto.randomUUID(), 'task.deleted')).status, 400, 'and a name the relay lists');
   assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', ['x'])).status, 400, 'its data is an object');
   assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { note: 'x'.repeat(17000) })).status, 400, 'of at most 16 KB');
+  assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { note: '会'.repeat(6000) })).status, 400, 'counted in bytes, as it goes over the wire');
   assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { node: NODE }, stranger)).status, 401, 'and only its own Orbital sends it one');
   assert.deepEqual((await send(G, crypto.randomUUID())).json, { subscribers: 0, delivered: 0 }, 'an agent that has not subscribed hears nothing, and Orbital is told so');
   assert.equal(posted.length, 0, 'nothing was sent, and nothing is kept for later');
@@ -207,6 +211,9 @@ const server = http.createServer(relay.handle);
   // only public addresses are called back
   assert.deepEqual(['8.8.8.8', '2606:4700::1111', '127.0.0.1', '10.1.2.3', '169.254.169.254', '192.168.1.1', '::1', 'fd00::1', '::ffff:127.0.0.1', 'fe80::1', 'localhost'].map(isPublicAddress),
     [true, true, false, false, false, false, false, false, false, false, false], 'loopback, private, link-local and cloud metadata addresses are never called');
+  assert.deepEqual(['::ffff:7f00:1', '0:0:0:0:0:ffff:a9fe:a9fe', '::FFFF:192.168.1.1', '::ffff:0:a00:1', '::ffff:808:808'].map(isPublicAddress), [false, false, false, false, true],
+    'nor an IPv4 address written as IPv6 in any spelling: hex, written out, upper case, translated');
+  assert.equal(isPublicAddress(new URL('https://[::ffff:127.0.0.1]/').hostname.replace(/^\[|\]$/g, '')), false, 'including the hex the URL parser turns a callback\'s dotted form into');
 
   // ---- limits a caller cannot pick: the address the proxy appended, failed codes counted across every connection ----
   const reg = (first) => call('POST', '/mcp/oauth/register', { forwarded: first + ', 198.51.100.7', body: { redirect_uris: ['https://agents.example/r'] } });
@@ -226,6 +233,13 @@ const server = http.createServer(relay.handle);
   assert.equal(isPublicAddress('::7f00:1'), false, 'an IPv4 address written the old IPv6 way is not public either');
 
   // ---- what the database holds: ids, and no key or token as itself (only their hashes) ----
+  // two first asks for a code at once, with a key the relay has not seen: one Orbital, not two
+  const twin = { key: newKey() }, twinHash = crypto.createHash('sha256').update(twin.key).digest('base64url');
+  slow = true;
+  const asked = await Promise.all([1, 2].map(() => call('POST', '/mcp/orbital/codes', { auth: as(twin) })));
+  slow = false;
+  assert.deepEqual(asked.map((a) => a.status), [201, 201], 'both get a code');
+  assert.equal((await relay.dump()).split(twinHash).length - 1, 1, 'and the key is one Orbital');
   const rows = await relay.dump();
   for (const secret of [firstKey, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
 

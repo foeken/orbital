@@ -3754,6 +3754,13 @@ async function main() {
     created.length = 0;
     await set(task.id, true, 'Have another go');
     assert.equal(created.length, 1, 'so assigning again creates a fresh task rather than reopening the old one');
+    // A reassignment that fails puts the node back as it was: the task link still names the earlier request
+    const linkBefore = JSON.stringify(backend.agent.taskLink(task.id)), resume = cx.resume;
+    cx.resume = async () => { throw new Error('Codex is not answering'); };
+    await assert.rejects(() => set(task.id, true, 'Something else entirely'), /Codex is not answering/, 'a reassignment the task does not take fails');
+    assert.deepEqual([await assigned(), (cache.setting('codexPrompt') || {})[task.id], context()[0].children.map((n) => n.text).join('|'), JSON.stringify(backend.agent.taskLink(task.id))],
+      [task.id, 'Have another go', 'Have another go', linkBefore], 'and leaves the node assigned, with the earlier request in the settings and in the node, beside the task it went to');
+    cx.resume = resume;
     // An assignment with nothing typed writes nothing into the document — there is no context to add.
     const beforeBlocks = outline.readOutline(task).length, beforeContext = context()[0].children.map((n) => n.text).join('|');
     await set(task.id, true);
@@ -3919,6 +3926,7 @@ async function main() {
     assert.equal(docs.lastAgentStatus('Agent status: Completed\nAgent status: Assigned'), 'assigned', 'so a handoff after an old Completed is the current one');
     assert.equal(docs.lastAgentStatus('Agent status: Assigned\nagent status: working'), 'working', 'until the agent says it started');
     assert.equal(docs.lastAgentStatus('The agent status: Failed was a guess\nAgent status: maybe'), null, 'and only a line that starts with it and names one of the three counts');
+    assert.equal(docs.lastAgentStatus('Agent status: Completed\nAgent status: Working with finance'), 'completed', 'and only the whole line: a sentence that starts the same way is somebody\'s words');
     docs.writeAgentStatus = realWrite; docs.agentStatus = realStatus;
     // rename; switched off stays off on a device that sees the agent for the first time; a new key; unlink
     assert.equal((await h('relay:rename', id, 'Grok')).find((a) => a.id === id).label, 'Grok', 'renamed in Orbital');
@@ -3930,8 +3938,9 @@ async function main() {
     await h('relay:reset');
     assert.notEqual(settings.get('relayKey'), key, 'a new key');
     assert.equal((await h('relay:refresh')).some((a) => a.id === id), true, 'whose agents stay linked');
+    settings.set('codex', [...docs.agentIds(), NODE]);
     assert.equal((await h('relay:unlink', id)).some((a) => a.id === id), false, 'unlinked, it leaves the list');
-    assert.equal(agent.links()[NODE], undefined, 'and the node lets go of its task');
+    assert.deepEqual([agent.links()[NODE], docs.agentIds().includes(NODE)], [undefined, false], 'and its node lets go of its task and is no longer assigned: no badge for an agent that is gone');
     docs.mut = realMut; docs.op = realOp; await relay.close(); server.close();
     console.log('ok  linked agents: linked with a code, named by themselves, a node handed over as one event to a subscriber, the badge from its last Agent status line, renamed, off, a new key, unlinked');
   }

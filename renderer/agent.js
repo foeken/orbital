@@ -181,7 +181,7 @@ function linkedAgentRows(q) {
     { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, left out of Assign to Agent' : 'Back in Assign to Agent', keepOpen: true,
       run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) },
     { group, icon: 'trash', label: 'Unlink', hint: 'It can no longer take tasks from Orbital', keepOpen: true,
-      run: () => run(async () => { agentList = await tana.relayUnlink(a.id); showNote('Unlinked ' + a.label); openAgentsPalette(); }) },
+      run: () => run(async () => { agentList = await tana.relayUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) }, // its nodes were unassigned too
   ];
   return q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows;
 }

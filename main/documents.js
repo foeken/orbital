@@ -754,7 +754,9 @@ function writeAgentContext(id, prompt) {
 // Working as it starts, so its pickup shows, and to Completed or Failed when it is done. Ordinary content,
 // so whoever opens the node sees it, in Tana too; the last one wins, so a handoff added after an old Completed is the
 // current one.
-const AGENT_STATUS = /^\s*Agent status:\s*(Assigned|Working|Completed|Failed)\b/i;
+// The whole line, a full stop allowed: "Agent status: Working with finance" is somebody's sentence, never a status to
+// show or to take out of the node
+const AGENT_STATUS = /^\s*Agent status:\s*(Assigned|Working|Completed|Failed)\s*\.?\s*$/i;
 const lastAgentStatus = (text) => { let last = null; for (const line of String(text || '').split('\n')) { const m = line.match(AGENT_STATUS); if (m) last = m[1].toLowerCase(); } return last; };
 // The status is one line, the node's last (written for an agent linked through orbital.md): what was there is replaced.
 const writeAgentStatus = (id, status) => mut(id, (doc) => {
@@ -764,6 +766,7 @@ const writeAgentStatus = (id, status) => mut(id, (doc) => {
   return content.insertAfter(doc, null, 'Agent status: ' + status);
 });
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
+const agentPrompt = (id) => codexPrompts()[id]; // what the node's agent was last asked, for a reassignment that fails to put back
 // Unassigned: the Agent context block goes, with its status line, and any status line an older build left on its own
 const removeAgentContext = (id) => mut(id, (doc) => {
   for (const n of content.readOutline(doc)) if ((n.text || '').trim() === AGENT_HEADING || AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
@@ -1449,4 +1452,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { agentPrompt, forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
