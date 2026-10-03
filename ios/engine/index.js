@@ -402,6 +402,7 @@ window.orbital = {
   },
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
   email: () => (last && last.user && last.user.email) || null,
+  account: () => (S.me ? S.me.userUri + '@' + S.me.orgId : null), // who in which workspace, as the settings mirror keys it (stand-ins.js ns): what the app keeps its saved Timeline for
   // Zooming into a node: what it holds, as the desktop's page for it shows. A chat is its conversation (sdk/chat.js,
   // docs/CHATS.md), a saved search its results, a meeting the documents it owns (its write-up, its outcomes), anything
   // else its outline (sdk/content.js).

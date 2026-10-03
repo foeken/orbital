@@ -85,6 +85,7 @@ class Engine(
             platform.store.set("demoMode", if (on) "true" else null)
             opened.clear() // a page read before it was turned on or off shows its words as they were then
             partsFor = null // what a read under way brings is the other mode's
+            if (on && !isSample) rows = emptyList() // the real words go at once, rather than staying until the masked read lands, or for good with Tana out of reach
             scope.launch { refresh() }
         }
 
@@ -106,6 +107,7 @@ class Engine(
     private var session = 0 // counts sign-outs: a read that began before one never saves or shows what it got
     private var again = false // a change told while a read is under way: one more read follows it
     private var savedFor: String? = null // whose the saved Timeline on screen is, until Tana says who is signed in
+    private var account: String? = null // who is signed in, in which workspace (orbital.account): what the saved Timeline is kept for
     private var partsFor: Int? = null // the session whose Timeline read is under way, taking its first part (show)
     // the last read of each node opened, newest last: a page gone back to shows it at once while it is read again, as
     // the iPhone's NavigationStack keeps the page under the one on top (NodeScreen starts from cached(id))
@@ -120,7 +122,7 @@ class Engine(
             phase = Phase.Ready
         } else if (host != null && !demoOn) {
             // the last Timeline read, on screen at once while Tana connects (SavedTimeline); never in demo mode
-            SavedTimeline.load(platform.files, now())?.let { (email, saved) -> rows = saved; savedFor = email }
+            SavedTimeline.load(platform.files, now())?.let { (whose, saved) -> rows = saved; savedFor = whose }
         }
     }
 
@@ -178,7 +180,8 @@ class Engine(
                 ok -> {
                     justSignedIn = false
                     email = maybe { host.run("return orbital.email()").jsonPrimitive.contentOrNull }
-                    if (savedFor != null && savedFor != email) rows = emptyList() // the saved Timeline was another account's
+                    account = maybe { host.run("return orbital.account()").jsonPrimitive.contentOrNull }
+                    if (savedFor != null && savedFor != account) rows = emptyList() // the saved Timeline was another account's, or another workspace's
                     savedFor = null
                     host.keepCookies() // at once: the refresh may not finish
                     phase = Phase.Ready
@@ -255,7 +258,7 @@ class Engine(
             partsFor = null // a part told late is older than this
             if (started != session || masked != demo) return // signed out meanwhile, or demo mode switched: the read it asked for shows
             rows = read
-            email?.let { if (!demo && pages == 1) SavedTimeline.save(platform.files, raw, it, now()) } // what the next launch shows first
+            account?.let { if (!demo && pages == 1) SavedTimeline.save(platform.files, raw, it, now()) } // what the next launch shows first
             error = null
             settle(rows)
             maybe { call<Setup>("return await orbital.setup()") }?.let { setup ->
@@ -300,7 +303,7 @@ class Engine(
         maybe { host.run("await orbital.signOut()") }
         host.forgetCookies()
         SavedTimeline.forget(platform.files)
-        rows = emptyList(); states.clear(); removed = emptySet(); email = null; pages = 1; opened.clear()
+        rows = emptyList(); states.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear()
         note("signed out")
         start()
     }
@@ -538,17 +541,17 @@ fun Value.asJson(): Map<String, String> = listOfNotNull(ref?.let { "ref" to it }
 // Today's Tasks and Upcoming meetings come with the read, as does a free time that has ended.
 object SavedTimeline {
     private const val KEY = "timeline"
-    @kotlinx.serialization.Serializable private class Saved(val email: String, val at: Double, val rows: List<Row>)
+    @kotlinx.serialization.Serializable private class Saved(val account: String, val at: Double, val rows: List<Row>)
 
     // rows: as engine.js answered them, kept as they came
-    fun save(files: Store, rows: String, email: String, now: Instant) =
-        files.set(KEY, "{\"email\":" + JsonPrimitive(email) + ",\"at\":" + now.toEpochMilliseconds() / 1000.0 + ",\"rows\":" + rows + "}")
+    fun save(files: Store, rows: String, account: String, now: Instant) =
+        files.set(KEY, "{\"account\":" + JsonPrimitive(account) + ",\"at\":" + now.toEpochMilliseconds() / 1000.0 + ",\"rows\":" + rows + "}")
 
     fun load(files: Store, now: Instant, zone: TimeZone = TimeZone.currentSystemDefault()): Pair<String, List<Row>>? {
         val saved = files.get(KEY)?.let { runCatching { json.decodeFromString<Saved>(it) }.getOrNull() } ?: return null
         val today = Instant.fromEpochMilliseconds((saved.at * 1000).toLong()).toLocalDateTime(zone).date == now.toLocalDateTime(zone).date
         val ms = now.toEpochMilliseconds().toDouble()
-        return saved.email to saved.rows.filter { row -> if (today) (row.timeline?.free?.until ?: Double.POSITIVE_INFINITY) > ms else !row.top }
+        return saved.account to saved.rows.filter { row -> if (today) (row.timeline?.free?.until ?: Double.POSITIVE_INFINITY) > ms else !row.top }
     }
 
     fun forget(files: Store) = files.set(KEY, null)

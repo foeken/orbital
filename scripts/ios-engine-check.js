@@ -211,6 +211,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.strictEqual(await fromPage.orbital.connect(), true);
   assert.ok(!fromPage.calls.some((c) => c.startsWith('/api/auth/session')), 'the page is the session: not asked twice');
   assert.strictEqual(fromPage.orbital.email(), 'a@b.c');
+  assert.strictEqual(fromPage.orbital.account(), 'tana:user-profile:u1@org_1', 'who, in which workspace: what the saved Timeline is kept for');
   const signedOutPage = boot(new Map(), JSON.stringify({ authenticated: false, reason: 'no_session_cookie' }));
   assert.strictEqual(await signedOutPage.orbital.connect(), true, 'a signed-out page is asked again');
   assert.ok(signedOutPage.calls.some((c) => c.startsWith('/api/auth/session')));

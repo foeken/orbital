@@ -28,13 +28,19 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var reveal = false // sensitive items shown, after a shake; never kept, as the desktop keeps it on the machine only
     // Settings' Demo mode, as the desktop's: made-up words and names on screen, nothing saved (ios/engine/demo.js); kept on this phone
     var demo = UserDefaults.standard.bool(forKey: "demoMode") {
-        didSet { UserDefaults.standard.set(demo, forKey: "demoMode"); partsFor = nil; Task { await refresh() } } // what a read under way brings is the other mode's
+        didSet {
+            UserDefaults.standard.set(demo, forKey: "demoMode")
+            partsFor = nil // what a read under way brings is the other mode's
+            if demo, !Self.isSample { rows = [] } // the real words go at once, rather than staying until the masked read lands, or for good with Tana out of reach
+            Task { await refresh() }
+        }
     }
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
     @ObservationIgnored private var session = 0 // counts sign-outs: a read that began before one never saves or shows what it got
     @ObservationIgnored private var savedFor: String? // whose the saved Timeline on screen is, until Tana says who is signed in
+    @ObservationIgnored private var account: String? // who is signed in, in which workspace (orbital.account): what the saved Timeline is kept for
     @ObservationIgnored private var partsFor: Int? // the session whose Timeline read is under way, taking its first part (show(part:))
 
     static let session = URL(string: "https://home.tana.inc/api/auth/session")!
@@ -60,7 +66,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         web.navigationDelegate = self
         if Self.isSample { showSample(); return }
         // the last Timeline read, on screen at once while Tana connects (SavedTimeline); never in demo mode
-        if !demo, let saved = SavedTimeline.load() { rows = saved.rows; savedFor = saved.email }
+        if !demo, let saved = SavedTimeline.load() { rows = saved.rows; savedFor = saved.account }
         Task {
             await SavedSession.restore(into: web.configuration.websiteDataStore.httpCookieStore)
             start()
@@ -125,7 +131,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             if ok {
                 justSignedIn = false
                 email = try? await web.callAsyncJavaScript("return orbital.email()", contentWorld: .page) as? String
-                if let savedFor, savedFor != email { rows = [] } // the saved Timeline was another account's
+                account = try? await web.callAsyncJavaScript("return orbital.account()", contentWorld: .page) as? String
+                if let savedFor, savedFor != account { rows = [] } // the saved Timeline was another account's, or another workspace's
                 savedFor = nil
                 // the cookies kept at once, as the refresh may not finish, and beside it: the Timeline waits on no Keychain
                 Task { await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) }
@@ -199,7 +206,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             partsFor = nil // a part told late is older than this
             guard started == session, masked == demo else { return } // signed out meanwhile, or demo mode switched: the read it asked for shows
             rows = read
-            if !demo, pages == 1, let email { SavedTimeline.save(json, email: email) } // what the next launch shows first
+            if !demo, pages == 1, let account { SavedTimeline.save(json, account: account) } // what the next launch shows first
             error = nil
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
@@ -239,7 +246,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
         SavedTimeline.forget()
-        rows = []; states = [:]; removed = []; email = nil; pages = 1
+        rows = []; states = [:]; removed = []; email = nil; account = nil; pages = 1
         note("signed out")
         start()
     }
@@ -527,21 +534,21 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 @MainActor
 enum SavedTimeline {
     private static let file = URL.cachesDirectory.appending(path: "timeline.json")
-    private struct Head: Encodable { let email: String; let at: Double }
-    private struct Saved: Decodable { let email: String; let at: Double; let rows: [Row] }
+    private struct Head: Encodable { let account: String; let at: Double }
+    private struct Saved: Decodable { let account: String; let at: Double; let rows: [Row] }
 
     // json: the rows as engine.js answered them, kept as they came
-    static func save(_ json: String, email: String) {
-        guard let head = try? JSONEncoder().encode(Head(email: email, at: Date.now.timeIntervalSince1970)) else { return }
+    static func save(_ json: String, account: String) {
+        guard let head = try? JSONEncoder().encode(Head(account: account, at: Date.now.timeIntervalSince1970)) else { return }
         var data = Data(head.dropLast()) // its closing brace, which the rows close instead
         data.append(Data((",\"rows\":" + json + "}").utf8))
         try? data.write(to: file, options: [.atomic, .completeFileProtection])
     }
 
-    static func load() -> (email: String, rows: [Row])? {
+    static func load() -> (account: String, rows: [Row])? {
         guard let data = try? Data(contentsOf: file), let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return nil }
         let today = Calendar.current.isDateInToday(Date(timeIntervalSince1970: saved.at)), now = Date.now.timeIntervalSince1970 * 1000
-        return (saved.email, saved.rows.filter { row in today ? (row.timeline?.free?.until ?? .infinity) > now : !row.top })
+        return (saved.account, saved.rows.filter { row in today ? (row.timeline?.free?.until ?? .infinity) > now : !row.top })
     }
 
     static func forget() { try? FileManager.default.removeItem(at: file) }

@@ -32,6 +32,7 @@ class EngineTest {
             "orbital.connect()" in body -> JsonPrimitive(true)
             "orbital.why()" in body -> text("200 signed in")
             "orbital.email()" in body -> text("me@example.com")
+            "orbital.account()" in body -> text(ME)
             "orbital.timeline" in body -> text(timeline)
             "orbital.setup()" in body -> setup()
             "orbital.issues()" in body -> kotlinx.serialization.json.JsonArray(emptyList())
@@ -189,6 +190,8 @@ class EngineTest {
         assertEquals(Engine.SESSION, host.loaded.last())
     }
 
+    private val ME = "tana:user-profile:me@org_1" // orbital.account: who, in which workspace
+
     // The last Timeline read (SavedTimeline): Today's Tasks above a day of entries, as the engine answered them
     private val saved = """[{"id":"today","timeline":{"today":true},"children":[]},{"id":"free","timeline":{"free":{"from":0,"until":1}}},
         {"id":"s:old","segments":[{"text":"Priya completed the plan"}],"timeline":{"tone":"done","day":"2026-10-02"}}]"""
@@ -198,7 +201,7 @@ class EngineTest {
 
     @Test fun theLastTimelineIsThereAtLaunchUntilTheReadLands() = runTest {
         val platform = FakePlatform()
-        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        SavedTimeline.save(platform.files, saved, ME, clock)
         val host = page()
         val engine = launched(host, platform, scope = this)
         assertEquals(listOf("today", "s:old"), engine.rows.map { it.id }, "drawn before Tana answers, without a free time that has ended")
@@ -211,13 +214,13 @@ class EngineTest {
 
     @Test fun aDayGoneByKeepsOnlyWhatHappened() = runTest {
         val platform = FakePlatform()
-        SavedTimeline.save(platform.files, saved, "me@example.com", clock - 1.days)
+        SavedTimeline.save(platform.files, saved, ME, clock - 1.days)
         assertEquals(listOf("s:old"), SavedTimeline.load(platform.files, clock)!!.second.map { it.id })
     }
 
-    @Test fun anotherAccountsTimelineGoesOnceTanaSaysWhoIsSignedIn() = runTest {
+    @Test fun anotherWorkspacesTimelineGoesOnceTanaSaysWhoIsSignedIn() = runTest {
         val platform = FakePlatform()
-        SavedTimeline.save(platform.files, saved, "someone@example.com", clock)
+        SavedTimeline.save(platform.files, saved, "tana:user-profile:me@org_2", clock) // you, in another workspace
         val answers = page()
         val host = FakeHost { body, args -> if ("orbital.timeline" in body) throw Exception("slow") else answers.answer(body, args) }
         val engine = launched(host, platform, scope = this)
@@ -229,7 +232,7 @@ class EngineTest {
 
     @Test fun demoModeNeitherShowsNorKeepsTheTimeline() = runTest {
         val platform = FakePlatform()
-        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        SavedTimeline.save(platform.files, saved, ME, clock)
         val host = page()
         val engine = launched(host, platform, demoMode = true, scope = this)
         assertTrue(engine.rows.isEmpty())
@@ -241,7 +244,7 @@ class EngineTest {
 
     @Test fun theFirstPartShowsAheadOfThePage() = runTest {
         val platform = FakePlatform()
-        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        SavedTimeline.save(platform.files, saved, ME, clock)
         val whole = CompletableDeferred<String>()
         val answers = page()
         val host = FakeHost { body, args -> if ("orbital.timeline" in body) text(whole.await()) else answers.answer(body, args) }
@@ -261,7 +264,7 @@ class EngineTest {
 
     @Test fun tanaOutOfReachKeepsTheSavedTimelineAndTriesAgain() = runTest {
         val platform = FakePlatform()
-        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        SavedTimeline.save(platform.files, saved, ME, clock)
         val host = page()
         val engine = launched(host, platform, scope = this)
         engine.start()
@@ -275,7 +278,7 @@ class EngineTest {
 
     @Test fun aWriteBeforeTanaConnectsWaitsForIt() = runTest {
         val platform = FakePlatform()
-        SavedTimeline.save(platform.files, saved, "me@example.com", clock)
+        SavedTimeline.save(platform.files, saved, ME, clock)
         val host = page()
         val engine = launched(host, platform, scope = this)
         engine.start()
@@ -300,5 +303,16 @@ class EngineTest {
     @Test fun whereNamesHostAndPath() {
         assertEquals("home.tana.inc" to "/api/auth/session", Engine.where("https://home.tana.inc/api/auth/session?x=1"))
         assertEquals("none" to "", Engine.where(null))
+    }
+
+    @Test fun demoModeTurnedOnTakesTheRealRowsAwayAtOnce() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, ME, clock)
+        val host = page()
+        val engine = launched(host, platform, scope = this)
+        engine.start()
+        host.listener!!.failed("net::ERR_INTERNET_DISCONNECTED")
+        engine.demo = true
+        assertTrue(engine.rows.isEmpty(), "no real words on screen in demo mode, Tana out of reach or not")
     }
 }
