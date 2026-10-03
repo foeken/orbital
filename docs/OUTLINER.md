@@ -533,7 +533,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
-  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect to new agent …, ChatGPT sign-in, Set OpenAI API
+  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect to your OpenAI Dot …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
@@ -784,21 +784,14 @@ wrong twenty.
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
-  Codex's app-server), **Dot** (the user's dot, OpenAI's always-on agent: a message in their one conversation with it,
-  opened in the ChatGPT app by its `codex://threads/<id>?hostId=durable&prompt=` link and sent by pressing ↩ there
-  through System Events, only while ChatGPT is frontmost; one conversation for every node, so a node keeps no task id,
-  only that Dot has it; since what the dot does next is out of this Mac's reach and Tana's connector offers it only
-  Tana's four statuses, it reports in the node: Orbital adds "Agent status: Working" at the end once the message is
-  sent, the dot ends each update with Working, Completed or Failed, and the badge follows the last such line
-  (main/documents.js `agentStatus`): working, done or broken) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
-  Orbital never signs in to Anthropic). Codex, Dot and Claude are offered only once this Mac has them. **Choose agents …**
-  (Settings) lists all four, greyed with what to install when missing: ↩ switches one on or off, one that needs a paste
-  first asks for it on a page of its own (Dot's chat link, `dotChat`, synced, but only where the ChatGPT app on this Mac
-  has no dot: main/agents/dot.js `appDot` reads the dot that app picked, `primary-aeon-selection-v1` in
-  `~/.codex/.codex-global-state.json`, stores it as `dotChat` and follows it when it changes), and the second group
-  picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
-  **Connect to new agent …** (Settings, and under the linked agents in Choose agents) links any agent that adds the MCP server
-  orbital.md/mcp: a prompt carrying a one-time code, the agent naming itself; each linked agent is one more agent,
+  Codex's app-server), **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
+  Orbital never signs in to Anthropic) and every agent linked through orbital.md/mcp, your Dot among them (below). Codex and
+  Claude are offered only once this Mac has them. **Choose agents …** (Settings) lists them, greyed with what to install
+  when missing: ↩ switches one on or off, and the second group picks the **default agent**. Both follow you (`agents`,
+  `defaultAgent`); unset is Tana and Codex on, Tana the default.
+  **Connect to your OpenAI Dot …** (Settings, and under the linked agents in Choose agents) links your Dot through the MCP
+  server orbital.md/mcp: where to add it and Tana's in ChatGPT (Open ChatGPT plugins, then each server's name with its
+  URL, ↩ copies it), then a message carrying a one-time code that links it as Dot; each linked agent is one more agent,
   with a page of its own (Rename …, Switch off, Unlink) and Reset the link key beside them (docs/AGENT-RELAY.md).
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
@@ -1145,9 +1138,7 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     Out), the OpenAI API key only while one is stored (Remove), both **On this Mac**; the Quick and the Regular AI, a model
     and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
   - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
-    another Mac switched it on) and the default agent. One that needs a paste first (Dot's chat link, when the ChatGPT app
-    here has no dot; `setup` in `agentList`) opens a field under its row instead of switching on: ↩ or Switch On hands the paste to `enableAgent`,
-    main refuses what it cannot read, and only then is it on; Esc or another tab drops the field.
+    another Mac switched it on) and the default agent.
   - **Lists**: the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
     it) and Show MCP chats.
   Every control makes the call its Cmd+K row makes, so a choice made there and one made here are the same write. Main

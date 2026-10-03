@@ -308,9 +308,8 @@ function mockApi() {
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true },
-    { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: false, isDefault: false, missing: 'Install the ChatGPT app', setup: '' }, // found in the ChatGPT app (main/agents/dot.js appDot)
     { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true }];
-  const mockRelay = { polls: 0 }; // how often the Connect to new agent page has asked, since its code was made
+  const mockRelay = { polls: 0 }; // how often the Connect to your OpenAI Dot page has asked, since its code was made
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   const hiddenTitles = new Set(['Daily Brief Delivery', 'Private AI chat for*']); // Edit hidden items: an exact title and a prefix
@@ -688,22 +687,24 @@ function mockApi() {
       return !!on;
     },
     linkAgentTask: async (docId) => { codexAssigned.add(docId); return true; },
-    // the agents (main/agent.js): Tana and Codex on, Dot found and off, Claude installed and off, enough to draw their Cmd+K pages
+    // the agents (main/agent.js): Tana and Codex on, Claude installed and off, enough to draw their Cmd+K pages; your Dot links below
     agentList: async () => mockAgents.map((a) => ({ ...a })),
-    enableAgent: async (id, on, setup) => {
+    enableAgent: async (id, on) => {
       const a = mockAgents.find((x) => x.id === id);
-      if (a && on && a.setup && setup) { if (!/^(codex:\/\/threads\/)?[0-9a-f-]{36}/i.test(setup)) throw new Error('Paste your dot\'s chat link: codex://threads/…'); a.installed = true; a.setup = ''; }
       if (a && a.installed && id !== 'tana') { a.enabled = !!on; if (!on && a.isDefault) { a.isDefault = false; mockAgents[0].isDefault = true; } }
       return mockAgents.map((x) => ({ ...x }));
     },
     setDefaultAgent: async (id) => { for (const a of mockAgents) a.isDefault = a.id === id; return mockAgents.map((x) => ({ ...x })); },
-    // Connect to new agent (main/agents/linked.js): a code, then GrokBot links itself on the third time the page asks
-    relayLink: async () => { mockRelay.polls = 0; return { code: '7KQX-M2PD', expiresAt: Date.now() + 14 * 60e3 + 42e3, url: 'https://orbital.md/mcp',
-      prompt: 'Add two MCP servers to yourself: Orbital at https://orbital.md/mcp and Tana at https://home.tana.inc/mcp. Then call Orbital\'s link_orbital tool with the code 7KQX-M2PD and a short name for yourself.' }; },
+    // Connect to your OpenAI Dot (main/agents/linked.js): a code, then your Dot links itself on the third time the page asks
+    relayLink: async () => { mockRelay.polls = 0; return { code: '7KQX-M2PD', expiresAt: Date.now() + 14 * 60e3 + 42e3, url: 'https://orbital.md/mcp', tana: 'https://home.tana.inc/mcp',
+      prompt: 'Call Orbital\'s link_orbital tool with the code 7KQX-M2PD and the name Dot. Then subscribe to Orbital\'s task.assigned event, and each time it fires, call get_tasks and carry out what it returns, as it explains. '
+        + 'If you cannot find Orbital\'s or Tana\'s tools, tell me which: I add them in ChatGPT as custom MCP servers, '
+        + 'Orbital at https://orbital.md/mcp and Tana at https://home.tana.inc/mcp. If I ask what goes through Orbital: only ids, a Tana node\'s id and what to do with it, and your status back. '
+        + 'The words stay in Tana, where you read them with your own Tana access.' }; },
     relayLinkStatus: async () => {
       if (++mockRelay.polls < 3) return { state: 'waiting', expiresAt: Date.now() + 14 * 60e3 };
-      if (!mockAgents.some((a) => a.id === 'relay:grok')) mockAgents.push({ id: 'relay:grok', label: 'GrokBot', icon: 'link', installed: true, enabled: true, isDefault: false, linked: true, app: 'Grok', seenAt: Date.now() });
-      return { state: 'linked', agent: { id: 'relay:grok', label: 'GrokBot', app: 'Grok' } };
+      if (!mockAgents.some((a) => a.id === 'relay:dot')) mockAgents.push({ id: 'relay:dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: true, isDefault: false, linked: true, app: 'ChatGPT', seenAt: Date.now() });
+      return { state: 'linked', agent: { id: 'relay:dot', label: 'Dot', app: 'ChatGPT' } };
     },
     relayLinkCancel: async () => true,
     relayRefresh: async () => mockAgents.map((x) => ({ ...x })),

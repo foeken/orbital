@@ -93,7 +93,7 @@ contextBridge.exposeInMainWorld('api', {
   // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, Dot, Claude, and every agent linked
   // through orbital.md/mcp (main/agents/linked.js), which carries linked, app and seenAt
   agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, isDefault, link, openNew, chat, opensHere, setup, linked?, app?, seenAt? }]
-  enableAgent: (id, on, setup) => ipcRenderer.invoke('agent:enable', id, on, setup), // the new list; setup: the paste the agent asked for (its setup hint)
+  enableAgent: (id, on) => ipcRenderer.invoke('agent:enable', id, on), // the new list
   setDefaultAgent: (id) => ipcRenderer.invoke('agent:default', id), // the new list
   agentIds: () => ipcRenderer.invoke('agent:ids'), // nodes handed to an agent; app-local, not a Tana assignee
   setAgent: (docId, on, prompt, agent) => ipcRenderer.invoke('agent:set', docId, on, prompt, agent), // agent: its id, the default when absent
@@ -102,8 +102,8 @@ contextBridge.exposeInMainWorld('api', {
   openAgentTask: (docId) => ipcRenderer.invoke('agent:open', docId), // open the task this node is linked to, in its agent's app
   openInAgent: (agent, link) => ipcRenderer.invoke('agent:openNew', agent, link), // a fresh, untracked task carrying the node's link
   agentStatus: () => ipcRenderer.invoke('agent:status'), // docId -> pending|working|waiting|done|broken for every linked node
-  // Connect to new agent … (main/agents/linked.js, docs/AGENT-RELAY.md): a one-time code and the prompt that carries it
-  relayLink: () => ipcRenderer.invoke('relay:link'), // { code, expiresAt, url, prompt }
+  // Connect to your OpenAI Dot … (main/agents/linked.js, docs/AGENT-RELAY.md): a one-time code and the prompt that carries it
+  relayLink: () => ipcRenderer.invoke('relay:link'), // { code, expiresAt, url, tana, prompt }
   relayLinkStatus: (code) => ipcRenderer.invoke('relay:linkStatus', code), // { state: waiting|expired, expiresAt } or { state: 'linked', agent: { id, label, app } }
   relayLinkCancel: (code) => ipcRenderer.invoke('relay:linkCancel', code), // the code stops working
   relayRefresh: () => ipcRenderer.invoke('relay:refresh'), // the agent list, after asking the relay

@@ -7,9 +7,8 @@
 const agent = require('../agent');
 require('./tana');
 require('./codex');
-require('./dot');
 require('./claude');
-const linked = require('./linked'); // the agents linked through orbital.md/mcp, one plugin each, as they come and go
+const linked = require('./linked'); // the agents linked through orbital.md/mcp (your Dot), one plugin each, as they come and go
 const { agentIds, setAgentMark } = require('../documents');
 const { readNode } = require('../../sdk/node');
 const { S, pageOf } = require('../state');
@@ -88,7 +87,7 @@ async function readStatuses() {
 const changed = (e, id) => { settings.tellOthers(pageOf(e), id); };
 const ipc = {
   'agent:list': () => { linked.refreshSoon(); return agent.list(); }, // the relay's list is asked for now and then, and the pages told when it moved
-  'agent:enable': (e, id, on, setup) => { const out = agent.setEnabled(id, !!on, setup); changed(e); return out; },
+  'agent:enable': (e, id, on) => { const out = agent.setEnabled(id, !!on); changed(e); return out; },
   'agent:default': (e, id) => { const out = agent.setDefault(id); changed(e); return out; },
   'agent:ids': () => agentIds(),
   'agent:set': async (e, id, on, prompt, agentId) => {

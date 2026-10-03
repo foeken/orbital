@@ -1,7 +1,7 @@
 # AGENT-RELAY.md — linking any agent to Orbital
 
-Orbital hands work to agents (main/agent.js): Tana, Codex, Dot and Claude are built in. The agent relay lets **any**
-AI agent that can add MCP servers become one more: your dot, a Grok bot, a Claude project, one you built. It is
+Orbital hands work to agents (main/agent.js): Tana, Codex and Claude are built in. The agent relay is how your Dot,
+OpenAI's always-on agent in ChatGPT, becomes one more (any other agent that takes an MCP server links the same way). It is
 the MCP server at **orbital.md/mcp** (relay/server.js), plain JSON over HTTPS, and the only thing between Orbital and
 those agents. **Only ids go through it**: a task is a Tana node's id and an action, which the agent carries out by
 reading and answering in the node through Tana's own MCP server (https://home.tana.inc/mcp); what comes back is the
@@ -9,21 +9,27 @@ task's id and a status. Your words never leave Tana.
 
 ## The flow
 
-1. **Cmd+K → Connect to new agent …** (renderer/agent.js) asks main for a code. The first time, main makes *your Orbital*:
+1. **Cmd+K → Connect to your OpenAI Dot …** (renderer/agent.js) asks main for a code. The first time, main makes *your Orbital*:
    one random key, kept in the Orbital settings document in Tana (`relayKey`, docs/SETTINGS.md), so every device
    signed into your Tana account is the same Orbital. The relay keeps only the key's hash, and makes the Orbital the
    first time that key asks for a code.
-2. The page's first row, **Copy instructions for your agent**, copies them, and shows them under it: *Add two MCP
-   servers to yourself: Orbital at https://orbital.md/mcp and Tana at https://home.tana.inc/mcp. Then call Orbital's
-   link_orbital tool with the code 7KQX-M2PD and a short name for yourself.* Under them, the page says that only ids go
-   through orbital.md. You give them to the agent.
-3. The agent adds both servers (its Tana access is its own, signed in as you). Its MCP client signs in to Orbital's on
-   its own (OAuth below), calls `link_orbital` with the code and a name it chose, and is linked. The code works once and
-   for fifteen minutes.
-4. The page, asking every two seconds, sees the code used, closes on "Linked GrokBot · Grok", and the agent is one of
+2. A Dot cannot add an MCP server itself, and ChatGPT has no link straight to its form, so the page's first group says
+   where: **Add both in ChatGPT · Add, then Create custom MCP server · the rest as it is**, with **Open ChatGPT plugins**
+   (chatgpt.com/plugins) and the two servers as that form asks for them, a name and a URL: **Orbital**
+   https://orbital.md/mcp and **Tana** https://home.tana.inc/mcp (↩ copies the URL). ChatGPT signs in to Orbital's on
+   its own (OAuth below; it connects at once, there is nothing to approve).
+3. Then **Copy the message for your Dot** copies what you send it: *Call Orbital's link_orbital tool with the code
+   7KQX-M2PD and the name Dot. Then subscribe to Orbital's task.assigned event, and each time it fires, call get_tasks
+   and carry out what it returns*, what to say if either server's tools are missing, and that only ids go through Orbital
+   (a node's id and what to do with it, and a status back) while the words stay in Tana, so the Dot can explain it when
+   asked. The page says the same under it. The Dot calls `link_orbital` and is linked. The code works once and for
+   fifteen minutes. Any other agent that takes an MCP server can still link with the same message; the relay does not
+   know which app it is.
+4. The page, asking every two seconds, sees the code used, closes on "Linked Dot · ChatGPT", and the agent is one of
    yours: `relay:<id>` in main/agent.js, on from the start, in Choose agents, Assign to Agent and Settings.
 5. **Assign to Agent** writes the request into the node's `Agent context` block, as for every agent, then queues
-   `{ id, node, action: "assign" }` for that agent. The agent sees it the next time it calls `get_tasks`, reads the node
+   `{ id, node, action: "assign" }` for that agent, and the relay POSTs the `task.assigned` event to the agent's
+   callback at once (below), which wakes it. It calls `get_tasks`, reads the node
    with its Tana tools, writes what it did into the node with them too, and reports with `update_task` (working,
    completed or failed). Whichever of your devices reads a status first keeps it in `relayTasks`, so every device draws
    the same badge (main/agents/linked.js).
@@ -32,17 +38,28 @@ One Orbital has as many agents as you link; each agent's MCP connection is one l
 with a new code moves it. `assign` is the one action today; the field is there so a later one (such as cancel) needs no
 new message.
 
-## No webhooks
+## The event that wakes the agent (MCP Events)
 
-Nothing calls the agent. A task waits until the agent asks (`get_tasks`): an agent with a schedule or a heartbeat
-checks for work, any other one when you ask it to. Nothing calls Orbital either: it asks for statuses when it reads the
-agents' badges (main/agents/index.js readStatuses, every 30 s and on each refresh).
+The relay is how a task reaches the agent the moment you assign it. Orbital's server offers one event, `task.assigned`
+([OpenAI's MCP Events](https://developers.openai.com/plugins/build/mcp-events), MCP protocol 2026-07-28, which dots
+subscribe to). The Dot subscribes once, as the message asks: ChatGPT calls `events/subscribe` with a callback URL and a
+`whsec_` signing secret; the relay challenges the callback (a signed `{ type: "verification", challenge }` it must echo),
+then keeps the subscription for the lifetime it grants (a week unless asked otherwise, an hour to thirty days; ChatGPT
+refreshes it before `refreshBefore`). When Orbital queues a task for that agent, the relay POSTs
+`{ eventId: "evt_<task id>", name: "task.assigned", timestamp, data: { task_id, node, action }, cursor: null }` to the
+callback, signed with Standard Webhooks (`webhook-id` = the event id, `webhook-timestamp`, `webhook-signature`,
+`X-MCP-Subscription-Id`): ids only, as everywhere. The first try is made before Orbital's call is answered; a failure is
+tried four more times with the same event id, a 410 ends the subscription, and the task waits in `get_tasks` regardless.
+A callback must be HTTPS to a public address: every address its name resolves to is checked as the connection is made,
+and redirects are not followed. `events/list` needs no sign-in; subscribing and unsubscribing do, and a connection
+hears only of its own agent's tasks. Nothing calls Orbital: it asks for statuses when it reads the agents' badges
+(main/agents/index.js readStatuses, every 30 s and on each refresh).
 
 ## Three doors (relay/server.js)
 
 | Door | Path | Who | Auth |
 |---|---|---|---|
-| MCP | `POST /mcp` (JSON-RPC over streamable HTTP, one message, one JSON answer) | an agent | OAuth bearer token to call a tool; none for `initialize`, `ping`, `tools/list` |
+| MCP | `POST /mcp` (JSON-RPC over streamable HTTP, one message, one JSON answer; both the `initialize` protocols and 2026-07-28 with `server/discover`) | an agent | OAuth bearer token to call a tool or subscribe; none for `initialize`, `server/discover`, `ping`, `tools/list`, `events/list` |
 | OAuth | `/mcp/oauth/register`, `/authorize`, `/token`; `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server/mcp` | an agent's MCP client | dynamic client registration, PKCE (S256), refresh with rotation |
 | Orbital | `/mcp/orbital/*` | Orbital | `Authorization: Orbital <key>` |
 

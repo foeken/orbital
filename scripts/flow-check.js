@@ -280,12 +280,11 @@ const SETTINGS_API = String.raw`(() => {
   window.__calls = []; window.__slow = [];
   const call = (name, answer) => (...a) => { __calls.push([name, ...a]); return Promise.resolve(typeof answer === 'function' ? answer(...a) : answer); };
   const AI = { models: ['gpt-6-luna', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'high'] };
-  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
-    { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: false, enabled: false, missing: 'Install the ChatGPT app', setup: "Paste your dot's chat link" }];
+  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true }];
   start({ prefs: { theme: 'light' }, translate: () => {}, onSettings: (fn) => { window.__settings = fn; },
     aiOptions: () => new Promise((resolve) => __slow.push(() => resolve(AI))), setAiOption: call('setAiOption', (k, v) => ({ ...AI, [k]: v })),
     chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@private.example' }), chatgptLogout: call('chatgptLogout', { available: true, signedIn: false }),
-    agentList: async () => agents, enableAgent: call('enableAgent', (id, on, setup) => (agents = agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a)))),
+    agentList: async () => agents, enableAgent: call('enableAgent', (id, on) => (agents = agents.map((a) => (a.id === id ? { ...a, enabled: on } : a)))),
     setDefaultAgent: call('setDefaultAgent', () => agents), filters: async () => hidden,
     addFilter: call('addFilter', (p) => (hidden = [...hidden, p])), removeFilter: call('removeFilter', (p) => (hidden = hidden.filter((h) => h !== p))),
     mcpHidden: async () => true, setMcpHidden: call('setMcpHidden', (on) => on), setPref: call('setPref'), settingsSize: (h) => { __calls.push(['settingsSize', h]); } });
@@ -315,12 +314,6 @@ flow('the Settings window writes what you pick and shows what is newest', async 
   await p.js('document.querySelector(\'[data-key="agent/codex"]\').focus(); 1'); await p.key('Space'); await settle(p, 150);
   assert.deepEqual(await p.js('[__calls.find((c) => c[0] === "enableAgent"), document.activeElement.dataset.key, document.activeElement.getAttribute("aria-checked")]'),
     [['enableAgent', 'codex', false], 'agent/codex', 'false'], 'Space switches Codex off, and the keyboard is still on its switch');
-  // Dot needs its chat link before it can be on: its switch asks for the link in its row, and only the paste switches it on
-  await p.js('document.querySelector(\'[data-key="agent/dot"]\').click(); 1'); await settle(p, 100);
-  assert.equal(await p.js('__calls.filter((c) => c[0] === "enableAgent").length'), 1, 'Dot is not switched on without its link');
-  await p.type('codex://threads/0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b'); await p.key('↩'); await settle(p, 150);
-  assert.deepEqual(await p.js('[__calls.filter((c) => c[0] === "enableAgent").at(-1), document.querySelector(\'[data-key="agent/dot"]\').getAttribute("aria-checked"), !!document.querySelector("input.link")]'),
-    [['enableAgent', 'dot', true, 'codex://threads/0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b'], 'true', false], 'the pasted link switches Dot on, and the field goes');
   // the Lists tab: + and a title hides it, ⌫ on a selected one unhides it
   await tab('lists');
   await p.js('document.querySelector(\'[data-key="hidden+"]\').click(); 1'); await p.type('Lunch*'); await p.key('↩'); await settle(p, 150);
@@ -595,35 +588,40 @@ flow('golden path: read notifications and settle proposals', async (p) => {
   assert.deepEqual(await p.js('__screen()'), before.filter((t) => !/^(Check out the new editor|Studio LT charter)$/.test(t)), 'the others stay');
 });
 
-// Connect to new agent (main/agents/linked.js, docs/AGENT-RELAY.md): ⌘K Connect to new agent shows the prompt that carries a one-time
-// code; while the page waits the agent links itself (the mock's GrokBot, on the third time the page asks), the palette
-// closes on its name, and from then on it is one of your agents, with a page of its own to rename or unlink it
-flow('golden path: link an agent with a code, and it joins your agents', async (p) => {
+// Connect to your OpenAI Dot (main/agents/linked.js, docs/AGENT-RELAY.md): ⌘K Connect to your OpenAI Dot names both servers
+// to add in ChatGPT, then copies the message that carries a one-time code; while the page waits the agent links itself
+// (the mock's Dot, on the third time the page asks), the palette closes on its name, and from then on it is one of
+// your agents, with a page of its own to rename or unlink it
+flow('golden path: connect your Dot with a code, and it joins your agents', async (p) => {
   await p.start();
-  await command(p, 'connect to new agent', 'Connect to new agent \u2026');
-  await p.waitFor('palMode === "linkAgent" && palRows.length === 4', 'the instructions and the wait');
-  assert.deepEqual(await p.js('[palRows[0].label, !!palRows[0].disabled, palIndex]'), ['Copy instructions for your agent', false, 0], 'the first row copies the instructions, and ↩ is on it');
-  assert.match(await p.js('relayCtx.prompt'), /^Add two MCP servers to yourself: Orbital at https:\/\/orbital\.md\/mcp and Tana at https:\/\/home\.tana\.inc\/mcp\. Then .* 7KQX-M2PD and a short name for yourself\.$/, 'what it copies: both servers, and the code');
+  await command(p, 'connect to your openai dot', 'Connect to your OpenAI Dot \u2026');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 7', 'the servers, the message and the wait');
+  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => [r.icon, r.label, r.hint])'), [['chatgpt', 'Open ChatGPT plugins', 'chatgpt.com/plugins'], ['orbital', 'Orbital', 'https://orbital.md/mcp · ↩ copies'], ['tana', 'Tana', 'https://home.tana.inc/mcp · ↩ copies']],
+    'first where to go in ChatGPT, then both servers as its form asks for them: a name and a URL');
+  assert.equal(await p.js('palIndex'), 0, '↩ starts at ChatGPT');
+  assert.deepEqual(await p.js('[palRows[3].label, palRows[3].group, !!palRows[3].disabled]'), ['Copy the message for your Dot', 'Then ask your Dot to link', false], 'then the message');
+  assert.match(await p.js('relayCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and the name Dot\. Then subscribe to Orbital's task\.assigned event.*only ids/, 'what it copies: the code, the event that wakes it, and what goes through orbital.md');
   assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
-  assert.match(await p.js('palRows[1].label'), /^Only ids go through orbital\.md: your words stay in Tana/, 'it says what goes through orbital.md');
-  assert.deepEqual(await p.js('[palRows[2].label, !!palRows[2].icon, palRows[2].group === palRows[0].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for an agent to use the code…', false, true, true],
+  assert.match(await p.js('palRows[4].label'), /^Only ids go through orbital\.md: your words stay in Tana/, 'it says what goes through orbital.md');
+  assert.deepEqual(await p.js('[palRows[5].label, !!palRows[5].icon, palRows[5].group === palRows[3].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your Dot to use the code…', false, true, true],
     'and waits in the same group, with no glyph, a light passing over its words');
   // where the heading's words start (its box plus its padding), measured once the page has slid in
   const offset = '(() => { const g = document.querySelector("#palette .list .group"); return document.querySelector("#palette .row .label.sweep").getBoundingClientRect().left - g.getBoundingClientRect().left - parseFloat(getComputedStyle(g).paddingLeft); })()';
   await p.waitFor('Math.abs(' + offset + ') <= 1', 'the wait to start where the heading\u2019s words do (' + await p.js(offset) + 'px off at first)');
-  assert.match(await p.js('palRows[2].hint'), /^Works once · \d+:\d\d left$/, 'saying how long the code lasts');
-  await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked GrokBot · Grok"', 'the palette to close on the agent that linked', 10000);
+  assert.match(await p.js('palRows[5].hint'), /^Works once · \d+:\d\d left$/, 'saying how long the code lasts');
+  await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked Dot · ChatGPT"', 'the palette to close on the agent that linked', 10000);
   await command(p, 'choose agents', 'Choose agents \u2026');
-  await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "GrokBot")', 'GrokBot among your agents');
-  assert.deepEqual(await p.js('(({ group, hint }) => [group, hint])(palRows.find((r) => r.label === "GrokBot"))'), ['Linked through orbital.md/mcp · ↩ opens one', 'On · Grok · seen just now'], 'linked, on, and where it runs');
-  assert.ok(await p.js('palRows.some((r) => r.group === "Default agent · ↩ makes it the default" && r.label === "GrokBot")'), 'and it can be the default');
-  await p.type('grokbot');
-  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "GrokBot"', 'its row');
+  await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "Dot")', 'your Dot among your agents');
+  assert.equal(await p.js('palRows.find((r) => r.label === "Dot").icon'), 'chatgpt', 'drawn with the OpenAI logo');
+  assert.deepEqual(await p.js('(({ group, hint }) => [group, hint])(palRows.find((r) => r.label === "Dot"))'), ['Linked through orbital.md/mcp · ↩ opens one', 'On · ChatGPT · seen just now'], 'linked, on, and where it runs');
+  assert.ok(await p.js('palRows.some((r) => r.group === "Default agent · ↩ makes it the default" && r.label === "Dot")'), 'and it can be the default');
+  await p.type('dot');
+  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Dot"', 'its row');
   await p.key('↩');
   await p.waitFor('palMode === "linkedAgent"', 'its page');
   assert.deepEqual(await p.js('palRows.map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
   await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink"', 'Unlink'); await p.key('↩');
-  await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "GrokBot")', 'Choose agents without it');
+  await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot")', 'Choose agents without it');
   await closePalette(p);
 });
 

@@ -73,7 +73,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    - Notifications read by bullet and by Mark all as read, a row opening its node; a proposal approved from Cmd+K and
      one rejected with its button;
    - a chat message sent with ↩ shows as yours and Tana's answer follows;
-   - Connect to new agent: the prompt carries orbital.md/mcp and a one-time code, the agent links while the page waits, the
+   - Connect to your OpenAI Dot: both servers named with their URLs, the message carries a one-time code, the agent links while the page waits, the
      palette closes on its name, and it is in Choose agents (on, where it runs) with a page to rename or unlink it;
    - panes and tabs (shell.html): ⌘↩ on a search result opens a tab, ⇧↩ a pane beside, ⇧⌘N a new pane, the keys go
      with the page just opened and every page keeps its own place.

@@ -1,12 +1,11 @@
 'use strict';
 // The agents a Tana node can be handed to, and the link from each node to the task it became (issue #669). Each agent
 // is a plugin in main/agents/ that registers itself here (main/agents/index.js loads them): Tana, always there and the
-// default until you choose another; Codex, Dot and Claude, when this Mac has them. A plugin answers:
+// default until you choose another; Codex and Claude, when this Mac has them; and every agent linked through
+// orbital.md/mcp, your Dot among them. A plugin answers:
 //   id, label, icon         how the app names and draws it ("Codex", the robot glyph)
 //   available()             whether this Mac can run it; one that cannot shows greyed in Choose agents
 //   missing                 what to install, for that grey row
-//   setupHint(), setup(text)  what to paste before it can run ("Paste your dot's chat link"), and taking that paste
-//   oneChat                 one conversation for every node (Dot): a node keeps no task id, only which agent has it
 //   start({ key, nodeUri, title, prompt, rules, userData })   begins a task and answers its id
 //   resume(taskId, prompt)  hands an existing task the new request (a reassignment)
 //   statuses({ nodeId: taskId })  nodeId -> pending | working | waiting | done | broken
@@ -38,10 +37,8 @@ const get = (id) => { catchUp(); return typeof id === 'string' && Object.hasOwn(
 // and waits to be switched on. Tana cannot be switched off: it needs nothing installed and is the one agent everybody has.
 const enabledIds = () => { const stored = settings.get('agents'); return ['tana', ...(Array.isArray(stored) ? stored : ['codex']).filter((id) => id !== 'tana' && get(id))]; };
 const usable = (id) => !!get(id) && enabledIds().includes(id) && get(id).available();
-// setup: the paste the agent asked for (setupHint), taken before it is switched on; one it cannot read switches nothing
-function setEnabled(id, on, setup) {
+function setEnabled(id, on) {
   if (!get(id) || id === 'tana') throw new Error('No such agent');
-  if (on && setup !== undefined && get(id).setup) get(id).setup(setup);
   const next = enabledIds().filter((x) => x !== 'tana' && x !== id);
   if (on) next.push(id);
   settings.set('agents', next);
@@ -60,7 +57,7 @@ function setDefault(id) {
 // says so, with the app it came through and when the relay last heard from it.
 const list = () => { catchUp(); return Object.values(AGENTS).map((a) => ({
   id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id), isDefault: defaultAgent() === a.id,
-  link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere, setup: (a.setupHint && a.setupHint()) || '',
+  link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere,
   ...(a.linked ? { linked: true, app: a.app || '', seenAt: a.seenAt || null } : {}),
 })); };
 
@@ -75,13 +72,13 @@ function taskLink(id) {
   const link = typeof stored === 'string' ? { agent: 'codex', taskId: stored }
     : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', ...(stored.taskId || stored.threadId ? { taskId: stored.taskId || stored.threadId } : {}), ...(stored.device ? { device: stored.device } : {}) } : null;
   const a = link && get(link.agent);
-  return a && (a.oneChat || (typeof link.taskId === 'string' && link.taskId)) ? link : null;
+  return a && typeof link.taskId === 'string' && link.taskId ? link : null;
 }
 function setTask(id, agentId, taskId) {
   const map = tasks();
   // a plugin whose tasks live only on the Mac that ran them (local: Claude Code's sessions) names that Mac with the link
   const a = get(agentId), hasId = typeof taskId === 'string' && !!taskId;
-  if (a && (hasId || a.oneChat)) map[id] = { agent: agentId, ...(hasId ? { taskId } : {}), ...(a.local ? { device: deviceId() } : {}) }; else delete map[id];
+  if (a && hasId) map[id] = { agent: agentId, taskId, ...(a.local ? { device: deviceId() } : {}) }; else delete map[id];
   settings.set('codexTask', map);
   return taskLink(id);
 }

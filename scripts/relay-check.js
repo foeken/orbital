@@ -7,12 +7,17 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { createRelay, postgresStore, TTL } = require('../relay/server');
+const { createRelay, postgresStore, TTL, isPublicAddress } = require('../relay/server');
 
 let clock = Date.UTC(2026, 9, 3, 12);
 // RELAY_CHECK_DATABASE_URL runs the same check on PostgreSQL (an empty database: it makes its tables), as a host would
 const store = process.env.RELAY_CHECK_DATABASE_URL ? postgresStore(process.env.RELAY_CHECK_DATABASE_URL) : undefined;
-const relay = createRelay({ store, publicUrl: 'http://127.0.0.1', now: () => clock });
+// the agents' event callbacks (MCP Events): every POST the relay makes is kept here, and answered as a receiver would
+const posted = [];
+const echo = (body) => ({ status: 200, text: JSON.parse(body).type === 'verification' ? JSON.stringify({ challenge: JSON.parse(body).challenge }) : '' });
+let answer = echo;
+const post = async (url, headers, body) => { posted.push({ url, headers, body }); return answer(body); };
+const relay = createRelay({ store, publicUrl: 'http://127.0.0.1', now: () => clock, post });
 const server = http.createServer(relay.handle);
 
 (async () => {
@@ -35,7 +40,7 @@ const server = http.createServer(relay.handle);
   // ChatGPT lists the tools before it signs in, so hello and the list need no token (it found none when they did)
   const hello = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'ChatGPT', version: '1' } } } });
   assert.equal(hello.status, 200, 'hello needs no sign-in');
-  assert.deepEqual(hello.json.result.capabilities, { tools: {} });
+  assert.deepEqual(hello.json.result.capabilities, { tools: {}, events: {} }, 'tools, and the task.assigned event');
   const open = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'tools/list' } });
   assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital', 'get_tasks', 'update_task'], 'nor does the list');
   assert.ok(open.json.result.tools.every((t) => t.securitySchemes[0].type === 'oauth2' && t._meta.securitySchemes[0].type === 'oauth2'), 'and each tool says it needs a sign-in');
@@ -171,6 +176,63 @@ const server = http.createServer(relay.handle);
   assert.equal((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).status, 401, 'the old key stops working');
   orbital.key = fresh;
   assert.deepEqual((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).json.agents.map((a) => a.name), ['My dot'], 'and the agents stay linked');
+
+  // ---- MCP Events (2026-07-28): the Dot subscribes to task.assigned, and a task for it is POSTed to its callback, signed ----
+  const modern = (method, params = {}, auth) => call('POST', '/mcp', { auth, body: { jsonrpc: '2.0', id: 9, method, params: { ...params, _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' } } } });
+  const disc = await modern('server/discover');
+  assert.deepEqual([disc.status, disc.json.result.resultType, disc.json.result.supportedVersions[0], disc.json.result.capabilities], [200, 'complete', '2026-07-28', { tools: {}, events: {} }],
+    'server/discover needs no sign-in, and says Orbital has events');
+  assert.equal(disc.json.result._meta['io.modelcontextprotocol/serverInfo'].name, 'orbital', 'and who answered');
+  const old = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '1900-01-01' } } } });
+  assert.deepEqual([old.json.error.code, old.json.error.data.supported[0]], [-32022, '2026-07-28'], 'a version Orbital does not speak is refused, naming those it does');
+  const listedTools = (await modern('tools/list')).json.result;
+  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.length], ['complete', 'public', 'number', 3], 'the tools, cacheable, in the new shape');
+  const events = (await modern('events/list')).json.result.events;
+  assert.deepEqual(events.map((e) => [e.name, e.delivery, e.payloadSchema.required]), [['task.assigned', ['webhook'], ['task_id', 'node', 'action']]], 'one event, by webhook, carrying ids only');
+  const SECRET = 'whsec_' + crypto.randomBytes(32).toString('base64'), CB = 'https://receiver.example/mcp-events/cb1';
+  const want = { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: CB, secret: SECRET }, cursor: null };
+  const sub = (params, agent = dot) => modern('events/subscribe', params, 'Bearer ' + agent.tokens.access_token);
+  assert.equal((await modern('events/subscribe', want)).status, 401, 'subscribing needs the sign-in');
+  assert.equal((await sub({ ...want, name: 'comment.created' })).json.error.code, -32602, 'only task.assigned');
+  assert.equal((await sub({ ...want, arguments: { node: 'x' } })).json.error.code, -32602, 'which takes no arguments');
+  assert.equal((await sub({ ...want, delivery: { ...want.delivery, secret: 'whsec_c2hvcnQ=' } })).json.error.code, -32602, 'a secret of 24 to 64 bytes');
+  assert.equal((await sub({ ...want, delivery: { ...want.delivery, url: 'http://receiver.example/cb' } })).json.error.code, -32602, 'an https callback');
+  answer = () => ({ status: 200, text: '{"challenge":"not-it"}' });
+  const refused = (await sub(want)).json.error;
+  assert.deepEqual([refused.code, refused.data.reason], [-32015, 'challenge_failed'], 'a callback that does not echo the challenge is refused');
+  answer = echo; posted.length = 0;
+  const made = (await sub(want)).json.result;
+  assert.deepEqual([made.resultType, made.cursor, made.truncated, made.refreshBefore], ['complete', null, false, new Date(clock + TTL.subscription).toISOString()], 'subscribed, for a week');
+  // Standard Webhooks, worked out here rather than with the relay's own function
+  const signs = (p) => p.headers['webhook-signature'] === 'v1,' + crypto.createHmac('sha256', Buffer.from(SECRET.slice(6), 'base64')).update(p.headers['webhook-id'] + '.' + p.headers['webhook-timestamp'] + '.' + p.body).digest('base64');
+  const [check] = posted;
+  assert.deepEqual([JSON.parse(check.body).type, /^msg_verification_/.test(check.headers['webhook-id']), check.headers['x-mcp-subscription-id'], signs(check)], ['verification', true, made.id, true], 'the callback was challenged first, signed');
+  const refreshedSub = (await sub({ ...want, arguments: undefined, ttlMs: 3 * TTL.message })).json.result;
+  assert.deepEqual([refreshedSub.id, posted.length, refreshedSub.refreshBefore], [made.id, 1, new Date(clock + 3 * TTL.message).toISOString()], 'asked again it is the same subscription, as long as asked, not challenged again');
+  // grok, signed in but linked to nothing, listens too: it hears nothing of the Dot's tasks
+  assert.ok((await sub({ ...want, delivery: { ...want.delivery, url: 'https://receiver.example/grok' } }, grok)).json.result.id);
+  posted.length = 0;
+  const tEvent = crypto.randomUUID();
+  assert.equal((await send(D, tEvent, NODE)).status, 202);
+  assert.equal(posted.length, 1, 'a task for the Dot is POSTed once, to its callback alone');
+  const [delivery] = posted, event = JSON.parse(delivery.body);
+  assert.deepEqual(event, { eventId: 'evt_' + tEvent, name: 'task.assigned', timestamp: new Date(clock).toISOString(), data: { task_id: tEvent, node: NODE, action: 'assign' }, cursor: null }, 'the event: ids and the action, nothing more');
+  assert.deepEqual([delivery.url, delivery.headers['webhook-id'], delivery.headers['x-mcp-subscription-id'], signs(delivery)], [CB, event.eventId, made.id, true], 'signed, its webhook-id the event id');
+  assert.equal(JSON.parse((await dot.tool('get_tasks')).text).tasks[0].task_id, tEvent, 'and the task waits in get_tasks, where the event sends it');
+  // a receiver that is gone (410) ends the subscription; unsubscribing ends one too
+  answer = () => ({ status: 410, text: '' }); posted.length = 0;
+  await send(D, crypto.randomUUID(), NODE);
+  answer = echo; posted.length = 0;
+  await send(D, crypto.randomUUID(), NODE);
+  assert.equal(posted.length, 0, 'after a 410 nothing more is sent there');
+  await sub(want);
+  assert.deepEqual((await modern('events/unsubscribe', { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: CB } }, 'Bearer ' + dot.tokens.access_token)).json.result, { resultType: 'complete', _meta: { 'io.modelcontextprotocol/serverInfo': disc.json.result._meta['io.modelcontextprotocol/serverInfo'] } }, 'unsubscribed');
+  posted.length = 0;
+  await send(D, crypto.randomUUID(), NODE);
+  assert.equal(posted.length, 0, 'and then nothing is sent');
+  // only public addresses are called back
+  assert.deepEqual(['8.8.8.8', '2606:4700::1111', '127.0.0.1', '10.1.2.3', '169.254.169.254', '192.168.1.1', '::1', 'fd00::1', '::ffff:127.0.0.1', 'fe80::1', 'localhost'].map(isPublicAddress),
+    [true, true, false, false, false, false, false, false, false, false, false], 'loopback, private, link-local and cloud metadata addresses are never called');
 
   // ---- what the database holds: ids, and no key or token as itself (only their hashes) ----
   const rows = await relay.dump();

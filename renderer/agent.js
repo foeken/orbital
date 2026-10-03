@@ -77,17 +77,16 @@ const agentsApply = (call) => run(async () => {
 });
 const LINKED_GROUP = 'Linked through orbital.md/mcp · ↩ opens one';
 function agentsRows(q) {
-  const asks = (a) => !!a.setup && !a.enabled; // switching it on starts with the paste it asked for
   const rows = agentList.filter((a) => !a.linked).map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
-    hint: a.id === 'tana' ? 'Always on' : asks(a) ? a.setup : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
+    hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
     // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
-    disabled: a.id === 'tana' || (!a.installed && !a.enabled && !asks(a)), run: () => (asks(a) ? openAgentSetup(a) : agentsApply(() => tana.enableAgent(a.id, !a.enabled))) }));
-  // Every agent linked through the relay has a page of its own, and the way to link another is right under them
+    disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
+  // Every agent linked through the relay (your Dot) has a page of its own, and the way to link another is right under them
   if (tana.relayLink) {
     const linked = agentList.filter((a) => a.linked);
     for (const a of linked) rows.push({ group: LINKED_GROUP, icon: a.icon, label: a.label, keepOpen: true,
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
-    rows.push({ group: LINKED_GROUP, icon: 'createNew', label: 'Connect to new agent …', hint: 'Any agent that takes an MCP server', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
+    rows.push({ group: LINKED_GROUP, icon: 'chatgpt', label: 'Connect to your OpenAI Dot …', hint: 'Orbital and Tana in ChatGPT, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
     if (linked.length && tana.relayReset) rows.push({ group: LINKED_GROUP, icon: 'lock', label: 'Reset the link key', hint: 'If it may have been seen: your agents stay linked', keepOpen: true,
       run: () => run(async () => { await tana.relayReset(); showNote('New link key: your agents stay linked'); }) });
   }
@@ -99,32 +98,19 @@ function openAgentsPalette() {
   loadAgentList().then(() => { if (palMode === 'agents') renderPalette(); });
   openPage('agents', 'Choose agents', { rows: agentsRows, back: BACK_TO_COMMANDS });
 }
-// The paste an agent asks for before it can be switched on: main reads it (the agent knows its own shape) and refuses
-// what it cannot use, and the agent comes back on Choose agents, switched on.
-let agentSetupCtx = null; // the agent the paste is for, while this page is up
-function agentSetupRows(q, typed) {
-  const a = agentSetupCtx, group = a.label + ' · ' + a.setup;
-  if (!typed.trim()) return [{ group, icon: a.icon, label: a.setup, disabled: true }];
-  return [{ group, icon: a.icon, label: 'Switch on ' + a.label, keepOpen: true, run: () => run(async () => {
-    agentList = await tana.enableAgent(a.id, true, typed.trim());
-    openAgentsPalette();
-  }) }];
-}
-function openAgentSetup(a) {
-  agentSetupCtx = a;
-  openPage('agentSetup', a.id === 'dot' ? 'codex://threads/…' : a.setup, { rows: agentSetupRows, back: openAgentsPalette, typed: true });
-}
-// ---- Connect to new agent: any agent that adds orbital.md/mcp, linked with a one-time code (main/agents/linked.js) ----
-// The page asks main for a code and shows the prompt that carries it: ↩ copies it, and you give it to the agent, which
-// adds the server, names itself and links. The page asks every two seconds whether that happened; once it has, the
-// palette closes on a toast naming the agent. Leaving the page does not stop the code: an agent that uses it later
-// shows up in Choose agents all the same.
+// ---- Connect to your OpenAI Dot: orbital.md/mcp and Tana's server added in ChatGPT, then linked with a one-time code ----
+// (main/agents/linked.js) ChatGPT has no link to its own "Create custom MCP server" form and a Dot cannot add a server
+// itself, so the page says where to go and names both servers as that form wants them, a name and a URL (↩ copies the
+// URL). Then one row copies the message for your Dot, which only links. The page asks every two seconds whether that
+// happened; once it has, the palette closes on a toast naming the agent. Leaving the page does not stop the code: a Dot
+// that uses it later shows up in Choose agents all the same.
+const CHATGPT_PLUGINS = 'https://chatgpt.com/plugins';
 let relayCtx = null; // { state: asking|waiting|expired|failed, code, prompt, expiresAt, error, back } while the page is up
 let relayTimer = null;
 const unwrapError = (e) => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 function openLinkPalette(back = BACK_TO_COMMANDS) {
   const ctx = relayCtx = { state: 'asking', back };
-  openPage('linkAgent', 'Connect to new agent', { rows: relayRows, back, typed: true });
+  openPage('linkAgent', 'Connect to your OpenAI Dot', { rows: relayRows, back, typed: true });
   Promise.resolve(tana.relayLink()).then((r) => { if (relayCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawRelay(); pollRelay(ctx); },
     (e) => { if (relayCtx !== ctx) return; ctx.state = 'failed'; ctx.error = unwrapError(e); drawRelay(); });
 }
@@ -149,19 +135,25 @@ function pollRelay(ctx) {
   }, 2000);
 }
 function relayRows() {
-  const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) };
-  if (c.state === 'asking') return [{ group: 'Connect to new agent', label: 'Getting a code…', disabled: true, sweep: true, bare: true, match: [] }];
-  if (c.state === 'failed') return [{ group: 'Connect to new agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Connect to new agent', label: 'Try again', match: [] }];
+  const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) }, title = 'Connect to your OpenAI Dot';
+  if (c.state === 'asking') return [{ group: title, label: 'Getting a code…', disabled: true, sweep: true, bare: true, match: [] }];
+  if (c.state === 'failed') return [{ group: title, icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: title, label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
-  const group = 'Give these to the agent · it adds the servers, names itself and links';
-  const rows = [{ group, icon: 'prompt', label: 'Copy instructions for your agent', hint: '↩', keepOpen: true, match: [],
-    run: () => run(() => copyText(c.prompt, 'Copied: give them to your agent')) },
+  // first both servers, in ChatGPT: a name and a URL each, as its form asks, the rest left as it is
+  const add = 'Add both in ChatGPT · Add, then Create custom MCP server · the rest as it is';
+  const server = (icon, label, url) => ({ group: add, icon, label, hint: url + ' · ↩ copies', keepOpen: true, match: [], run: () => run(() => copyText(url, 'Copied ' + label + '\u2019s URL')) });
+  const rows = [{ group: add, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
+    server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana)];
+  // then the message, which only links: what goes through orbital.md is in it too, for the Dot to explain
+  const group = 'Then ask your Dot to link';
+  rows.push({ group, icon: 'prompt', label: 'Copy the message for your Dot', hint: '↩ copies', keepOpen: true, match: [],
+    run: () => run(() => copyText(c.prompt, 'Copied: send it to your Dot')) },
   // what crosses orbital.md (main/agents/linked.js send): a node's id and an action out, a status back
-  { group, icon: 'lock', label: 'Only ids go through orbital.md: your words stay in Tana, where the agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] }];
+  { group, icon: 'lock', label: 'Only ids go through orbital.md: your words stay in Tana, where your Dot reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
   // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
   if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
   return [...rows,
-    { group, label: 'Waiting for an agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, bare: true, match: [] },
+    { group, label: 'Waiting for your Dot to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, bare: true, match: [] },
     { group, icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { relayCtx = null; run(() => tana.relayLinkCancel(c.code)); (c.back || closePalette)(); } }];
 }
 // When the relay last heard from an agent, in a few words

@@ -1,6 +1,6 @@
 'use strict';
 // Agents linked through the relay at orbital.md/mcp (docs/AGENT-RELAY.md; the relay is relay/): any agent that adds
-// that MCP server to itself and links with a code from Cmd+K Connect to new agent … Each is an agent of its own beside Codex
+// that MCP server to itself and links with a code from Cmd+K Connect to your OpenAI Dot … Each is an agent of its own beside Codex
 // and Claude (main/agent.js), "relay:<its id>", named as it named itself.
 //   - Your Orbital is one random key (relayKey), made the first time you link an agent and kept in the Orbital settings
 //     document, so every device signed into your Tana account has the same agents. The relay keeps only its hash.
@@ -36,7 +36,7 @@ function orbitalKey(create) {
   return made;
 }
 async function call(method, path, body, key = orbitalKey(false)) {
-  if (!key) throw new Error('No agent is linked yet: Connect to new agent first');
+  if (!key) throw new Error('No agent is linked yet: Connect to your OpenAI Dot first');
   let res;
   try {
     res = await relay.fetch(relay.base + path, { method, body: body === undefined ? undefined : JSON.stringify(body),
@@ -57,7 +57,7 @@ function load() {
   shown = sig;
   for (const id of Object.keys(agent.AGENTS)) if (id.startsWith(ID) && !list.some((a) => ID + a.id === id)) agent.unregister(id);
   for (const a of list) agent.register({
-    id: ID + a.id, label: a.name, icon: 'link', linked: true, app: a.app || '', seenAt: a.seenAt || null,
+    id: ID + a.id, label: a.name, icon: 'chatgpt', linked: true, app: a.app || '', seenAt: a.seenAt || null,
     available: () => true, // nothing to install: the agent is wherever it runs
     start: (task) => send(a, task),
     statuses: (links) => statuses(links),
@@ -131,8 +131,14 @@ async function statuses(links) {
 // ---- linking, renaming, unlinking, a new key ----
 async function linkCode() {
   const { code, expiresAt } = await call('POST', '/orbital/codes', undefined, orbitalKey(true)); // the relay makes your Orbital the first time
-  return { code, expiresAt, url: relay.base,
-    prompt: 'Add two MCP servers to yourself: Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. Then call Orbital\'s link_orbital tool with the code ' + code + ' and a short name for yourself.' };
+  // ChatGPT has no way for a Dot to add a server itself: you add both in ChatGPT (the page names them and their URLs).
+  // The message links, subscribes the Dot to task.assigned so a task wakes it (relay/server.js EVENTS), and says what
+  // goes through orbital.md, so the Dot can explain it when asked.
+  return { code, expiresAt, url: relay.base, tana: TANA_MCP,
+    prompt: 'Call Orbital\'s link_orbital tool with the code ' + code + ' and the name Dot. Then subscribe to Orbital\'s task.assigned event, and each time it '
+      + 'fires, call get_tasks and carry out what it returns, as it explains. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
+      + 'I add them in ChatGPT as custom MCP servers, Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. If I ask what goes through Orbital: only ids, '
+      + 'a Tana node\'s id and what to do with it, and your status back. The words stay in Tana, where you read them with your own Tana access.' };
 }
 async function codeStatus(code) {
   if (typeof code !== 'string' || !CODE.test(code)) throw new Error('Not a link code');

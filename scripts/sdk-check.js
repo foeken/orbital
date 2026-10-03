@@ -59,8 +59,6 @@ function mainHelpers(childProcess) {
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
   const loaded = load(nodePath.join(root, 'main.js'));
-  // the ChatGPT app's state file, where Dot finds your dot (main/agents/dot.js appDot): none in the checks unless one hands it one
-  load(nodePath.join(root, 'main', 'agents', 'dot.js')).dot.stateFile = nodePath.join(require('node:os').tmpdir(), 'orbital-check-no-codex-state.json');
   return { ...loaded, handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
 }
 
@@ -3757,15 +3755,15 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const agent = backend.agent, settings = backend.settings, NODE = 'tana:text:' + ulid(), THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
-    const cx = agent.get('codex'), cl = agent.get('claude'), dt = agent.get('dot');
-    cx.available = () => true; cl.available = () => false; dt.available = () => false;
+    const cx = agent.get('codex'), cl = agent.get('claude');
+    cx.available = () => true; cl.available = () => false;
     const view = () => agent.list().map((a) => a.id + (a.installed ? '' : '?') + (a.enabled ? '+' : '') + (a.isDefault ? '*' : '')).join(' ');
-    assert.equal(view(), 'tana+* codex+ dot? claude?', 'Tana, Codex, Dot and Claude are known, in that order; Tana is on and the default, Codex is on as before, Dot and Claude wait');
+    assert.equal(view(), 'tana+* codex+ claude?', 'Tana, Codex and Claude are known, in that order; Tana is on and the default, Codex is on as before, Claude waits');
     assert.throws(() => agent.setEnabled('tana', false), 'Tana cannot be switched off');
     assert.throws(() => agent.setDefault('claude'), /Switch that agent on first/, 'an agent that is off cannot be the default');
     cl.available = () => true;
     agent.setEnabled('claude', true); agent.setDefault('claude');
-    assert.equal(view(), 'tana+ codex+ dot? claude+*', 'switched on and chosen');
+    assert.equal(view(), 'tana+ codex+ claude+*', 'switched on and chosen');
     assert.deepEqual([settings.isSynced('agents'), settings.isSynced('defaultAgent')], [true, true], 'and both follow you to the next machine');
     cl.available = () => false;
     assert.equal(agent.defaultAgent(), 'tana', 'a default this Mac cannot run falls back to Tana, so Assign to Agent always has somewhere to go');
@@ -3802,59 +3800,6 @@ async function main() {
     assert.equal(cx.linkId('not-a-thread'), null, 'and nothing else');
     assert.equal(cl.linkId('claude --resume ' + THREAD), THREAD, 'Claude takes its resume command');
     assert.equal(cl.linkId('codex://threads/' + THREAD), null, 'but not a Codex link');
-    // Dot: your one conversation with your dot, linked once, and a message in it for every node (main/agents/dot.js).
-    {
-      const CHAT = '6abf3de2-abe4-81a4-9796-103cc1f3f0d4';
-      assert.throws(() => agent.setEnabled('dot', true, 'https://chatgpt.com'), /chat link/, 'a paste that is no chat link is refused');
-      assert.equal(agent.enabledIds().includes('dot'), false, 'and switches nothing on');
-      agent.setEnabled('dot', true, 'codex://threads/' + CHAT + '?hostId=durable');
-      assert.deepEqual([settings.get('dotChat'), settings.isSynced('dotChat')], [CHAT, true], 'the app\'s link, query and all, is the conversation, and it follows you');
-      dt.available = () => true; agent.setDefault('dot');
-      assert.equal(agent.defaultAgent(), 'dot', 'and Dot can be the default');
-      const docs = backend.documents, realWrite = docs.writeAgentStatus, realStatus = docs.agentStatus, wrote = [];
-      docs.writeAgentStatus = async (id, status) => { wrote.push([id, status]); };
-      const opened = backend.opened.length, timers = backend.timers.length;
-      // the handoff is the conversation opening with the message typed in, and nothing more: no wait, no key pressed
-      // (the old ↩ waited on a timer and pressed it with System Events, which needed Accessibility)
-      const done = await Promise.race([dt.start({ nodeUri: NODE, title: 'Plan the\noffsite', prompt: 'Book a venue' }).then(() => 'opened'), new Promise((r) => setImmediate(() => r('still waiting')))]);
-      assert.equal(done, 'opened', 'the handoff is done once the conversation opens, with no wait for a key to be pressed');
-      assert.equal(backend.timers.length, timers, 'and sets no timer');
-      assert.equal(backend.opened.length, opened + 1, 'it opens the conversation once');
-      const url = backend.opened.at(-1), prefix = 'codex://threads/' + CHAT + '?hostId=durable&prompt=';
-      assert.ok(url.startsWith(prefix), 'the conversation opens on the dot\'s host');
-      assert.equal(decodeURIComponent(url.slice(prefix.length)), 'Book a venue\n\nTana: Plan the offsite (' + NODE + ')\nKeep this Tana task updated: add your updates at the end of it, and end each update with a line "Agent status: Working", '
-        + 'or "Agent status: Completed" when you are done, or "Agent status: Failed" if you cannot finish. Leave the task\'s own status as it is.',
-      'with the request typed in, then the node by name and uri, and how to report back in it without touching its status');
-      assert.equal('press' in dt || 'sendAfter' in dt, false, 'Dot has no key to press');
-      // a node handed back to Dot after an earlier Completed or Failed is working again, not done or broken (#713 review)
-      assert.deepEqual(wrote, [[NODE, 'Working']], 'the handoff ends the node with Working, so an old status line no longer counts');
-      assert.deepEqual({ ...agent.setTask(NODE, 'dot') }, { agent: 'dot' }, 'so the node keeps only that Dot has it');
-      // the badge follows the node's last status line (main/documents.js lastAgentStatus)
-      const badge = async (status) => { docs.agentStatus = async () => { if (status instanceof Error) throw status; return status; }; return (await backend.agents.readStatuses())[NODE]; };
-      assert.deepEqual([await badge('working'), await badge('completed'), await badge('failed'), await badge(null), await badge(new Error('gone'))], ['working', 'done', 'broken', 'working', 'broken'],
-        'Working, Completed and Failed are the badge\'s working, done and broken; no line is still with the dot; a node that cannot be read needs you');
-      assert.equal(docs.lastAgentStatus('Agent context\nBook a venue\nAgent status: Working\nBooked De Hoge Veluwe\nagent status: completed.'), 'completed', 'the last line wins, in any case, with a full stop');
-      assert.equal(docs.lastAgentStatus('Agent status: Completed\nAgent status: Working'), 'working', 'so a handoff after an old Completed is the current one');
-      assert.equal(docs.lastAgentStatus('The agent status: Failed was a guess\nAgent status: maybe'), null, 'and only a line that starts with it and names one of the three counts');
-      docs.writeAgentStatus = realWrite; docs.agentStatus = realStatus;
-      await backend.handlers.get('agent:open')(null, NODE);
-      assert.equal(backend.opened.at(-1), 'codex://threads/' + CHAT + '?hostId=durable', 'and opens the conversation');
-      agent.clearTask(NODE);
-      assert.equal(agent.setTask(NODE, 'codex'), null, 'an agent with a task per node still needs its id');
-      settings.set('dotChat', undefined);
-      await assert.rejects(dt.start({ nodeUri: NODE, prompt: 'Do it' }), /Link your dot first/, 'with no conversation linked nothing is sent');
-      // nobody has to find that link: the ChatGPT app on this Mac knows which conversation is your dot, and Dot reads it there
-      const nodePath = require("node:path"), stateDir = fs.mkdtempSync(nodePath.join(require('node:os').tmpdir(), 'dot-state-')), noState = dt.stateFile, FOUND = '6abf3de2-abe4-81a4-9796-1c3d5e7f9a0b';
-      dt.stateFile = nodePath.join(stateDir, 'state.json');
-      fs.writeFileSync(dt.stateFile, JSON.stringify({ 'electron-persisted-atom-state': { 'primary-aeon-selection-v1': { response: { selection: { thread_id: FOUND, available: true }, profile: { active_root_thread_id: FOUND } } } } }));
-      await dt.open();
-      assert.deepEqual([settings.get('dotChat'), backend.opened.at(-1)], [FOUND, 'codex://threads/' + FOUND + '?hostId=durable'], 'the app\'s dot is found, opened, and stored to follow you');
-      settings.set('dotChat', undefined); fs.writeFileSync(dt.stateFile, '{ half written'); fs.utimesSync(dt.stateFile, new Date(), new Date(Date.now() + 5000));
-      await assert.rejects(dt.start({ nodeUri: NODE, prompt: 'Do it' }), /Link your dot first/, 'a state file that cannot be read finds nothing, and the link can still be pasted');
-      dt.stateFile = noState; fs.rmSync(stateDir, { recursive: true });
-      agent.setEnabled('dot', false); dt.available = () => false;
-      assert.equal(settings.get('defaultAgent'), null, 'switched off, it stops being the default');
-    }
     // Claude's state is read from its transcript (main/agents/claude.js): the last turn decides.
     const claude = require('../main/agents/claude');
     const said = (type, extra) => ({ type, message: { role: type, ...extra } });
@@ -3913,8 +3858,10 @@ async function main() {
     assert.equal(agent.list().some((a) => a.linked), false, 'no agent is linked until one is');
     assert.equal(settings.get('relayKey'), undefined, 'and there is no Orbital at the relay until the first link');
     const link = await h('relay:link');
-    assert.match(link.code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/, 'Connect to new agent gets a code');
-    assert.ok(link.prompt.includes(base + '/mcp') && link.prompt.includes(link.code), 'and a prompt carrying the server and the code, for the agent');
+    assert.match(link.code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/, 'Connect to your OpenAI Dot gets a code');
+    assert.deepEqual([link.url, link.tana], [base + '/mcp', 'https://home.tana.inc/mcp'], 'and both servers\' URLs, for the page to name');
+    assert.ok(link.prompt.startsWith('Call Orbital\'s link_orbital tool with the code ' + link.code + ' and the name Dot. Then subscribe to Orbital\'s task.assigned event'), 'the message links, as Dot, and subscribes it to the event that wakes it');
+    assert.ok(link.prompt.includes(base + '/mcp') && link.prompt.includes('home.tana.inc/mcp') && /only ids/.test(link.prompt), 'naming both servers if one is missing, and what goes through orbital.md, for the Dot to explain');
     const key = settings.get('relayKey');
     assert.match(key, /^[\w-]{43}$/, 'the first link makes your Orbital: one random key');
     assert.deepEqual(['relayKey', 'relaySeen', 'relayTasks', 'relayAgents'].map(settings.isSynced), [true, true, true, false], 'which follows you in the settings document; the agents\' list is this machine\'s mirror of the relay');
