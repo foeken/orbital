@@ -28,12 +28,22 @@ struct Shell: View {
     @State private var drag: CGFloat = 0 // how far a sideways swipe has moved the page, while it is under the finger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
-    private let width: CGFloat = 300
-
     var body: some View {
+        GeometryReader { proxy in
+            content(menuWidth: Self.menuWidth(for: proxy.size.width))
+        }
+    }
+
+    // The menu keeps its familiar 300 pt phone width, but grows with a wide window so the page and menu both retain
+    // useful room after a rotation or a fold. This is about the space SwiftUI gives us, not a list of device models.
+    private static func menuWidth(for available: CGFloat) -> CGFloat {
+        min(360, max(300, available * 0.4))
+    }
+
+    private func content(menuWidth: CGFloat) -> some View {
         ZStack(alignment: .leading) {
             SideMenu(page: $page, searches: $searches, icons: icons, hidden: engine.reveal ? [] : secret, moved: saveOrder, close: { path = []; show(false) }, settings: { settings = true })
-                .frame(width: width)
+                .frame(width: menuWidth)
                 .accessibilityHidden(!menu)
             NavigationStack(path: $path) {
                 Group {
@@ -75,7 +85,7 @@ struct Shell: View {
                     .accessibilityHidden(true)
             }
             .shadow(color: .black.opacity(menu ? 0.12 : 0), radius: 24)
-            .offset(x: min(width, max(0, (menu ? width : 0) + drag)))
+            .offset(x: min(menuWidth, max(0, (menu ? menuWidth : 0) + drag)))
         }
         .background(Color(.systemBackground))
         // A mention, a reference or a row anywhere zooms into its node: an orbital:<id> link (Row.zoom) is pushed here
@@ -102,7 +112,7 @@ struct Shell: View {
             .onEnded { g in
                 let moved = path.isEmpty && abs(g.translation.width) > abs(g.translation.height) ? g.predictedEndTranslation.width : 0
                 withAnimation(reduceMotion ? nil : Self.move) {
-                    if moved > width / 3 { menu = true } else if moved < -width / 3 { menu = false }
+                    if moved > menuWidth / 3 { menu = true } else if moved < -menuWidth / 3 { menu = false }
                     drag = 0
                 }
             })
