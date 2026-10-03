@@ -5351,7 +5351,7 @@ function runCodexAssignCheck() {
     const agentStates = new Map();
     const agentTasks = new Map([[DOC, { agent: 'codex', taskId: '01a0b379-afbc-74c3-a191-c419e6543bcc' }]]);
     // Tana and Codex on, Tana the default: the page offers both, and the row that sends names the one it goes to
-    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, link: true, openNew: true }];
+    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, link: true, openNew: true, opens: true }];
     let agentPick = 'tana';
     const agentsOn = () => agentList.filter((a) => a.enabled && a.installed), agentNamed = (id) => agentList.find((a) => a.id === id) || null;
     const openedTasks = [], wentTo = [];
@@ -5443,6 +5443,10 @@ function runCodexAssignCheck() {
       byName: () => paletteRows('').filter((r) => r.rank === 'codexTo').map((r) => [r.label, r.hint]),
       pressTo: async (label) => { await paletteRows('').find((r) => r.label === label).run(); await tick(); return { mode: palMode, agent: agentPick, sent: sent.length }; },
       pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codex').run(); await tick(); return state(); },
+      unassignRow: () => (paletteRows('').find((r) => r.rank === 'codexUnassign') || {}).label || null,
+      pressUnassign: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codexUnassign').run(); await tick(); return state(); },
+      dotGoRow: () => { agentList.push({ id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true }); agentIds.add(DOC); agentStates.set(DOC, 'working'); agentTasks.set(DOC, { agent: 'relay:echo', taskId: 't-echo' });
+        const r = paletteRows('').find((row) => row.rank === 'codexOpen'), el = agentBadgeEl(DOC); agentList.pop(); return { row: r ? r.label : null, role: el.attrs.role }; },
       type: (text) => { palText.value = text; },
       submitKey: async (name, mod) => { sent.length = 0; errors.length = 0; const e = key(name, mod); const handled = agentPromptKey(e); await tick(); return { handled, stopped: e.stopped, ...state() }; },
       promptRow: () => { const r = agentPromptRows()[0]; return { group: r.group, label: r.label, hint: r.hint, disabled: !!r.disabled }; },
@@ -5529,12 +5533,14 @@ function runCodexAssignCheck() {
     assert.equal(sent.editor, false, 'the editor is put away');
     assert.equal(sent.prompt, '', 'and emptied, so the next node is asked about from scratch');
     // Escape on the prompt page: back to the commands, with nothing written
-    assert.equal(api.label(), 'Unassign from Agent', 'the row now says how to take it back');
-    const back = plain(await api.pressRow());
+    assert.equal(api.label(), 'Assign to Agent', 'an assigned node can be handed over again: the request in its block is replaced');
+    assert.equal(api.unassignRow(), 'Unassign from Agent', 'and a row of its own says how to take it back');
+    const back = plain(await api.pressUnassign());
     // the third argument is the prompt, absent here and null by the time it comes back through JSON
     assert.deepEqual(back.sent, [[CODEX_DOC, false, null]], 'and taking it back needs nothing typed');
     assert.equal(back.assigned, false, 'the mark is dropped');
     assert.equal(back.badges.length, 0, 'and the badge goes with it');
+    assert.equal(api.unassignRow(), null, 'an unassigned node offers nothing to take back');
     const reopened = plain(await api.pressRow());
     assert.equal(reopened.mode, 'agentPrompt', 'assigning again asks again');
     api.type('never mind');
@@ -5597,6 +5603,7 @@ function runCodexAssignCheck() {
     assert.equal(api.goRow(false, true), null, 'an unassigned node does not, however stale the status map is');
     assert.equal(api.goRow(true, false), null, 'nor does an assigned node whose task is not known yet');
     assert.equal(api.goRow(false, false), null, 'and a node with neither says nothing');
+    assert.deepEqual(plain(api.dotGoRow()), { row: null, role: 'img' }, 'a Dot\'s task lives in ChatGPT, where nothing here can open it: no Go to row, and its badge is no button');
     // A Codex task opens in Codex, through main; a Tana chat opens here, in Orbital.
     const inCodex = plain(await api.onAgent('codex', '01a0b379-afbc-74c3-a191-c419e6543bcc'));
     assert.deepEqual([inCodex.row, inCodex.opened, inCodex.wentTo], ['Go to Codex task', [CODEX_DOC], []], 'a Codex task is opened by main, by node');
@@ -5618,7 +5625,7 @@ function runCodexAssignCheck() {
     const zoomedElsewhere = plain(api.zoomInto('tana:text:01exampleb0000000000000000'));
     assert.equal(zoomedElsewhere.header.length, 0, 'a page nobody handed to the agent says nothing');
     api.zoomInto(CODEX_DOC);
-    const takenBack = plain(await api.pressRow());
+    const takenBack = plain(await api.pressUnassign());
     assert.equal(takenBack.assigned, false);
     assert.equal(takenBack.header.length, 0, 'unassigning while the page is open takes the badge off it at once');
     assert.deepEqual(takenBack.renders, [], 'and does so by patching the header, not by redrawing the page');

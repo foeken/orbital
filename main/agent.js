@@ -57,7 +57,7 @@ function setDefault(id) {
 // says so, with the app it came through and when the relay last heard from it.
 const list = () => { catchUp(); return Object.values(AGENTS).map((a) => ({
   id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id), isDefault: defaultAgent() === a.id,
-  link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere,
+  link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere, opens: !!(a.open || a.opensHere), // opens: Go to <agent> task can show it
   ...(a.linked ? { linked: true, app: a.app || '', seenAt: a.seenAt || null } : {}),
 })); };
 

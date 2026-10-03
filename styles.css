@@ -603,7 +603,6 @@ html.links .app { display: none; }
 .line:is(:hover, :focus-within) :is(.ticon, .tl-join, .meeting-link), .line .ticon:is(.audience, .hiddenfrom) { opacity: 1; }
 :is(.tl-join, .meeting-link):hover { color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
-.node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
 /* a row that opens on a click shows the pointer over what it draws, and only there: the empty width beside it is no
    target (renderer/nodes.js onRowBlank). An "added to your Inbox" line opens nothing itself, so it has no .opens; its rows do. */
 .node.tl .line { cursor: default; } /* no caret on the Timeline: a click there never edits */

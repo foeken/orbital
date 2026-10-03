@@ -3726,7 +3726,9 @@ async function main() {
     assert.equal(await set(task.id, false), false);
     assert.equal(await assigned(), '', 'unassigning takes it back out');
     assert.deepEqual(Object.keys(cache.setting('codexPrompt') || {}), [], 'and takes the prompt with it: the two are one decision');
-    assert.equal(context().length, 1, 'but the context stays in the document: by then it is ordinary content somebody may have edited');
+    assert.equal(context().length, 0, 'and the Agent context block leaves the node with it, its status line too');
+    assert.equal(outline.readOutline(task).some((n) => /^Agent status:/.test(n.text || '')), false, 'nor is any status line left on its own');
+    assert.equal(outline.readOutline(task).at(-1).text, 'What the agent wrote', 'while what the agent wrote stays');
     // A handoff that cannot be opened is not a handoff: the call fails, so the renderer shows why rather than
     // drawing a badge for a task nobody opened. The task left from the last assignment is let go first, so this one
     // starts a new task rather than handing the old one the request.

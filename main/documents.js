@@ -726,8 +726,8 @@ const codexPrompts = () => { const stored = settings.get('codexPrompt'); return 
 // The prompt also goes into the node itself, where a person reading it in Tana can see what the agent was handed:
 // one "Agent context" block on the document with the prompt's lines nested under it. Reassigning rewrites that
 // block's children rather than adding a second one — the heading is found by its exact title among the document's
-// own top-level blocks, the same way anything else here looks a child up. Unassigning leaves it alone: it is
-// ordinary content by then, and deleting what somebody may have edited is not this feature's call.
+// own top-level blocks, the same way anything else here looks a child up. Unassigning takes it out again, with its status
+// line (removeAgentContext): the node goes back to what it was before it was handed over, but for what the agent wrote.
 const AGENT_HEADING = 'Agent context';
 function writeAgentContext(id, prompt) {
   // Blank lines would be empty outline rows, which read as damage rather than as spacing; everything else is kept
@@ -766,6 +766,10 @@ const writeAgentStatus = (id, status) => mut(id, (doc) => {
   return kids.length ? content.insertAfter(doc, kids.at(-1).id, line) : content.insertChild(doc, heading.id, line);
 });
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
+// Unassigned: the Agent context block goes, with its status line, and any status line an older build left on its own
+const removeAgentContext = (id) => mut(id, (doc) => {
+  for (const n of content.readOutline(doc)) if ((n.text || '').trim() === AGENT_HEADING || AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
+});
 async function setAgentMark(id, on, prompt) {
   const next = agentIds().filter((x) => x !== id);
   const text = typeof prompt === 'string' ? prompt.trim() : '';
@@ -773,6 +777,7 @@ async function setAgentMark(id, on, prompt) {
   // never claims a handoff the node itself knows nothing about. With no prompt there is nothing to write, and the
   // assignment is simply local.
   if (on && text) await writeAgentContext(id, text);
+  if (!on) await removeAgentContext(id).catch(() => {}); // a node that will not take the write still lets go of the assignment
   if (on) next.push(id);
   settings.set('codex', next);
   const prompts = codexPrompts();

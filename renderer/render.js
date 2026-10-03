@@ -689,7 +689,7 @@ function agentBadgeEl(id, done = !!docOf(id)?.done) {
   badgeMoved(el, id, state + (done ? ':closed' : '')); // a state that just changed pops, shines or shakes
   // A badge with a task behind it is the way into that task; a pending one has nowhere to go, so it stays a plain
   // image rather than a button that does nothing.
-  const link = agentTasks.get(id), linked = agentStates.has(id) && !!link && state !== 'elsewhere'; // nothing to open from here
+  const link = agentTasks.get(id), opens = link && agentNamed(link.agent), linked = agentStates.has(id) && !!link && state !== 'elsewhere' && !!opens && !!(opens.opens || opens.opensHere); // nothing to open from here (another Mac, or a Dot's task)
   el.setAttribute('role', linked ? 'button' : 'img');
   el.setAttribute('aria-label', linked ? words.label + ', open the ' + ((agentNamed(link.agent) || {}).label || 'agent') + ' task' : words.label);
   el.title = linked ? words.title + ' — click to open the task' : words.title;
@@ -933,7 +933,9 @@ function nodeEl(node, docId, parent) {
   if (sub) body.append(sub);
   blurSensitive(body, docId, target && target.id, node.timeline && node.timeline.uri); // a Timeline row says its node's title in its own words
   line.append(body);
-  // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
+  // handed to an agent: the robot badge at the end of the row, after everything the row says about itself. On the
+  // Timeline too, where a task row is the node itself (Today's Tasks, what was added to your Inbox); a line about what
+  // happened ("Priya completed …") has an id of its own, so it carries none: the badge is a fact about the task
   if (agentIds.has(display.id)) line.append(agentBadgeEl(display.id, display.done));
   if (node.proposal) line.append(proposalButtonsEl(node)); // approve and reject, at the end of a Proposals row (renderer/proposals.js)
   // A click that misses the words still belongs to the row, and the row is bigger than its text: the padding

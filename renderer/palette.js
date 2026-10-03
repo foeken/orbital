@@ -38,7 +38,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
-  'codex', 'codexOpen', 'codexLink', 'sendToAgent',
+  'codex', 'codexTo', 'codexUnassign', 'codexOpen', 'codexLink', 'sendToAgent',
   'visibility', 'addParticipants', 'notify', 'copyLink', 'exportPdf',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
@@ -285,23 +285,22 @@ function paletteRows(q, typed = q) {
   if (palDoc && tana.setAgent && isRealId(palDoc.id)) {
     const assigned = agentIds.has(palDoc.id), doc = palDoc;
     const holder = agentNamed((agentTasks.get(doc.id) || {}).agent), fallback = agentsOn().find((a) => a.isDefault) || agentNamed('tana');
-    // and one row per agent that is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked
-    if (!assigned) for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: a.isDefault ? 'Default' : '',
+    // Assigning is offered whether or not the node is with an agent already: handing it over again replaces the request
+    // in its Agent context block (main/documents.js writeAgentContext), to that agent or another. One row per agent that
+    // is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked.
+    rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: 'Assign to Agent', hint: assigned ? 'Replaces what ' + ((holder && holder.label) || 'the agent') + ' was asked' : 'To ' + ((fallback && fallback.label) || 'Tana'),
+      keepOpen: true, run: () => openAgentPrompt(doc) });
+    for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: a.isDefault ? 'Default' : '',
       keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
-    rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: assigned ? 'Unassign from Agent' : 'Assign to Agent',
-      hint: assigned ? (holder ? holder.label : '') : 'To ' + ((fallback && fallback.label) || 'Tana'),
-      keepOpen: !assigned,
-      run: () => {
-        if (!assigned) return openAgentPrompt(doc);
-        run(async () => {
-          holdRow(doc); // taking it back moves the row out of Agent: it stays put, and Clean up offers the redraw
-          await tana.setAgent(doc.id, false); // the prompt goes with the assignment
-          agentIds.delete(doc.id);
-          agentStates.delete(doc.id); // main lets go of the task id; the snapshot has to let go with it, not next refresh
-          renderPalette(); patchAgent(doc.id);
-          renderPills(true); // Clean up is decided while the pills render, and nothing else here redraws them
-        });
-      } });
+    if (assigned) rows.push({ rank: 'codexUnassign', group: docGroup, icon: 'robot', label: 'Unassign from Agent', hint: holder ? holder.label : '',
+      run: () => run(async () => {
+        holdRow(doc); // taking it back moves the row out of Agent: it stays put, and Clean up offers the redraw
+        await tana.setAgent(doc.id, false); // the prompt goes with the assignment, and its block leaves the node
+        agentIds.delete(doc.id);
+        agentStates.delete(doc.id); // main lets go of the task id; the snapshot has to let go with it, not next refresh
+        renderPalette(); patchAgent(doc.id);
+        renderPills(true); // Clean up is decided while the pills render, and nothing else here redraws them
+      }) });
   }
   // A task that already exists in an agent's app, linked by pasting its link (#143): renderer/agent.js.
   if (palDoc && tana.linkAgentTask && isRealId(palDoc.id)) { const doc = palDoc; for (const a of agentsOn().filter((x) => x.link)) rows.push({ rank: 'codexLink', group: docGroup, icon: a.icon, label: 'Link ' + a.label + ' task …', keepOpen: true, run: () => openAgentLink(doc, a) }); }
@@ -312,7 +311,8 @@ function paletteRows(q, typed = q) {
     const doc = palDoc, a = agentNamed(agentTasks.get(doc.id).agent);
     // a task on another Mac stays offered, greyed with where it is (the badge is not a button there either)
     const away = agentStateOf(doc.id) === 'elsewhere';
-    if (a) rows.push({ rank: 'codexOpen', group: docGroup, icon: a.icon, label: 'Go to ' + a.label + ' task', ...(away ? { disabled: true, hint: 'On another Mac: open it there' } : {}), run: () => openAgentTask(doc.id) });
+    // only an agent whose task can be opened from here: a Dot's lives in ChatGPT, where nothing can open it for you
+    if (a && (a.opens || a.opensHere)) rows.push({ rank: 'codexOpen', group: docGroup, icon: a.icon, label: 'Go to ' + a.label + ' task', ...(away ? { disabled: true, hint: 'On another Mac: open it there' } : {}), run: () => openAgentTask(doc.id) });
   }
   if (palDoc && tana.accessOptions) {
     if (!palette.hidden) loadAccess(palDoc.id); // for the open palette only (#274): a key on a choice folded under these asks in runAction
