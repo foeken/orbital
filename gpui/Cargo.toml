@@ -1,0 +1,21 @@
+[package]
+name = "orbital-gpui"
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "Spike: Orbital's desktop window drawn with GPUI over the JavaScript engine"
+
+[dependencies]
+# runtime_shaders: the Metal shaders compile when the app starts, so building needs no Metal Toolchain download.
+# No wayland/x11: this spike is macOS only.
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders"] }
+futures = "0.3"
+unicode-segmentation = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
