@@ -12,10 +12,11 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: ['ios/**', '.github/workflows/ios.yml']
 
-# a newer push to a pull request replaces its run; every merge to main finishes its own, so main shows each commit's result
+# a newer push to a pull request replaces its run; a merge to main gets a group of its own, its commit, because a group keeps
+# one waiting run and a newer one replaces it: so every commit on main finishes its run
 concurrency:
-  group: ios-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ios-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   ui-tests:

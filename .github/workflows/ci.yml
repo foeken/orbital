@@ -8,10 +8,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
+# a newer push to a pull request replaces its run; a merge to main gets a group of its own, its commit, because a group keeps
+# one waiting run and a newer one replaces it: so every commit on main finishes its run
 concurrency:
-  group: ci-${{ github.ref }}
-  # a newer push to a pull request replaces its run; every merge to main finishes its own, so main shows each commit's result
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   # Keys, tokens and real work content (.gitleaks.toml) in the commits this pull request or push adds; the history
