@@ -129,7 +129,7 @@ fun NodeScreen(
         if (titled) PageBar(if (hiddenPage) "" else engine.translator.words(current?.title ?: "", current?.sensitive == true).first, onBack = onBack)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                current != null && hiddenPage -> Empty("Hidden", "You marked this sensitive in Orbital. Shake your phone to show sensitive items, and shake it again to hide them.", glyph = "hidden")
+                current != null && hiddenPage -> Empty("Hidden", "You marked this sensitive in Orbital. Shake your phone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.", glyph = "hidden")
                 current != null -> when (current.kind) {
                     "chat" -> Column(Modifier.fillMaxSize()) {
                         ChatView(current.rows, waitingSince ?: asked, engine, Modifier.weight(1f))

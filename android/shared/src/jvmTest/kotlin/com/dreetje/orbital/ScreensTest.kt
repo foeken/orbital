@@ -26,11 +26,11 @@ import kotlin.test.assertTrue
 // every element is found by what TalkBack reads, so a test that cannot find something is also a screen TalkBack cannot read
 @OptIn(ExperimentalTestApi::class)
 class ScreensTest {
-    private fun sample(width: Int = 412, height: Int = 915, test: DesktopComposeUiTest.(Engine) -> Unit) = runDesktopComposeUiTest(width, height) {
+    private fun sample(width: Int = 412, height: Int = 915, start: com.dreetje.orbital.ui.Start = com.dreetje.orbital.ui.Start(), test: DesktopComposeUiTest.(Engine) -> Unit) = runDesktopComposeUiTest(width, height) {
         val scope = MainScope() // the Activity's viewModelScope here: ended with the test, so no work outlives it into the next
         try {
             val engine = Engine(null, FakePlatform(), scope, sample = sampleFile("timeline-sample.json") to sampleFile("pages-sample.json"), demoMode = false)
-            setContent { OrbitalApp(engine) }
+            setContent { OrbitalApp(engine, start) }
             waitUntil(timeoutMillis = 5000) { onAllWithText("Today's Tasks").isNotEmpty() }
             test(engine)
         } finally {
@@ -56,7 +56,7 @@ class ScreensTest {
 
     @Test fun aSensitiveTaskShowsNoWords() = sample { engine ->
         box("Sensitive task").assertExists()
-        onAllNodes(hasContentDescription("Sensitive, shake to show")).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
+        onAllNodes(hasContentDescription(com.dreetje.orbital.ui.SENSITIVE_LABEL)).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
         assertFalse(onAllNodes(hasText("offsite agenda", substring = true)).fetchSemanticsNodes().isNotEmpty())
         // a shake shows it
         engine.reveal = true
@@ -106,6 +106,16 @@ class ScreensTest {
         waitUntil(timeoutMillis = 3000) { onAllWithText("Demo mode").isNotEmpty() }
         onNodeWithContentDescription("Close").performClick()
         waitUntil(timeoutMillis = 3000) { onAllWithText("Demo mode").isEmpty() }
+    }
+
+    // Settings' Show sensitive items shows what a shake shows, for a phone that cannot be shaken (Settings open at the
+    // start: from the menu, the menu would still be over the page once it closes)
+    @Test fun settingsShowSensitiveItems() = sample(start = com.dreetje.orbital.ui.Start(settings = true)) { engine ->
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Show sensitive items").isNotEmpty() }
+        onNodeWithContentDescription("Show sensitive items").performClick()
+        assertTrue(engine.reveal)
+        onNodeWithContentDescription("Close").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllNodes(hasText("Send the offsite agenda", substring = true)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test fun aLongPressOffersTheNodesActions() = sample {

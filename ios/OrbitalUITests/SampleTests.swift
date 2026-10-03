@@ -44,7 +44,7 @@ final class SampleTests: XCTestCase {
     // only a test, never VoiceOver, reaches them
     func testSensitiveTaskShowsNoWords() {
         XCTAssert(box("Sensitive task").exists)
-        XCTAssert(app.buttons["Sensitive, shake to show"].exists)
+        XCTAssert(app.buttons["Sensitive, shake or use Settings to show"].exists)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'offsite agenda'")).firstMatch.exists)
     }
 
@@ -84,5 +84,18 @@ final class SampleTests: XCTestCase {
         XCTAssert(app.staticTexts["Demo mode"].waitForExistence(timeout: 5))
         app.buttons["Close"].tap()
         XCTAssert(app.staticTexts["Demo mode"].waitForNonExistence(timeout: 5))
+    }
+
+    // Settings' Show sensitive items shows what a shake shows, for an iPhone that cannot be shaken
+    // (-settings: open at the start; from the menu, the menu would still cover the page once it closes)
+    func testSettingsShowSensitiveItems() {
+        app.terminate()
+        app.launchArguments.append("-settings")
+        app.launch()
+        let show = app.switches["Show sensitive items"]
+        XCTAssert(show.waitForExistence(timeout: 5))
+        show.switches.firstMatch.tap()
+        app.buttons["Close"].tap()
+        XCTAssert(app.buttons.matching(NSPredicate(format: "label CONTAINS 'offsite agenda'")).firstMatch.waitForExistence(timeout: 5))
     }
 }

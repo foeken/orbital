@@ -105,7 +105,7 @@ extension View {
         }
     }
 
-    // What is sensitive, drawn as the desktop draws it, until a shake of the phone shows it (Engine.reveal)
+    // What is sensitive, drawn as the desktop draws it, until a shake of the phone or Settings shows it (Engine.reveal)
     func sensitive(_ on: Bool?, engine: Engine) -> some View {
         modifier(Blur(hidden: on == true && !engine.reveal))
     }
@@ -118,7 +118,7 @@ struct Blur: ViewModifier {
     let hidden: Bool
     func body(content: Content) -> some View {
         if hidden {
-            content.textRenderer(Redacted()).environment(\.sensitiveHidden, true).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake to show")
+            content.textRenderer(Redacted()).environment(\.sensitiveHidden, true).accessibilityElement(children: .ignore).accessibilityLabel("Sensitive, shake or use Settings to show")
         } else {
             content
         }

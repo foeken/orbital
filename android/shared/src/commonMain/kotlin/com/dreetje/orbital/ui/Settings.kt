@@ -87,7 +87,8 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
             }
             item("orbital") {
                 val notes = listOfNotNull(engine.translator.problem?.takeIf { engine.translator.to != null }?.let { "Auto-translate: $it" }, // why the last translation did not come
-                    "Demo mode shows made-up words and names in place of yours, for showing Orbital to someone. Nothing is saved to Tana while it is on.")
+                    "Demo mode shows made-up words and names in place of yours, for showing Orbital to someone. Nothing is saved to Tana while it is on.",
+                    "Show sensitive items shows what you marked sensitive until Orbital closes, as a shake of the phone does.")
                 Group("Orbital", footer = notes.joinToString("\n\n")) {
                     // the language notes are shown in, the same synced setting as Cmd+K Auto-translate … on the Mac
                     var open by remember { mutableStateOf(false) }
@@ -100,11 +101,10 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                             }
                         }
                     }
-                    GroupRow(onClick = { engine.demo = !engine.demo }) {
-                        Label("hidden", "Demo mode")
-                        // the switch in its own colour: in the rows' text colour it is white on white
-                        Switch(engine.demo, { engine.demo = it }, Modifier.semantics { contentDescription = "Demo mode" }, colors = SwitchDefaults.colors(checkedTrackColor = c.done, checkedThumbColor = Color.White, checkedBorderColor = c.done))
-                    }
+                    OnOff("hidden", "Demo mode", engine.demo) { engine.demo = it }
+                    // what you marked sensitive, shown until Orbital closes, as a shake shows it: for a phone without the
+                    // sensor, or a hand that cannot shake it
+                    OnOff("visible", "Show sensitive items", engine.reveal) { engine.reveal = it }
                     GroupRow(last = true) { Label("info", "Version"); Text(engine.platform.version, color = c.secondary) }
                 }
             }
@@ -125,6 +125,17 @@ private fun androidx.compose.foundation.layout.RowScope.Label(glyph: String, tit
     val c = Theme.colors
     Glyph(glyph, Modifier.size(22.dp), c.text)
     Text(title, Modifier.weight(1f), color = c.text)
+}
+
+// a row that is a switch: the whole row flips it, and the switch in its own colour (in the rows' text colour it is white
+// on white)
+@Composable
+private fun OnOff(glyph: String, title: String, on: Boolean, set: (Boolean) -> Unit) {
+    val c = Theme.colors
+    GroupRow(onClick = { set(!on) }) {
+        Label(glyph, title)
+        Switch(on, set, Modifier.semantics { contentDescription = title }, colors = SwitchDefaults.colors(checkedTrackColor = c.done, checkedThumbColor = Color.White, checkedBorderColor = c.done))
+    }
 }
 
 @Composable

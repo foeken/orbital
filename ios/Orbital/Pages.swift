@@ -78,7 +78,7 @@ struct NodeScreen: View {
         Group {
             // a node you marked sensitive: what it is, and how to see it, until a shake shows it (the title says Hidden, as the desktop's tab does)
             if let page, page.sensitive == true, !engine.reveal {
-                ContentUnavailableView { Label { Text("Hidden") } icon: { Image("Glyphs/hidden").resizable().frame(width: 48, height: 48) } } description: { Text("You marked this sensitive in Orbital. Shake your iPhone to show sensitive items, and shake it again to hide them.") }
+                ContentUnavailableView { Label { Text("Hidden") } icon: { Image("Glyphs/hidden").resizable().frame(width: 48, height: 48) } } description: { Text("You marked this sensitive in Orbital. Shake your iPhone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.") }
             } else if let page {
                 switch page.kind {
                 case "chat":

@@ -43,10 +43,13 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .tint(.secondary) // its value in grey, as the other rows have theirs
                     Toggle(isOn: Binding { engine.demo } set: { engine.demo = $0 }) { Row(glyph: "hidden", title: "Demo mode") }.tint(.green) // the switch in its own colour: in the rows' text colour it is white on white
+                    // what you marked sensitive, shown until Orbital closes, as a shake shows it: for a phone held where it
+                    // cannot be shaken, or a hand that cannot shake it
+                    Toggle(isOn: Binding { engine.reveal } set: { engine.reveal = $0 }) { Row(glyph: "visible", title: "Show sensitive items") }.tint(.green)
                     LabeledContent { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") } label: { Row(glyph: "info", title: "Version") }
                 } header: { Header("Orbital") } footer: {
                     if engine.translator.to != nil, let problem = engine.translator.problem { Text("Auto-translate: " + problem) } // why the last translation did not come
-                    Text("Demo mode shows made-up words and names in place of yours, for showing Orbital to someone. Nothing is saved to Tana while it is on.")
+                    Text("Demo mode shows made-up words and names in place of yours, for showing Orbital to someone. Nothing is saved to Tana while it is on.\n\nShow sensitive items shows what you marked sensitive until Orbital closes, as a shake of the iPhone does.")
                 }
                 // signing out, apart from everything else and in red, as the ChatGPT app has its Log out
                 Section {

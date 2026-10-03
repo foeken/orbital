@@ -413,7 +413,7 @@ fun Faces(people: List<Node.Person>, names: Boolean = true, modifier: Modifier =
     val c = Theme.colors
     val hidden = LocalHidden.current // under a sensitive mark: the names barred, no circles
     val ten = with(LocalDensity.current) { 10.dp.toSp() }
-    Row(modifier.semantics(mergeDescendants = true) {}.clearAndSetSemantics { contentDescription = if (hidden) "Sensitive, shake to show" else people.joinToString(", ") { it.name } },
+    Row(modifier.semantics(mergeDescendants = true) {}.clearAndSetSemantics { contentDescription = if (hidden) SENSITIVE_LABEL else people.joinToString(", ") { it.name } },
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (!hidden) Row(horizontalArrangement = Arrangement.spacedBy((-4).dp)) {
             for (p in people.take(4)) {

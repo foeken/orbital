@@ -72,7 +72,7 @@ class SampleJourneyTest {
     @Test fun aSensitiveTaskShowsNoWords() {
         launch()
         box("Sensitive task").assertExists()
-        compose.onAllNodes(hasContentDescription("Sensitive, shake to show")).fetchSemanticsNodes().isNotEmpty().let(::check)
+        compose.onAllNodes(hasContentDescription(com.dreetje.orbital.ui.SENSITIVE_LABEL)).fetchSemanticsNodes().isNotEmpty().let(::check)
         // what TalkBack is given (the system's accessibility tree, as UI Automator reads it) has no words of it; the
         // words still sit, transparent, under the bars, where only a test of Compose's own tree reaches them
         check(compose.onAllNodes(hasText("offsite agenda", substring = true)).fetchSemanticsNodes().isEmpty())
@@ -130,6 +130,15 @@ class SampleJourneyTest {
         compose.waitUntil(5000) { seen("Demo mode") }
         compose.onNodeWithContentDescription("Close").performClick()
         compose.waitUntil(5000) { !seen("Demo mode") }
+    }
+
+    // Settings' Show sensitive items shows what a shake shows, for a phone that cannot be shaken
+    @Test fun settingsShowSensitiveItems() {
+        launch { putExtra("settings", true) } // open at the start: from the menu, the menu would still cover the page
+        compose.waitUntil(5000) { seen("Show sensitive items") }
+        compose.onNodeWithContentDescription("Show sensitive items").performClick()
+        compose.onNodeWithContentDescription("Close").performClick()
+        compose.waitUntil(5000) { seen("Send the offsite agenda") }
     }
 
     @Test fun aLongPressOffersTheNodesActions() {

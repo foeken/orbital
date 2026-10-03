@@ -39,15 +39,18 @@ import com.dreetje.orbital.Row
 // Zooming into a node from anywhere: a mention, a reference or a row (Shell pushes it, as the iPhone's openURL does)
 val LocalZoom = staticCompositionLocalOf<(String?) -> Unit> { {} }
 
+// What TalkBack hears of something sensitive, and how to show it (ios/Orbital Blur, its accessibilityLabel)
+const val SENSITIVE_LABEL = "Sensitive, shake or use Settings to show"
+
 // Under a sensitive mark: every Words below draws its bars, and Faces draw no circles (ios/Orbital Blur, sensitiveHidden)
 val LocalHidden = staticCompositionLocalOf { false }
 
-// What is sensitive, drawn as the desktop draws it, until a shake of the phone shows it (Engine.reveal); TalkBack
+// What is sensitive, drawn as the desktop draws it, until a shake of the phone or Settings shows it (Engine.reveal); TalkBack
 // hears only that it is hidden, as the eye sees
 @Composable
 fun Sensitive(hidden: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     if (!hidden) { Box(modifier) { content() }; return }
-    Box(modifier.clearAndSetSemantics { contentDescription = "Sensitive, shake to show" }) {
+    Box(modifier.clearAndSetSemantics { contentDescription = SENSITIVE_LABEL }) {
         CompositionLocalProvider(LocalHidden provides true, content = content)
     }
 }
