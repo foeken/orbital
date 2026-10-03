@@ -1,6 +1,6 @@
 # Orbital
 
-**[orbital.md](https://orbital.md)**
+**[orbital.md](https://orbital.md)** · **[Manual](https://orbital.md/manual)**
 
 A small macOS app for the new Tana (home.tana.inc), rendered the way Tana's own outliner reads: every
 line is a node, top-level rows are documents and their children are the document's content blocks.
