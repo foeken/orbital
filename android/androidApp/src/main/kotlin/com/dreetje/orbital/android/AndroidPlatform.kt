@@ -8,7 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.provider.Settings
+import android.animation.ValueAnimator
 import android.view.ViewGroup
 import android.view.textclassifier.TextClassificationManager
 import android.view.textclassifier.TextLanguage
@@ -58,7 +58,8 @@ class AndroidPlatform(private val context: Context) : Platform {
     override val chatgpt: ChatGPT = ChatGPTClient(Secrets(context))
     override val version: String = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
     override val recorder: Recorder = MicRecorder(context)
-    override val reduceMotion: Boolean get() = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    // the system's animators off (Remove animations, a duration scale of 0, Battery Saver), as docs/ANDROID.md has it
+    override val reduceMotion: Boolean get() = !ValueAnimator.areAnimatorsEnabled()
 
     override suspend fun microphone(): Boolean {
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) return true

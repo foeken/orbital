@@ -1,11 +1,36 @@
 package com.dreetje.orbital.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
+import androidx.compose.foundation.gestures.AnchoredDraggableState
+import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.anchoredDraggable
+import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -13,15 +38,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,7 +57,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -46,8 +67,6 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -117,13 +136,23 @@ fun Shell(engine: Engine, start: Start = Start()) {
     var searches by remember { mutableStateOf(listOf<Menu.Search>()) }
     var icons by remember { mutableStateOf(mapOf<String, ImageBitmap>()) } // saved search id -> the icon it was given in Orbital
     var secret by remember { mutableStateOf(setOf<String>()) } // the saved searches marked sensitive
-    var menu by remember { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(start.settings) }
     var adding by rememberSaveable { mutableStateOf(start.add) }
-    var drag by remember { mutableStateOf(0f) }
+    var composer by remember { mutableStateOf(0.dp) } // how tall the floating composer is
     val focus = LocalFocusManager.current
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     val pages = rememberSaveableStateHolder() // each page keeps its scroll while another is on top
-    val width = 300.dp
+    // The menu behind the page: the page follows the finger and settles open or shut with the iPhone's menu move, by
+    // where it was let go and how fast it was going (Shell.swift predictedEndTranslation past a third of the menu)
+    val drawer = remember { AnchoredDraggableState(false) }
+    val move: AnimationSpec<Float> = if (still) snap() else snappy(0.3f)
+    fun show(open: Boolean) { if (open) focus.clearFocus(); scope.launch { drawer.animateTo(open, move) } }
+    // a back gesture under way: how far it has come (Back.kt), and where the open menu was when it began
+    var back by remember { mutableFloatStateOf(0f) }
+    var drawerAtStart by remember { mutableStateOf<Float?>(null) }
+    var forward by remember { mutableStateOf(true) } // which way the next page change moves
+    var settled by remember { mutableStateOf(false) } // a page a gesture has already moved off: it goes without moving again
 
     // your saved searches for the menu, with the icons they were given in Orbital; the last list stays when a read fails
     suspend fun loadSearches() {
@@ -133,45 +162,98 @@ fun Shell(engine: Engine, start: Start = Start()) {
         secret = found.filter { it.sensitive == true }.map { it.id }.toSet()
         icons = found.mapNotNull { row -> row.glyph?.let { g -> runCatching { Base64.decode(g) }.getOrNull()?.let(engine.platform::decode)?.let { row.id to it } } }.toMap()
     }
-    fun show(open: Boolean) { menu = open; if (open) focus.clearFocus() }
+    fun push(id: String) { forward = true; settled = false; path.add(id) }
+    fun pop() { forward = false; settled = false; path.removeAt(path.lastIndex) }
     LaunchedEffect(engine.phase) { loadSearches() }
-    // however it opens, the saved searches are read again, so one pinned or given an icon on the Mac since shows up
-    LaunchedEffect(menu) { if (menu) loadSearches() }
+    // however it opens (the button, a swipe), the composer's keyboard goes and the saved searches are read again, so one
+    // pinned or given an icon on the Mac since shows up
+    LaunchedEffect(drawer.targetValue) { if (drawer.targetValue) { focus.clearFocus(); loadSearches() } }
     LaunchedEffect(Unit) { if (start.menuDemo) { delay(2000); show(true); delay(2000); show(false) } }
     // something shared to Orbital opens Quick Add on its own, over nothing else (Shell.swift: adding and settings shut)
     LaunchedEffect(engine.shared) { if (engine.shared != null) { adding = false; settings = false } }
-    PlatformBack(menu || path.isNotEmpty()) { if (menu) show(false) else path.removeAt(path.lastIndex) }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(c.page)) {
         val wide = maxWidth >= 840.dp
-        val zoom: (String?) -> Unit = { id -> if (id != null) { path.add(id); menu = false } }
+        // the iPhone's 300 on a phone, growing with a wide window so page and menu both keep room (Shell.swift menuWidth)
+        val width = (maxWidth * 0.4f).coerceIn(300.dp, 360.dp)
+        val widthPx = with(density) { width.toPx() }
+        LaunchedEffect(widthPx) { drawer.updateAnchors(DraggableAnchors { false at 0f; true at widthPx }) } // set again only when the width changes
+        val x = drawer.offset.takeUnless { it.isNaN() }?.coerceIn(0f, widthPx) ?: 0f
+        val menuShown = !wide && x > 0.5f
+
+        PlatformBack(menuShown || path.isNotEmpty(), onProgress = { p ->
+            if (menuShown || drawerAtStart != null) {
+                val from = drawerAtStart ?: x.also { drawerAtStart = it }
+                drawer.dispatchRawDelta(predictiveDrawerOffset(from, p) - x)
+            } else back = p
+        }, onCancel = {
+            if (drawerAtStart != null) { drawerAtStart = null; show(true) }
+            else scope.launch { animate(back, 0f, animationSpec = if (still) snap() else snappy(0.3f)) { v, _ -> back = v } }
+        }) {
+            when {
+                drawerAtStart != null || menuShown -> { drawerAtStart = null; show(false) }
+                back != 0f -> scope.launch {
+                    // let go to go back: the page carries on off the edge it was pulled to, then the one under it stays
+                    val to = if (back < 0f) -1f else 1f
+                    animate(back, to, animationSpec = if (still) snap() else smooth(0.3f)) { v, _ -> back = v }
+                    settled = true; forward = false; path.removeAt(path.lastIndex); back = 0f
+                }
+                path.isNotEmpty() -> pop()
+            }
+        }
+
+        val zoom: (String?) -> Unit = { id -> if (id != null) { push(id); show(false) } }
         val sideMenu = @Composable { modifier: Modifier ->
-            SideMenu(page, searches, icons, if (engine.reveal) emptySet() else secret, modifier,
+            SideMenu(page, searches, icons, if (engine.reveal) emptySet() else secret, still, modifier,
                 pick = { page = it; path.clear(); show(false) },
                 move = { i, by -> val to = i + by; if (to in searches.indices) { searches = searches.toMutableList().apply { add(to, removeAt(i)) }; saveOrder(searches, engine) } },
                 settings = { settings = true })
         }
-        val content = @Composable { modifier: Modifier ->
-            androidx.compose.runtime.CompositionLocalProvider(LocalZoom provides zoom) {
-                AnimatedContent(path.lastOrNull(), modifier, transitionSpec = {
-                    val forward = (targetState != null && initialState == null) || (targetState != null && path.size > 1 && initialState != targetState && path.contains(initialState))
-                    if (still) fadeIn(tween(0)) togetherWith fadeOut(tween(0))
-                    else if (forward) (slideInHorizontally(tween(260)) { it } + fadeIn(tween(200))) togetherWith (slideOutHorizontally(tween(260)) { -it / 4 } + fadeOut(tween(200)))
-                    else (slideInHorizontally(tween(260)) { -it / 4 } + fadeIn(tween(200))) togetherWith (slideOutHorizontally(tween(260)) { it } + fadeOut(tween(200)))
-                }) { top ->
-                    // a node zoomed into and the menu's page are kept apart: a saved search can be both
-                    pages.SaveableStateProvider(top?.let { "node:$it" } ?: "page:" + page.key) {
-                        if (top == null) Column(Modifier.fillMaxSize().imePadding().navigationBarsPadding()) {
-                            PageBar(page.title, onMenu = if (wide) null else ({ show(true) }), onAdd = { adding = true })
-                            Box(Modifier.weight(1f).fillMaxWidth()) {
-                                when (val p = page) {
-                                    Menu.Timeline -> TimelineScreen(engine, Modifier.fillMaxSize())
-                                    is Menu.Search -> NodeScreen(engine, p.id, titled = false)
-                                }
+        // One page: the menu's (its bar, the page, and the composer floating over its foot, as the iPhone's
+        // .safeAreaInset: the page scrolls on under it and fades out behind it), or a node zoomed into
+        val pageOf = @Composable { top: String?, preview: Boolean ->
+            // a node zoomed into and the menu's page are kept apart: a saved search can be both
+            pages.SaveableStateProvider(top?.let { "node:$it" } ?: "page:" + page.key) {
+                if (top == null) Column(Modifier.fillMaxSize().background(c.page).imePadding().navigationBarsPadding()) {
+                    PageBar(page.title, onMenu = if (wide) null else ({ show(true) }), onAdd = { adding = true })
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        CompositionLocalProvider(LocalBottomInset provides composer) {
+                            when (val p = page) {
+                                Menu.Timeline -> TimelineScreen(engine, Modifier.fillMaxSize())
+                                is Menu.Search -> NodeScreen(engine, p.id, titled = false)
                             }
-                            // a new chat, opened as it starts, its warning shown there
-                            Composer(engine) { text -> val sent = engine.ask(text); sent.warning?.let { notes[sent.id] = it }; asked[sent.id] = engine.now(); path.add(sent.id); null }
-                        } else NodeScreen(engine, top, Modifier.imePadding().navigationBarsPadding(), note = notes[top], asked = asked[top], onBack = { path.removeAt(path.lastIndex) })
+                        }
+                        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(composer + 16.dp)
+                            .background(Brush.verticalGradient(0f to c.page.copy(alpha = 0f), 0.45f to c.page.copy(alpha = 0.9f), 1f to c.page)))
+                        // a new chat, opened as it starts, its warning shown there
+                        Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { if (!preview) composer = with(density) { it.height.toDp() } }) {
+                            Composer(engine) { text -> val sent = engine.ask(text); sent.warning?.let { notes[sent.id] = it }; asked[sent.id] = engine.now(); push(sent.id); null }
+                        }
+                    }
+                } else NodeScreen(engine, top, Modifier.background(c.page).imePadding().navigationBarsPadding(), note = notes[top], asked = asked[top], onBack = { pop() })
+            }
+        }
+        val content = @Composable { modifier: Modifier ->
+            CompositionLocalProvider(LocalZoom provides zoom) {
+                Box(modifier) {
+                    val motion = backMotion(back)
+                    // under a back gesture, the page it goes back to, coming in under the finger
+                    if (back != 0f && path.isNotEmpty()) Box(Modifier.fillMaxSize().clearAndSetSemantics {}.graphicsLayer {
+                        translationX = size.width * motion.previousTranslation; alpha = motion.previousAlpha
+                    }) { pageOf(path.getOrNull(path.lastIndex - 1), true) }
+                    AnimatedContent(path.lastOrNull(), Modifier.fillMaxSize(), transitionSpec = {
+                        // a page pushed slides in over the one it came from, which drifts a quarter of the way off, as a
+                        // NavigationStack push; back is the same in reverse
+                        val slide: FiniteAnimationSpec<IntOffset> = smooth(0.35f)
+                        when {
+                            still || settled -> EnterTransition.None togetherWith ExitTransition.None
+                            forward -> slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 4 }
+                            else -> (slideInHorizontally(slide) { -it / 4 } togetherWith slideOutHorizontally(slide) { it }).apply { targetContentZIndex = -1f }
+                        }
+                    }) { top ->
+                        Box(Modifier.fillMaxSize().graphicsLayer {
+                            if (top == path.lastOrNull()) translationX = size.width * motion.currentTranslation
+                        }) { pageOf(top, false) }
                     }
                 }
             }
@@ -182,29 +264,20 @@ fun Shell(engine: Engine, start: Start = Start()) {
             VerticalDivider(color = c.separator)
             content(Modifier.weight(1f).fillMaxHeight())
         } else {
-            val target = if (menu) width else 0.dp
-            val shift by animateDpAsState(target, if (still) tween(0) else tween(300))
-            val x = (shift + with(androidx.compose.ui.platform.LocalDensity.current) { drag.toDp() }).coerceIn(0.dp, width)
-            val radius = if (menu || drag != 0f) 28.dp else 0.dp
-            val shape = RoundedCornerShape(radius)
-            Box(Modifier.fillMaxSize().pointerInput(path.isEmpty()) {
-                // A sideways swipe anywhere, the menu included: the page follows the finger and settles open or shut, as the
-                // ChatGPT app's does. Only a swipe that is more sideways than up or down counts, so lists still scroll.
-                if (path.isNotEmpty()) return@pointerInput
-                detectHorizontalDragGestures(
-                    onDragEnd = { val third = width.toPx() / 3; if (drag > third) show(true) else if (drag < -third) show(false); drag = 0f },
-                    onDragCancel = { drag = 0f },
-                ) { change, amount -> change.consume(); drag += amount }
-            }) {
-                sideMenu(Modifier.width(width).fillMaxHeight().then(if (menu) Modifier else Modifier.clearAndSetSemantics {}))
+            // A sideways swipe anywhere, the menu included, as the ChatGPT app's; only a swipe more sideways than up or
+            // down moves it, so lists still scroll
+            val open = x / widthPx
+            val shape = RoundedCornerShape(28.dp * open)
+            Box(Modifier.fillMaxSize().anchoredDraggable(drawer, Orientation.Horizontal, enabled = path.isEmpty(),
+                flingBehavior = AnchoredDraggableDefaults.flingBehavior(drawer, positionalThreshold = { it / 3f }, animationSpec = move))) {
+                sideMenu(Modifier.width(width).fillMaxHeight().then(if (menuShown) Modifier else Modifier.clearAndSetSemantics {}))
                 // pushed aside, the page is a card with a hairline edge, as the ChatGPT app's is; a tap closes it
-                Box(Modifier.fillMaxSize().offset { IntOffset(x.roundToPx(), 0) }
-                    .shadow(if (x > 0.dp && !c.dark) 24.dp else 0.dp, shape, ambientColor = Color.Black.copy(0.12f), spotColor = Color.Black.copy(0.12f))
+                Box(Modifier.fillMaxSize().offset { IntOffset(x.roundToInt(), 0) }
+                    .shadow(if (menuShown && !c.dark) 24.dp * open else 0.dp, shape, ambientColor = Color.Black.copy(0.12f), spotColor = Color.Black.copy(0.12f))
                     .clip(shape).background(c.page)
-                    .then(if (x > 0.dp) Modifier.border(1.dp, c.separator, shape) else Modifier)
-                    .then(if (menu) Modifier.clearAndSetSemantics {} else Modifier)) {
+                    .then(if (menuShown) Modifier.border(1.dp, c.separator, shape).clearAndSetSemantics {} else Modifier)) {
                     content(Modifier.fillMaxSize())
-                    if (menu) Box(Modifier.fillMaxSize().background(if (c.dark) Color.White.copy(0.08f) else Color.Transparent)
+                    if (menuShown) Box(Modifier.fillMaxSize().background(if (c.dark) Color.White.copy(0.08f * open) else Color.Transparent)
                         .clickable(remember { MutableInteractionSource() }, null) { show(false) })
                 }
             }
@@ -260,36 +333,68 @@ private fun SideMenu(
     searches: List<Menu.Search>,
     icons: Map<String, ImageBitmap>,
     hidden: Set<String>, // sensitive and not shown by a shake
+    still: Boolean,
     modifier: Modifier,
     pick: (Menu) -> Unit,
     move: (Int, Int) -> Unit,
     settings: () -> Unit,
 ) {
     val c = Theme.colors
+    val haptic = LocalHapticFeedback.current
+    val list by rememberUpdatedState(searches)
+    val moveBy by rememberUpdatedState(move)
+    var lifted by remember { mutableStateOf<String?>(null) } // the search picked up, and how far it is from its place
+    var liftedBy by remember { mutableFloatStateOf(0f) }
     Box(modifier.background(c.page).statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp).padding(top = 8.dp)) {
             Text("Orbital", Modifier.heightIn(min = 46.dp).padding(start = 14.dp, top = 8.dp, bottom = 12.dp), style = Type.title2, color = c.text)
             MenuItem(Menu.Timeline, page == Menu.Timeline, null, false, pick)
             if (searches.isNotEmpty()) {
                 HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), color = c.separator)
-                // Your saved searches, as the ChatGPT app lists chats under its pages; a long press offers to move one
-                LazyColumn(Modifier.weight(1f)) {
+                // Your saved searches, as the ChatGPT app lists chats under its pages. A long press picks one up and it
+                // follows the finger, the others making way, as the iPhone's List reorders (Shell.swift onMove); TalkBack
+                // moves one with Move up and Move down. They scroll under the settings button, fading out behind it.
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 90.dp)) {
                     itemsIndexed(searches, key = { _, s -> s.id }) { i, s ->
-                        var open by remember { mutableStateOf(false) }
-                        Box(Modifier.semantics {
-                            customActions = listOf(CustomAccessibilityAction("Move up") { move(i, -1); true }, CustomAccessibilityAction("Move down") { move(i, 1); true })
-                        }) {
-                            MenuItem(s, page == s, icons[s.id], s.id in hidden, pick) { open = true }
-                            DropdownMenu(open, { open = false }) {
-                                if (i > 0) DropdownMenuItem({ Text("Move up") }, { move(i, -1); open = false })
-                                if (i < searches.size - 1) DropdownMenuItem({ Text("Move down") }, { move(i, 1); open = false })
+                        val up = lifted == s.id
+                        val lift by animateFloatAsState(if (up) 1f else 0f, if (still) snap() else snappy(0.3f))
+                        var height by remember { mutableIntStateOf(1) }
+                        Box(Modifier
+                            .then(if (up) Modifier else Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = if (still) snap() else snappy(0.3f)))
+                            .zIndex(if (up) 1f else 0f)
+                            .onSizeChanged { height = it.height }
+                            .graphicsLayer {
+                                translationY = if (up) liftedBy else 0f
+                                scaleX = 1f + 0.03f * lift; scaleY = scaleX
+                                shadowElevation = 12.dp.toPx() * lift; shape = RoundedCornerShape(14.dp)
                             }
+                            .background(c.page.copy(alpha = lift), RoundedCornerShape(14.dp))
+                            .pointerInput(s.id) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { lifted = s.id; liftedBy = 0f; haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                    onDragEnd = { lifted = null; liftedBy = 0f },
+                                    onDragCancel = { lifted = null; liftedBy = 0f },
+                                ) { change, by ->
+                                    change.consume()
+                                    liftedBy += by.y
+                                    // past half the next row, it takes that row's place
+                                    val from = list.indexOfFirst { it.id == s.id }
+                                    val step = if (liftedBy > height / 2f) 1 else if (liftedBy < -height / 2f) -1 else 0
+                                    if (step != 0 && from + step in list.indices) {
+                                        moveBy(from, step); liftedBy -= step * height
+                                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                    }
+                                }
+                            }
+                            .semantics { customActions = listOf(CustomAccessibilityAction("Move up") { moveBy(i, -1); true }, CustomAccessibilityAction("Move down") { moveBy(i, 1); true }) }) {
+                            MenuItem(s, page == s, icons[s.id], s.id in hidden, pick)
                         }
                     }
-                    item { Spacer(Modifier.height(80.dp)) } // clear of the settings button
                 }
             }
         }
+        if (searches.isNotEmpty()) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(90.dp)
+            .background(Brush.verticalGradient(0f to c.page.copy(alpha = 0f), 0.7f to c.page.copy(alpha = 0.95f), 1f to c.page)))
         RoundButton("Settings", 48.dp, c.card, Modifier.align(Alignment.BottomEnd).padding(12.dp).shadow(if (c.dark) 0.dp else 4.dp, CircleShape), border = c.separator, onClick = settings) {
             Icon(Icons.Outlined.Settings, null, Modifier.size(24.dp), c.text)
         }
@@ -297,11 +402,11 @@ private fun SideMenu(
 }
 
 @Composable
-private fun MenuItem(item: Menu, selected: Boolean, icon: ImageBitmap?, hidden: Boolean, pick: (Menu) -> Unit, longPress: (() -> Unit)? = null) {
+private fun MenuItem(item: Menu, selected: Boolean, icon: ImageBitmap?, hidden: Boolean, pick: (Menu) -> Unit) {
     val c = Theme.colors
     Row(
         Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(14.dp)).background(if (selected) c.fill else Color.Transparent)
-            .combinedClickable(onLongClick = longPress, onClick = { pick(item) }).semantics { this.selected = selected }
+            .clickable { pick(item) }.semantics { this.selected = selected }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -331,7 +436,7 @@ fun Composer(engine: Engine, prompt: String = "Ask Tana", note: String? = null, 
     val empty = text.isBlank()
     val busy = dictation.recording || dictation.transcribing // listening, or writing down what was said
     val open = focused || !empty || busy
-    val side by animateDpAsState(if (open) 14.dp else 36.dp, if (still) tween(0) else tween(240))
+    val side by animateDpAsState(if (open) 14.dp else 36.dp, if (still) snap() else snappy())
     val shape = RoundedCornerShape(23.dp)
     fun append(said: String) { text = if (text.isEmpty()) said else "$text $said" } // dictated words land after what is typed
 
@@ -361,7 +466,7 @@ fun Composer(engine: Engine, prompt: String = "Ask Tana", note: String? = null, 
         val line = failure ?: dictation.problem
         if (line != null) Text(line, Modifier.padding(bottom = 6.dp), style = Type.footnote, color = c.secondary, textAlign = TextAlign.Center)
         Box(Modifier.fillMaxWidth().shadow(if (c.dark) 0.dp else 8.dp, shape, ambientColor = Color.Black.copy(0.08f), spotColor = Color.Black.copy(0.12f))
-            .clip(shape).background(c.card).border(1.dp, c.separator, shape).animateContentSize(if (still) tween(0) else tween(240))) {
+            .clip(shape).background(c.card).border(1.dp, c.separator, shape).animateContentSize(if (still) snap() else snappy())) {
             BasicTextField(
                 text, { text = it },
                 Modifier.fillMaxWidth().heightIn(min = 46.dp).onFocusChanged { focused = it.isFocused }

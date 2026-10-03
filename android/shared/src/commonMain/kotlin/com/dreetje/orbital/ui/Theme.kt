@@ -1,7 +1,10 @@
 package com.dreetje.orbital.ui
 
+import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -13,12 +16,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.PI
 
 // The iPhone's colours, type and rail (ios/Orbital/Timeline.swift Rail, Color.pair, and the system's own)
 
 // Orbital's colours, the desktop's light ones and their dark twins (styles.css and its [data-theme="dark"] rules, as
 // ios/Orbital Color.pair has them): grey unless colour means something. Green is done, blue is a link or something
-// happening now, red is an error or leaving, orange a warning. Dark is the desktop's own charcoal, not an inversion.
+// happening now, red is an error or leaving, orange a warning. Dark is not an inversion: the page and the menu behind it
+// are black, as the iPhone's Color(.systemBackground) is, and the rest the desktop's charcoal greys.
 @Immutable
 class Colors(
     val dark: Boolean,
@@ -55,7 +60,7 @@ private val Light = Colors(
 )
 
 private val Dark = Colors(
-    dark = true, page = Color(0xFF1B1D1E), grouped = Color(0xFF121314), card = Color(0xFF242729), text = Color(0xFFE3E4E5),
+    dark = true, page = Color.Black, grouped = Color(0xFF121314), card = Color(0xFF242729), text = Color(0xFFE3E4E5),
     secondary = Color(0xFFA0A5A8), tertiary = Color(0xFF6B7073), separator = Color(0xFF34383A), fill = Color(0xFF2C3032),
     fillQuiet = Color(0xFF232628), accent = Color(0xFF0A84FF), link = Color(0xFF7FB8DD), done = Color(0xFF5A9670),
     checkOn = Color(0xFF5B976C), checkOff = Color(0xFF3A3E40), checkInbox = Color(0xFF5D6467), face = Color(0xFF33373A),
@@ -87,6 +92,17 @@ val LocalRailTime = staticCompositionLocalOf { Rail.time }
 
 val LocalColors = staticCompositionLocalOf { Light }
 
+// How much of the page's foot a floating composer covers (the iPhone's .safeAreaInset(edge: .bottom)): a list under it
+// scrolls on past it by this much, so its last row can still come up above the composer
+val LocalBottomInset = staticCompositionLocalOf { 0.dp }
+
+// SwiftUI's springs, which the iPhone's moves are written in, as Compose springs: SwiftUI's bounce b is a damping ratio
+// of 1 - b, and its duration d (the time to settle, near enough) a stiffness of (2π / d)². .snappy is bounce 0.15 and
+// half a second; the menu's move is .snappy(duration: 0.3) (Shell.swift move). .smooth has no bounce: a page pushed.
+fun <T> snappy(duration: Float = 0.5f): SpringSpec<T> = spring(0.85f, stiffness(duration))
+fun <T> smooth(duration: Float = 0.5f): SpringSpec<T> = spring(1f, stiffness(duration))
+private fun stiffness(duration: Float) = (2 * PI / duration).let { it * it }.toFloat()
+
 object Theme {
     val colors: Colors @Composable get() = LocalColors.current
 }
@@ -103,7 +119,10 @@ fun OrbitalTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () 
         surfaceBright = c.card, surfaceDim = c.grouped, inverseSurface = c.text, inverseOnSurface = c.page,
         outline = c.separator, outlineVariant = c.separator, error = c.danger, onError = c.page, scrim = Color.Black,
     )
+    // Material's own pieces (a menu, a dialog, a button's words) in the app's sizes rather than Material's
+    val type = Typography(bodyLarge = Type.body, bodyMedium = Type.body, bodySmall = Type.footnote, labelLarge = Type.body,
+        titleLarge = Type.title2, titleMedium = Type.title3, titleSmall = Type.headline, headlineSmall = Type.title2)
     CompositionLocalProvider(LocalColors provides c) {
-        MaterialTheme(colorScheme = scheme, content = content)
+        MaterialTheme(colorScheme = scheme, typography = type, content = content)
     }
 }

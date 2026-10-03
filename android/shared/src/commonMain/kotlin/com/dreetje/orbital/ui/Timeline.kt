@@ -1,7 +1,6 @@
 package com.dreetje.orbital.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -13,7 +12,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -69,6 +70,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -89,6 +91,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -134,7 +137,7 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
 
     androidx.compose.runtime.CompositionLocalProvider(LocalRailTime provides timeWidth) { Box(modifier) {
         PullToRefreshBox(refreshing, { scope.launch { refreshing = true; engine.refresh(); refreshing = false } }, Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().alpha(shown), contentPadding = PaddingValues(bottom = 12.dp)) {
+            LazyColumn(Modifier.fillMaxSize().alpha(shown), contentPadding = PaddingValues(bottom = 12.dp + LocalBottomInset.current)) {
                 val key = uniqueKeys()
                 if (hasToday) {
                     // one stop on the rail: Now, the Today glyph, its words, the tasks hanging under them
@@ -186,7 +189,7 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
         }
         val error = engine.error
         if (error != null && rows.isNotEmpty()) {
-            Notice(error, Modifier.align(Alignment.BottomCenter))
+            Notice(error, Modifier.align(Alignment.BottomCenter).padding(bottom = LocalBottomInset.current))
         }
     } }
 }
@@ -332,7 +335,8 @@ fun FreeLine(free: Node.Free, time: String, bottom: Dp, engine: Engine) {
 @Composable
 fun CheckBox(state: String, still: Boolean, modifier: Modifier = Modifier) {
     val c = Theme.colors
-    val tick by animateFloatAsState(if (state == "closed") 1f else 0f, if (still) tween(0) else tween(220, easing = FastOutSlowInEasing))
+    // the iPhone's .animation(.snappy, value: state): the tick springs in, a touch past its size and back
+    val tick by animateFloatAsState(if (state == "closed") 1f else 0f, if (still) tween(0) else snappy())
     Canvas(modifier.size(20.dp)) {
         val r = CornerRadius(5.5.dp.toPx())
         when (state) {
@@ -356,28 +360,35 @@ fun CheckBox(state: String, still: Boolean, modifier: Modifier = Modifier) {
 private inline fun androidx.compose.ui.graphics.drawscope.DrawScope.scaleAround(k: Float, block: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit) =
     drawContext.transform.let { t -> t.scale(k, k, center); block(); t.scale(1 / k, 1 / k, center) }
 
-// A task's box: a tap ticks it off or back on (Engine.toggle, the desktop's rule), with the success haptic; the words
-// beside it open the task. TalkBack reads its words and its state. The write runs on the engine's scope, as the
-// iPhone's Task does, so a row leaving the list (a tick that moves it) never cancels its own write.
+// A task's box: a tap ticks it off or back on (Engine.toggle, the desktop's rule), with the success haptic as the tick
+// lands, not when Tana answers; the words beside it open the task. TalkBack reads its words and its state. The write
+// runs on the engine's scope, as the iPhone's Task does, so a row leaving the list (a tick that moves it) never cancels
+// its own write. The box is drawn text-sized and takes a finger-sized tap around it without moving anything, as the
+// iPhone's .padding(10).contentShape(Rectangle()).padding(-10) does: 48 dp, Android's touch target.
 @Composable
 fun TaskBox(task: Node, engine: Engine, modifier: Modifier = Modifier) {
     val state = engine.state(task)
     val haptic = LocalHapticFeedback.current
     val hidden = task.sensitive == true && !engine.reveal
-    CheckBox(state, engine.platform.reduceMotion, modifier
-        .semantics(mergeDescendants = true) {}
+    fun toggle() {
+        if (!engine.demo && state != "proposed" && state != "closed") haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+        engine.scope.launch { engine.toggle(task) }
+    }
+    Box(modifier
+        .layout { m, _ ->
+            val target = m.measure(Constraints.fixed(48.dp.roundToPx(), 48.dp.roundToPx()))
+            val box = 20.dp.roundToPx()
+            layout(box, box) { target.place((box - target.width) / 2, (box - target.height) / 2) }
+        }
         .clearAndSetSemantics {
             contentDescription = if (hidden) "Sensitive task" else task.words
             stateDescription = when (state) { "closed" -> "Completed"; "proposed" -> "In your Inbox"; else -> "Not completed" }
             role = androidx.compose.ui.semantics.Role.Checkbox
-            onClick("Ticks the task off, or back on") { engine.scope.launch { engine.toggle(task) }; true }
+            onClick("Ticks the task off, or back on") { toggle(); true }
         }
-        .combinedClickable(onClick = {
-            engine.scope.launch {
-                engine.toggle(task)
-                if (engine.states[task.id] == "closed") haptic.performHapticFeedback(HapticFeedbackType.Confirm) // your own tick, not a change read from Tana
-            }
-        }))
+        .clickable(remember { MutableInteractionSource() }, null) { toggle() }, contentAlignment = Alignment.Center) {
+        CheckBox(state, engine.platform.reduceMotion)
+    }
 }
 
 // The marker in the gutter, as the desktop's rail draws it (main/timeline.js ICON, styles.css .tl-*): finished work is
