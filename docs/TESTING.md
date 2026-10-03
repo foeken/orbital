@@ -59,9 +59,24 @@ From fastest to slowest. Each catches what the one before it cannot.
      and ⌘Z puts it back;
    - dragging a task from Today's Tasks onto a meeting pins it there, and the Timeline's record rows offer nothing to
      pick up.
+   - a task's life from Cmd+K: Set status to Waiting, Assign to Sam, ⌘↩ to complete and again to reopen, each saved;
+   - Quick Add Task (task.html): a title, a type with ↓, an assignee with ⇥, and ↩ makes it, hands it over and tells
+     the window;
+   - writing on Today's page: "/" makes a heading and a checklist row, "@" links a task and a day, saved as they read;
+   - a view: the Library grouped, sorted and filtered with ⌘F, Escape clearing it, then saved as a search that opens
+     on the same rows;
+   - Notifications read by bullet and by Mark all as read, a row opening its node; a proposal approved from Cmd+K and
+     one rejected with its button;
+   - a chat message sent with ↩ shows as yours and Tana's answer follows;
+   - panes and tabs (shell.html): ⌘↩ on a search result opens a tab, ⇧↩ a pane beside, ⇧⌘N a new pane, the keys go
+     with the page just opened and every page keeps its own place.
 
    A drag is dispatched in the page as Chromium delivers one (`__drag`: dragstart on the row's grip, dragover and drop
    where the pointer is), since the DevTools protocol cannot start a native drag in a headless page.
+   A page main would open is driven on a stand-in for main, given before its scripts run (`p.beforeLoad`, cleared
+   when the flow ends) and opened with `p.open`: task.html gets a `window.api`, shell.html a `window.shell` that
+   opens a page the way main.js `window:split` does. `p.jsIn(side, …)` runs in one pane's page, whose CSP refuses
+   eval.
 
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; CI runs it on every PR marked ready for review (a draft is tested on the machine that writes it, AGENTS.md).
@@ -83,8 +98,9 @@ The manual's scenes (`manual/scenes`) play the same mock in the same Chromium, b
   it. A new page goes into the privacy flow's list of places.
 - **Anything that draws an async answer**: a generation guard, and the page in the out-of-order flow when it reads per id.
 - **A new key or palette page**: the caret comes back on Escape; extend the focus flow when it opens over a row.
-- **A change to a golden path** (the Timeline, pins, getting around, dragging): its flow passes, and a step that is new
-  there joins it. A path the flows do not walk yet is listed under Open.
+- **A change to a golden path** (the Timeline, pins, getting around, dragging, tasks, Quick Add, writing, views,
+  Notifications and Proposals, chats, panes and tabs): its flow passes, and a step that is new there joins it. A path
+  the flows do not walk yet is listed under Open.
 - **An iPhone screen**: an accessibility label for everything you can tap, and a step in `SampleTests`.
 - **Before the first push**: read the whole diff and trace every caller of what changed; walk missing and empty values, a
   rename or retype, async ordering, cache and restart, masking, and the labels. Review bots are a second opinion.
@@ -98,10 +114,10 @@ the same dependency-free DevTools protocol as `shoot.js` and the manual. Worth a
 
 ## Open
 
-- Flows over the shell: two panes, tabs, the Graph pane following (#138, #435, #463). `manual/scenes/kit.js` `live` has the bridge.
-- Golden paths not walked yet: Quick Add Task (task.html, on a stand-in as the Settings flow does), sending in a chat,
-  a table, and dragging a task between the sections of My Tasks by Responsibility, which needs the mock's tasks to
-  carry `createdBy`.
+- More over the shell: the Graph pane following the focused page, and closing a pane mid-edit (the close guard's
+  flush, which needs main's `page:gone`) (#138, #435, #463).
+- Golden paths not walked yet: a table, and dragging a task between the sections of My Tasks by Responsibility, which
+  needs the mock's tasks to carry `createdBy`.
 - A sweep invariant in `sdk-check`: after every page closes, the fake SyncService holds no subscription (#436, #452).
 - Stale Cmd+K results while typing.
 - The gaps in `NOT_MOCKED`: `indentMany`, `outdentMany`, `pasteMarkdown`, `archiveDocument`, `taskTypes`.

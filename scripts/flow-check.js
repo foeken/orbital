@@ -475,6 +475,188 @@ flow('golden path: a task dragged onto a meeting is pinned there', async (p) => 
   await p.waitFor('[...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("Pinned to Leadership sync"))', 'the note that says so');
 });
 
+// 15. A task's life from Cmd+K (docs/OUTLINER.md): its status set by name, handed to someone, completed with ⌘↩ and
+// reopened with it, each saved as it is pressed
+flow('golden path: set a task\u2019s status, assign it, complete and reopen it', async (p) => {
+  await p.start();
+  const doc = 'tana:text:mockpin1', task = () => p.js('Promise.all([tana.node(' + J(doc) + '), tana.taskMeta(' + J(doc) + ')]).then(([n, m]) => [n.stateType, m.assignees])');
+  await p.js('goTo(' + J(doc) + ')'); await at(p, doc);
+  assert.deepEqual(await task(), ['open', ['tana:user-profile:robin']], 'an open task of yours to start with');
+  await command(p, 'waiting', 'Set status to Waiting');
+  await p.waitFor('tana.node(' + J(doc) + ').then((n) => n.stateType === "waiting")', 'the status Waiting saved');
+  await closePalette(p);
+  await command(p, 'assign to sam', 'Assign to Sam Okafor');
+  await p.waitFor('tana.taskMeta(' + J(doc) + ').then((m) => m.assignees.join() === "tana:user-profile:sam")', 'the task handed to Sam');
+  await closePalette(p);
+  await p.key('⌘↩');
+  await p.waitFor('tana.node(' + J(doc) + ').then((n) => n.stateType === "closed")', '⌘↩ to complete it');
+  await p.key('⌘↩');
+  await p.waitFor('tana.node(' + J(doc) + ').then((n) => n.stateType === "open")', '⌘↩ again to reopen it');
+  assert.deepEqual(await task(), ['open', ['tana:user-profile:sam']], 'reopened, and still Sam\u2019s');
+});
+
+// 16. Quick Add Task (task.html, ⇧⌘Space), on a stand-in for main as the Settings flow is: a title, a type with ↓, an
+// assignee with ⇥ and a few letters, and ↩ makes the task, hands it over and tells the window what it made
+const QUICK_ADD_API = String.raw`if (location.pathname === '/task.html') { window.__calls = [];
+  const people = [['robin', 'Robin Vega', true], ['sam', 'Sam Okafor'], ['priya', 'Priya Raman']].map(([k, title, me]) => ({ id: 'tana:user-profile:' + k, title, me: !!me }));
+  window.api = { members: async () => people, taskTypes: async () => [{ uri: 'tana:type:bug', title: 'Bug', hue: 10 }, { uri: 'tana:type:decision', title: 'Decision', hue: 150 }], clipboardHasImage: async () => false,
+    createDocument: async (title, opts) => { __calls.push(['createDocument', title, opts]); return { id: 'tana:text:quick1', title }; },
+    setAssignees: async (id, uris) => { __calls.push(['setAssignees', id, uris]); }, closeOverlay: (result) => { __calls.push(['closeOverlay', result]); } }; }`;
+flow('golden path: Quick Add Task makes a typed task for someone', async (p) => {
+  await p.beforeLoad(QUICK_ADD_API);
+  await p.open('task.html');
+  await p.waitFor('document.activeElement && document.activeElement.id === "taskTitle" && document.querySelectorAll("#taskTypes .row").length === 3', 'the card with its title field and three types');
+  const picks = () => p.js('document.getElementById("taskPicks").textContent');
+  assert.equal(await picks(), 'Task · Assigned to Me⇥', 'a plain task of yours by default');
+  await p.type('Fix the login loop'); await p.key('↓');
+  assert.equal(await picks(), 'Bug · Assigned to Me⇥', '↓ picks the next type');
+  await p.key('⇥'); await p.type('pri');
+  assert.deepEqual(await p.js('[...document.querySelectorAll("#taskTypes .row")].map((r) => r.textContent)'), ['Priya Raman↩'], '⇥ and a few letters find the person');
+  await p.key('↩');
+  assert.deepEqual([await p.js('document.getElementById("taskTitle").value'), await picks()], ['Fix the login loop', 'Bug · Assigned to Priya Raman⇥'], '↩ picks them and the title comes back');
+  await p.key('↩');
+  await p.waitFor('__calls.some((c) => c[0] === "closeOverlay")', 'the card to close');
+  assert.deepEqual(await p.js('__calls'), [['createDocument', 'Fix the login loop', { kind: 'task', typeUri: 'tana:type:bug' }], ['setAssignees', 'tana:text:quick1', ['tana:user-profile:priya']],
+    ['closeOverlay', { note: 'Task created: Fix the login loop, assigned to Priya Raman', open: 'tana:text:quick1' }]], 'the task made as a Bug, handed to Priya, and the window told');
+});
+
+// 17. Writing on today's page: ⌘K Today opens it, "/" turns a row into a heading or a checklist, "@" links a node or a
+// day, and every row is saved as it reads
+flow('golden path: write on Today\u2019s page with / blocks, @ links and dates', async (p) => {
+  await p.start();
+  await command(p, 'today', 'Today');
+  await p.waitFor('zoom && document.getElementById("title").textContent === localDate()', 'today\u2019s page');
+  const day = await p.js('zoom.docId');
+  await p.js('document.querySelector("#outline .node .text").focus(); placeCaret(keyOfEl(document.querySelector("#outline .node .text")), 0)');
+  await p.type('/'); await p.waitFor('palMode === "slash"', 'the / menu'); await p.type('heading 2');
+  await p.waitFor('palRows[palIndex]?.label === "Heading 2"', 'Heading 2 offered'); await p.key('↩');
+  await p.type('Plan'); await p.key('↩');
+  await p.type('See '); await p.type('@'); await p.waitFor('palMode === "search"', 'the @ picker'); await p.type('Check out');
+  await p.waitFor('palRows[palIndex]?.label === "Check out the new editor"', 'the task found'); await p.key('↩');
+  await p.type(' by '); await p.type('@'); await p.type('friday');
+  await p.waitFor('palRows[palIndex]?.date', 'Friday offered as a day'); await p.key('↩');
+  await p.key('↩'); await p.type('/'); await p.type('checklist'); await p.waitFor('palRows[palIndex]?.label === "Checklist"', 'Checklist offered'); await p.key('↩');
+  await p.type('Buy cake');
+  await p.js('flushAll()'); await settle(p, 500);
+  const friday = await p.js('parseDay("friday")');
+  const saved = await p.js('tana.children(' + J(day) + ').then((rows) => rows.map((n) => ({ block: n.block || null, done: n.done ?? null, segments: n.segments })))');
+  assert.deepEqual(saved, [
+    { block: 'heading2', done: null, segments: [{ text: 'Plan' }] },
+    { block: null, done: null, segments: [{ text: 'See ' }, { mention: { label: 'Check out the new editor', uri: 'mockdoc2', icon: 'task' } }, { text: ' by ' }, { mention: { label: await p.js('dayLabel(' + J(friday) + ')'), uri: 'tana:plaindate:' + friday } }] },
+    { block: null, done: 0, segments: [{ text: 'Buy cake' }] }], 'a heading, a row linking a task and a day, and a checklist row, saved as they read');
+});
+
+// 18. A view (docs/VIEWS.md): the Library grouped, sorted and filtered from Cmd+K and ⌘F, then saved as a search that
+// opens on the same rows
+flow('golden path: group, sort and filter the Library, then save it as a search', async (p) => {
+  await p.start();
+  await command(p, 'library', 'Library'); await p.waitFor('viewOf()?.id === "library" && document.querySelector("#outline .node")', 'the Library');
+  await command(p, 'group by none', 'Group by None'); await closePalette(p);
+  await p.waitFor('groupBy() === "none" && !document.querySelector("#outline .ghead")', 'one list, no sections');
+  await command(p, 'sort by title', 'Sort by Title'); await closePalette(p); await settle(p, 300);
+  const all = await p.js('__screen()');
+  assert.ok(all.length > 10, 'the whole Library listed');
+  assert.deepEqual(all, [...all].sort((a, b) => a.localeCompare(b)), 'sorted by title');
+  await p.key('⌘f'); await p.waitFor('document.activeElement === filterEl', 'the filter field');
+  await p.type('offsite'); await settle(p, 500);
+  const offsite = ['Book a room for the offsite', 'Prepare the offsite agenda', 'Terugblik offsite Studio'];
+  assert.deepEqual(await p.js('__screen()'), offsite, '⌘F keeps the rows with the words');
+  await p.key('esc'); await settle(p, 300);
+  assert.deepEqual([await p.js('filterEl.value'), (await p.js('__screen()')).length], ['', all.length], 'Escape clears the filter');
+  await p.key('⌘f'); await p.type('offsite'); await settle(p, 400);
+  await command(p, 'save as', 'Save as new search');
+  await p.waitFor('zoom && String(zoom.docId).startsWith("tana:search:")', 'the saved search to open');
+  await settle(p, 400);
+  assert.deepEqual([...await p.js('__screen()')].sort(), offsite, 'the saved search lists what the view showed');
+});
+
+// 19. Notifications and Proposals (#135 family): a bullet marks one read, Mark all as read the rest, a row opens what
+// it is about; a proposal approved from Cmd+K and one rejected with its button both leave the page
+flow('golden path: read notifications and settle proposals', async (p) => {
+  await p.start();
+  await p.js("goTo('orbital:notifications')"); await at(p, 'orbital:notifications');
+  const unread = () => p.js('[document.querySelectorAll("#outline .node.unread").length, inboxUnread]');
+  await p.waitFor('document.querySelectorAll("#outline .node.unread").length === 2', 'two unread');
+  await p.js('document.querySelector("#outline .node.unread .bullet").click()');
+  await p.waitFor('document.querySelectorAll("#outline .node.unread").length === 1', 'one read with its bullet');
+  await command(p, 'mark all', 'Mark all as read'); await closePalette(p);
+  await p.waitFor('document.querySelectorAll("#outline .node.unread").length === 0', 'the rest read');
+  assert.deepEqual(await unread(), [0, 0], 'nothing unread, and the count says so');
+  await clickWords(p, 'Priya Raman added you');
+  await at(p, 'mockmeeting2');
+  await p.js("goTo('orbital:proposals')"); await at(p, 'orbital:proposals');
+  await p.waitFor(T('Check out the new editor'), 'the proposals');
+  const before = await p.js('__screen()');
+  await p.js('(' + T('Check out the new editor') + ').focus()');
+  await command(p, 'approve', 'Approve proposal'); await closePalette(p);
+  await p.waitFor('!' + T('Check out the new editor'), 'the approved one gone');
+  await p.js(rowOf('Studio LT charter') + '.querySelector(".pbutton:not(.approve)").click()');
+  await p.waitFor('!' + T('Studio LT charter'), 'the rejected one gone');
+  assert.deepEqual(await p.js('__screen()'), before.filter((t) => !/^(Check out the new editor|Studio LT charter)$/.test(t)), 'the others stay');
+});
+
+// 20. A chat (docs/CHATS.md): a message typed in the composer is sent with ↩, shows as yours at once, and Tana's answer
+// follows below it
+flow('golden path: send a chat message and read the answer', async (p) => {
+  await p.start();
+  await p.js("goTo('tana:chat:mockchat0')"); await p.waitFor('document.getElementById("composerText") && document.querySelector(".chat-msg")', 'the conversation');
+  const mine = await p.js('document.querySelectorAll(".chat-msg.mine").length');
+  await p.js('document.getElementById("composerText").focus()'); await p.type('Summarise the pilots'); await p.key('↩');
+  await p.waitFor('document.querySelectorAll(".chat-msg.mine").length === ' + (mine + 1) + ' && [...document.querySelectorAll(".chat-msg.mine")].at(-1).textContent.includes("Summarise the pilots")', 'the message sent', 2000);
+  assert.equal(await p.js('document.getElementById("composerText").textContent'), '', 'the composer emptied');
+  await p.waitFor('[...document.querySelectorAll(".chat-msg.theirs")].at(-1)?.textContent.includes("Mock answer to: Summarise the pilots")', 'Tana\u2019s answer', 6000);
+});
+
+// 21. Panes and tabs (#138, #435, #463; shell.html): the window's shell on a stand-in for main that opens a page the way
+// main.js window:split does. ⌘↩ on a search result opens it in a new tab, ⇧↩ in a pane beside, ⇧⌘N a new pane on the
+// Library; the keys stay with the page just opened, and every page keeps its own place.
+const TWO_PANES = { schema: 1, root: { kind: 'split', id: 'split-m', axis: 'x', weights: [0.55, 0.45], children: [{ kind: 'panel', id: 'panel-a', views: ['page'], selected: 'page' },
+  { kind: 'panel', id: 'panel-b', views: ['page2'], selected: 'page2' }] }, floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2' } } } };
+// On the mock a page has no preload to give it its id, so every page reads the one 'view' and 'place': the page about
+// to open gets them written just before, as manual/scenes/kit.js live() does
+const SHELL_API = 'if (window === top) { let seq = 2; window.shell = { state: () => ({ doc: ' + J(TWO_PANES) + ', theme: "light" }), onCommand: (cb) => { window.shellCmd = cb; }, layout() {} };'
+  + ' window.orbOpen = (where, start, from) => { const id = String(++seq); localStorage.setItem("view", start.view || "library"); localStorage.setItem("place", start.place || "{}"); window.shellCmd("open", { id, where, from, focus: true }); return id; }; }';
+flow('golden path: open pages in tabs and panes, each keeping its own place', async (p) => {
+  await p.beforeLoad(SHELL_API);
+  await p.open('shell.html');
+  const frame = (s) => '[...document.querySelectorAll("iframe")].find((f) => new URL(f.src).searchParams.get("side") === ' + J(s) + ')';
+  const sides = () => p.js('[...document.querySelectorAll("iframe")].map((f) => new URL(f.src).searchParams.get("side"))');
+  const signed = new Set();
+  // the window has n pages: each new one signed in on the mock, its window:split answered by the stand-in, and drawn
+  const pages = async (n) => {
+    await p.waitFor('document.querySelectorAll("iframe").length === ' + n, n + ' pages', 8000);
+    for (const s of await sides()) {
+      if (signed.has(s)) continue;
+      signed.add(s);
+      await p.waitFor(frame(s) + '?.contentDocument?.readyState === "complete" && typeof ' + frame(s) + '.contentWindow.goTo === "function"', 'page ' + s + ' to load', 8000);
+      for (let i = 0; ; i++) { try { await p.jsIn(s, 'tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, ' + J(s) + '); document.getElementById("login")?.click(); 1'); break; } catch (e) { if (i > 20) throw e; await p.sleep(50); } }
+      await p.waitFor(frame(s) + '.contentDocument.querySelector("#outline .node, #outline .empty") && ' + frame(s) + '.contentDocument.getElementById("title").textContent', 'page ' + s + ' drawn', 8000);
+    }
+  };
+  const found = (s, label) => p.waitFor('(' + frame(s) + '.contentDocument.querySelector("#palette .row.active")?.textContent || "").includes(' + J(label) + ')', J(label) + ' found');
+  const places = async () => { const out = {}; for (const s of await sides()) out[s] = await p.js(frame(s) + '.contentDocument.getElementById("title").textContent'); return out; };
+  const tabs = () => p.js('[...document.querySelectorAll("[data-trellis-part=panel]")].map((pn) => [...pn.querySelectorAll("[data-trellis-part=tab]")].map((t) => t.textContent.trim()))');
+  const keysIn = () => p.js('new URL(document.activeElement.src).searchParams.get("side")');
+  await pages(2);
+  await p.jsIn('', 'goTo("mockdoc0")'); await p.jsIn('2', 'setView("library")');
+  await p.waitFor(frame('') + '.contentDocument.getElementById("title").textContent.startsWith("Schedule")', 'the first page on a document');
+  const title = await p.js('(() => { const f = ' + frame('') + ', o = f.getBoundingClientRect(), b = f.contentDocument.getElementById("title").getBoundingClientRect(); return [o.left + b.left + 10, o.top + b.top + b.height / 2]; })()');
+  await p.click(...title);
+  assert.equal(await keysIn(), '', 'the keys are with the first page');
+  await p.key('⌘s'); await p.type('offsite agenda'); await found('', 'Prepare the offsite agenda'); await p.key('⌘↩');
+  await pages(3);
+  assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library']], '⌘↩ opened it as a tab beside the page');
+  assert.equal(await keysIn(), '3', 'the keys went with the new tab');
+  await p.key('⌘s'); await p.type('book a room'); await found('3', 'Book a room for the offsite'); await p.key('⇧↩');
+  await pages(4);
+  await p.key('⇧⌘N');
+  await pages(5);
+  assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['Library']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on the Library');
+  assert.equal(await keysIn(), '5', 'the keys went with the new pane');
+  assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'Library' }, 'every page kept its own place');
+  for (const s of await sides()) assert.deepEqual(await p.jsIn(s, 'window.__errors'), [], 'page ' + s + ' reported errors');
+});
+
 (async () => {
   if (process.env.CODEX_SANDBOX) { console.error('flow-check: the agent sandbox refuses the loopback port and Chromium this needs; run it escalated'); process.exit(3); }
   const chrome = findChrome();
@@ -495,7 +677,12 @@ flow('golden path: a task dragged onto a meeting is pinned there', async (p) => 
     if (!t) throw new Error('Chromium did not start: ' + chrome);
     const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => { ws.onopen = r; });
     let id = 0; const waiting = new Map();
-    ws.onmessage = (m) => { const d = JSON.parse(m.data); if (waiting.has(d.id)) { waiting.get(d.id)(d); waiting.delete(d.id); } };
+    // each frame's own scope (a pane's page inside shell.html), for jsIn: the page's CSP refuses eval, and a const in
+    // its classic scripts (tana, zoom) is not on its window, so the frame is evaluated in directly
+    const scopes = new Map(); // frameId -> its default execution context
+    ws.onmessage = (m) => { const d = JSON.parse(m.data);
+      if (d.method === 'Runtime.executionContextCreated' && d.params.context.auxData?.isDefault) scopes.set(d.params.context.auxData.frameId, d.params.context.id);
+      if (waiting.has(d.id)) { waiting.get(d.id)(d); waiting.delete(d.id); } };
     // every command answers within 15 s or fails the flow: a page promise left pending must not hang the run (or CI)
     const send = (method, params = {}) => new Promise((r, j) => {
       const n = ++id, timer = setTimeout(() => { waiting.delete(n); j(new Error(method + ' did not answer within 15 s')); }, 15000);
@@ -507,10 +694,17 @@ flow('golden path: a task dragged onto a meeting is pinned there', async (p) => 
     await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
 
     // the page a flow drives
-    const js = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+    const js = async (expression, contextId) => {
+      const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, ...(contextId ? { contextId } : {}) });
       if (r.exceptionDetails) throw new Error('in page: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text) + '\n  ' + expression.slice(0, 200));
       return r.result.value;
+    };
+    // the same in one pane of the window (shell.html): side is the page's ?side= ('' the first, '2', '3', …)
+    const jsIn = async (side, expression) => {
+      const { frameTree } = await send('Page.getFrameTree');
+      const frame = (frameTree.childFrames || []).map((c) => c.frame).find((f) => new URL(f.url).searchParams.get('side') === side);
+      if (!frame || !scopes.has(frame.id)) throw new Error('no pane with side=' + side);
+      return js(expression, scopes.get(frame.id));
     };
     const waitFor = async (expression, what, ms = 4000) => {
       for (const end = Date.now() + ms; Date.now() < end; await sleep(40)) if (await js('!!(' + expression + ')')) return;
@@ -543,8 +737,18 @@ flow('golden path: a task dragged onto a meeting is pinned there', async (p) => 
       await js(HELPERS);
       await js('document.getElementById("login").click()'); await waitFor('document.querySelector("#outline .node")', 'the first rows', 8000);
     };
+    // another page of the app, fresh (the window's shell.html, an overlay's task.html), loaded with nothing signed in
+    const open = async (file) => {
+      await send('Storage.clearDataForOrigin', { origin: base, storageTypes: 'local_storage' });
+      await send('Page.navigate', { url: base + '/' + file });
+      await waitFor('document.readyState === "complete"', file + ' to load', 8000);
+    };
     const click = async (x, y) => { for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 }); await sleep(80); };
-    const page = { js, waitFor, key, type, click, start, sleep };
+    // a script every page this flow opens runs before its own (what preload gives a page main opens: a stand-in for
+    // window.api); taken away when the flow ends, so the next flow's pages are the mock's again
+    const loaded = [];
+    const beforeLoad = async (source) => { loaded.push((await send('Page.addScriptToEvaluateOnNewDocument', { source })).identifier); };
+    const page = { js, jsIn, waitFor, key, type, click, start, open, sleep, beforeLoad };
 
     for (const f of flows) {
       if (only && !f.name.includes(only)) continue;
@@ -559,6 +763,7 @@ flow('golden path: a task dragged onto a meeting is pinned there', async (p) => 
         console.log('FAIL ' + f.name + '\n     ' + String(e.stack || e).split('\n').slice(0, 6).join('\n     '));
         try { const errors = await js('window.__errors'); if (errors?.length) console.log('     page errors:\n       ' + errors.join('\n       ').slice(0, 2000)); } catch { /* page gone */ }
       }
+      for (const identifier of loaded.splice(0)) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
     }
     ws.close();
   } finally { ch.kill(); server.close(); }
