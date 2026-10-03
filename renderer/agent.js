@@ -157,7 +157,9 @@ function relayRows() {
   const group = 'Give these to the agent · it adds the server, names itself and links';
   const rows = [{ group, icon: 'link', label: 'Copy instructions for your agent', hint: '↩', keepOpen: true, match: [],
     run: () => run(() => copyText(c.prompt, 'Copied: give them to your agent')) },
-  { group, label: c.prompt, note: true, wrap: true, disabled: true, match: [] }];
+  { group, label: c.prompt, note: true, wrap: true, disabled: true, match: [] },
+  // what crosses orbital.md (main/agents/linked.js send): a node's id out, a status back, both sealed
+  { group, icon: 'lock', label: 'Only ids go through orbital.md, and those encrypted: your words stay in Tana, where the agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] }];
   if (c.state === 'expired' || !left) return [...rows, { group: 'Waiting', icon: 'link', label: 'The code expired', hint: 'Nobody used it', disabled: true, match: [] }, { ...again, group: 'Waiting', label: 'Get a new code', match: [] }];
   return [...rows,
     { group: 'Waiting', icon: 'robot', label: 'Waiting for an agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, spin: true, match: [] },

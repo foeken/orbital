@@ -7,14 +7,14 @@
 //     the secret and the public key it stands for (relay/seal.js keyFromSecret), never the secret.
 //   - The relay keeps the list of agents; relayAgents mirrors it on this machine, so they are known before the network
 //     answers. A newly linked agent is switched on once, wherever it is first seen (relaySeen).
-//   - A task is sealed to the agent's key and queued; the agent takes it with get_tasks. Its answers come back sealed to
-//     your Orbital's key. Whichever device reads one first writes it into the node, under the agent's name, and keeps
-//     its status in relayTasks, which follows you, so every device draws the same badge.
+//   - Only ids go through the relay. A task is the node's id, sealed to the agent's key and queued; the agent takes it
+//     with get_tasks and reads the node itself through Tana's own MCP server (home.tana.inc/mcp), where the "Agent
+//     context" block Orbital wrote is the request, and it writes its answer there too. What comes back is the task's id
+//     and a status, sealed to your Orbital's key; whichever device reads one first keeps it in relayTasks, which
+//     follows you, so every device draws the same badge.
 const crypto = require('node:crypto');
 const agent = require('../agent');
 const settings = require('../settings');
-const documents = require('../documents');
-const content = require('../../sdk/content');
 const seal = require('../../relay/seal');
 const { pageOf } = require('../state');
 
@@ -24,7 +24,7 @@ const where = () => relay.base.replace(/^https?:\/\//, '');
 const ID = 'relay:';
 const CODE = /^[0-9A-Z]{4}-[0-9A-Z]{4}$/;
 const BADGE = { working: 'working', completed: 'done', failed: 'broken' };
-const CONTENT_CAP = 20000; // the node's words that travel with a task: a long document is cut, never refused
+const TANA_MCP = 'https://home.tana.inc/mcp'; // where the agent reads the node and writes its answer
 
 // ---- your Orbital ----
 function account(create) {
@@ -96,32 +96,16 @@ function linkedOf(id) {
 }
 
 // ---- a task out ----
-// The node's outline as indented lines, for an agent that has no Tana of its own to read it from
-async function outline(nodeUri) {
-  const lines = [];
-  const walk = (nodes, depth) => { for (const n of nodes || []) { if ((n.text || '').trim()) lines.push('  '.repeat(depth) + '- ' + n.text.trim()); walk(n.children, depth + 1); } };
-  await documents.op(nodeUri, (doc) => walk(content.readOutline(doc), 0)).catch(() => {});
-  const text = lines.join('\n');
-  return text.length > CONTENT_CAP ? text.slice(0, CONTENT_CAP) + '\n…' : text;
-}
-async function send(a, { nodeUri, title, prompt }) {
+// The node's id and nothing else: its title, its words and the request (its "Agent context" block, written by
+// main/agents/index.js assign before this runs) stay in Tana, where the agent reads them with its own Tana access
+async function send(a, { nodeUri }) {
   const acct = account(false), id = crypto.randomUUID();
   if (!acct) throw new Error('No agent is linked yet: Link to agent first');
-  const task = { title: agent.oneLine(title), node: nodeUri, prompt: prompt || 'Help me with this.', content: await outline(nodeUri) };
-  await call('POST', '/orbital/agents/' + a.id + '/messages', { id, box: seal.seal(JSON.stringify(task), a.key, seal.context('task', acct.id, a.id, id)) }, acct);
+  await call('POST', '/orbital/agents/' + a.id + '/messages', { id, box: seal.seal(JSON.stringify({ node: nodeUri }), a.key, seal.context('task', acct.id, a.id, id)) }, acct);
   return id; // the task id the node is linked to (main/agent.js setTask), and what the agent answers about
 }
 
-// ---- answers back ----
-const CAP = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-// the note under the agent's name, then the status line the badge and Tana's readers both follow
-function writeUpdate(nodeId, name, { status, note }) {
-  const lines = String(note || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 40);
-  return documents.mut(nodeId, (doc) => {
-    lines.forEach((line, i) => content.insertAfter(doc, null, i ? line : name + ': ' + line));
-    content.insertAfter(doc, null, 'Agent status: ' + CAP(status));
-  });
-}
+// ---- statuses back: a task id and how it is going, the words being in the node ----
 function setTaskStatus(taskId, status) {
   const live = new Set(Object.values(agent.links()).map((l) => l.taskId)), map = {};
   for (const [id, s] of Object.entries(settings.get('relayTasks') || {})) if (live.has(id)) map[id] = s; // a task no node holds any more is forgotten
@@ -133,17 +117,12 @@ async function pullNow() {
   if (!acct || !cached().length) return;
   const { updates } = await call('GET', '/orbital/updates', undefined, acct);
   if (!updates.length) return;
-  const own = seal.keyFromSecret(acct.secret).secretKey, nodeOf = {}, done = [];
-  for (const [nodeId, link] of Object.entries(agent.links())) if (link.agent.startsWith(ID)) nodeOf[link.taskId] = nodeId;
+  const own = seal.keyFromSecret(acct.secret).secretKey, ours = new Set(), done = [];
+  for (const link of Object.values(agent.links())) if (link.agent.startsWith(ID)) ours.add(link.taskId);
   for (const u of updates) {
     let msg;
     try { msg = JSON.parse(seal.open(u.box, own, seal.context('update', acct.id, u.agent, u.id))); } catch { done.push(u.id); continue; } // not sealed for this Orbital, or changed: nobody here can read it
-    if (!BADGE[msg.status]) { done.push(u.id); continue; }
-    const name = (cached().find((a) => a.id === u.agent) || {}).name || 'Agent', nodeId = nodeOf[msg.task];
-    if (nodeId) {
-      try { await writeUpdate(nodeId, name, msg); } catch { continue; } // left unacknowledged: the next read tries again
-      setTaskStatus(msg.task, msg.status);
-    }
+    if (BADGE[msg.status] && ours.has(msg.task)) setTaskStatus(msg.task, msg.status); // a task no node holds any more is let go
     done.push(u.id);
   }
   if (done.length) await call('POST', '/orbital/updates/ack', { ids: done }, acct);
@@ -167,7 +146,7 @@ async function linkCode() {
   const acct = account(true);
   const { code, expiresAt } = await call('POST', '/orbital/codes', undefined, acct);
   return { code, expiresAt, url: relay.base,
-    prompt: 'Add the MCP server ' + relay.base + ' to yourself, then call its link_orbital tool with the code ' + code + ' and a short name for yourself.' };
+    prompt: 'Add two MCP servers to yourself: Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. Then call Orbital\'s link_orbital tool with the code ' + code + ' and a short name for yourself.' };
 }
 async function codeStatus(code) {
   if (typeof code !== 'string' || !CODE.test(code)) throw new Error('Not a link code');
@@ -219,4 +198,4 @@ const ipc = {
   'relay:reset': () => resetSecret(),
 };
 
-module.exports = { relay, account, load, refresh, refreshSoon, linkCode, codeStatus, cancelCode, rename, unlink, resetSecret, send, statuses, pullNow, writeUpdate, ipc };
+module.exports = { relay, account, load, refresh, refreshSoon, linkCode, codeStatus, cancelCode, rename, unlink, resetSecret, send, statuses, pullNow, ipc };

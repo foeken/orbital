@@ -601,11 +601,12 @@ flow('golden path: read notifications and settle proposals', async (p) => {
 flow('golden path: link an agent with a code, and it joins your agents', async (p) => {
   await p.start();
   await command(p, 'link to agent', 'Link to agent \u2026');
-  await p.waitFor('palMode === "linkAgent" && palRows.length === 4', 'the instructions and the wait');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 5', 'the instructions and the wait');
   assert.deepEqual(await p.js('[palRows[0].label, !!palRows[0].disabled, palIndex]'), ['Copy instructions for your agent', false, 0], 'the first row copies the instructions, and ↩ is on it');
-  assert.match(await p.js('palRows[1].label'), /^Add the MCP server https:\/\/orbital\.md\/mcp to yourself, then .* 7KQX-M2PD and a short name for yourself\.$/, 'and under it are the instructions themselves, with the server and the code');
+  assert.match(await p.js('palRows[1].label'), /^Add two MCP servers to yourself: Orbital at https:\/\/orbital\.md\/mcp and Tana at https:\/\/home\.tana\.inc\/mcp\. Then .* 7KQX-M2PD and a short name for yourself\.$/, 'and under it are the instructions themselves: both servers, and the code');
   assert.match(await p.js('document.querySelector("#palette .row.note.wrap").textContent'), /7KQX-M2PD/, 'shown in full');
-  assert.match(await p.js('palRows[2].hint'), /^Works once · \d+:\d\d left$/, 'and how long the code lasts');
+  assert.match(await p.js('palRows[2].label'), /^Only ids go through orbital\.md, and those encrypted: your words stay in Tana/, 'with what goes through orbital.md');
+  assert.match(await p.js('palRows[3].hint'), /^Works once · \d+:\d\d left$/, 'and how long the code lasts');
   await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked GrokBot · Grok"', 'the palette to close on the agent that linked', 10000);
   await command(p, 'choose agents', 'Choose agents \u2026');
   await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "GrokBot")', 'GrokBot among your agents');

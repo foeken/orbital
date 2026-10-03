@@ -699,7 +699,7 @@ function mockApi() {
     setDefaultAgent: async (id) => { for (const a of mockAgents) a.isDefault = a.id === id; return mockAgents.map((x) => ({ ...x })); },
     // Link to agent (main/agents/linked.js): a code, then GrokBot links itself on the third time the page asks
     relayLink: async () => { mockRelay.polls = 0; return { code: '7KQX-M2PD', expiresAt: Date.now() + 9 * 60e3 + 42e3, url: 'https://orbital.md/mcp',
-      prompt: 'Add the MCP server https://orbital.md/mcp to yourself, then call its link_orbital tool with the code 7KQX-M2PD and a short name for yourself.' }; },
+      prompt: 'Add two MCP servers to yourself: Orbital at https://orbital.md/mcp and Tana at https://home.tana.inc/mcp. Then call Orbital\'s link_orbital tool with the code 7KQX-M2PD and a short name for yourself.' }; },
     relayLinkStatus: async () => {
       if (++mockRelay.polls < 3) return { state: 'waiting', expiresAt: Date.now() + 9 * 60e3 };
       if (!mockAgents.some((a) => a.id === 'relay:grok')) mockAgents.push({ id: 'relay:grok', label: 'GrokBot', icon: 'link', installed: true, enabled: true, isDefault: false, linked: true, app: 'Grok', seenAt: Date.now() });

@@ -1,6 +1,6 @@
 ---
 name: orbital-manual
-description: Build, update, re-capture and publish Orbital's manual (manual/, https://orbital.md/manual, Cmd+K Open Manual). Use in every PR that adds, removes or changes something a user can see or do in Orbital (a Cmd+K row, a key, a page, a pane, a label, a behaviour), whenever a chapter, a picture, a clip or a motion diagram of the manual is written, restyled or re-recorded, and at every release (publishing it to orbital.md).
+description: Build, update, re-capture and publish Orbital's manual (manual/, https://orbital.md/manual, Cmd+K Open Manual). Use when a PR that adds, removes or changes something a user can see or do in Orbital moves from draft to ready (a Cmd+K row, a key, a page, a pane, a label, a behaviour), whenever a chapter, a picture, a clip or a motion diagram of the manual is written, restyled or re-recorded, and at every release (publishing it to orbital.md).
 ---
 
 # The Orbital manual
@@ -10,8 +10,10 @@ with every release. Cmd+K → Help → **Open Manual** opens it there in the bro
 `manual/` is packaged. Every chapter pictures the real window on the mock data. A PR's manual changes go live with the
 next release, so the web copy always describes the released app.
 
-**Every PR updates the manual.** A change a user can see or do lands with its chapter updated in the same PR: the words,
-the scene and the pictures. A PR that changes nothing a user meets says so in its description ("Manual: nothing
+**Every PR updates the manual, when it leaves draft.** While a PR is a draft its manual is left alone (what it shows
+still moves) and its Platforms line says `when ready: <the chapter>`. Before `gh pr ready`, a change a user can see or do gets its
+chapter updated in the same PR: the words, the scene and the pictures, and the line becomes `updated`. The Platforms
+check fails a ready PR whose manual line still says `when ready`. A PR that changes nothing a user meets says so in its description ("Manual: nothing
 user-visible"). A manual that trails the app teaches the wrong keys, which is worse than no manual.
 
 ## Where things are
@@ -46,7 +48,7 @@ Which chapter owns a feature:
 | theme, text size, what syncs, PDF, reload, updates, about, log out | settings |
 | every key | keys (always, when a key is added or changed) |
 
-## Updating it for a PR
+## Updating it for a PR (as it leaves draft)
 
 1. Find the chapter (table above) and the section; `rg -n "<the Cmd+K label>" manual/*.html` finds every mention.
 2. Change the words: what it is for, the exact Cmd+K row label (verbatim from `label: '…'`, including a trailing " …"),

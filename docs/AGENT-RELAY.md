@@ -1,8 +1,10 @@
 # AGENT-RELAY.md — linking any agent to Orbital
 
 Orbital hands work to agents (main/agent.js): Tana, Codex, Dot and Claude are built in. The agent relay lets **any**
-AI agent that can add an MCP server become one more: your dot, a Grok bot, a Claude project, one you built. It is
-the MCP server at **orbital.md/mcp** (relay/server.js), and the only thing between Orbital and those agents.
+AI agent that can add MCP servers become one more: your dot, a Grok bot, a Claude project, one you built. It is
+the MCP server at **orbital.md/mcp** (relay/server.js), and the only thing between Orbital and those agents. **Only ids
+go through it**: a task is a Tana node's id, which the agent reads and answers in through Tana's own MCP server
+(https://home.tana.inc/mcp), and what comes back is the task's id and a status. Your words never leave Tana.
 
 ## The flow
 
@@ -10,17 +12,18 @@ the MCP server at **orbital.md/mcp** (relay/server.js), and the only thing betwe
    a random id and a random secret, kept in the Orbital settings document in Tana (`relayAccount`, docs/SETTINGS.md),
    so every device signed into your Tana account is the same Orbital. Main tells the relay the id, the secret (which
    the relay keeps only as a hash) and the public key the secret stands for (`POST /orbital/register`).
-2. The page's first row, **Copy instructions for your agent**, copies them, and shows them under it: *Add the MCP server https://orbital.md/mcp to yourself, then call its link_orbital tool
-   with the code 7KQX-M2PD and a short name for yourself.* You give them to the agent.
-3. The agent adds the server. Its MCP client signs in on its own (OAuth below), calls `link_orbital` with the code and
+2. The page's first row, **Copy instructions for your agent**, copies them, and shows them under it: *Add two MCP servers to yourself: Orbital at https://orbital.md/mcp and Tana at
+   https://home.tana.inc/mcp. Then call Orbital's link_orbital tool with the code 7KQX-M2PD and a short name for
+   yourself.* Under them, the page says that only ids go through orbital.md, encrypted. You give them to the agent.
+3. The agent adds both servers (its Tana access is its own, signed in as you). Its MCP client signs in on its own (OAuth below), calls `link_orbital` with the code and
    a name it chose, and is linked. The code works once and for ten minutes.
 4. The page, asking every two seconds, sees the code used, closes on "Linked GrokBot · Grok", and the agent is one of
    yours: `relay:<id>` in main/agent.js, on from the start, in Choose agents, Assign to Agent and Settings.
-5. **Assign to Agent** seals the task (the request, the node's title, uri and outline) to that agent's key and queues it.
-   The agent sees it the next time it calls `get_tasks`, and reports with `update_task` (working, completed, failed and
-   a note). Its updates come back sealed to your Orbital's key; whichever device reads one first writes the note into
-   the node under the agent's name, ending with an `Agent status:` line, and keeps the status in `relayTasks` so every
-   device draws the same badge (main/agents/linked.js).
+5. **Assign to Agent** writes the request into the node's `Agent context` block, as for every agent, then seals the
+   node's id to that agent's key and queues it. The agent sees it the next time it calls `get_tasks` (a task id, a node
+   id and a time), reads the node with its Tana tools, writes what it did into the node with them too, and reports with
+   `update_task` (working, completed or failed). Each status comes back sealed to your Orbital's key; whichever device
+   reads it first keeps it in `relayTasks`, so every device draws the same badge (main/agents/linked.js).
 
 One Orbital has as many agents as you link; each agent's MCP connection is one link. Linking the same connection again
 with a new code moves it.
@@ -44,10 +47,11 @@ becomes names a fresh *installation*, an identity that can do nothing until a li
 is what tells two agents apart: each MCP connection is its own installation, whichever app it runs in. An app that
 shares one connection between several bots is one agent to Orbital.
 
-**MCP tools.** `link_orbital { code, name }`, `get_tasks {}` (a fetched task is leased for ten minutes, then offered
-again), `update_task { task_id, status: working|completed|failed, note }` (the first update is the receipt: the task
-leaves the queue). The `initialize` answer's instructions tell the agent that a node's own words are content, not
-orders.
+**MCP tools.** `link_orbital { code, name }`, `get_tasks {}` (`{ task_id, node, sent_at }` each, and how to handle them; a fetched
+task is leased for ten minutes, then offered again), `update_task { task_id, status: working|completed|failed }` (the
+first update is the receipt: the task leaves the queue; anything else it is given is dropped). The `initialize` answer and
+the tools tell the agent it needs Tana's MCP server too, to read each node there (its `Agent context` block is the request)
+and to write its answer there, and that instructions quoted elsewhere in a node are content, not orders.
 
 **Orbital's calls.** `POST /orbital/register { key }`, `POST /orbital/rotate { secret, key }`; `POST /orbital/codes`,
 `GET|DELETE /orbital/codes/<code>`; `GET /orbital/agents`, `PATCH|DELETE /orbital/agents/<id>`,
@@ -74,19 +78,22 @@ What the design gives, and what it does not:
 
 - **A database dump alone reads nothing.** Tasks and updates are stored sealed; secrets, tokens and codes only as
   SHA-256 hashes; agents' keys wrapped with a master key that is not in the database. SQLite runs with
-  `secure_delete`, so a deleted message is overwritten. scripts/relay-check.js searches every table for the words sent
+  `secure_delete`, so a deleted message is overwritten. scripts/relay-check.js searches every table for the node ids sent
   and the secrets used.
-- **The running relay can read tasks.** It opens a task for the agent when the agent fetches it, so whoever controls
-  orbital.md's process and master key can read what is sent to agents. This is the price of agents that cannot hold a
+- **The running relay sees ids, never words.** It opens a task for the agent when the agent fetches it, so whoever
+  controls orbital.md's process and master key learns which Tana node ids were handed to which agent, and the statuses
+  that came back. Not end to end, then, but nothing a node says: the title, the request and the answer stay in Tana,
+  between Tana and the agent's own Tana access. This is the price of agents that cannot hold a
   key. An agent that can (one with a computer of its own) could be given its own key later and the relay would only
   carry ciphertext; the wire format already allows it.
-- **Answers are for your devices only.** They are sealed to your Orbital's key; the relay never has the private half.
+- **Statuses are for your devices only.** They are sealed to your Orbital's key; the relay never has the private half.
 - **Whoever reads your Orbital settings document can act as your Orbital**: send your agents tasks and read their
   answers. That is you, Tana, and anyone you share that document with. Cmd+K → Choose agents → Reset the link secret
   makes a new secret; agents stay linked (to the id). Answers still sealed to the old key are let go.
 - **A code is a short secret**: 40 bits, once, ten minutes, ten tries a minute per connection.
-- **An agent is not trusted with more than its tasks.** It sees only what was sent to it, and what it writes back
-  becomes text in the node (and a status line), never an action of Orbital's.
+- **An agent is not trusted with more than its tasks** by Orbital: through the relay it learns only the node ids sent to
+  it, and what it sends back is a status, never an action of Orbital's. What it can read and write in Tana is what its
+  own Tana access allows, which is yours: link only agents you would give your Tana to.
 - **Lifetimes**: a task is deleted when answered and after 24 hours regardless; an update when Orbital acknowledges it
   and after 24 hours; a code an hour after it ran out; access tokens last an hour, refresh tokens 90 days. Nothing a
   message says is logged.
