@@ -577,7 +577,7 @@ assert.match(source, /function openAgentPrompt\(doc(, pick)?\) \{[\s\S]{0,400}sh
 assert.match(source, /function showPage\(mode, placeholder, page, value = ''\) \{\n(?:[^\n]*\n)*?  palInput\.placeholder = placeholder; palInput\.value = value;\n  coverWindow\([^\n]*\n\}/, 'a page starts with the field holding only what it was opened with');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.
-assert.match(source, /line\.append\(body\);[\s\S]{0,600}if \(agentIds\.has\(display\.id\)\) line\.append\(agentBadgeEl\(display\.id, display\.done\)\)/,
+assert.match(source, /line\.append\(body\);[\s\S]{0,600}if \(agentIds\.has\(display\.id\)\) placeAgentBadge\(line, agentBadgeEl\(display\.id, display\.done\)\)/,
   'the agent badge is appended after the body, so it ends the row, and is told whether that row is finished');
 // The badge is a status, so it can never be drawn without one: every call names the node whose state it shows, and
 // the state falls back to pending rather than to the green it used to be.

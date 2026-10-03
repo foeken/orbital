@@ -680,6 +680,14 @@ const childEl = (n, item) => nodeEl(n, n.kind === 'document' ? n.id : item.docId
 // `done` is the row's own node, which is what the tick and the strikethrough beside it are drawn from. It is passed
 // rather than looked up because `docOf` scans every view's cached rows and answers with the first copy it finds —
 // one that may still be open in a view that has not refreshed since.
+// Where a row's badge goes: at the end of the row, after everything it says about itself, in every list; on the Timeline
+// in line, right after the title, where a task reads as a sentence (styles.css .cbadge.inline)
+function placeAgentBadge(line, badge) {
+  const text = zoom?.docId === TIMELINE_PAGE && line.querySelector(':scope > .body > .text');
+  if (!text) return line.append(badge);
+  badge.classList.add('inline');
+  text.after(badge);
+}
 function agentBadgeEl(id, done = !!docOf(id)?.done) {
   const state = agentStateOf(id), words = AGENT_BADGE[state];
   const el = document.createElement('span');
@@ -716,8 +724,8 @@ function patchAgent(docId) {
     const item = items.get(row.dataset.key), line = row.querySelector(':scope > .line');
     const node = item && (referenceTarget(item.node) || item.node);
     if (!item || !line || node.id !== docId) continue;
-    line.querySelector(':scope > .cbadge')?.remove();
-    if (agentIds.has(docId)) line.append(agentBadgeEl(docId, node.done));
+    line.querySelector('.cbadge')?.remove();
+    if (agentIds.has(docId)) placeAgentBadge(line, agentBadgeEl(docId, node.done));
     if (row.dataset.sig) row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
   }
   agentHeader(); // the open page says it too, and for the same reason it is patched rather than re-rendered
@@ -936,7 +944,7 @@ function nodeEl(node, docId, parent) {
   // handed to an agent: the robot badge at the end of the row, after everything the row says about itself. On the
   // Timeline too, where a task row is the node itself (Today's Tasks, what was added to your Inbox); a line about what
   // happened ("Priya completed …") has an id of its own, so it carries none: the badge is a fact about the task
-  if (agentIds.has(display.id)) line.append(agentBadgeEl(display.id, display.done));
+  if (agentIds.has(display.id)) placeAgentBadge(line, agentBadgeEl(display.id, display.done));
   if (node.proposal) line.append(proposalButtonsEl(node)); // approve and reject, at the end of a Proposals row (renderer/proposals.js)
   // A click that misses the words still belongs to the row, and the row is bigger than its text: the padding
   // around it, and the blank line a soft break leaves inside it, are all places a caret can sit. It used to answer

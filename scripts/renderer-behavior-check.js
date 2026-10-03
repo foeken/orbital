@@ -5414,6 +5414,8 @@ function runCodexAssignCheck() {
     // holdRow is renderer/views.js: the row keeps its place, which is what lets the Clean up pill offer the redraw
     const held = [], holdRow = (n) => held.push(n.id);
     const pills = [], renderPills = () => pills.push('pills'); // where Clean up is decided (renderer/pills.js)
+    const TIMELINE_PAGE = 'orbital:timeline'; // renderer/timeline.js: where placeAgentBadge puts it in line
+    ${functionSource('placeAgentBadge')}
     ${functionSource('agentBadgeEl')}
     ${functionSource('openAgentTask')}
     ${functionSource('agentHeader')}
