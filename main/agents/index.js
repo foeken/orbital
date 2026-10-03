@@ -7,9 +7,9 @@
 const agent = require('../agent');
 require('./tana');
 require('./codex');
-require('./dot');
 require('./claude');
-const { agentIds, setAgentMark } = require('../documents');
+const linked = require('./linked'); // the agents linked through orbital.md/mcp (your Dot), one plugin each, as they come and go
+const { agentIds, setAgentMark, agentPrompt, agentStatus, writeAgentStatus, dropAgentMark } = require('../documents');
 const { readNode } = require('../../sdk/node');
 const { S, pageOf } = require('../state');
 const settings = require('../settings');
@@ -19,12 +19,17 @@ const ready = (id) => { const a = agent.get(id); if (!a || !agent.usable(id)) th
 
 // Handing a node to an agent. A node already linked to a task of this agent hands that task the new request; anything
 // else starts a new task. A handoff that fails leaves no mark behind on a node that had none: the mark is a synced
-// setting, so it would reach the other machines as a pending badge for work nobody took.
+// setting, so it would reach the other machines as a pending badge for work nobody took. On a node that had one, it
+// puts back what was there (restore below): its task link still names the earlier request.
 async function assign(id, prompt, agentId = agent.defaultAgent()) {
   const a = ready(agentId), was = agentIds().includes(id);
+  const held = was && agent.taskLink(id), heldBy = held && agent.get(held.agent);
+  const before = was ? { prompt: agentPrompt(id), linked: !!(heldBy && heldBy.linked) } : null;
+  if (before && before.linked) before.status = await agentStatus(id).catch(() => null);
   let started = false; // a new task was begun: on failure it is let go (a Codex writer otherwise runs on, hidden), a resumed one is not
   try {
-    const result = await setAgentMark(id, true, prompt);
+    // an agent linked through orbital.md (your Dot) gets the request in its event, not in the node: the node stays content
+    const result = await setAgentMark(id, true, prompt, !a.linked);
     // the node's own title, off the document the mark just opened, so the task is named after the work
     const open = S.client && S.client.sync.getDocument(id);
     const title = open ? readNode(open).title : '';
@@ -43,8 +48,16 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
   } catch (error) {
     if (started && a.release) await a.release(id).catch(() => {});
     if (!was && agentIds().includes(id)) { await setAgentMark(id, false); agent.clearTask(id); }
+    else if (before) await restore(id, before).catch(() => {});
     throw error;
   }
+}
+// The node as its earlier handoff left it: that request, as an Agent context block or, for an agent linked through
+// orbital.md, in the mark alone, with the status line that agent last wrote
+async function restore(id, { prompt, linked, status }) {
+  await setAgentMark(id, false);
+  await setAgentMark(id, true, prompt, !linked);
+  if (linked && status) await writeAgentStatus(id, status[0].toUpperCase() + status.slice(1));
 }
 // What a plugin still holds for a node's previous task (a Codex writer) is let go before the link moves on: a later
 // unassign releases only the agent the link then names (#671 review)
@@ -65,6 +78,10 @@ async function unassign(id) {
 // on every refresh, and a Codex read is an app-server child.
 let reading = null;
 async function readStatuses() {
+  // the Dot an older build typed into the ChatGPT app is no agent any more: its nodes let go of it, and of its chat
+  // (the stored links: agent.links() leaves out those of an agent nobody registers, which is what these are)
+  for (const [nodeId, stored] of Object.entries(agent.tasks())) if (stored && stored.agent === 'dot') { dropAgentMark(nodeId); agent.clearTask(nodeId); }
+  if (settings.get('dotChat') !== undefined) settings.set('dotChat', undefined);
   const before = agent.links();
   const byAgent = {};
   const out = {};
@@ -86,8 +103,8 @@ async function readStatuses() {
 
 const changed = (e, id) => { settings.tellOthers(pageOf(e), id); };
 const ipc = {
-  'agent:list': () => agent.list(),
-  'agent:enable': (e, id, on, setup) => { const out = agent.setEnabled(id, !!on, setup); changed(e); return out; },
+  'agent:list': () => { linked.refreshSoon(); return agent.list(); }, // the relay's list is asked for now and then, and the pages told when it moved
+  'agent:enable': (e, id, on) => { const out = agent.setEnabled(id, !!on); changed(e); return out; },
   'agent:default': (e, id) => { const out = agent.setDefault(id); changed(e); return out; },
   'agent:ids': () => agentIds(),
   'agent:set': async (e, id, on, prompt, agentId) => {
@@ -127,6 +144,7 @@ const ipc = {
     if (!a.openNew) throw new Error(a.label + ' cannot open a link');
     return a.openNew(link);
   },
+  ...linked.ipc,
 };
 const stop = () => { for (const a of Object.values(agent.AGENTS)) if (a.stop) a.stop(); }; // no writer outlives the app that spawned it
 module.exports = { assign, unassign, readStatuses, stop, ipc };

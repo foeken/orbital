@@ -15,6 +15,9 @@ module.exports = [
   { name: 'views-presets', video: true, size: '1000x640', setup: library(), clip: [0, 30, 1000, 520], steps: [
     { wait: 500 }, { key: '⌘K' }, { type: 'Types', delay: 90 }, { wait: 300 }, { key: '↩' }, { wait: 1200 },
     { key: '⌘K' }, { type: 'Inbox', delay: 90 }, { wait: 300 }, { key: '↩' }, { wait: 800 }] },
+  // a Library row: the first click selects it, the second puts the caret in its title
+  { name: 'views-click', video: true, size: '1000x640', setup: library(), clip: [0, 30, 1000, 560], hold: 1200, steps: [
+    { wait: 500 }, { click: '#outline .node .text', text: 'Check out the new editor' }, { wait: 1300 }, { click: '#outline .node .text', text: 'Check out the new editor' }, { wait: 900 }] },
   // a pill's menu: Status loses Completed, and the Completed pill goes with it
   { name: 'views-pill', video: true, size: '1000x640', setup: library(), clip: [0, 30, 1000, 560], steps: [
     { wait: 400 }, { click: '.pill[data-id="status"]' }, { wait: 700 }, { click: '.menu .mrow', text: 'Completed' }, { wait: 900 }, { key: 'esc' }] },
@@ -48,7 +51,5 @@ module.exports = [
   // saved window views
   { name: 'views-savedview', setup: [...library(), { key: '⌘K' }, { type: 'save view' }, { key: '↩' }, { type: 'Planning' }, { wait: 400 }], clip: card },
 ];
-
-
 
 

@@ -240,7 +240,20 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
 - **Focus.** A focused read-only row shows a focus ring; an editable row shows the caret and no ring.
 - **Caret on an empty row.** An empty editable row shows the caret at once (a zero-width placeholder gives it a box
   and is stripped when the text is read). A click anywhere on a row lands the caret where it was aimed (`caretAt` pulls
-  the point into the text's own box); a row that cannot answer a position takes the end.
+  the point into the text's own box); a row that cannot answer a position takes the end. A list's own rows go through a
+  selection first (below).
+- **A list's own rows: select, then go in** (`topListRow`, `timelineRow`, renderer/nodes.js; render.js). A top-level
+  row of a view (Inbox, Library, Types), a saved search or a type's page is a whole node, and so is a Timeline row
+  about a node and a task or meeting listed under one, so a first click selects it (no caret; the
+  blue ring a focused read-only row has, editable or not, in place of the selection's band, `.picked`; a ⇧ range made
+  from it is a band again; ⌘K acts on it) and a click on the selected row goes in: on a row whose title can be typed in
+  (`typesInto`) the caret lands where it was clicked, on one that cannot (read-only, a type, a canvas, every Timeline
+  row) what it opens opens (`openSelectedRow`, renderer/select.js: a Timeline row the node it is about, a task under
+  one the task itself). ↩ on the selected row does the same, Space opens it, and the bullet opens it at once (on the
+  Timeline what the row is about, with ⌘/⇧/⌥ elsewhere). ⌘- and ⌥-click on a Timeline row still open it in a tab or
+  floating at once. The box, the chevron, a chip, a link and a row's buttons answer their own clicks, and a row already
+  being typed in takes clicks as text does. Notifications and Proposals keep their own click (it opens the row), and
+  rows inside a document are typed into on the first click.
 - **Links.** http(s) URLs in a text run render as links and open in the default browser (`api.openExternal`, http and
   https only); the stored text is untouched and the row stays editable.
 - **Mentions.** A mention renders as a link chip that opens its target; it carries its target's icon (`resolveReferences`,
@@ -334,7 +347,8 @@ numbered row make it a bullet, as "1. " makes a bullet numbered. The
 first line continues the row at the caret, what stood after the caret ends the last line, and one undo takes it all
 back. A plain line, a draft row and a code block paste as text.
 
-Mouse: a click on the bullet zooms into the row, on the chevron toggles it, on the checkbox toggles done.
+Mouse: a click on the bullet zooms into the row at once, on the chevron toggles it, on the checkbox toggles done. A
+list's own rows are selected by a first click and gone into by the next (Rows, above).
 
 ### Toolbar, "/" and marks
 
@@ -533,7 +547,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
-  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, ChatGPT sign-in, Set OpenAI API
+  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect to your OpenAI Dot …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
@@ -784,27 +798,30 @@ wrong twenty.
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
-  Codex's app-server), **Dot** (the user's dot, OpenAI's always-on agent: a message in their one conversation with it,
-  opened in the ChatGPT app by its `codex://threads/<id>?hostId=durable&prompt=` link and sent by pressing ↩ there
-  through System Events, only while ChatGPT is frontmost; one conversation for every node, so a node keeps no task id,
-  only that Dot has it; since what the dot does next is out of this Mac's reach and Tana's connector offers it only
-  Tana's four statuses, it reports in the node: Orbital adds "Agent status: Working" at the end once the message is
-  sent, the dot ends each update with Working, Completed or Failed, and the badge follows the last such line
-  (main/documents.js `agentStatus`): working, done or broken) and **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
-  Orbital never signs in to Anthropic). Codex, Dot and Claude are offered only once this Mac has them. **Choose agents …**
-  (Settings) lists all four, greyed with what to install when missing: ↩ switches one on or off, one that needs a paste
-  first asks for it on a page of its own (Dot's chat link, `dotChat`, synced, but only where the ChatGPT app on this Mac
-  has no dot: main/agents/dot.js `appDot` reads the dot that app picked, `primary-aeon-selection-v1` in
-  `~/.codex/.codex-global-state.json`, stores it as `dotChat` and follows it when it changes), and the second group
-  picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
+  Codex's app-server), **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
+  Orbital never signs in to Anthropic) and every agent linked through orbital.md/mcp, your Dot among them (below). Codex and
+  Claude are offered only once this Mac has them. **Choose agents …** (Settings) lists them, greyed with what to install
+  when missing: ↩ switches one on or off; **Set default agent …** picks the **default agent** on a page of its own. Both
+  follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
+  **Connect to your OpenAI Dot …** (Settings, and under the linked agents in Choose agents) links your Dot through the MCP
+  server orbital.md/mcp: where to add it and Tana's in ChatGPT (Open ChatGPT plugins, then each server's name with its
+  URL, ↩ copies it), then a message carrying a one-time code that links it by its own name (Dot if it has none), makes it the default
+  agent, and subscribes it to the task.assigned
+  event (a node handed to it is that event: the node's id, the request and how to handle it, nothing of the request
+  written into the node, which the Dot reads as content; its badge follows the node's last line, "Agent status: Assigned |
+  Working | Completed | Failed": Orbital writes Assigned, grey until the Dot changes it to Working as it starts); each linked agent is one more agent,
+  listed with the other agents in Choose agents, with a page of its own (Rename …, Switch off, Unlink); **Set default agent …** picks the default on a page of its own, and **Reset agent link key** makes a new key for your Orbital at orbital.md (docs/AGENT-RELAY.md).
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
-  default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
+  default ticked; beside it **Assign to <agent> …** for each agent that is on, Assign to Codex …, Assign to Echo …, opens
+  the same page with that agent picked) and hands the node over; the agent's own default model does the work. The node then carries the agent
   badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session
   lives only on the Mac that ran it, names that Mac in its link and reads **Agent on another Mac** (grey, not a button)
-  anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). **Unassign from Agent** takes it
-  back at once. **Go to <agent> task** opens it (Codex in Codex, Claude in Terminal on `claude --resume`, Tana's chat
-  here), **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
-  node's link and tracks nothing. Every task runs on this Mac.
+  anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). Assign to Agent stays offered on a node an agent already has:
+  handing it over again replaces the request in its Agent context block. **Unassign from Agent** takes it back at once,
+  and takes the Agent context block (with its status line) out of the node again. **Go to <agent> task** opens it (Codex
+  in Codex, Claude in Terminal on `claude --resume`, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
+  badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not, **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
+  node's link and tracks nothing. Codex and Claude tasks run on this Mac, Tana's in Tana, and a Dot's in ChatGPT.
 
 - **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
   (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is
@@ -925,6 +942,11 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   row's dot is the thing to grab. An empty line is nothing to pick up (`dragEmpty`); an image and a divider are. A
   draft row never is. The dragged row dims; the drag carries our own dataTransfer flavour, so a drop on a text field
   elsewhere pastes nothing, and a drag that is not ours (text out of a row, a file) is left to the browser.
+- **A list's or the Timeline's row is picked up anywhere on it** (`.selectfirst`, render.js; styles.css). Until it is
+  selected such a row is one thing to press (Rows, above), so its whole line is `draggable` and its words take no
+  press of their own (`pointer-events: none`, a link or chip in them excepted): a press neither focuses them nor
+  puts a caret in them, and is left undefaulted so Chromium can start the drag from it. Selected and editable, or typed
+  in, the line stops being draggable on the next press, and a drag across the words selects them.
 - **A drag names the place.** `moveTo(document, id, { parentId, afterId, from })` (sdk/content.js) moves the row whole,
   children, checkbox and block ids included (Loro cannot move a container, so it is copied and the original deleted,
   and a list or quote it leaves empty is pruned). `from` is the outline it came from, so a row crosses between a page
@@ -1142,9 +1164,7 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     Out), the OpenAI API key only while one is stored (Remove), both **On this Mac**; the Quick and the Regular AI, a model
     and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
   - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
-    another Mac switched it on) and the default agent. One that needs a paste first (Dot's chat link, when the ChatGPT app
-    here has no dot; `setup` in `agentList`) opens a field under its row instead of switching on: ↩ or Switch On hands the paste to `enableAgent`,
-    main refuses what it cannot read, and only then is it on; Esc or another tab drops the field.
+    another Mac switched it on) and the default agent.
   - **Lists**: the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
     it) and Show MCP chats.
   Every control makes the call its Cmd+K row makes, so a choice made there and one made here are the same write. Main

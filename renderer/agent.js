@@ -62,12 +62,13 @@ function openAIKeyRows() {
   return [{ group: 'OpenAI API key', icon: 'openaiKey', label: 'Save OpenAI API key', hint: '↩ saves locally', keepOpen: true,
     run: () => run(async () => { await tana.setOpenAIKey(key); closePalette(); }) }];
 }
-// ---- Choose agents ----
-// Every agent the app knows: Tana always on, Codex, Dot and Claude greyed with what to install until this Mac has them.
-// ↩ on one switches it on or off; one that needs something pasted first (Dot: its chat link) asks for it on a page of
-// its own. The second group picks the default, the agent Assign to Agent starts on. The lists are main's, and each
-// answer is the new list, so the page redraws from what was stored.
-const AGENTS_GROUP = 'Agents · ↩ switches one on or off', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
+// ---- Choose agents, and Set default agent ----
+// Every agent the app knows, in one list: Tana always on, Codex and Claude greyed with what to install until this Mac has
+// them, then your linked Dot (each linked agent has a page of its own: ↩ opens it), with Connect to your OpenAI Dot under
+// them (Reset agent link key is in Cmd+K itself). ↩ on a built-in one switches it on or off. The default, the agent Assign to Agent
+// starts on, is picked on a page of its own (Set default agent …). The lists are main's, and each answer is the new
+// list, so the page redraws from what was stored.
+const AGENTS_GROUP = 'Agents', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
 // the chat's @agents follow the same switches: read again here, since this page is left out of its own settings:changed
 const agentsApply = (call) => run(async () => {
   const list = await call();
@@ -76,33 +77,122 @@ const agentsApply = (call) => run(async () => {
   renderPalette(); renderSoon();
 });
 function agentsRows(q) {
-  const asks = (a) => !!a.setup && !a.enabled; // switching it on starts with the paste it asked for
-  const rows = agentList.map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
-    hint: a.id === 'tana' ? 'Always on' : asks(a) ? a.setup : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
+  const rows = agentList.filter((a) => !a.linked).map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
+    hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
     // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
-    disabled: a.id === 'tana' || (!a.installed && !a.enabled && !asks(a)), run: () => (asks(a) ? openAgentSetup(a) : agentsApply(() => tana.enableAgent(a.id, !a.enabled))) }));
-  for (const a of agentsOn()) rows.push({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
-    run: () => agentsApply(() => tana.setDefaultAgent(a.id)) });
+    disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
+  if (tana.relayLink) {
+    const linked = agentList.filter((a) => a.linked);
+    for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
+      hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
+    rows.push({ group: AGENTS_GROUP, icon: 'chatgpt', label: 'Connect to your OpenAI Dot …', hint: 'Orbital and Tana in ChatGPT, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
+  }
   return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
 }
 function openAgentsPalette() {
   loadAgentList().then(() => { if (palMode === 'agents') renderPalette(); });
   openPage('agents', 'Choose agents', { rows: agentsRows, back: BACK_TO_COMMANDS });
 }
-// The paste an agent asks for before it can be switched on: main reads it (the agent knows its own shape) and refuses
-// what it cannot use, and the agent comes back on Choose agents, switched on.
-let agentSetupCtx = null; // the agent the paste is for, while this page is up
-function agentSetupRows(q, typed) {
-  const a = agentSetupCtx, group = a.label + ' · ' + a.setup;
-  if (!typed.trim()) return [{ group, icon: a.icon, label: a.setup, disabled: true }];
-  return [{ group, icon: a.icon, label: 'Switch on ' + a.label, keepOpen: true, run: () => run(async () => {
-    agentList = await tana.enableAgent(a.id, true, typed.trim());
-    openAgentsPalette();
-  }) }];
+function defaultAgentRows(q) {
+  const rows = agentsOn().map((a) => ({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
+    run: () => agentsApply(() => tana.setDefaultAgent(a.id)) }));
+  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
 }
-function openAgentSetup(a) {
-  agentSetupCtx = a;
-  openPage('agentSetup', a.id === 'dot' ? 'codex://threads/…' : a.setup, { rows: agentSetupRows, back: openAgentsPalette, typed: true });
+function openDefaultAgentPalette() {
+  loadAgentList().then(() => { if (palMode === 'defaultAgent') renderPalette(); });
+  openPage('defaultAgent', 'Set default agent', { rows: defaultAgentRows, back: BACK_TO_COMMANDS });
+}
+// ---- Connect to your OpenAI Dot: orbital.md/mcp and Tana's server added in ChatGPT, then linked with a one-time code ----
+// (main/agents/linked.js) ChatGPT has no link to its own "Create custom MCP server" form and a Dot cannot add a server
+// itself, so the page says where to go and names both servers as that form wants them, a name and a URL (↩ copies the
+// URL). Then one row copies the message for your Dot, which only links. The page asks every two seconds whether that
+// happened; once it has, the palette closes on a toast naming the agent. Leaving the page does not stop the code: a Dot
+// that uses it later shows up in Choose agents all the same.
+const CHATGPT_PLUGINS = 'https://chatgpt.com/plugins';
+let relayCtx = null; // { state: asking|waiting|expired|failed, code, prompt, expiresAt, error, back } while the page is up
+let relayTimer = null;
+const unwrapError = (e) => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+function openLinkPalette(back = BACK_TO_COMMANDS) {
+  // a code still waiting is the page you left: shown again, rather than another code (the relay holds five at most)
+  const open = relayCtx && relayCtx.state === 'waiting' && relayCtx.expiresAt > Date.now() ? relayCtx : null;
+  if (open) { open.back = back; openPage('linkAgent', 'Connect to your OpenAI Dot', { rows: relayRows, back, typed: true }); pollRelay(open); return; }
+  const ctx = relayCtx = { state: 'asking', back };
+  openPage('linkAgent', 'Connect to your OpenAI Dot', { rows: relayRows, back, typed: true });
+  Promise.resolve(tana.relayLink()).then((r) => { if (relayCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawRelay(); pollRelay(ctx); },
+    (e) => { if (relayCtx !== ctx) return; ctx.state = 'failed'; ctx.error = unwrapError(e); drawRelay(); });
+}
+const drawRelay = () => { if (palMode === 'linkAgent' && !palette.hidden) renderPalette(); };
+function pollRelay(ctx) {
+  clearTimeout(relayTimer);
+  relayTimer = setTimeout(async () => {
+    if (relayCtx !== ctx || palMode !== 'linkAgent' || palette.hidden) return;
+    try {
+      const s = await tana.relayLinkStatus(ctx.code);
+      if (relayCtx !== ctx) return;
+      if (s.state === 'linked') {
+        relayCtx = null;
+        await loadAgentList();
+        closePalette();
+        return showNote('Linked ' + s.agent.label + (s.agent.app ? ' · ' + s.agent.app : ''));
+      }
+      ctx.state = s.state;
+    } catch { /* a missed answer: the next one asks again */ }
+    drawRelay();
+    if (ctx.state === 'waiting') pollRelay(ctx);
+  }, 2000);
+}
+function relayRows() {
+  const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) }, title = 'Connect to your OpenAI Dot';
+  if (c.state === 'asking') return [{ group: title, label: 'Getting a code…', disabled: true, sweep: true, bare: true, match: [] }];
+  if (c.state === 'failed') return [{ group: title, icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: title, label: 'Try again', match: [] }];
+  const left = Math.max(0, (c.expiresAt || 0) - Date.now());
+  // first both servers, in ChatGPT: a name and a URL each, as its form asks, the rest left as it is
+  const add = 'Add both in ChatGPT · Add, then Create custom MCP server · the rest as it is';
+  const server = (icon, label, url) => ({ group: add, icon, label, hint: url + ' · ↩ copies', keepOpen: true, match: [], run: () => run(() => copyText(url, 'Copied ' + label + '\u2019s URL')) });
+  const rows = [{ group: add, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
+    server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana)];
+  // then the message, which only links: what goes through orbital.md is in it too, for the Dot to explain
+  const group = 'Then ask your Dot to link';
+  rows.push({ group, icon: 'prompt', label: 'Copy the message for your Dot', hint: '↩ copies', keepOpen: true, match: [],
+    run: () => run(() => copyText(c.prompt, 'Copied: send it to your Dot')) },
+  // what crosses orbital.md (main/agents/linked.js send): with each event the node's id, the request and how to handle it, kept nowhere
+  { group, icon: 'lock', label: 'Only the node\'s id and your request go through orbital.md, and it keeps neither: the node\'s words stay in Tana, where your Dot reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
+  // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
+  if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
+  return [...rows,
+    { group, label: 'Waiting for your Dot to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, bare: true, match: [] },
+    { group, icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { relayCtx = null; run(() => tana.relayLinkCancel(c.code)); (c.back || closePalette)(); } }];
+}
+// When the relay last heard from an agent, in a few words
+function seenText(at) {
+  if (!at) return '';
+  const min = Math.round((Date.now() - at) / 60000);
+  return min < 2 ? 'seen just now' : min < 60 ? 'seen ' + min + ' min ago' : min < 48 * 60 ? 'seen ' + Math.round(min / 60) + ' h ago' : 'not seen for ' + Math.round(min / 1440) + ' days';
+}
+// A linked agent's own page: its name and where it runs, then rename, switch off and unlink
+let linkedCtx = null; // the agent's id while its page or its rename page is up
+function openLinkedAgent(id) {
+  linkedCtx = id;
+  openPage('linkedAgent', (agentNamed(id) || { label: 'Agent' }).label, { rows: linkedAgentRows, back: openAgentsPalette });
+}
+function linkedAgentRows(q) {
+  const a = agentNamed(linkedCtx);
+  if (!a) return [{ group: 'Linked agent', icon: 'link', label: 'Not linked any more', disabled: true }];
+  const group = [a.label, a.app ? 'through ' + a.app : '', seenText(a.seenAt) || 'not seen yet'].filter(Boolean).join(' · ');
+  const rows = [
+    { group, icon: 'field', label: 'Rename …', keepOpen: true, run: () => openRenameAgent(a) },
+    { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, left out of Assign to Agent' : 'Back in Assign to Agent', keepOpen: true,
+      run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) },
+    { group, icon: 'trash', label: 'Unlink', hint: 'It can no longer take tasks from Orbital', keepOpen: true,
+      run: () => run(async () => { agentList = await tana.relayUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) }, // its nodes were unassigned too
+  ];
+  return q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows;
+}
+function openRenameAgent(a) {
+  const group = 'Rename ' + a.label + ' · ↩ saves';
+  openPage('renameAgent', 'Its name in Orbital', { typed: true, back: () => openLinkedAgent(a.id), rows: (q, typed) => (typed.trim()
+    ? [{ group, icon: 'field', label: 'Rename to “' + typed.trim() + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.relayRename(a.id, typed.trim()); openLinkedAgent(a.id); }) }]
+    : [{ group, icon: 'field', label: 'Type its new name', disabled: true, match: [] }]) }, a.label);
 }
 // ---- linking a node to a task that already exists in an agent's app (#143) ----
 // Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, Claude's session is its id. Main reads the
@@ -135,13 +225,14 @@ function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
   if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
 }
-function openAgentPrompt(doc) {
+function openAgentPrompt(doc, pick) {
   // No back: Escape cancels the whole thing rather than stepping back a level. The page was opened to answer one
   // question, and abandoning that question is abandoning the assignment. Nothing is written either way.
   showPage('agentPrompt', '', { rows: agentPromptRows, typed: true }); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
-  agentCtx = { id: doc.id, doc }; // the row itself, so the assignment can hold it where it sits
-  agentPick = (agentsOn().find((a) => a.isDefault) || agentsOn()[0] || { id: 'tana' }).id; // every assignment starts on the default
+  agentCtx = { id: doc.id, doc, fixed: !!pick }; // the row itself, so the assignment can hold it where it sits; fixed: its row named the agent
+  // it starts on the agent its row named (Assign to Echo …), or else on the default
+  agentPick = (agentsOn().find((a) => a.id === pick) || agentsOn().find((a) => a.isDefault) || agentsOn()[0] || { id: 'tana' }).id;
   renderPalette(); palText.focus();
 }
 function agentPromptRows() {
@@ -152,7 +243,8 @@ function agentPromptRows() {
     hint: prompt ? '⌘↩' : 'Nothing to send yet', disabled: !prompt, keepOpen: true, run: submitAgentPrompt }];
   // Only with a choice to make: Tana alone needs no list. Choosing keeps the keyboard where it was: picked from the
   // list, the list keeps it so another can be tried; clicked or reached from the editor, the caret goes back.
-  const on = agentsOn();
+  // Not when the row that opened the page already named the agent (Assign to Echo …): the choice is made
+  const on = agentCtx && agentCtx.fixed ? [] : agentsOn();
   if (on.length > 1) for (const a of on) rows.push({ group: PICK_GROUP, icon: a.icon, label: a.label, hint: agentPick === a.id ? '✓' : '', keepOpen: true,
     run: () => { const onList = document.activeElement === palList; agentPick = a.id; renderPalette(); (onList ? palList : palText).focus(); } });
   return rows;

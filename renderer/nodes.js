@@ -141,6 +141,16 @@ const inField = (docId) => typeof docId === 'string' && docId.includes('|tana:ty
 // a table's row too: its title is a column to click into, not text to type in (renderer/views.js tableView)
 // and so does a canvas whose title cannot be typed in: its window is the only place it is anything (main.js canvas:open, #611)
 const opensOnClick = (item) => (isTypeDoc(item.node) && !inField(item.docId)) || (tableRow(item.parent) && !item.node.draft && zoomable(item.node)) || (/^tana:canvas:/.test(String(item.node.id)) && !canEditText(item));
+// A top-level row of a list: a document a view (Inbox, Library, Types), a saved search or a type's page lists. A first
+// click selects it and a click on it once selected goes in: the caret where it was clicked when its title can be typed
+// in, its page when not (renderer/render.js); its bullet zooms in at once. The Timeline's, the Notifications' and the
+// Proposals' rows open on a click of their own, and a draft is a title being typed.
+const topListRow = (item) => item.node.kind === 'document' && !item.node.draft && !item.node.upload && !item.node.timeline && !item.node.notification && !item.node.proposal && (!item.parent || isSearchDoc(item.parent.node) || isTypeDoc(item.parent.node));
+// A Timeline row about a node, or a task or meeting listed under one: selected by a first click as a list row is, and
+// opening what it is about on the next (renderer/select.js openSelectedRow). A line about nothing takes no click.
+const timelineRow = (item) => !!item.node.timeline?.uri || (!item.node.timeline && !!item.parent?.node?.timeline);
+// whether a row's text takes the caret: the one rule behind its contenteditable
+const typesInto = (item) => !demoMode && !opensOnClick(item) && canEditText(item);
 // A row that opens on a click opens from what it draws (words, time, chips, faces), never from the empty width beside
 // them: those land on the row's own boxes, which span the pane (#518). styles.css draws the pointer the same way.
 const onRowBlank = (e) => !!e.target.matches?.('.line, .body');
@@ -368,8 +378,13 @@ function loadAgentStates() {
   // links; an answer for none of them is cheap and correct.
   if (!tana.agentStatus) return;
   tana.agentStatus().then((states) => {
+    const before = new Map(agentStates);
     agentStates.clear();
     for (const [id, state] of Object.entries(states || {})) agentStates.set(id, state);
+    // A badge whose state moved is swapped where it is (renderer/render.js patchAgent: the rows and the page's header).
+    // render() waits while the caret is in a row, and the header's badge is drawn only by it, so the page being typed in
+    // kept its badge grey until the caret left. The badge is the agent's, not the row's words: changing it disturbs nothing.
+    if (typeof patchAgent === 'function') for (const id of new Set([...before.keys(), ...agentStates.keys()])) if (before.get(id) !== agentStates.get(id)) patchAgent(id);
     renderSoon();
   }, () => {}); // a status read that fails leaves the badges as they were; it is not an error the user can act on
   // and whose task each one is: the badge and Go to <agent> task open it there, so a late answer redraws too

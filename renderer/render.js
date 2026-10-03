@@ -680,6 +680,14 @@ const childEl = (n, item) => nodeEl(n, n.kind === 'document' ? n.id : item.docId
 // `done` is the row's own node, which is what the tick and the strikethrough beside it are drawn from. It is passed
 // rather than looked up because `docOf` scans every view's cached rows and answers with the first copy it finds —
 // one that may still be open in a view that has not refreshed since.
+// Where a row's badge goes: at the end of the row, after everything it says about itself, in every list; on the Timeline
+// in line, right after the title, where a task reads as a sentence (styles.css .cbadge.inline)
+function placeAgentBadge(line, badge) {
+  const text = zoom?.docId === TIMELINE_PAGE && line.querySelector(':scope > .body > .text');
+  if (!text) return line.append(badge);
+  badge.classList.add('inline');
+  text.after(badge);
+}
 function agentBadgeEl(id, done = !!docOf(id)?.done) {
   const state = agentStateOf(id), words = AGENT_BADGE[state];
   const el = document.createElement('span');
@@ -689,7 +697,7 @@ function agentBadgeEl(id, done = !!docOf(id)?.done) {
   badgeMoved(el, id, state + (done ? ':closed' : '')); // a state that just changed pops, shines or shakes
   // A badge with a task behind it is the way into that task; a pending one has nowhere to go, so it stays a plain
   // image rather than a button that does nothing.
-  const link = agentTasks.get(id), linked = agentStates.has(id) && !!link && state !== 'elsewhere'; // nothing to open from here
+  const link = agentTasks.get(id), opens = link && agentNamed(link.agent), linked = agentStates.has(id) && !!link && state !== 'elsewhere' && !!opens && !!(opens.opens || opens.opensHere); // nothing to open from here (another Mac, or a Dot's task)
   el.setAttribute('role', linked ? 'button' : 'img');
   el.setAttribute('aria-label', linked ? words.label + ', open the ' + ((agentNamed(link.agent) || {}).label || 'agent') + ' task' : words.label);
   el.title = linked ? words.title + ' — click to open the task' : words.title;
@@ -716,8 +724,8 @@ function patchAgent(docId) {
     const item = items.get(row.dataset.key), line = row.querySelector(':scope > .line');
     const node = item && (referenceTarget(item.node) || item.node);
     if (!item || !line || node.id !== docId) continue;
-    line.querySelector(':scope > .cbadge')?.remove();
-    if (agentIds.has(docId)) line.append(agentBadgeEl(docId, node.done));
+    line.querySelector('.cbadge')?.remove();
+    if (agentIds.has(docId)) placeAgentBadge(line, agentBadgeEl(docId, node.done));
     if (row.dataset.sig) row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
   }
   agentHeader(); // the open page says it too, and for the same reason it is patched rather than re-rendered
@@ -893,7 +901,7 @@ function nodeEl(node, docId, parent) {
     text.append(tableEl(item));
   } else {
     const english = !pending.has(item.key) && translated && !translated.pending && !translated.original && caretBefore?.key !== item.key ? translated : null; // shown translated (renderer/translate.js), never while typed in, as the title
-    if (!demoMode && !clickOpens && canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
+    if (typesInto(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
     const shown = (label) => (reference ? [{ text: label }] : fullref ? [{ mention: { uri: node.reference.uri, label } }] : null); // a translated reference keeps its chip
@@ -933,8 +941,10 @@ function nodeEl(node, docId, parent) {
   if (sub) body.append(sub);
   blurSensitive(body, docId, target && target.id, node.timeline && node.timeline.uri); // a Timeline row says its node's title in its own words
   line.append(body);
-  // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
-  if (agentIds.has(display.id)) line.append(agentBadgeEl(display.id, display.done));
+  // handed to an agent: the robot badge at the end of the row, after everything the row says about itself. On the
+  // Timeline too, where a task row is the node itself (Today's Tasks, what was added to your Inbox); a line about what
+  // happened ("Priya completed …") has an id of its own, so it carries none: the badge is a fact about the task
+  if (agentIds.has(display.id)) placeAgentBadge(line, agentBadgeEl(display.id, display.done));
   if (node.proposal) line.append(proposalButtonsEl(node)); // approve and reject, at the end of a Proposals row (renderer/proposals.js)
   // A click that misses the words still belongs to the row, and the row is bigger than its text: the padding
   // around it, and the blank line a soft break leaves inside it, are all places a caret can sit. It used to answer
@@ -958,6 +968,45 @@ function nodeEl(node, docId, parent) {
     if (selKeys().includes(item.key) && canEditText(item)) { if (fullref) { e.preventDefault(); setCaret(text, text.textContent.length); } return; }
     e.preventDefault(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key }; leaveText(); applySel();
   };
+  // A top-level row of a list and a Timeline row (topListRow, timelineRow, renderer/nodes.js): the first click selects
+  // it, and a click on the selected row goes in — the caret where it was clicked on a row that can be typed in, what
+  // the row opens on one that cannot (openSelectedRow, renderer/select.js). The bullet goes in at once; the box, the
+  // chevron, a chip, a link and a button answer their own clicks, and a row already being typed in takes its clicks as
+  // any text does. ⌘- and ⌥-click on a Timeline row still open it in a tab or floating at once.
+  const onTimeline = timelineRow(item);
+  if (onTimeline) bullet.onclick = (e) => { // what the row is about, as its second click opens it, not the Timeline's own copy of the row
+    e.stopPropagation();
+    const where = elsewhere(e);
+    if (node.timeline) openTimeline(node, where); else if (where) run(() => openElsewhere(where, node.id)); else goTo(node.id);
+  };
+  if (onTimeline || topListRow(item)) {
+    // Until it is selected the row is one thing to press, so its whole line picks it up (renderer/drag.js), not only its
+    // bullet: its words take no press of their own then (styles.css .selectfirst), so a press neither puts a caret in
+    // them nor focuses them. Selected and editable, or typed in, its words are words again, to click into and select.
+    el.classList.add('selectfirst');
+    const grab = canDragItem(item);
+    if (grab) line.draggable = true;
+    const before = line.onclick; // a list row: the caret beside its words while typed in; a Timeline row: ⌘ and ⌥ opening it elsewhere
+    let pressed = null; // what the press decided, for the click that ends it
+    line.onmousedown = (e) => {
+      pressed = null;
+      const keys = selKeys(), mine = keys.length === 1 && keys[0] === item.key;
+      if (grab) line.draggable = document.activeElement !== text && !(mine && text.isContentEditable);
+      if (e.button !== 0 || e.metaKey || e.shiftKey || e.ctrlKey || e.altKey || document.activeElement === text) return;
+      if (e.target.closest('.check, .bullet, .chev, .mention, a, button, input, [role="button"], .cell')) return;
+      pressed = !mine ? 'select' : text.isContentEditable ? 'edit' : 'open';
+      // in the words the browser puts the caret where they were pressed (and a drag selects them); beside them it is ours to put
+      if (pressed === 'edit') { if (!text.contains(e.target)) { e.preventDefault(); setCaret(text, caretAt(text, e.clientX, e.clientY)); } }
+      // a row picked up by its whole line: Chromium starts that drag from this very default, so it is left alone
+      else if (!line.draggable) e.preventDefault();
+    };
+    line.onclick = (e) => {
+      const was = pressed; pressed = null;
+      if (was === 'select') { leaveText(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key, picked: true }; applySel(); }
+      else if (was === 'open') openSelectedRow(items.get(item.key) || item);
+      else if (!was && before && (onTimeline ? e.metaKey || e.altKey : document.activeElement === text)) before(e);
+    };
+  }
   el.append(line);
   // expanded = real children shown, or an explicitly opened empty node (which shows one draft child)
   const expanded = expandable && (has ? opened : !node.draft && open.get(item.key) === true);
