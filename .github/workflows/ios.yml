@@ -22,12 +22,6 @@ jobs:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: macos-26
     steps:
-      # The simulator takes minutes to come up on a runner, so it starts first and boots in the background while the
-      # job checks out, installs and builds: the newest iOS runtime's first iPhone (the app needs iOS 26). Its id is
-      # written to a file once picked; the UI tests step builds for it, then waits for the boot before testing.
-      - name: Boot a simulator
-        run: |
-          nohup bash -c 'id=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require(\"fs\").readFileSync(0)).devices; const rt=Object.keys(d).filter(k=>k.includes(\"iOS\")).sort().reverse()[0]; console.log(d[rt].find(x=>x.name.startsWith(\"iPhone\")).udid)") && echo "$id" > "$RUNNER_TEMP/sim.tmp" && mv "$RUNNER_TEMP/sim.tmp" "$RUNNER_TEMP/sim" && xcrun simctl boot "$id"' > "$RUNNER_TEMP/sim.log" 2>&1 &
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -35,12 +29,12 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts # loro-crdt for the engine bundle; the Electron download is not needed
       - uses: oven-sh/setup-bun@v2
+      # the newest iOS runtime's first iPhone: the app needs iOS 26. Booting it in the background while the app builds was
+      # tried (#702) and made the build six times slower: the runner has few cores, and the boot takes them
+      - name: Pick a simulator
+        run: |
+          id=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices; const rt=Object.keys(d).filter(k=>k.includes('iOS')).sort().reverse()[0]; console.log(d[rt].find(x=>x.name.startsWith('iPhone')).udid)")
+          echo "SIM=$id" >> "$GITHUB_ENV"
       - name: UI tests
         working-directory: ios
-        run: |
-          for i in $(seq 120); do [ -s "$RUNNER_TEMP/sim" ] && break; sleep 1; done
-          [ -s "$RUNNER_TEMP/sim" ] || { cat "$RUNNER_TEMP/sim.log"; exit 1; }
-          sim=$(cat "$RUNNER_TEMP/sim")
-          xcodebuild build-for-testing -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$sim" CODE_SIGNING_ALLOWED=NO
-          xcrun simctl bootstatus "$sim" -b
-          xcodebuild test-without-building -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$sim" CODE_SIGNING_ALLOWED=NO
+        run: xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$SIM" CODE_SIGNING_ALLOWED=NO
