@@ -458,10 +458,10 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     const m = /^Orbital ([\w-]{32,128})$/.exec(req.headers.authorization || '');
     if (!m) throw fail(401, 'unauthorized', 'No Orbital key');
     const keyHash = hash(m[1]);
-    limit('o:' + keyHash);
     const find = () => one('SELECT * FROM orbitals WHERE secret = ? ORDER BY created, id LIMIT 1', keyHash);
     const row = await find();
-    if (row) return row;
+    if (row) { limit('o:' + keyHash); return row; }
+    limit('unknown-orbital:' + ip(req));
     if (!mayCreate) throw fail(401, 'unauthorized', 'Unknown Orbital key');
     // a new key is a new row, and the caller picks the key: new Orbitals are counted by the address the proxy saw
     limit('new-orbital:' + ip(req), LIMITS.newOrbitals);
