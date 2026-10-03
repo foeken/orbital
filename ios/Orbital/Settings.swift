@@ -169,9 +169,23 @@ enum ChatGPT {
 
     // The account with a live access token: renewed with its refresh token a minute before it runs out, as Codex does
     // (codex-rs/login, the refresh_token grant); nil when signed out. A refresh refused leaves the account as it was.
-    static func fresh() async throws -> Account? {
+    // On the main actor, so nothing runs between finding no renewal in flight and starting one.
+    @MainActor static func fresh() async throws -> Account? {
         guard let account = load() else { return nil }
         if account.expires > .now.addingTimeInterval(60) { return account }
+        if let renewing { return try await renewing.value }
+        let renewal = Task { try await renew(account) }
+        renewing = renewal
+        defer { renewing = nil }
+        return try await renewal.value
+    }
+
+    // One renewal at a time, as ChatGPTClient.kt's renewing Mutex: a refresh token is good for one use, so a second
+    // renewal at the same moment (Auto-translate and the models list as the app starts) would be refused with it; the
+    // later callers await the one in flight
+    @MainActor private static var renewing: Task<Account?, Error>?
+
+    private static func renew(_ account: Account) async throws -> Account? {
         // no scope: the refresh keeps everything the sign-in was granted
         let request = tokenRequest(["grant_type": "refresh_token", "client_id": client, "refresh_token": account.refreshToken])
         let (data, response) = try await URLSession.shared.data(for: request)

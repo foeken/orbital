@@ -34,7 +34,7 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
     suspend fun listen() {
         problem = null
         wanted = true
-        if (platform.ai.account() == null) { problem = "Sign in with ChatGPT in Settings to dictate"; return }
+        if (platform.chatgpt.account() == null) { problem = "Sign in with ChatGPT in Settings to dictate"; return }
         if (!platform.microphone()) { problem = "Allow Orbital the microphone in Android's settings to dictate"; return }
         // cancelled while Android asked (the page left, or ✕): no recording that nothing would stop
         if (!wanted) return
@@ -50,7 +50,7 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
         transcribing = true
         heard = scope.async {
             try {
-                val text = platform.ai.transcribe(audio) ?: run { problem = "Sign in with ChatGPT in Settings to dictate"; return@async false }
+                val text = platform.chatgpt.transcribe(audio) ?: run { problem = "Sign in with ChatGPT in Settings to dictate"; return@async false }
                 text.trim().takeIf { it.isNotEmpty() }?.let(into)
                 true
             } catch (e: CancellationException) {

@@ -26,10 +26,10 @@ class FakeHost(var answer: suspend (String, Map<String, Any?>) -> JsonElement = 
 // engine.js answers a JSON string for most calls: as the page would
 fun text(value: String) = JsonPrimitive(value)
 
-class FakeAI(private val signedIn: Boolean = false) : AI {
-    override fun account(): AI.Account? = if (signedIn) AI.Account("me@example.com", "plus") else null
+class FakeChatGPT(private val signedIn: Boolean = false) : ChatGPT {
+    override fun account(): ChatGPT.Account? = if (signedIn) ChatGPT.Account("me@example.com", "plus") else null
     override fun forget() {}
-    override suspend fun models(): List<AI.Model>? = null
+    override suspend fun models(): List<ChatGPT.Model>? = null
     override suspend fun respond(instructions: String, content: List<JsonObject>, model: String, effort: String, schema: JsonObject?): String? = null
     override suspend fun transcribe(audio: ByteArray): String? = null
 }
@@ -45,7 +45,7 @@ class FakeRecorder : Recorder {
 
 class FakePlatform(
     override val store: Store = MemoryStore(),
-    override val ai: AI = FakeAI(),
+    override val chatgpt: ChatGPT = FakeChatGPT(),
     override val recorder: Recorder? = null,
     private val allowed: suspend () -> Boolean = { false }, // what Android's microphone question answers
 ) : Platform {

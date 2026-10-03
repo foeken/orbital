@@ -61,10 +61,7 @@ class EngineWeb(private val app: Context, private val engine: String, screen: Co
 
     fun use(screen: Context?) { context.baseContext = screen ?: app }
 
-    private fun make(): WebView = WebView(context).also { web ->
-        web.settings.javaScriptEnabled = true
-        web.settings.domStorageEnabled = true // the settings mirror and the device's storage id (ios/engine/stand-ins.js)
-        web.settings.userAgentString = chrome(web.settings.userAgentString)
+    private fun make(): WebView = browser(context).also { web ->
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true) // Tana's sign-in hands over through WorkOS
         // no X-Requested-With: Google refuses to sign in a page that says it is an app's web view
         if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) WebSettingsCompat.setRequestedWithHeaderOriginAllowList(web.settings, emptySet())
@@ -177,6 +174,15 @@ class EngineWeb(private val app: Context, private val engine: String, screen: Co
     }
 
     companion object {
+        // a web view as both sign-ins need one: scripts and storage on (the settings mirror and the device's storage id,
+        // ios/engine/stand-ins.js), and Chrome's own user agent; profile first, before anything else touches it
+        fun browser(context: Context, profile: String? = null): WebView = WebView(context).apply {
+            if (profile != null && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) WebViewCompat.setProfile(this, profile)
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.userAgentString = chrome(settings.userAgentString)
+        }
+
         private val TANA = listOf("https://home.tana.inc", "https://tana.inc")
 
         // Google and others refuse sign-in in a page that says it is a web view: Chrome's own words, without "; wv"

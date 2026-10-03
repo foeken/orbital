@@ -165,7 +165,7 @@ extension ChatGPT {
         return try JSONDecoder().decode(Out.self, from: data).models.filter { $0.visibility != "hide" }.map { Model(id: $0.slug, efforts: ($0.supported_reasoning_levels ?? []).map(\.effort)) }
     }
     // as the Mac's Settings page names them, by its own pattern (renderer/settings.js aiModelLabel): gpt-6-sol Sol 6,
-    // gpt-5.5 GPT-5.5, and an id that is not a version and a name (gpt-oss-120b) as it is (ChatGPTText.kt label)
+    // gpt-5.5 GPT-5.5, and an id that is not a version and a name (gpt-oss-120b) as it is (ChatGPT.kt label)
     static func label(_ id: String) -> String {
         guard let m = id.wholeMatch(of: /gpt-([\d.]+)-?(.*)/) else { return id }
         let (version, name) = (String(m.1), String(m.2))

@@ -33,6 +33,9 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import com.dreetje.orbital.Row
 
+// Words as the iPhone draws them (ios/Orbital/Timeline.swift Blur, Redacted, Row.styled): marks, links, and the
+// sensitive bar
+
 // Zooming into a node from anywhere: a mention, a reference or a row (Shell pushes it, as the iPhone's openURL does)
 val LocalZoom = staticCompositionLocalOf<(String?) -> Unit> { {} }
 
@@ -48,6 +51,11 @@ fun Sensitive(hidden: Boolean, modifier: Modifier = Modifier, content: @Composab
         CompositionLocalProvider(LocalHidden provides true, content = content)
     }
 }
+
+// A row you marked sensitive, until a shake shows it (Engine.reveal): the iPhone's .sensitive(row.sensitive, engine:)
+@Composable
+fun Sensitive(row: Row, reveal: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) =
+    Sensitive(row.sensitive == true && !reveal, modifier, content)
 
 // A row's words with their marks. A mention and a link to a node zoom into it; any other link opens as it would anywhere.
 fun Row.styled(c: Colors, zoom: (String?) -> Unit): AnnotatedString = buildAnnotatedString {

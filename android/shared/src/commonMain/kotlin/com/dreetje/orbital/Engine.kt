@@ -34,7 +34,7 @@ class Engine(
     sample: Pair<String, String>? = null, // timeline-sample.json and pages-sample.json, for -sample
     history: Boolean = false, // -history: the day's entries only
     demoMode: Boolean? = null, // overrides what this phone kept, for one launch (as -demoMode NO in the iPhone's tests)
-    private val now: () -> Instant = { Clock.System.now() },
+    val now: () -> Instant = { Clock.System.now() }, // the clock every screen reads, fixed in tests
 ) : EngineHost.Listener {
     sealed interface Phase {
         data object Starting : Phase
@@ -60,7 +60,7 @@ class Engine(
     // when it differs from the one before.
     val log = mutableStateListOf<String>()
     // its answers kept in a file of their own (Platform.files): one ever-growing string, rewritten on every flush
-    val translator = Translator(platform.files, platform.ai, platform::language, scope)
+    val translator = Translator(platform.files, platform.chatgpt, platform::language, scope)
     var sensitiveIds by mutableStateOf(setOf<String>()) // marked sensitive in Orbital (synced), for the long-press menu
         private set
     var pinned by mutableStateOf(setOf<String>()) // pinned to a day, any day, for the long-press menu
@@ -234,7 +234,7 @@ class Engine(
             settle(rows)
             maybe { call<Setup>("return await orbital.setup()") }?.let { setup ->
                 translator.use(setup.to, setup.ai)
-                if (translator.catalogue.isEmpty()) maybe { platform.ai.models() }?.takeIf { it.isNotEmpty() }?.let { translator.catalogue = it } // once: what this account may ask
+                if (translator.catalogue.isEmpty()) maybe { platform.chatgpt.models() }?.takeIf { it.isNotEmpty() }?.let { translator.catalogue = it } // once: what this account may ask
                 sensitiveIds = setup.sensitive.toSet()
                 pinned = setup.pinned.toSet()
             }
@@ -353,7 +353,7 @@ class Engine(
     // The image, already a JPEG of 2048 px at most, read by ChatGPT, then made into its node (orbital.fromImage)
     suspend fun processImage(jpeg: ByteArray): String {
         if (isSample) throw Failure("The sample saves nothing")
-        val read = ChatGPTText.readImage(platform.ai, jpeg, translator.to, translator.ai.getValue("model"), translator.ai.getValue("effort"))
+        val read = ChatGPT.readImage(platform.chatgpt, jpeg, translator.to, translator.ai.getValue("model"), translator.ai.getValue("effort"))
         val id: String = call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
             mapOf("kind" to (read.kind ?: "doc"), "title" to (read.title ?: ""), "notes" to (read.notes ?: emptyList()), "image" to Base64.encode(jpeg)))
         refresh()

@@ -42,22 +42,6 @@ class MemoryStore(private val map: MutableMap<String, String> = mutableMapOf()) 
     override fun set(key: String, value: String?) { if (value == null) map.remove(key) else map[key] = value }
 }
 
-// Your ChatGPT account, for Auto-translate, reading an image and dictation, as Codex asks ChatGPT (ios/Orbital/Translator.swift).
-// The Android app's is ChatGPTClient; null answers mean signed out.
-interface AI {
-    data class Account(val email: String?, val plan: String?)
-    data class Model(val id: String, val efforts: List<String>) {
-        // a model listed without its levels takes these, as main/ai.js EFFORTS
-        val levels: List<String> get() = efforts.ifEmpty { listOf("low", "medium", "high") }
-    }
-
-    fun account(): Account?
-    fun forget()
-    suspend fun models(): List<Model>?
-    // one question, its answer's text; content: the user's parts (input_text, input_image); schema: the answer's shape
-    suspend fun respond(instructions: String, content: List<JsonObject>, model: String, effort: String, schema: JsonObject? = null): String?
-    suspend fun transcribe(audio: ByteArray): String?
-}
 
 // The microphone, recording AAC for dictation (Dictation)
 interface Recorder {
@@ -73,7 +57,7 @@ interface Platform {
     // what is kept on this phone in files of its own rather than in store: a value that grows (the translations), read
     // and written whole. The same as store unless the platform has better.
     val files: Store get() = store
-    val ai: AI
+    val chatgpt: ChatGPT
     val version: String
     val recorder: Recorder?
     val reduceMotion: Boolean // the system's animations off: every move of the app's still too

@@ -95,12 +95,12 @@ class ListsTest {
     }
 
     @Test fun modelsAreNamedAsTheMacNamesThem() {
-        assertEquals("Sol 6", ChatGPTText.label("gpt-6-sol"))
-        assertEquals("Terra 5.6", ChatGPTText.label("gpt-5.6-terra"))
-        assertEquals("GPT-5.5", ChatGPTText.label("gpt-5.5"))
-        assertEquals("gpt-oss-120b", ChatGPTText.label("gpt-oss-120b")) // not a version and a name: as it is, as on the Mac
-        assertEquals("o3", ChatGPTText.label("o3"))
-        assertEquals("Extra high", ChatGPTText.effortLabel("xhigh"))
+        assertEquals("Sol 6", ChatGPT.label("gpt-6-sol"))
+        assertEquals("Terra 5.6", ChatGPT.label("gpt-5.6-terra"))
+        assertEquals("GPT-5.5", ChatGPT.label("gpt-5.5"))
+        assertEquals("gpt-oss-120b", ChatGPT.label("gpt-oss-120b")) // not a version and a name: as it is, as on the Mac
+        assertEquals("o3", ChatGPT.label("o3"))
+        assertEquals("Extra high", ChatGPT.effortLabel("xhigh"))
     }
 
     @Test fun accessNamesItsRuleAndWhetherItGrants() {

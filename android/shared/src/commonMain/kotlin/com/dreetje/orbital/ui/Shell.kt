@@ -1,6 +1,7 @@
 package com.dreetje.orbital.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -37,14 +38,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.WifiOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -52,84 +52,55 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.dreetje.orbital.Dictation
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.json
 import com.dreetje.orbital.maybe
-import kotlinx.coroutines.delay
 import kotlin.io.encoding.Base64
-import kotlin.math.roundToInt
-import kotlin.time.Clock
 import kotlin.time.Instant
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-// How the app opens, for design shots and tests (the iPhone's launch arguments): a node zoomed into, Settings or Quick
-// Add open, the menu opened and closed again
-data class Start(val zoom: String? = null, val settings: Boolean = false, val add: Boolean = false, val menuDemo: Boolean = false)
-
-// The app: one web view in one place, Tana's sign-in while signed out and hidden behind the app once the engine runs;
-// the app's frame once it starts, its Timeline building itself while Tana connects
-@Composable
-fun OrbitalApp(engine: Engine, start: Start = Start()) {
-    OrbitalTheme {
-        val c = Theme.colors
-        var details by remember { mutableStateOf(false) }
-        val signingIn = engine.phase == Engine.Phase.SignedOut
-        Box(Modifier.fillMaxSize().background(c.page)) {
-            Column(if (signingIn) Modifier.fillMaxSize() else Modifier.size(1.dp).alpha(0f).clearAndSetSemantics {}) {
-                if (signingIn) Box(Modifier.fillMaxWidth().statusBarsPadding().height(52.dp)) {
-                    Text("Sign in to Tana", Modifier.align(Alignment.Center), style = Type.headline, color = c.text)
-                    TextButton({ details = true }, Modifier.align(Alignment.CenterEnd)) { Text("Details", color = c.text) }
-                }
-                engine.platform.EngineView(Modifier.fillMaxWidth().weight(1f).navigationBarsPadding().imePadding())
-            }
-            when (val phase = engine.phase) {
-                is Engine.Phase.Failed -> Empty("Can't reach Tana", phase.message, Modifier.statusBarsPadding(), icon = Icons.Outlined.WifiOff) {
-                    Button({ engine.start() }, colors = ButtonDefaults.buttonColors(containerColor = c.text, contentColor = c.page)) { Text("Try again") }
-                    TextButton({ details = true }) { Text("Details", color = c.text) }
-                }
-                Engine.Phase.SignedOut -> {}
-                else -> Shell(engine, start)
-            }
-        }
-        if (details) SignInLog(engine.log.toList(), engine.platform::share) { details = false }
-    }
-}
+// The iPhone's ios/Orbital/Shell.swift: the side menu, the page, and the composer under it
 
 // The app's frame, after the Codex and ChatGPT apps: a side menu behind the page (the Timeline, your saved searches and
 // settings), the page with the menu button and its title, and a composer at the bottom that starts a chat with Tana.
@@ -199,7 +170,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
                                 }
                             }
                             // a new chat, opened as it starts, its warning shown there
-                            Composer(engine) { text -> val sent = engine.ask(text); sent.warning?.let { notes[sent.id] = it }; asked[sent.id] = Clock.System.now(); path.add(sent.id); null }
+                            Composer(engine) { text -> val sent = engine.ask(text); sent.warning?.let { notes[sent.id] = it }; asked[sent.id] = engine.now(); path.add(sent.id); null }
                         } else NodeScreen(engine, top, Modifier.imePadding().navigationBarsPadding(), note = notes[top], asked = asked[top], onBack = { path.removeAt(path.lastIndex) })
                     }
                 }
@@ -319,8 +290,7 @@ private fun SideMenu(
                 }
             }
         }
-        Box(Modifier.align(Alignment.BottomEnd).padding(12.dp).size(48.dp).shadow(if (c.dark) 0.dp else 4.dp, CircleShape).clip(CircleShape).background(c.card)
-            .border(1.dp, c.separator, CircleShape).clickable(onClick = settings).semantics { contentDescription = "Settings" }, contentAlignment = Alignment.Center) {
+        RoundButton("Settings", 48.dp, c.card, Modifier.align(Alignment.BottomEnd).padding(12.dp).shadow(if (c.dark) 0.dp else 4.dp, CircleShape), border = c.separator, onClick = settings) {
             Icon(Icons.Outlined.Settings, null, Modifier.size(24.dp), c.text)
         }
     }
@@ -339,5 +309,82 @@ private fun MenuItem(item: Menu, selected: Boolean, icon: ImageBitmap?, hidden: 
         if (icon != null) Image(icon, null, Modifier.size(22.dp), colorFilter = ColorFilter.tint(c.text))
         else Glyph(if (item is Menu.Search) "searchMenu" else "timelineMenu", Modifier.size(22.dp), c.text)
         Sensitive(hidden) { Words(item.title, style = Type.body.copy(fontWeight = FontWeight.Medium), maxLines = 1) }
+    }
+}
+
+// The composer, as the Codex app has it: what you type goes to Tana, as a new chat from the page (Shell) or a follow-up
+// in a chat (NodeScreen). A capsule at rest, a card while you type in it, the words on top and send in its corner.
+// The words go the moment it is sent, and come back with the reason if Tana refuses them; a message sent that Tana did
+// not answer stays sent, with the warning send hands back shown over the box.
+@Composable
+fun Composer(engine: Engine, prompt: String = "Ask Tana", note: String? = null, send: suspend (String) -> String?) {
+    val c = Theme.colors
+    val still = engine.platform.reduceMotion
+    var text by rememberSaveable { mutableStateOf("") }
+    var failure by remember { mutableStateOf(note) }
+    var sending by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
+    val dictation = remember { Dictation(engine.platform, engine.scope) }
+    DisposableEffect(Unit) { onDispose { dictation.cancel() } } // the page left while listening: nothing kept
+    val empty = text.isBlank()
+    val busy = dictation.recording || dictation.transcribing // listening, or writing down what was said
+    val open = focused || !empty || busy
+    val side by animateDpAsState(if (open) 14.dp else 36.dp, if (still) tween(0) else tween(240))
+    val shape = RoundedCornerShape(23.dp)
+    fun append(said: String) { text = if (text.isEmpty()) said else "$text $said" } // dictated words land after what is typed
+
+    // Send while listening or writing down too: listening stops and the words are waited for first
+    suspend fun submit() {
+        if (busy) {
+            sending = true
+            val heard = dictation.settle(::append)
+            sending = false
+            if (!heard) return
+        }
+        val words = text.trim()
+        if (words.isEmpty()) return
+        text = ""; focus.clearFocus(); sending = true
+        try {
+            failure = send(words)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            text = if (text.isEmpty()) words else words + "\n\n" + text // the unsent words come back, ahead of anything typed since
+            failure = e.message
+        }
+        sending = false
+    }
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = side).padding(top = 4.dp, bottom = if (focused) 10.dp else 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        val line = failure ?: dictation.problem
+        if (line != null) Text(line, Modifier.padding(bottom = 6.dp), style = Type.footnote, color = c.secondary, textAlign = TextAlign.Center)
+        Box(Modifier.fillMaxWidth().shadow(if (c.dark) 0.dp else 8.dp, shape, ambientColor = Color.Black.copy(0.08f), spotColor = Color.Black.copy(0.12f))
+            .clip(shape).background(c.card).border(1.dp, c.separator, shape).animateContentSize(if (still) tween(0) else tween(240))) {
+            BasicTextField(
+                text, { text = it },
+                Modifier.fillMaxWidth().heightIn(min = 46.dp).onFocusChanged { focused = it.isFocused }
+                    .padding(start = 18.dp, end = if (open) 18.dp else 52.dp, top = if (open) 15.dp else 12.dp, bottom = if (open) 58.dp else 12.dp)
+                    .semantics { contentDescription = prompt },
+                textStyle = Type.body.copy(color = c.text), cursorBrush = SolidColor(c.accent), maxLines = 6,
+                decorationBox = { inner -> Box { if (text.isEmpty()) Text(prompt, style = Type.body, color = c.secondary); inner() } },
+            )
+            // the card's bottom row: dictating, only while you are in the card (or it still listens), then send
+            Row(Modifier.align(Alignment.BottomEnd).then(if (dictation.recording) Modifier.fillMaxWidth() else Modifier).padding(if (open) 10.dp else 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (focused || busy) Dictate(dictation, engine) { append(it) }
+                Send(enabled = (!empty || busy) && !sending, label = prompt) { scope.launch { submit() } }
+            }
+        }
+    }
+}
+
+// the Codex app's send: a grey circle while there is nothing to send, blue once there is
+@Composable
+fun Send(enabled: Boolean, label: String, onClick: () -> Unit) {
+    val c = Theme.colors
+    RoundButton(label, 34.dp, if (enabled) c.accent else c.fill, enabled = enabled, onClick = onClick) {
+        Icon(Icons.Filled.ArrowUpward, null, Modifier.size(20.dp), if (enabled) Color.White else c.tertiary)
     }
 }

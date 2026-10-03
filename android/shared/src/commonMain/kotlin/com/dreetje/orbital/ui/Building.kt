@@ -29,6 +29,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 
+// The iPhone's ios/Orbital/Building.swift: the Timeline building itself while Tana connects
+
 // Loading, as the desktop's (renderer/loading.js) and the iPhone's (Building.swift): while the Timeline's first rows
 // are on their way, the page builds itself where they will be, row by row, each a small outlined glyph rising in and a
 // rounded bar for its words growing in from the left, with a soft band of light running through the bars. The same

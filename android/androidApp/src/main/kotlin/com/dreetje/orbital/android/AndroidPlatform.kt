@@ -30,9 +30,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.webkit.ProfileStore
-import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
-import com.dreetje.orbital.AI
+import com.dreetje.orbital.ChatGPT
 import com.dreetje.orbital.Platform
 import com.dreetje.orbital.Recorder
 import com.dreetje.orbital.Store
@@ -56,7 +55,7 @@ class AndroidPlatform(private val context: Context) : Platform {
     override val store: Store = Prefs(context)
     // the translations once kept in store, moved to their file the first time
     override val files: Store = Files(context).also { files -> store.get("translations")?.let { files.set("translations", it); store.set("translations", null) } }
-    override val ai: AI = ChatGPTClient(Secrets(context))
+    override val chatgpt: ChatGPT = ChatGPTClient(Secrets(context))
     override val version: String = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
     override val recorder: Recorder = MicRecorder(context)
     override val reduceMotion: Boolean get() = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
@@ -140,16 +139,12 @@ class AndroidPlatform(private val context: Context) : Platform {
     @SuppressLint("SetJavaScriptEnabled")
     @Composable
     override fun ChatGPTSignIn(done: () -> Unit, failed: (String) -> Unit) {
-        val client = ai as ChatGPTClient
+        val client = chatgpt as ChatGPTClient
         val scope = rememberCoroutineScope()
         val verifier = remember { ChatGPTClient.random() }
         val state = remember { ChatGPTClient.random() }
         AndroidView({ ctx ->
-            WebView(ctx).apply {
-                if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) WebViewCompat.setProfile(this, OPENAI_PROFILE) // before anything loads
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.userAgentString = EngineWeb.chrome(settings.userAgentString)
+            EngineWeb.browser(ctx, OPENAI_PROFILE).apply {
                 var caught = false
                 fun answer(url: Uri): Boolean {
                     if (!url.toString().startsWith(ChatGPTClient.REDIRECT)) return false

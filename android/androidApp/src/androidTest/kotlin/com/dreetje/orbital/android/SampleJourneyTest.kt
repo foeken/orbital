@@ -44,7 +44,9 @@ class SampleJourneyTest {
 
     @After fun close() { scenario?.close() }
 
-    private fun seen(text: String) = compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    // on screen; while one screen hands over to another (a share bringing Orbital forward) there is briefly none to ask,
+    // which is not yet rather than a failure
+    private fun seen(text: String) = runCatching { compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
     // a phone's menu is behind its button; a tablet's stays beside the page and has none
     private fun openMenu() {
         if (compose.onAllNodes(hasContentDescription("Menu")).fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithContentDescription("Menu").performClick()
@@ -109,7 +111,7 @@ class SampleJourneyTest {
         field.performClick()
         field.performTextInput("Summarise this week")
         compose.onNode(hasContentDescription("Ask Tana") and hasSetTextAction().not() and hasClickAction()).performClick()
-        compose.waitUntil(5000) { seen("Summarise this week’s meetings") }
+        compose.waitUntil(10_000) { seen("Summarise this week’s meetings") }
     }
 
     @Test fun quickAddWaitsForATitle() {

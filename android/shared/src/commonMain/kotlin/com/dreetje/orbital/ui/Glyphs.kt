@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.graphics.vector.group
 import androidx.compose.ui.unit.dp
 
+// The iPhone's Glyph (ios/Orbital/Pages.swift) and its asset catalog: the desktop's Nucleo glyphs by name
+
 // The Nucleo line glyphs the desktop and the iPhone draw (icons.js, GlyphData.kt), as vectors tinted like Material
 // icons: one grey everywhere unless the colour means something
 object Glyphs {

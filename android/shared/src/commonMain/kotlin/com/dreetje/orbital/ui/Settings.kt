@@ -1,8 +1,6 @@
 package com.dreetje.orbital.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,25 +30,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.dreetje.orbital.AI
-import com.dreetje.orbital.ChatGPTText
+import com.dreetje.orbital.ChatGPT
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Translator
 import com.dreetje.orbital.maybe
 import kotlinx.coroutines.launch
+
+// The iPhone's ios/Orbital/Settings.swift: Settings and its Models page
 
 // Settings, opened from the side menu, laid out as the ChatGPT app's: no title, a close button top right, rounded
 // groups under grey headings, each row a line glyph, its words and its value in grey
 @Composable
 fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
     val c = Theme.colors
-    val ai = engine.platform.ai
+    val ai = engine.platform.chatgpt
     var account by remember { mutableStateOf(ai.account()) }
     var signingIn by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
-    var models by remember { mutableStateOf(listOf<AI.Model>()) } // the choices for Models, read when signed in
+    var models by remember { mutableStateOf(listOf<ChatGPT.Model>()) } // the choices for Models, read when signed in
     var showModels by remember { mutableStateOf(false) }
     LaunchedEffect(account) {
         models = if (account == null) emptyList() else maybe { ai.models() } ?: emptyList()
@@ -62,7 +60,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 engine.platform.ChatGPTSignIn(done = { account = ai.account(); signingIn = false; failure = null }, failed = { failure = it })
             }
-            failure?.let { Text(it, Modifier.fillMaxWidth().background(c.card).padding(8.dp), style = Type.footnote, color = c.secondary, textAlign = TextAlign.Center) }
+            failure?.let { Notice(it) }
             return@Sheet
         }
         if (showModels) { Models(engine, models) { showModels = false }; return@Sheet }
@@ -82,7 +80,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                         a.plan?.let { GroupRow(last = models.isEmpty()) { Label("license", "Plan"); Text(it.replaceFirstChar { ch -> ch.uppercase() }, color = c.secondary) } }
                         if (models.isNotEmpty()) GroupRow(last = true, onClick = { showModels = true }) {
                             Label("brain", "Models")
-                            Text(listOf("quickModel", "model").joinToString(", ") { ChatGPTText.label(engine.translator.ai[it] ?: "") }, color = c.secondary, maxLines = 1)
+                            Text(listOf("quickModel", "model").joinToString(", ") { ChatGPT.label(engine.translator.ai[it] ?: "") }, color = c.secondary, maxLines = 1)
                         }
                     }
                 }
@@ -139,7 +137,7 @@ private fun LogOut(title: String) {
 // Settings' Models: the Quick and the Regular AI, a segment each, the Mac Settings page's same synced choices
 // (main/settings.js AI_KEYS) from the same remote list of models. A new model whose levels lack the effort takes low.
 @Composable
-fun Models(engine: Engine, models: List<AI.Model>, back: () -> Unit) {
+fun Models(engine: Engine, models: List<ChatGPT.Model>, back: () -> Unit) {
     val c = Theme.colors
     var quick by remember { mutableStateOf(true) }
     val modelKey = if (quick) "quickModel" else "model"
@@ -164,7 +162,7 @@ fun Models(engine: Engine, models: List<AI.Model>, back: () -> Unit) {
                             val next = m.levels
                             if (next.isNotEmpty() && engine.translator.ai[effortKey] !in next) engine.aiChoice(effortKey, if ("low" in next) "low" else next[0])
                         }
-                    }) { Text(ChatGPTText.label(m.id), Modifier.weight(1f), color = c.text); RadioButton(m.id == model, null) }
+                    }) { Text(ChatGPT.label(m.id), Modifier.weight(1f), color = c.text); RadioButton(m.id == model, null) }
                 }
             }
         }
@@ -173,24 +171,8 @@ fun Models(engine: Engine, models: List<AI.Model>, back: () -> Unit) {
                 efforts.forEachIndexed { i, e ->
                     val on = (engine.translator.ai[effortKey] ?: "low") == e
                     GroupRow(last = i == efforts.size - 1, selected = on, onClick = { engine.scope.launch { engine.aiChoice(effortKey, e) } }) {
-                        Text(ChatGPTText.effortLabel(e), Modifier.weight(1f), color = c.text); RadioButton(on, null)
+                        Text(ChatGPT.effortLabel(e), Modifier.weight(1f), color = c.text); RadioButton(on, null)
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SignInLog(lines: List<String>, share: (String) -> Unit, onDismiss: () -> Unit) {
-    val c = Theme.colors
-    val text = lines.joinToString("\n")
-    Sheet(onDismiss) { close ->
-        SheetBar("Sign-in details", cancel = close, action = "Share") { share(text) }
-        LazyColumn(Modifier.fillMaxWidth()) {
-            item {
-                androidx.compose.foundation.text.selection.SelectionContainer {
-                    Text(text.ifEmpty { "Nothing yet." }, Modifier.fillMaxWidth().padding(16.dp), style = Type.footnote.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), color = c.text)
                 }
             }
         }

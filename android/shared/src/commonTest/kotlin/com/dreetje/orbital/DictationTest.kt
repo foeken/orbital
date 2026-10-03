@@ -16,7 +16,7 @@ class DictationTest {
     @Test fun cancelledWhileAskedForTheMicrophoneNeverRecords() = runTest {
         val asked = CompletableDeferred<Boolean>()
         val recorder = FakeRecorder()
-        val dictation = Dictation(FakePlatform(ai = FakeAI(signedIn = true), recorder = recorder, allowed = { asked.await() }), backgroundScope)
+        val dictation = Dictation(FakePlatform(chatgpt = FakeChatGPT(signedIn = true), recorder = recorder, allowed = { asked.await() }), backgroundScope)
         launch { dictation.listen() }
         runCurrent()
         dictation.cancel()
@@ -28,7 +28,7 @@ class DictationTest {
 
     @Test fun grantedItRecords() = runTest {
         val recorder = FakeRecorder()
-        val dictation = Dictation(FakePlatform(ai = FakeAI(signedIn = true), recorder = recorder, allowed = { true }), backgroundScope)
+        val dictation = Dictation(FakePlatform(chatgpt = FakeChatGPT(signedIn = true), recorder = recorder, allowed = { true }), backgroundScope)
         dictation.listen()
         assertEquals(1, recorder.started)
         assertTrue(dictation.recording)

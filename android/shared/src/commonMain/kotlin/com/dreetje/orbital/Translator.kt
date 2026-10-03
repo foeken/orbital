@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
 // is kept on this phone (store: Platform.files), so a title is asked once. What is marked sensitive is never sent to
 // the model.
 @Stable
-class Translator(private val store: Store, private val chatgpt: AI, private val detect: suspend (String) -> Pair<String, Float>?, private val scope: CoroutineScope) {
+class Translator(private val store: Store, private val chatgpt: ChatGPT, private val detect: suspend (String) -> Pair<String, Float>?, private val scope: CoroutineScope) {
     @Serializable data class Answer(val lang: String, val text: String) // text "": nothing to translate
 
     var to by mutableStateOf<String?>(null)
@@ -42,7 +42,7 @@ class Translator(private val store: Store, private val chatgpt: AI, private val 
     }
 
     // This account's models, once read: a synced choice off them is asked as the start choice instead, as main/ai.js chosen does
-    var catalogue: List<AI.Model> = emptyList()
+    var catalogue: List<ChatGPT.Model> = emptyList()
         set(value) { field = value; fit() }
 
     private fun fit() {
@@ -87,7 +87,7 @@ class Translator(private val store: Store, private val chatgpt: AI, private val 
         val ask = batch.filter { answers[to + "\n" + it] == null }
         if (ask.isEmpty()) return save()
         val found = try {
-            ChatGPTText.translate(chatgpt, ask, to, ai.getValue("quickModel"), ai.getValue("quickEffort")) ?: run {
+            ChatGPT.translate(chatgpt, ask, to, ai.getValue("quickModel"), ai.getValue("quickEffort")) ?: run {
                 problem = "Sign in with ChatGPT"
                 ask.forEach { asked.remove(to + "\n" + it) } // asked again once signed in
                 return save()

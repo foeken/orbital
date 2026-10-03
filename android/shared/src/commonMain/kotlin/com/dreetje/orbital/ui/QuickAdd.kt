@@ -4,12 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -43,9 +45,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dreetje.orbital.Dictation
 import com.dreetje.orbital.Engine
@@ -57,13 +59,15 @@ import com.dreetje.orbital.Preset
 import com.dreetje.orbital.TaskType
 import com.dreetje.orbital.Times
 import com.dreetje.orbital.Value
+import kotlin.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Instant
+
+// The iPhone's ios/Orbital/QuickAdd.swift: Quick Add, and the pickers behind Assign to
 
 // Quick Add Task, as the desktop's (task.js, ⇧⌘Space): a title and the type the task is made with, plain Task or one of
 // the workflow types you may create in, the type's fields and whom it is for, or an image read into a task or a note
@@ -207,12 +211,12 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
                 }
             }
         }
-        failure?.let { Text(it, Modifier.fillMaxWidth().background(c.card).padding(8.dp), style = Type.footnote, color = c.secondary, textAlign = TextAlign.Center) }
+        failure?.let { Notice(it) }
     }
 
     dating?.let { f ->
         val now = values[f.key]?.ref?.let(Lists::parsePlainDate)?.let { (y, m, d) -> LocalDate(y, m, d).atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds() }
-        val state = rememberDatePickerState(initialSelectedDateMillis = now ?: kotlin.time.Clock.System.now().toEpochMilliseconds())
+        val state = rememberDatePickerState(initialSelectedDateMillis = now ?: engine.now().toEpochMilliseconds())
         DatePickerDialog({ dating = null }, confirmButton = {
             TextButton({
                 state.selectedDateMillis?.let { ms -> val d = Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date; values = values + (f.key to Value(ref = Lists.plainDate(d.year, d.month.ordinal + 1, d.day))) }
@@ -252,6 +256,48 @@ private fun FieldRow(f: Field, value: Value?, last: Boolean, set: (Value?) -> Un
         }
         else -> GroupRow(last = last, onClick = pick) { // a person or a link
             Text(f.title, Modifier.weight(1f), color = c.text); Text(value?.label ?: "None", color = c.secondary)
+        }
+    }
+}
+
+// A person or a node to pick, searchable: Assign to, Quick Add's person and link fields. none is the row that leaves it
+// unset. The list is asked again as you type, once typing pauses.
+@Composable
+fun Choices(title: String, none: String, load: suspend (String) -> List<Member>, current: (String?) -> Boolean = { false }, back: (() -> Unit)? = null, cancel: (() -> Unit)? = null, pick: (Member?) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    var items by remember { mutableStateOf(listOf<Member>()) }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(query) {
+        if (query.isNotEmpty()) delay(250)
+        items = load(query) // typed on meanwhile: this one is cancelled, the newer answer wins
+        loaded = true
+    }
+    SheetBar(title, cancel = cancel, back = back)
+    SearchField(query, { query = it })
+    if (loaded && items.isEmpty() && query.isNotEmpty()) { Empty("No results", "Nothing matches “$query”.", icon = Icons.Outlined.Search); return }
+    LazyColumn(Modifier.fillMaxWidth()) {
+        item { Spacer(Modifier.padding(top = 4.dp)) }
+        if (query.isEmpty()) item("none") { Group { ChoiceRow(none, current(null), last = true) { pick(null) } } }
+        item("all") {
+            if (items.isNotEmpty()) Group {
+                items.forEachIndexed { i, m -> ChoiceRow(m.name, current(m.id), last = i == items.size - 1) { pick(m) } }
+            }
+        }
+    }
+}
+
+// Long press, Assign to …: the workspace's people, searchable, the task's assignee ticked; a pick gives the task to that
+// person alone, as the desktop's Assign to … does, and Unassigned takes everyone off it
+@Composable
+fun AssignSheet(engine: Engine, task: Engine.Assigning, onDismiss: () -> Unit) {
+    var people by remember { mutableStateOf<List<Member>?>(null) }
+    Sheet(onDismiss) { close ->
+        Choices("Assign to", "Unassigned", { q ->
+            val all = people ?: engine.members().sortedBy { it.name.lowercase() }.also { people = it }
+            if (q.isEmpty()) all else all.filter { it.name.contains(q, ignoreCase = true) }
+        }, current = { uri -> task.current?.let { now -> if (uri != null) now == listOf(uri) else now.isEmpty() } ?: false }, cancel = close) { m ->
+            close()
+            engine.scope.launch { engine.assign(task.id, m?.id, task.then); task.then() }
         }
     }
 }

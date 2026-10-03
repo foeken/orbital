@@ -1,6 +1,6 @@
 package com.dreetje.orbital.android
 
-import com.dreetje.orbital.AI
+import com.dreetje.orbital.ChatGPT
 import com.dreetje.orbital.Failure
 import com.dreetje.orbital.json
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +11,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -32,7 +31,7 @@ import java.util.UUID
 // Translator.swift): sign-in with PKCE against auth.openai.com with Codex's client id, the access token renewed a
 // minute before it runs out, the Responses endpoint streamed. The tokens stay on this phone, sealed by the Keystore.
 // ponytail: Codex's client id, fine for a personal build; Orbital's own id once registered with OpenAI (#664).
-class ChatGPTClient(private val secrets: Secrets) : AI {
+class ChatGPTClient(private val secrets: Secrets) : ChatGPT {
     @Serializable
     data class Tokens(@SerialName("id_token") val idToken: String, @SerialName("access_token") val accessToken: String, @SerialName("refresh_token") val refreshToken: String)
 
@@ -44,10 +43,10 @@ class ChatGPTClient(private val secrets: Secrets) : AI {
     // and the models list as the app starts) would be refused with it; the one waiting reads what the first saved
     private val renewing = Mutex()
 
-    override fun account(): AI.Account? = load()?.let { t ->
+    override fun account(): ChatGPT.Account? = load()?.let { t ->
         val claims = claims(t.idToken)
         val auth = claims["https://api.openai.com/auth"] as? JsonObject
-        AI.Account(claims["email"]?.jsonPrimitive?.contentOrNull, auth?.get("chatgpt_plan_type")?.jsonPrimitive?.contentOrNull)
+        ChatGPT.Account(claims["email"]?.jsonPrimitive?.contentOrNull, auth?.get("chatgpt_plan_type")?.jsonPrimitive?.contentOrNull)
     }
 
     // The account with a live access token: renewed with its refresh token a minute before it runs out (codex-rs/login,
@@ -71,14 +70,14 @@ class ChatGPTClient(private val secrets: Secrets) : AI {
     }
 
     // The models to choose from: ChatGPT's own list of Codex models at a high client_version, each with its thinking levels
-    override suspend fun models(): List<AI.Model>? {
+    override suspend fun models(): List<ChatGPT.Model>? {
         val t = fresh() ?: return null
         val (status, body) = get("https://chatgpt.com/backend-api/codex/models?client_version=99.0.0", mapOf("authorization" to "Bearer " + t.accessToken))
         if (status != 200) throw Failure("HTTP $status")
         @Serializable data class Level(val effort: String)
         @Serializable data class M(val slug: String, val visibility: String? = null, @SerialName("supported_reasoning_levels") val levels: List<Level>? = null)
         @Serializable data class Out(val models: List<M>)
-        return json.decodeFromString<Out>(body).models.filter { it.visibility != "hide" }.map { AI.Model(it.slug, (it.levels ?: emptyList()).map(Level::effort)) }
+        return json.decodeFromString<Out>(body).models.filter { it.visibility != "hide" }.map { ChatGPT.Model(it.slug, (it.levels ?: emptyList()).map(Level::effort)) }
     }
 
     // One question to ChatGPT as Codex asks it (its Responses endpoint for a ChatGPT sign-in, streamed): the answer's text

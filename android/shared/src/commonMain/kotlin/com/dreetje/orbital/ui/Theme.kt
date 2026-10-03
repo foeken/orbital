@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// The iPhone's colours, type and rail (ios/Orbital/Timeline.swift Rail, Color.pair, and the system's own)
+
 // Orbital's colours, the desktop's light ones and their dark twins (styles.css and its [data-theme="dark"] rules, as
 // ios/Orbital Color.pair has them): grey unless colour means something. Green is done, blue is a link or something
 // happening now, red is an error or leaving, orange a warning. Dark is the desktop's own charcoal, not an inversion.
@@ -77,7 +79,6 @@ object Rail {
     val time = 42.dp
     val marker = 24.dp
     val gap = 10.dp
-    val line = time + gap + marker / 2 - 0.5.dp
 }
 
 // the time column as wide as "00:00" is at this phone's font size, the iPhone's 42 at least: at Android's larger
