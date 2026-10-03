@@ -11,4 +11,4 @@ the phones by itself. scripts/platform-check.js holds these lines to the diff. -
 - **Desktop**: <!-- updated, or not needed: why -->
 - **iOS**: <!-- updated, or not needed: why -->
 - **Android**: <!-- updated, or not needed: why -->
-- **Manual**: <!-- updated (the chapter, scene and pictures: manual/, .agents/skills/orbital-manual), or nothing user-visible -->
+- **Manual**: <!-- while a draft: "when ready: <the chapter>"; before gh pr ready: updated (the chapter, scene and pictures: manual/, .agents/skills/orbital-manual); or nothing user-visible -->

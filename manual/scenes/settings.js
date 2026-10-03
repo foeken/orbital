@@ -33,7 +33,7 @@ const SETTINGS_API = "start({ prefs: { theme: new URLSearchParams(location.searc
   + " agentList: async () => window.agents, enableAgent: async (id, on, setup) => (window.agents = window.agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a))), setDefaultAgent: async () => window.agents,"
   + " settingsSize: (h) => { frameElement.style.height = h + 'px'; } }); 1";
 const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
-  { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: false, missing: 'Install the ChatGPT app', setup: '' },
+  { id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true, app: 'ChatGPT' },
   { id: 'claude', label: 'Claude', icon: 'robot', installed: false, enabled: false, missing: 'Install Claude Code' }];
 const settingsWindow = (tab = 'general') => ({ page: 'shell', js: "(() => { const theme = window.shell.state().theme, w = document.createElement('div'), f = document.createElement('iframe'), s = document.createElement('style');"
   + " s.textContent = '#mc-settings { position: fixed; z-index: 9999; left: 50%; top: 70px; width: 600px; transform: translateX(-50%); border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 0.5px rgba(0,0,0,.3), 0 22px 70px rgba(0,0,0,.35); }"
@@ -51,7 +51,7 @@ module.exports = [
   { name: 'settings-tabs', video: true, size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }, settingsWindow('general'), { wait: 300 }], steps: [
     { click: '[data-key="tab/ai"]', page: 'settings' }, { wait: 1200 }, { click: '[data-key="tab/agents"]', page: 'settings' }, { wait: 900 },
     { click: '[data-key="agent/codex"]', page: 'settings' }, { wait: 700 }, { click: '[data-key="agent/codex"]', page: 'settings' }, { wait: 700 },
-    { click: '[data-key="agent/dot"]', page: 'settings' }, { wait: 1000 },
+    { click: '[data-key="agent/relay:echo"]', page: 'settings' }, { wait: 1000 },
     { click: '[data-key="tab/lists"]', page: 'settings' }, { wait: 1000 }], clip: [300, 40, 680, 620] },
   // ---- how it looks ----
   { name: 'settings-theme', video: true, size: '1000x640', setup: [stubs, open('mockdoc0'), { wait: 900 }, { click: '#title' }], steps: [

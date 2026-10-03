@@ -54,8 +54,9 @@ function answers(body) {
   return out;
 }
 
-// What the description and the diff say together: { errors, warnings }
-function judge(files, body) {
+// What the description and the diff say together: { errors, warnings }. A draft leaves the manual for later (AGENTS.md:
+// it is updated as the PR leaves draft), so "when ready: <the chapter>" is a fine answer then, and an error once ready.
+function judge(files, body, { draft = true } = {}) {
   const errors = [], warnings = [];
   const said = answers(body);
   const touched = Object.fromEntries(Object.entries(AREAS).map(([a, test]) => [a, files.filter(test)]));
@@ -67,6 +68,7 @@ function judge(files, body) {
     if (a.updated && !changed) errors.push(area + ': says updated, but nothing of it changed');
     if (!a.updated && touched[area].length) errors.push(area + ': says "' + a.reason + '", but ' + touched[area].length + ' of its files changed (' + touched[area].slice(0, 3).join(', ') + ')');
     if (!a.updated && !touched[area].length && a.reason.split(/\s+/).filter(Boolean).length < 2) errors.push(area + ': not needed, but why? Say it in a few words');
+    if (area === 'Manual' && !a.updated && /^when ready\b/i.test(a.reason) && !draft) errors.push('Manual: the PR is ready, so its manual is due: update the chapter, its scene and its pictures, and say updated');
   }
   const ios = touched.iOS.length > 0, android = touched.Android.length > 0;
   if (ios !== android) warnings.push((ios ? 'The iPhone' : 'Android') + ' changed and ' + (ios ? 'Android' : 'the iPhone') + ' did not: the two mirror each other, so be sure "' + ((said[ios ? 'Android' : 'iOS'] || {}).reason || '') + '" is why');
@@ -86,7 +88,11 @@ if (require.main === module) {
   const base = arg('--base') || 'origin/main';
   const body = arg('--body-file') ? fs.readFileSync(arg('--body-file'), 'utf8') : process.env.PR_BODY || '';
   const files = execFileSync('git', ['diff', '--name-only', base + '...HEAD'], { encoding: 'utf8' }).split('\n').filter(Boolean);
-  const { errors, warnings } = judge(files, body);
+  // in the workflow the pull request event says whether it is a draft; by hand, --ready checks it as one that has left draft
+  let event = null;
+  try { event = process.env.GITHUB_EVENT_PATH ? JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')) : null; } catch { /* no event to read */ }
+  const draft = event && event.pull_request ? event.pull_request.draft === true : !process.argv.includes('--ready');
+  const { errors, warnings } = judge(files, body, { draft });
   const ci = !!process.env.GITHUB_ACTIONS;
   for (const w of warnings) console.log((ci ? '::warning title=Platforms::' : 'note: ') + w);
   for (const e of errors) console.log((ci ? '::error title=Platforms::' : 'error: ') + e);
@@ -119,5 +125,10 @@ function selfCheck() {
   assert.match(judge(['renderer/edit.js'], body('updated', '<!-- updated, or not needed: why -->', 'not needed: desktop only', 'nothing user-visible')).errors.join('|'), /iOS: not needed, but why/);
   // the template's old manual line still reads as a reason
   assert.equal(answers('**Manual**: nothing user-visible').Manual.reason, 'nothing user-visible');
+  // a draft leaves the manual until it is ready: "when ready" passes as a draft and fails once ready
+  const later = body('updated', 'not needed: desktop only', 'not needed: desktop only', 'when ready: AI & agents');
+  ok(judge(['renderer/agent.js'], later, { draft: true }));
+  assert.match(judge(['renderer/agent.js'], later, { draft: false }).errors.join('|'), /Manual: the PR is ready, so its manual is due/);
+  ok(judge(['renderer/agent.js', 'manual/ai.html'], body('updated', 'not needed: desktop only', 'not needed: desktop only', 'updated'), { draft: false }));
   console.log('platform check rules ok');
 }

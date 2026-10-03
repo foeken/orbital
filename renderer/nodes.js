@@ -378,8 +378,13 @@ function loadAgentStates() {
   // links; an answer for none of them is cheap and correct.
   if (!tana.agentStatus) return;
   tana.agentStatus().then((states) => {
+    const before = new Map(agentStates);
     agentStates.clear();
     for (const [id, state] of Object.entries(states || {})) agentStates.set(id, state);
+    // A badge whose state moved is swapped where it is (renderer/render.js patchAgent: the rows and the page's header).
+    // render() waits while the caret is in a row, and the header's badge is drawn only by it, so the page being typed in
+    // kept its badge grey until the caret left. The badge is the agent's, not the row's words: changing it disturbs nothing.
+    if (typeof patchAgent === 'function') for (const id of new Set([...before.keys(), ...agentStates.keys()])) if (before.get(id) !== agentStates.get(id)) patchAgent(id);
     renderSoon();
   }, () => {}); // a status read that fails leaves the badges as they were; it is not an error the user can act on
   // and whose task each one is: the badge and Go to <agent> task open it there, so a late answer redraws too

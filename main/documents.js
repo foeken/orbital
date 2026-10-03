@@ -726,8 +726,8 @@ const codexPrompts = () => { const stored = settings.get('codexPrompt'); return 
 // The prompt also goes into the node itself, where a person reading it in Tana can see what the agent was handed:
 // one "Agent context" block on the document with the prompt's lines nested under it. Reassigning rewrites that
 // block's children rather than adding a second one — the heading is found by its exact title among the document's
-// own top-level blocks, the same way anything else here looks a child up. Unassigning leaves it alone: it is
-// ordinary content by then, and deleting what somebody may have edited is not this feature's call.
+// own top-level blocks, the same way anything else here looks a child up. Unassigning takes it out again, with its status
+// line (removeAgentContext): the node goes back to what it was before it was handed over, but for what the agent wrote.
 const AGENT_HEADING = 'Agent context';
 function writeAgentContext(id, prompt) {
   // Blank lines would be empty outline rows, which read as damage rather than as spacing; everything else is kept
@@ -735,9 +735,14 @@ function writeAgentContext(id, prompt) {
   const lines = prompt.split('\n').map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return Promise.resolve(null);
   return mut(id, (doc) => {
+    // a status line an agent linked through orbital.md left on its own goes: this agent reports in its block
+    for (const n of content.readOutline(doc)) if (AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
     const heading = content.readOutline(doc).find((n) => (n.text || '').trim() === AGENT_HEADING);
     if (heading) for (const child of heading.children || []) content.remove(doc, child.id); // this prompt replaces the last one
     const headId = heading ? heading.id : content.insertAfter(doc, null, AGENT_HEADING);
+    // the block is the last of the node: the agent writes above it, and its status is the block's last line
+    const last = content.readOutline(doc).at(-1);
+    if (heading && last && last.id !== headId) content.moveTo(doc, headId, { afterId: last.id });
     // insertChild always lands at the top of the child list, so only the first line goes in that way and the rest
     // follow their predecessor — the same pair of operations the day-node rows are written with.
     let prev = content.insertChild(doc, headId, lines[0]);
@@ -745,21 +750,45 @@ function writeAgentContext(id, prompt) {
     return headId;
   });
 }
-// How a handed-over node is going, in the agent's own words: the last "Agent status: Working | Completed | Failed" line
-// in it. Orbital adds Working at the end when it hands a node over, and an agent that cannot set a status of ours (Dot,
-// whose Tana connector offers only Tana's four) ends each update with one. Ordinary content, so whoever opens the node
-// sees it, in Tana too; the last one wins, so a handoff added after an old Completed is the current one.
-const AGENT_STATUS = /^\s*Agent status:\s*(Working|Completed|Failed)\b/i;
+// How a handed-over node is going: the last "Agent status: Assigned | Working | Completed | Failed" line in it, which is
+// the last line of its Agent context block. Orbital writes Assigned when it hands a node over; the agent, which reports
+// nowhere else (your Dot, through orbital.md, whose Tana connector offers only Tana's four statuses), changes it to
+// Working as it starts, so its pickup shows, and to Completed or Failed when it is done. Ordinary content,
+// so whoever opens the node sees it, in Tana too; the last one wins, so a handoff added after an old Completed is the
+// current one.
+// The whole line, a full stop allowed: "Agent status: Working with finance" is somebody's sentence, never a status to
+// show or to take out of the node
+const AGENT_STATUS = /^\s*Agent status:\s*(Assigned|Working|Completed|Failed)\s*\.?\s*$/i;
 const lastAgentStatus = (text) => { let last = null; for (const line of String(text || '').split('\n')) { const m = line.match(AGENT_STATUS); if (m) last = m[1].toLowerCase(); } return last; };
-const writeAgentStatus = (id, status) => mut(id, (doc) => content.insertAfter(doc, null, 'Agent status: ' + status));
+// The status is one line, the node's last (written for an agent linked through orbital.md): what was there is replaced.
+const writeAgentStatus = (id, status) => mut(id, (doc) => {
+  // the status is the node's one last line; a request block an earlier handoff left (to Codex, say) goes with the old
+  // lines, since an agent linked through orbital.md is handed its request in the event and reads the node as content
+  for (const n of content.readOutline(doc)) if ((n.text || '').trim() === AGENT_HEADING || AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
+  return content.insertAfter(doc, null, 'Agent status: ' + status);
+});
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
-async function setAgentMark(id, on, prompt) {
+const agentPrompt = (id) => codexPrompts()[id]; // what the node's agent was last asked, for a reassignment that fails to put back
+// The local mark alone, for an agent that is gone (an old build's Dot, one the relay no longer lists): the node is not
+// written, so nothing changes in Tana that you did not do
+function dropAgentMark(id) {
+  const ids = agentIds();
+  if (ids.includes(id)) settings.set('codex', ids.filter((x) => x !== id));
+  const prompts = codexPrompts();
+  if (Object.hasOwn(prompts, id)) { const rest = { ...prompts }; delete rest[id]; settings.set('codexPrompt', rest); }
+}
+// Unassigned: the Agent context block goes, with its status line, and any status line an older build left on its own
+const removeAgentContext = (id) => mut(id, (doc) => {
+  for (const n of content.readOutline(doc)) if ((n.text || '').trim() === AGENT_HEADING || AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
+});
+async function setAgentMark(id, on, prompt, writeContext = true) {
   const next = agentIds().filter((x) => x !== id);
   const text = typeof prompt === 'string' ? prompt.trim() : '';
   // The visible half first. If the document will not take the context there is nothing local to undo, so a badge
   // never claims a handoff the node itself knows nothing about. With no prompt there is nothing to write, and the
   // assignment is simply local.
-  if (on && text) await writeAgentContext(id, text);
+  if (on && text && writeContext) await writeAgentContext(id, text);
+  if (!on) await removeAgentContext(id).catch(() => {}); // a node that will not take the write still lets go of the assignment
   if (on) next.push(id);
   settings.set('codex', next);
   const prompts = codexPrompts();
@@ -1433,4 +1462,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { agentPrompt, dropAgentMark, forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

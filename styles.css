@@ -603,7 +603,6 @@ html.links .app { display: none; }
 .line:is(:hover, :focus-within) :is(.ticon, .tl-join, .meeting-link), .line .ticon:is(.audience, .hiddenfrom) { opacity: 1; }
 :is(.tl-join, .meeting-link):hover { color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
-.node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
 /* a row that opens on a click shows the pointer over what it draws, and only there: the empty width beside it is no
    target (renderer/nodes.js onRowBlank). An "added to your Inbox" line opens nothing itself, so it has no .opens; its rows do. */
 .node.tl .line { cursor: default; } /* no caret on the Timeline: a click there never edits */
@@ -993,6 +992,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* a node handed to the local Codex agent: the robot glyph at the end of the row, on a green tag */
 .cbadge { position: relative; overflow: hidden; flex: none; display: inline-flex; align-items: center; margin: 2px 0 0 8px; padding: 2px 5px; border-radius: 6px; background: #d9f0de; color: #17652f; --cbadge-sheen: rgba(255, 255, 255, .85); }
 .cbadge svg { display: block; }
+.cbadge.inline { vertical-align: -2px; margin: 0 0 0 6px; } /* on the Timeline, in line after the title (renderer/render.js placeAgentBadge) */
 .cbadge[role="button"] { cursor: pointer; }
 .cbadge:focus-visible { outline: 2px solid #4f8ad9; outline-offset: 1px; } /* reachable by keyboard, and visibly so */
 /* the agent is working on it: a sheen crosses the tag left to right, clipped to its corners. The badge itself never
@@ -1284,6 +1284,16 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
   .palette .ricon.thinking svg path:nth-child(2) { animation-delay: calc(var(--dur-loop) / 3); }
   .palette .ricon.thinking svg path:nth-child(5) { animation-delay: calc(var(--dur-loop) * 2 / 3); }
   .palette .ricon.thinking svg path:nth-child(3), .palette .ricon.thinking svg path:nth-child(4) { animation: sparkle-trail calc(var(--dur-loop) * 2) ease-in-out infinite; }
+}
+/* A row waiting on someone else (Connect to your OpenAI Dot: the code, then the agent): a light passes over its words, the
+   sweep over "Thinking…" in a chat, in no colour: the grey words turn darker in the light theme and brighter in the dark
+   one as it passes. Plain grey words where motion is not welcome. */
+:root { --sweep-ink: #1a1a1a; }
+[data-theme="dark"] { --sweep-ink: #ffffff; }
+.palette .row.bare .ricon { display: none; } /* a row with no glyph starts where the group's heading does */
+@media (prefers-reduced-motion: no-preference) {
+  .palette .row .label.sweep { flex: 0 1 auto; margin-right: auto; background: linear-gradient(100deg, var(--muted) 40%, var(--sweep-ink) 50%, var(--muted) 60%) 100% 0 / 300% 100% no-repeat;
+    background-clip: text; -webkit-text-fill-color: transparent; animation: thinking-sweep calc(var(--dur-loop) * 2) ease-in-out infinite; }
 }
 @keyframes sparkle-twinkle { 0%, 100% { opacity: .25; transform: scale(.55) rotate(-25deg); } 45% { opacity: 1; transform: scale(1.2) rotate(0deg); } }
 @keyframes sparkle-trail { 0%, 100% { opacity: .15; } 50% { opacity: .75; } }

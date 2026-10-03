@@ -448,7 +448,8 @@ const DEMO_SAFE = new Set([
   'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
   'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',
   'pinState', 'prefs', 'prefsNow', 'presenceClose', 'presenceOpen', 'presenceSet', 'presenceView', 'previewMove',
-  'refresh', 'related', 'relatedWatch', 'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
+  'refresh', 'related', 'relatedWatch', 'relayLink', 'relayLinkCancel', 'relayLinkStatus', 'relayRefresh', 'relayRename', 'relayReset',
+  'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
   'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'settingsSize',
   'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
   'status', 'suggestDiscussWith', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
@@ -569,11 +570,14 @@ assert.match(styleSheet, /\.tmeta > \.ticon:not\(:first-child\) \{ margin-left: 
 // what they found, or why they have nothing, in rows of their own.
 assert.match(source, /&& !palPage\.typed && \(palMode === 'cmd'/, 'the no-results line skips the pages whose row is what was typed');
 for (const typed of [/showPage\('agentPrompt', '', \{ rows: agentPromptRows, typed: true \}\)/, /openPage\('discuss', 'Discuss with…', \{ rows: discussRows, back: BACK_TO_COMMANDS, typed: true \}\)/, /openPage\('field', placeholder, \{ rows, back, keys, typed: true \}, text\)/, /openPage\(mode, placeholder, \{ rows: \{ meetingTime[^\n]*typed: true \}\)/]) assert.match(source, typed, 'and those pages say so');
-assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}showPage\('agentPrompt', '', \{/, 'opening the prompt page clears the query behind it');
+// The Timeline's task rows show their agent badge as every list does (it used to be hidden there by a style); a line
+// about what happened has an id of its own, so it has none
+assert.doesNotMatch(fs.readFileSync(require('node:path').join(__dirname, '..', 'styles.css'), 'utf8'), /\.node\.tl \.cbadge \{ display: none/, 'which no style hides on the Timeline');
+assert.match(source, /function openAgentPrompt\(doc(, pick)?\) \{[\s\S]{0,400}showPage\('agentPrompt', '', \{/, 'opening the prompt page clears the query behind it');
 assert.match(source, /function showPage\(mode, placeholder, page, value = ''\) \{\n(?:[^\n]*\n)*?  palInput\.placeholder = placeholder; palInput\.value = value;\n  coverWindow\([^\n]*\n\}/, 'a page starts with the field holding only what it was opened with');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.
-assert.match(source, /line\.append\(body\);[\s\S]{0,240}if \(agentIds\.has\(display\.id\)\) line\.append\(agentBadgeEl\(display\.id, display\.done\)\)/,
+assert.match(source, /line\.append\(body\);[\s\S]{0,600}if \(agentIds\.has\(display\.id\)\) placeAgentBadge\(line, agentBadgeEl\(display\.id, display\.done\)\)/,
   'the agent badge is appended after the body, so it ends the row, and is told whether that row is finished');
 // The badge is a status, so it can never be drawn without one: every call names the node whose state it shows, and
 // the state falls back to pending rather than to the green it used to be.

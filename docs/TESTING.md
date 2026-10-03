@@ -33,6 +33,15 @@ From fastest to slowest. Each catches what the one before it cannot.
    demo mode (`DEMO_WRITES`, renderer/state.js) or listed as writing no content (`DEMO_SAFE`), and either answered by the
    mock or listed in `NOT_MOCKED`. A new call fails until both are decided. Demo mode lets the synced settings through on
    purpose (view filters, hidden titles, agents, preferences): they are settings, not content.
+   `scripts/relay-check.js` runs the agent relay (relay/, docs/AGENT-RELAY.md) on a loopback port with its clock in hand:
+   an agent's OAuth sign-in (PKCE, a code used once, rotating refresh), linking with a code, subscribing to
+   task.assigned (the callback challenged and signed) and an event delivered once to it, isolation between agents and
+   between Orbitals, and what must fail (an unknown key, a used or expired code, an unlinked connection subscribing, an
+   unknown event or more than 16 KB of data, a callback to a private address, too many failed codes), a key rotated
+   with the agents kept, and two first asks for a code making one Orbital. It checks that the request an event carried
+   is not in the database afterwards, and that no Orbital key or OAuth token is stored as itself (the subscriptions'
+   signing secrets are kept as given: signing needs them). sdk-check drives Orbital's side of it
+   (main/agents/linked.js) against the same relay.
 2. **`npm run flows`** (about 20 s, Chromium on the mock, `scripts/flow-check.js`). Whole journeys in the real page, each on a
    fresh page that fails on any uncaught error, unhandled rejection or `console.error`:
    - sensitive titles stay hidden on every page, in Cmd+K, in tooltips, labels and the window title;
@@ -68,6 +77,8 @@ From fastest to slowest. Each catches what the one before it cannot.
    - Notifications read by bullet and by Mark all as read, a row opening its node; a proposal approved from Cmd+K and
      one rejected with its button;
    - a chat message sent with ↩ shows as yours and Tana's answer follows;
+   - Connect to your OpenAI Dot: both servers named with their URLs, the message carries a one-time code, the agent links while the page waits, the
+     palette closes on its name, and it is in Choose agents (on, where it runs) with a page to rename or unlink it;
    - panes and tabs (shell.html): ⌘↩ on a search result opens a tab, ⇧↩ a pane beside, ⇧⌘N a new pane, the keys go
      with the page just opened and every page keeps its own place.
 

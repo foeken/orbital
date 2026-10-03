@@ -5357,7 +5357,7 @@ function runCodexAssignCheck() {
     const agentStates = new Map();
     const agentTasks = new Map([[DOC, { agent: 'codex', taskId: '01a0b379-afbc-74c3-a191-c419e6543bcc' }]]);
     // Tana and Codex on, Tana the default: the page offers both, and the row that sends names the one it goes to
-    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, link: true, openNew: true }];
+    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, link: true, openNew: true, opens: true }];
     let agentPick = 'tana';
     const agentsOn = () => agentList.filter((a) => a.enabled && a.installed), agentNamed = (id) => agentList.find((a) => a.id === id) || null;
     const openedTasks = [], wentTo = [];
@@ -5420,6 +5420,8 @@ function runCodexAssignCheck() {
     // holdRow is renderer/views.js: the row keeps its place, which is what lets the Clean up pill offer the redraw
     const held = [], holdRow = (n) => held.push(n.id);
     const pills = [], renderPills = () => pills.push('pills'); // where Clean up is decided (renderer/pills.js)
+    const TIMELINE_PAGE = 'orbital:timeline'; // renderer/timeline.js: where placeAgentBadge puts it in line
+    ${functionSource('placeAgentBadge')}
     ${functionSource('agentBadgeEl')}
     ${functionSource('openAgentTask')}
     ${functionSource('agentHeader')}
@@ -5446,7 +5448,13 @@ function runCodexAssignCheck() {
       other: (kids.get(OTHER) || []).map((n) => n.text) });
     ({
       label: () => paletteRows('').find((r) => r.rank === 'codex').label,
+      byName: () => paletteRows('').filter((r) => r.rank === 'codexTo').map((r) => [r.label, r.hint]),
+      pressTo: async (label) => { await paletteRows('').find((r) => r.label === label).run(); await tick(); return { mode: palMode, agent: agentPick, sent: sent.length, rows: agentPromptRows().map((r) => r.label) }; },
       pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codex').run(); await tick(); return state(); },
+      unassignRow: () => (paletteRows('').find((r) => r.rank === 'codexUnassign') || {}).label || null,
+      pressUnassign: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codexUnassign').run(); await tick(); return state(); },
+      dotGoRow: () => { agentList.push({ id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true }); agentIds.add(DOC); agentStates.set(DOC, 'working'); agentTasks.set(DOC, { agent: 'relay:echo', taskId: 't-echo' });
+        const r = paletteRows('').find((row) => row.rank === 'codexOpen'), el = agentBadgeEl(DOC); agentList.pop(); return { row: r ? r.label : null, role: el.attrs.role }; },
       type: (text) => { palText.value = text; },
       submitKey: async (name, mod) => { sent.length = 0; errors.length = 0; const e = key(name, mod); const handled = agentPromptKey(e); await tick(); return { handled, stopped: e.stopped, ...state() }; },
       promptRow: () => { const r = agentPromptRows()[0]; return { group: r.group, label: r.label, hint: r.hint, disabled: !!r.disabled }; },
@@ -5480,6 +5488,8 @@ function runCodexAssignCheck() {
   `);
   return (async () => {
     assert.equal(api.label(), 'Assign to Agent', 'an unassigned node offers to hand itself to the agent');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'Default'], ['Assign to Codex …', '']], 'and to each agent that is on by its name, the default said');
+    assert.deepEqual(plain(await api.pressTo('Assign to Codex …')), { mode: 'agentPrompt', agent: 'codex', sent: 0, rows: ['What should Codex do?'] }, 'which opens the same prompt page with that agent picked, assigns nothing yet, and offers no other agent: the row chose');
     const opened = plain(await api.pressRow());
     assert.equal(opened.mode, 'agentPrompt', 'choosing it advances to the prompt page inside the palette');
     assert.deepEqual(opened.sent, [], 'and assigns nothing yet: the page is the question, not the answer');
@@ -5531,12 +5541,14 @@ function runCodexAssignCheck() {
     assert.equal(sent.editor, false, 'the editor is put away');
     assert.equal(sent.prompt, '', 'and emptied, so the next node is asked about from scratch');
     // Escape on the prompt page: back to the commands, with nothing written
-    assert.equal(api.label(), 'Unassign from Agent', 'the row now says how to take it back');
-    const back = plain(await api.pressRow());
+    assert.equal(api.label(), 'Assign to Agent', 'an assigned node can be handed over again: the request in its block is replaced');
+    assert.equal(api.unassignRow(), 'Unassign from Agent', 'and a row of its own says how to take it back');
+    const back = plain(await api.pressUnassign());
     // the third argument is the prompt, absent here and null by the time it comes back through JSON
     assert.deepEqual(back.sent, [[CODEX_DOC, false, null]], 'and taking it back needs nothing typed');
     assert.equal(back.assigned, false, 'the mark is dropped');
     assert.equal(back.badges.length, 0, 'and the badge goes with it');
+    assert.equal(api.unassignRow(), null, 'an unassigned node offers nothing to take back');
     const reopened = plain(await api.pressRow());
     assert.equal(reopened.mode, 'agentPrompt', 'assigning again asks again');
     api.type('never mind');
@@ -5599,6 +5611,7 @@ function runCodexAssignCheck() {
     assert.equal(api.goRow(false, true), null, 'an unassigned node does not, however stale the status map is');
     assert.equal(api.goRow(true, false), null, 'nor does an assigned node whose task is not known yet');
     assert.equal(api.goRow(false, false), null, 'and a node with neither says nothing');
+    assert.deepEqual(plain(api.dotGoRow()), { row: null, role: 'img' }, 'a Dot\'s task lives in ChatGPT, where nothing here can open it: no Go to row, and its badge is no button');
     // A Codex task opens in Codex, through main; a Tana chat opens here, in Orbital.
     const inCodex = plain(await api.onAgent('codex', '01a0b379-afbc-74c3-a191-c419e6543bcc'));
     assert.deepEqual([inCodex.row, inCodex.opened, inCodex.wentTo], ['Go to Codex task', [CODEX_DOC], []], 'a Codex task is opened by main, by node');
@@ -5620,7 +5633,7 @@ function runCodexAssignCheck() {
     const zoomedElsewhere = plain(api.zoomInto('tana:text:01exampleb0000000000000000'));
     assert.equal(zoomedElsewhere.header.length, 0, 'a page nobody handed to the agent says nothing');
     api.zoomInto(CODEX_DOC);
-    const takenBack = plain(await api.pressRow());
+    const takenBack = plain(await api.pressUnassign());
     assert.equal(takenBack.assigned, false);
     assert.equal(takenBack.header.length, 0, 'unassigning while the page is open takes the badge off it at once');
     assert.deepEqual(takenBack.renders, [], 'and does so by patching the header, not by redrawing the page');
@@ -6908,18 +6921,22 @@ function runAgentStatusBootCheck() {
     const agentStates = new Map(), agentTasks = new Map();
     const renderSoon = () => {};
     const showError = () => {};
+    const patched = [];
+    const patchAgent = (id) => patched.push(id); // renderer/render.js: the badge swapped in place
     const tana = {
       agentStatus: async () => { asked.push('status'); return { 'tana:text:01examplea0000000000000000': 'working' }; },
       agentTasks: async () => { asked.push('tasks'); return { 'tana:text:01examplea0000000000000000': { agent: 'codex', taskId: 't1' } }; },
     };
     ${functionSource('loadAgentStates')}
-    ({ boot: async () => { loadAgentStates(); for (let i = 0; i < 5; i++) await Promise.resolve(); return { asked: [...asked], states: [...agentStates], hosts: [...agentTasks] }; } });
+    ({ boot: async () => { loadAgentStates(); for (let i = 0; i < 5; i++) await Promise.resolve(); return { asked: [...asked], states: [...agentStates], hosts: [...agentTasks], patched: patched.splice(0) }; } });
   `);
   return (async () => {
     const after = plain(await api.boot());
     assert.deepEqual(after.asked, ['status', 'tasks'], 'the status is asked for on load, even before the assigned ids have arrived');
     assert.deepEqual(after.states, [['tana:text:01examplea0000000000000000', 'working']], 'so a linked task is not grey after a reload');
     assert.deepEqual(after.hosts, [['tana:text:01examplea0000000000000000', { agent: 'codex', taskId: 't1' }]], 'and whose task it is is known with it');
+    assert.deepEqual(after.patched, ['tana:text:01examplea0000000000000000'], 'a badge whose state moved is swapped in place, the header too, even while a render waits on the caret');
+    assert.deepEqual(plain(await api.boot()).patched, [], 'and one that did not move is left alone, so its sweep does not restart');
   })();
 }
 
