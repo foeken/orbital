@@ -240,7 +240,20 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
 - **Focus.** A focused read-only row shows a focus ring; an editable row shows the caret and no ring.
 - **Caret on an empty row.** An empty editable row shows the caret at once (a zero-width placeholder gives it a box
   and is stripped when the text is read). A click anywhere on a row lands the caret where it was aimed (`caretAt` pulls
-  the point into the text's own box); a row that cannot answer a position takes the end.
+  the point into the text's own box); a row that cannot answer a position takes the end. A list's own rows go through a
+  selection first (below).
+- **A list's own rows: select, then go in** (`topListRow`, `timelineRow`, renderer/nodes.js; render.js). A top-level
+  row of a view (Inbox, Library, Types), a saved search or a type's page is a whole node, and so is a Timeline row
+  about a node and a task or meeting listed under one, so a first click selects it (no caret; the
+  blue ring a focused read-only row has, editable or not, in place of the selection's band, `.picked`; a ⇧ range made
+  from it is a band again; ⌘K acts on it) and a click on the selected row goes in: on a row whose title can be typed in
+  (`typesInto`) the caret lands where it was clicked, on one that cannot (read-only, a type, a canvas, every Timeline
+  row) what it opens opens (`openSelectedRow`, renderer/select.js: a Timeline row the node it is about, a task under
+  one the task itself). ↩ on the selected row does the same, Space opens it, and the bullet opens it at once (on the
+  Timeline what the row is about, with ⌘/⇧/⌥ elsewhere). ⌘- and ⌥-click on a Timeline row still open it in a tab or
+  floating at once. The box, the chevron, a chip, a link and a row's buttons answer their own clicks, and a row already
+  being typed in takes clicks as text does. Notifications and Proposals keep their own click (it opens the row), and
+  rows inside a document are typed into on the first click.
 - **Links.** http(s) URLs in a text run render as links and open in the default browser (`api.openExternal`, http and
   https only); the stored text is untouched and the row stays editable.
 - **Mentions.** A mention renders as a link chip that opens its target; it carries its target's icon (`resolveReferences`,
@@ -334,7 +347,8 @@ numbered row make it a bullet, as "1. " makes a bullet numbered. The
 first line continues the row at the caret, what stood after the caret ends the last line, and one undo takes it all
 back. A plain line, a draft row and a code block paste as text.
 
-Mouse: a click on the bullet zooms into the row, on the chevron toggles it, on the checkbox toggles done.
+Mouse: a click on the bullet zooms into the row at once, on the chevron toggles it, on the checkbox toggles done. A
+list's own rows are selected by a first click and gone into by the next (Rows, above).
 
 ### Toolbar, "/" and marks
 
@@ -928,6 +942,11 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   row's dot is the thing to grab. An empty line is nothing to pick up (`dragEmpty`); an image and a divider are. A
   draft row never is. The dragged row dims; the drag carries our own dataTransfer flavour, so a drop on a text field
   elsewhere pastes nothing, and a drag that is not ours (text out of a row, a file) is left to the browser.
+- **A list's or the Timeline's row is picked up anywhere on it** (`.selectfirst`, render.js; styles.css). Until it is
+  selected such a row is one thing to press (Rows, above), so its whole line is `draggable` and its words take no
+  press of their own (`pointer-events: none`, a link or chip in them excepted): a press neither focuses them nor
+  puts a caret in them, and is left undefaulted so Chromium can start the drag from it. Selected and editable, or typed
+  in, the line stops being draggable on the next press, and a drag across the words selects them.
 - **A drag names the place.** `moveTo(document, id, { parentId, afterId, from })` (sdk/content.js) moves the row whole,
   children, checkbox and block ids included (Loro cannot move a container, so it is copied and the original deleted,
   and a list or quote it leaves empty is pruned). `from` is the outline it came from, so a row crosses between a page
