@@ -150,19 +150,17 @@ function pollRelay(ctx) {
 }
 function relayRows() {
   const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) };
-  if (c.state === 'asking') return [{ group: 'Link to agent', icon: 'link', label: 'Getting a code…', disabled: true, spin: true, match: [] }];
+  if (c.state === 'asking') return [{ group: 'Link to agent', icon: 'link', label: 'Getting a code…', disabled: true, sweep: true, match: [] }];
   if (c.state === 'failed') return [{ group: 'Link to agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Link to agent', label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
-  // the row says what ↩ does; the words themselves sit under it, so you can see what your agent will be told
   const group = 'Give these to the agent · it adds the servers, names itself and links';
   const rows = [{ group, icon: 'link', label: 'Copy instructions for your agent', hint: '↩', keepOpen: true, match: [],
     run: () => run(() => copyText(c.prompt, 'Copied: give them to your agent')) },
-  { group, label: c.prompt, note: true, wrap: true, disabled: true, match: [] },
   // what crosses orbital.md (main/agents/linked.js send): a node's id and an action out, a status back
   { group, icon: 'lock', label: 'Only ids go through orbital.md: your words stay in Tana, where the agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] }];
   if (c.state === 'expired' || !left) return [...rows, { group: 'Waiting', icon: 'link', label: 'The code expired', hint: 'Nobody used it', disabled: true, match: [] }, { ...again, group: 'Waiting', label: 'Get a new code', match: [] }];
   return [...rows,
-    { group: 'Waiting', icon: 'robot', label: 'Waiting for an agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, spin: true, match: [] },
+    { group: 'Waiting', icon: 'robot', label: 'Waiting for an agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, match: [] },
     { group: 'Waiting', icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { relayCtx = null; run(() => tana.relayLinkCancel(c.code)); (c.back || closePalette)(); } }];
 }
 // When the relay last heard from an agent, in a few words

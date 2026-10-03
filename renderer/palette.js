@@ -1055,6 +1055,7 @@ function renderPalette() {
     const rowHue = r.hue; // only the Set colour page carries one: every other glyph is monochrome
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
+    if (r.sweep) label.classList.add('sweep'); // a row waiting on someone else: a light passes over its words, as over "Thinking…" in a chat
     const match = r.match || (q ? fuzzyMatch(r.label, q.toLowerCase()) : null); // every level: the letters the query matched, in bold
     if (demoMode && r.node) label.textContent = demoText(r.label, r.node.id); // a document's title is content: masked, and no highlight to give its words away
     else if (match && match.length) {

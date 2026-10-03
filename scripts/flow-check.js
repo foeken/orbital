@@ -601,12 +601,13 @@ flow('golden path: read notifications and settle proposals', async (p) => {
 flow('golden path: link an agent with a code, and it joins your agents', async (p) => {
   await p.start();
   await command(p, 'link to agent', 'Link to agent \u2026');
-  await p.waitFor('palMode === "linkAgent" && palRows.length === 5', 'the instructions and the wait');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 4', 'the instructions and the wait');
   assert.deepEqual(await p.js('[palRows[0].label, !!palRows[0].disabled, palIndex]'), ['Copy instructions for your agent', false, 0], 'the first row copies the instructions, and ↩ is on it');
-  assert.match(await p.js('palRows[1].label'), /^Add two MCP servers to yourself: Orbital at https:\/\/orbital\.md\/mcp and Tana at https:\/\/home\.tana\.inc\/mcp\. Then .* 7KQX-M2PD and a short name for yourself\.$/, 'and under it are the instructions themselves: both servers, and the code');
-  assert.match(await p.js('document.querySelector("#palette .row.note.wrap").textContent'), /7KQX-M2PD/, 'shown in full');
-  assert.match(await p.js('palRows[2].label'), /^Only ids go through orbital\.md: your words stay in Tana/, 'with what goes through orbital.md');
-  assert.match(await p.js('palRows[3].hint'), /^Works once · \d+:\d\d left$/, 'and how long the code lasts');
+  assert.match(await p.js('relayCtx.prompt'), /^Add two MCP servers to yourself: Orbital at https:\/\/orbital\.md\/mcp and Tana at https:\/\/home\.tana\.inc\/mcp\. Then .* 7KQX-M2PD and a short name for yourself\.$/, 'what it copies: both servers, and the code');
+  assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
+  assert.match(await p.js('palRows[1].label'), /^Only ids go through orbital\.md: your words stay in Tana/, 'it says what goes through orbital.md');
+  assert.deepEqual(await p.js('[palRows[2].label, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for an agent to use the code…', true], 'and waits with a light passing over its words');
+  assert.match(await p.js('palRows[2].hint'), /^Works once · \d+:\d\d left$/, 'saying how long the code lasts');
   await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked GrokBot · Grok"', 'the palette to close on the agent that linked', 10000);
   await command(p, 'choose agents', 'Choose agents \u2026');
   await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "GrokBot")', 'GrokBot among your agents');
