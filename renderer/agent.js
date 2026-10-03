@@ -113,6 +113,9 @@ let relayCtx = null; // { state: asking|waiting|expired|failed, code, prompt, ex
 let relayTimer = null;
 const unwrapError = (e) => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 function openLinkPalette(back = BACK_TO_COMMANDS) {
+  // a code still waiting is the page you left: shown again, rather than another code (the relay holds five at most)
+  const open = relayCtx && relayCtx.state === 'waiting' && relayCtx.expiresAt > Date.now() ? relayCtx : null;
+  if (open) { open.back = back; openPage('linkAgent', 'Connect to your OpenAI Dot', { rows: relayRows, back, typed: true }); pollRelay(open); return; }
   const ctx = relayCtx = { state: 'asking', back };
   openPage('linkAgent', 'Connect to your OpenAI Dot', { rows: relayRows, back, typed: true });
   Promise.resolve(tana.relayLink()).then((r) => { if (relayCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawRelay(); pollRelay(ctx); },

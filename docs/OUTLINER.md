@@ -801,8 +801,8 @@ wrong twenty.
   Codex's app-server), **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
   Orbital never signs in to Anthropic) and every agent linked through orbital.md/mcp, your Dot among them (below). Codex and
   Claude are offered only once this Mac has them. **Choose agents …** (Settings) lists them, greyed with what to install
-  when missing: ↩ switches one on or off, and the second group picks the **default agent**. Both follow you (`agents`,
-  `defaultAgent`); unset is Tana and Codex on, Tana the default.
+  when missing: ↩ switches one on or off; **Set default agent …** picks the **default agent** on a page of its own. Both
+  follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
   **Connect to your OpenAI Dot …** (Settings, and under the linked agents in Choose agents) links your Dot through the MCP
   server orbital.md/mcp: where to add it and Tana's in ChatGPT (Open ChatGPT plugins, then each server's name with its
   URL, ↩ copies it), then a message carrying a one-time code that links it by its own name (Dot if it has none), makes it the default
@@ -821,7 +821,7 @@ wrong twenty.
   and takes the Agent context block (with its status line) out of the node again. **Go to <agent> task** opens it (Codex
   in Codex, Claude in Terminal on `claude --resume`, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
   badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not, **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
-  node's link and tracks nothing. Every task runs on this Mac.
+  node's link and tracks nothing. Codex and Claude tasks run on this Mac, Tana's in Tana, and a Dot's in ChatGPT.
 
 - **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
   (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is

@@ -34,10 +34,14 @@ From fastest to slowest. Each catches what the one before it cannot.
    mock or listed in `NOT_MOCKED`. A new call fails until both are decided. Demo mode lets the synced settings through on
    purpose (view filters, hidden titles, agents, preferences): they are settings, not content.
    `scripts/relay-check.js` runs the agent relay (relay/, docs/AGENT-RELAY.md) on a loopback port with its clock in hand:
-   an agent's OAuth sign-in, linking with a code, a task (a node id and an action) and its status, and what must fail (a used or expired
-   code, a wrong secret, a changed or misaddressed message, an unlinked agent, a task past its day), then searches the
-   whole database for any node id sent or secret used. sdk-check drives Orbital's side of it (main/agents/linked.js)
-   against the same relay.
+   an agent's OAuth sign-in (PKCE, a code used once, rotating refresh), linking with a code, subscribing to
+   task.assigned (the callback challenged and signed) and an event delivered once to it, isolation between agents and
+   between Orbitals, and what must fail (an unknown key, a used or expired code, an unlinked connection subscribing, an
+   unknown event or more than 16 KB of data, a callback to a private address, too many failed codes), a key rotated
+   with the agents kept, and two first asks for a code making one Orbital. It checks that the request an event carried
+   is not in the database afterwards, and that no Orbital key or OAuth token is stored as itself (the subscriptions'
+   signing secrets are kept as given: signing needs them). sdk-check drives Orbital's side of it
+   (main/agents/linked.js) against the same relay.
 2. **`npm run flows`** (about 20 s, Chromium on the mock, `scripts/flow-check.js`). Whole journeys in the real page, each on a
    fresh page that fails on any uncaught error, unhandled rejection or `console.error`:
    - sensitive titles stay hidden on every page, in Cmd+K, in tooltips, labels and the window title;

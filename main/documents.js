@@ -735,6 +735,8 @@ function writeAgentContext(id, prompt) {
   const lines = prompt.split('\n').map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return Promise.resolve(null);
   return mut(id, (doc) => {
+    // a status line an agent linked through orbital.md left on its own goes: this agent reports in its block
+    for (const n of content.readOutline(doc)) if (AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
     const heading = content.readOutline(doc).find((n) => (n.text || '').trim() === AGENT_HEADING);
     if (heading) for (const child of heading.children || []) content.remove(doc, child.id); // this prompt replaces the last one
     const headId = heading ? heading.id : content.insertAfter(doc, null, AGENT_HEADING);
@@ -767,6 +769,14 @@ const writeAgentStatus = (id, status) => mut(id, (doc) => {
 });
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
 const agentPrompt = (id) => codexPrompts()[id]; // what the node's agent was last asked, for a reassignment that fails to put back
+// The local mark alone, for an agent that is gone (an old build's Dot, one the relay no longer lists): the node is not
+// written, so nothing changes in Tana that you did not do
+function dropAgentMark(id) {
+  const ids = agentIds();
+  if (ids.includes(id)) settings.set('codex', ids.filter((x) => x !== id));
+  const prompts = codexPrompts();
+  if (Object.hasOwn(prompts, id)) { const rest = { ...prompts }; delete rest[id]; settings.set('codexPrompt', rest); }
+}
 // Unassigned: the Agent context block goes, with its status line, and any status line an older build left on its own
 const removeAgentContext = (id) => mut(id, (doc) => {
   for (const n of content.readOutline(doc)) if ((n.text || '').trim() === AGENT_HEADING || AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
@@ -1452,4 +1462,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { agentPrompt, forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { agentPrompt, dropAgentMark, forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

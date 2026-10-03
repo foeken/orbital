@@ -197,6 +197,14 @@ const server = http.createServer(relay.handle);
   assert.deepEqual(JSON.parse(posted[0].body).data, pkg, 'the package Orbital sends (node, request, instructions) arrives as it was sent');
   assert.equal((await relay.dump()).includes('Draft the pilot brief'), false, 'and the relay keeps none of it');
   assert.equal((await send(D, crypto.randomUUID(), 'task.assigned', { request: 'x'.repeat(17000) })).status, 400, 'up to 16 KB');
+  // a receiver that fails is tried once: Orbital hears nobody took it, and nothing of the event waits in the relay for later
+  answer = () => ({ status: 503, text: '' }); posted.length = 0;
+  const realTimeout = global.setTimeout, again = []; // a delivery the relay would make later is a timer that delivers
+  global.setTimeout = (fn, ...rest) => { if (/deliver\(/.test(String(fn))) again.push(fn); return realTimeout(fn, ...rest); };
+  assert.deepEqual((await send(D, crypto.randomUUID(), 'task.assigned', pkg)).json, { subscribers: 1, delivered: 0 }, 'a receiver that fails: Orbital is told nobody took it');
+  global.setTimeout = realTimeout;
+  assert.deepEqual([posted.length, again.length], [1, 0], 'tried once, with no retry holding it to send again');
+  answer = echo;
   // a receiver that is gone (410) ends the subscription; unsubscribing ends one too
   answer = () => ({ status: 410, text: '' }); posted.length = 0;
   await send(D, crypto.randomUUID());

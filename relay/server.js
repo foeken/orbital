@@ -414,23 +414,20 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     await run('DELETE FROM subscriptions WHERE id = ? AND install = ?', s.id, install.id);
     return {};
   }
-  // Orbital sent an event: each live subscription of the agent's connection to it hears of it. The first try is awaited
-  // (an autoscaled host may not run anything after the answer), and Orbital is told how many took it; a failed one is
-  // tried a few times more with the same event id. Nothing waits for a subscriber that is not there.
-  const RETRY = [5e3, 30e3, 2 * MINUTE, 10 * MINUTE];
+  // Orbital sent an event: each live subscription of the agent's connection to it hears of it, once, before Orbital is
+  // answered how many took it. No retry: a retry would hold the event (the node, the request) in memory after the
+  // answer, and the relay keeps none of it; Orbital says when nobody took it, and assigning again sends it again.
   async function announce(agent, event) {
     const subs = await all('SELECT * FROM subscriptions WHERE install = ? AND name = ? AND expires > ?', agent.install, event.name, now());
     const id = 'evt_' + event.id, body = JSON.stringify({ eventId: id, name: event.name, timestamp: new Date(event.at).toISOString(), data: event.data, cursor: null });
-    const took = await Promise.all(subs.map((s) => deliver(s, id, body, 0)));
+    const took = await Promise.all(subs.map((s) => deliver(s, id, body)));
     return { subscribers: subs.length, delivered: took.filter(Boolean).length };
   }
-  async function deliver(s, id, body, attempt) {
-    if (attempt) { s = await one('SELECT * FROM subscriptions WHERE id = ? AND expires > ?', s.id, now()); if (!s) return false; } // unsubscribed meanwhile
+  async function deliver(s, id, body) {
     let status = 0;
-    try { status = (await post(s.url, signed(s, id, body), body, 5e3)).status; } catch { /* unreachable: tried again */ }
+    try { status = (await post(s.url, signed(s, id, body), body)).status; } catch { /* unreachable: not taken */ }
     if (status >= 200 && status < 300) return true;
     if (status === 410) { await run('DELETE FROM subscriptions WHERE id = ?', s.id); return false; } // the receiver is gone for good
-    if (status !== 413 && attempt < RETRY.length) setTimeout(() => { deliver(s, id, body, attempt + 1).catch(() => {}); }, RETRY[attempt]).unref();
     return false;
   }
   async function linkOrbital(install, agent, args) {
@@ -507,7 +504,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
       if (method === 'DELETE' && parts.length === 2) { await run('DELETE FROM agents WHERE id = ?', a.id); return send(res, 204); }
       // an event for this agent: its name (one of EVENTS) and what goes with it, as Orbital says; delivered at once to
       // whatever the agent's connection subscribed, and Orbital told how many took it. The id makes the event's id, the
-      // same for a retry, so a receiver can tell one event sent twice
+      // same if Orbital sends it again, so a receiver can tell one event sent twice
       if (method === 'POST' && parts[2] === 'events' && parts.length === 3) {
         const b = await body(req), data = b.data;
         if (!UUID.test(String(b.id || ''))) throw fail(400, 'bad_id', 'id: a UUID');

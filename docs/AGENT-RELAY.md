@@ -63,8 +63,9 @@ Orbital's to say, passed through as sent, so a later event is one more entry in 
 - **Delivering.** `POST /orbital/agents/<id>/events { id, name, data }` sends one; the relay POSTs
   `{ eventId: "evt_<id>", name, timestamp, data, cursor: null }` to each live subscription of that agent's connection,
   signed with Standard Webhooks (`webhook-id` = the event id, `webhook-timestamp`, `webhook-signature`,
-  `X-MCP-Subscription-Id`), and answers Orbital `{ subscribers, delivered }`. The first try is made before it answers; a
-  failure is tried four more times with the same event id, and a 410 ends the subscription. Nothing is queued.
+  `X-MCP-Subscription-Id`), and answers Orbital `{ subscribers, delivered }`. Each is tried once, before it answers, and
+  a 410 ends the subscription. Nothing is queued or retried, so nothing of an event stays in memory after the answer:
+  when nobody took it Orbital says so ("… did not take it"), takes the status line back out, and assigning again sends it again.
 - **Callbacks** must be HTTPS to a public address: every address the name resolves to is checked as the connection is
   made (loopback, private, link-local, cloud metadata and IPv4-in-IPv6 forms are refused), and redirects are not followed.
 
@@ -98,7 +99,11 @@ hold a deploy (or a change nobody meant) against this repository.
   keeps your Orbital, its agents and their names, their subscriptions (the callback URL and the signing secret ChatGPT
   gave, which signing needs), codes and tokens. The node's own words stay in Tana, between Tana and the Dot's own access.
 - **Keys and tokens only as hashes**: your Orbital's key, access and refresh tokens, authorization codes.
-  scripts/relay-check.js searches every table for them.
+  scripts/relay-check.js searches every table for them. The one secret kept as given is each subscription's signing
+  secret (the `whsec_` ChatGPT sends), since the relay signs every event with it: whoever reads the database could sign
+  events to that Dot's callback, so the database is as private as the relay itself.
+- **Reset agent link key** survives a lost answer: Orbital keeps the new key (`relayKeyNext`, synced) before sending it,
+  and a call the old key no longer opens tries the new one and keeps it.
 - **Whoever reads your Orbital settings document can act as your Orbital**: send your agents events. That is you,
   Tana, and anyone you share that document with. Cmd+K → Reset agent link key makes a new key for the same Orbital, so
   the agents stay linked.

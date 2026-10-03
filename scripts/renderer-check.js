@@ -448,7 +448,7 @@ const DEMO_SAFE = new Set([
   'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
   'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',
   'pinState', 'prefs', 'prefsNow', 'presenceClose', 'presenceOpen', 'presenceSet', 'presenceView', 'previewMove',
-  'refresh', 'related', 'relatedWatch', 'relayLink', 'relayLinkCancel', 'relayLinkStatus', 'relayRefresh', 'relayRename', 'relayReset', 'relayUnlink',
+  'refresh', 'related', 'relatedWatch', 'relayLink', 'relayLinkCancel', 'relayLinkStatus', 'relayRefresh', 'relayRename', 'relayReset',
   'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
   'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'settingsSize',
   'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',

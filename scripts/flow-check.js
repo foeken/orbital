@@ -630,6 +630,12 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   const offset = '(() => { const g = document.querySelector("#palette .list .group"); return document.querySelector("#palette .row .label.sweep").getBoundingClientRect().left - g.getBoundingClientRect().left - parseFloat(getComputedStyle(g).paddingLeft); })()';
   await p.waitFor('Math.abs(' + offset + ') <= 1', 'the wait to start where the heading\u2019s words do (' + await p.js(offset) + 'px off at first)');
   assert.match(await p.js('palRows[5].hint'), /^Works once · \d+:\d\d left$/, 'saying how long the code lasts');
+  // left and opened again while its code waits: the same page, no new code (the relay holds five at most)
+  await p.js('(() => { const f = tana.relayLink; window.__codes = 0; tana.relayLink = (...a) => { window.__codes++; return f(...a); }; return 1; })()');
+  await closePalette(p);
+  await command(p, 'connect to your openai dot', 'Connect to your OpenAI Dot \u2026');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 7', 'the page left, back');
+  assert.deepEqual(await p.js('[window.__codes, relayCtx.code]'), [0, '7KQX-M2PD'], 'reopened while its code waits: that code again, no new one');
   await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked Dot · ChatGPT"', 'the palette to close on the agent that linked', 10000);
   await command(p, 'set default agent', 'Set default agent \u2026');
   await p.waitFor('palMode === "defaultAgent" && palRows.some((r) => r.label === "Dot")', 'Set default agent');

@@ -46,6 +46,14 @@ async function call(method, path, body, key = orbitalKey(false)) {
   const text = await res.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* not the relay answering */ }
+  // a reset's new key may have reached the relay with its answer lost: the old key is then unknown, and the new one,
+  // kept before it was sent (resetKey), is the Orbital's now
+  const next = settings.get('relayKeyNext');
+  if (res.status === 401 && key === orbitalKey(false) && typeof next === 'string' && KEY.test(next) && next !== key) {
+    const out = await call(method, path, body, next);
+    settings.set('relayKey', next); settings.set('relayKeyNext', undefined);
+    return out;
+  }
   if (!res.ok) throw new Error((json && json.error_description) || where() + ' answered ' + res.status);
   return json;
 }
@@ -72,6 +80,11 @@ function store(list) {
   // a new agent is on, once, and the default: linking your Dot is choosing it (switched off or another picked later, that stays)
   for (const a of fresh) { agent.setEnabled(ID + a.id, true); agent.setDefault(ID + a.id); }
   if (fresh.length || seen.size !== list.length) settings.set('relaySeen', list.map((a) => a.id));
+  // an agent the relay no longer lists (unlinked elsewhere, or linked to another Orbital) leaves its nodes: the local
+  // mark and the link go, so no badge waits for it; the node itself is left as it is
+  const listed = new Set(list.map((a) => ID + a.id));
+  // (the stored links: agent.links() leaves out those of an agent no longer registered, which is what these are)
+  for (const [nodeId, stored] of Object.entries(agent.tasks())) if (stored && typeof stored.agent === 'string' && stored.agent.startsWith(ID) && !listed.has(stored.agent)) { documents.dropAgentMark(nodeId); agent.clearTask(nodeId); }
 }
 async function refresh() { if (orbitalKey(false)) store((await call('GET', '/orbital/agents')).agents); }
 // Cmd+K and Settings read the list often: the relay is asked at most once a minute, and the pages hear of a change
@@ -111,8 +124,9 @@ async function send(a, { nodeUri, prompt }) {
   if (request.length > REQUEST_MAX) throw new Error('That request is too long for ' + a.name + ': ' + REQUEST_MAX + ' characters at most');
   await documents.writeAgentStatus(nodeUri, 'Assigned'); // first, and not quietly: a node that will not take it is not handed over
   const id = crypto.randomUUID();
-  const { subscribers } = await call('POST', '/orbital/agents/' + a.id + '/events', { id, name: 'task.assigned', data: { node: nodeUri, request, instructions: HOW } });
+  const { subscribers, delivered } = await call('POST', '/orbital/agents/' + a.id + '/events', { id, name: 'task.assigned', data: { node: nodeUri, request, instructions: HOW } });
   if (!subscribers) throw new Error(a.name + ' is not listening yet: ask it to subscribe to Orbital\'s task.assigned event');
+  if (!delivered) throw new Error(a.name + ' did not take it: assign it again in a moment'); // orbital.md tries once and keeps nothing
   return id; // the task id the node is linked to (main/agent.js setTask)
 }
 // The badge follows the node's last status line: Assigned (or none) is waiting for the agent, Working, Completed and
@@ -168,9 +182,11 @@ async function unlink(id) {
 }
 // A new key, for when the old one may have been seen: the relay keeps the same Orbital, so the agents stay linked
 async function resetKey() {
+  await call('GET', '/orbital/agents'); // a key an earlier reset left half-done is settled first (call, above)
   const next = newKey();
+  settings.set('relayKeyNext', next); // kept before it is sent: if the answer is lost after the relay took it, the next call finds it
   await call('POST', '/orbital/rotate', { key: next });
-  settings.set('relayKey', next);
+  settings.set('relayKey', next); settings.set('relayKeyNext', undefined);
   return true;
 }
 
