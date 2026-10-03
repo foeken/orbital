@@ -23,7 +23,7 @@ const crypto = require('node:crypto');
 const MINUTE = 60e3, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 const TTL = { code: 15 * MINUTE, grant: 10 * MINUTE, access: HOUR, refresh: 90 * DAY,
   subscription: 7 * DAY, subscriptionMin: HOUR, subscriptionMax: 30 * DAY, verified: DAY };
-const LIMITS = { body: 32 * 1024, eventData: 16 * 1024, codes: 5, agents: 50, name: 60, perMinute: 120, links: 10, subscriptions: 10, linkFailures: 300 };
+const LIMITS = { body: 32 * 1024, eventData: 16 * 1024, codes: 5, agents: 50, name: 60, perMinute: 120, links: 10, subscriptions: 10, linkFailures: 300, authorize: 30, newOrbitals: 5 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODE = /^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/;
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']; // the handshake ones: initialize answers in one of these
@@ -189,6 +189,8 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     await run('DELETE FROM installs WHERE created < ? AND id NOT IN (SELECT install FROM tokens) AND id NOT IN (SELECT install FROM agents)', t - HOUR);
     await run('DELETE FROM subscriptions WHERE install NOT IN (SELECT id FROM installs)');
     await run('DELETE FROM clients WHERE created < ? AND id NOT IN (SELECT client FROM installs) AND id NOT IN (SELECT client FROM grants)', t - DAY);
+    // an Orbital that never linked an agent and has no code left is nobody's: its key makes it again if it ever asks
+    await run('DELETE FROM orbitals WHERE created < ? AND id NOT IN (SELECT orbital FROM agents) AND id NOT IN (SELECT orbital FROM codes)', t - DAY);
   }
 
   // ---- HTTP ----
@@ -232,7 +234,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
       }
       if (p === PATH + '/health') return send(res, 200, { ok: true, sha256: SELF }); // which server.js runs, to hold against the repository
       if (p === PATH + '/oauth/register' && req.method === 'POST') return await register(req, res);
-      if (p === PATH + '/oauth/authorize' && req.method === 'GET') return await authorize(url, res);
+      if (p === PATH + '/oauth/authorize' && req.method === 'GET') { limit('authorize:' + ip(req), LIMITS.authorize); return await authorize(url, res); } // each one writes a grant
       if (p === PATH + '/oauth/token' && req.method === 'POST') return await tokenGrant(req, res);
       if (p.startsWith(PATH + '/orbital/')) return await orbitalApi(req, res, p.slice(PATH.length + '/orbital'.length));
       return send(res, 404, { error: 'not_found' });
@@ -461,6 +463,8 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     const row = await find();
     if (row) return row;
     if (!mayCreate) throw fail(401, 'unauthorized', 'Unknown Orbital key');
+    // a new key is a new row, and the caller picks the key: new Orbitals are counted by the address the proxy saw
+    limit('new-orbital:' + ip(req), LIMITS.newOrbitals);
     // a twin request may make it first: the one row the key has is the Orbital, whichever request wrote it
     await run('INSERT INTO orbitals VALUES (?, ?, ?) ON CONFLICT DO NOTHING', crypto.randomUUID(), keyHash, now());
     return find();

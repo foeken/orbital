@@ -231,11 +231,21 @@ const server = http.createServer(relay.handle);
   for (let i = 0; i < 3; i++) assert.match((await grok.tool('link_orbital', { code: 'ZZZZ-ZZZ' + i, name: 'Guess' })).text, /unknown, used or expired/);
   assert.match((await grok.tool('link_orbital', { code: 'ZZZZ-ZZZ9', name: 'Guess' })).text, /Too many requests/, 'failed codes are held to a cap across every connection, so new connections do not buy more guesses');
   LIMITS.linkFailures = failures;
+  // each sign-in page writes a grant, and each new key a new Orbital: both are counted by the address the proxy saw
+  const authz = () => call('GET', '/mcp/oauth/authorize?client_id=nobody', { forwarded: '198.51.100.8' });
+  for (let i = 0; i < LIMITS.authorize; i++) assert.notEqual((await authz()).status, 429);
+  assert.equal((await authz()).status, 429, 'the sign-in page is held to a rate per address, since each one writes a grant');
+  const strays = [], newOrbital = (key) => call('POST', '/mcp/orbital/codes', { auth: 'Orbital ' + key, forwarded: '198.51.100.9' });
+  for (let i = 0; i < LIMITS.newOrbitals; i++) { strays.push(newKey()); assert.equal((await newOrbital(strays.at(-1))).status, 201); }
+  assert.equal((await newOrbital(newKey())).status, 429, 'new keys from one address make a few Orbitals a minute, no more');
+  assert.notEqual((await newOrbital(strays[0])).json.error, 'rate_limited', 'while an Orbital that exists is not held back by it');
+  const keyHash = (k) => crypto.createHash('sha256').update(k).digest('base64url');
   // a client that never signed in and a connection with no token and no link are swept away, the linked ones stay
   const lone = (await call('POST', '/mcp/oauth/register', { body: { redirect_uris: ['https://agents.example/lone'] } })).json.client_id;
   clock += 24 * 3600e3 + 1; await relay.sweep();
   const kept = await relay.dump();
   assert.deepEqual([kept.includes(lone), kept.includes(D.id)], [false, true], 'an unused client goes; a linked agent stays');
+  assert.deepEqual(strays.map((k) => kept.includes(keyHash(k))), strays.map(() => false), 'and an Orbital that never linked an agent goes after a day');
   // which server.js runs, to hold against the repository
   assert.equal((await call('GET', '/mcp/health')).json.sha256, crypto.createHash('sha256').update(require('node:fs').readFileSync(require.resolve('../relay/server'))).digest('hex'), '/health names the file it runs');
   assert.equal(isPublicAddress('::7f00:1'), false, 'an IPv4 address written the old IPv6 way is not public either');

@@ -114,10 +114,13 @@ hold a deploy (or a change nobody meant) against this repository.
 - **Limits a caller cannot pick**: behind the host's proxy, the address it appended (the last of `X-Forwarded-For`) is
   the one a limit counts; the ones before it are whatever the caller wrote.
 - **Lifetimes**: a subscription as long as granted; a code an hour after it ran out; access tokens last an hour, refresh
-  tokens 90 days; a connection with no token and no link goes after an hour, and a registered client that never signed
-  in after a day. Nothing is logged but the kind of an unexpected failure.
+  tokens 90 days; a connection with no token and no link goes after an hour, a registered client that never signed
+  in after a day, and an Orbital that never linked an agent (and has no code left) after a day. Nothing is logged but
+  the kind of an unexpected failure.
 - **Limits**: 32 KB a request, 16 KB of data an event (in UTF-8 bytes, as it goes over the wire), 50 agents, ten
-  subscriptions a connection, five open codes, 120 calls a minute per caller.
+  subscriptions a connection, five open codes, 120 calls a minute per caller. What writes a row a caller could make
+  up is counted by the address the proxy saw: twenty registrations, thirty sign-in pages (each writes a grant) and five
+  new Orbitals (each new key is one) a minute.
 - **Callbacks reach public addresses only**: every address a callback's name resolves to, and an IP literal itself, is
   checked against loopback, private, link-local and metadata ranges, an IPv4 address written as IPv6 in any spelling
   included (`::ffff:7f00:1` is how the URL parser writes `[::ffff:127.0.0.1]`). No redirects are followed.
