@@ -1,8 +1,8 @@
 'use strict';
 // The agent relay end to end (relay/server.js, docs/AGENT-RELAY.md): an Orbital and two agents over real HTTP on a
-// loopback port, the relay's clock in the check's hands. Sign-in (OAuth with PKCE), linking with a code, a task (a node
-// id and an action) out to one agent and a status back, and what must fail: a used or expired code, a wrong secret,
-// a task that is not ids, another agent's task, an unlinked agent, a task kept past its day. Last, no secret and no
+// loopback port, the relay's clock in the check's hands. Sign-in (OAuth with PKCE), linking with a code, the events an
+// agent subscribes to and receives, signed, at its callback, and what must fail: a used or expired code, a wrong key,
+// an event that is not one the relay lists, a callback that does not answer its challenge. Last, no secret and no
 // token is in the database as itself.
 const assert = require('node:assert/strict');
 const http = require('node:http');
@@ -42,10 +42,10 @@ const server = http.createServer(relay.handle);
   assert.equal(hello.status, 200, 'hello needs no sign-in');
   assert.deepEqual(hello.json.result.capabilities, { tools: {}, events: {} }, 'tools, and the task.assigned event');
   const open = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'tools/list' } });
-  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital', 'get_tasks', 'update_task'], 'nor does the list');
+  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital'], 'nor does the list');
   assert.ok(open.json.result.tools.every((t) => t.securitySchemes[0].type === 'oauth2' && t._meta.securitySchemes[0].type === 'oauth2'), 'and each tool says it needs a sign-in');
   for (const auth of [undefined, 'Bearer not-a-token']) {
-    const unauth = await call('POST', '/mcp', { auth, body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'get_tasks', arguments: {} } } });
+    const unauth = await call('POST', '/mcp', { auth, body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'link_orbital', arguments: {} } } });
     assert.equal(unauth.status, 401, 'calling a tool needs a token');
     assert.match(unauth.headers.get('www-authenticate'), /resource_metadata="http:\/\/127\.0\.0\.1\/\.well-known\/oauth-protected-resource\/mcp"/, 'and says where to sign in');
     assert.match(unauth.json.result._meta['mcp/www_authenticate'][0], /resource_metadata=.*error="invalid_token".*error_description=/, 'in the result too, as ChatGPT reads it');
@@ -79,10 +79,9 @@ const server = http.createServer(relay.handle);
   }
   const grok = await signIn('Grok');
   const listed = (await grok.rpc('tools/list')).result.tools;
-  assert.deepEqual(listed.map((t) => t.name), ['link_orbital', 'get_tasks', 'update_task']);
-  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false], [true, false, false], [false, false, false]],
-    'each says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three): only get_tasks reads, none destroys');
-  assert.match((await grok.tool('get_tasks')).text, /Not linked/, 'an agent with no link is told how to get one');
+  assert.deepEqual(listed.map((t) => t.name), ['link_orbital'], 'one tool: the rest happens in Tana');
+  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false]],
+    'it says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three)');
 
   // a refresh token turns once: the new pair works, the old refresh token does not
   const refreshed = (await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: grok.tokens.refresh_token, client_id: grok.client } })).json;
@@ -114,63 +113,29 @@ const server = http.createServer(relay.handle);
   assert.deepEqual(agents.map((a) => a.name), ['GrokBot', 'Dot'], 'one Orbital, as many agents as link to it');
   const [G, D] = agents;
 
-  // ---- a task: a node's id and an action, the request and the words staying in Tana for the agent to read there ----
-  const send = (agent, id, node, action = 'assign') => call('POST', '/mcp/orbital/agents/' + agent.id + '/messages', { auth: as(orbital), body: { id, node, action } });
-  const NODE = 'tana:text:01jzq8k3m5p7r9t1v3x5z7b9d1', OTHER = 'tana:text:01jzq8k3m5p7r9t1v3x5z7b9d2';
-  const t1 = crypto.randomUUID();
-  assert.equal((await send(G, t1, 'Draft the pilot brief')).status, 400, 'a task is a node id, not words');
-  assert.equal((await send(G, t1, NODE, 'delete everything')).status, 400, 'and an action Orbital knows');
-  assert.equal((await send(G, t1, NODE)).status, 202);
-  assert.equal((await send(G, t1, OTHER)).status, 200, 'sending the same task twice queues it once');
-  assert.equal((await send(D, t1, NODE)).status, 409, 'and its id cannot be reused for another agent');
-  const first = JSON.parse((await grok.tool('get_tasks')).text), got = first.tasks;
-  assert.match(first.how, /Tana's MCP server, https:\/\/home\.tana\.inc\/mcp/, 'the agent is told to read each node with Tana\'s MCP server');
-  assert.equal(got.length, 1);
-  assert.deepEqual(Object.keys(got[0]).sort(), ['action', 'node', 'sent_at', 'task_id'], 'a task is ids, an action and a time, nothing more');
-  assert.deepEqual([got[0].node, got[0].action], [NODE, 'assign'], 'the agent reads which node, and what to do with it');
-  assert.equal(got[0].task_id, t1);
-  assert.match((await grok.tool('get_tasks')).text, /No tasks/, 'a fetched task is held for ten minutes, not handed out twice');
-  assert.match((await dot.tool('get_tasks')).text, /No tasks/, 'and another agent never sees it');
+  // ---- an event for an agent: a name the relay lists and what goes with it; with nobody subscribed, nobody hears it ----
+  const NODE = 'tana:text:01jzq8k3m5p7r9t1v3x5z7b9d1';
+  const send = (agent, id, name = 'task.assigned', data = { node: NODE }, o = orbital) => call('POST', '/mcp/orbital/agents/' + agent.id + '/events', { auth: as(o), body: { id, name, data } });
+  assert.equal((await send(G, 'not-an-id')).status, 400, 'an event has a UUID');
+  assert.equal((await send(G, crypto.randomUUID(), 'task.deleted')).status, 400, 'and a name the relay lists');
+  assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', ['x'])).status, 400, 'its data is an object');
+  assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { note: 'x'.repeat(9000) })).status, 400, 'of at most 8 KB');
+  assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { node: NODE }, stranger)).status, 401, 'and only its own Orbital sends it one');
+  assert.deepEqual((await send(G, crypto.randomUUID())).json, { subscribers: 0, delivered: 0 }, 'an agent that has not subscribed hears nothing, and Orbital is told so');
+  assert.equal(posted.length, 0, 'nothing was sent, and nothing is kept for later');
 
-  // a task for one agent is that agent's alone
-  const t3 = crypto.randomUUID();
-  await send(D, t3, OTHER);
-  assert.match((await grok.tool('get_tasks')).text, /No tasks/, 'Grok does not see a task for Dot');
-  assert.equal(JSON.parse((await dot.tool('get_tasks')).text).tasks[0].task_id, t3, 'Dot does');
-  assert.equal((await grok.tool('update_task', { task_id: t3, status: 'completed' })).error, true, 'and Grok cannot report on it');
-
-  // ---- the status: read back by Orbital, then gone ----
-  assert.equal((await grok.tool('update_task', { task_id: crypto.randomUUID(), status: 'completed' })).error, true, 'no answer to a task it was never sent');
-  assert.equal((await dot.tool('update_task', { task_id: t1, status: 'completed' })).error, true, 'nor to another agent\'s');
-  assert.equal((await grok.tool('update_task', { task_id: t1, status: 'done' })).error, true, 'statuses are working, completed or failed');
-  await grok.tool('update_task', { task_id: t1, status: 'working' });
-  await grok.tool('update_task', { task_id: t1, status: 'completed', note: 'Words have nowhere to go: notes belong in the node' });
-  const updates = (await call('GET', '/mcp/orbital/updates', { auth: as(orbital) })).json.updates;
-  assert.deepEqual(updates.map((u) => [u.agent, u.task, u.status, u.note]), [[G.id, t1, 'working', undefined], [G.id, t1, 'completed', undefined]], 'an update is a task id and a status: a note sent along is dropped');
-  assert.equal((await call('GET', '/mcp/orbital/updates', { auth: as(stranger) })).status, 401, 'nobody without the key reads them');
-  assert.equal((await call('GET', '/mcp/orbital/updates', { auth: as(orbital) })).json.updates.length, 0, 'answers being read by one device are not handed to another');
-  assert.equal((await call('POST', '/mcp/orbital/updates/ack', { auth: as(orbital), body: { ids: updates.map((u) => u.id) } })).status, 204);
-  clock += TTL.updateLease + 1;
-  assert.equal((await call('GET', '/mcp/orbital/updates', { auth: as(orbital) })).json.updates.length, 0, 'an acknowledged answer is gone');
-  clock += TTL.lease;
-  assert.match((await grok.tool('get_tasks')).text, /No tasks/, 'an answered task left the queue');
-
-  // ---- a day at most ----
-  const t4 = crypto.randomUUID();
-  await send(G, t4, NODE);
+  // ---- a day on ----
   const late = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json.code;
-  clock += TTL.message + 1;
+  clock += 24 * 3600e3 + 1;
   await relay.sweep();
-  assert.match((await grok.rpc('tools/call', { name: 'get_tasks', arguments: {} })).result._meta['mcp/www_authenticate'][0], /invalid_token/, 'a day on, the hour-long access token has run out');
+  assert.match((await grok.rpc('tools/call', { name: 'link_orbital', arguments: {} })).result._meta['mcp/www_authenticate'][0], /invalid_token/, 'a day on, the hour-long access token has run out');
   for (const a of [grok, dot]) a.tokens = (await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: a.tokens.refresh_token, client_id: a.client } })).json;
-  assert.match((await grok.tool('get_tasks')).text, /No tasks/, 'a task nobody fetched for a day is gone');
-  assert.equal((await call('GET', '/mcp/orbital/codes/' + late, { auth: as(orbital) })).status, 404, 'and so is a code nobody used');
+  assert.equal((await call('GET', '/mcp/orbital/codes/' + late, { auth: as(orbital) })).status, 404, 'and a code nobody used is gone');
 
   // ---- rename, unlink, and a new key ----
   assert.equal((await call('PATCH', '/mcp/orbital/agents/' + D.id, { auth: as(orbital), body: { name: 'My dot' } })).json.name, 'My dot');
   assert.equal((await call('DELETE', '/mcp/orbital/agents/' + G.id, { auth: as(orbital) })).status, 204);
-  assert.match((await grok.tool('get_tasks')).text, /Not linked/, 'an unlinked agent is told so');
-  assert.equal((await send(G, crypto.randomUUID(), NODE)).status, 404, 'and nothing more can be sent to it');
+  assert.equal((await send(G, crypto.randomUUID())).status, 404, 'an unlinked agent is sent nothing more');
   const fresh = newKey();
   assert.equal((await call('POST', '/mcp/orbital/rotate', { auth: as(orbital), body: { key: fresh } })).status, 204);
   assert.equal((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).status, 401, 'the old key stops working');
@@ -186,9 +151,10 @@ const server = http.createServer(relay.handle);
   const old = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '1900-01-01' } } } });
   assert.deepEqual([old.json.error.code, old.json.error.data.supported[0]], [-32022, '2026-07-28'], 'a version Orbital does not speak is refused, naming those it does');
   const listedTools = (await modern('tools/list')).json.result;
-  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.length], ['complete', 'public', 'number', 3], 'the tools, cacheable, in the new shape');
+  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.length], ['complete', 'public', 'number', 1], 'the tools, cacheable, in the new shape');
   const events = (await modern('events/list')).json.result.events;
-  assert.deepEqual(events.map((e) => [e.name, e.delivery, e.payloadSchema.required]), [['task.assigned', ['webhook'], ['task_id', 'node', 'action']]], 'one event, by webhook, carrying ids only');
+  assert.deepEqual(events.map((e) => [e.name, e.delivery, Object.keys(e.payloadSchema.properties), e.payloadSchema.additionalProperties]), [['task.assigned', ['webhook'], ['node'], true]],
+    'task.assigned, by webhook, its data the node and whatever else Orbital sends');
   const SECRET = 'whsec_' + crypto.randomBytes(32).toString('base64'), CB = 'https://receiver.example/mcp-events/cb1';
   const want = { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: CB, secret: SECRET }, cursor: null };
   const sub = (params, agent = dot) => modern('events/subscribe', params, 'Bearer ' + agent.tokens.access_token);
@@ -207,28 +173,30 @@ const server = http.createServer(relay.handle);
   const signs = (p) => p.headers['webhook-signature'] === 'v1,' + crypto.createHmac('sha256', Buffer.from(SECRET.slice(6), 'base64')).update(p.headers['webhook-id'] + '.' + p.headers['webhook-timestamp'] + '.' + p.body).digest('base64');
   const [check] = posted;
   assert.deepEqual([JSON.parse(check.body).type, /^msg_verification_/.test(check.headers['webhook-id']), check.headers['x-mcp-subscription-id'], signs(check)], ['verification', true, made.id, true], 'the callback was challenged first, signed');
-  const refreshedSub = (await sub({ ...want, arguments: undefined, ttlMs: 3 * TTL.message })).json.result;
-  assert.deepEqual([refreshedSub.id, posted.length, refreshedSub.refreshBefore], [made.id, 1, new Date(clock + 3 * TTL.message).toISOString()], 'asked again it is the same subscription, as long as asked, not challenged again');
+  const refreshedSub = (await sub({ ...want, arguments: undefined, ttlMs: 3 * 864e5 })).json.result;
+  assert.deepEqual([refreshedSub.id, posted.length, refreshedSub.refreshBefore], [made.id, 1, new Date(clock + 3 * 864e5).toISOString()], 'asked again it is the same subscription, as long as asked, not challenged again');
   // grok, signed in but linked to nothing, listens too: it hears nothing of the Dot's tasks
   assert.ok((await sub({ ...want, delivery: { ...want.delivery, url: 'https://receiver.example/grok' } }, grok)).json.result.id);
   posted.length = 0;
   const tEvent = crypto.randomUUID();
-  assert.equal((await send(D, tEvent, NODE)).status, 202);
-  assert.equal(posted.length, 1, 'a task for the Dot is POSTed once, to its callback alone');
+  assert.deepEqual((await send(D, tEvent)).json, { subscribers: 1, delivered: 1 }, 'an event for the Dot reaches it, and Orbital is told');
+  assert.equal(posted.length, 1, 'POSTed once, to its callback alone');
   const [delivery] = posted, event = JSON.parse(delivery.body);
-  assert.deepEqual(event, { eventId: 'evt_' + tEvent, name: 'task.assigned', timestamp: new Date(clock).toISOString(), data: { task_id: tEvent, node: NODE, action: 'assign' }, cursor: null }, 'the event: ids and the action, nothing more');
+  assert.deepEqual(event, { eventId: 'evt_' + tEvent, name: 'task.assigned', timestamp: new Date(clock).toISOString(), data: { node: NODE }, cursor: null }, 'the event: its name, and the data Orbital sent');
   assert.deepEqual([delivery.url, delivery.headers['webhook-id'], delivery.headers['x-mcp-subscription-id'], signs(delivery)], [CB, event.eventId, made.id, true], 'signed, its webhook-id the event id');
-  assert.equal(JSON.parse((await dot.tool('get_tasks')).text).tasks[0].task_id, tEvent, 'and the task waits in get_tasks, where the event sends it');
+  posted.length = 0;
+  await send(D, crypto.randomUUID(), 'task.assigned', { node: NODE, why: 'later events say more' });
+  assert.deepEqual(JSON.parse(posted[0].body).data, { node: NODE, why: 'later events say more' }, 'whatever Orbital sends with it, as it sent it');
   // a receiver that is gone (410) ends the subscription; unsubscribing ends one too
   answer = () => ({ status: 410, text: '' }); posted.length = 0;
-  await send(D, crypto.randomUUID(), NODE);
+  await send(D, crypto.randomUUID());
   answer = echo; posted.length = 0;
-  await send(D, crypto.randomUUID(), NODE);
+  await send(D, crypto.randomUUID());
   assert.equal(posted.length, 0, 'after a 410 nothing more is sent there');
   await sub(want);
   assert.deepEqual((await modern('events/unsubscribe', { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: CB } }, 'Bearer ' + dot.tokens.access_token)).json.result, { resultType: 'complete', _meta: { 'io.modelcontextprotocol/serverInfo': disc.json.result._meta['io.modelcontextprotocol/serverInfo'] } }, 'unsubscribed');
   posted.length = 0;
-  await send(D, crypto.randomUUID(), NODE);
+  await send(D, crypto.randomUUID());
   assert.equal(posted.length, 0, 'and then nothing is sent');
   // only public addresses are called back
   assert.deepEqual(['8.8.8.8', '2606:4700::1111', '127.0.0.1', '10.1.2.3', '169.254.169.254', '192.168.1.1', '::1', 'fd00::1', '::ffff:127.0.0.1', 'fe80::1', 'localhost'].map(isPublicAddress),
@@ -236,7 +204,7 @@ const server = http.createServer(relay.handle);
 
   // ---- what the database holds: ids, and no key or token as itself (only their hashes) ----
   const rows = await relay.dump();
-  for (const secret of ['nowhere to go', firstKey, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
+  for (const secret of [firstKey, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
 
   console.log('relay-check: ok');
   await relay.close(); server.close();

@@ -148,7 +148,7 @@ function relayRows() {
   const group = 'Then ask your Dot to link';
   rows.push({ group, icon: 'prompt', label: 'Copy the message for your Dot', hint: '↩ copies', keepOpen: true, match: [],
     run: () => run(() => copyText(c.prompt, 'Copied: send it to your Dot')) },
-  // what crosses orbital.md (main/agents/linked.js send): a node's id and an action out, a status back
+  // what crosses orbital.md (main/agents/linked.js send): an event with a node's id, and nothing back
   { group, icon: 'lock', label: 'Only ids go through orbital.md: your words stay in Tana, where your Dot reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
   // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
   if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];

@@ -72,7 +72,7 @@ async function relayAgent(base, app) {
   let n = 0;
   const rpc = (method, params = {}) => fetch(base + '/mcp', { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++n, method, params }) }).then((r) => r.json());
   await rpc('initialize', { protocolVersion: '2025-06-18', clientInfo: { name: app, version: '1' }, capabilities: {} });
-  return { tool: async (name, args = {}) => (await rpc('tools/call', { name, arguments: args })).result.content[0].text };
+  return { rpc, tool: async (name, args = {}) => (await rpc('tools/call', { name, arguments: args })).result.content[0].text };
 }
 
 async function main() {
@@ -3851,7 +3851,9 @@ async function main() {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const { agent, settings, linked, documents: docs } = backend, h = (name, ...args) => backend.handlers.get(name)(null, ...args)
     const plain = (value) => JSON.parse(JSON.stringify(value)); // made in the vm context: another Object prototype
-    const relay = require('../relay/server').createRelay({ publicUrl: 'http://127.0.0.1' }), server = require('node:http').createServer(relay.handle);
+    // the agents' callbacks: every event the relay POSTs is kept here, and a challenge answered as a receiver would
+    const posted = [], post = async (url, headers, body) => { posted.push(JSON.parse(body)); return { status: 200, text: JSON.stringify({ challenge: JSON.parse(body).challenge }) }; };
+    const relay = require('../relay/server').createRelay({ publicUrl: 'http://127.0.0.1', post }), server = require('node:http').createServer(relay.handle);
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     const base = 'http://127.0.0.1:' + server.address().port;
     linked.relay.base = base + '/mcp'; linked.relay.fetch = (url, options) => fetch(url, options);
@@ -3864,7 +3866,7 @@ async function main() {
     assert.ok(link.prompt.includes(base + '/mcp') && link.prompt.includes('home.tana.inc/mcp') && /only ids/.test(link.prompt), 'naming both servers if one is missing, and what goes through orbital.md, for the Dot to explain');
     const key = settings.get('relayKey');
     assert.match(key, /^[\w-]{43}$/, 'the first link makes your Orbital: one random key');
-    assert.deepEqual(['relayKey', 'relaySeen', 'relayTasks', 'relayAgents'].map(settings.isSynced), [true, true, true, false], 'which follows you in the settings document; the agents\' list is this machine\'s mirror of the relay');
+    assert.deepEqual(['relayKey', 'relaySeen', 'relayAgents'].map(settings.isSynced), [true, true, false], 'which follows you in the settings document; the agents\' list is this machine\'s mirror of the relay');
     assert.equal((await relay.dump()).includes(key), false, 'the relay keeps only its hash');
     assert.equal((await h('relay:linkStatus', link.code)).state, 'waiting', 'nobody has used the code yet');
     await assert.rejects(h('relay:linkStatus', 'nonsense'), /Not a link code/, 'and only a code is asked about');
@@ -3874,22 +3876,28 @@ async function main() {
     assert.deepEqual([status.state, status.agent.label, status.agent.app], ['linked', 'GrokBot', 'Grok'], 'the agent linked, by the name it chose, through the app it runs in');
     const entry = () => agent.list().find((a) => a.id === id);
     assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled], ['GrokBot', true, true, true], 'and is an agent like any other, on from the start');
-    // a task: the node's id and an action, nothing else; the words stay in Tana
+    // a node handed over: the event task.assigned with the node's id, nothing else; the words stay in Tana
     const NODE = 'tana:text:' + ulid(), realMut = docs.mut, realOp = docs.op;
     docs.op = docs.mut = async () => { throw new Error('a linked agent reads the node with its own Tana tools: Orbital sends no words'); };
-    const taskId = await agent.get(id).start({ nodeUri: NODE, title: 'Pilot brief', prompt: 'Draft the brief' });
+    const handOver = () => agent.get(id).start({ nodeUri: NODE, title: 'Pilot brief', prompt: 'Draft the brief' });
+    await assert.rejects(handOver(), /GrokBot is not listening yet: ask it to subscribe to Orbital's task\.assigned event/, 'an agent that has not subscribed would never hear of it: it is told to, and nothing is handed over');
+    const sub = await grok.rpc('events/subscribe', { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: 'https://agents.example/events', secret: 'whsec_' + require('node:crypto').randomBytes(32).toString('base64') } });
+    assert.match(sub.result.id, /^sub_/, 'subscribed');
+    const taskId = await handOver();
     agent.setTask(NODE, id, taskId);
-    const [task] = JSON.parse(await grok.tool('get_tasks')).tasks;
-    assert.deepEqual(Object.keys(task).sort(), ['action', 'node', 'sent_at', 'task_id'], 'a task is ids, an action and a time');
-    assert.deepEqual([task.task_id, task.node, task.action], [taskId, NODE, 'assign'], 'the agent learns which node and what to do, and reads it in Tana');
-    const stored = await relay.dump();
-    assert.deepEqual(['Pilot brief', 'Draft the brief'].map((s) => stored.includes(s)), [false, false], 'the title and the request never leave Orbital');
-    assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'pending' }, 'pending until the agent says something');
-    // its status: a task id and a word, read by whichever device asks first
-    await grok.tool('update_task', { task_id: taskId, status: 'completed' });
-    await linked.pullNow();
-    assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'done' }, 'the badge is done');
-    assert.deepEqual(plain(settings.get('relayTasks')), { [taskId]: 'completed' }, 'kept where every device reads it');
+    const event = posted.at(-1);
+    assert.deepEqual([event.name, event.eventId, event.data], ['task.assigned', 'evt_' + taskId, { node: NODE }], 'the event names the node, nothing more');
+    const stored = JSON.stringify(posted) + await relay.dump();
+    assert.deepEqual(['Pilot brief', 'Draft the brief'].map((x) => stored.includes(x)), [false, false], 'the title and the request never leave Orbital');
+    // the badge is the node's own status in Tana, which the agent sets: open is with it, closed is done
+    const { Document } = require('../sdk/document');
+    const withState = (state) => { docs.op = async (nodeId, fn) => { const d = new Document(nodeId); d.transact((l) => { initDocument(l, 'Pilot brief', ME, { kind: 'task' }); l.getMap('data').set('stateType', state); }); return fn(d); }; };
+    withState('open');
+    assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'working' }, 'an open node is with the agent');
+    withState('closed');
+    assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'done' }, 'closed in Tana, it is done');
+    docs.op = async () => { throw new Error('gone'); };
+    assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'broken' }, 'a node that cannot be read needs you');
     // rename; switched off stays off on a device that sees the agent for the first time; a new key; unlink
     assert.equal((await h('relay:rename', id, 'Grok')).find((a) => a.id === id).label, 'Grok', 'renamed in Orbital');
     agent.setEnabled(id, false);
@@ -3902,9 +3910,8 @@ async function main() {
     assert.equal((await h('relay:refresh')).some((a) => a.id === id), true, 'whose agents stay linked');
     assert.equal((await h('relay:unlink', id)).some((a) => a.id === id), false, 'unlinked, it leaves the list');
     assert.equal(agent.links()[NODE], undefined, 'and the node lets go of its task');
-    assert.match(await grok.tool('get_tasks'), /Not linked/, 'and the agent is told');
     docs.mut = realMut; docs.op = realOp; await relay.close(); server.close();
-    console.log('ok  linked agents: linked with a code, named by themselves, only ids out and a status back, renamed, off, a new key, unlinked');
+    console.log('ok  linked agents: linked with a code, named by themselves, a node handed over as one event to a subscriber, the badge from Tana, renamed, off, a new key, unlinked');
   }
   // What the badge is allowed to say: the linked task's own status, one read for every linked node.
   {
