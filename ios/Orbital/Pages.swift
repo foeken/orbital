@@ -121,6 +121,8 @@ struct NodeScreen: View {
             }
         }
         .onChange(of: engine.sensitiveIds) { Task { await load() } } // marked or unmarked on another device: drawn again
+        // Demo mode turned on or off with this page open: read again, and none of the words read before it shown meanwhile
+        .onChange(of: engine.demo) { page = nil; Task { await load() } }
         .navigationTitle(titled && !(page?.sensitive == true && !engine.reveal) ? engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0 : "")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {

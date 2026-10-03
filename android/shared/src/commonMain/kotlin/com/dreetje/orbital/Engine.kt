@@ -227,7 +227,7 @@ class Engine(
         val host = host ?: return
         val started = session
         try {
-            val read: List<Row> = call("orbital.demo(demo); return await orbital.timeline(pages)", mapOf("pages" to pages, "demo" to demo))
+            val read: List<Row> = call("return await orbital.timeline(pages)", mapOf("pages" to pages))
             if (started != session) return // signed out meanwhile
             rows = read
             error = null
@@ -442,7 +442,9 @@ class Engine(
     private suspend inline fun <reified T> call(body: String, args: Map<String, Any?> = emptyMap()): T {
         val host = host ?: throw Failure("Not in the sample")
         try {
-            val answer = host.run(body, args)
+            // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
+            // moment it is turned on, not from the next Timeline read, which a read already under way puts off
+            val answer = host.run("orbital.demo(demo); " + body, args + ("demo" to demo))
             val text = (answer as? JsonPrimitive)?.takeIf { it.isString }?.content ?: "null"
             return json.decodeFromString<T>(text)
         } catch (e: CancellationException) {

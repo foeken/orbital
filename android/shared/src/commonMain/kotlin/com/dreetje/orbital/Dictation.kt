@@ -45,8 +45,9 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
     }
 
     // stop: listening stops and the recording is written down, its words handed to into once they come
-    fun finish(into: (String) -> Unit) {
-        val audio = stop() ?: return
+    // false when there was nothing to write down: a recording too short for Android to keep, which it says
+    fun finish(into: (String) -> Unit): Boolean {
+        val audio = stop() ?: run { problem = "Too short to write down. Try again."; return false }
         transcribing = true
         heard = scope.async {
             try {
@@ -63,12 +64,13 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
                 heard = null
             }
         }
+        return true
     }
 
     // Add or send while listening or writing down: the words are waited for; false when they did not come, so what
     // was said is never lost without a word
     suspend fun settle(into: (String) -> Unit): Boolean {
-        if (recording) finish(into)
+        if (recording && !finish(into)) return false
         return heard?.await() ?: true
     }
 

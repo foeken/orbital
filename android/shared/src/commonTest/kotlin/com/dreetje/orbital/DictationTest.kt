@@ -34,4 +34,14 @@ class DictationTest {
         assertTrue(dictation.recording)
         dictation.cancel()
     }
+
+    // Add or Send right after starting: Android keeps no recording that short (stop() is null), which is said, and
+    // what is waiting to be sent waits rather than going without what was said
+    @Test fun aRecordingTooShortToKeepIsSaidNotDropped() = runTest {
+        val dictation = Dictation(FakePlatform(chatgpt = FakeChatGPT(signedIn = true), recorder = FakeRecorder(), allowed = { true }), backgroundScope)
+        dictation.listen()
+        assertFalse(dictation.settle {})
+        assertEquals("Too short to write down. Try again.", dictation.problem)
+        assertFalse(dictation.recording)
+    }
 }

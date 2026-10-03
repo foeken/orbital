@@ -25,8 +25,9 @@ final class Dictation {
     }
 
     // ■: listening stops and the recording is written down, its words handed to into once they come
-    func finish(into: @escaping (String) -> Void) {
-        guard let audio = stop() else { return }
+    // false when there was nothing to write down: a recording too short to keep, which it says
+    @discardableResult func finish(into: @escaping (String) -> Void) -> Bool {
+        guard let audio = stop() else { problem = "Too short to write down. Try again."; return false }
         transcribing = true
         heard = Task {
             defer { transcribing = false; heard = nil }
@@ -37,12 +38,13 @@ final class Dictation {
                 return true
             } catch { problem = "Dictation: " + error.localizedDescription; return false }
         }
+        return true
     }
 
     // Add or send while listening or writing down: listening stops and the words are waited for; false when they did not
     // come, so what was said is never lost without a word
     func settle(into: @escaping (String) -> Void) async -> Bool {
-        if recording { finish(into: into) }
+        if recording, !finish(into: into) { return false }
         return await heard?.value ?? true
     }
 

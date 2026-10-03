@@ -326,7 +326,7 @@ window.orbital = {
     return true;
   },
   // the Timeline page, three days per page, as the rows the desktop renderer gets, with the words for their times (labels.js)
-  demo: (on) => demoOn(on), // Settings' Demo mode, told before each read (Engine.swift refresh)
+  demo: (on) => demoOn(on), // Settings' Demo mode, told before every call (Engine.swift and Engine.kt call)
   async timeline(pages = 1) {
     timeline.setPages(pages);
     await settled(); // the watch choices and what is sensitive

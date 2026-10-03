@@ -174,7 +174,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private func read() async {
         let started = session
         do {
-            let read: [Row] = try await call("orbital.demo(demo); return await orbital.timeline(pages)", ["pages": pages, "demo": demo])
+            let read: [Row] = try await call("return await orbital.timeline(pages)", ["pages": pages])
             guard started == session else { return } // signed out meanwhile
             rows = read
             error = nil
@@ -381,7 +381,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     struct Failure: LocalizedError { let errorDescription: String? }
     private func call<T: Decodable>(_ js: String, _ arguments: [String: Any]) async throws -> T {
         do {
-            let json = try await web.callAsyncJavaScript(js, arguments: arguments, contentWorld: .page) as? String ?? "null"
+            // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
+            // moment it is turned on, not from the next Timeline read, which a read already under way puts off
+            let json = try await web.callAsyncJavaScript("orbital.demo(demo); " + js, arguments: arguments.merging(["demo": demo]) { _, now in now },
+                                                         contentWorld: .page) as? String ?? "null"
             return try JSONDecoder().decode(T.self, from: Data(json.utf8))
         } catch {
             note("\(js.firstMatch(of: /orbital\.(\w+)/)?.1 ?? "engine") failed: \(Self.message(error))")

@@ -118,6 +118,9 @@ fun NodeScreen(
         while ((page?.kind ?: kindOf(id)) == "chat") { delay(2000); load() }
     }
     LaunchedEffect(engine.sensitiveIds) { if (page != null) load() } // marked or unmarked on another device: drawn again
+    // Demo mode turned on or off with this page open: read again, and none of the words read before it shown meanwhile
+    var readInDemo by remember(id) { mutableStateOf(engine.demo) }
+    LaunchedEffect(engine.demo) { if (engine.demo != readInDemo) { readInDemo = engine.demo; page = null; load() } }
     val refresh: () -> Unit = { scope.launch { refreshing = true; load(); refreshing = false } }
 
     val current = page

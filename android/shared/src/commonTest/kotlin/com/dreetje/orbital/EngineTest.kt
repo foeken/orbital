@@ -145,6 +145,18 @@ class EngineTest {
         assertTrue(host.calls.none { "orbital.toggle" in it.first })
     }
 
+    // Demo mode turned on and a write at once, before any Timeline read has told the engine: the write itself says
+    // so first, and the engine refuses it (ios/engine/index.js)
+    @Test fun everyCallSaysWhetherDemoModeIsOn() = runTest {
+        val host = page()
+        val engine = ready(host)
+        engine.demo = true
+        engine.markSensitive("tana:text:a", true)
+        val write = host.calls.last { "orbital.sensitive" in it.first }
+        assertTrue(write.first.startsWith("orbital.demo(demo); "))
+        assertEquals(true, write.second["demo"])
+    }
+
     @Test fun aRefusedDeleteBringsTheRowBack() = runTest {
         val engine = ready(page())
         assertFalse(engine.remove("tana:text:a"))
