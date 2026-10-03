@@ -656,6 +656,14 @@ flow('golden path: a list row is selected by a click, edited or opened by the ne
   assert.equal(await ring('Check out the new editor'), 'solid', 'and rings it');
   await clickWords(p, 'Check out the new editor');
   await at(p, locked);
+  // an open that leaves this page where it is (the place open in another pane, which comes forward there) lets the
+  // selection go and takes its ring off too
+  await p.js('setView("library")'); await p.waitFor(T('Check out the new editor'), 'the Library again');
+  await clickWords(p, 'Check out the new editor'); await settle(p, 150);
+  await p.js('window.__zoomTo = zoomTo; zoomTo = () => {}; 1'); // as zoomTo does when inOtherPane answers
+  await clickWords(p, 'Check out the new editor'); await settle(p, 150);
+  await p.js('zoomTo = window.__zoomTo; 1');
+  assert.deepEqual(await p.js('[zoom, selKeys().length, document.querySelectorAll("#outline .node.selected, #outline .node.picked").length]'), [null, 0, 0], 'an open that stays on the page leaves no ring behind');
   await p.js('setView("library")'); await p.waitFor(T(row.words), 'the Library again');
   await p.js(rowOf(row.words) + '.querySelector(".bullet").click()');
   await at(p, row.id);

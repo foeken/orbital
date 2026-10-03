@@ -993,7 +993,7 @@ function nodeEl(node, docId, parent) {
     line.onclick = (e) => {
       const was = pressed; pressed = null;
       if (was === 'select') { leaveText(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key, picked: true }; applySel(); }
-      else if (was === 'open') { sel = null; openSelectedRow(items.get(item.key) || item); }
+      else if (was === 'open') openSelectedRow(items.get(item.key) || item);
       else if (!was && before && (onTimeline ? e.metaKey || e.altKey : document.activeElement === text)) before(e);
     };
   }

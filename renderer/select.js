@@ -61,8 +61,11 @@ function extendSel(item, dir) { // grow (or shrink) the range from the focus end
 function clearSel(key) { sel = null; selectionFrozen = false; render(); if (key) placeCaret(key); }
 // What going into a selected row opens (a second click on it, Space, ↩ on one that cannot be typed in): the node a
 // Timeline row is about, a task listed under one as itself (its row there is a read-only copy), a reference's target,
-// else the row's own page
+// else the row's own page. The selection is let go and its ring taken off first: not every open leaves this page (a
+// canvas opens a window, a Timeline row about something with no page here opens in Tana, a place open in another pane
+// comes forward there), and one that does not would leave a ring drawn around a selection nothing acts on any more.
 function openSelectedRow(item) {
+  sel = null; selectionFrozen = false; applySel();
   if (item.node.timeline) return openTimeline(item.node);
   if (item.parent?.node?.timeline) return goTo(item.node.id);
   if (referenceTarget(item.node)) return openReference(item.node);
@@ -132,9 +135,9 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (blockSelection(keys, false, 'Remove', false)) removeSel(keys); }
   else if (mod && e.shiftKey && vert) { if (blockSelection(keys, true, 'Move')) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'Tab' && !mod) { if (blockSelection(keys, true, e.shiftKey ? 'Outdent' : 'Indent')) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
-  else if (e.key === ' ' && !mod && keys.length === 1) { const it = items.get(keys[0]); sel = null; openSelectedRow(it); } // Space on one selected row zooms into it, or opens what it references or is about
+  else if (e.key === ' ' && !mod && keys.length === 1) openSelectedRow(items.get(keys[0])); // Space on one selected row zooms into it, or opens what it references or is about
   else if (e.key === 'Enter' && !mod && keys.length === 1 && canEditText(items.get(keys[0])) && !timelineRow(items.get(keys[0])) && (!topListRow(items.get(keys[0])) || typesInto(items.get(keys[0])))) clearSel(keys[0]); // Enter starts editing the selected row, caret at the end — the way a second click on it does
-  else if (e.key === 'Enter' && !mod && keys.length === 1 && (topListRow(items.get(keys[0])) || timelineRow(items.get(keys[0])))) { const it = items.get(keys[0]); sel = null; openSelectedRow(it); } // a list or Timeline row that cannot be typed in: Enter goes in, as a second click on it does
+  else if (e.key === 'Enter' && !mod && keys.length === 1 && (topListRow(items.get(keys[0])) || timelineRow(items.get(keys[0])))) openSelectedRow(items.get(keys[0])); // a list or Timeline row that cannot be typed in: Enter goes in, as a second click on it does
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;
