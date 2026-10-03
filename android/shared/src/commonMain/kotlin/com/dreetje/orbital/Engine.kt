@@ -180,9 +180,10 @@ class Engine(
                 ok -> {
                     justSignedIn = false
                     email = maybe { host.run("return orbital.email()").jsonPrimitive.contentOrNull }
+                    val was = savedFor ?: account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
                     account = maybe { host.run("return orbital.account()").jsonPrimitive.contentOrNull }
-                    // another account's, or another workspace's: off the screen and off the phone
-                    if (savedFor != null && savedFor != account) { rows = emptyList(); SavedTimeline.forget(platform.files) }
+                    // another account's, or another workspace's: off the screen and off the phone, with the pages read for it
+                    if (was != null && was != account) { rows = emptyList(); opened.clear(); SavedTimeline.forget(platform.files) }
                     savedFor = null
                     host.keepCookies() // at once: the refresh may not finish
                     phase = Phase.Ready
@@ -488,7 +489,10 @@ class Engine(
     private suspend fun <T> reply(body: String, args: Map<String, Any?>, decode: (String) -> T): T {
         val host = host ?: throw Failure("Not in the sample")
         try {
+            val owner = account ?: savedFor // whose screen this was asked from
             connected()
+            // a tap on a row of another account's, made before Tana said who signed in: not done to this one
+            if (owner != null && owner != account) throw Failure("Another Tana account is signed in now, so this was not done")
             // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
             // moment it is turned on, not from the next Timeline read, which a read already under way puts off
             val answer = host.run("orbital.demo(demo); " + body, args + ("demo" to demo))

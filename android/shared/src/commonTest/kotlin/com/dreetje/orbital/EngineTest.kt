@@ -316,4 +316,42 @@ class EngineTest {
         engine.demo = true
         assertTrue(engine.rows.isEmpty(), "no real words on screen in demo mode, Tana out of reach or not")
     }
+
+    // the session ran out and someone else signed in: what was on screen was the last account's
+    @Test fun signingInAgainAsSomeoneElseTakesTheirRowsAway() = runTest {
+        var who = ME
+        var slow = false
+        val answers = page()
+        val host = FakeHost { body, args ->
+            when {
+                "orbital.account()" in body -> text(who)
+                "orbital.timeline" in body && slow -> throw Exception("slow")
+                else -> answers.answer(body, args)
+            }
+        }
+        val platform = FakePlatform()
+        val engine = ready(host, platform)
+        assertEquals(listOf("s:e1"), engine.rows.map { it.id })
+        who = "tana:user-profile:someone@org_1"
+        slow = true
+        host.listener!!.said("ready") // the page again, after Tana's sign-in
+        runCurrent()
+        assertTrue(engine.rows.isEmpty(), "the other account's rows are gone before the new read lands")
+        assertNull(SavedTimeline.load(platform.files, clock))
+    }
+
+    @Test fun aTapOnAnotherAccountsSavedTimelineIsNotDone() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, "tana:user-profile:someone@org_1", clock)
+        val host = page() // signs in as ME
+        val engine = launched(host, platform, scope = this)
+        engine.start()
+        launch { engine.markSensitive("tana:text:a", true) }
+        advanceTimeBy(500)
+        host.listener!!.said("ready")
+        runCurrent()
+        advanceTimeBy(200)
+        runCurrent()
+        assertTrue(host.calls.none { "orbital.sensitive" in it.first }, "asked of someone else's row: never written to this account")
+    }
 }

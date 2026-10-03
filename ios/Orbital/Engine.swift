@@ -131,8 +131,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             if ok {
                 justSignedIn = false
                 email = try? await web.callAsyncJavaScript("return orbital.email()", contentWorld: .page) as? String
+                let was = savedFor ?? account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
                 account = try? await web.callAsyncJavaScript("return orbital.account()", contentWorld: .page) as? String
-                if let savedFor, savedFor != account { rows = []; SavedTimeline.forget() } // another account's, or another workspace's: off the screen and off the phone
+                if let was, was != account { rows = []; SavedTimeline.forget() } // another account's, or another workspace's: off the screen and off the phone
                 savedFor = nil
                 // the cookies kept at once, as the refresh may not finish, and beside it: the Timeline waits on no Keychain
                 Task { await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) }
@@ -424,7 +425,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // decode: what to make of the JSON engine.js answers
     private func call<T>(_ js: String, _ arguments: [String: Any], decode: (String) throws -> T) async throws -> T {
         do {
+            let owner = account ?? savedFor // whose screen this was asked from
             try await connected()
+            // a tap on a row of another account's, made before Tana said who signed in: not done to this one
+            if let owner, owner != account { throw Failure(errorDescription: "Another Tana account is signed in now, so this was not done") }
             // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
             // moment it is turned on, not from the next Timeline read, which a read already under way puts off
             let json = try await web.callAsyncJavaScript("orbital.demo(demo); " + js, arguments: arguments.merging(["demo": demo]) { _, now in now },
