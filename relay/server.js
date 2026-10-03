@@ -7,8 +7,8 @@
 //     Orbital made, get_tasks hands it its tasks, update_task carries a status back.
 //   - OAuth (<path>/oauth/*, /.well-known/*): that sign-in. There is no account: an installation is only an identity,
 //     worth nothing until a code links it.
-//   - Orbital (<path>/orbital/*): your Orbital, known by an id and a secret kept in its settings document in Tana; the
-//     relay keeps only a hash of the secret.
+//   - Orbital (<path>/orbital/*): your Orbital, known by one random key kept in its settings document in Tana; the
+//     relay keeps only the key's hash, and makes the Orbital the first time that key asks for a link code.
 // A task is gone once the agent reports on it, a status once Orbital has it, and either after a day regardless.
 // Rows live in SQLite (node:sqlite), or in PostgreSQL (DATABASE_URL, the host's pg) where the disk does not outlast a
 // deploy; every query is written once, with ? placeholders, for both.
@@ -301,30 +301,31 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     await run('DELETE FROM agents WHERE id = ?', agentId);
   }
 
-  // ---- Orbital's own door: "Authorization: Orbital <id>.<secret>" ----
+  // ---- Orbital's own door: "Authorization: Orbital <key>" ----
+  // The key is the Orbital: whoever holds it acts as it, so the relay keeps only its hash (the orbitals table's secret
+  // column, beside an id of the relay's own that the agents and codes point at). An unknown key becomes a new Orbital
+  // only where linking starts, asking for a code; anywhere else it is refused.
   async function orbitalFrom(req, mayCreate) {
-    const m = /^Orbital ([0-9a-f-]{36})\.([\w-]{32,128})$/i.exec(req.headers.authorization || '');
-    if (!m || !UUID.test(m[1])) throw fail(401, 'unauthorized', 'No Orbital credentials');
-    limit('o:' + m[1]);
-    const row = await one('SELECT * FROM orbitals WHERE id = ?', m[1]);
-    if (!row) { if (mayCreate) return { id: m[1], secret: m[2], fresh: true }; throw fail(401, 'unauthorized', 'Unknown Orbital'); }
-    if (!sameHash(hash(m[2]), row.secret)) throw fail(401, 'unauthorized', 'Wrong Orbital secret');
-    return row;
+    const m = /^Orbital ([\w-]{32,128})$/.exec(req.headers.authorization || '');
+    if (!m) throw fail(401, 'unauthorized', 'No Orbital key');
+    const keyHash = hash(m[1]);
+    limit('o:' + keyHash);
+    const row = await one('SELECT * FROM orbitals WHERE secret = ?', keyHash);
+    if (row) return row;
+    if (!mayCreate) throw fail(401, 'unauthorized', 'Unknown Orbital key');
+    const made = { id: crypto.randomUUID(), secret: keyHash, created: now() };
+    await run('INSERT INTO orbitals VALUES (?, ?, ?)', made.id, made.secret, made.created);
+    return made;
   }
   const agentView = (a) => ({ id: a.id, name: a.name, app: a.app || '', linkedAt: Number(a.linked), seenAt: a.seen == null ? null : Number(a.seen) });
   async function orbitalApi(req, res, route) {
     const method = req.method, parts = route.split('/').filter(Boolean);
-    if (method === 'POST' && route === '/register') {
-      const o = await orbitalFrom(req, true);
-      if (o.fresh) { try { await run('INSERT INTO orbitals VALUES (?, ?, ?)', o.id, hash(o.secret), now()); } catch { await orbitalFrom(req, false); } } // made a moment ago by another device: only its secret will do
-      return send(res, 200, { id: o.id });
-    }
-    const o = await orbitalFrom(req, false);
+    const o = await orbitalFrom(req, method === 'POST' && route === '/codes');
     if (method === 'POST' && route === '/rotate') {
       const b = await body(req);
-      if (typeof b.secret !== 'string' || !/^[\w-]{32,128}$/.test(b.secret)) throw fail(400, 'bad_secret', 'secret: 32 to 128 letters, digits, - or _');
-      await run('UPDATE orbitals SET secret = ? WHERE id = ?', hash(b.secret), o.id);
-      return send(res, 200, { id: o.id });
+      if (typeof b.key !== 'string' || !/^[\w-]{32,128}$/.test(b.key)) throw fail(400, 'bad_key', 'key: 32 to 128 letters, digits, - or _');
+      await run('UPDATE orbitals SET secret = ? WHERE id = ?', hash(b.key), o.id); // the same Orbital, so its agents stay linked
+      return send(res, 204);
     }
     if (parts[0] === 'codes') {
       if (method === 'POST' && parts.length === 1) {
@@ -399,4 +400,3 @@ if (require.main === module) {
 }
 
 module.exports = { createRelay, sqliteStore, postgresStore, TOOLS, LIMITS, TTL, ACTIONS };
-

@@ -799,7 +799,7 @@ wrong twenty.
   picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
   **Link to agent …** (Settings, and under the linked agents in Choose agents) links any agent that adds the MCP server
   orbital.md/mcp: a prompt carrying a one-time code, the agent naming itself; each linked agent is one more agent,
-  with a page of its own (Rename …, Switch off, Unlink) and Reset the link secret beside them (docs/AGENT-RELAY.md).
+  with a page of its own (Rename …, Switch off, Unlink) and Reset the link key beside them (docs/AGENT-RELAY.md).
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
   badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session

@@ -3911,14 +3911,14 @@ async function main() {
     const base = 'http://127.0.0.1:' + server.address().port;
     linked.relay.base = base + '/mcp'; linked.relay.fetch = (url, options) => fetch(url, options);
     assert.equal(agent.list().some((a) => a.linked), false, 'no agent is linked until one is');
-    assert.equal(settings.get('relayAccount'), undefined, 'and there is no Orbital at the relay until the first link');
+    assert.equal(settings.get('relayKey'), undefined, 'and there is no Orbital at the relay until the first link');
     const link = await h('relay:link');
     assert.match(link.code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/, 'Link to agent gets a code');
     assert.ok(link.prompt.includes(base + '/mcp') && link.prompt.includes(link.code), 'and a prompt carrying the server and the code, for the agent');
-    const account = settings.get('relayAccount');
-    assert.ok(agent.UUID.test(account.id) && agent.UUID.test(account.secret), 'the first link makes your Orbital: an id and a secret');
-    assert.deepEqual(['relayAccount', 'relaySeen', 'relayTasks', 'relayAgents'].map(settings.isSynced), [true, true, true, false], 'which follow you in the settings document; the agents\' list is this machine\'s mirror of the relay');
-    assert.equal((await relay.dump()).includes(account.secret), false, 'the relay never holds the secret itself');
+    const key = settings.get('relayKey');
+    assert.match(key, /^[\w-]{43}$/, 'the first link makes your Orbital: one random key');
+    assert.deepEqual(['relayKey', 'relaySeen', 'relayTasks', 'relayAgents'].map(settings.isSynced), [true, true, true, false], 'which follows you in the settings document; the agents\' list is this machine\'s mirror of the relay');
+    assert.equal((await relay.dump()).includes(key), false, 'the relay keeps only its hash');
     assert.equal((await h('relay:linkStatus', link.code)).state, 'waiting', 'nobody has used the code yet');
     await assert.rejects(h('relay:linkStatus', 'nonsense'), /Not a link code/, 'and only a code is asked about');
     const grok = await relayAgent(base, 'Grok');
@@ -3943,7 +3943,7 @@ async function main() {
     await linked.pullNow();
     assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'done' }, 'the badge is done');
     assert.deepEqual(plain(settings.get('relayTasks')), { [taskId]: 'completed' }, 'kept where every device reads it');
-    // rename; switched off stays off on a device that sees the agent for the first time; a new secret; unlink
+    // rename; switched off stays off on a device that sees the agent for the first time; a new key; unlink
     assert.equal((await h('relay:rename', id, 'Grok')).find((a) => a.id === id).label, 'Grok', 'renamed in Orbital');
     agent.setEnabled(id, false);
     settings.set('relayAgents', []); linked.load();
@@ -3951,14 +3951,13 @@ async function main() {
     await h('relay:refresh');
     assert.deepEqual([entry().label, entry().enabled], ['Grok', false], 'once it has, it is there, and switched off as you left it');
     await h('relay:reset');
-    assert.notEqual(settings.get('relayAccount').secret, account.secret, 'a new secret');
-    assert.equal(settings.get('relayAccount').id, account.id, 'for the same Orbital');
+    assert.notEqual(settings.get('relayKey'), key, 'a new key');
     assert.equal((await h('relay:refresh')).some((a) => a.id === id), true, 'whose agents stay linked');
     assert.equal((await h('relay:unlink', id)).some((a) => a.id === id), false, 'unlinked, it leaves the list');
     assert.equal(agent.links()[NODE], undefined, 'and the node lets go of its task');
     assert.match(await grok.tool('get_tasks'), /Not linked/, 'and the agent is told');
     docs.mut = realMut; docs.op = realOp; await relay.close(); server.close();
-    console.log('ok  linked agents: linked with a code, named by themselves, only ids out and a status back, renamed, off, a new secret, unlinked');
+    console.log('ok  linked agents: linked with a code, named by themselves, only ids out and a status back, renamed, off, a new key, unlinked');
   }
   // What the badge is allowed to say: the linked task's own status, one read for every linked node.
   {

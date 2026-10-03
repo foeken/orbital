@@ -70,15 +70,14 @@ const server = http.createServer(relay.handle);
   assert.equal((await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: grok.tokens.refresh_token, client_id: grok.client } })).status, 400);
   grok.tokens = refreshed;
 
-  // ---- an Orbital: an id and a secret, and the key the secret stands for ----
-  const orbital = { id: crypto.randomUUID(), secret: crypto.randomUUID() };
-  const as = (o) => 'Orbital ' + o.id + '.' + o.secret;
-  assert.equal((await call('POST', '/mcp/orbital/register', { auth: as(orbital), body: {} })).status, 200);
-  assert.equal((await call('POST', '/mcp/orbital/register', { auth: as(orbital), body: {} })).status, 200, 'registering again is a no-op');
-  assert.equal((await call('POST', '/mcp/orbital/codes', { auth: as({ id: orbital.id, secret: crypto.randomUUID() }) })).status, 401, 'a wrong secret is refused');
-  assert.equal((await call('GET', '/mcp/orbital/agents', { auth: as({ id: crypto.randomUUID(), secret: orbital.secret }) })).status, 401, 'an unknown Orbital is refused');
-
+  // ---- an Orbital: one random key, made into an Orbital the first time it asks for a link code ----
+  const newKey = () => crypto.randomBytes(32).toString('base64url');
+  const orbital = { key: newKey() }, firstKey = orbital.key, stranger = { key: newKey() };
+  const as = (o) => 'Orbital ' + o.key;
+  assert.equal((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).status, 401, 'an unknown key is refused');
   const { code } = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json;
+  assert.deepEqual((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).json.agents, [], 'until it asks for a link code: then it is an Orbital, with no agents yet');
+  assert.equal((await call('GET', '/mcp/orbital/codes/' + code, { auth: as(stranger) })).status, 401, 'another key reads nothing of it');
   assert.match(code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/);
   assert.equal((await call('GET', '/mcp/orbital/codes/' + code, { auth: as(orbital) })).json.state, 'waiting');
   assert.equal((await grok.tool('link_orbital', { code: 'AAAA-AAAA', name: 'GrokBot' })).error, true, 'an unknown code links nothing');
@@ -128,7 +127,7 @@ const server = http.createServer(relay.handle);
   await grok.tool('update_task', { task_id: t1, status: 'completed', note: 'Words have nowhere to go: notes belong in the node' });
   const updates = (await call('GET', '/mcp/orbital/updates', { auth: as(orbital) })).json.updates;
   assert.deepEqual(updates.map((u) => [u.agent, u.task, u.status, u.note]), [[G.id, t1, 'working', undefined], [G.id, t1, 'completed', undefined]], 'an update is a task id and a status: a note sent along is dropped');
-  assert.equal((await call('GET', '/mcp/orbital/updates', { auth: as({ id: orbital.id, secret: crypto.randomUUID() }) })).status, 401, 'nobody without the secret reads them');
+  assert.equal((await call('GET', '/mcp/orbital/updates', { auth: as(stranger) })).status, 401, 'nobody without the key reads them');
   assert.equal((await call('GET', '/mcp/orbital/updates', { auth: as(orbital) })).json.updates.length, 0, 'answers being read by one device are not handed to another');
   assert.equal((await call('POST', '/mcp/orbital/updates/ack', { auth: as(orbital), body: { ids: updates.map((u) => u.id) } })).status, 204);
   clock += TTL.updateLease + 1;
@@ -147,20 +146,20 @@ const server = http.createServer(relay.handle);
   assert.match((await grok.tool('get_tasks')).text, /No tasks/, 'a task nobody fetched for a day is gone');
   assert.equal((await call('GET', '/mcp/orbital/codes/' + late, { auth: as(orbital) })).status, 404, 'and so is a code nobody used');
 
-  // ---- rename, unlink, and a new secret ----
+  // ---- rename, unlink, and a new key ----
   assert.equal((await call('PATCH', '/mcp/orbital/agents/' + D.id, { auth: as(orbital), body: { name: 'My dot' } })).json.name, 'My dot');
   assert.equal((await call('DELETE', '/mcp/orbital/agents/' + G.id, { auth: as(orbital) })).status, 204);
   assert.match((await grok.tool('get_tasks')).text, /Not linked/, 'an unlinked agent is told so');
   assert.equal((await send(G, crypto.randomUUID(), NODE)).status, 404, 'and nothing more can be sent to it');
-  const fresh = crypto.randomUUID();
-  assert.equal((await call('POST', '/mcp/orbital/rotate', { auth: as(orbital), body: { secret: fresh } })).status, 200);
-  assert.equal((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).status, 401, 'the old secret stops working');
-  orbital.secret = fresh;
+  const fresh = newKey();
+  assert.equal((await call('POST', '/mcp/orbital/rotate', { auth: as(orbital), body: { key: fresh } })).status, 204);
+  assert.equal((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).status, 401, 'the old key stops working');
+  orbital.key = fresh;
   assert.deepEqual((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).json.agents.map((a) => a.name), ['My dot'], 'and the agents stay linked');
 
-  // ---- what the database holds: ids, and no secret or token as itself (only their hashes) ----
+  // ---- what the database holds: ids, and no key or token as itself (only their hashes) ----
   const rows = await relay.dump();
-  for (const secret of ['nowhere to go', orbital.secret, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
+  for (const secret of ['nowhere to go', firstKey, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
 
   console.log('relay-check: ok');
   await relay.close(); server.close();

@@ -88,8 +88,8 @@ function agentsRows(q) {
     for (const a of linked) rows.push({ group: LINKED_GROUP, icon: a.icon, label: a.label, keepOpen: true,
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
     rows.push({ group: LINKED_GROUP, icon: 'createNew', label: 'Link to agent …', hint: 'Any agent that takes an MCP server', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
-    if (linked.length && tana.relayReset) rows.push({ group: LINKED_GROUP, icon: 'lock', label: 'Reset the link secret', hint: 'If it may have been seen: your agents stay linked', keepOpen: true,
-      run: () => run(async () => { await tana.relayReset(); showNote('New link secret: your agents stay linked'); }) });
+    if (linked.length && tana.relayReset) rows.push({ group: LINKED_GROUP, icon: 'lock', label: 'Reset the link key', hint: 'If it may have been seen: your agents stay linked', keepOpen: true,
+      run: () => run(async () => { await tana.relayReset(); showNote('New link key: your agents stay linked'); }) });
   }
   for (const a of agentsOn()) rows.push({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
     run: () => agentsApply(() => tana.setDefaultAgent(a.id)) });

@@ -2,9 +2,8 @@
 // Agents linked through the relay at orbital.md/mcp (docs/AGENT-RELAY.md; the relay is relay/): any agent that adds
 // that MCP server to itself and links with a code from Cmd+K Link to agent … Each is an agent of its own beside Codex
 // and Claude (main/agent.js), "relay:<its id>", named as it named itself.
-//   - Your Orbital is an id and a secret (relayAccount), made the first time you link an agent and kept in the Orbital
-//     settings document, so every device signed into your Tana account has the same agents. The relay keeps only a
-//     hash of the secret.
+//   - Your Orbital is one random key (relayKey), made the first time you link an agent and kept in the Orbital settings
+//     document, so every device signed into your Tana account has the same agents. The relay keeps only its hash.
 //   - The relay keeps the list of agents; relayAgents mirrors it on this machine, so they are known before the network
 //     answers. A newly linked agent is switched on once, wherever it is first seen (relaySeen).
 //   - Only ids go through the relay, over HTTPS. A task is the node's id and an action ("assign"); the agent takes it
@@ -25,21 +24,23 @@ const CODE = /^[0-9A-Z]{4}-[0-9A-Z]{4}$/;
 const BADGE = { working: 'working', completed: 'done', failed: 'broken' };
 const TANA_MCP = 'https://home.tana.inc/mcp'; // where the agent reads the node and writes its answer
 
-// ---- your Orbital ----
-function account(create) {
-  const stored = settings.get('relayAccount');
-  if (stored && agent.UUID.test(stored.id) && agent.UUID.test(stored.secret)) return stored;
+// ---- your Orbital: its key ----
+const KEY = /^[\w-]{43}$/;
+const newKey = () => crypto.randomBytes(32).toString('base64url');
+function orbitalKey(create) {
+  const stored = settings.get('relayKey');
+  if (typeof stored === 'string' && KEY.test(stored)) return stored;
   if (!create) return null;
-  const made = { id: crypto.randomUUID(), secret: crypto.randomUUID() };
-  settings.set('relayAccount', made);
+  const made = newKey();
+  settings.set('relayKey', made);
   return made;
 }
-let registered = ''; // the account this session has told the relay about: once is enough
-async function request(method, path, body, acct) {
+async function call(method, path, body, key = orbitalKey(false)) {
+  if (!key) throw new Error('No agent is linked yet: Link to agent first');
   let res;
   try {
     res = await relay.fetch(relay.base + path, { method, body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { authorization: 'Orbital ' + acct.id + '.' + acct.secret, ...(body === undefined ? {} : { 'content-type': 'application/json' }) } });
+      headers: { authorization: 'Orbital ' + key, ...(body === undefined ? {} : { 'content-type': 'application/json' }) } });
   } catch { throw new Error(where() + ' cannot be reached'); }
   const text = await res.text();
   let json = null;
@@ -47,15 +48,6 @@ async function request(method, path, body, acct) {
   if (!res.ok) throw new Error((json && json.error_description) || where() + ' answered ' + res.status);
   return json;
 }
-async function call(method, path, body, acct = account(false)) {
-  if (!acct) throw new Error('No agent is linked yet: Link to agent first');
-  if (registered !== acct.id + acct.secret) {
-    await request('POST', '/orbital/register', {}, acct);
-    registered = acct.id + acct.secret;
-  }
-  return request(method, path, body, acct);
-}
-
 // ---- the agents, as main/agent.js knows them ----
 const cached = () => { const list = settings.get('relayAgents'); return Array.isArray(list) ? list.filter((a) => a && agent.UUID.test(a.id) && typeof a.name === 'string') : []; };
 let shown = null; // what the registry was last given, so an unchanged list is not registered again
@@ -79,11 +71,11 @@ function store(list) {
   for (const a of fresh) agent.setEnabled(ID + a.id, true); // a new agent is on, once; switched off later it stays off
   if (fresh.length || seen.size !== list.length) settings.set('relaySeen', list.map((a) => a.id));
 }
-async function refresh() { if (account(false)) store((await call('GET', '/orbital/agents')).agents); }
+async function refresh() { if (orbitalKey(false)) store((await call('GET', '/orbital/agents')).agents); }
 // Cmd+K and Settings read the list often: the relay is asked at most once a minute, and the pages hear of a change
 let refreshedAt = 0;
 function refreshSoon() {
-  if (!account(false) || Date.now() - refreshedAt < 60e3) return;
+  if (!orbitalKey(false) || Date.now() - refreshedAt < 60e3) return;
   refreshedAt = Date.now();
   const before = JSON.stringify(cached());
   refresh().then(() => { if (JSON.stringify(cached()) !== before) settings.tellOthers(null); }, () => {});
@@ -98,9 +90,8 @@ function linkedOf(id) {
 // The node's id and nothing else: its title, its words and the request (its "Agent context" block, written by
 // main/agents/index.js assign before this runs) stay in Tana, where the agent reads them with its own Tana access
 async function send(a, { nodeUri }) {
-  const acct = account(false), id = crypto.randomUUID();
-  if (!acct) throw new Error('No agent is linked yet: Link to agent first');
-  await call('POST', '/orbital/agents/' + a.id + '/messages', { id, node: nodeUri, action: 'assign' }, acct);
+  const id = crypto.randomUUID();
+  await call('POST', '/orbital/agents/' + a.id + '/messages', { id, node: nodeUri, action: 'assign' });
   return id; // the task id the node is linked to (main/agent.js setTask), and what the agent answers about
 }
 
@@ -112,9 +103,8 @@ function setTaskStatus(taskId, status) {
   settings.set('relayTasks', map);
 }
 async function pullNow() {
-  const acct = account(false);
-  if (!acct || !cached().length) return;
-  const { updates } = await call('GET', '/orbital/updates', undefined, acct);
+  if (!orbitalKey(false) || !cached().length) return;
+  const { updates } = await call('GET', '/orbital/updates');
   if (!updates.length) return;
   const ours = new Set(), done = [];
   for (const link of Object.values(agent.links())) if (link.agent.startsWith(ID)) ours.add(link.taskId);
@@ -122,7 +112,7 @@ async function pullNow() {
     if (BADGE[u.status] && ours.has(u.task)) setTaskStatus(u.task, u.status); // a task no node holds any more is let go
     done.push(u.id);
   }
-  if (done.length) await call('POST', '/orbital/updates/ack', { ids: done }, acct);
+  if (done.length) await call('POST', '/orbital/updates/ack', { ids: done });
 }
 let pulling = null, pulledAt = 0;
 function pull() {
@@ -138,10 +128,9 @@ async function statuses(links) {
   return Object.fromEntries(Object.entries(links || {}).map(([nodeId, taskId]) => [nodeId, BADGE[known[taskId]] || 'pending']));
 }
 
-// ---- linking, renaming, unlinking, a new secret ----
+// ---- linking, renaming, unlinking, a new key ----
 async function linkCode() {
-  const acct = account(true);
-  const { code, expiresAt } = await call('POST', '/orbital/codes', undefined, acct);
+  const { code, expiresAt } = await call('POST', '/orbital/codes', undefined, orbitalKey(true)); // the relay makes your Orbital the first time
   return { code, expiresAt, url: relay.base,
     prompt: 'Add two MCP servers to yourself: Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. Then call Orbital\'s link_orbital tool with the code ' + code + ' and a short name for yourself.' };
 }
@@ -172,14 +161,11 @@ async function unlink(id) {
   await refresh();
   return agent.list();
 }
-// A new secret, for when the old one may have been seen: the agents stay linked, since they are linked to the id
-async function resetSecret() {
-  const acct = account(false);
-  if (!acct) throw new Error('No agent is linked yet');
-  const secret = crypto.randomUUID();
-  await call('POST', '/orbital/rotate', { secret }, acct);
-  settings.set('relayAccount', { id: acct.id, secret });
-  registered = acct.id + secret;
+// A new key, for when the old one may have been seen: the relay keeps the same Orbital, so the agents stay linked
+async function resetKey() {
+  const next = newKey();
+  await call('POST', '/orbital/rotate', { key: next });
+  settings.set('relayKey', next);
   return true;
 }
 
@@ -191,7 +177,7 @@ const ipc = {
   'relay:refresh': async () => { await refresh(); return agent.list(); },
   'relay:rename': async (e, id, name) => told(e, await rename(id, name)),
   'relay:unlink': async (e, id) => told(e, await unlink(id)),
-  'relay:reset': () => resetSecret(),
+  'relay:reset': () => resetKey(),
 };
 
-module.exports = { relay, account, load, refresh, refreshSoon, linkCode, codeStatus, cancelCode, rename, unlink, resetSecret, send, statuses, pullNow, ipc };
+module.exports = { relay, orbitalKey, load, refresh, refreshSoon, linkCode, codeStatus, cancelCode, rename, unlink, resetKey, send, statuses, pullNow, ipc };

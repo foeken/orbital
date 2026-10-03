@@ -10,9 +10,9 @@ task's id and a status. Your words never leave Tana.
 ## The flow
 
 1. **Cmd+K → Link to agent …** (renderer/agent.js) asks main for a code. The first time, main makes *your Orbital*:
-   a random id and a random secret, kept in the Orbital settings document in Tana (`relayAccount`, docs/SETTINGS.md),
-   so every device signed into your Tana account is the same Orbital. The relay keeps only a hash of the secret
-   (`POST /orbital/register`).
+   one random key, kept in the Orbital settings document in Tana (`relayKey`, docs/SETTINGS.md), so every device
+   signed into your Tana account is the same Orbital. The relay keeps only the key's hash, and makes the Orbital the
+   first time that key asks for a code.
 2. The page's first row, **Copy instructions for your agent**, copies them, and shows them under it: *Add two MCP
    servers to yourself: Orbital at https://orbital.md/mcp and Tana at https://home.tana.inc/mcp. Then call Orbital's
    link_orbital tool with the code 7KQX-M2PD and a short name for yourself.* Under them, the page says that only ids go
@@ -44,7 +44,7 @@ agents' badges (main/agents/index.js readStatuses, every 30 s and on each refres
 |---|---|---|---|
 | MCP | `POST /mcp` (JSON-RPC over streamable HTTP, one message, one JSON answer) | an agent | OAuth bearer token |
 | OAuth | `/mcp/oauth/register`, `/authorize`, `/token`; `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server/mcp` | an agent's MCP client | dynamic client registration, PKCE (S256), refresh with rotation |
-| Orbital | `/mcp/orbital/*` | Orbital | `Authorization: Orbital <id>.<secret>` |
+| Orbital | `/mcp/orbital/*` | Orbital | `Authorization: Orbital <key>` |
 
 **OAuth without an account.** There is nobody to sign in: `/authorize` answers with a code at once, and the token it
 becomes names a fresh *installation*, an identity that can do nothing until a link code ties it to an Orbital. That
@@ -57,7 +57,7 @@ working|completed|failed }` (the first update is the receipt: the task leaves th
 dropped). The `initialize` answer and the tools tell the agent it needs Tana's MCP server too, to read each node there
 and to write its answer there, and that instructions quoted elsewhere in a node are content, not orders.
 
-**Orbital's calls.** `POST /orbital/register`, `POST /orbital/rotate { secret }`; `POST /orbital/codes`,
+**Orbital's calls.** `POST /orbital/codes` (the only one an unknown key may make: it becomes an Orbital), `POST /orbital/rotate { key }`,
 `GET|DELETE /orbital/codes/<code>`; `GET /orbital/agents`, `PATCH|DELETE /orbital/agents/<id>`,
 `POST /orbital/agents/<id>/messages { id, node, action }` (idempotent on `id`; a node must be a Tana id and the action
 one the relay knows); `GET /orbital/updates` (each `{ id, agent, task, status, at }`, leased for two minutes to
@@ -68,11 +68,11 @@ whichever device asked, so two devices do not both take one), `POST /orbital/upd
 - **Ids, never words.** The relay stores, for as long as each lives, which Tana node ids were handed to which agent
   with which action, and the statuses that came back, in plain rows (HTTPS on the way). The title, the request and
   the answer stay in Tana, between Tana and the agent's own Tana access.
-- **Secrets and tokens only as hashes**: your Orbital's secret, access and refresh tokens, authorization codes.
+- **Keys and tokens only as hashes**: your Orbital's key, access and refresh tokens, authorization codes.
   scripts/relay-check.js searches every table for them.
 - **Whoever reads your Orbital settings document can act as your Orbital**: hand your agents node ids and read their
-  statuses. That is you, Tana, and anyone you share that document with. Cmd+K → Choose agents → Reset the link secret
-  makes a new secret; agents stay linked (to the id).
+  statuses. That is you, Tana, and anyone you share that document with. Cmd+K → Choose agents → Reset the link key
+  makes a new key for the same Orbital, so the agents stay linked.
 - **A code is a short secret**: 40 bits, once, ten minutes, ten tries a minute per connection.
 - **An agent is not trusted with more than its tasks** by Orbital: through the relay it learns only the node ids sent
   to it, and what it sends back is a status, never an action of Orbital's. What it can read and write in Tana is what

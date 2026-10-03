@@ -109,7 +109,7 @@ contextBridge.exposeInMainWorld('api', {
   relayRefresh: () => ipcRenderer.invoke('relay:refresh'), // the agent list, after asking the relay
   relayRename: (id, name) => ipcRenderer.invoke('relay:rename', id, name), // the new agent list
   relayUnlink: (id) => ipcRenderer.invoke('relay:unlink', id), // the new agent list
-  relayReset: () => ipcRenderer.invoke('relay:reset'), // a new secret for your Orbital; the agents stay linked
+  relayReset: () => ipcRenderer.invoke('relay:reset'), // a new key for your Orbital; the agents stay linked
   // Cmd+K "Discuss with …": gives the document the Discussion Task type (created in the Library when the workspace
   // has none) and writes who into its "Discuss with" field. Resolves to { typeUri, key, who }.
   discussWith: (docId, who) => ipcRenderer.invoke('doc:discussWith', docId, who),
