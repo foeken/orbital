@@ -3877,27 +3877,28 @@ async function main() {
     const entry = () => agent.list().find((a) => a.id === id);
     assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled], ['GrokBot', true, true, true], 'and is an agent like any other, on from the start');
     // a node handed over: the event task.assigned with the node's id, nothing else; the words stay in Tana
-    const NODE = 'tana:text:' + ulid(), realMut = docs.mut, realOp = docs.op;
+    const NODE = 'tana:text:' + ulid(), realMut = docs.mut, realOp = docs.op, realWrite = docs.writeAgentStatus, realStatus = docs.agentStatus, wrote = [];
     docs.op = docs.mut = async () => { throw new Error('a linked agent reads the node with its own Tana tools: Orbital sends no words'); };
     const handOver = () => agent.get(id).start({ nodeUri: NODE, title: 'Pilot brief', prompt: 'Draft the brief' });
     await assert.rejects(handOver(), /GrokBot is not listening yet: ask it to subscribe to Orbital's task\.assigned event/, 'an agent that has not subscribed would never hear of it: it is told to, and nothing is handed over');
     const sub = await grok.rpc('events/subscribe', { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: 'https://agents.example/events', secret: 'whsec_' + require('node:crypto').randomBytes(32).toString('base64') } });
     assert.match(sub.result.id, /^sub_/, 'subscribed');
+    docs.writeAgentStatus = async (nodeId, status) => { wrote.push([nodeId, status]); };
     const taskId = await handOver();
+    assert.deepEqual(wrote, [[NODE, 'Working']], 'the handoff ends the node with Agent status: Working, so an old status line no longer counts');
     agent.setTask(NODE, id, taskId);
     const event = posted.at(-1);
     assert.deepEqual([event.name, event.eventId, event.data], ['task.assigned', 'evt_' + taskId, { node: NODE }], 'the event names the node, nothing more');
     const stored = JSON.stringify(posted) + await relay.dump();
     assert.deepEqual(['Pilot brief', 'Draft the brief'].map((x) => stored.includes(x)), [false, false], 'the title and the request never leave Orbital');
-    // the badge is the node's own status in Tana, which the agent sets: open is with it, closed is done
-    const { Document } = require('../sdk/document');
-    const withState = (state) => { docs.op = async (nodeId, fn) => { const d = new Document(nodeId); d.transact((l) => { initDocument(l, 'Pilot brief', ME, { kind: 'task' }); l.getMap('data').set('stateType', state); }); return fn(d); }; };
-    withState('open');
-    assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'working' }, 'an open node is with the agent');
-    withState('closed');
-    assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'done' }, 'closed in Tana, it is done');
-    docs.op = async () => { throw new Error('gone'); };
-    assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'broken' }, 'a node that cannot be read needs you');
+    // the badge follows the node's last status line, which the agent writes in Tana (main/documents.js lastAgentStatus)
+    const badge = async (status) => { docs.agentStatus = async () => { if (status instanceof Error) throw status; return status; }; return plain(await agent.get(id).statuses({ [NODE]: taskId }))[NODE]; };
+    assert.deepEqual([await badge('working'), await badge('completed'), await badge('failed'), await badge(null), await badge(new Error('gone'))], ['working', 'done', 'broken', 'working', 'broken'],
+      'Working, Completed and Failed are the badge\'s working, done and broken; no line is still with the agent; a node that cannot be read needs you');
+    assert.equal(docs.lastAgentStatus('Agent context\nBook a venue\nAgent status: Working\nBooked De Hoge Veluwe\nagent status: completed.'), 'completed', 'the last line wins, in any case, with a full stop');
+    assert.equal(docs.lastAgentStatus('Agent status: Completed\nAgent status: Working'), 'working', 'so a handoff after an old Completed is the current one');
+    assert.equal(docs.lastAgentStatus('The agent status: Failed was a guess\nAgent status: maybe'), null, 'and only a line that starts with it and names one of the three counts');
+    docs.writeAgentStatus = realWrite; docs.agentStatus = realStatus;
     // rename; switched off stays off on a device that sees the agent for the first time; a new key; unlink
     assert.equal((await h('relay:rename', id, 'Grok')).find((a) => a.id === id).label, 'Grok', 'renamed in Orbital');
     agent.setEnabled(id, false);
@@ -3911,7 +3912,7 @@ async function main() {
     assert.equal((await h('relay:unlink', id)).some((a) => a.id === id), false, 'unlinked, it leaves the list');
     assert.equal(agent.links()[NODE], undefined, 'and the node lets go of its task');
     docs.mut = realMut; docs.op = realOp; await relay.close(); server.close();
-    console.log('ok  linked agents: linked with a code, named by themselves, a node handed over as one event to a subscriber, the badge from Tana, renamed, off, a new key, unlinked');
+    console.log('ok  linked agents: linked with a code, named by themselves, a node handed over as one event to a subscriber, the badge from its last Agent status line, renamed, off, a new key, unlinked');
   }
   // What the badge is allowed to say: the linked task's own status, one read for every linked node.
   {

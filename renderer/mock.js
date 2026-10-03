@@ -697,7 +697,7 @@ function mockApi() {
     setDefaultAgent: async (id) => { for (const a of mockAgents) a.isDefault = a.id === id; return mockAgents.map((x) => ({ ...x })); },
     // Connect to your OpenAI Dot (main/agents/linked.js): a code, then your Dot links itself on the third time the page asks
     relayLink: async () => { mockRelay.polls = 0; return { code: '7KQX-M2PD', expiresAt: Date.now() + 14 * 60e3 + 42e3, url: 'https://orbital.md/mcp', tana: 'https://home.tana.inc/mcp',
-      prompt: 'Call Orbital\'s link_orbital tool with the code 7KQX-M2PD and the name Dot. Then subscribe to Orbital\'s task.assigned event, and each time it fires, read the Tana node its data names with your Tana tools, do what its "Agent context" block asks, write what you did into the node, and set the task\'s status in Tana to done when you finish. '
+      prompt: 'Call Orbital\'s link_orbital tool with the code 7KQX-M2PD and the name Dot. Then subscribe to Orbital\'s task.assigned event, and each time it fires, read the Tana node its data names with your Tana tools, do what its "Agent context" block asks, and write what you did into the node, ending each update with a line "Agent status: Working", or "Agent status: Completed" when you are done, or "Agent status: Failed" if you cannot finish. Leave the task\'s own status as it is. '
         + 'If you cannot find Orbital\'s or Tana\'s tools, tell me which: I add them in ChatGPT as custom MCP servers, '
         + 'Orbital at https://orbital.md/mcp and Tana at https://home.tana.inc/mcp. If I ask what goes through Orbital: only ids: each event carries a Tana node\'s id, and nothing comes back through Orbital. '
         + 'The words stay in Tana, where you read them with your own Tana access.' }; },

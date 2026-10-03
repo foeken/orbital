@@ -4,8 +4,8 @@ Orbital hands work to agents (main/agent.js): Tana, Codex and Claude are built i
 OpenAI's always-on agent in ChatGPT, becomes one more (any other agent that takes an MCP server and MCP Events links the
 same way). It is the MCP server at **orbital.md/mcp** (relay/server.js), plain JSON over HTTPS, and it is **only an event
 layer**: Orbital names an event and what goes with it (a Tana node's id), the relay delivers it to the agents subscribed
-to it, and everything else happens in Tana. The agent reads the node, does the work, writes its answer and sets the
-task's status through Tana's own MCP server (https://home.tana.inc/mcp). Nothing comes back through the relay, and
+to it, and everything else happens in Tana. The agent reads the node, does the work and writes its answer, with a
+status line at the end, through Tana's own MCP server (https://home.tana.inc/mcp). Nothing comes back through the relay, and
 your words never pass through it.
 
 ## The flow
@@ -21,18 +21,22 @@ your words never pass through it.
    its own (OAuth below; it connects at once, there is nothing to approve).
 3. Then **Copy the message for your Dot** copies what you send it: *Call Orbital's link_orbital tool with the code
    7KQX-M2PD and the name Dot. Then subscribe to Orbital's task.assigned event, and each time it fires, read the Tana
-   node its data names with your Tana tools, do what its "Agent context" block asks, write what you did into the node,
-   and set the task's status in Tana to done when you finish*, what to say if either server's tools are missing, and
+   node its data names with your Tana tools, do what its "Agent context" block asks, and write what you did into the
+   node, ending each update with a line "Agent status: Working", or "Agent status: Completed" when you are done, or
+   "Agent status: Failed" if you cannot finish. Leave the task's own status as it is*, what to say if either server's tools are missing, and
    that only ids go through Orbital, so the Dot can explain it when asked. The page says the same under it. The code
    works once and for fifteen minutes.
 4. The page, asking every two seconds, sees the code used, closes on "Linked Dot · ChatGPT", and the agent is one of
    yours: `relay:<id>` in main/agent.js, on from the start, in Choose agents, Assign to Agent and Settings.
 5. **Assign to Agent** writes the request into the node's `Agent context` block, as for every agent, then sends the
    event `task.assigned` with `{ node }` for that agent (main/agents/linked.js send). The relay POSTs it to the Dot's
-   callback at once, which wakes it. An agent with no subscription would never hear of it, so the assignment fails
+   callback at once, which wakes it, and adds the line "Agent status: Working" at the end of the node, so a Completed
+   or Failed from an earlier handoff no longer counts. An agent with no subscription would never hear of it, so the assignment fails
    with "<name> is not listening yet: ask it to subscribe to Orbital's task.assigned event" and nothing is handed over.
-6. The badge is the node's own status in Tana: open is with the agent (working), closed is done, a node that cannot be
-   read needs you. The Dot sets it there when it finishes.
+6. The badge follows the node's last status line (main/documents.js lastAgentStatus): Working, Completed and Failed are
+   working, done and broken, none is still with the agent, and a node that cannot be read needs you. The lines are
+   ordinary text in the node, so anyone who opens it in Tana sees them, and the task's own status stays yours:
+   Completed means your turn to look, not done.
 
 One Orbital has as many agents as you link; each agent's MCP connection is one link. Linking the same connection again
 with a new code moves it.

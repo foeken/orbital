@@ -8,14 +8,14 @@
 //     answers. A newly linked agent is switched on once, wherever it is first seen (relaySeen).
 //   - The relay is an event layer. Handing a node over is the event task.assigned with the node's id, delivered at once to
 //     the agent's subscription (relay/server.js EVENTS); the agent reads the node through Tana's own MCP server
-//     (home.tana.inc/mcp), where the "Agent context" block Orbital wrote is the request, writes its answer there and sets
-//     the task's status there. Nothing comes back through the relay: the badge is the node's own status in Tana.
+//     (home.tana.inc/mcp), where the "Agent context" block Orbital wrote is the request, and writes its answer there,
+//     ending each update with a line "Agent status: Working | Completed | Failed" (main/documents.js agentStatus).
+//     Nothing comes back through the relay: the badge is that last line.
 const crypto = require('node:crypto');
 const agent = require('../agent');
 const settings = require('../settings');
 const { pageOf } = require('../state');
-const documents = require('../documents'); // as a whole, so the checks can stand in for a node's state
-const { readNode } = require('../../sdk/node');
+const documents = require('../documents'); // as a whole, so the checks can stand in for a node's status
 
 // where the relay is: orbital.md, or ORBITAL_RELAY_URL for one running elsewhere; the checks point both at their own
 const relay = { base: (process.env.ORBITAL_RELAY_URL || 'https://orbital.md/mcp').replace(/\/+$/, ''), fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(15000) }) };
@@ -94,12 +94,17 @@ async function send(a, { nodeUri }) {
   const id = crypto.randomUUID();
   const { subscribers } = await call('POST', '/orbital/agents/' + a.id + '/events', { id, name: 'task.assigned', data: { node: nodeUri } });
   if (!subscribers) throw new Error(a.name + ' is not listening yet: ask it to subscribe to Orbital\'s task.assigned event');
+  // this handoff is the current one, whatever an earlier one ended with; a line that will not write loses only the
+  // badge's first state, never the handoff (the event takes seconds to wake the agent: this lands first)
+  await documents.writeAgentStatus(nodeUri, 'Working').catch(() => {});
   return id; // the task id the node is linked to (main/agent.js setTask)
 }
-// The badge: the agent sets the node's status in Tana when it is done, so a closed node is done and any other is with it
+// The badge follows the node's last status line: Working, Completed and Failed are working, done and broken; none (written
+// away) is still with the agent; a node that cannot be read needs you
+const BADGE = { working: 'working', completed: 'done', failed: 'broken' };
 async function statuses(links) {
   return Object.fromEntries(await Promise.all(Object.keys(links || {}).map(async (nodeId) =>
-    [nodeId, await documents.op(nodeId, (doc) => (readNode(doc).stateType === 'closed' ? 'done' : 'working')).catch(() => 'broken')])));
+    [nodeId, BADGE[await documents.agentStatus(nodeId).catch(() => 'failed')] || 'working'])));
 }
 
 // ---- linking, renaming, unlinking, a new key ----
@@ -107,11 +112,11 @@ async function linkCode() {
   const { code, expiresAt } = await call('POST', '/orbital/codes', undefined, orbitalKey(true)); // the relay makes your Orbital the first time
   // ChatGPT has no way for a Dot to add a server itself: you add both in ChatGPT (the page names them and their URLs).
   // The message links, subscribes the Dot to task.assigned so a node handed over wakes it (relay/server.js EVENTS), says
-  // that everything else happens in Tana, and what goes through orbital.md, so the Dot can explain it when asked.
+  // that everything else happens in Tana (the status lines included), and what goes through orbital.md, so the Dot can explain it when asked.
   return { code, expiresAt, url: relay.base, tana: TANA_MCP,
     prompt: 'Call Orbital\'s link_orbital tool with the code ' + code + ' and the name Dot. Then subscribe to Orbital\'s task.assigned event, and each time it '
-      + 'fires, read the Tana node its data names with your Tana tools, do what its "Agent context" block asks, write what you did into the node, and set the '
-      + 'task\'s status in Tana to done when you finish. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
+      + 'fires, read the Tana node its data names with your Tana tools, do what its "Agent context" block asks, and write what you did into the node, ending each '
+      + 'update with a line "Agent status: Working", or "Agent status: Completed" when you are done, or "Agent status: Failed" if you cannot finish. Leave the task\'s own status as it is. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
       + 'I add them in ChatGPT as custom MCP servers, Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. If I ask what goes through Orbital: only ids: '
       + 'each event carries a Tana node\'s id, and nothing comes back through Orbital. The words stay in Tana, where you read them with your own Tana access.' };
 }

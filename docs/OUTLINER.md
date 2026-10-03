@@ -792,8 +792,8 @@ wrong twenty.
   **Connect to your OpenAI Dot …** (Settings, and under the linked agents in Choose agents) links your Dot through the MCP
   server orbital.md/mcp: where to add it and Tana's in ChatGPT (Open ChatGPT plugins, then each server's name with its
   URL, ↩ copies it), then a message carrying a one-time code that links it as Dot and subscribes it to the task.assigned
-  event (a node handed to it is that event, with the node's id; its badge is the node's own status in Tana, done once
-  the Dot closes it); each linked agent is one more agent,
+  event (a node handed to it is that event, with the node's id; its badge follows the last "Agent status: Working |
+  Completed | Failed" line in the node, which Orbital starts with Working and the Dot ends each update with); each linked agent is one more agent,
   with a page of its own (Rename …, Switch off, Unlink) and Reset the link key beside them (docs/AGENT-RELAY.md).
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
