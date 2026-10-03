@@ -27,7 +27,7 @@ struct ContentView: View {
             .allowsHitTesting(signingIn)
             .accessibilityHidden(!signingIn)
             switch engine.phase {
-            case .failed(let message):
+            case .failed(let message) where engine.rows.isEmpty:
                 ContentUnavailableView {
                     Label("Can't reach Tana", systemImage: "wifi.exclamationmark")
                 } description: {
@@ -38,7 +38,9 @@ struct ContentView: View {
                 }
             case .signedOut:
                 EmptyView()
-            case .starting, .ready: // the app at once, its Timeline building itself while Tana connects (Building)
+            // the app at once: the Timeline last read while Tana connects, or building itself (Building); and still there,
+            // saying why under it, when Tana could not be reached (Engine.fail)
+            case .starting, .ready, .failed:
                 Shell(engine: engine)
             }
         }

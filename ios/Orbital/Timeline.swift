@@ -53,6 +53,8 @@ struct Row: Decodable, Identifiable {
         let dayTitle: String?
     }
 
+    // above the days: Today's Tasks, the free time and Upcoming meetings (main/timeline.js pageOf)
+    var top: Bool { timeline?.today == true || timeline?.upcoming == true || timeline?.free != nil }
     // Tana's times, with or without fractional seconds ("2026-09-30T13:00:00Z", "…:00.000Z")
     static func parse(_ s: String) -> Date? {
         (try? Date(s, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true))) ?? (try? Date(s, strategy: .iso8601))
@@ -238,7 +240,7 @@ struct TimelineScreen: View {
     // timelineGroups, ios/engine/labels.js)
     private var days: [(String, [Row])] {
         var out: [(key: String, title: String, rows: [Row])] = []
-        for row in engine.shown(engine.rows) where row.timeline?.today != true && row.timeline?.upcoming != true && row.timeline?.free == nil {
+        for row in engine.shown(engine.rows) where !row.top {
             let key = row.timeline?.day ?? ""
             if out.last?.key == key { out[out.count - 1].rows.append(row) } else { out.append((key, Self.day(key, row.timeline?.dayTitle), [row])) }
         }
