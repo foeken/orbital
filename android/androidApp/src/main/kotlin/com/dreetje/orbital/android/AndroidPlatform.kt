@@ -159,7 +159,12 @@ class AndroidPlatform(private val context: Context) : Platform {
                         return true
                     }
                     scope.launch {
-                        try { client.save(client.exchange(code, verifier)); done() } catch (e: CancellationException) { throw e } catch (e: Exception) { caught = false; failed("ChatGPT did not accept the sign-in. Try again.") }
+                        try { client.save(client.exchange(code, verifier)); done() } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                            // what OpenAI said, on screen and in the log (ChatGPTClient.refusal: never the code or a token)
+                            android.util.Log.w("Orbital", "ChatGPT sign-in: the code was not exchanged: " + e)
+                            caught = false
+                            failed("ChatGPT did not accept the sign-in (" + (e.message ?: e.javaClass.simpleName) + "). Try again.")
+                        }
                     }
                     return true
                 }

@@ -5,6 +5,9 @@ import javax.inject.Inject
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
+    // ChatGPTClient's own @Serializable classes (the tokens, the model list): without it they have no serializer and an
+    // accepted ChatGPT sign-in failed on the phone
+    alias(libs.plugins.kotlinSerialization)
 }
 
 // The engine the iPhone app runs (ios/engine, bundled by Bun from sdk/ and main/), and the iPhone's invented sample
