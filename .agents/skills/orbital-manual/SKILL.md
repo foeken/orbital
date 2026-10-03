@@ -141,14 +141,14 @@ when that list is most of it. The site is the Replit App **orbital.md** (Replit 
 `8231ee1f-7a4d-4d28-991a-83859947a51e`), a static deployment of `artifacts/orbital/public`; the manual is its `manual/`
 folder, copied byte for byte. The Replit tools take prompts, not files, so the files travel through a URL:
 
-1. Build the site folder: `manual/*.html`, `*.css`, `*.js` and `media/` into a fresh directory's `manual/` (never `scenes/`).
-2. Push it as the branch `manual-site` of the public `foeken/orbital-releases` (a branch, never a release: the updater
-   reads releases). The archive is `https://codeload.github.com/foeken/orbital-releases/tar.gz/refs/heads/manual-site`.
-3. `update_app_using_prompt`: copy the archive's `manual` folder (or only the changed files) into the published folder
-   unchanged, change nothing else, add no links, do not publish. Poll with `list_app_files`/`read_app_file` and compare.
-4. `publish_app`, wait for `get_publish_status` success, then check `https://orbital.md/manual` (no slash) in a
+1. The release's tag carries the manual, and this repo is public, so its archive is the URL:
+   `https://codeload.github.com/foeken/orbital/tar.gz/refs/tags/v<version>`, whose `orbital-<version>/manual/` holds
+   the pages, `*.css`, `*.js` and `media/` (leave out `scenes/`). Nothing is pushed for it.
+2. `update_app_using_prompt`: copy that archive's `manual` folder without `scenes/` (or only the changed files) into the
+   published folder unchanged, change nothing else, add no links, do not publish. Poll with `list_app_files`/
+   `read_app_file` and compare.
+3. `publish_app`, wait for `get_publish_status` success, then check `https://orbital.md/manual` (no slash) in a
    browser, and that the front page does not mention the manual.
-5. Delete the `manual-site` branch again (`git push https://github.com/foeken/orbital-releases.git --delete manual-site`).
 
 The host serves `/manual` as the manual's index.html without redirecting, so its relative links would point at the site
 root: the inline script at the top of `manual/index.html` adds the slash first, allowed by its sha256 in that page's CSP.
