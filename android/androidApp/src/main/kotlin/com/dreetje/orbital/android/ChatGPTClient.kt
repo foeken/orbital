@@ -65,7 +65,7 @@ class ChatGPTClient(private val secrets: Secrets) : ChatGPT {
     // the code for tokens, as codex-rs/login exchange_code_for_tokens posts it
     suspend fun exchange(code: String, verifier: String): Tokens {
         val (status, body) = post(ISSUER + "/oauth/token", form(mapOf("grant_type" to "authorization_code", "code" to code, "redirect_uri" to REDIRECT, "client_id" to CLIENT, "code_verifier" to verifier)), "application/x-www-form-urlencoded")
-        if (status != 200) throw Failure(refusal(status, body))
+        if (status != 200) throw Failure("HTTP $status")
         return json.decodeFromString(body)
     }
 
@@ -159,15 +159,6 @@ class ChatGPTClient(private val secrets: Secrets) : ChatGPT {
 
         fun base64url(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
         fun random(): String = base64url(ByteArray(32).also(SecureRandom()::nextBytes))
-
-        // why the token endpoint said no, in its own words (OAuth's error and error_description), else its status: never
-        // the request, which holds the code
-        fun refusal(status: Int, body: String): String {
-            val answer = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
-            fun field(name: String) = answer?.get(name)?.let { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull() ?: it.jsonObject["message"]?.jsonPrimitive?.contentOrNull }
-            val why = field("error_description") ?: field("error")
-            return if (why != null) "HTTP $status: $why" else "HTTP $status"
-        }
 
         // A form posted to the token endpoint: every value encoded, a + included (a form body reads it as a space)
         fun form(fields: Map<String, String>) = fields.entries.joinToString("&") { (k, v) -> URLEncoder.encode(k, "UTF-8") + "=" + URLEncoder.encode(v, "UTF-8") }
