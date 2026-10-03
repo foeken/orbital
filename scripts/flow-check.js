@@ -595,6 +595,30 @@ flow('golden path: read notifications and settle proposals', async (p) => {
   assert.deepEqual(await p.js('__screen()'), before.filter((t) => !/^(Check out the new editor|Studio LT charter)$/.test(t)), 'the others stay');
 });
 
+// Link to agent (main/agents/linked.js, docs/AGENT-RELAY.md): ⌘K Link to agent shows the prompt that carries a one-time
+// code; while the page waits the agent links itself (the mock's GrokBot, on the third time the page asks), the palette
+// closes on its name, and from then on it is one of your agents, with a page of its own to rename or unlink it
+flow('golden path: link an agent with a code, and it joins your agents', async (p) => {
+  await p.start();
+  await command(p, 'link to agent', 'Link to agent \u2026');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 3', 'the prompt and the wait');
+  assert.match(await p.js('palRows[0].label'), /^Add the MCP server https:\/\/orbital\.md\/mcp to yourself, then .* 7KQX-M2PD and a short name for yourself\.$/, 'the prompt carries the server and the code');
+  assert.match(await p.js('palRows[1].hint'), /^Works once · \d+:\d\d left$/, 'and says how long the code lasts');
+  await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked GrokBot · Grok"', 'the palette to close on the agent that linked', 10000);
+  await command(p, 'choose agents', 'Choose agents \u2026');
+  await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "GrokBot")', 'GrokBot among your agents');
+  assert.deepEqual(await p.js('(({ group, hint }) => [group, hint])(palRows.find((r) => r.label === "GrokBot"))'), ['Linked through orbital.md/mcp · ↩ opens one', 'On · Grok · seen just now'], 'linked, on, and where it runs');
+  assert.ok(await p.js('palRows.some((r) => r.group === "Default agent · ↩ makes it the default" && r.label === "GrokBot")'), 'and it can be the default');
+  await p.type('grokbot');
+  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "GrokBot"', 'its row');
+  await p.key('↩');
+  await p.waitFor('palMode === "linkedAgent"', 'its page');
+  assert.deepEqual(await p.js('palRows.map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
+  await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink"', 'Unlink'); await p.key('↩');
+  await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "GrokBot")', 'Choose agents without it');
+  await closePalette(p);
+});
+
 // 20. A chat (docs/CHATS.md): a message typed in the composer is sent with ↩, shows as yours at once, and Tana's answer
 // follows below it
 flow('golden path: send a chat message and read the answer', async (p) => {

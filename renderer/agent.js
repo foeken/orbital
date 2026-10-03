@@ -75,12 +75,22 @@ const agentsApply = (call) => run(async () => {
   if (tana.chatAgents) chatAgents = await tana.chatAgents().catch(() => chatAgents);
   renderPalette(); renderSoon();
 });
+const LINKED_GROUP = 'Linked through orbital.md/mcp · ↩ opens one';
 function agentsRows(q) {
   const asks = (a) => !!a.setup && !a.enabled; // switching it on starts with the paste it asked for
-  const rows = agentList.map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
+  const rows = agentList.filter((a) => !a.linked).map((a) => ({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
     hint: a.id === 'tana' ? 'Always on' : asks(a) ? a.setup : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
     // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
     disabled: a.id === 'tana' || (!a.installed && !a.enabled && !asks(a)), run: () => (asks(a) ? openAgentSetup(a) : agentsApply(() => tana.enableAgent(a.id, !a.enabled))) }));
+  // Every agent linked through the relay has a page of its own, and the way to link another is right under them
+  if (tana.relayLink) {
+    const linked = agentList.filter((a) => a.linked);
+    for (const a of linked) rows.push({ group: LINKED_GROUP, icon: a.icon, label: a.label, keepOpen: true,
+      hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
+    rows.push({ group: LINKED_GROUP, icon: 'createNew', label: 'Link to agent …', hint: 'Any agent that takes an MCP server', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
+    if (linked.length && tana.relayReset) rows.push({ group: LINKED_GROUP, icon: 'lock', label: 'Reset the link secret', hint: 'If it may have been seen: your agents stay linked', keepOpen: true,
+      run: () => run(async () => { await tana.relayReset(); showNote('New link secret: your agents stay linked'); }) });
+  }
   for (const a of agentsOn()) rows.push({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
     run: () => agentsApply(() => tana.setDefaultAgent(a.id)) });
   return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
@@ -103,6 +113,83 @@ function agentSetupRows(q, typed) {
 function openAgentSetup(a) {
   agentSetupCtx = a;
   openPage('agentSetup', a.id === 'dot' ? 'codex://threads/…' : a.setup, { rows: agentSetupRows, back: openAgentsPalette, typed: true });
+}
+// ---- Link to agent: any agent that adds orbital.md/mcp, linked with a one-time code (main/agents/linked.js) ----
+// The page asks main for a code and shows the prompt that carries it: ↩ copies it, and you give it to the agent, which
+// adds the server, names itself and links. The page asks every two seconds whether that happened; once it has, the
+// palette closes on a toast naming the agent. Leaving the page does not stop the code: an agent that uses it later
+// shows up in Choose agents all the same.
+let relayCtx = null; // { state: asking|waiting|expired|failed, code, prompt, expiresAt, error, back } while the page is up
+let relayTimer = null;
+const unwrapError = (e) => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+function openLinkPalette(back = BACK_TO_COMMANDS) {
+  const ctx = relayCtx = { state: 'asking', back };
+  openPage('linkAgent', 'Link to agent', { rows: relayRows, back, typed: true });
+  Promise.resolve(tana.relayLink()).then((r) => { if (relayCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawRelay(); pollRelay(ctx); },
+    (e) => { if (relayCtx !== ctx) return; ctx.state = 'failed'; ctx.error = unwrapError(e); drawRelay(); });
+}
+const drawRelay = () => { if (palMode === 'linkAgent' && !palette.hidden) renderPalette(); };
+function pollRelay(ctx) {
+  clearTimeout(relayTimer);
+  relayTimer = setTimeout(async () => {
+    if (relayCtx !== ctx || palMode !== 'linkAgent' || palette.hidden) return;
+    try {
+      const s = await tana.relayLinkStatus(ctx.code);
+      if (relayCtx !== ctx) return;
+      if (s.state === 'linked') {
+        relayCtx = null;
+        await loadAgentList();
+        closePalette();
+        return showNote('Linked ' + s.agent.label + (s.agent.app ? ' · ' + s.agent.app : ''));
+      }
+      ctx.state = s.state;
+    } catch { /* a missed answer: the next one asks again */ }
+    drawRelay();
+    if (ctx.state === 'waiting') pollRelay(ctx);
+  }, 2000);
+}
+function relayRows() {
+  const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) };
+  if (c.state === 'asking') return [{ group: 'Link to agent', icon: 'link', label: 'Getting a code…', disabled: true, spin: true, match: [] }];
+  if (c.state === 'failed') return [{ group: 'Link to agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Link to agent', label: 'Try again', match: [] }];
+  const left = Math.max(0, (c.expiresAt || 0) - Date.now());
+  const rows = [{ group: 'Give this to the agent · it adds the server, names itself and links', icon: 'link', label: c.prompt, wrap: true, hint: '↩ copies', keepOpen: true, match: [],
+    run: () => run(() => copyText(c.prompt, 'Copied: give it to your agent')) }];
+  if (c.state === 'expired' || !left) return [...rows, { group: 'Waiting', icon: 'link', label: 'The code expired', hint: 'Nobody used it', disabled: true, match: [] }, { ...again, group: 'Waiting', label: 'Get a new code', match: [] }];
+  return [...rows,
+    { group: 'Waiting', icon: 'robot', label: 'Waiting for an agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, spin: true, match: [] },
+    { group: 'Waiting', icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { relayCtx = null; run(() => tana.relayLinkCancel(c.code)); (c.back || closePalette)(); } }];
+}
+// When the relay last heard from an agent, in a few words
+function seenText(at) {
+  if (!at) return '';
+  const min = Math.round((Date.now() - at) / 60000);
+  return min < 2 ? 'seen just now' : min < 60 ? 'seen ' + min + ' min ago' : min < 48 * 60 ? 'seen ' + Math.round(min / 60) + ' h ago' : 'not seen for ' + Math.round(min / 1440) + ' days';
+}
+// A linked agent's own page: its name and where it runs, then rename, switch off and unlink
+let linkedCtx = null; // the agent's id while its page or its rename page is up
+function openLinkedAgent(id) {
+  linkedCtx = id;
+  openPage('linkedAgent', (agentNamed(id) || { label: 'Agent' }).label, { rows: linkedAgentRows, back: openAgentsPalette });
+}
+function linkedAgentRows(q) {
+  const a = agentNamed(linkedCtx);
+  if (!a) return [{ group: 'Linked agent', icon: 'link', label: 'Not linked any more', disabled: true }];
+  const group = [a.label, a.app ? 'through ' + a.app : '', seenText(a.seenAt) || 'not seen yet'].filter(Boolean).join(' · ');
+  const rows = [
+    { group, icon: 'field', label: 'Rename …', keepOpen: true, run: () => openRenameAgent(a) },
+    { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, left out of Assign to Agent' : 'Back in Assign to Agent', keepOpen: true,
+      run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) },
+    { group, icon: 'trash', label: 'Unlink', hint: 'It can no longer take tasks from Orbital', keepOpen: true,
+      run: () => run(async () => { agentList = await tana.relayUnlink(a.id); showNote('Unlinked ' + a.label); openAgentsPalette(); }) },
+  ];
+  return q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows;
+}
+function openRenameAgent(a) {
+  const group = 'Rename ' + a.label + ' · ↩ saves';
+  openPage('renameAgent', 'Its name in Orbital', { typed: true, back: () => openLinkedAgent(a.id), rows: (q, typed) => (typed.trim()
+    ? [{ group, icon: 'field', label: 'Rename to “' + typed.trim() + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.relayRename(a.id, typed.trim()); openLinkedAgent(a.id); }) }]
+    : [{ group, icon: 'field', label: 'Type its new name', disabled: true, match: [] }]) }, a.label);
 }
 // ---- linking a node to a task that already exists in an agent's app (#143) ----
 // Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, Claude's session is its id. Main reads the

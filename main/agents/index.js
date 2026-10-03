@@ -9,6 +9,7 @@ require('./tana');
 require('./codex');
 require('./dot');
 require('./claude');
+const linked = require('./linked'); // the agents linked through orbital.md/mcp, one plugin each, as they come and go
 const { agentIds, setAgentMark } = require('../documents');
 const { readNode } = require('../../sdk/node');
 const { S, pageOf } = require('../state');
@@ -86,7 +87,7 @@ async function readStatuses() {
 
 const changed = (e, id) => { settings.tellOthers(pageOf(e), id); };
 const ipc = {
-  'agent:list': () => agent.list(),
+  'agent:list': () => { linked.refreshSoon(); return agent.list(); }, // the relay's list is asked for now and then, and the pages told when it moved
   'agent:enable': (e, id, on, setup) => { const out = agent.setEnabled(id, !!on, setup); changed(e); return out; },
   'agent:default': (e, id) => { const out = agent.setDefault(id); changed(e); return out; },
   'agent:ids': () => agentIds(),
@@ -127,6 +128,7 @@ const ipc = {
     if (!a.openNew) throw new Error(a.label + ' cannot open a link');
     return a.openNew(link);
   },
+  ...linked.ipc,
 };
 const stop = () => { for (const a of Object.values(agent.AGENTS)) if (a.stop) a.stop(); }; // no writer outlives the app that spawned it
 module.exports = { assign, unassign, readStatuses, stop, ipc };

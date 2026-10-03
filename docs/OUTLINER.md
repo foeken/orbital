@@ -533,7 +533,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
-  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, ChatGPT sign-in, Set OpenAI API
+  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Link to agent …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
@@ -797,6 +797,9 @@ wrong twenty.
   has no dot: main/agents/dot.js `appDot` reads the dot that app picked, `primary-aeon-selection-v1` in
   `~/.codex/.codex-global-state.json`, stores it as `dotChat` and follows it when it changes), and the second group
   picks the **default agent**. Both follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
+  **Link to agent …** (Settings, and under the linked agents in Choose agents) links any agent that adds the MCP server
+  orbital.md/mcp: a prompt carrying a one-time code, the agent naming itself; each linked agent is one more agent,
+  with a page of its own (Rename …, Switch off, Unlink) and Reset the link secret beside them (docs/AGENT-RELAY.md).
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked) and hands the node over; the agent's own default model does the work. The node then carries the agent
   badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session

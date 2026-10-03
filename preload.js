@@ -90,8 +90,9 @@ contextBridge.exposeInMainWorld('api', {
   proposalAnswer: (chatUri, proposedUri, approve) => ipcRenderer.invoke('proposals:answer', chatUri, proposedUri, approve),
   timelinePages: (n) => ipcRenderer.invoke('timeline:pages', n), // how many pages of three days back children('orbital:timeline') reads; resolves to the number it took
   onTimelinePart: (cb) => ipcRenderer.on('timeline:part', (_e, rows) => cb(rows)), // the Timeline so far, while children('orbital:timeline') is still reading the rest
-  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, Dot, Claude
-  agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, isDefault, link, openNew, chat, opensHere, setup }]
+  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, Dot, Claude, and every agent linked
+  // through orbital.md/mcp (main/agents/linked.js), which carries linked, app and seenAt
+  agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, isDefault, link, openNew, chat, opensHere, setup, linked?, app?, seenAt? }]
   enableAgent: (id, on, setup) => ipcRenderer.invoke('agent:enable', id, on, setup), // the new list; setup: the paste the agent asked for (its setup hint)
   setDefaultAgent: (id) => ipcRenderer.invoke('agent:default', id), // the new list
   agentIds: () => ipcRenderer.invoke('agent:ids'), // nodes handed to an agent; app-local, not a Tana assignee
@@ -101,6 +102,14 @@ contextBridge.exposeInMainWorld('api', {
   openAgentTask: (docId) => ipcRenderer.invoke('agent:open', docId), // open the task this node is linked to, in its agent's app
   openInAgent: (agent, link) => ipcRenderer.invoke('agent:openNew', agent, link), // a fresh, untracked task carrying the node's link
   agentStatus: () => ipcRenderer.invoke('agent:status'), // docId -> pending|working|waiting|done|broken for every linked node
+  // Link to agent … (main/agents/linked.js, docs/AGENT-RELAY.md): a one-time code and the prompt that carries it
+  relayLink: () => ipcRenderer.invoke('relay:link'), // { code, expiresAt, url, prompt }
+  relayLinkStatus: (code) => ipcRenderer.invoke('relay:linkStatus', code), // { state: waiting|expired, expiresAt } or { state: 'linked', agent: { id, label, app } }
+  relayLinkCancel: (code) => ipcRenderer.invoke('relay:linkCancel', code), // the code stops working
+  relayRefresh: () => ipcRenderer.invoke('relay:refresh'), // the agent list, after asking the relay
+  relayRename: (id, name) => ipcRenderer.invoke('relay:rename', id, name), // the new agent list
+  relayUnlink: (id) => ipcRenderer.invoke('relay:unlink', id), // the new agent list
+  relayReset: () => ipcRenderer.invoke('relay:reset'), // a new secret for your Orbital; the agents stay linked
   // Cmd+K "Discuss with …": gives the document the Discussion Task type (created in the Library when the workspace
   // has none) and writes who into its "Discuss with" field. Resolves to { typeUri, key, who }.
   discussWith: (docId, who) => ipcRenderer.invoke('doc:discussWith', docId, who),

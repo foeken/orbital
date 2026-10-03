@@ -61,7 +61,20 @@ function mainHelpers(childProcess) {
   const loaded = load(nodePath.join(root, 'main.js'));
   // the ChatGPT app's state file, where Dot finds your dot (main/agents/dot.js appDot): none in the checks unless one hands it one
   load(nodePath.join(root, 'main', 'agents', 'dot.js')).dot.stateFile = nodePath.join(require('node:os').tmpdir(), 'orbital-check-no-codex-state.json');
-  return { ...loaded, handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
+  return { ...loaded, handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
+}
+
+// An agent's MCP connection to a relay (relay/server.js), signed in as an MCP client signs in: registered, PKCE, a token
+async function relayAgent(base, app) {
+  const crypto = require('node:crypto'), redirect = 'https://agents.example/callback';
+  const post = (path, body, form) => fetch(base + path, { method: 'POST', headers: { 'content-type': form ? 'application/x-www-form-urlencoded' : 'application/json' }, body: form ? new URLSearchParams(body).toString() : JSON.stringify(body) }).then((r) => r.json());
+  const client = (await post('/mcp/oauth/register', { redirect_uris: [redirect], client_name: app })).client_id, verifier = crypto.randomBytes(32).toString('base64url');
+  const back = (await fetch(base + '/mcp/oauth/authorize?' + new URLSearchParams({ response_type: 'code', client_id: client, redirect_uri: redirect, code_challenge: crypto.createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' }), { redirect: 'manual' })).headers.get('location');
+  const { access_token: token } = await post('/mcp/oauth/token', { grant_type: 'authorization_code', code: new URL(back).searchParams.get('code'), client_id: client, redirect_uri: redirect, code_verifier: verifier }, true);
+  let n = 0;
+  const rpc = (method, params = {}) => fetch(base + '/mcp', { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++n, method, params }) }).then((r) => r.json());
+  await rpc('initialize', { protocolVersion: '2025-06-18', clientInfo: { name: app, version: '1' }, capabilities: {} });
+  return { tool: async (name, args = {}) => (await rpc('tools/call', { name, arguments: args })).result.content[0].text };
 }
 
 async function main() {
@@ -3886,6 +3899,69 @@ async function main() {
     assert.equal(chatState(null, [msg('human'), msg('ai', { errorMessage: 'limit' })]), 'broken', 'an error is broken');
     assert.equal(chatState(null, [msg('human'), msg('ai', { completedAt: 2 })]), 'done', 'an answer is done');
     console.log('ok  agents: Tana always on and the default, Codex and Claude switched and chosen, links by agent, pasted links, Claude and Tana states');
+  }
+  // Agents linked through the relay (main/agents/linked.js, relay/server.js, docs/AGENT-RELAY.md): a real relay on a
+  // loopback port, an agent signing in and linking as an MCP client would, and Orbital's side through its handlers.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const { agent, settings, linked, documents: docs } = backend, h = (name, ...args) => backend.handlers.get(name)(null, ...args)
+    const plain = (value) => JSON.parse(JSON.stringify(value)); // made in the vm context: another Object prototype
+    const relay = require('../relay/server').createRelay({ publicUrl: 'http://127.0.0.1' }), server = require('node:http').createServer(relay.handle);
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const base = 'http://127.0.0.1:' + server.address().port;
+    linked.relay.base = base + '/mcp'; linked.relay.fetch = (url, options) => fetch(url, options);
+    assert.equal(agent.list().some((a) => a.linked), false, 'no agent is linked until one is');
+    assert.equal(settings.get('relayAccount'), undefined, 'and there is no Orbital at the relay until the first link');
+    const link = await h('relay:link');
+    assert.match(link.code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/, 'Link to agent gets a code');
+    assert.ok(link.prompt.includes(base + '/mcp') && link.prompt.includes(link.code), 'and a prompt carrying the server and the code, for the agent');
+    const account = settings.get('relayAccount');
+    assert.ok(agent.UUID.test(account.id) && agent.UUID.test(account.secret), 'the first link makes your Orbital: an id and a secret');
+    assert.deepEqual(['relayAccount', 'relaySeen', 'relayTasks', 'relayAgents'].map(settings.isSynced), [true, true, true, false], 'which follow you in the settings document; the agents\' list is this machine\'s mirror of the relay');
+    assert.equal(relay.dump().includes(account.secret), false, 'the relay never holds the secret itself');
+    assert.equal((await h('relay:linkStatus', link.code)).state, 'waiting', 'nobody has used the code yet');
+    await assert.rejects(h('relay:linkStatus', 'nonsense'), /Not a link code/, 'and only a code is asked about');
+    const grok = await relayAgent(base, 'Grok');
+    assert.match(await grok.tool('link_orbital', { code: link.code, name: 'GrokBot' }), /Linked to Orbital as GrokBot/);
+    const status = await h('relay:linkStatus', link.code), id = status.agent.id;
+    assert.deepEqual([status.state, status.agent.label, status.agent.app], ['linked', 'GrokBot', 'Grok'], 'the agent linked, by the name it chose, through the app it runs in');
+    const entry = () => agent.list().find((a) => a.id === id);
+    assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled], ['GrokBot', true, true, true], 'and is an agent like any other, on from the start');
+    // a task: the request and the node's outline, sealed to the agent, opened by it
+    const d = new Document('tana:text:' + ulid()); d.transact((l) => initDocument(l, 'Pilot brief', ME));
+    outline.insertAfter(d, null, 'Two pilots in Q4');
+    const realMut = docs.mut, realOp = docs.op; docs.op = async (_id, fn) => fn(d); docs.mut = async (_id, fn) => fn(d);
+    const taskId = await agent.get(id).start({ nodeUri: d.id, title: 'Pilot brief', prompt: 'Draft the brief' });
+    agent.setTask(d.id, id, taskId);
+    const [task] = JSON.parse(await grok.tool('get_tasks')).tasks;
+    assert.deepEqual([task.task_id, task.title, task.request, task.node], [taskId, 'Pilot brief', 'Draft the brief', d.id], 'the agent reads the request and which node it is about');
+    assert.match(task.content, /^- Two pilots in Q4$/m, 'and the node\'s words, for an agent with no Tana of its own');
+    assert.equal(relay.dump().includes('Draft the brief'), false, 'which the relay holds only sealed');
+    assert.deepEqual(plain(await agent.get(id).statuses({ [d.id]: taskId })), { [d.id]: 'pending' }, 'pending until the agent says something');
+    // its answer: into the node under its name, with the line the badge follows, wherever it is read first
+    await grok.tool('update_task', { task_id: taskId, status: 'completed', note: 'Drafted the brief\nTwo pages, one per pilot' });
+    await linked.pullNow();
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text).slice(-3), ['GrokBot: Drafted the brief', 'Two pages, one per pilot', 'Agent status: Completed'], 'the answer is written into the node under the agent\'s name');
+    assert.deepEqual(plain(await agent.get(id).statuses({ [d.id]: taskId })), { [d.id]: 'done' }, 'and the badge is done');
+    assert.deepEqual(plain(settings.get('relayTasks')), { [taskId]: 'completed' }, 'kept where every device reads it');
+    await linked.pullNow();
+    assert.equal(outline.readOutline(d).filter((n) => n.text === 'Agent status: Completed').length, 1, 'an answer is written once');
+    // rename; switched off stays off on a device that sees the agent for the first time; a new secret; unlink
+    assert.equal((await h('relay:rename', id, 'Grok')).find((a) => a.id === id).label, 'Grok', 'renamed in Orbital');
+    agent.setEnabled(id, false);
+    settings.set('relayAgents', []); linked.load();
+    assert.equal(entry(), undefined, 'a device that has not asked the relay yet does not know it');
+    await h('relay:refresh');
+    assert.deepEqual([entry().label, entry().enabled], ['Grok', false], 'once it has, it is there, and switched off as you left it');
+    await h('relay:reset');
+    assert.notEqual(settings.get('relayAccount').secret, account.secret, 'a new secret');
+    assert.equal(settings.get('relayAccount').id, account.id, 'for the same Orbital');
+    assert.equal((await h('relay:refresh')).some((a) => a.id === id), true, 'whose agents stay linked');
+    assert.equal((await h('relay:unlink', id)).some((a) => a.id === id), false, 'unlinked, it leaves the list');
+    assert.equal(agent.links()[d.id], undefined, 'and the node lets go of its task');
+    assert.match(await grok.tool('get_tasks'), /Not linked/, 'and the agent is told');
+    docs.mut = realMut; docs.op = realOp; relay.close(); server.close();
+    console.log('ok  linked agents: linked with a code, named by themselves, a sealed task out and its answer written into the node, renamed, off, a new secret, unlinked');
   }
   // What the badge is allowed to say: the linked task's own status, one read for every linked node.
   {

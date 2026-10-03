@@ -214,7 +214,7 @@
 
   <section class="topic">
     <h2 id="agents" data-short="Choose agents" data-k="agents choose agents default agent tana codex dot claude install chat link">Choose your agents</h2>
-    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows four. <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in. <b>Dot</b> is your dot, OpenAI's always-on assistant: a task for it is a message in your one chat with it, sent from the ChatGPT app.</p>
+    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows four of its own, and any agent you link (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in. <b>Dot</b> is your dot, OpenAI's always-on assistant: a task for it is a message in your one chat with it, sent from the ChatGPT app.</p>
     <div class="split">
       <div>
         <p>Run <b>Choose agents …</b> to see all four. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat.</p>
@@ -233,6 +233,28 @@
     </div>
     <div class="note">Claude runs as your own Claude Code on this Mac, signed in with your own account. Orbital never signs in to Anthropic and never sees a Claude login.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>choose agents</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
+    <h2 id="link-agent" data-short="Link to agent" data-k="link to agent mcp server orbital.md/mcp code prompt grok chatgpt any agent linked rename unlink switch off reset secret">Link any agent</h2>
+    <p>Any AI agent that can add an MCP server can work for you through Orbital: your dot, a Grok bot, a Claude project, one you built yourself. You give it one prompt; it adds Orbital's server, <b>orbital.md/mcp</b>, names itself and links. From then on it is one of your agents, beside Codex and Claude. Link as many as you like.</p>
+    <div class="split">
+      <div>
+        <p>Run <b>Link to agent …</b>. After <b>Getting a code…</b> its first row is the prompt, with a code in it that works once, for ten minutes: <kbd>↩</kbd> copies it. Give it to the agent. While the page says <b>Waiting for an agent to use the code…</b>, the agent adds the server, picks a short name for itself and links, and the palette closes on a note naming it, like <b>Linked GrokBot · Grok</b>.</p>
+        <p>You can close the page and give the prompt later: the code keeps working until it runs out, and the agent turns up in <b>Choose agents …</b> once it has used it. <b>Cancel</b> stops the code at once.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-relay-link" alt="Link to agent: the prompt with its one-time code, and the page waiting for an agent to use it"><figcaption>One prompt carries the server and a code that works once.</figcaption></figure>
+    </div>
+    <h3>Your linked agents</h3>
+    <div class="split">
+      <div>
+        <p>Linked agents have a group of their own in <b>Choose agents …</b>, each with whether it is on, the app it runs in and when it last checked in. <kbd>↩</kbd> on one opens its page: <b>Rename …</b>, <b>Switch off</b> (it stays linked, but leaves <b>Assign to Agent</b>) and <b>Unlink</b>.</p>
+        <p>Assign a node to one as to any agent. The agent collects the task, with the node's words, the next time it checks for work. Its answers land at the end of the node under its name, each ending in a line <b>Agent status: Working</b>, <b>Completed</b> or <b>Failed</b> that the badge follows.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-relay-agents" alt="Choose agents with GrokBot linked through orbital.md/mcp: on, through Grok, seen just now, and Link to agent"><figcaption>A linked agent, where it runs and when it last checked in.</figcaption></figure>
+    </div>
+    <div class="note">Tasks and answers are sealed on the way and while they wait: a task opens only when its agent collects it, an answer only on your own devices, and nothing waits at orbital.md for more than a day. Your linked agents follow your Tana account to every Mac, because Orbital keeps the link's id and secret in its settings document in Tana. If you think the secret was seen, <b>Reset the link secret</b> in Choose agents makes a new one, and your agents stay linked.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>link to agent</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
 
   <section class="topic">

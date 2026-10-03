@@ -16,11 +16,22 @@
 //   read(taskIds)           Map taskId -> { state: working|done|failed, text }, for @<agent> in a chat
 //   release(key), stop()    let go of a task this app is running, one or all
 // Only id, label, available and start are required; the app offers what a plugin answers and nothing else.
+// Some agents come and go while the app runs: those linked through the relay (main/agents/linked.js), one per agent
+// linked, are registered by a source that is asked to catch up whenever the agents are looked at.
 const settings = require('./settings');
 
 const AGENTS = {}; // id -> plugin, in the order they registered
 const register = (plugin) => { AGENTS[plugin.id] = plugin; return plugin; };
-const get = (id) => (typeof id === 'string' && Object.hasOwn(AGENTS, id) ? AGENTS[id] : null);
+const unregister = (id) => { delete AGENTS[id]; };
+const sources = [];
+let catching = false;
+const addSource = (fn) => { sources.push(fn); };
+function catchUp() {
+  if (catching) return; // a source registering its agents looks them up too
+  catching = true;
+  try { for (const fn of sources) fn(); } catch { /* a source that cannot read now keeps what it registered last */ } finally { catching = false; }
+}
+const get = (id) => { catchUp(); return typeof id === 'string' && Object.hasOwn(AGENTS, id) ? AGENTS[id] : null; };
 
 // Which agents are on, and which one Assign to Agent uses. Both follow you (main/settings.js SYNCED). Unset is Tana and
 // Codex: Codex is what this app handed work to before agents were plugins, so nobody loses it on update; Claude is new
@@ -45,11 +56,13 @@ function setDefault(id) {
   settings.set('defaultAgent', id);
   return list();
 }
-// What the renderer draws: every agent, installed or not, and what each can do. Names and flags only.
-const list = () => Object.values(AGENTS).map((a) => ({
+// What the renderer draws: every agent, installed or not, and what each can do. Names and flags only. A linked agent
+// says so, with the app it came through and when the relay last heard from it.
+const list = () => { catchUp(); return Object.values(AGENTS).map((a) => ({
   id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id), isDefault: defaultAgent() === a.id,
   link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere, setup: (a.setupHint && a.setupHint()) || '',
-}));
+  ...(a.linked ? { linked: true, app: a.app || '', seenAt: a.seenAt || null } : {}),
+})); };
 
 // ---- which task each node became ----
 // nodeId -> { agent, taskId }, kept under the old key so nothing moves: the record follows you between machines.
@@ -129,4 +142,4 @@ function findBin(name, extra = []) {
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-module.exports = { AGENTS, register, get, enabledIds, usable, setEnabled, defaultAgent, setDefault, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };
+module.exports = { AGENTS, register, unregister, addSource, get, enabledIds, usable, setEnabled, defaultAgent, setDefault, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };

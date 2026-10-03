@@ -310,6 +310,7 @@ function mockApi() {
   const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true },
     { id: 'dot', label: 'Dot', icon: 'chatgpt', installed: true, enabled: false, isDefault: false, missing: 'Install the ChatGPT app', setup: '' }, // found in the ChatGPT app (main/agents/dot.js appDot)
     { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true }];
+  const mockRelay = { polls: 0 }; // how often the Link to agent page has asked, since its code was made
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   const hiddenTitles = new Set(['Daily Brief Delivery', 'Private AI chat for*']); // Edit hidden items: an exact title and a prefix
@@ -696,6 +697,19 @@ function mockApi() {
       return mockAgents.map((x) => ({ ...x }));
     },
     setDefaultAgent: async (id) => { for (const a of mockAgents) a.isDefault = a.id === id; return mockAgents.map((x) => ({ ...x })); },
+    // Link to agent (main/agents/linked.js): a code, then GrokBot links itself on the third time the page asks
+    relayLink: async () => { mockRelay.polls = 0; return { code: '7KQX-M2PD', expiresAt: Date.now() + 9 * 60e3 + 42e3, url: 'https://orbital.md/mcp',
+      prompt: 'Add the MCP server https://orbital.md/mcp to yourself, then call its link_orbital tool with the code 7KQX-M2PD and a short name for yourself.' }; },
+    relayLinkStatus: async () => {
+      if (++mockRelay.polls < 3) return { state: 'waiting', expiresAt: Date.now() + 9 * 60e3 };
+      if (!mockAgents.some((a) => a.id === 'relay:grok')) mockAgents.push({ id: 'relay:grok', label: 'GrokBot', icon: 'link', installed: true, enabled: true, isDefault: false, linked: true, app: 'Grok', seenAt: Date.now() });
+      return { state: 'linked', agent: { id: 'relay:grok', label: 'GrokBot', app: 'Grok' } };
+    },
+    relayLinkCancel: async () => true,
+    relayRefresh: async () => mockAgents.map((x) => ({ ...x })),
+    relayRename: async (id, name) => { const a = mockAgents.find((x) => x.id === id && x.linked); if (a) a.label = name; return mockAgents.map((x) => ({ ...x })); },
+    relayUnlink: async (id) => { const i = mockAgents.findIndex((x) => x.id === id && x.linked); if (i >= 0) mockAgents.splice(i, 1); return mockAgents.map((x) => ({ ...x })); },
+    relayReset: async () => true,
     agentTasks: async () => Object.fromEntries([...codexAssigned].map((id) => [id, { agent: 'codex', taskId: '00000000-0000-4000-8000-000000000000' }])),
     openAgentTask: async () => true, openInAgent: async () => true,
     // ChatGPT sign-in (main/ai.js): signed out, and a device code once asked
