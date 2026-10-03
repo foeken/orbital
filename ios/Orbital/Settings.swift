@@ -42,7 +42,7 @@ struct SettingsView: View {
                     } label: { Row(glyph: "language", title: "Auto-translate") }
                     .pickerStyle(.menu)
                     .tint(.secondary) // its value in grey, as the other rows have theirs
-                    Toggle(isOn: Binding { engine.demo } set: { engine.demo = $0 }) { Row(glyph: "hidden", title: "Demo mode") }.tint(.green) // the switch in its own colour: in the rows' text colour it is white on white
+                    Toggle(isOn: Binding { engine.demo } set: { engine.demo = $0 }) { Row(glyph: "demo", title: "Demo mode") }.tint(.green) // the switch in its own colour: in the rows' text colour it is white on white
                     // what you marked sensitive, shown until Orbital closes, as a shake shows it: for a phone held where it
                     // cannot be shaken, or a hand that cannot shake it
                     Toggle(isOn: Binding { engine.reveal } set: { engine.reveal = $0 }) { Row(glyph: "visible", title: "Show sensitive items") }.tint(.green)

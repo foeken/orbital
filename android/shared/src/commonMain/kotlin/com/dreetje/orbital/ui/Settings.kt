@@ -101,7 +101,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                             }
                         }
                     }
-                    OnOff("hidden", "Demo mode", engine.demo) { engine.demo = it }
+                    OnOff("demo", "Demo mode", engine.demo) { engine.demo = it }
                     // what you marked sensitive, shown until Orbital closes, as a shake shows it: for a phone without the
                     // sensor, or a hand that cannot shake it
                     OnOff("visible", "Show sensitive items", engine.reveal) { engine.reveal = it }
