@@ -21,6 +21,7 @@ import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.dreetje.orbital.Bridge
+import com.dreetje.orbital.Engine
 import com.dreetje.orbital.EngineHost
 import com.dreetje.orbital.Failure
 import kotlinx.coroutines.CompletableDeferred
@@ -149,7 +150,9 @@ class EngineWeb(private val app: Context, private val engine: String, screen: Co
         }
     }
 
-    override fun load(url: String) = web.loadUrl(url)
+    // the session page from Tana, never a cache (it carries no cache headers): engine.js takes the session from it, as
+    // the iPhone's reloadIgnoringLocalAndRemoteCacheData load has it (ios/engine/index.js fromPage)
+    override fun load(url: String) = if (url == Engine.SESSION) web.loadUrl(url, mapOf("Cache-Control" to "no-cache", "Pragma" to "no-cache")) else web.loadUrl(url)
 
     override val url: String? get() = web.url
 

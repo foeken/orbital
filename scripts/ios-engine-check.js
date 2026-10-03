@@ -215,6 +215,12 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   const signedOutPage = boot(new Map(), JSON.stringify({ authenticated: false, reason: 'no_session_cookie' }));
   assert.strictEqual(await signedOutPage.orbital.connect(), true, 'a signed-out page is asked again');
   assert.ok(signedOutPage.calls.some((c) => c.startsWith('/api/auth/session')));
+  // a page whose token is nearly spent (one a cache kept) is asked again too
+  const aged = 'x.' + b64({ exp: Math.floor(Date.now() / 1000) + 30, 'urn:tana:user:id': 'u9', org_id: 'org_9' }) + '.y';
+  const oldPage = boot(new Map(), JSON.stringify({ ...JSON.parse(session), accessToken: aged, userExternalId: 'u9' }));
+  assert.strictEqual(await oldPage.orbital.connect(), true);
+  assert.ok(oldPage.calls.some((c) => c.startsWith('/api/auth/session')), 'an aged page is not taken');
+  assert.strictEqual(oldPage.orbital.account(), 'tana:user-profile:u1@org_1', 'Tana\'s own answer is');
   // once it has been (the mark is this account's own, in its own mirror), the Timeline answers in the desktop's row shape
   const page = boot(new Map([['orbital:tana:user-profile:u1@org_1:settingsRead', 'true']]));
   assert.strictEqual(await page.orbital.connect(), true);

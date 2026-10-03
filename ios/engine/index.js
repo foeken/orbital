@@ -42,13 +42,17 @@ function take(ok, status, json) {
   expiresAt = last && last.accessToken ? (claims(last.accessToken).exp || 0) * 1000 : 0;
   return last;
 }
-// The page this runs on is that answer already, loaded uncached by the app a moment ago (Engine.swift start): the first
-// lookup takes it from there, one round trip less before anything is read. Anything but a signed-in answer is asked again.
+// The page this runs on is that answer already, loaded uncached by the app a moment ago (Engine.swift start, EngineWeb.kt
+// load): the first lookup takes it from there, one round trip less before anything is read. Anything but a signed-in
+// answer whose token has more than a minute left is asked again, so a copy some cache kept could never stand in for it.
 let onPage = true;
 function fromPage() {
   if (!onPage) return null;
   onPage = false;
-  try { const json = JSON.parse(document.body.textContent); return json.authenticated === true && json.accessToken ? json : null; } catch { return null; }
+  try {
+    const json = JSON.parse(document.body.textContent);
+    return json.authenticated === true && json.accessToken && (claims(json.accessToken).exp || 0) * 1000 > Date.now() + 60000 ? json : null;
+  } catch { return null; }
 }
 function fetchSession(refresh) {
   const kind = refresh ? 'refresh' : 'plain';
