@@ -7,7 +7,7 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { createRelay, postgresStore, TTL, isPublicAddress } = require('../relay/server');
+const { createRelay, postgresStore, TTL, LIMITS, isPublicAddress } = require('../relay/server');
 
 let clock = Date.UTC(2026, 9, 3, 12);
 // RELAY_CHECK_DATABASE_URL runs the same check on PostgreSQL (an empty database: it makes its tables), as a host would
@@ -23,8 +23,8 @@ const server = http.createServer(relay.handle);
 (async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = 'http://127.0.0.1:' + server.address().port;
-  const call = async (method, path, { body, auth, form } = {}) => {
-    const headers = {};
+  const call = async (method, path, { body, auth, form, forwarded } = {}) => {
+    const headers = forwarded ? { 'x-forwarded-for': forwarded } : {};
     if (auth) headers.authorization = auth;
     if (body !== undefined) headers['content-type'] = form ? 'application/x-www-form-urlencoded' : 'application/json';
     const res = await fetch(base + path, { method, headers, redirect: 'manual', body: body === undefined ? undefined : form ? new URLSearchParams(body).toString() : JSON.stringify(body) });
@@ -42,7 +42,7 @@ const server = http.createServer(relay.handle);
   assert.equal(hello.status, 200, 'hello needs no sign-in');
   assert.deepEqual(hello.json.result.capabilities, { tools: {}, events: {} }, 'tools, and the task.assigned event');
   const open = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'tools/list' } });
-  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital', 'get_instructions'], 'nor does the list');
+  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital'], 'nor does the list');
   assert.ok(open.json.result.tools.every((t) => t.securitySchemes[0].type === 'oauth2' && t._meta.securitySchemes[0].type === 'oauth2'), 'and each tool says it needs a sign-in');
   for (const auth of [undefined, 'Bearer not-a-token']) {
     const unauth = await call('POST', '/mcp', { auth, body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'link_orbital', arguments: {} } } });
@@ -79,12 +79,10 @@ const server = http.createServer(relay.handle);
   }
   const grok = await signIn('Grok');
   const listed = (await grok.rpc('tools/list')).result.tools;
-  assert.deepEqual(listed.map((t) => t.name), ['link_orbital', 'get_instructions'], 'linking, and how to handle an event: the rest happens in Tana');
-  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false], [true, false, false]],
-    'each says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three): only get_instructions reads');
-  const how = await grok.tool('get_instructions', { event: 'task.assigned' });
-  assert.match(how.text, /Agent status: Assigned.*Agent status: Working.*above the "Agent context" block.*Agent status: Completed/s, 'the instructions an event comes with are served here, so changing them is a deploy: the status line, and where to write');
-  assert.equal((await grok.tool('get_instructions', { event: 'nothing.happened' })).error, true, 'an event Orbital does not have is said to be one');
+  assert.deepEqual(listed.map((t) => t.name), ['link_orbital'], 'one tool, linking: how to handle an event comes with the event, from Orbital');
+  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false]],
+    'it says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three)');
+  assert.equal((await grok.rpc('tools/call', { name: 'get_instructions', arguments: { event: 'task.assigned' } })).error.code, -32602, 'there is no instructions tool: this server tells an agent nothing of its own about what to do');
 
   // a refresh token turns once: the new pair works, the old refresh token does not
   const refreshed = (await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: grok.tokens.refresh_token, client_id: grok.client } })).json;
@@ -122,7 +120,7 @@ const server = http.createServer(relay.handle);
   assert.equal((await send(G, 'not-an-id')).status, 400, 'an event has a UUID');
   assert.equal((await send(G, crypto.randomUUID(), 'task.deleted')).status, 400, 'and a name the relay lists');
   assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', ['x'])).status, 400, 'its data is an object');
-  assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { note: 'x'.repeat(9000) })).status, 400, 'of at most 8 KB');
+  assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { note: 'x'.repeat(17000) })).status, 400, 'of at most 16 KB');
   assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { node: NODE }, stranger)).status, 401, 'and only its own Orbital sends it one');
   assert.deepEqual((await send(G, crypto.randomUUID())).json, { subscribers: 0, delivered: 0 }, 'an agent that has not subscribed hears nothing, and Orbital is told so');
   assert.equal(posted.length, 0, 'nothing was sent, and nothing is kept for later');
@@ -154,9 +152,9 @@ const server = http.createServer(relay.handle);
   const old = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '1900-01-01' } } } });
   assert.deepEqual([old.json.error.code, old.json.error.data.supported[0]], [-32022, '2026-07-28'], 'a version Orbital does not speak is refused, naming those it does');
   const listedTools = (await modern('tools/list')).json.result;
-  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.length], ['complete', 'public', 'number', 2], 'the tools, cacheable, in the new shape');
+  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.length], ['complete', 'public', 'number', 1], 'the tools, cacheable, in the new shape');
   const events = (await modern('events/list')).json.result.events;
-  assert.deepEqual(events.map((e) => [e.name, e.delivery, Object.keys(e.payloadSchema.properties), e.payloadSchema.additionalProperties]), [['task.assigned', ['webhook'], ['node'], true]],
+  assert.deepEqual(events.map((e) => [e.name, e.delivery, Object.keys(e.payloadSchema.properties), e.payloadSchema.additionalProperties]), [['task.assigned', ['webhook'], ['node', 'request', 'instructions'], true]],
     'task.assigned, by webhook, its data the node and whatever else Orbital sends');
   const SECRET = 'whsec_' + crypto.randomBytes(32).toString('base64'), CB = 'https://receiver.example/mcp-events/cb1';
   const want = { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: CB, secret: SECRET }, cursor: null };
@@ -178,8 +176,10 @@ const server = http.createServer(relay.handle);
   assert.deepEqual([JSON.parse(check.body).type, /^msg_verification_/.test(check.headers['webhook-id']), check.headers['x-mcp-subscription-id'], signs(check)], ['verification', true, made.id, true], 'the callback was challenged first, signed');
   const refreshedSub = (await sub({ ...want, arguments: undefined, ttlMs: 3 * 864e5 })).json.result;
   assert.deepEqual([refreshedSub.id, posted.length, refreshedSub.refreshBefore], [made.id, 1, new Date(clock + 3 * 864e5).toISOString()], 'asked again it is the same subscription, as long as asked, not challenged again');
-  // grok, signed in but linked to nothing, listens too: it hears nothing of the Dot's tasks
-  assert.ok((await sub({ ...want, delivery: { ...want.delivery, url: 'https://receiver.example/grok' } }, grok)).json.result.id);
+  // grok, signed in but linked to nothing, cannot subscribe: it would hear nothing, and a subscription makes the relay call a URL
+  const before = posted.length;
+  assert.equal((await sub({ ...want, delivery: { ...want.delivery, url: 'https://receiver.example/grok' } }, grok)).json.error.code, -32602, 'a connection linked to nothing cannot subscribe');
+  assert.equal(posted.length, before, 'and nothing was called for it');
   posted.length = 0;
   const tEvent = crypto.randomUUID();
   assert.deepEqual((await send(D, tEvent)).json, { subscribers: 1, delivered: 1 }, 'an event for the Dot reaches it, and Orbital is told');
@@ -188,8 +188,11 @@ const server = http.createServer(relay.handle);
   assert.deepEqual(event, { eventId: 'evt_' + tEvent, name: 'task.assigned', timestamp: new Date(clock).toISOString(), data: { node: NODE }, cursor: null }, 'the event: its name, and the data Orbital sent');
   assert.deepEqual([delivery.url, delivery.headers['webhook-id'], delivery.headers['x-mcp-subscription-id'], signs(delivery)], [CB, event.eventId, made.id, true], 'signed, its webhook-id the event id');
   posted.length = 0;
-  await send(D, crypto.randomUUID(), 'task.assigned', { node: NODE, why: 'later events say more' });
-  assert.deepEqual(JSON.parse(posted[0].body).data, { node: NODE, why: 'later events say more' }, 'whatever Orbital sends with it, as it sent it');
+  const pkg = { node: NODE, request: 'Draft the pilot brief', instructions: 'How to handle it, as Orbital writes it' };
+  await send(D, crypto.randomUUID(), 'task.assigned', pkg);
+  assert.deepEqual(JSON.parse(posted[0].body).data, pkg, 'the package Orbital sends (node, request, instructions) arrives as it was sent');
+  assert.equal((await relay.dump()).includes('Draft the pilot brief'), false, 'and the relay keeps none of it');
+  assert.equal((await send(D, crypto.randomUUID(), 'task.assigned', { request: 'x'.repeat(17000) })).status, 400, 'up to 16 KB');
   // a receiver that is gone (410) ends the subscription; unsubscribing ends one too
   answer = () => ({ status: 410, text: '' }); posted.length = 0;
   await send(D, crypto.randomUUID());
@@ -204,6 +207,23 @@ const server = http.createServer(relay.handle);
   // only public addresses are called back
   assert.deepEqual(['8.8.8.8', '2606:4700::1111', '127.0.0.1', '10.1.2.3', '169.254.169.254', '192.168.1.1', '::1', 'fd00::1', '::ffff:127.0.0.1', 'fe80::1', 'localhost'].map(isPublicAddress),
     [true, true, false, false, false, false, false, false, false, false, false], 'loopback, private, link-local and cloud metadata addresses are never called');
+
+  // ---- limits a caller cannot pick: the address the proxy appended, failed codes counted across every connection ----
+  const reg = (first) => call('POST', '/mcp/oauth/register', { forwarded: first + ', 198.51.100.7', body: { redirect_uris: ['https://agents.example/r'] } });
+  for (let i = 0; i < 20; i++) assert.equal((await reg('203.0.113.' + i)).status, 201);
+  assert.equal((await reg('203.0.113.99')).status, 429, 'whatever a caller writes before it, the address the proxy appended is the one the limit counts');
+  const failures = LIMITS.linkFailures; LIMITS.linkFailures = 3;
+  for (let i = 0; i < 3; i++) assert.match((await grok.tool('link_orbital', { code: 'ZZZZ-ZZZ' + i, name: 'Guess' })).text, /unknown, used or expired/);
+  assert.match((await grok.tool('link_orbital', { code: 'ZZZZ-ZZZ9', name: 'Guess' })).text, /Too many requests/, 'failed codes are held to a cap across every connection, so new connections do not buy more guesses');
+  LIMITS.linkFailures = failures;
+  // a client that never signed in and a connection with no token and no link are swept away, the linked ones stay
+  const lone = (await call('POST', '/mcp/oauth/register', { body: { redirect_uris: ['https://agents.example/lone'] } })).json.client_id;
+  clock += 24 * 3600e3 + 1; await relay.sweep();
+  const kept = await relay.dump();
+  assert.deepEqual([kept.includes(lone), kept.includes(D.id)], [false, true], 'an unused client goes; a linked agent stays');
+  // which server.js runs, to hold against the repository
+  assert.equal((await call('GET', '/mcp/health')).json.sha256, crypto.createHash('sha256').update(require('node:fs').readFileSync(require.resolve('../relay/server'))).digest('hex'), '/health names the file it runs');
+  assert.equal(isPublicAddress('::7f00:1'), false, 'an IPv4 address written the old IPv6 way is not public either');
 
   // ---- what the database holds: ids, and no key or token as itself (only their hashes) ----
   const rows = await relay.dump();

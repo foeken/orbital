@@ -756,27 +756,25 @@ function writeAgentContext(id, prompt) {
 // current one.
 const AGENT_STATUS = /^\s*Agent status:\s*(Assigned|Working|Completed|Failed)\b/i;
 const lastAgentStatus = (text) => { let last = null; for (const line of String(text || '').split('\n')) { const m = line.match(AGENT_STATUS); if (m) last = m[1].toLowerCase(); } return last; };
-// The status is one line, the last inside the Agent context block (writeAgentContext keeps that block last): what was
-// there is replaced. A node with no block gets it at its end.
+// The status is one line, the node's last (written for an agent linked through orbital.md): what was there is replaced.
 const writeAgentStatus = (id, status) => mut(id, (doc) => {
-  const line = 'Agent status: ' + status, heading = content.readOutline(doc).find((n) => (n.text || '').trim() === AGENT_HEADING);
-  if (!heading) return content.insertAfter(doc, null, line);
-  for (const child of heading.children || []) if (AGENT_STATUS.test(child.text || '')) content.remove(doc, child.id);
-  const kids = content.readOutline(doc).find((n) => n.id === heading.id).children || [];
-  return kids.length ? content.insertAfter(doc, kids.at(-1).id, line) : content.insertChild(doc, heading.id, line);
+  // the status is the node's one last line; a request block an earlier handoff left (to Codex, say) goes with the old
+  // lines, since an agent linked through orbital.md is handed its request in the event and reads the node as content
+  for (const n of content.readOutline(doc)) if ((n.text || '').trim() === AGENT_HEADING || AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
+  return content.insertAfter(doc, null, 'Agent status: ' + status);
 });
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
 // Unassigned: the Agent context block goes, with its status line, and any status line an older build left on its own
 const removeAgentContext = (id) => mut(id, (doc) => {
   for (const n of content.readOutline(doc)) if ((n.text || '').trim() === AGENT_HEADING || AGENT_STATUS.test(n.text || '')) content.remove(doc, n.id);
 });
-async function setAgentMark(id, on, prompt) {
+async function setAgentMark(id, on, prompt, writeContext = true) {
   const next = agentIds().filter((x) => x !== id);
   const text = typeof prompt === 'string' ? prompt.trim() : '';
   // The visible half first. If the document will not take the context there is nothing local to undo, so a badge
   // never claims a handoff the node itself knows nothing about. With no prompt there is nothing to write, and the
   // assignment is simply local.
-  if (on && text) await writeAgentContext(id, text);
+  if (on && text && writeContext) await writeAgentContext(id, text);
   if (!on) await removeAgentContext(id).catch(() => {}); // a node that will not take the write still lets go of the assignment
   if (on) next.push(id);
   settings.set('codex', next);

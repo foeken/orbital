@@ -24,7 +24,8 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
   const a = ready(agentId), was = agentIds().includes(id);
   let started = false; // a new task was begun: on failure it is let go (a Codex writer otherwise runs on, hidden), a resumed one is not
   try {
-    const result = await setAgentMark(id, true, prompt);
+    // an agent linked through orbital.md (your Dot) gets the request in its event, not in the node: the node stays content
+    const result = await setAgentMark(id, true, prompt, !a.linked);
     // the node's own title, off the document the mark just opened, so the task is named after the work
     const open = S.client && S.client.sync.getDocument(id);
     const title = open ? readNode(open).title : '';
