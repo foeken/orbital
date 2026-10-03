@@ -132,7 +132,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 justSignedIn = false
                 email = try? await web.callAsyncJavaScript("return orbital.email()", contentWorld: .page) as? String
                 account = try? await web.callAsyncJavaScript("return orbital.account()", contentWorld: .page) as? String
-                if let savedFor, savedFor != account { rows = [] } // the saved Timeline was another account's, or another workspace's
+                if let savedFor, savedFor != account { rows = []; SavedTimeline.forget() } // another account's, or another workspace's: off the screen and off the phone
                 savedFor = nil
                 // the cookies kept at once, as the refresh may not finish, and beside it: the Timeline waits on no Keychain
                 Task { await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) }

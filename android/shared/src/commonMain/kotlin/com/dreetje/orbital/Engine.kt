@@ -181,7 +181,8 @@ class Engine(
                     justSignedIn = false
                     email = maybe { host.run("return orbital.email()").jsonPrimitive.contentOrNull }
                     account = maybe { host.run("return orbital.account()").jsonPrimitive.contentOrNull }
-                    if (savedFor != null && savedFor != account) rows = emptyList() // the saved Timeline was another account's, or another workspace's
+                    // another account's, or another workspace's: off the screen and off the phone
+                    if (savedFor != null && savedFor != account) { rows = emptyList(); SavedTimeline.forget(platform.files) }
                     savedFor = null
                     host.keepCookies() // at once: the refresh may not finish
                     phase = Phase.Ready

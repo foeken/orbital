@@ -228,6 +228,7 @@ class EngineTest {
         host.listener!!.said("ready")
         runCurrent()
         assertTrue(engine.rows.isEmpty())
+        assertNull(SavedTimeline.load(platform.files, clock), "and off the phone: a read that never lands leaves nothing of it for the next launch")
     }
 
     @Test fun demoModeNeitherShowsNorKeepsTheTimeline() = runTest {
