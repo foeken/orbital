@@ -5443,7 +5443,7 @@ function runCodexAssignCheck() {
     ({
       label: () => paletteRows('').find((r) => r.rank === 'codex').label,
       byName: () => paletteRows('').filter((r) => r.rank === 'codexTo').map((r) => [r.label, r.hint]),
-      pressTo: async (label) => { await paletteRows('').find((r) => r.label === label).run(); await tick(); return { mode: palMode, agent: agentPick, sent: sent.length }; },
+      pressTo: async (label) => { await paletteRows('').find((r) => r.label === label).run(); await tick(); return { mode: palMode, agent: agentPick, sent: sent.length, rows: agentPromptRows().map((r) => r.label) }; },
       pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codex').run(); await tick(); return state(); },
       unassignRow: () => (paletteRows('').find((r) => r.rank === 'codexUnassign') || {}).label || null,
       pressUnassign: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codexUnassign').run(); await tick(); return state(); },
@@ -5483,7 +5483,7 @@ function runCodexAssignCheck() {
   return (async () => {
     assert.equal(api.label(), 'Assign to Agent', 'an unassigned node offers to hand itself to the agent');
     assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'Default'], ['Assign to Codex …', '']], 'and to each agent that is on by its name, the default said');
-    assert.deepEqual(plain(await api.pressTo('Assign to Codex …')), { mode: 'agentPrompt', agent: 'codex', sent: 0 }, 'which opens the same prompt page with that agent picked, and assigns nothing yet');
+    assert.deepEqual(plain(await api.pressTo('Assign to Codex …')), { mode: 'agentPrompt', agent: 'codex', sent: 0, rows: ['What should Codex do?'] }, 'which opens the same prompt page with that agent picked, assigns nothing yet, and offers no other agent: the row chose');
     const opened = plain(await api.pressRow());
     assert.equal(opened.mode, 'agentPrompt', 'choosing it advances to the prompt page inside the palette');
     assert.deepEqual(opened.sent, [], 'and assigns nothing yet: the page is the question, not the answer');

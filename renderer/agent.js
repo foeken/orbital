@@ -227,7 +227,7 @@ function openAgentPrompt(doc, pick) {
   // question, and abandoning that question is abandoning the assignment. Nothing is written either way.
   showPage('agentPrompt', '', { rows: agentPromptRows, typed: true }); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
-  agentCtx = { id: doc.id, doc }; // the row itself, so the assignment can hold it where it sits
+  agentCtx = { id: doc.id, doc, fixed: !!pick }; // the row itself, so the assignment can hold it where it sits; fixed: its row named the agent
   // it starts on the agent its row named (Assign to Echo …), or else on the default
   agentPick = (agentsOn().find((a) => a.id === pick) || agentsOn().find((a) => a.isDefault) || agentsOn()[0] || { id: 'tana' }).id;
   renderPalette(); palText.focus();
@@ -240,7 +240,8 @@ function agentPromptRows() {
     hint: prompt ? '⌘↩' : 'Nothing to send yet', disabled: !prompt, keepOpen: true, run: submitAgentPrompt }];
   // Only with a choice to make: Tana alone needs no list. Choosing keeps the keyboard where it was: picked from the
   // list, the list keeps it so another can be tried; clicked or reached from the editor, the caret goes back.
-  const on = agentsOn();
+  // Not when the row that opened the page already named the agent (Assign to Echo …): the choice is made
+  const on = agentCtx && agentCtx.fixed ? [] : agentsOn();
   if (on.length > 1) for (const a of on) rows.push({ group: PICK_GROUP, icon: a.icon, label: a.label, hint: agentPick === a.id ? '✓' : '', keepOpen: true,
     run: () => { const onList = document.activeElement === palList; agentPick = a.id; renderPalette(); (onList ? palList : palText).focus(); } });
   return rows;
