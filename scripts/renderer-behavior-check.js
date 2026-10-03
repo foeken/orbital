@@ -146,6 +146,8 @@ const withShims = (src) => {
   // a list's own rows, selected by a first click, and whether a row's text takes the caret (renderer/nodes.js): the real
   // rules, which read what the lines below supply when the harness has not
   if (/\btopListRow\(/.test(src) && !/const topListRow =/.test(src)) src = sourceLine('const topListRow =') + '\n' + src;
+  if (/\btimelineRow\(/.test(src) && !/const timelineRow =/.test(src)) src = sourceLine('const timelineRow =') + '\n' + src;
+  if (/\bopenSelectedRow\(/.test(src) && !/function openSelectedRow\(/.test(src)) src = functionSource('openSelectedRow') + '\nglobalThis.openTimeline ??= () => {};\n' + src;
   if (/\btypesInto\(/.test(src) && !/const typesInto =/.test(src)) src = sourceLine('const typesInto =') + '\nglobalThis.demoMode ??= false;\n' + src;
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
   if (/\bonRowBlank\(/.test(src) && !/const onRowBlank =/.test(src)) src = sourceBetween('const onRowBlank =', '// `texts()`') + '\n' + src;

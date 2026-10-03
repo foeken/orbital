@@ -958,27 +958,37 @@ function nodeEl(node, docId, parent) {
     if (selKeys().includes(item.key) && canEditText(item)) { if (fullref) { e.preventDefault(); setCaret(text, text.textContent.length); } return; }
     e.preventDefault(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key }; leaveText(); applySel();
   };
-  // A top-level row of a list (topListRow, renderer/nodes.js): the first click selects it, and a click on the selected
-  // row goes in — the caret where it was clicked on a row that can be typed in, its page on one that cannot. The
-  // bullet zooms in at once (above); the box, the chevron, a chip, a link and a button answer their own clicks, and a
-  // row already being typed in takes its clicks as any text does.
-  if (topListRow(item)) {
-    const caretClick = line.onclick;
+  // A top-level row of a list and a Timeline row (topListRow, timelineRow, renderer/nodes.js): the first click selects
+  // it, and a click on the selected row goes in — the caret where it was clicked on a row that can be typed in, what
+  // the row opens on one that cannot (openSelectedRow, renderer/select.js). The bullet goes in at once; the box, the
+  // chevron, a chip, a link and a button answer their own clicks, and a row already being typed in takes its clicks as
+  // any text does. ⌘- and ⌥-click on a Timeline row still open it in a tab or floating at once.
+  const onTimeline = timelineRow(item);
+  if (onTimeline) bullet.onclick = (e) => { // what the row is about, as its second click opens it, not the Timeline's own copy of the row
+    e.stopPropagation();
+    const where = elsewhere(e);
+    if (node.timeline) openTimeline(node, where); else if (where) run(() => openElsewhere(where, node.id)); else goTo(node.id);
+  };
+  if (onTimeline || topListRow(item)) {
+    const before = line.onclick; // a list row: the caret beside its words while typed in; a Timeline row: ⌘ and ⌥ opening it elsewhere
     let pressed = null; // what the press decided, for the click that ends it
     line.onmousedown = (e) => {
       pressed = null;
       if (e.button !== 0 || e.metaKey || e.shiftKey || e.ctrlKey || e.altKey || document.activeElement === text) return;
       if (e.target.closest('.check, .bullet, .chev, .mention, a, button, input, [role="button"], .cell')) return;
       const keys = selKeys();
-      if (keys.length !== 1 || keys[0] !== item.key) { e.preventDefault(); pressed = 'select'; sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key, picked: true }; leaveText(); applySel(); return; }
-      if (!text.isContentEditable) { e.preventDefault(); pressed = 'open'; return; }
-      pressed = 'edit'; // in the words the browser puts the caret where they were pressed (and a drag selects them); beside them it is ours to put
-      if (!text.contains(e.target)) { e.preventDefault(); setCaret(text, caretAt(text, e.clientX, e.clientY)); }
+      pressed = keys.length !== 1 || keys[0] !== item.key ? 'select' : text.isContentEditable ? 'edit' : 'open';
+      // in the words the browser puts the caret where they were pressed (and a drag selects them); beside them it is ours to put
+      if (pressed === 'edit') { if (!text.contains(e.target)) { e.preventDefault(); setCaret(text, caretAt(text, e.clientX, e.clientY)); } }
+      // a task under Today's Tasks is picked up by its whole line, and Chromium starts that drag from this very default
+      // (the grab, above), so there the press focuses the row and the click below takes the focus back as it selects
+      else if (!line.draggable) e.preventDefault();
     };
     line.onclick = (e) => {
       const was = pressed; pressed = null;
-      if (was === 'open') { const it = items.get(item.key) || item; sel = null; if (zoomable(it.node)) zoomTo(it); }
-      else if (!was && document.activeElement === text && caretClick) caretClick(e);
+      if (was === 'select') { leaveText(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key, picked: true }; applySel(); }
+      else if (was === 'open') { sel = null; openSelectedRow(items.get(item.key) || item); }
+      else if (!was && before && (onTimeline ? e.metaKey || e.altKey : document.activeElement === text)) before(e);
     };
   }
   el.append(line);

@@ -242,15 +242,18 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   and is stripped when the text is read). A click anywhere on a row lands the caret where it was aimed (`caretAt` pulls
   the point into the text's own box); a row that cannot answer a position takes the end. A list's own rows go through a
   selection first (below).
-- **A list's own rows: select, then go in** (`topListRow`, renderer/nodes.js; render.js). A top-level row of a view
-  (Inbox, Library, Types), a saved search or a type's page is a whole node, so a first click selects it (no caret; the
+- **A list's own rows: select, then go in** (`topListRow`, `timelineRow`, renderer/nodes.js; render.js). A top-level
+  row of a view (Inbox, Library, Types), a saved search or a type's page is a whole node, and so is a Timeline row
+  about a node and a task or meeting listed under one, so a first click selects it (no caret; the
   blue ring a focused read-only row has, editable or not, in place of the selection's band, `.picked`; a ⇧ range made
   from it is a band again; ⌘K acts on it) and a click on the selected row goes in: on a row whose title can be typed in
-  (`typesInto`) the caret lands where it was clicked, on one that cannot (read-only, a type, a canvas) its page opens.
-  ↩ on the selected row does the same, Space opens it, and the bullet zooms in at once. The box, the chevron, a chip, a
-  link and a row's buttons answer their own clicks, and a row already being typed in takes clicks as text does. The
-  Timeline, Notifications and Proposals keep their own click (it opens the row), and rows inside a document are typed
-  into on the first click.
+  (`typesInto`) the caret lands where it was clicked, on one that cannot (read-only, a type, a canvas, every Timeline
+  row) what it opens opens (`openSelectedRow`, renderer/select.js: a Timeline row the node it is about, a task under
+  one the task itself). ↩ on the selected row does the same, Space opens it, and the bullet opens it at once (on the
+  Timeline what the row is about, with ⌘/⇧/⌥ elsewhere). ⌘- and ⌥-click on a Timeline row still open it in a tab or
+  floating at once. The box, the chevron, a chip, a link and a row's buttons answer their own clicks, and a row already
+  being typed in takes clicks as text does. Notifications and Proposals keep their own click (it opens the row), and
+  rows inside a document are typed into on the first click.
 - **Links.** http(s) URLs in a text run render as links and open in the default browser (`api.openExternal`, http and
   https only); the stored text is untouched and the row stays editable.
 - **Mentions.** A mention renders as a link chip that opens its target; it carries its target's icon (`resolveReferences`,

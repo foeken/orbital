@@ -59,6 +59,15 @@ function extendSel(item, dir) { // grow (or shrink) the range from the focus end
   else rangeSelTo(sel.focus, sel.anchor);
 }
 function clearSel(key) { sel = null; selectionFrozen = false; render(); if (key) placeCaret(key); }
+// What going into a selected row opens (a second click on it, Space, ↩ on one that cannot be typed in): the node a
+// Timeline row is about, a task listed under one as itself (its row there is a read-only copy), a reference's target,
+// else the row's own page
+function openSelectedRow(item) {
+  if (item.node.timeline) return openTimeline(item.node);
+  if (item.parent?.node?.timeline) return goTo(item.node.id);
+  if (referenceTarget(item.node)) return openReference(item.node);
+  if (zoomable(item.node)) zoomTo(item);
+}
 // Moving, indenting and outdenting carry the rows as one block, so they need siblings, and a contiguous run of
 // them. Removing does not: a selection to delete is a set of rows, whatever levels they sit on (sdk/content.js
 // removeMany takes any of them, a row inside another going with the row that holds it). Requiring siblings there
@@ -123,9 +132,9 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (blockSelection(keys, false, 'Remove', false)) removeSel(keys); }
   else if (mod && e.shiftKey && vert) { if (blockSelection(keys, true, 'Move')) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'Tab' && !mod) { if (blockSelection(keys, true, e.shiftKey ? 'Outdent' : 'Indent')) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
-  else if (e.key === ' ' && !mod && keys.length === 1) { const it = items.get(keys[0]); sel = null; if (referenceTarget(it.node)) openReference(it.node); else zoomTo(it); } // Space on one selected row zooms into it, or opens what it references
-  else if (e.key === 'Enter' && !mod && keys.length === 1 && canEditText(items.get(keys[0])) && (!topListRow(items.get(keys[0])) || typesInto(items.get(keys[0])))) clearSel(keys[0]); // Enter starts editing the selected row, caret at the end — the way a second click on it does
-  else if (e.key === 'Enter' && !mod && keys.length === 1 && topListRow(items.get(keys[0])) && zoomable(items.get(keys[0]).node)) { const it = items.get(keys[0]); sel = null; zoomTo(it); } // a list row that cannot be typed in: Enter goes in, as a second click on it does
+  else if (e.key === ' ' && !mod && keys.length === 1) { const it = items.get(keys[0]); sel = null; openSelectedRow(it); } // Space on one selected row zooms into it, or opens what it references or is about
+  else if (e.key === 'Enter' && !mod && keys.length === 1 && canEditText(items.get(keys[0])) && !timelineRow(items.get(keys[0])) && (!topListRow(items.get(keys[0])) || typesInto(items.get(keys[0])))) clearSel(keys[0]); // Enter starts editing the selected row, caret at the end — the way a second click on it does
+  else if (e.key === 'Enter' && !mod && keys.length === 1 && (topListRow(items.get(keys[0])) || timelineRow(items.get(keys[0])))) { const it = items.get(keys[0]); sel = null; openSelectedRow(it); } // a list or Timeline row that cannot be typed in: Enter goes in, as a second click on it does
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;

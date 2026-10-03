@@ -340,8 +340,9 @@ flow('the Settings window writes what you pick and shows what is newest', async 
 // The flows above guard the kinds of break that came back PR after PR; these guard the paths themselves, so a change
 // that breaks opening the Timeline, pinning, getting around or dragging fails here even when it is a new kind of break.
 
-// 10. The Timeline (#135): a first launch opens on it, a row opens what it is about by click or Enter, ⌘[ comes back,
-// a task ticked under Today's Tasks is saved as done, and its end reads three more days
+// 10. The Timeline (#135): a first launch opens on it, a row is selected by a first click and opens what it is about on
+// the next, by Enter or by its bullet at once, ⌘[ comes back, a task ticked under Today's Tasks is saved as done, and
+// its end reads three more days
 flow('golden path: the Timeline opens first and leads to what each row is about', async (p) => {
   await p.start();
   await settle(p, 400); // the first read of the page lands in parts (renderer/timeline.js): clicked once it is whole
@@ -351,7 +352,11 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   assert.ok(top.includes('Upcoming meetings'), 'today\u2019s meetings to come are listed');
   assert.deepEqual(await p.js('[...document.querySelectorAll("#outline .ghead")].map((h) => h.textContent.trim())'), ['Today', 'Yesterday'], 'the history in day sections');
   const back = async () => { await p.key('⌘['); await at(p, 'orbital:timeline'); };
-  // a click on an edit opens the task edited
+  // a first click on an edit selects it and opens nothing; the next opens the task edited
+  await clickWords(p, 'Sam Okafor edited');
+  await settle(p, 200);
+  assert.deepEqual(await p.js('[zoom.docId, selKeys().map((k) => items.get(k).node.timeline?.uri)]'), ['orbital:timeline', ['mockdoc0']], 'a first click selects the Timeline row and stays on the Timeline');
+  assert.equal(await p.js('getComputedStyle(' + T('Sam Okafor edited') + ').outlineStyle'), 'solid', 'and rings it');
   await clickWords(p, 'Sam Okafor edited');
   await at(p, 'mockdoc0');
   assert.equal(await p.js('document.getElementById("title").textContent'), await p.js('tana.node("mockdoc0").then((n) => n.title)'), 'the edited task opened');
@@ -360,9 +365,16 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   await p.js('(' + T('Tomas Ilves accepted') + ').focus()'); await p.key('↩');
   await at(p, 'mockdoc5');
   await back();
-  // a meeting still to come opens its page
+  // a meeting still to come opens its page, on the second click
+  await clickWords(p, '1-1 with Priya');
+  await settle(p, 200);
+  assert.equal(await p.js('zoom.docId'), 'orbital:timeline', 'a first click on a meeting to come opens nothing');
   await clickWords(p, '1-1 with Priya');
   await at(p, 'mockmeeting7');
+  await back();
+  // the bullet opens what the row is about at once
+  await p.js(rowOf('Sam Okafor edited') + '.querySelector(".bullet").click()');
+  await at(p, 'mockdoc0');
   await back();
   // ticked under Today's Tasks: saved as done, and ticked again it is open again
   const box = rowOf('Organise working sessions') + '.querySelector(".check")', state = () => p.js('tana.node("mockdoc5").then((n) => n.stateType)');

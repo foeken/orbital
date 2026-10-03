@@ -146,6 +146,9 @@ const opensOnClick = (item) => (isTypeDoc(item.node) && !inField(item.docId)) ||
 // in, its page when not (renderer/render.js); its bullet zooms in at once. The Timeline's, the Notifications' and the
 // Proposals' rows open on a click of their own, and a draft is a title being typed.
 const topListRow = (item) => item.node.kind === 'document' && !item.node.draft && !item.node.upload && !item.node.timeline && !item.node.notification && !item.node.proposal && (!item.parent || isSearchDoc(item.parent.node) || isTypeDoc(item.parent.node));
+// A Timeline row about a node, or a task or meeting listed under one: selected by a first click as a list row is, and
+// opening what it is about on the next (renderer/select.js openSelectedRow). A line about nothing takes no click.
+const timelineRow = (item) => !!item.node.timeline?.uri || (!item.node.timeline && !!item.parent?.node?.timeline);
 // whether a row's text takes the caret: the one rule behind its contenteditable
 const typesInto = (item) => !demoMode && !opensOnClick(item) && canEditText(item);
 // A row that opens on a click opens from what it draws (words, time, chips, faces), never from the empty width beside
