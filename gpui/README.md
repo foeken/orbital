@@ -33,6 +33,31 @@ Keys: ↑↓ move, Enter opens a document or edits a row (and splits it while ed
 ⌘↑ and ⌘↓ fold, ⌘K searches and runs commands, Esc saves an edit or goes back, ⌘Z and ⇧⌘Z undo and redo, ⇧⌘L switches
 the theme.
 
+## The Timeline, drawn as the web page draws it
+
+The window opens on the Timeline, and it is meant to be indistinguishable from Orbital's: the same header (38px, its
+buttons at half opacity), the title bar, the time column, the rail and its markers, the rows a block lists, faces,
+Join and meeting glyphs, the edit's quote block, day headings, the rule after the top blocks and Create new. Every
+offset in `src/timeline.rs` was measured off the web page in Chrome, the glyphs are `icons.js` itself compiled in
+(`src/icons.rs`), and the traffic lights sit where Electron's `hiddenInset` puts them (measured: the close button at
+12, 11).
+
+`compare/compare.sh [light|dark] [WxH]` checks it: it captures shell.html on the mock in headless Chrome and the GPUI
+window at the same size, then writes them side by side and as an overlay, and prints how much ink the same words take
+in each. Both themes are at 1.00 (0.97–1.00), every flat colour is identical, and 1–2% of the pixels differ, from
+anti-aliasing and the clock times the mock stamps at load.
+
+Three things had to be added to GPUI for that:
+
+- **No font smoothing.** Orbital's CSS draws text with `-webkit-font-smoothing: antialiased`, and GPUI rasterises
+  glyphs with macOS's smoothing on, which thickens every stroke: text came out 10–18% heavier. `patches/` turns it off
+  in GPUI's glyph rasteriser; `vendor.sh` (run by `bundle.sh`) puts gpui 0.2.2 from crates.io in `vendor/` with the patch
+  applied, for Cargo's `[patch.crates-io]`.
+- **Letter-spacing.** GPUI's styles have none; the title (-0.5px) and day headings (0.06em) are a small element that
+  paints each shaped glyph shifted (`src/tracked.rs`).
+- **Comparing in sRGB.** `screencapture` tags its image with the display's colour profile, which makes every grey a
+  few levels darker and text look heavier than it is; `compare.py` converts it back before comparing.
+
 The real engine is read-only three ways: it answers only calls that read, it turns off what main/ writes while reading
 (block ids on open, the settings document's merge and tidy), and the sync client refuses to send any change except to
 Tana's own ephemeral live-query documents. A tick or an edit there is refused with a toast and drawn back.

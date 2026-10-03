@@ -2,6 +2,7 @@
 # Wraps the spike's binary in a minimal app bundle, so macOS (and Computer Use) sees an app: bundle.sh [debug|release]
 set -e
 cd "$(dirname "$0")"
+./vendor.sh
 profile=${1:-debug}
 if [ "$profile" = release ]; then cargo build --release; else cargo build; fi
 app="target/$profile/Orbital GPUI.app"

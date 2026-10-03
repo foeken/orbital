@@ -21,7 +21,7 @@ app.setPath('userData', require('../userdata').userDataDir(app.getPath('appData'
 if (app.dock) app.dock.hide();
 
 const READS = new Set(['roots', 'viewFilter', 'viewList', 'children', 'node', 'search', 'pinIds', 'status', 'members', 'searches',
-  'searchFilter', 'taskMeta', 'typeList', 'timelinePages', 'inboxUnread', 'filters']);
+  'searchFilter', 'taskMeta', 'typeList', 'timelinePages', 'inboxUnread', 'filters', 'pinDates']);
 
 const handlers = {};
 electron.ipcMain.handle = (channel, fn) => { handlers[channel] = fn; };

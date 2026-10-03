@@ -2,7 +2,11 @@
 //! (sidecar.js, answering window.api's calls) knows Tana. Keyboard first: arrows move, Enter opens or edits, Tab and
 //! Shift-Tab indent, ⌘Enter ticks, ⌘K searches, Esc goes back.
 mod engine;
+mod icons;
 mod input;
+mod time;
+mod timeline;
+mod tracked;
 
 use engine::{Engine, Push};
 use futures::StreamExt;
@@ -11,7 +15,7 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use input::{InputEvent, TextInput};
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -30,7 +34,6 @@ struct Theme {
     fg: Hsla,
     muted: Hsla,
     faint: Hsla,
-    chrome: Hsla,
     line: Hsla,
     select: Hsla,
     surface: Hsla,
@@ -39,17 +42,49 @@ struct Theme {
     link: Hsla,
     chip: Hsla,
     scrim: Hsla,
+    // the window's header and title (shell.css .head, styles.css .titlebar h1)
+    head_bg: Hsla,
+    head_btn: Hsla,
+    head_hover: Hsla,
+    title: Hsla,
+    create_bg: Hsla,
+    create_fg: Hsla,
+    // the Timeline (styles.css "Timeline"): an entry's words, the markers, the rail, a finished entry's disc
+    entry: Hsla,
+    marker: Hsla,
+    marker_new: Hsla,
+    marker_robot_new: Hsla,
+    accent_live: Hsla,
+    rail: Hsla,
+    done: Hsla,
+    unread: Hsla,
+    check: Hsla,
+    check_on: Hsla,
+    face_text: Hsla,
+    face_more: Hsla,
+    detail_border: Hsla,
+    detail_bg: Hsla,
+    detail_text: Hsla,
+    detail_strong: Hsla,
 }
 
 fn theme(dark: bool) -> Theme {
     let c = |x: u32| -> Hsla { rgb(x).into() };
     let ca = |x: u32| -> Hsla { rgba(x).into() };
     if dark {
-        Theme { dark, bg: c(0x1b1d1e), fg: c(0xc9c9c9), muted: c(0xa0a5a8), faint: c(0x5c6266), chrome: c(0x202325), line: c(0x2e3235),
-            select: ca(0x6ea8dc2e), surface: c(0x242729), accent: c(0x6ea8dc), green: c(0x5abe78), link: c(0x8ab8e8), chip: c(0x2c3033), scrim: ca(0x00000085) }
+        Theme { dark, bg: c(0x1b1d1e), fg: c(0xc9c9c9), muted: c(0xa0a5a8), faint: c(0x5c6266), line: c(0x2e3235),
+            select: ca(0x6ea8dc2e), surface: c(0x242729), accent: c(0x6ea8dc), green: c(0x5abe78), link: c(0x8ab8e8), chip: c(0x2c3033), scrim: ca(0x00000085),
+            head_bg: c(0x232627), head_btn: c(0xaaaaaa), head_hover: c(0x3a3f42), title: c(0xe8eaec), create_bg: c(0x242729), create_fg: c(0xa6a6a6),
+            entry: c(0xccd0d3), marker: c(0x8a8f95), marker_new: c(0x5a5d60), marker_robot_new: c(0x5a5d60), accent_live: c(0x3b9eff), rail: c(0x34373a),
+            done: c(0x5a9670), unread: c(0x0090ff), check: c(0x3a3e40), check_on: c(0x5b976c), face_text: c(0xbbbbbb), face_more: c(0x33383b),
+            detail_border: c(0x45484b), detail_bg: c(0x242628), detail_text: c(0xb4b6b8), detail_strong: c(0xd4d6d8) }
     } else {
-        Theme { dark, bg: c(0xffffff), fg: c(0x1a1a1a), muted: c(0x666666), faint: c(0xb4b4b4), chrome: c(0xf5f5f5), line: c(0xebebeb),
-            select: ca(0x508fbb24), surface: c(0xffffff), accent: c(0x508fbb), green: c(0x34a853), link: c(0x2f6db5), chip: c(0xf0f0f0), scrim: ca(0x0000001f) }
+        Theme { dark, bg: c(0xffffff), fg: c(0x1a1a1a), muted: c(0x666666), faint: c(0xb4b4b4), line: c(0xebebeb),
+            select: ca(0x508fbb24), surface: c(0xffffff), accent: c(0x508fbb), green: c(0x34a853), link: c(0x2f6db5), chip: c(0xf0f0f0), scrim: ca(0x0000001f),
+            head_bg: c(0xf6f6f6), head_btn: c(0x777777), head_hover: c(0xdddddd), title: c(0x1c2024), create_bg: c(0xffffff), create_fg: c(0x6b6b6b),
+            entry: c(0x3c3e42), marker: c(0x8e9297), marker_new: c(0xc4c4c4), marker_robot_new: c(0xaeb1b5), accent_live: c(0x0090ff), rail: c(0xe6e6e6),
+            done: c(0x5a9670), unread: c(0x0090ff), check: c(0xe4e4e4), check_on: c(0x6fae82), face_text: c(0x666666), face_more: c(0xeeeeee),
+            detail_border: c(0xdcdcdc), detail_bg: c(0xf6f6f6), detail_text: c(0x555555), detail_strong: c(0x333333) }
     }
 }
 
@@ -153,6 +188,22 @@ struct Page {
     meta: String,
     rows: Vec<Value>,
     doc: Option<String>,
+    /// the days each document is pinned to (api.pinDates), for the Timeline's "Pinned to Today" line
+    pins: HashMap<String, Vec<String>>,
+}
+
+/// What the page's virtual list holds, item by item. A page is its head and its rows; the Timeline interleaves day
+/// headings, its entries and the rows they list, Add more, the rule after the top blocks and Show three more days.
+#[derive(Clone)]
+enum Slot {
+    PageHead,
+    Row(usize),
+    DayHead { key: String, title: String, top: f32, open: bool },
+    Entry(usize),
+    Child { ix: usize, last: bool, boxes: bool },
+    AddMore,
+    Divider,
+    Older,
 }
 
 #[derive(Clone)]
@@ -201,9 +252,17 @@ struct Orbital {
     follow_system: bool,
     note: Option<(u64, SharedString)>,
     seq: u64,
-    /// the page as a virtual list: item 0 the head, then one item per visible row. Only what is on screen is laid out,
-    /// so a frame costs the same at 50 rows or 50,000.
+    /// the page as a virtual list of slots (Slot). Only what is on screen is laid out, so a frame costs the same at 50
+    /// rows or 50,000.
     list: ListState,
+    slots: Vec<Slot>,
+    /// the Timeline's folded days, its date pins, how many three-day pages it reads, and whether a key moved the caret
+    /// (the page draws no caret until one does, as the web page shows none)
+    tl_folded: HashSet<String>,
+    pins: HashMap<String, Vec<String>>,
+    tl_pages: u32,
+    tl_loading: bool,
+    keyed: bool,
     started: Option<Instant>,
     timing: bool,
     window: Option<AnyWindowHandle>,
@@ -240,7 +299,7 @@ impl Orbital {
             focus,
             views,
             pinned: vec![],
-            place: Place::View(std::env::var("ORBITAL_START").unwrap_or_else(|_| "library".into())),
+            place: Place::View(std::env::var("ORBITAL_START").unwrap_or_else(|_| "timeline".into())),
             back: vec![],
             page: None,
             lines: vec![],
@@ -257,6 +316,12 @@ impl Orbital {
             note: None,
             seq: 0,
             list: ListState::new(1, ListAlignment::Top, px(600.)),
+            slots: vec![],
+            tl_folded: HashSet::new(),
+            pins: HashMap::new(),
+            tl_pages: 1,
+            tl_loading: false,
+            keyed: false,
             started: Some(started),
             timing: std::env::var("ORBITAL_TIMING").is_ok(),
             window: Some(window.window_handle()),
@@ -268,6 +333,16 @@ impl Orbital {
         }
         this.reload(window, cx);
         this.load_pins(window, cx);
+        // the free time counts down while the Timeline is on screen (renderer/timeline.js, every 15 s)
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(15)).await;
+                if this.update(cx, |this, cx| if this.is_timeline() { cx.notify() }).is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
         this
     }
 
@@ -295,8 +370,9 @@ impl Orbital {
                     return; // a newer read was asked for: an answer that arrives late never paints over it
                 }
                 match page {
-                    Ok(page) => {
+                    Ok(mut page) => {
                         let keep = this.keep_cursor.then(|| this.lines.get(this.cursor).map(|l| l.id.clone())).flatten();
+                        this.pins = std::mem::take(&mut page.pins);
                         this.page = Some(page);
                         this.flatten();
                         this.relist(!this.keep_cursor);
@@ -428,8 +504,17 @@ impl Orbital {
     }
 
     /// Tells the list its rows changed. A new page starts at the top; a page that changed under you stays where it was.
-    fn relist(&self, fresh: bool) {
-        let count = self.lines.len() + 1;
+    fn is_timeline(&self) -> bool {
+        matches!(&self.place, Place::View(id) if id == "timeline")
+    }
+
+    fn relist(&mut self, fresh: bool) {
+        self.slots = if self.is_timeline() {
+            timeline::slots(&self.lines, &self.tl_folded)
+        } else {
+            std::iter::once(Slot::PageHead).chain((0..self.lines.len()).map(Slot::Row)).collect()
+        };
+        let count = self.slots.len().max(1);
         if fresh {
             return self.list.reset(count);
         }
@@ -439,8 +524,15 @@ impl Orbital {
         self.list.scroll_to(top);
     }
 
+    /// the list item that draws a row
+    fn slot_of(&self, line: usize) -> Option<usize> {
+        self.slots.iter().position(|s| matches!(s, Slot::Row(i) | Slot::Entry(i) | Slot::Child { ix: i, .. } if *i == line))
+    }
+
     fn reveal(&self) {
-        self.list.scroll_to_reveal_item(self.cursor + 1); // item 0 is the page head
+        if let Some(ix) = self.slot_of(self.cursor) {
+            self.list.scroll_to_reveal_item(ix);
+        }
     }
 
     fn go(&mut self, place: Place, push: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -451,6 +543,7 @@ impl Orbital {
         self.place = place;
         self.keep_cursor = false;
         self.cursor = 0;
+        self.keyed = false;
         self.reload(window, cx);
         cx.notify();
     }
@@ -484,7 +577,9 @@ impl Orbital {
         self.cursor = ix;
         // A row only takes typing once it is painted: the list keeps a focused row drawn even off screen, and once it
         // has been measured it is scrolled into view again (a new row is first revealed at no height).
-        self.list.splice_focusable(ix + 1..ix + 2, [Some(input.focus_handle(cx))]);
+        if let Some(slot) = self.slot_of(ix) {
+            self.list.splice_focusable(slot..slot + 1, [Some(input.focus_handle(cx))]);
+        }
         cx.on_next_frame(window, |this, _, cx| {
             this.reveal();
             cx.notify();
@@ -547,6 +642,7 @@ impl Orbital {
 
     fn up(&mut self, _: &Up, window: &mut Window, cx: &mut Context<Self>) {
         self.timed("up", window);
+        self.keyed = true;
         if let Some(p) = self.palette.as_mut() {
             p.sel = p.sel.saturating_sub(1);
             return cx.notify();
@@ -566,6 +662,7 @@ impl Orbital {
 
     fn down(&mut self, _: &Down, window: &mut Window, cx: &mut Context<Self>) {
         self.timed("down", window);
+        self.keyed = true;
         if let Some(p) = self.palette.as_mut() {
             p.sel = (p.sel + 1).min(p.items.len().saturating_sub(1));
             return cx.notify();
@@ -616,7 +713,7 @@ impl Orbital {
             let temp = format!("pending:{}", rand_id());
             node["id"] = json!(temp);
             self.lines.insert(end, Line { id: temp.clone(), depth, node, doc: Some(doc.clone()) });
-            self.list.splice(end + 1..end + 1, 1);
+            self.relist(false);
             self.editing = None;
             self.edit_at(end, Some(0), window, cx);
             self.reveal();
@@ -819,47 +916,6 @@ impl Orbital {
 
     // ---- drawing ----
 
-    fn sidebar(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let entry = |i: usize, (place, title): &(Place, String)| {
-            let place = place.clone();
-            let active = place == self.place;
-            div()
-                .id(("side", i))
-                .flex_none()
-                .px(px(10.))
-                .py(px(5.))
-                .rounded(px(6.))
-                .text_size(px(14.))
-                .truncate()
-                .when(active, |d| d.bg(t.select))
-                .hover(|d| d.bg(t.line))
-                .child(title.clone())
-                .on_click(cx.listener(move |this, _, window, cx| this.go(place.clone(), true, window, cx)))
-        };
-        let views: Vec<_> = self.views.iter().enumerate().map(|(i, v)| entry(i, v)).collect();
-        let pins: Vec<_> = self.pinned.iter().enumerate().map(|(i, v)| entry(100 + i, v)).collect();
-        div()
-            .id("sidebar")
-            .w(px(220.))
-            .flex_none()
-            .h_full()
-            .overflow_y_scroll()
-            .pb(px(24.))
-            .bg(t.chrome)
-            .border_r_1()
-            .border_color(t.line)
-            .pt(px(52.))
-            .px(px(10.))
-            .flex()
-            .flex_col()
-            .gap(px(1.))
-            .children(views)
-            .when(!pins.is_empty(), |d| {
-                d.child(div().mt(px(18.)).mb(px(4.)).px(px(10.)).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.muted).child("PINNED"))
-                    .children(pins)
-            })
-    }
-
     fn row(&self, ix: usize, line: &Line, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let v = &line.node;
         let heading = v.get("heading").and_then(Value::as_u64);
@@ -1038,26 +1094,66 @@ impl Orbital {
     }
 
     fn list_item(&mut self, ix: usize, cx: &mut Context<Self>) -> AnyElement {
-        let t = self.theme();
-        if ix > 0 {
-            return match self.lines.get(ix - 1) {
-                Some(line) => {
-                    let row = self.row(ix - 1, line, &t, cx);
-                    if ix == self.lines.len() { div().pb(px(160.)).child(row).into_any_element() } else { row }
-                }
-                None => div().into_any_element(),
-            };
+        if self.is_timeline() {
+            return self.tl_slot(ix, cx);
         }
-        let (title, meta) = self.page.as_ref().map(|p| (p.title.clone(), p.meta.clone())).unwrap_or_default();
-        let empty = self.lines.is_empty() && self.page.is_some();
+        let t = self.theme();
+        let last = ix + 1 == self.slots.len();
+        match self.slots.get(ix).cloned() {
+            Some(Slot::Row(i)) => {
+                let line = self.lines[i].clone();
+                let row = self.row(i, &line, &t, cx);
+                div().px(px(36.)).when(last, |d| d.pb(px(160.))).child(row).into_any_element()
+            }
+            _ => {
+                let meta = self.page.as_ref().map(|p| p.meta.clone()).unwrap_or_default();
+                let empty = self.lines.is_empty() && self.page.is_some();
+                div()
+                    .pt(px(4.))
+                    .pb(px(12.))
+                    .pl(px(32.))
+                    .when(!meta.is_empty(), |d| d.child(div().text_size(px(13.)).text_color(t.muted).child(meta)))
+                    .when(empty, |d| d.child(div().mt(px(24.)).text_size(px(15.)).text_color(t.muted).child("Nothing here yet. ⌘K finds something to open.")))
+                    .into_any_element()
+            }
+        }
+    }
+
+    /// The window's header (shell.css .head): 38px over the whole width, the traffic lights at its left, the app's
+    /// switches at its right — Work View, sensitive items, ⌘K, Help — each a 24px button at half opacity.
+    fn header(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let button = |id: &'static str, icon: &'static str| {
+            div()
+                .id(id)
+                .size(px(24.))
+                .flex_none()
+                .rounded(px(4.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .opacity(0.5)
+                .hover(|d| d.bg(t.head_hover).opacity(1.))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(svg().path(format!("{icon}.svg")).size(px(18.)).text_color(t.head_btn))
+        };
         div()
-            .pt(px(44.))
-            .pb(px(16.))
-            .pl(px(38.))
-            .child(div().text_size(px(32.)).line_height(px(40.)).font_weight(FontWeight::BOLD).child(title))
-            .when(!meta.is_empty(), |d| d.child(div().mt(px(2.)).text_size(px(13.)).text_color(t.muted).child(meta)))
-            .when(empty, |d| d.child(div().mt(px(24.)).text_size(px(15.)).text_color(t.muted).child("Nothing here yet. ⌘K finds something to open.")))
-            .into_any_element()
+            .h(px(38.))
+            .w_full()
+            .flex_none()
+            .bg(t.head_bg)
+            .flex()
+            .items_center()
+            .justify_end()
+            .gap(px(2.))
+            .pl(px(80.))
+            .pr(px(12.))
+            .on_mouse_down(MouseButton::Left, |ev: &MouseDownEvent, window, _| {
+                if ev.click_count >= 2 { window.titlebar_double_click() } else { window.start_window_move() }
+            })
+            .child(button("head-home", "home").on_click(cx.listener(|this, _, window, cx| this.go(Place::View("timeline".into()), true, window, cx))))
+            .child(button("head-sensitive", "hidden"))
+            .child(button("head-palette", "command").on_click(cx.listener(|this, _, window, cx| this.palette(&Palette, window, cx))))
+            .child(button("head-help", "help"))
     }
 }
 
@@ -1066,20 +1162,21 @@ async fn load(engine: &Engine, place: &Place, title: String) -> Result<Page, Str
     match place {
         Place::View(id) if id == "timeline" => {
             let rows = engine.call("children", json!(["orbital:timeline"])).await?;
-            Ok(Page { title, meta: String::new(), rows: list(rows), doc: None })
+            let pins = engine.call("pinDates", json!([])).await.ok().and_then(|p| serde_json::from_value(p).ok()).unwrap_or_default();
+            Ok(Page { title: "Timeline".into(), meta: String::new(), rows: list(rows), doc: None, pins })
         }
         Place::View(id) => {
             let filter = engine.call("viewFilter", json!([id])).await?;
             let found = engine.call("viewList", json!([id, filter])).await?;
             let rows = list(found["nodes"].clone());
-            Ok(Page { title, meta: format!("{} items", rows.len()), rows, doc: None })
+            Ok(Page { title, meta: format!("{} items", rows.len()), rows, doc: None, pins: HashMap::new() })
         }
         Place::Doc(id) => {
             let info = engine.call("node", json!([id])).await?;
             let rows = engine.call("children", json!([id])).await?;
             let tags: Vec<String> = info["tags"].as_array().map(Vec::as_slice).unwrap_or(&[]).iter().map(|t| format!("#{}", s(t, "label"))).collect();
             let meta = [tags.join(" "), s(&info, "meta").to_string()].into_iter().filter(|m| !m.is_empty()).collect::<Vec<_>>().join("  ·  ");
-            Ok(Page { title: title_of(&info), meta, rows: list(rows), doc: Some(id.clone()) })
+            Ok(Page { title: title_of(&info), meta, rows: list(rows), doc: Some(id.clone()), pins: HashMap::new() })
         }
     }
 }
@@ -1094,6 +1191,13 @@ impl Render for Orbital {
         let t = self.theme();
         let palette = self.palette.as_ref().map(|p| self.palette_card(p, &t, cx));
         let note = self.note.as_ref().map(|(_, n)| n.clone());
+        let title = self.page.as_ref().map(|p| p.title.clone()).unwrap_or_default();
+        let shadow = |c: u32, y: f32, blur: f32, spread: f32| BoxShadow { color: rgba(c).into(), offset: point(px(0.), px(y)), blur_radius: px(blur), spread_radius: px(spread) };
+        let create_shadow = if t.dark {
+            vec![shadow(0x00000073, 6., 24., 0.), shadow(0xffffff14, 0., 0., 1.)]
+        } else {
+            vec![shadow(0x0000001a, 6., 24., 0.), shadow(0x0000000f, 1., 3., 0.), shadow(0x0000000f, 0., 0., 1.)]
+        };
         div()
             .id("orbital")
             .key_context("Orbital")
@@ -1114,24 +1218,37 @@ impl Render for Orbital {
             .relative()
             .size_full()
             .flex()
+            .flex_col()
             .bg(t.bg)
             .text_color(t.fg)
             .font_family(".SystemUIFont")
-            .child(self.sidebar(&t, cx))
-            .child(
-                div().flex_1().h_full().px(px(36.)).child(list(self.list.clone(), cx.processor(|this, ix: usize, _, cx| this.list_item(ix, cx))).size_full()),
-            )
-            // the top band moves the window, as a title bar does (the window has none of its own)
+            .text_size(px(16.))
+            .child(self.header(&t, cx))
+            // the page's title bar (styles.css .titlebar): 18px over the title, 32px in, 6px under it; it does not scroll
             .child(
                 div()
+                    .flex_none()
+                    .pt(px(19.5)) // 18px in CSS; GPUI centres a 34px line 1.5px higher in its 40px than Chromium does
+                    .px(px(32.))
+                    .pb(px(4.5))
+                    .child(div().text_size(px(34.)).line_height(px(40.)).font_weight(FontWeight::BOLD).text_color(t.title).overflow_hidden().child(tracked::tracked(title, -0.5))),
+            )
+            .child(div().flex_1().min_h_0().child(list(self.list.clone(), cx.processor(|this, ix: usize, _, cx| this.list_item(ix, cx))).size_full()))
+            // Create new (shell.css .create): a round button floating in the window's corner
+            .child(
+                div()
+                    .id("create")
                     .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
-                    .h(px(36.))
-                    .on_mouse_down(MouseButton::Left, |ev: &MouseDownEvent, window, _| {
-                        if ev.click_count >= 2 { window.titlebar_double_click() } else { window.start_window_move() }
-                    }),
+                    .right(px(20.))
+                    .bottom(px(20.))
+                    .size(px(40.))
+                    .rounded_full()
+                    .bg(t.create_bg)
+                    .shadow(create_shadow)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(svg().path("textPlus.svg").size(px(16.)).text_color(t.create_fg)),
             )
             .children(palette)
             .children(note.map(|n| {
@@ -1144,7 +1261,7 @@ impl Render for Orbital {
 
 fn main() {
     let started = Instant::now();
-    Application::new().run(move |cx: &mut App| {
+    Application::new().with_assets(icons::Icons).run(move |cx: &mut App| {
         input::bind_keys(cx);
         let c = Some("Orbital");
         cx.bind_keys([
@@ -1167,10 +1284,12 @@ fn main() {
         cx.on_action(|_: &Quit, cx| cx.quit());
         cx.set_menus(vec![Menu { name: "Orbital".into(), items: vec![MenuItem::action("Quit Orbital", Quit)] }]);
         let (engine, pushes) = Engine::start().expect("could not start the engine (node gpui/sidecar.js)");
-        let bounds = Bounds::centered(None, size(px(1100.), px(760.)), cx);
+        let (w, h) = std::env::var("ORBITAL_SIZE").ok().and_then(|s| s.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))).unwrap_or((1100., 760.));
+        let bounds = Bounds::centered(None, size(px(w), px(h)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(TitlebarOptions { title: Some("Orbital".into()), appears_transparent: true, traffic_light_position: Some(point(px(14.), px(16.))) }),
+            // where Electron's hiddenInset puts them in Orbital's window, measured: the close button at 12, 11
+            titlebar: Some(TitlebarOptions { title: Some("Orbital".into()), appears_transparent: true, traffic_light_position: Some(point(px(12.), px(11.))) }),
             ..Default::default()
         };
         cx.open_window(options, |window, cx| cx.new(|cx| Orbital::new(engine, pushes, started, window, cx))).expect("window");
