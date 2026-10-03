@@ -189,8 +189,9 @@ struct TimelineScreen: View {
             // always, as the desktop has it: a quiet three days must not hide the days before them
             if !engine.rows.isEmpty {
                 Button { Task { await engine.more() } } label: {
-                    // the saved Timeline is on screen before Tana connects: more days wait for it, greyed
-                    Text(engine.loading || engine.phase == .starting ? "Loading…" : "Show three more days").frame(maxWidth: .infinity)
+                    // the saved Timeline is on screen before Tana connects, or when it cannot be reached: more days wait for
+                    // it, greyed and saying why
+                    Text(engine.loading || engine.phase == .starting ? "Loading…" : engine.phase == .ready ? "Show three more days" : "Can't reach Tana").frame(maxWidth: .infinity)
                 }
                 .foregroundStyle(.secondary)
                 .disabled(engine.loading || engine.phase != .ready)

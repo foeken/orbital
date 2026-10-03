@@ -140,6 +140,10 @@ class ScreensTest {
             setContent { OrbitalApp(engine) }
             waitUntil(timeoutMillis = 5000) { onAllWithText("Priya completed").isNotEmpty() }
             onNodeWithText("Loading…").assertIsNotEnabled()
+            // and Tana out of reach: still greyed, saying so rather than loading
+            engine.failed("net::ERR_INTERNET_DISCONNECTED")
+            waitUntil(timeoutMillis = 3000) { onAllWithText("Can't reach Tana").isNotEmpty() }
+            onNodeWithText("Can't reach Tana").assertIsNotEnabled()
         } finally {
             scope.cancel()
         }
