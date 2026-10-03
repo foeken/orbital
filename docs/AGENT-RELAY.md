@@ -19,7 +19,7 @@ task's id and a status. Your words never leave Tana.
    through orbital.md. You give them to the agent.
 3. The agent adds both servers (its Tana access is its own, signed in as you). Its MCP client signs in to Orbital's on
    its own (OAuth below), calls `link_orbital` with the code and a name it chose, and is linked. The code works once and
-   for ten minutes.
+   for fifteen minutes.
 4. The page, asking every two seconds, sees the code used, closes on "Linked GrokBot · Grok", and the agent is one of
    yours: `relay:<id>` in main/agent.js, on from the start, in Choose agents, Assign to Agent and Settings.
 5. **Assign to Agent** writes the request into the node's `Agent context` block, as for every agent, then queues
@@ -73,7 +73,7 @@ whichever device asked, so two devices do not both take one), `POST /orbital/upd
 - **Whoever reads your Orbital settings document can act as your Orbital**: hand your agents node ids and read their
   statuses. That is you, Tana, and anyone you share that document with. Cmd+K → Choose agents → Reset the link key
   makes a new key for the same Orbital, so the agents stay linked.
-- **A code is a short secret**: 40 bits, once, ten minutes, ten tries a minute per connection.
+- **A code is a short secret**: 40 bits, once, fifteen minutes, ten tries a minute per connection.
 - **An agent is not trusted with more than its tasks** by Orbital: through the relay it learns only the node ids sent
   to it, and what it sends back is a status, never an action of Orbital's. What it can read and write in Tana is what
   its own Tana access allows, which is yours: link only agents you would give your Tana to.

@@ -16,7 +16,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 
 const MINUTE = 60e3, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
-const TTL = { message: DAY, update: DAY, code: 10 * MINUTE, grant: 10 * MINUTE, access: HOUR, refresh: 90 * DAY, task: 30 * DAY, lease: 10 * MINUTE, updateLease: 2 * MINUTE };
+const TTL = { message: DAY, update: DAY, code: 15 * MINUTE, grant: 10 * MINUTE, access: HOUR, refresh: 90 * DAY, task: 30 * DAY, lease: 10 * MINUTE, updateLease: 2 * MINUTE };
 const LIMITS = { body: 32 * 1024, queue: 200, codes: 5, agents: 50, name: 60, perMinute: 120, links: 10 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODE = /^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/;
@@ -30,7 +30,7 @@ const TANA_MCP = 'https://home.tana.inc/mcp';
 const hash = (text) => crypto.createHash('sha256').update(String(text)).digest('base64url');
 const sameHash = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const newToken = () => crypto.randomBytes(32).toString('base64url');
-// 8 characters, 40 bits: a code lives ten minutes, is used once, and a connection may try ten a minute
+// 8 characters, 40 bits: a code lives fifteen minutes, is used once, and a connection may try ten a minute
 function newCode() { let s = ''; for (const b of crypto.randomBytes(8)) s += ALPHABET[b & 31]; return s.slice(0, 4) + '-' + s.slice(4); }
 const fail = (status, code, message, rpc) => Object.assign(new Error(message || code), { status, code, rpc });
 const text = (value, max) => (typeof value === 'string' ? value.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) : '');
@@ -74,19 +74,25 @@ const HOW = 'Each task is a Tana node and an action. For "assign", read the node
 const INSTRUCTIONS = 'Orbital is an outliner over Tana. Its owner hands you Tana nodes to work on. You need two MCP servers: this one, and Tana\'s at '
   + TANA_MCP + '. Link once with link_orbital and the code they give you, then call get_tasks to see what they handed you. ' + HOW
   + ' Only ids pass through Orbital: the words are in Tana.';
+// Every tool says what it does (annotations): ChatGPT expects all three hints stated, and asks before running one that
+// writes. get_tasks only marks the tasks it hands out as fetched, so it counts as reading: checking for work needs no
+// confirmation. link_orbital and update_task write, harmlessly and only to Orbital.
 const TOOLS = [
   { name: 'link_orbital', title: 'Link with Orbital',
     description: 'Link yourself to the Orbital of the person you work for, with the one-time code they gave you (Orbital: Cmd+K, Connect to new agent). '
       + 'Choose a short name for yourself: it is how you are shown in Orbital. Linking again with a new code moves you to that Orbital.',
-    inputSchema: { type: 'object', properties: { code: { type: 'string', description: 'The link code, like 7KQX-M2PD' }, name: { type: 'string', description: 'A short name for yourself, shown in Orbital' } }, required: ['code', 'name'], additionalProperties: false } },
+    inputSchema: { type: 'object', properties: { code: { type: 'string', description: 'The link code, like 7KQX-M2PD' }, name: { type: 'string', description: 'A short name for yourself, shown in Orbital' } }, required: ['code', 'name'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
   { name: 'get_tasks', title: 'Get tasks from Orbital',
     description: 'The tasks Orbital handed you that you have not reported on yet: a task_id, a Tana node id and an action each. ' + HOW
       + ' A task you fetch and do not report on comes back after ten minutes.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
   { name: 'update_task', title: 'Report on an Orbital task',
     description: 'Tell Orbital how a task is going: working, completed or failed. What you did, found or need goes into the Tana node itself, with your Tana tools. '
       + 'Your first update also tells Orbital you received the task.',
-    inputSchema: { type: 'object', properties: { task_id: { type: 'string' }, status: { type: 'string', enum: STATUSES } }, required: ['task_id', 'status'], additionalProperties: false } },
+    inputSchema: { type: 'object', properties: { task_id: { type: 'string' }, status: { type: 'string', enum: STATUSES } }, required: ['task_id', 'status'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
 ];
 
 function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now } = {}) {

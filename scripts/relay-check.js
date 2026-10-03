@@ -62,7 +62,10 @@ const server = http.createServer(relay.handle);
     return agent;
   }
   const grok = await signIn('Grok');
-  assert.deepEqual((await grok.rpc('tools/list')).result.tools.map((t) => t.name), ['link_orbital', 'get_tasks', 'update_task']);
+  const listed = (await grok.rpc('tools/list')).result.tools;
+  assert.deepEqual(listed.map((t) => t.name), ['link_orbital', 'get_tasks', 'update_task']);
+  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false], [true, false, false], [false, false, false]],
+    'each says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three): only get_tasks reads, none destroys');
   assert.match((await grok.tool('get_tasks')).text, /Not linked/, 'an agent with no link is told how to get one');
 
   // a refresh token turns once: the new pair works, the old refresh token does not
@@ -75,7 +78,8 @@ const server = http.createServer(relay.handle);
   const orbital = { key: newKey() }, firstKey = orbital.key, stranger = { key: newKey() };
   const as = (o) => 'Orbital ' + o.key;
   assert.equal((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).status, 401, 'an unknown key is refused');
-  const { code } = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json;
+  const { code, expiresAt } = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json;
+  assert.equal(expiresAt - clock, 15 * 60e3, 'a code works for fifteen minutes');
   assert.deepEqual((await call('GET', '/mcp/orbital/agents', { auth: as(orbital) })).json.agents, [], 'until it asks for a link code: then it is an Orbital, with no agents yet');
   assert.equal((await call('GET', '/mcp/orbital/codes/' + code, { auth: as(stranger) })).status, 401, 'another key reads nothing of it');
   assert.match(code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/);

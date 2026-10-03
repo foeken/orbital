@@ -154,7 +154,7 @@ function relayRows() {
   if (c.state === 'failed') return [{ group: 'Connect to new agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Connect to new agent', label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
   const group = 'Give these to the agent · it adds the servers, names itself and links';
-  const rows = [{ group, icon: 'link', label: 'Copy instructions for your agent', hint: '↩', keepOpen: true, match: [],
+  const rows = [{ group, icon: 'prompt', label: 'Copy instructions for your agent', hint: '↩', keepOpen: true, match: [],
     run: () => run(() => copyText(c.prompt, 'Copied: give them to your agent')) },
   // what crosses orbital.md (main/agents/linked.js send): a node's id and an action out, a status back
   { group, icon: 'lock', label: 'Only ids go through orbital.md: your words stay in Tana, where the agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] }];
