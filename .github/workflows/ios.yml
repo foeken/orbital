@@ -3,12 +3,13 @@ name: iOS
 # The iPhone app's UI tests (ios/OrbitalUITests) on a simulator, on the invented -sample content. macOS minutes cost more
 # than Linux ones, so this runs only when the iPhone app changes. The desktop code its engine bundles (sdk/, main/timeline.js,
 # main/settings.js, renderer/segments.js) is covered on every PR by CI's npm run check, which builds and runs that bundle
-# (scripts/ios-engine-check.js).
+# (scripts/ios-engine-check.js). Like CI, it waits until a pull request is marked ready for review.
 on:
   push:
     branches: [main]
     paths: ['ios/**', '.github/workflows/ios.yml']
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths: ['ios/**', '.github/workflows/ios.yml']
 
 # a newer push to a pull request replaces its run; every merge to main finishes its own, so main shows each commit's result
@@ -18,6 +19,7 @@ concurrency:
 
 jobs:
   ui-tests:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: macos-26
     steps:
       # The simulator takes minutes to come up on a runner, so it starts first and boots in the background while the

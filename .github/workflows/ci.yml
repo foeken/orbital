@@ -3,7 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # a draft pull request is tested on the machine that writes it (AGENTS.md, Pull requests); the checks run here when it is
+  # marked ready for review, and again on every push after that
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -30,6 +33,7 @@ jobs:
           ./gitleaks git --redact --no-banner --log-opts="$RANGE" .
 
   check:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
