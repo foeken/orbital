@@ -47,6 +47,12 @@ object Glyphs {
     }
 
     fun ofUri(uri: String): String = of(com.dreetje.orbital.kindOf(uri))
+
+    // the rail's marker for a Timeline row's icon (main/timeline.js ICON): a meeting, and anything else, by its calendar
+    fun marker(icon: String?): String = when (icon) {
+        "tlAccepted", "tlLater", "tlInbox", "tlNew", "updated", "robot", "tana", "free", "todayTasks", "pinRoute" -> icon
+        else -> "calendar"
+    }
 }
 
 @Composable

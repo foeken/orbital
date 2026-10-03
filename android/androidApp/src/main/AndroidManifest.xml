@@ -53,5 +53,31 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+        <!-- the widgets (Widgets.kt): Today's Tasks on the home screen, the Timeline on a Galaxy Z Flip's cover screen -->
+        <receiver
+            android:name=".TodayWidgetReceiver"
+            android:exported="false"
+            android:label="Today's Tasks">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget" />
+        </receiver>
+        <receiver
+            android:name=".TimelineWidgetReceiver"
+            android:exported="false"
+            android:label="Timeline">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/timeline_widget" />
+            <meta-data
+                android:name="com.samsung.android.appwidget.provider"
+                android:resource="@xml/flex_window" />
+        </receiver>
     </application>
 </manifest>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="today_widget">The tasks pinned to today, each a tap from its page</string>
+    <string name="timeline_widget">Your Timeline: today\'s tasks, the meetings to come with their documents, and what happened</string>
+</resources>

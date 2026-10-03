@@ -236,6 +236,11 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.strictEqual(today.timeline.time, 'Now', 'the Today stop keeps its own time through labels.js');
   assert.ok(page.calls.some((c) => c.includes('GraphService/ListNodes')), 'the Timeline asks the graph');
   assert.strictEqual(page.orbital.email(), 'a@b.c');
+  // the widgets' meeting previews (Engine.kt glimpse): each meeting's documents from the graph, no meeting opened for it
+  const synced = page.calls.filter((c) => c.includes('ServerSyncCommand')).length;
+  const meeting = 'tana:event:01aaaaaaaaaaaaaaaaaaaaaaab';
+  assert.deepStrictEqual(JSON.parse(await page.orbital.docs([meeting])), { [meeting]: [] });
+  assert.strictEqual(page.calls.filter((c) => c.includes('ServerSyncCommand')).length, synced, 'no meeting subscribed for its documents');
   fs.rmSync(out, { force: true });
   console.log('ios engine check ok');
   process.exit(0); // the fake sync stream keeps retrying

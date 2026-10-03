@@ -194,6 +194,14 @@ fun Shell(engine: Engine, start: Start = Start()) {
     }
     // an image's node, made: opened, as the desktop opens it
     LaunchedEffect(engine.made) { engine.made?.let { engine.made = null; push(it); show(false) } }
+    // a widget's tap with the app already open (Widgets.kt): Quick Add, or that node over the Timeline
+    LaunchedEffect(engine.widget) {
+        val tapped = engine.widget ?: return@LaunchedEffect
+        engine.widget = null
+        settings = false
+        if (tapped == "add") adding = true else { adding = false; page = Menu.Timeline; path.clear(); push(tapped) }
+        show(false)
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(c.page)) {
         val wide = maxWidth >= 840.dp

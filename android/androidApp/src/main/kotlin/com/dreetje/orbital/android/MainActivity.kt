@@ -8,12 +8,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.ui.OrbitalApp
 import com.dreetje.orbital.ui.Start
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 // The one screen: the shared app over an Engine kept across rotations (Holder), the engine's web view in it. Launched
@@ -44,10 +47,12 @@ class MainActivity : ComponentActivity() {
         setContent { OrbitalApp(engine, start) }
     }
 
-    // brought forward by ShareActivity: what it left is taken in onResume, which follows
+    // brought forward by ShareActivity (what it left is taken in onResume, which follows), or by a widget's tap: the
+    // node it opens, or Quick Add
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        holder.engine.widget = intent.getStringExtra("zoom") ?: "add".takeIf { intent.getBooleanExtra("add", false) }
     }
 
     override fun onResume() {
@@ -85,7 +90,17 @@ class MainActivity : ComponentActivity() {
             demoMode = if (activity.intent.hasExtra("demoMode")) activity.intent.getBooleanExtra("demoMode", false) else null,
         )
 
-        init { engine.start() }
+        init {
+            engine.start()
+            // the widgets' Timeline (Widgets.kt), kept a moment after each read or tick settles; gone once signed out
+            val app = activity.applicationContext
+            viewModelScope.launch {
+                snapshotFlow { listOf(engine.phase, engine.rows, engine.states.toMap(), engine.removed, engine.unpinned) }.collectLatest { (phase) ->
+                    delay(500)
+                    if (phase == Engine.Phase.Ready) Widgets.keep(app, engine.glimpse()) else if (phase == Engine.Phase.SignedOut) Widgets.keep(app, null)
+                }
+            }
+        }
 
         override fun onCleared() {
             web?.destroy()

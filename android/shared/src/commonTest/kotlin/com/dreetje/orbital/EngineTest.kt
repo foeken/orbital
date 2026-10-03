@@ -17,6 +17,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -27,13 +28,14 @@ class EngineTest {
     private var clock = Instant.parse("2026-10-02T10:00:00Z")
 
     // a page that is signed in and answers the Timeline; toggle answers what it is told to
-    private fun page(setup: suspend () -> JsonElement = { text("""{"sensitive":["tana:text:a"],"pinned":[]}""") }, toggle: () -> String = { "\"closed\"" }) = FakeHost { body, _ ->
+    private fun page(rows: String = timeline, setup: suspend () -> JsonElement = { text("""{"sensitive":["tana:text:a"],"pinned":[]}""") }, toggle: () -> String = { "\"closed\"" }) = FakeHost { body, _ ->
         when {
             "orbital.connect()" in body -> JsonPrimitive(true)
             "orbital.why()" in body -> text("200 signed in")
             "orbital.email()" in body -> text("me@example.com")
             "orbital.account()" in body -> text(ME)
-            "orbital.timeline" in body -> text(timeline)
+            "orbital.timeline" in body -> text(rows)
+            "orbital.docs" in body -> text("""{"tana:event:m":[{"id":"tana:text:w","title":"Write-up"}]}""")
             "orbital.setup()" in body -> setup()
             "orbital.issues()" in body -> kotlinx.serialization.json.JsonArray(emptyList())
             "orbital.toggle" in body -> text(toggle())
@@ -353,5 +355,19 @@ class EngineTest {
         advanceTimeBy(200)
         runCurrent()
         assertTrue(host.calls.none { "orbital.sensitive" in it.first }, "asked of someone else's row: never written to this account")
+    }
+
+    // the widgets' meeting previews: a meeting's documents asked of Tana when it first shows, then once in five minutes,
+    // not at every read (a read follows every change Tana tells)
+    @Test fun aMeetingsDocumentsAreAskedForOnceInAWhile() = runTest {
+        val meeting = """[{"id":"s:m","text":"Weekly sync","createdAt":"2026-10-02T09:00:00Z","timeline":{"uri":"tana:event:m","tone":"meeting"}}]"""
+        val host = page(rows = meeting)
+        val engine = ready(host)
+        assertEquals(listOf("Write-up"), engine.glimpse().docs["tana:event:m"]?.map { it.words })
+        engine.glimpse()
+        assertEquals(1, host.calls.count { "orbital.docs" in it.first })
+        clock += 6.minutes
+        engine.glimpse()
+        assertEquals(2, host.calls.count { "orbital.docs" in it.first })
     }
 }

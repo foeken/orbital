@@ -7,5 +7,7 @@ const USED = ['timeline', 'library', 'info', 'chatgpt', 'license', 'task', 'doc'
 // the check inside finished work's green disc, drawn heavier as styles.css .tl-done does (stroke 2.5 at 12px), and the
 // side menu's glyphs, weighted like its medium text
 const HEAVY = { applyDone: ['apply', 2.5], timelineMenu: ['timeline', 1.6], searchMenu: ['search', 1.6] };
+// the few the iPhone's widgets draw (ios/Widgets): an extension has an asset catalog of its own, not the app's
+const WIDGETS = ['todayTasks', 'free', 'calendar', 'pinRoute', 'tlAccepted', 'tlLater', 'tlInbox', 'tlNew', 'updated', 'robot', 'tana', 'doc', 'applyDone'];
 
-module.exports = { USED, HEAVY };
+module.exports = { USED, HEAVY, WIDGETS };

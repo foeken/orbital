@@ -4,13 +4,14 @@
 // one to scripts/phone-glyphs.js, the list both phones share, when a screen needs it. Run: node scripts/build-ios-glyphs.js
 const fs = require('node:fs');
 const path = require('node:path');
-const { USED, HEAVY } = require('./phone-glyphs');
+const { USED, HEAVY, WIDGETS } = require('./phone-glyphs');
 
 const window = {};
 new Function('window', fs.readFileSync(path.join(__dirname, '..', 'icons.js'), 'utf8'))(window);
 const out = path.join(__dirname, '..', 'ios', 'Orbital', 'Assets.xcassets', 'Glyphs');
-// every file of the catalog folder, by its path inside it, which scripts/glyph-check.js compares with the ones checked in
-function files() {
+// every file of a catalog folder, by its path inside it, which scripts/glyph-check.js compares with the ones checked in;
+// only: the names it keeps (the widgets'), or all
+function files(only) {
   const all = { 'Contents.json': JSON.stringify({ info: { author: 'xcode', version: 1 }, properties: { 'provides-namespace': true } }, null, 2) + '\n' };
   const add = (name, svg) => {
     // black rather than currentColor, which CoreSVG does not resolve: a template image keeps only the shape
@@ -20,19 +21,23 @@ function files() {
   };
   for (const name of USED) {
     if (!window.ICONS[name]) throw new Error('no glyph ' + name + ' in icons.js');
-    add(name, window.ICONS[name]);
+    if (!only || only.includes(name)) add(name, window.ICONS[name]);
   }
   // (the weight is a number, or Nucleo's CSS variable as the timeline glyph has it)
-  for (const [name, [from, width]] of Object.entries(HEAVY)) add(name, window.ICONS[from].replace(/stroke-width="(?:[\d.]+|var\(--nucleo-stroke-width, [\d.]+\))"/g, 'stroke-width="' + width + '"'));
+  for (const [name, [from, width]] of Object.entries(HEAVY)) if (!only || only.includes(name)) add(name, window.ICONS[from].replace(/stroke-width="(?:[\d.]+|var\(--nucleo-stroke-width, [\d.]+\))"/g, 'stroke-width="' + width + '"'));
   return all;
 }
+// the app's catalog and the widgets' (ios/Widgets), each folder with what it holds
+const catalogs = [[out, files()], [path.join(__dirname, '..', 'ios', 'Widgets', 'Assets.xcassets', 'Glyphs'), files(WIDGETS)]];
 
-module.exports = { out, files };
+module.exports = { catalogs };
 if (require.main === module) {
-  fs.rmSync(out, { recursive: true, force: true });
-  for (const [name, text] of Object.entries(files())) {
-    fs.mkdirSync(path.dirname(path.join(out, name)), { recursive: true });
-    fs.writeFileSync(path.join(out, name), text);
+  for (const [dir, all] of catalogs) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    for (const [name, text] of Object.entries(all)) {
+      fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
+      fs.writeFileSync(path.join(dir, name), text);
+    }
+    console.log('wrote', (Object.keys(all).length - 1) / 2, 'glyphs to', path.relative(process.cwd(), dir));
   }
-  console.log('wrote', USED.length + Object.keys(HEAVY).length, 'glyphs to', path.relative(process.cwd(), out));
 }

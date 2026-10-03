@@ -123,8 +123,15 @@ struct Shell: View {
         .sheet(item: Binding { shared?.image == nil ? shared : nil } set: { shared = $0 }) { QuickAdd(engine: engine, shared: $0) }
         .onChange(of: shared?.id) { if let image = shared?.image { shared = nil; engine.addImage { image } } }
         .onChange(of: engine.made) { if let id = engine.made { engine.made = nil; path.append(id) } } // an image's node, made: opened
-        // the Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS not open it
-        .onOpenURL { _ in shared = Shared.take() ?? shared }
+        // the Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
+        // not open it. A widget's tap (ios/Widgets) is orbital:add for Quick Add, orbital:<id> for that node over the
+        // Timeline, or orbital:timeline.
+        .onOpenURL { url in
+            guard url.scheme == "orbital" else { shared = Shared.take() ?? shared; return }
+            let what = String(url.absoluteString.dropFirst("orbital:".count))
+            settings = false; adding = what == "add"; show(false)
+            if what.hasPrefix("tana:") { page = .timeline; path = [what] } else if what == "timeline" { page = .timeline; path = [] }
+        }
         // shared words open Quick Add over nothing else; an image opens nothing, so whatever is open stays
         .onChange(of: scene, initial: true) { if scene == .active, let found = Shared.take() { if found.image == nil { adding = false; settings = false }; shared = found } }
         .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }

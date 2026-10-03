@@ -201,7 +201,7 @@ private class Prefs(context: Context) : Store {
 
 // Files as the shared module's Platform.files: a file a key, written whole beside it first and moved over it, so a value
 // is never half written. SharedPreferences rewrites and reads every key at once, where the translations grow for ever.
-private class Files(context: Context) : Store {
+internal class Files(context: Context) : Store {
     private val dir = File(context.filesDir, "store").apply { mkdirs() }
     override fun get(key: String): String? = File(dir, key).takeIf { it.exists() }?.let { runCatching { it.readText() }.getOrNull() }
     override fun set(key: String, value: String?) {

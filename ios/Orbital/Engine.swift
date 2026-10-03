@@ -1,6 +1,7 @@
 import Security
 import SwiftUI
 import WebKit
+import WidgetKit
 
 // The app's only link to Tana: one web view, hidden on https://home.tana.inc/api/auth/session running engine.js, which is
 // Orbital's own SDK and main/timeline.js bundled for the phone (ios/engine, issue #658). Same-origin there, the SDK
@@ -215,6 +216,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 if translator.catalogue.isEmpty, let list = try? await ChatGPT.models(), !list.isEmpty { translator.catalogue = list } // once: what this account may ask
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
+            await keepGlimpse()
             for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
@@ -247,6 +249,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
         SavedTimeline.forget()
+        Keychain.delete("glimpse") // nothing of the account left on a widget
+        WidgetCenter.shared.reloadAllTimelines()
         rows = []; states = [:]; removed = []; email = nil; account = nil; pages = 1
         note("signed out")
         start()
@@ -519,6 +523,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let before = state(of: task)
         states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
         ticked[task.id] = .now
+        defer { Task { await keepGlimpse() } } // the widgets show it ticked too
         guard !Self.isSample else { return } // the sample writes nothing
         do {
             states[task.id] = try await call("return await orbital.toggle(id)", ["id": task.id]) as String
@@ -539,6 +544,41 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     func state(of task: Row) -> String {
         states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
+    }
+
+    // The widgets' Timeline (ios/Widgets; Glimpse.kt on Android): the rows on screen, a box ticked here ticked and what was
+    // deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget), and the documents of
+    // the meetings in it, left in the Keychain where the widgets read it, as the Share extension leaves what it shares.
+    // The documents are asked of Tana when a meeting first shows, then once in five minutes: a read follows every change.
+    struct Glimpse: Encodable { let read: Int64; let rows: [Row]; let docs: [String: [Row]] }
+    @ObservationIgnored private var meetingDocs: [String: [Row]] = [:]
+    @ObservationIgnored private var docsRead = Date.distantPast
+
+    func keepGlimpse() async {
+        func kept(_ list: [Row]?, today: Bool = false) -> [Row]? {
+            list.map { shown($0).filter { !today || !unpinned.contains($0.id) }.map { row in
+                var r = row
+                if r.sensitive == true {
+                    r.text = nil; r.title = nil; r.segments = nil; r.subtext = nil; r.people = nil; r.reference?.label = nil
+                    r.timeline?.note = nil; r.timeline?.change = nil; r.timeline?.detail = nil
+                }
+                r.stateType = states[r.id] ?? r.stateType
+                r.children = kept(r.children, today: r.timeline?.today == true)
+                return r
+            } }
+        }
+        let meetings = rows.flatMap { r in r.timeline?.upcoming == true ? (r.children ?? []).map(\.id) : [r.timeline?.uri].compactMap { $0 } }.filter { Glyph.kind(of: $0) == "event" }
+        if meetings.contains(where: { meetingDocs[$0] == nil }) || Date.now.timeIntervalSince(docsRead) > 300, let read = try? await docs(meetings) { meetingDocs = read; docsRead = .now }
+        let docs = meetings.reduce(into: [String: [Row]]()) { out, id in if let list = kept(meetingDocs[id]), !list.isEmpty { out[id] = list } }
+        guard let data = try? JSONEncoder().encode(Glimpse(read: Int64(Date.now.timeIntervalSince1970 * 1000), rows: kept(rows) ?? [], docs: docs)) else { return }
+        Keychain.save(data, "glimpse")
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    // the documents each meeting owns (orbital.docs), as a meeting's page lists them, without opening the meetings
+    private func docs(_ ids: [String]) async throws -> [String: [Row]] {
+        if let s = Self.sample { return ids.reduce(into: [:]) { $0[$1] = s.pages[$1]?.rows ?? [] } }
+        return try await call("return await orbital.docs(ids)", ["ids": ids])
     }
 
     // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
@@ -582,6 +622,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         // -history: the day's entries only, so a shot of them needs no scrolling
         if CommandLine.arguments.contains("-history") { rows.removeAll { $0.timeline?.today == true || $0.timeline?.upcoming == true || $0.timeline?.free != nil } }
         phase = .ready
+        Task { await keepGlimpse() }
     }
 
     // what engine.js threw, rather than WebKit's "A JavaScript exception occurred"

@@ -1,25 +1,26 @@
 import SwiftUI
 
 // One row as the desktop renderer gets it: of the Timeline (main/timeline.js), a saved search or a meeting's documents
-// (ios/engine/index.js listRow), an outline (sdk/content.js) or a chat (sdk/chat.js); only what this draws.
-struct Row: Decodable, Identifiable {
+// (ios/engine/index.js listRow), an outline (sdk/content.js) or a chat (sdk/chat.js); only what this draws. Encoded again
+// for the widgets (Engine.swift keepGlimpse), with a sensitive row's words taken out.
+struct Row: Codable, Identifiable {
     let id: String
-    let text: String?
-    let title: String?
-    let segments: [Segment]?
+    var text: String?
+    var title: String?
+    var segments: [Segment]?
     let icon: String?
     let createdAt: String?
     let unread: Bool?
     let done: Bool?
-    let stateType: String?
-    let subtext: String?
+    var stateType: String?
+    var subtext: String?
     let start: String?
     let join: String?
-    let people: [Person]?
+    var people: [Person]?
     let assignees: [String]? // a task's, in a saved search: who it is assigned to, for Assign to …
-    let children: [Row]?
-    let timeline: Info?
-    let reference: Ref?
+    var children: [Row]?
+    var timeline: Info?
+    var reference: Ref?
     let heading: Int?
     let block: String?
     let type: String?
@@ -30,17 +31,17 @@ struct Row: Decodable, Identifiable {
     let group: String? // the section a saved search files it under (ios/engine/arrange.js)
     let glyph: String? // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
 
-    struct Segment: Decodable { let text: String?; let marks: Marks?; let mention: Ref? }
-    struct Marks: Decodable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
-    struct Ref: Decodable { let uri: String; let label: String? }
-    struct Chat: Decodable { let mine: Bool?; let status: Bool?; let streaming: Bool?; let author: String? }
-    struct Person: Decodable { let name: String }
-    struct Free: Decodable { let from: Double; let until: Double }
-    struct Info: Decodable {
+    struct Segment: Codable { let text: String?; let marks: Marks?; let mention: Ref? }
+    struct Marks: Codable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
+    struct Ref: Codable { let uri: String; var label: String? }
+    struct Chat: Codable { let mine: Bool?; let status: Bool?; let streaming: Bool?; let author: String? }
+    struct Person: Codable { let name: String }
+    struct Free: Codable { let from: Double; let until: Double }
+    struct Info: Codable {
         let uri: String?
-        let note: String?
-        let change: String?
-        let detail: String?
+        var note: String?
+        var change: String?
+        var detail: String?
         let tone: String?
         let today: Bool?
         let upcoming: Bool?

@@ -430,6 +430,13 @@ window.orbital = {
     else rows = named(readOutline(doc));
     return JSON.stringify({ title: demoTitle(n.title || 'Untitled', id), kind, rows: redact(await titled(rows)), sensitive: secret().has(id) });
   },
+  // The widgets' meeting previews (Engine.swift and Engine.kt glimpse): each meeting's documents, as open(id) lists a
+  // meeting's, with no meeting opened (held, it would push out what you opened)
+  async docs(ids) {
+    await settled();
+    const lists = await Promise.all(ids.map((id) => S.client.graph.listNodes({ ownerIds: [id], limit: 6, sortOptions: newest })));
+    return JSON.stringify(Object.fromEntries(ids.map((id, i) => [id, redact(lists[i].nodes.map(listRow))])));
+  },
   // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
   // answer (main/documents.js newChat), with what you typed as its first message. Answers the chat's id.
   // The message is written with the chat, in one go: a chat that is slow to reach Tana still arrives with its message,
