@@ -1276,10 +1276,14 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
   .palette .ricon.thinking svg path:nth-child(5) { animation-delay: calc(var(--dur-loop) * 2 / 3); }
   .palette .ricon.thinking svg path:nth-child(3), .palette .ricon.thinking svg path:nth-child(4) { animation: sparkle-trail calc(var(--dur-loop) * 2) ease-in-out infinite; }
 }
-/* A row waiting on someone else (Connect to new agent: the code, then the agent) keeps its glyph still: a light passes over its
-   words instead, the sweep over "Thinking…" in a chat and over a working agent badge. Plain grey words where motion is not welcome. */
+/* A row waiting on someone else (Connect to new agent: the code, then the agent): a light passes over its words, the
+   sweep over "Thinking…" in a chat, in no colour: the grey words turn darker in the light theme and brighter in the dark
+   one as it passes. Plain grey words where motion is not welcome. */
+:root { --sweep-ink: #1a1a1a; }
+[data-theme="dark"] { --sweep-ink: #ffffff; }
+.palette .row.bare .ricon { display: none; } /* a row with no glyph starts where the group's heading does */
 @media (prefers-reduced-motion: no-preference) {
-  .palette .row .label.sweep { flex: 0 1 auto; margin-right: auto; background: linear-gradient(100deg, var(--muted) 40%, var(--working-ink) 50%, var(--muted) 60%) 100% 0 / 300% 100% no-repeat;
+  .palette .row .label.sweep { flex: 0 1 auto; margin-right: auto; background: linear-gradient(100deg, var(--muted) 40%, var(--sweep-ink) 50%, var(--muted) 60%) 100% 0 / 300% 100% no-repeat;
     background-clip: text; -webkit-text-fill-color: transparent; animation: thinking-sweep calc(var(--dur-loop) * 2) ease-in-out infinite; }
 }
 @keyframes sparkle-twinkle { 0%, 100% { opacity: .25; transform: scale(.55) rotate(-25deg); } 45% { opacity: 1; transform: scale(1.2) rotate(0deg); } }

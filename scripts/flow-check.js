@@ -606,7 +606,11 @@ flow('golden path: link an agent with a code, and it joins your agents', async (
   assert.match(await p.js('relayCtx.prompt'), /^Add two MCP servers to yourself: Orbital at https:\/\/orbital\.md\/mcp and Tana at https:\/\/home\.tana\.inc\/mcp\. Then .* 7KQX-M2PD and a short name for yourself\.$/, 'what it copies: both servers, and the code');
   assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
   assert.match(await p.js('palRows[1].label'), /^Only ids go through orbital\.md: your words stay in Tana/, 'it says what goes through orbital.md');
-  assert.deepEqual(await p.js('[palRows[2].label, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for an agent to use the code…', true], 'and waits with a light passing over its words');
+  assert.deepEqual(await p.js('[palRows[2].label, !!palRows[2].icon, palRows[2].group === palRows[0].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for an agent to use the code…', false, true, true],
+    'and waits in the same group, with no glyph, a light passing over its words');
+  // where the heading's words start (its box plus its padding), measured once the page has slid in
+  const offset = '(() => { const g = document.querySelector("#palette .list .group"); return document.querySelector("#palette .row .label.sweep").getBoundingClientRect().left - g.getBoundingClientRect().left - parseFloat(getComputedStyle(g).paddingLeft); })()';
+  await p.waitFor('Math.abs(' + offset + ') <= 1', 'the wait to start where the heading\u2019s words do (' + await p.js(offset) + 'px off at first)');
   assert.match(await p.js('palRows[2].hint'), /^Works once · \d+:\d\d left$/, 'saying how long the code lasts');
   await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked GrokBot · Grok"', 'the palette to close on the agent that linked', 10000);
   await command(p, 'choose agents', 'Choose agents \u2026');

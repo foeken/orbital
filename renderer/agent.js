@@ -150,7 +150,7 @@ function pollRelay(ctx) {
 }
 function relayRows() {
   const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) };
-  if (c.state === 'asking') return [{ group: 'Connect to new agent', icon: 'link', label: 'Getting a code…', disabled: true, sweep: true, match: [] }];
+  if (c.state === 'asking') return [{ group: 'Connect to new agent', label: 'Getting a code…', disabled: true, sweep: true, bare: true, match: [] }];
   if (c.state === 'failed') return [{ group: 'Connect to new agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Connect to new agent', label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
   const group = 'Give these to the agent · it adds the servers, names itself and links';
@@ -158,10 +158,11 @@ function relayRows() {
     run: () => run(() => copyText(c.prompt, 'Copied: give them to your agent')) },
   // what crosses orbital.md (main/agents/linked.js send): a node's id and an action out, a status back
   { group, icon: 'lock', label: 'Only ids go through orbital.md: your words stay in Tana, where the agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] }];
-  if (c.state === 'expired' || !left) return [...rows, { group: 'Waiting', icon: 'link', label: 'The code expired', hint: 'Nobody used it', disabled: true, match: [] }, { ...again, group: 'Waiting', label: 'Get a new code', match: [] }];
+  // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
+  if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
   return [...rows,
-    { group: 'Waiting', icon: 'robot', label: 'Waiting for an agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, match: [] },
-    { group: 'Waiting', icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { relayCtx = null; run(() => tana.relayLinkCancel(c.code)); (c.back || closePalette)(); } }];
+    { group, label: 'Waiting for an agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, bare: true, match: [] },
+    { group, icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { relayCtx = null; run(() => tana.relayLinkCancel(c.code)); (c.back || closePalette)(); } }];
 }
 // When the relay last heard from an agent, in a few words
 function seenText(at) {
