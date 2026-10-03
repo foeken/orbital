@@ -141,6 +141,16 @@ const inField = (docId) => typeof docId === 'string' && docId.includes('|tana:ty
 // a table's row too: its title is a column to click into, not text to type in (renderer/views.js tableView)
 // and so does a canvas whose title cannot be typed in: its window is the only place it is anything (main.js canvas:open, #611)
 const opensOnClick = (item) => (isTypeDoc(item.node) && !inField(item.docId)) || (tableRow(item.parent) && !item.node.draft && zoomable(item.node)) || (/^tana:canvas:/.test(String(item.node.id)) && !canEditText(item));
+// A top-level row of a list: a document a view (Inbox, Library, Types), a saved search or a type's page lists. A first
+// click selects it and a click on it once selected goes in: the caret where it was clicked when its title can be typed
+// in, its page when not (renderer/render.js); its bullet zooms in at once. The Timeline's, the Notifications' and the
+// Proposals' rows open on a click of their own, and a draft is a title being typed.
+const topListRow = (item) => item.node.kind === 'document' && !item.node.draft && !item.node.upload && !item.node.timeline && !item.node.notification && !item.node.proposal && (!item.parent || isSearchDoc(item.parent.node) || isTypeDoc(item.parent.node));
+// A Timeline row about a node, or a task or meeting listed under one: selected by a first click as a list row is, and
+// opening what it is about on the next (renderer/select.js openSelectedRow). A line about nothing takes no click.
+const timelineRow = (item) => !!item.node.timeline?.uri || (!item.node.timeline && !!item.parent?.node?.timeline);
+// whether a row's text takes the caret: the one rule behind its contenteditable
+const typesInto = (item) => !demoMode && !opensOnClick(item) && canEditText(item);
 // A row that opens on a click opens from what it draws (words, time, chips, faces), never from the empty width beside
 // them: those land on the row's own boxes, which span the pane (#518). styles.css draws the pointer the same way.
 const onRowBlank = (e) => !!e.target.matches?.('.line, .body');

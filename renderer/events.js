@@ -250,7 +250,7 @@ onRows('contextmenu', (e) => {
 onRows('focusin', () => { // the caret is back in a node
   if (!sel) return;
   sel = null; selectionFrozen = false;
-  for (const n of eachRow('.selected')) n.classList.remove('selected');
+  for (const n of eachRow('.selected')) n.classList.remove('selected', 'picked');
   if (renderDeferred) queueMicrotask(() => { if (!editingRow()) render(); });
 });
 onRows('click', (e) => {

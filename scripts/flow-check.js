@@ -340,8 +340,9 @@ flow('the Settings window writes what you pick and shows what is newest', async 
 // The flows above guard the kinds of break that came back PR after PR; these guard the paths themselves, so a change
 // that breaks opening the Timeline, pinning, getting around or dragging fails here even when it is a new kind of break.
 
-// 10. The Timeline (#135): a first launch opens on it, a row opens what it is about by click or Enter, ⌘[ comes back,
-// a task ticked under Today's Tasks is saved as done, and its end reads three more days
+// 10. The Timeline (#135): a first launch opens on it, a row is selected by a first click and opens what it is about on
+// the next, by Enter or by its bullet at once, ⌘[ comes back, a task ticked under Today's Tasks is saved as done, and
+// its end reads three more days
 flow('golden path: the Timeline opens first and leads to what each row is about', async (p) => {
   await p.start();
   await settle(p, 400); // the first read of the page lands in parts (renderer/timeline.js): clicked once it is whole
@@ -351,7 +352,11 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   assert.ok(top.includes('Upcoming meetings'), 'today\u2019s meetings to come are listed');
   assert.deepEqual(await p.js('[...document.querySelectorAll("#outline .ghead")].map((h) => h.textContent.trim())'), ['Today', 'Yesterday'], 'the history in day sections');
   const back = async () => { await p.key('⌘['); await at(p, 'orbital:timeline'); };
-  // a click on an edit opens the task edited
+  // a first click on an edit selects it and opens nothing; the next opens the task edited
+  await clickWords(p, 'Sam Okafor edited');
+  await settle(p, 200);
+  assert.deepEqual(await p.js('[zoom.docId, selKeys().map((k) => items.get(k).node.timeline?.uri)]'), ['orbital:timeline', ['mockdoc0']], 'a first click selects the Timeline row and stays on the Timeline');
+  assert.equal(await p.js('getComputedStyle(' + T('Sam Okafor edited') + ').outlineStyle'), 'solid', 'and rings it');
   await clickWords(p, 'Sam Okafor edited');
   await at(p, 'mockdoc0');
   assert.equal(await p.js('document.getElementById("title").textContent'), await p.js('tana.node("mockdoc0").then((n) => n.title)'), 'the edited task opened');
@@ -360,9 +365,16 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   await p.js('(' + T('Tomas Ilves accepted') + ').focus()'); await p.key('↩');
   await at(p, 'mockdoc5');
   await back();
-  // a meeting still to come opens its page
+  // a meeting still to come opens its page, on the second click
+  await clickWords(p, '1-1 with Priya');
+  await settle(p, 200);
+  assert.equal(await p.js('zoom.docId'), 'orbital:timeline', 'a first click on a meeting to come opens nothing');
   await clickWords(p, '1-1 with Priya');
   await at(p, 'mockmeeting7');
+  await back();
+  // the bullet opens what the row is about at once
+  await p.js(rowOf('Sam Okafor edited') + '.querySelector(".bullet").click()');
+  await at(p, 'mockdoc0');
   await back();
   // ticked under Today's Tasks: saved as done, and ticked again it is open again
   const box = rowOf('Organise working sessions') + '.querySelector(".check")', state = () => p.js('tana.node("mockdoc5").then((n) => n.stateType)');
@@ -464,7 +476,7 @@ flow('golden path: drag a row to reorder it, nest it, and undo', async (p) => {
 });
 
 // 14. Dragging onto a meeting (#520): a task under Today's Tasks dropped on a meeting on the Timeline is pinned to it,
-// and the Timeline's own record rows offer nothing to pick up
+// picked up by its words as by a hand, and the Timeline's own record rows offer nothing to pick up
 flow('golden path: a task dragged onto a meeting is pinned there', async (p) => {
   await p.start({ real: true }); // a meeting takes a drop by its tana:event: id, and only a real node can be pinned
   await p.waitFor(T('Leadership sync'), 'the meeting on the Timeline');
@@ -473,6 +485,15 @@ flow('golden path: a task dragged onto a meeting is pinned there', async (p) => 
   assert.deepEqual(await p.js('__drag(' + rowOf('Check out the new editor') + ', ' + (to.left + 120) + ', ' + to.mid + ')'), { grip: true, accepted: true, line: false }, 'the task taken by the meeting, with no outline line');
   await p.waitFor('tana.pinState("tana:text:mockdoc2").then((s) => s.hubs.some((h) => h.id === "tana:event:mockmeeting2"))', 'the task pinned to Leadership sync');
   await p.waitFor('[...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("Pinned to Leadership sync"))', 'the note that says so');
+  // and by hand, from its words: a press there picks the row up (render.js .selectfirst) and a meeting to come, a few
+  // rows below it, takes it
+  await p.js(T('Organise working sessions') + '.scrollIntoView({ block: "start", behavior: "instant" })'); await settle(p, 150); // the task at the top, the meeting below it, both in view
+  const meeting = await p.js('(() => { const b = ' + rowOf('1-1 with Priya') + '.querySelector(".line").getBoundingClientRect(); return { left: b.left, mid: b.top + b.height / 2 }; })()');
+  const from = await p.js('(() => { const r = document.createRange(); r.selectNodeContents(' + T('Organise working sessions') + '); const b = r.getClientRects()[0]; return [b.left + 30, b.top + b.height / 2]; })()');
+  assert.equal(await p.js('document.elementFromPoint(' + from + ')?.closest(".node")?.dataset.key'), 'tana:text:mockdoc5', 'the task\u2019s words in view to press');
+  assert.equal(await p.js('document.elementFromPoint(' + (meeting.left + 120) + ', ' + meeting.mid + ')?.closest(".node")?.textContent.includes("1-1 with Priya")'), true, 'and the meeting in view to drop on');
+  assert.ok(await p.drag(from[0], from[1], meeting.left + 120, meeting.mid), 'a task under Today\u2019s Tasks is picked up by its words');
+  await p.waitFor('tana.pinState("tana:text:mockdoc5").then((s) => s.hubs.some((h) => h.id === "tana:event:mockmeeting7"))', 'the task dragged by its words pinned to 1-1 with Priya');
 });
 
 // 15. A task's life from Cmd+K (docs/OUTLINER.md): its status set by name, handed to someone, completed with ⌘↩ and
@@ -607,7 +628,69 @@ flow('golden path: send a chat message and read the answer', async (p) => {
   await p.waitFor('[...document.querySelectorAll(".chat-msg.theirs")].at(-1)?.textContent.includes("Mock answer to: Summarise the pilots")', 'Tana\u2019s answer', 6000);
 });
 
+// 20b. A list's own rows (renderer/nodes.js topListRow): a first click selects the row, a click on it once selected
+// goes in — the caret where it was clicked when its title can be typed in, the row's page when it cannot — and the
+// bullet zooms in at once. Before, a first click put the caret in an editable row and did nothing on a read-only one.
+flow('golden path: a list row is selected by a click, edited or opened by the next, zoomed by its bullet', async (p) => {
+  await p.start();
+  const locked = 'mockdoc2'; // read-only, as main lists a document you may not write
+  await p.js('(() => { const f = tana.viewList; tana.viewList = async (...a) => { const r = await f(...a); return { ...r, nodes: (r.nodes || []).map((n) => (n.id === ' + J(locked) + ' ? { ...n, editable: false } : n)) }; }; 1; })()');
+  await p.js('setView("library")'); await p.js('loadView("library")'); await p.waitFor(T('Check out the new editor'), 'the Library row');
+  await p.waitFor('!' + T('Check out the new editor') + '.isContentEditable', 'the locked row drawn read-only');
+  const row = await p.js('(() => { const it = [...document.querySelectorAll("#outline .node")].map((n) => items.get(n.dataset.key)).find((it) => it && topListRow(it) && typesInto(it) && it.node.id !== ' + J(locked) + ' && (it.node.text || "").length > 8); return it && { id: it.node.id, key: it.key, words: textEl(it.key).textContent.slice(0, 8) }; })()');
+  assert.ok(row, 'an editable Library row');
+  const selected = () => p.js('selKeys()');
+  await clickWords(p, row.words); await settle(p, 150);
+  assert.deepEqual(await selected(), [row.key], 'the first click selects the editable row');
+  assert.equal((await p.js('__caret()')).editable, false, 'and puts no caret in it');
+  const ring = (words) => p.js('getComputedStyle(' + T(words) + ').outlineStyle');
+  assert.equal(await ring(row.words), 'solid', 'the selected editable row is ringed in blue, as a focused read-only row is');
+  await p.key('⇧↓'); await settle(p, 100);
+  assert.equal(await ring(row.words), 'none', 'a range made with ⇧ is a band, not rings');
+  await p.key('esc'); await p.js('leaveText(); sel = null; applySel()'); await settle(p, 100);
+  await clickWords(p, row.words); await settle(p, 150);
+  await clickWords(p, row.words); await settle(p, 150);
+  assert.deepEqual(await p.js('[__caret().key, __caret().editable, selKeys().length]'), [row.key, true, 0], 'the second click puts the caret in its title');
+  await clickWords(p, 'Check out the new editor'); await settle(p, 150);
+  assert.deepEqual(await p.js('[selKeys().map((k) => items.get(k).node.id), zoom && zoom.docId]'), [[locked], null], 'the first click selects the read-only row and opens nothing');
+  assert.equal(await ring('Check out the new editor'), 'solid', 'and rings it');
+  await clickWords(p, 'Check out the new editor');
+  await at(p, locked);
+  // an open that leaves this page where it is (the place open in another pane, which comes forward there) lets the
+  // selection go and takes its ring off too
+  await p.js('setView("library")'); await p.waitFor(T('Check out the new editor'), 'the Library again');
+  await clickWords(p, 'Check out the new editor'); await settle(p, 150);
+  await p.js('window.__zoomTo = zoomTo; zoomTo = () => {}; 1'); // as zoomTo does when inOtherPane answers
+  await clickWords(p, 'Check out the new editor'); await settle(p, 150);
+  await p.js('zoomTo = window.__zoomTo; 1');
+  assert.deepEqual(await p.js('[zoom, selKeys().length, document.querySelectorAll("#outline .node.selected, #outline .node.picked").length]'), [null, 0, 0], 'an open that stays on the page leaves no ring behind');
+  await p.js('setView("library")'); await p.waitFor(T(row.words), 'the Library again');
+  await p.js(rowOf(row.words) + '.querySelector(".bullet").click()');
+  await at(p, row.id);
+});
+
 // 21. Panes and tabs (#138, #435, #463; shell.html): the window's shell on a stand-in for main that opens a page the way
+// 20c. Picked up by its words (renderer/render.js .selectfirst): a list row that is not selected yet is one thing to
+// press, so a drag from anywhere on it carries the row, as one from its bullet does; selected, its words are words
+// again, and a drag across them selects them instead of picking the row up
+flow('golden path: a list row is picked up by its words until it is selected', async (p) => {
+  await p.start({ real: true }); // only a real node can be picked up (renderer/drag.js canDragItem)
+  await p.js('setView("library")'); await p.waitFor(T('Discuss the two open'), 'the Library row'); await settle(p, 600); // its sections and facts land in parts
+  const words = 'Discuss the two open', key = await p.js('keyOfEl(' + T(words) + ')');
+  const point = () => p.js('(() => { const r = document.createRange(); r.selectNodeContents(' + T(words) + '); const b = r.getClientRects()[0]; return [b.left + 40, b.top + b.height / 2]; })()');
+  let [x, y] = await point();
+  assert.equal(await p.js('document.elementFromPoint(' + x + ', ' + y + ')?.closest(".node")?.dataset.key'), key, 'the row\u2019s words in view to press');
+  const carried = await p.drag(x, y, x + 10, y - 90);
+  assert.ok(carried, 'a drag from the words of a row not yet selected picks it up');
+  assert.deepEqual(carried.items.filter((i) => i.mimeType === 'application/x-orbital-row').map((i) => i.data), [key], 'and carries that row');
+  assert.equal((await p.js('__caret()')).editable, false, 'with no caret left in it');
+  await clickWords(p, words); await settle(p, 150);
+  assert.deepEqual(await p.js('selKeys()'), [key], 'a click still selects it');
+  [x, y] = await point();
+  assert.equal(await p.drag(x, y, x + 60, y), null, 'selected, a drag across its words picks nothing up');
+  assert.deepEqual(await p.js('[__caret().key, __caret().editable]'), [key, true], 'it goes into the words instead');
+});
+
 // main.js window:split does. ⌘↩ on a search result opens it in a new tab, ⇧↩ in a pane beside, ⇧⌘N a new pane on the
 // Library; the keys stay with the page just opened, and every page keeps its own place.
 const TWO_PANES = { schema: 1, root: { kind: 'split', id: 'split-m', axis: 'x', weights: [0.55, 0.45], children: [{ kind: 'panel', id: 'panel-a', views: ['page'], selected: 'page' },
@@ -680,7 +763,9 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
     // each frame's own scope (a pane's page inside shell.html), for jsIn: the page's CSP refuses eval, and a const in
     // its classic scripts (tana, zoom) is not on its window, so the frame is evaluated in directly
     const scopes = new Map(); // frameId -> its default execution context
+    let onEvent = null; // the one Chromium event a step waits for (drag below)
     ws.onmessage = (m) => { const d = JSON.parse(m.data);
+      if (d.method && onEvent) onEvent(d);
       if (d.method === 'Runtime.executionContextCreated' && d.params.context.auxData?.isDefault) scopes.set(d.params.context.auxData.frameId, d.params.context.id);
       if (waiting.has(d.id)) { waiting.get(d.id)(d); waiting.delete(d.id); } };
     // every command answers within 15 s or fails the flow: a page promise left pending must not hang the run (or CI)
@@ -744,11 +829,28 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
       await waitFor('document.readyState === "complete"', file + ' to load', 8000);
     };
     const click = async (x, y) => { for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 }); await sleep(80); };
+    // a drag as a hand makes one: pressed at one point, moved, let go at another. Chromium starts the drag itself from
+    // the press (so whatever stops a drag from beginning shows here, as __drag cannot), hands it to us instead of the
+    // OS, and we drop it through its own drag events. Answers what the drag carried ({ items: [{ mimeType, data }] }),
+    // or null when none began.
+    const drag = async (x0, y0, x1, y1) => {
+      await send('Input.setInterceptDrags', { enabled: true });
+      const began = new Promise((r) => { onEvent = (d) => { if (d.method === 'Input.dragIntercepted') r(d.params.data); }; });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: x0, y: y0, button: 'left', buttons: 1, clickCount: 1 });
+      for (let i = 1; i <= 6; i++) await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x0 + ((x1 - x0) * i) / 6, y: y0 + ((y1 - y0) * i) / 6, button: 'left', buttons: 1 });
+      const data = await Promise.race([began, sleep(1000).then(() => null)]);
+      onEvent = null;
+      if (data) for (const type of ['dragEnter', 'dragOver', 'drop']) await send('Input.dispatchDragEvent', { type, x: x1, y: y1, data });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x1, y: y1, button: 'left', clickCount: 1 });
+      await send('Input.setInterceptDrags', { enabled: false });
+      await sleep(120);
+      return data;
+    };
     // a script every page this flow opens runs before its own (what preload gives a page main opens: a stand-in for
     // window.api); taken away when the flow ends, so the next flow's pages are the mock's again
     const loaded = [];
     const beforeLoad = async (source) => { loaded.push((await send('Page.addScriptToEvaluateOnNewDocument', { source })).identifier); };
-    const page = { js, jsIn, waitFor, key, type, click, start, open, sleep, beforeLoad };
+    const page = { js, jsIn, waitFor, key, type, click, drag, start, open, sleep, beforeLoad };
 
     for (const f of flows) {
       if (only && !f.name.includes(only)) continue;
