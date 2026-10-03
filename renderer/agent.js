@@ -154,7 +154,7 @@ function relayRows() {
   if (c.state === 'failed') return [{ group: 'Link to agent', icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: 'Link to agent', label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
   // the row says what ↩ does; the words themselves sit under it, so you can see what your agent will be told
-  const group = 'Give these to the agent · it adds the server, names itself and links';
+  const group = 'Give these to the agent · it adds the servers, names itself and links';
   const rows = [{ group, icon: 'link', label: 'Copy instructions for your agent', hint: '↩', keepOpen: true, match: [],
     run: () => run(() => copyText(c.prompt, 'Copied: give them to your agent')) },
   { group, label: c.prompt, note: true, wrap: true, disabled: true, match: [] },

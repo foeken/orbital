@@ -42,4 +42,8 @@ module.exports = [
   { name: 'ai-codex-rows', setup: [translateOff, open(NOTE), { wait: 400 }, agent([[NOTE, 'working']])], steps: [{ key: '⌘K' }, { type: 'codex' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-link', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'link codex' }, { wait: 300 }, { key: '↩' }, { wait: 300 }, { type: 'codex://threads/3f2a9c1e-7b44-4d0e-9a51-2c8e6f0b7d13' }, { wait: 300 }, blank], clip: pal },
   { name: 'ai-chat-codex', video: true, size: '1000x700', setup: [translateOff, open('tana:chat:mockchat0'), { wait: 900 }], steps: [{ click: '#composerText' }, { type: '@Codex', delay: 80 }, { wait: 500 }, { key: '↓' }, { wait: 300 }, { key: '↩' }, { type: ' what did we decide about the pilots?', delay: 35 }, { wait: 300 }, { key: '↩' }, { wait: 3400 }], hold: 1800, clip: { page: '' } },
+  // ---- Link to agent (main/agents/linked.js): the instructions and their code, then GrokBot among your agents (renderer/mock.js links it on the third ask) ----
+  { name: 'ai-relay-link', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'link to agent' }, { wait: 300 }, { key: '↩' }, { wait: 700 }, blank], clip: pal },
+  { name: 'ai-relay-agents', setup: [translateOff, open(NOTE), { wait: 400 }, { js: "(async () => { await tana.relayLink(); for (let i = 0; i < 3; i++) await tana.relayLinkStatus('7KQX-M2PD'); await loadAgentList(); return 1; })()" }, { wait: 400 }],
+    steps: [{ key: '⌘K' }, { type: 'choose agents' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, blank], clip: pal },
 ];
