@@ -3,19 +3,18 @@
 // that MCP server to itself and links with a code from Cmd+K Link to agent … Each is an agent of its own beside Codex
 // and Claude (main/agent.js), "relay:<its id>", named as it named itself.
 //   - Your Orbital is an id and a secret (relayAccount), made the first time you link an agent and kept in the Orbital
-//     settings document, so every device signed into your Tana account has the same agents. The relay keeps a hash of
-//     the secret and the public key it stands for (relay/seal.js keyFromSecret), never the secret.
+//     settings document, so every device signed into your Tana account has the same agents. The relay keeps only a
+//     hash of the secret.
 //   - The relay keeps the list of agents; relayAgents mirrors it on this machine, so they are known before the network
 //     answers. A newly linked agent is switched on once, wherever it is first seen (relaySeen).
-//   - Only ids go through the relay. A task is the node's id, sealed to the agent's key and queued; the agent takes it
+//   - Only ids go through the relay, over HTTPS. A task is the node's id and an action ("assign"); the agent takes it
 //     with get_tasks and reads the node itself through Tana's own MCP server (home.tana.inc/mcp), where the "Agent
 //     context" block Orbital wrote is the request, and it writes its answer there too. What comes back is the task's id
-//     and a status, sealed to your Orbital's key; whichever device reads one first keeps it in relayTasks, which
-//     follows you, so every device draws the same badge.
+//     and a status; whichever device reads one first keeps it in relayTasks, which follows you, so every device draws
+//     the same badge.
 const crypto = require('node:crypto');
 const agent = require('../agent');
 const settings = require('../settings');
-const seal = require('../../relay/seal');
 const { pageOf } = require('../state');
 
 // where the relay is: orbital.md, or ORBITAL_RELAY_URL for one running elsewhere; the checks point both at their own
@@ -51,14 +50,14 @@ async function request(method, path, body, acct) {
 async function call(method, path, body, acct = account(false)) {
   if (!acct) throw new Error('No agent is linked yet: Link to agent first');
   if (registered !== acct.id + acct.secret) {
-    await request('POST', '/orbital/register', { key: seal.keyFromSecret(acct.secret).publicKey }, acct);
+    await request('POST', '/orbital/register', {}, acct);
     registered = acct.id + acct.secret;
   }
   return request(method, path, body, acct);
 }
 
 // ---- the agents, as main/agent.js knows them ----
-const cached = () => { const list = settings.get('relayAgents'); return Array.isArray(list) ? list.filter((a) => a && agent.UUID.test(a.id) && typeof a.key === 'string') : []; };
+const cached = () => { const list = settings.get('relayAgents'); return Array.isArray(list) ? list.filter((a) => a && agent.UUID.test(a.id) && typeof a.name === 'string') : []; };
 let shown = null; // what the registry was last given, so an unchanged list is not registered again
 function load() {
   const list = cached(), sig = JSON.stringify(list);
@@ -75,7 +74,7 @@ function load() {
 agent.addSource(load);
 function store(list) {
   const seen = new Set(settings.get('relaySeen') || []), fresh = list.filter((a) => !seen.has(a.id));
-  settings.set('relayAgents', list.map(({ id, name, app, key, linkedAt, seenAt }) => ({ id, name, app, key, linkedAt, seenAt })));
+  settings.set('relayAgents', list.map(({ id, name, app, linkedAt, seenAt }) => ({ id, name, app, linkedAt, seenAt })));
   load();
   for (const a of fresh) agent.setEnabled(ID + a.id, true); // a new agent is on, once; switched off later it stays off
   if (fresh.length || seen.size !== list.length) settings.set('relaySeen', list.map((a) => a.id));
@@ -101,7 +100,7 @@ function linkedOf(id) {
 async function send(a, { nodeUri }) {
   const acct = account(false), id = crypto.randomUUID();
   if (!acct) throw new Error('No agent is linked yet: Link to agent first');
-  await call('POST', '/orbital/agents/' + a.id + '/messages', { id, box: seal.seal(JSON.stringify({ node: nodeUri }), a.key, seal.context('task', acct.id, a.id, id)) }, acct);
+  await call('POST', '/orbital/agents/' + a.id + '/messages', { id, node: nodeUri, action: 'assign' }, acct);
   return id; // the task id the node is linked to (main/agent.js setTask), and what the agent answers about
 }
 
@@ -117,12 +116,10 @@ async function pullNow() {
   if (!acct || !cached().length) return;
   const { updates } = await call('GET', '/orbital/updates', undefined, acct);
   if (!updates.length) return;
-  const own = seal.keyFromSecret(acct.secret).secretKey, ours = new Set(), done = [];
+  const ours = new Set(), done = [];
   for (const link of Object.values(agent.links())) if (link.agent.startsWith(ID)) ours.add(link.taskId);
   for (const u of updates) {
-    let msg;
-    try { msg = JSON.parse(seal.open(u.box, own, seal.context('update', acct.id, u.agent, u.id))); } catch { done.push(u.id); continue; } // not sealed for this Orbital, or changed: nobody here can read it
-    if (BADGE[msg.status] && ours.has(msg.task)) setTaskStatus(msg.task, msg.status); // a task no node holds any more is let go
+    if (BADGE[u.status] && ours.has(u.task)) setTaskStatus(u.task, u.status); // a task no node holds any more is let go
     done.push(u.id);
   }
   if (done.length) await call('POST', '/orbital/updates/ack', { ids: done }, acct);
@@ -175,13 +172,12 @@ async function unlink(id) {
   await refresh();
   return agent.list();
 }
-// A new secret, for when the old one may have been seen: the agents stay linked, since they are linked to the id.
-// Answers still sealed to the old key cannot be read any more, and are let go on the next read.
+// A new secret, for when the old one may have been seen: the agents stay linked, since they are linked to the id
 async function resetSecret() {
   const acct = account(false);
   if (!acct) throw new Error('No agent is linked yet');
   const secret = crypto.randomUUID();
-  await call('POST', '/orbital/rotate', { secret, key: seal.keyFromSecret(secret).publicKey }, acct);
+  await call('POST', '/orbital/rotate', { secret }, acct);
   settings.set('relayAccount', { id: acct.id, secret });
   registered = acct.id + secret;
   return true;

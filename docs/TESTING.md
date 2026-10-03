@@ -34,7 +34,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    mock or listed in `NOT_MOCKED`. A new call fails until both are decided. Demo mode lets the synced settings through on
    purpose (view filters, hidden titles, agents, preferences): they are settings, not content.
    `scripts/relay-check.js` runs the agent relay (relay/, docs/AGENT-RELAY.md) on a loopback port with its clock in hand:
-   an agent's OAuth sign-in, linking with a code, a sealed task (a node id) and its status, and what must fail (a used or expired
+   an agent's OAuth sign-in, linking with a code, a task (a node id and an action) and its status, and what must fail (a used or expired
    code, a wrong secret, a changed or misaddressed message, an unlinked agent, a task past its day), then searches the
    whole database for any node id sent or secret used. sdk-check drives Orbital's side of it (main/agents/linked.js)
    against the same relay.

@@ -3927,18 +3927,18 @@ async function main() {
     assert.deepEqual([status.state, status.agent.label, status.agent.app], ['linked', 'GrokBot', 'Grok'], 'the agent linked, by the name it chose, through the app it runs in');
     const entry = () => agent.list().find((a) => a.id === id);
     assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled], ['GrokBot', true, true, true], 'and is an agent like any other, on from the start');
-    // a task: the node's id and nothing else, sealed to the agent and opened by it; the words stay in Tana
+    // a task: the node's id and an action, nothing else; the words stay in Tana
     const NODE = 'tana:text:' + ulid(), realMut = docs.mut, realOp = docs.op;
     docs.op = docs.mut = async () => { throw new Error('a linked agent reads the node with its own Tana tools: Orbital sends no words'); };
     const taskId = await agent.get(id).start({ nodeUri: NODE, title: 'Pilot brief', prompt: 'Draft the brief' });
     agent.setTask(NODE, id, taskId);
     const [task] = JSON.parse(await grok.tool('get_tasks')).tasks;
-    assert.deepEqual(Object.keys(task).sort(), ['node', 'sent_at', 'task_id'], 'a task is ids and a time');
-    assert.deepEqual([task.task_id, task.node], [taskId, NODE], 'the agent learns which node, and reads it in Tana');
+    assert.deepEqual(Object.keys(task).sort(), ['action', 'node', 'sent_at', 'task_id'], 'a task is ids, an action and a time');
+    assert.deepEqual([task.task_id, task.node, task.action], [taskId, NODE, 'assign'], 'the agent learns which node and what to do, and reads it in Tana');
     const stored = await relay.dump();
-    assert.deepEqual(['Pilot brief', 'Draft the brief', NODE].map((s) => stored.includes(s)), [false, false, false], 'the title and the request never leave, and the relay holds the id only sealed');
+    assert.deepEqual(['Pilot brief', 'Draft the brief'].map((s) => stored.includes(s)), [false, false], 'the title and the request never leave Orbital');
     assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'pending' }, 'pending until the agent says something');
-    // its status: a task id and a word, sealed to your Orbital and read by whichever device asks first
+    // its status: a task id and a word, read by whichever device asks first
     await grok.tool('update_task', { task_id: taskId, status: 'completed' });
     await linked.pullNow();
     assert.deepEqual(plain(await agent.get(id).statuses({ [NODE]: taskId })), { [NODE]: 'done' }, 'the badge is done');
@@ -3958,7 +3958,7 @@ async function main() {
     assert.equal(agent.links()[NODE], undefined, 'and the node lets go of its task');
     assert.match(await grok.tool('get_tasks'), /Not linked/, 'and the agent is told');
     docs.mut = realMut; docs.op = realOp; await relay.close(); server.close();
-    console.log('ok  linked agents: linked with a code, named by themselves, only ids sealed out and a status back, renamed, off, a new secret, unlinked');
+    console.log('ok  linked agents: linked with a code, named by themselves, only ids out and a status back, renamed, off, a new secret, unlinked');
   }
   // What the badge is allowed to say: the linked task's own status, one read for every linked node.
   {
