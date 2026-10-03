@@ -13,6 +13,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -82,6 +84,8 @@ class Engine(
             demoOn = on
             platform.store.set("demoMode", if (on) "true" else null)
             opened.clear() // a page read before it was turned on or off shows its words as they were then
+            partsFor = null // what a read under way brings is the other mode's
+            if (on && !isSample) rows = emptyList() // the real words go at once, rather than staying until the masked read lands, or for good with Tana out of reach
             scope.launch { refresh() }
         }
 
@@ -102,6 +106,9 @@ class Engine(
     private var justSignedIn = false
     private var session = 0 // counts sign-outs: a read that began before one never saves or shows what it got
     private var again = false // a change told while a read is under way: one more read follows it
+    private var savedFor: String? = null // whose the saved Timeline on screen is, until Tana says who is signed in
+    private var account: String? = null // who is signed in, in which workspace (orbital.account): what the saved Timeline is kept for
+    private var partsFor: Int? = null // the session whose Timeline read is under way, taking its first part (show)
     // the last read of each node opened, newest last: a page gone back to shows it at once while it is read again, as
     // the iPhone's NavigationStack keeps the page under the one on top (NodeScreen starts from cached(id))
     private val opened = LinkedHashMap<String, Page>()
@@ -110,9 +117,12 @@ class Engine(
         host?.listener = this
         if (sample != null) {
             rows = sampleRows(sample.first, now()).let { all ->
-                if (history) all.filter { it.timeline?.today != true && it.timeline?.upcoming != true && it.timeline?.free == null } else all
+                if (history) all.filter { !it.top } else all
             }
             phase = Phase.Ready
+        } else if (host != null && !demoOn) {
+            // the last Timeline read, on screen at once while Tana connects (SavedTimeline); never in demo mode
+            SavedTimeline.load(platform.files, now())?.let { (whose, saved) -> rows = saved; savedFor = whose }
         }
     }
 
@@ -131,6 +141,9 @@ class Engine(
     }
 
     override fun said(message: String) {
+        // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it, and
+        // 'part:' with the first rows of a Timeline read still under way
+        if (message.startsWith("part:")) return show(message.removePrefix("part:"))
         when (message) {
             "changed" -> scope.launch { refresh() }
             "ready" -> scope.launch { connect() }
@@ -141,7 +154,14 @@ class Engine(
     override fun failed(message: String) {
         note("load failed: " + message)
         watch?.cancel()
+        fail(message)
+    }
+
+    // Tana out of reach, or a session that could not be read: said in place of the app, or under the saved Timeline when
+    // one is on screen (OrbitalApp), where pulling it or coming back to the app tries again (refresh)
+    private fun fail(message: String) {
         phase = Phase.Failed(message)
+        error = message
     }
 
     // Android stopped Tana's page to free memory and EngineWeb made a new one (onRenderProcessGone; the iPhone has no
@@ -160,6 +180,11 @@ class Engine(
                 ok -> {
                     justSignedIn = false
                     email = maybe { host.run("return orbital.email()").jsonPrimitive.contentOrNull }
+                    val was = savedFor ?: account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
+                    account = maybe { host.run("return orbital.account()").jsonPrimitive.contentOrNull }
+                    // another account's, or another workspace's: off the screen and off the phone, with the pages read for it
+                    if (was != null && was != account) { rows = emptyList(); opened.clear(); SavedTimeline.forget(platform.files) }
+                    savedFor = null
                     host.keepCookies() // at once: the refresh may not finish
                     phase = Phase.Ready
                     refresh()
@@ -167,7 +192,7 @@ class Engine(
                 // Tana said signed in a moment ago: say so, rather than showing its sign-in again and again
                 justSignedIn -> {
                     justSignedIn = false
-                    phase = Phase.Failed("You signed in to Tana, but Orbital could not read the session. Try again.")
+                    fail("You signed in to Tana, but Orbital could not read the session. Try again.")
                 }
                 else -> signIn()
             }
@@ -175,7 +200,7 @@ class Engine(
             throw e
         } catch (e: Exception) {
             note("engine failed: " + e.message)
-            phase = Phase.Failed(e.message ?: "The engine did not start")
+            fail(e.message ?: "The engine did not start")
         }
     }
 
@@ -214,6 +239,7 @@ class Engine(
     }
 
     suspend fun refresh() {
+        if (phase is Phase.Failed && rows.isNotEmpty() && !isSample) { start(); return } // the saved Timeline on screen, Tana out of reach: try again
         if (phase != Phase.Ready || isSample) return
         if (loading) { again = true; return }
         loading = true
@@ -226,10 +252,15 @@ class Engine(
     private suspend fun read() {
         val host = host ?: return
         val started = session
+        val masked = demo
+        partsFor = session
         try {
-            val read: List<Row> = call("return await orbital.timeline(pages)", mapOf("pages" to pages))
-            if (started != session) return // signed out meanwhile
+            var raw = ""
+            val read: List<Row> = reply("return await orbital.timeline(pages)", mapOf("pages" to pages)) { raw = it; json.decodeFromString(it) }
+            partsFor = null // a part told late is older than this
+            if (started != session || masked != demo) return // signed out meanwhile, or demo mode switched: the read it asked for shows
             rows = read
+            account?.let { if (!demo && pages == 1) SavedTimeline.save(platform.files, raw, it, now()) } // what the next launch shows first
             error = null
             settle(rows)
             maybe { call<Setup>("return await orbital.setup()") }?.let { setup ->
@@ -246,11 +277,22 @@ class Engine(
             if (started != session) return
             if (e.message?.contains("not authenticated") == true) signIn() // the session ran out: sign in again
             error = e.message
+        } finally {
+            partsFor = null
         }
     }
 
+    // The Timeline's first part, Today's Tasks and Upcoming meetings, told while the rest is still read (ios/engine/read.js):
+    // it takes the place of the same rows on screen, and the days under them stay until the whole page lands. The last part
+    // can be the whole page.
+    private fun show(part: String) {
+        if (partsFor != session) return
+        val got = runCatching { json.decodeFromString<List<Row>>(part) }.getOrNull() ?: return
+        rows = if (got.all { it.top }) got + rows.filter { !it.top } else got
+    }
+
     suspend fun more() {
-        if (loading) return // a second tap while the first is loading would count a page never read
+        if (loading || phase != Phase.Ready) return // a second tap while the first is loading would count a page never read
         pages += 1
         refresh()
     }
@@ -262,7 +304,8 @@ class Engine(
         session += 1
         maybe { host.run("await orbital.signOut()") }
         host.forgetCookies()
-        rows = emptyList(); states.clear(); removed = emptySet(); email = null; pages = 1; opened.clear()
+        SavedTimeline.forget(platform.files)
+        rows = emptyList(); states.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear()
         note("signed out")
         start()
     }
@@ -439,20 +482,35 @@ class Engine(
         return null
     }
 
-    private suspend inline fun <reified T> call(body: String, args: Map<String, Any?> = emptyMap()): T {
+    private suspend inline fun <reified T> call(body: String, args: Map<String, Any?> = emptyMap()): T =
+        reply(body, args) { json.decodeFromString<T>(it) }
+
+    // decode: what to make of the JSON engine.js answers
+    private suspend fun <T> reply(body: String, args: Map<String, Any?>, decode: (String) -> T): T {
         val host = host ?: throw Failure("Not in the sample")
         try {
+            val owner = account ?: savedFor // whose screen this was asked from
+            connected()
+            // a tap on a row of another account's, made before Tana said who signed in: not done to this one
+            if (owner != null && owner != account) throw Failure("Another Tana account is signed in now, so this was not done")
             // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
             // moment it is turned on, not from the next Timeline read, which a read already under way puts off
             val answer = host.run("orbital.demo(demo); " + body, args + ("demo" to demo))
             val text = (answer as? JsonPrimitive)?.takeIf { it.isString }?.content ?: "null"
-            return json.decodeFromString<T>(text)
+            return decode(text)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             note((Regex("orbital\\.(\\w+)").find(body)?.groupValues?.get(1) ?: "engine") + " failed: " + e.message)
             throw Failure(e.message ?: "The engine failed")
         }
+    }
+
+    // The saved Timeline is on screen before the engine has connected: what is asked of it meanwhile waits for it
+    private suspend fun connected() {
+        while (phase == Phase.Starting) delay(100)
+        (phase as? Phase.Failed)?.let { throw Failure(it.message) }
+        if (phase == Phase.SignedOut) throw Failure("Signed out of Tana")
     }
 
     companion object {
@@ -481,6 +539,28 @@ class Engine(
 
 // a set value as the engine takes it ({ ref, label } or { text })
 fun Value.asJson(): Map<String, String> = listOfNotNull(ref?.let { "ref" to it }, label?.let { "label" to it }, text?.let { "text" to it }).toMap()
+
+// The last Timeline read, kept on this phone (Platform.files: never in a backup) and drawn at launch while Tana connects,
+// as the desktop draws its cached rows before its sync client exists; the read that follows takes its place (Engine.swift
+// SavedTimeline). Only your own account's and never in demo mode (Engine), and of a day gone by only what happened:
+// Today's Tasks and Upcoming meetings come with the read, as does a free time that has ended.
+object SavedTimeline {
+    private const val KEY = "timeline"
+    @kotlinx.serialization.Serializable private class Saved(val account: String, val at: Double, val rows: List<Row>)
+
+    // rows: as engine.js answered them, kept as they came
+    fun save(files: Store, rows: String, account: String, now: Instant) =
+        files.set(KEY, "{\"account\":" + JsonPrimitive(account) + ",\"at\":" + now.toEpochMilliseconds() / 1000.0 + ",\"rows\":" + rows + "}")
+
+    fun load(files: Store, now: Instant, zone: TimeZone = TimeZone.currentSystemDefault()): Pair<String, List<Row>>? {
+        val saved = files.get(KEY)?.let { runCatching { json.decodeFromString<Saved>(it) }.getOrNull() } ?: return null
+        val today = Instant.fromEpochMilliseconds((saved.at * 1000).toLong()).toLocalDateTime(zone).date == now.toLocalDateTime(zone).date
+        val ms = now.toEpochMilliseconds().toDouble()
+        return saved.account to saved.rows.filter { row -> if (today) (row.timeline?.free?.until ?: Double.POSITIVE_INFINITY) > ms else !row.top }
+    }
+
+    fun forget(files: Store) = files.set(KEY, null)
+}
 
 // what a call answers, or null when it threw; a cancelled coroutine stays cancelled
 suspend fun <T> maybe(block: suspend () -> T): T? = try {

@@ -21,6 +21,7 @@ import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
 import { mark } from './sensitive';
 import { times } from './labels';
+import { read } from './read';
 import { demo, demoName, demoOn, demoTitle, isDemo } from './demo';
 import NUCLEO from 'nucleo-ui';
 
@@ -35,17 +36,33 @@ const claims = (t) => { try { return JSON.parse(atob(t.split('.')[1].replace(/-/
 // hand back the same expired token (tana-session.js keeps the two apart the same way).
 let last = null, expiresAt = 0, answer = 'not asked';
 const inFlight = {};
+function take(ok, status, json) {
+  last = ok && json.authenticated ? json : null;
+  answer = status + ' ' + (last ? 'signed in' : 'signed out' + (json.reason ? ' (' + json.reason + ')' : ''));
+  expiresAt = last && last.accessToken ? (claims(last.accessToken).exp || 0) * 1000 : 0;
+  return last;
+}
+// The page this runs on is that answer already, loaded uncached by the app a moment ago (Engine.swift start, EngineWeb.kt
+// load): the first lookup takes it from there, one round trip less before anything is read. Anything but a signed-in
+// answer whose token has more than a minute left is asked again, so a copy some cache kept could never stand in for it.
+let onPage = true;
+function fromPage() {
+  if (!onPage) return null;
+  onPage = false;
+  try {
+    const json = JSON.parse(document.body.textContent);
+    return json.authenticated === true && json.accessToken && (claims(json.accessToken).exp || 0) * 1000 > Date.now() + 60000 ? json : null;
+  } catch { return null; }
+}
 function fetchSession(refresh) {
   const kind = refresh ? 'refresh' : 'plain';
+  const page = !refresh && !inFlight.plain && fromPage();
+  if (page) return Promise.resolve(take(true, 200, page));
   // no-store: Tana sends this with no cache headers, and a signed-out answer from before signing in must never be reused
   return (inFlight[kind] ||= fetch('/api/auth/session' + (refresh ? '?refresh=true' : ''), { credentials: 'include', cache: 'no-store', headers: { accept: 'application/json' } })
     .then(async (res) => {
       if (!res.ok && res.status !== 401 && res.status !== 403) throw new Error('GET /api/auth/session failed: HTTP ' + res.status);
-      const json = await res.json().catch(() => ({}));
-      last = res.ok && json.authenticated ? json : null;
-      answer = res.status + ' ' + (last ? 'signed in' : 'signed out' + (json.reason ? ' (' + json.reason + ')' : ''));
-      expiresAt = last && last.accessToken ? (claims(last.accessToken).exp || 0) * 1000 : 0;
-      return last;
+      return take(res.ok, res.status, await res.json().catch(() => ({})));
     }, (e) => { answer = String(e && e.message || e); throw e; }).finally(() => { delete inFlight[kind]; }));
 }
 async function getAccessToken({ refresh = false } = {}) {
@@ -325,12 +342,14 @@ window.orbital = {
     }
     return true;
   },
-  // the Timeline page, three days per page, as the rows the desktop renderer gets, with the words for their times (labels.js)
+  // the Timeline page, three days per page, as the rows the desktop renderer gets, with the words for their times
+  // (labels.js); its first part (Today's Tasks and Upcoming meetings) told to the app ahead of the rest, as 'part:' and
+  // the rows (read.js, Engine.swift show(part:)): a string, as both phones' bridges carry it
   demo: (on) => demoOn(on), // Settings' Demo mode, told before every call (Engine.swift and Engine.kt call)
   async timeline(pages = 1) {
     timeline.setPages(pages);
-    await settled(); // the watch choices and what is sensitive
-    return JSON.stringify(times(redact(await timeline.rows())));
+    const part = (rows) => window.webkit?.messageHandlers?.orbital?.postMessage('part:' + JSON.stringify(times(rows)));
+    return JSON.stringify(times(await read({ rows: timeline.rows, settled, follows: () => JSON.stringify(settings.get('notify') || {}), redact, part })));
   },
   // A task's box, as the desktop's does it (renderer/edit.js toggleDone, main/documents.js doc:setDone and mutTasks): an
   // Inbox task is accepted first (In Progress), a finished one is reopened, anything else is completed. Answers the state
@@ -387,6 +406,7 @@ window.orbital = {
   },
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
   email: () => (last && last.user && last.user.email) || null,
+  account: () => (S.me ? S.me.userUri + '@' + S.me.orgId : null), // who in which workspace, as the settings mirror keys it (stand-ins.js ns): what the app keeps its saved Timeline for
   // Zooming into a node: what it holds, as the desktop's page for it shows. A chat is its conversation (sdk/chat.js,
   // docs/CHATS.md), a saved search its results, a meeting the documents it owns (its write-up, its outcomes), anything
   // else its outline (sdk/content.js).

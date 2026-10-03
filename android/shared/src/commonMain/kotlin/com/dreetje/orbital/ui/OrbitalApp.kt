@@ -55,12 +55,15 @@ fun OrbitalApp(engine: Engine, start: Start = Start()) {
                 }
                 engine.platform.EngineView(Modifier.fillMaxWidth().weight(1f).navigationBarsPadding().imePadding())
             }
-            when (val phase = engine.phase) {
-                is Engine.Phase.Failed -> Empty("Can't reach Tana", phase.message, Modifier.statusBarsPadding(), icon = Icons.Outlined.WifiOff) {
+            // the app at once: the Timeline last read while Tana connects, or building itself (Building); and still there,
+            // saying why under it, when Tana could not be reached (Engine.fail)
+            val failed = (engine.phase as? Engine.Phase.Failed)?.takeIf { engine.rows.isEmpty() }
+            when {
+                failed != null -> Empty("Can't reach Tana", failed.message, Modifier.statusBarsPadding(), icon = Icons.Outlined.WifiOff) {
                     Button({ engine.start() }, colors = ButtonDefaults.buttonColors(containerColor = c.text, contentColor = c.page)) { Text("Try again") }
                     TextButton({ details = true }) { Text("Details", color = c.text) }
                 }
-                Engine.Phase.SignedOut -> {}
+                engine.phase == Engine.Phase.SignedOut -> {}
                 else -> Shell(engine, start)
             }
         }

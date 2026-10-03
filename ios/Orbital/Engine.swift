@@ -28,12 +28,20 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var reveal = false // sensitive items shown, after a shake; never kept, as the desktop keeps it on the machine only
     // Settings' Demo mode, as the desktop's: made-up words and names on screen, nothing saved (ios/engine/demo.js); kept on this phone
     var demo = UserDefaults.standard.bool(forKey: "demoMode") {
-        didSet { UserDefaults.standard.set(demo, forKey: "demoMode"); Task { await refresh() } }
+        didSet {
+            UserDefaults.standard.set(demo, forKey: "demoMode")
+            partsFor = nil // what a read under way brings is the other mode's
+            if demo, !Self.isSample { rows = [] } // the real words go at once, rather than staying until the masked read lands, or for good with Tana out of reach
+            Task { await refresh() }
+        }
     }
     @ObservationIgnored let web: WKWebView
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
     @ObservationIgnored private var session = 0 // counts sign-outs: a read that began before one never saves or shows what it got
+    @ObservationIgnored private var savedFor: String? // whose the saved Timeline on screen is, until Tana says who is signed in
+    @ObservationIgnored private var account: String? // who is signed in, in which workspace (orbital.account): what the saved Timeline is kept for
+    @ObservationIgnored private var partsFor: Int? // the session whose Timeline read is under way, taking its first part (show(part:))
 
     static let session = URL(string: "https://home.tana.inc/api/auth/session")!
     static let home = URL(string: "https://home.tana.inc")!
@@ -57,6 +65,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         #endif
         web.navigationDelegate = self
         if Self.isSample { showSample(); return }
+        // the last Timeline read, on screen at once while Tana connects (SavedTimeline); never in demo mode
+        if !demo, let saved = SavedTimeline.load() { rows = saved.rows; savedFor = saved.account }
         Task {
             await SavedSession.restore(into: web.configuration.websiteDataStore.httpCookieStore)
             start()
@@ -77,8 +87,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         if log.count > 100 { log.removeFirst() }
     }
 
-    // engine.js says 'ready' once it is loaded on the session page, and 'changed' when the Timeline moved under it
+    // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it, and
+    // 'part:' with the first rows of a Timeline read still under way
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if let said = message.body as? String, said.hasPrefix("part:") { show(part: String(said.dropFirst(5))); return }
         if message.body as? String == "changed" { Task { await refresh() }; return }
         guard message.body as? String == "ready" else { return }
         Task { await connect() }
@@ -91,7 +103,14 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let e = error as NSError
         guard !(e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled), !(e.domain == "WebKitErrorDomain" && e.code == 102) else { return }
         watch?.cancel()
-        phase = .failed(error.localizedDescription)
+        fail(error.localizedDescription)
+    }
+
+    // Tana out of reach, or a session that could not be read: said in place of the app, or under the saved Timeline when
+    // one is on screen (ContentView), where pulling it or coming back to the app tries again (refresh)
+    private func fail(_ message: String) {
+        phase = .failed(message)
+        error = message
     }
 
     // home.tana.inc claims every path for Tana's own app (its apple-app-site-association: "NOT /view/*", "*"), so a
@@ -112,19 +131,24 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             if ok {
                 justSignedIn = false
                 email = try? await web.callAsyncJavaScript("return orbital.email()", contentWorld: .page) as? String
-                await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // at once: the refresh may not finish
+                let was = savedFor ?? account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
+                account = try? await web.callAsyncJavaScript("return orbital.account()", contentWorld: .page) as? String
+                if let was, was != account { rows = []; SavedTimeline.forget() } // another account's, or another workspace's: off the screen and off the phone
+                savedFor = nil
+                // the cookies kept at once, as the refresh may not finish, and beside it: the Timeline waits on no Keychain
+                Task { await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) }
                 phase = .ready
                 await refresh()
             } else if justSignedIn {
                 // Tana said signed in a moment ago: say so, rather than showing its sign-in again and again
                 justSignedIn = false
-                phase = .failed("You signed in to Tana, but Orbital could not read the session. Try again.")
+                fail("You signed in to Tana, but Orbital could not read the session. Try again.")
             } else {
                 signIn()
             }
         } catch {
             note("engine failed: \(Self.message(error))")
-            phase = .failed(Self.message(error))
+            fail(Self.message(error))
         }
     }
 
@@ -163,6 +187,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // A change told while a read is under way is not lost: one more read follows it, however many came
     @ObservationIgnored private var again = false
     func refresh() async {
+        if case .failed = phase, !rows.isEmpty { start(); return } // the saved Timeline on screen, Tana out of reach: try again
         guard phase == .ready, !Self.isSample else { return }
         guard !loading else { again = true; return }
         loading = true
@@ -172,11 +197,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     private func read() async {
-        let started = session
+        let started = session, masked = demo
+        partsFor = session
+        defer { partsFor = nil }
         do {
-            let read: [Row] = try await call("return await orbital.timeline(pages)", ["pages": pages])
-            guard started == session else { return } // signed out meanwhile
+            let (read, json): ([Row], String) = try await call("return await orbital.timeline(pages)", ["pages": pages]) {
+                (try JSONDecoder().decode([Row].self, from: Data($0.utf8)), $0)
+            }
+            partsFor = nil // a part told late is older than this
+            guard started == session, masked == demo else { return } // signed out meanwhile, or demo mode switched: the read it asked for shows
             rows = read
+            if !demo, pages == 1, let account { SavedTimeline.save(json, account: account) } // what the next launch shows first
             error = nil
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
@@ -193,8 +224,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         }
     }
 
+    // The Timeline's first part, Today's Tasks and Upcoming meetings, told while the rest is still read (ios/engine/read.js):
+    // it takes the place of the same rows on screen, and the days under them stay until the whole page lands. The last part
+    // can be the whole page.
+    private func show(part json: String) {
+        guard partsFor == session, let part = try? JSONDecoder().decode([Row].self, from: Data(json.utf8)) else { return }
+        rows = part.allSatisfy(\.top) ? part + rows.filter { !$0.top } : part
+    }
+
     func more() async {
-        guard !loading else { return } // a second tap while the first is loading would count a page never read
+        guard !loading, phase == .ready else { return } // a second tap while the first is loading would count a page never read
         pages += 1
         await refresh()
     }
@@ -207,7 +246,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let store = web.configuration.websiteDataStore.httpCookieStore
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
-        rows = []; states = [:]; removed = []; email = nil; pages = 1
+        SavedTimeline.forget()
+        rows = []; states = [:]; removed = []; email = nil; account = nil; pages = 1
         note("signed out")
         start()
     }
@@ -380,16 +420,31 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     struct Failure: LocalizedError { let errorDescription: String? }
     private func call<T: Decodable>(_ js: String, _ arguments: [String: Any]) async throws -> T {
+        try await call(js, arguments) { try JSONDecoder().decode(T.self, from: Data($0.utf8)) }
+    }
+    // decode: what to make of the JSON engine.js answers
+    private func call<T>(_ js: String, _ arguments: [String: Any], decode: (String) throws -> T) async throws -> T {
         do {
+            let owner = account ?? savedFor // whose screen this was asked from
+            try await connected()
+            // a tap on a row of another account's, made before Tana said who signed in: not done to this one
+            if let owner, owner != account { throw Failure(errorDescription: "Another Tana account is signed in now, so this was not done") }
             // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
             // moment it is turned on, not from the next Timeline read, which a read already under way puts off
             let json = try await web.callAsyncJavaScript("orbital.demo(demo); " + js, arguments: arguments.merging(["demo": demo]) { _, now in now },
                                                          contentWorld: .page) as? String ?? "null"
-            return try JSONDecoder().decode(T.self, from: Data(json.utf8))
+            return try decode(json)
         } catch {
             note("\(js.firstMatch(of: /orbital\.(\w+)/)?.1 ?? "engine") failed: \(Self.message(error))")
             throw Failure(errorDescription: Self.message(error))
         }
+    }
+
+    // The saved Timeline is on screen before the engine has connected: what is asked of it meanwhile waits for it
+    private func connected() async throws {
+        while phase == .starting { try await Task.sleep(for: .milliseconds(100)) }
+        if case .failed(let message) = phase { throw Failure(errorDescription: message) }
+        if phase == .signedOut { throw Failure(errorDescription: "Signed out of Tana") }
     }
 
     // -sample: pages-sample.json in place of Tana for these pages, invented content only
@@ -474,6 +529,33 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private static func message(_ error: Error) -> String {
         (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription
     }
+}
+
+// The last Timeline read, kept on this phone and drawn at launch while Tana connects, as the desktop draws its cached rows
+// before its sync client exists; the read that follows takes its place. In Caches, so never in a backup, and sealed while
+// the phone is locked. Only your own account's and never in demo mode (Engine), and of a day gone by only what happened:
+// Today's Tasks and Upcoming meetings come with the read, as does a free time that has ended.
+@MainActor
+enum SavedTimeline {
+    private static let file = URL.cachesDirectory.appending(path: "timeline.json")
+    private struct Head: Encodable { let account: String; let at: Double }
+    private struct Saved: Decodable { let account: String; let at: Double; let rows: [Row] }
+
+    // json: the rows as engine.js answered them, kept as they came
+    static func save(_ json: String, account: String) {
+        guard let head = try? JSONEncoder().encode(Head(account: account, at: Date.now.timeIntervalSince1970)) else { return }
+        var data = Data(head.dropLast()) // its closing brace, which the rows close instead
+        data.append(Data((",\"rows\":" + json + "}").utf8))
+        try? data.write(to: file, options: [.atomic, .completeFileProtection])
+    }
+
+    static func load() -> (account: String, rows: [Row])? {
+        guard let data = try? Data(contentsOf: file), let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return nil }
+        let today = Calendar.current.isDateInToday(Date(timeIntervalSince1970: saved.at)), now = Date.now.timeIntervalSince1970 * 1000
+        return (saved.account, saved.rows.filter { row in today ? (row.timeline?.free?.until ?? .infinity) > now : !row.top })
+    }
+
+    static func forget() { try? FileManager.default.removeItem(at: file) }
 }
 
 // Tana's cookies (the __session on home.tana.inc lasts seven days) kept in the Keychain as well: WebKit writes cookies to

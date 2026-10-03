@@ -127,6 +127,48 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm');
 const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSync(b, ['--version']).status === 0);
 (async () => {
+  // The Timeline's read (ios/engine/read.js): the settings and the Timeline side by side, and nothing shown before the
+  // settings are read: a part that lands first waits for them and goes marked; a refusal shows nothing; a watch choice
+  // the settings moved reads the Timeline again
+  {
+    const { read } = require('../ios/engine/read.js');
+    const later = () => { let done, fail; const p = new Promise((a, b) => { done = a; fail = b; }); return { p, done, fail }; };
+    const tick = () => new Promise((r) => setImmediate(r));
+    const redact = (rows) => rows.map((r) => ({ ...r, marked: true }));
+    let settings = later(), page = later(), told, parts = [];
+    const asked = read({ rows: (progress) => { told = progress; return page.p; }, settled: () => settings.p, follows: () => 'same', redact, part: (p) => parts.push(p) });
+    told([{ id: 'today' }]);
+    await tick();
+    assert.deepStrictEqual(parts, [], 'nothing shown before the settings are read');
+    settings.done();
+    await tick();
+    assert.deepStrictEqual(parts, [[{ id: 'today', marked: true }]], 'then the part in so far, marked with them');
+    page.done([{ id: 'today' }, { id: 'event' }]);
+    assert.deepStrictEqual(await asked, [{ id: 'today', marked: true }, { id: 'event', marked: true }], 'the page, marked');
+    told([{ id: 'late' }]);
+    assert.strictEqual(parts.length, 1, 'nothing told after the page');
+
+    settings = later(); page = later(); parts = [];
+    const refused = read({ rows: (progress) => { told = progress; return page.p; }, settled: () => settings.p, follows: () => 'same', redact, part: (p) => parts.push(p) });
+    told([{ id: 'today' }]);
+    settings.fail(new Error('no settings'));
+    await assert.rejects(refused, /no settings/, 'no settings, no Timeline');
+    page.fail(new Error('refused too')); // handled: no unhandled rejection
+    told([{ id: 'today' }, { id: 'event' }]);
+    await tick();
+    assert.deepStrictEqual(parts, [], 'and nothing of it shown');
+
+    settings = later(); parts = [];
+    const quick = read({ rows: (progress) => { progress([{ id: 'today' }]); return Promise.resolve([{ id: 'whole' }]); }, settled: () => settings.p, follows: () => 'same', redact: (r) => r, part: (p) => parts.push(p) });
+    await tick();
+    settings.done();
+    assert.deepStrictEqual(await quick, [{ id: 'whole' }]);
+    assert.deepStrictEqual(parts, [], 'a page in before the settings goes whole, with no part ahead of it');
+
+    let n = 0, follows = 'watching a';
+    const again = await read({ rows: async () => [{ id: 'read ' + ++n }], settled: async () => { follows = 'watching b'; }, follows: () => follows, redact: (r) => r, part: () => {} });
+    assert.deepStrictEqual(again, [{ id: 'read 2' }], 'the settings moved a watch choice: the Timeline read again');
+  }
   if (!bun && process.env.CI) throw new Error('CI must build the engine: install Bun (.github/workflows/ci.yml)');
   if (!bun) return console.log('ios engine check ok (the bundle skipped: no Bun)');
   const out = path.join(os.tmpdir(), 'orbital-engine-check.js');
@@ -136,11 +178,13 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   const token = 'x.' + b64({ exp: Math.floor(Date.now() / 1000) + 300, 'urn:tana:user:id': 'u1', org_id: 'org_1' }) + '.y';
   const source = fs.readFileSync(out, 'utf8');
   // one page: a fresh vm, as a fresh web view, over the given storage
-  const boot = (store) => {
+  const session = JSON.stringify({ authenticated: true, accessToken: token, userExternalId: 'u1', orgDocUri: 'tana:org:01aaaaaaaaaaaaaaaaaaaaaaaa', user: { email: 'a@b.c' } });
+  // shown: what the page itself says, the session's answer as the app loads it (Engine.swift start); none, no document
+  const boot = (store, shown) => {
     const calls = [], posted = [];
     const fetch = async (url, init = {}) => {
       calls.push(String(url));
-      if (String(url).startsWith('/api/auth/session')) return new Response(JSON.stringify({ authenticated: true, accessToken: token, userExternalId: 'u1', orgDocUri: 'tana:org:01aaaaaaaaaaaaaaaaaaaaaaaa', user: { email: 'a@b.c' } }));
+      if (String(url).startsWith('/api/auth/session')) return new Response(session);
       assert.ok(new Headers(init.headers).get('authorization') === 'Bearer ' + token, 'every platform call carries the session token');
       return new Response(new Uint8Array(0), { headers: { 'content-type': 'application/proto' } });
     };
@@ -149,6 +193,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
       location: { origin: 'https://home.tana.inc', pathname: '/api/auth/session' },
       localStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i], get length() { return store.size; } },
       webkit: { messageHandlers: { orbital: { postMessage: (m) => posted.push(m) } } } };
+    if (shown !== undefined) ctx.document = { body: { textContent: shown } };
     ctx.window = ctx.globalThis = ctx.self = ctx;
     vm.createContext(ctx);
     vm.runInContext(source, ctx);
@@ -159,10 +204,29 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.deepStrictEqual(first.posted, ['ready'], 'the page says ready');
   assert.strictEqual(await first.orbital.connect(), true, 'signed in, it connects');
   await assert.rejects(first.orbital.timeline(1), /Could not read your Orbital settings/, 'no Timeline without the settings document');
+  await new Promise((r) => setTimeout(r, 50));
+  assert.deepStrictEqual(first.posted, ['ready'], 'and no part of it told to the app');
+  // the session page signed in: connected from it, with no second lookup; signed out, Tana is asked again
+  const fromPage = boot(new Map(), session);
+  assert.strictEqual(await fromPage.orbital.connect(), true);
+  assert.ok(!fromPage.calls.some((c) => c.startsWith('/api/auth/session')), 'the page is the session: not asked twice');
+  assert.strictEqual(fromPage.orbital.email(), 'a@b.c');
+  assert.strictEqual(fromPage.orbital.account(), 'tana:user-profile:u1@org_1', 'who, in which workspace: what the saved Timeline is kept for');
+  const signedOutPage = boot(new Map(), JSON.stringify({ authenticated: false, reason: 'no_session_cookie' }));
+  assert.strictEqual(await signedOutPage.orbital.connect(), true, 'a signed-out page is asked again');
+  assert.ok(signedOutPage.calls.some((c) => c.startsWith('/api/auth/session')));
+  // a page whose token is nearly spent (one a cache kept) is asked again too
+  const aged = 'x.' + b64({ exp: Math.floor(Date.now() / 1000) + 30, 'urn:tana:user:id': 'u9', org_id: 'org_9' }) + '.y';
+  const oldPage = boot(new Map(), JSON.stringify({ ...JSON.parse(session), accessToken: aged, userExternalId: 'u9' }));
+  assert.strictEqual(await oldPage.orbital.connect(), true);
+  assert.ok(oldPage.calls.some((c) => c.startsWith('/api/auth/session')), 'an aged page is not taken');
+  assert.strictEqual(oldPage.orbital.account(), 'tana:user-profile:u1@org_1', 'Tana\'s own answer is');
   // once it has been (the mark is this account's own, in its own mirror), the Timeline answers in the desktop's row shape
   const page = boot(new Map([['orbital:tana:user-profile:u1@org_1:settingsRead', 'true']]));
   assert.strictEqual(await page.orbital.connect(), true);
   const rows = JSON.parse(await page.orbital.timeline(1));
+  // what the page tells the app is a string, as both phones' bridges carry it: a first part as 'part:' and its rows
+  for (const m of page.posted) assert.ok(typeof m === 'string' && (['ready', 'changed'].includes(m) || (m.startsWith('part:') && Array.isArray(JSON.parse(m.slice(5))))), 'told as a string: ' + String(m).slice(0, 80));
   // the graph answers nothing here, so the page is its Today's Tasks stop alone, in the shape Timeline.swift reads
   const today = rows.find((r) => r.timeline && r.timeline.today);
   assert.ok(today, 'the Timeline answers its Today stop: ' + JSON.stringify(rows).slice(0, 200));

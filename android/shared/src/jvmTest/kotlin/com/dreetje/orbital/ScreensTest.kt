@@ -128,4 +128,24 @@ class ScreensTest {
         onNodeWithText("My open tasks", useUnmergedTree = true).assertExists()
         assertTrue(onAllNodes(hasContentDescription("Menu")).fetchSemanticsNodes().isEmpty())
     }
+
+    // the saved Timeline at launch, Tana not connected yet: more days wait for it, greyed rather than a tap that does nothing
+    @Test fun moreDaysWaitUntilTanaConnects() = runDesktopComposeUiTest(412, 915) {
+        val scope = MainScope()
+        try {
+            val platform = FakePlatform()
+            SavedTimeline.save(platform.files, """[{"id":"s:old","segments":[{"text":"Priya completed the plan"}],"timeline":{"tone":"done","day":"2026-10-02"}}]""",
+                "tana:user-profile:me@org_1", kotlin.time.Clock.System.now())
+            val engine = Engine(FakeHost(), platform, scope, demoMode = false)
+            setContent { OrbitalApp(engine) }
+            waitUntil(timeoutMillis = 5000) { onAllWithText("Priya completed").isNotEmpty() }
+            onNodeWithText("Loading…").assertIsNotEnabled()
+            // and Tana out of reach: still greyed, saying so rather than loading
+            engine.failed("net::ERR_INTERNET_DISCONNECTED")
+            waitUntil(timeoutMillis = 3000) { onAllWithText("Can't reach Tana").isNotEmpty() }
+            onNodeWithText("Can't reach Tana").assertIsNotEnabled()
+        } finally {
+            scope.cancel()
+        }
+    }
 }

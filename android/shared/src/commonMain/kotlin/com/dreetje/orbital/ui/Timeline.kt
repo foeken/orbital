@@ -164,8 +164,15 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
                 }
                 // always, as the desktop has it: a quiet three days must not hide the days before them
                 if (rows.isNotEmpty()) item("more") {
-                    TextButton({ engine.scope.launch { engine.more() } }, Modifier.fillMaxWidth().padding(top = 6.dp), enabled = !engine.loading) {
-                        Text(if (engine.loading) "Loading…" else "Show three more days", color = c.secondary)
+                    // the saved Timeline is on screen before Tana connects, or when it cannot be reached: more days wait for
+                    // it, greyed and saying why
+                    TextButton({ engine.scope.launch { engine.more() } }, Modifier.fillMaxWidth().padding(top = 6.dp), enabled = !engine.loading && engine.phase == Engine.Phase.Ready) {
+                        val label = when {
+                            engine.loading || engine.phase == Engine.Phase.Starting -> "Loading…"
+                            engine.phase == Engine.Phase.Ready -> "Show three more days"
+                            else -> "Can't reach Tana"
+                        }
+                        Text(label, color = c.secondary)
                     }
                 }
             }
