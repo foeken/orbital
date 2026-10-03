@@ -22,7 +22,8 @@ your words never pass through it.
 3. Then **Copy the message for your Dot** copies what you send it: *Call Orbital's link_orbital tool with the code
    7KQX-M2PD and your own name (Dot if you have none). Then subscribe to Orbital's task.assigned event, and each time it fires, read the Tana
    node its data names with your Tana tools; it can be a task, a note, anything. Do your part as its "Agent context"
-   block asks and write what you did into the node, ending each update with a line "Agent status: Working", or "Agent
+   block asks (adding "Agent status: Working" as soon as you start, so I see you picked it up) and write what you did
+   into the node, ending each update with a line "Agent status: Working", or "Agent
    status: Completed" when your part is done, or "Agent status: Failed" if you cannot do it. That line marks your role;
    leave the node itself as it is (a task stays open) unless the request asks you to change it*, what to say if either server's tools are missing, and
    that only ids go through Orbital, so the Dot can explain it when asked. The page says the same under it. The code
@@ -32,11 +33,12 @@ your words never pass through it.
    your Dot is choosing it), in Choose agents, Assign to Agent, Assign to <its name> … and Settings.
 5. **Assign to Agent** writes the request into the node's `Agent context` block, as for every agent, then sends the
    event `task.assigned` with `{ node }` for that agent (main/agents/linked.js send). The relay POSTs it to the Dot's
-   callback at once, which wakes it, and adds the line "Agent status: Working" at the end of the node, so a Completed
-   or Failed from an earlier handoff no longer counts. An agent with no subscription would never hear of it, so the assignment fails
+   callback at once, which wakes it, and adds the line "Agent status: Assigned" at the end of the node, so a Completed
+   or Failed from an earlier handoff no longer counts. Working is left for the Dot to write as it starts, so the badge
+   turning blue is the Dot saying it picked the node up. An agent with no subscription would never hear of it, so the assignment fails
    with "<name> is not listening yet: ask it to subscribe to Orbital's task.assigned event" and nothing is handed over.
-6. The badge follows the node's last status line (main/documents.js lastAgentStatus): Working, Completed and Failed are
-   working, done and broken, none is still with the agent, and a node that cannot be read needs you. The lines are
+6. The badge follows the node's last status line (main/documents.js lastAgentStatus): Assigned (or none) is waiting for
+   the agent, Working, Completed and Failed are working, done and broken, and a node that cannot be read needs you. The lines are
    ordinary text in the node, so anyone who opens it in Tana sees them, and the task's own status stays yours:
    Completed means your turn to look, not done.
 

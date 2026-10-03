@@ -3885,7 +3885,7 @@ async function main() {
     assert.match(sub.result.id, /^sub_/, 'subscribed');
     docs.writeAgentStatus = async (nodeId, status) => { wrote.push([nodeId, status]); };
     const taskId = await handOver();
-    assert.deepEqual(wrote, [[NODE, 'Working']], 'the handoff ends the node with Agent status: Working, so an old status line no longer counts');
+    assert.deepEqual(wrote, [[NODE, 'Assigned']], 'the handoff ends the node with Agent status: Assigned, so an old status line no longer counts, and leaves Working for the agent to write');
     agent.setTask(NODE, id, taskId);
     const event = posted.at(-1);
     assert.deepEqual([event.name, event.eventId, event.data], ['task.assigned', 'evt_' + taskId, { node: NODE }], 'the event names the node, nothing more');
@@ -3893,10 +3893,11 @@ async function main() {
     assert.deepEqual(['Pilot brief', 'Draft the brief'].map((x) => stored.includes(x)), [false, false], 'the title and the request never leave Orbital');
     // the badge follows the node's last status line, which the agent writes in Tana (main/documents.js lastAgentStatus)
     const badge = async (status) => { docs.agentStatus = async () => { if (status instanceof Error) throw status; return status; }; return plain(await agent.get(id).statuses({ [NODE]: taskId }))[NODE]; };
-    assert.deepEqual([await badge('working'), await badge('completed'), await badge('failed'), await badge(null), await badge(new Error('gone'))], ['working', 'done', 'broken', 'working', 'broken'],
-      'Working, Completed and Failed are the badge\'s working, done and broken; no line is still with the agent; a node that cannot be read needs you');
+    assert.deepEqual([await badge('assigned'), await badge('working'), await badge('completed'), await badge('failed'), await badge(null), await badge(new Error('gone'))], ['pending', 'working', 'done', 'broken', 'pending', 'broken'],
+      'Assigned (or no line) waits for the agent to pick it up; Working, Completed and Failed are working, done and broken; a node that cannot be read needs you');
     assert.equal(docs.lastAgentStatus('Agent context\nBook a venue\nAgent status: Working\nBooked De Hoge Veluwe\nagent status: completed.'), 'completed', 'the last line wins, in any case, with a full stop');
-    assert.equal(docs.lastAgentStatus('Agent status: Completed\nAgent status: Working'), 'working', 'so a handoff after an old Completed is the current one');
+    assert.equal(docs.lastAgentStatus('Agent status: Completed\nAgent status: Assigned'), 'assigned', 'so a handoff after an old Completed is the current one');
+    assert.equal(docs.lastAgentStatus('Agent status: Assigned\nagent status: working'), 'working', 'until the agent says it started');
     assert.equal(docs.lastAgentStatus('The agent status: Failed was a guess\nAgent status: maybe'), null, 'and only a line that starts with it and names one of the three counts');
     docs.writeAgentStatus = realWrite; docs.agentStatus = realStatus;
     // rename; switched off stays off on a device that sees the agent for the first time; a new key; unlink

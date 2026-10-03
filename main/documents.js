@@ -745,12 +745,13 @@ function writeAgentContext(id, prompt) {
     return headId;
   });
 }
-// How a handed-over node is going, in the agent's own words: the last "Agent status: Working | Completed | Failed" line
-// in it. Orbital adds Working at the end when it hands a node over, and an agent that reports nowhere else (your Dot,
-// through orbital.md, whose Tana connector offers only Tana's four statuses) ends each update with one. Ordinary content,
+// How a handed-over node is going: the last "Agent status: Assigned | Working | Completed | Failed" line in it. Orbital
+// adds Assigned at the end when it hands a node over; the agent, which reports nowhere else (your Dot, through orbital.md,
+// whose Tana connector offers only Tana's four statuses), adds Working as it starts, so its pickup shows, and ends each
+// update with one. Ordinary content,
 // so whoever opens the node sees it, in Tana too; the last one wins, so a handoff added after an old Completed is the
 // current one.
-const AGENT_STATUS = /^\s*Agent status:\s*(Working|Completed|Failed)\b/i;
+const AGENT_STATUS = /^\s*Agent status:\s*(Assigned|Working|Completed|Failed)\b/i;
 const lastAgentStatus = (text) => { let last = null; for (const line of String(text || '').split('\n')) { const m = line.match(AGENT_STATUS); if (m) last = m[1].toLowerCase(); } return last; };
 const writeAgentStatus = (id, status) => mut(id, (doc) => content.insertAfter(doc, null, 'Agent status: ' + status));
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));

@@ -9,7 +9,8 @@
 //   - The relay is an event layer. Handing a node over is the event task.assigned with the node's id, delivered at once to
 //     the agent's subscription (relay/server.js EVENTS); the agent reads the node through Tana's own MCP server
 //     (home.tana.inc/mcp), where the "Agent context" block Orbital wrote is the request, and writes its answer there,
-//     ending each update with a line "Agent status: Working | Completed | Failed" (main/documents.js agentStatus).
+//     starting with a line "Agent status: Working" and ending each update with Working, Completed or Failed (main/documents.js
+//     agentStatus). Orbital writes only "Agent status: Assigned", so Working is the agent saying it picked the node up.
 //     Nothing comes back through the relay: the badge is that last line.
 const crypto = require('node:crypto');
 const agent = require('../agent');
@@ -95,17 +96,18 @@ async function send(a, { nodeUri }) {
   const id = crypto.randomUUID();
   const { subscribers } = await call('POST', '/orbital/agents/' + a.id + '/events', { id, name: 'task.assigned', data: { node: nodeUri } });
   if (!subscribers) throw new Error(a.name + ' is not listening yet: ask it to subscribe to Orbital\'s task.assigned event');
-  // this handoff is the current one, whatever an earlier one ended with; a line that will not write loses only the
-  // badge's first state, never the handoff (the event takes seconds to wake the agent: this lands first)
-  await documents.writeAgentStatus(nodeUri, 'Working').catch(() => {});
+  // Assigned, not Working: Working is for the agent to write, so the badge turns blue only once it picked the node up.
+  // It also makes this handoff the current one, whatever an earlier one ended with; a line that will not write loses
+  // only the badge's first state, never the handoff (the event takes seconds to wake the agent: this lands first)
+  await documents.writeAgentStatus(nodeUri, 'Assigned').catch(() => {});
   return id; // the task id the node is linked to (main/agent.js setTask)
 }
-// The badge follows the node's last status line: Working, Completed and Failed are working, done and broken; none (written
-// away) is still with the agent; a node that cannot be read needs you
-const BADGE = { working: 'working', completed: 'done', failed: 'broken' };
+// The badge follows the node's last status line: Assigned (or none) is waiting for the agent, Working, Completed and
+// Failed are working, done and broken; a node that cannot be read needs you
+const BADGE = { assigned: 'pending', working: 'working', completed: 'done', failed: 'broken' };
 async function statuses(links) {
   return Object.fromEntries(await Promise.all(Object.keys(links || {}).map(async (nodeId) =>
-    [nodeId, BADGE[await documents.agentStatus(nodeId).catch(() => 'failed')] || 'working'])));
+    [nodeId, BADGE[await documents.agentStatus(nodeId).catch(() => 'failed')] || 'pending'])));
 }
 
 // ---- linking, renaming, unlinking, a new key ----
@@ -116,9 +118,11 @@ async function linkCode() {
   // that everything else happens in Tana (the status lines included), and what goes through orbital.md, so the Dot can explain it when asked.
   return { code, expiresAt, url: relay.base, tana: TANA_MCP,
     prompt: 'Call Orbital\'s link_orbital tool with the code ' + code + ' and your own name (Dot if you have none). Then subscribe to Orbital\'s task.assigned event, and each time it '
-      + 'fires, read the Tana node its data names with your Tana tools; it can be a task, a note, anything. Do your part as its "Agent context" block asks and write '
-      + 'what you did into the node, ending each update with a line "Agent status: Working", or "Agent status: Completed" when your part is done, or "Agent status: '
-      + 'Failed" if you cannot do it. That line marks your role; leave the node itself as it is (a task stays open) unless the request asks you to change it. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
+      + 'fires, read the Tana node its data names with your Tana tools; it can be a task, a note, anything. As soon as you start, add a line "Agent status: Working" '
+      + 'at the end of the node, so I see you picked it up. Do your part as its "Agent context" block asks and write what you did into the node, and make the last '
+      + 'line you write "Agent status: Completed" when your part is done and it is my turn (a draft ready for my review is Completed), or "Agent status: Failed" '
+      + 'if you cannot do it. Never stop without one of those two: Orbital shows the last such line. Leave the node itself as it is (a task stays open) unless the '
+      + 'request asks you to change it. If you cannot find Orbital\'s or Tana\'s tools, tell me which: '
       + 'I add them in ChatGPT as custom MCP servers, Orbital at ' + relay.base + ' and Tana at ' + TANA_MCP + '. If I ask what goes through Orbital: only ids: '
       + 'each event carries a Tana node\'s id, and nothing comes back through Orbital. The words stay in Tana, where you read them with your own Tana access.' };
 }
