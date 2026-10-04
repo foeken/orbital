@@ -55,6 +55,10 @@ From fastest to slowest. Each catches what the one before it cannot.
    - the Settings window (settings.html, on a stand-in for main) stores what you pick, keeps the newest answer when an
      older read lands after it, keeps the keyboard on a switch through its redraw, and masks your email and hidden
      titles in demo mode.
+   - Cmd+K Install mobile app: the Help tour (help.html) opens on its iPhone page in either theme, with the code drawn,
+     and its TestFlight link opens in the browser through main while the tour stays. `scripts/renderer-check.js` decodes
+     the code itself (help-testflight.svg) and holds it to that link and to the README's and the manual's, so a new
+     TestFlight link has to come with a new code.
 
    Then the **golden paths**, what someone does every day from start to end, by key and by pointer as they would. They
    guard the paths themselves, so a change that breaks one fails even when it is a new kind of break:

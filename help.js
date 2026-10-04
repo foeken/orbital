@@ -31,6 +31,13 @@ function helpStep(dir) { if (helpAt + dir >= helpPages.length) helpEl.close(); e
 helpEl.addEventListener('close', () => { if (helpApi && helpApi.closeOverlay) helpApi.closeOverlay({ palette: helpPalette, chatgpt: helpChatGPT }); });
 helpBack.onclick = () => helpStep(-1);
 helpNext.onclick = () => helpStep(1);
+// The iPhone page's link, the address its code holds: in the browser, as every link in Orbital opens. Without main (the
+// manual, the flows) it is a plain link.
+document.getElementById('helpMobileLink').onclick = (e) => {
+  if (!helpApi || !helpApi.openExternal) return;
+  e.preventDefault();
+  helpApi.openExternal(e.currentTarget.href).catch(() => {});
+};
 // The ChatGPT page: sign in with ChatGPT happens on its ⌘K page in the page that asked (renderer/agent.js startChatGPTLogin).
 // Signed in already, the line says so instead, at the button's height: the card is as tall as its tallest page, so a
 // line that came or went would move it after it had opened.
@@ -50,4 +57,5 @@ helpEl.addEventListener('keydown', (e) => {
   e.preventDefault();
 });
 helpEl.showModal();
-showHelpPage(0);
+// Cmd+K Install mobile app opens the tour on its iPhone page (?at=mobile, main.js openOverlay); everything else at the start
+showHelpPage(Math.max(0, helpPages.findIndex((p) => p.id === 'help-' + new URLSearchParams(location.search).get('at'))));

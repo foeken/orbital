@@ -3,6 +3,8 @@
 // The Help tour is a page main lays over the window (main.js openOverlay); the mock has no main, so it is laid over
 // the shell here the same way: help.html in a transparent frame over everything, in the window's theme.
 const help = { page: 'shell', js: "(() => { const f = document.createElement('iframe'); f.id = 'mc-help'; f.src = 'help.html?theme=' + window.shell.state().theme; f.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:100;background:transparent'; f.allowTransparency = true; document.body.append(f); return new Promise((r) => f.onload = () => { f.contentWindow.focus(); setTimeout(r, 300); }); })()" };
+// the tour as Cmd+K Install mobile app opens it: on its iPhone page (main.js openOverlay, at=mobile)
+const helpMobile = { ...help, js: help.js.replace("'help.html?theme='", "'help.html?at=mobile&theme='") };
 // an image file dragged over Create new, then dropped (shell.js create.ondragover / ondrop)
 const drag = (type) => ({ page: 'shell', js: "(() => { const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0)); const dt = new DataTransfer(); dt.items.add(new File([png], 'lunch-receipt.png', { type: 'image/png' })); document.getElementById('create').dispatchEvent(new DragEvent('" + type + "', { dataTransfer: dt, bubbles: true, cancelable: true })); })()" });
 const library = { js: "setView('inbox')" };
@@ -22,8 +24,10 @@ module.exports = [
   { name: 'start-help', video: true, clip: [300, 40, 680, 560], setup: [{ wait: 800 }, help, { wait: 300 }], steps: [
     { wait: 1800 }, { key: '→' }, { wait: 2600 }, { key: '→' }, { wait: 2200 }, { key: '→' }, { wait: 2000 }, { key: '→' }, { wait: 2400 },
   ] },
-  // the tour's last page: the iPhone app's TestFlight code
-  { name: 'start-help-iphone', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, help, { wait: 300 }, ...Array.from({ length: 7 }, () => [{ key: '→' }, { wait: 250 }]).flat(), { wait: 600 }] },
+  // the tour's last page, where Install mobile app opens it: the iPhone app's TestFlight code and link
+  { name: 'start-help-iphone', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, helpMobile, { wait: 900 }] },
+  // Cmd+K Install mobile app, under Help
+  { name: 'start-install-mobile', setup: [{ wait: 900 }, { key: '⌘K' }, { type: 'install' }, { wait: 400 }, bare], clip: { sel: '#palette .card', pad: 14 } },
   // the loader: the page building itself, then the rows rising in
   { name: 'start-loader', video: true, setup: [{ wait: 800 }, { js: "document.getElementById('skeleton').classList.remove('gone'); document.body.classList.add('building')" }], steps: [
     { wait: 3200 }, { js: "document.getElementById('skeleton').classList.add('gone'); document.body.classList.remove('building')" }, { wait: 600 },
