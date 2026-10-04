@@ -2,10 +2,14 @@ name: Platforms
 
 # Every pull request says, for the desktop app, the iPhone, Android and the manual, whether it updated each or why it
 # did not need to (AGENTS.md, Every platform; scripts/platform-check.js holds those lines to the diff). Its own
-# workflow so that editing the description runs this again without running the rest of CI.
+# workflow so that editing the description runs this again without running the rest. Every pull request, the agents'
+# own included: dreetje-echo[bot] opens most of them, and a check skipped for bots reads as passed.
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, ready_for_review]
+    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
 
 concurrency:
   group: platforms-${{ github.ref }}
@@ -13,13 +17,13 @@ concurrency:
 
 jobs:
   platforms:
-    if: github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - run: node scripts/platform-check.js --base "$BASE"
         env:
           BASE: ${{ github.event.pull_request.base.sha }}

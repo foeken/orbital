@@ -1,10 +1,10 @@
 #!/bin/sh
-# Both phones' checks on this Mac, as the scheduled checks run them (.github/workflows/checks.yml) (npm run phones [android|ios]; escalated: Gradle's
+# Both phones' checks on this Mac, as the full gate runs them (.github/workflows/checks.yml) (npm run phones [android|ios]; escalated: Gradle's
 # cache and the simulator live outside the checkout). Android: the shared module's tests, the screens among them, and,
 # with an Android SDK here, the debug build, its lint and its device tests compiled, and run on a phone or emulator when
 # one is connected (adb devices; without an SDK CI builds it, the tests need none). iPhone: the UI tests on a simulator.
 # A minute or so each here, against a quarter of an hour a push on GitHub's macOS runners, so a phone change is tested
-# on this machine before it merges, and the scheduled run on main confirms it.
+# on this machine before it is ready, and the full gate runs it again before it reaches main.
 set -e
 cd "$(dirname "$0")/.."
 which=${1:-both}

@@ -1,0 +1,86 @@
+name: Ready
+
+# The cheap checks, for a ready pull request into a developer's integration lane (integration/<developer>, AGENTS.md,
+# Pull requests): the linter and npm run check, and the user flows when the desktop's pages changed. The lane goes into
+# main later through the full gate (checks.yml), so nothing reaches main on these alone. The verdict job, "ready", is
+# the check a lane's ruleset requires: it fails on a draft, on a base that is no developer's lane, and on any job
+# skipped, cancelled or failed (scripts/gate.js). A fork runs here with a read-only token and no secrets.
+on:
+  pull_request:
+    branches: ['integration/**']
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ready-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ok: ${{ steps.route.outputs.ok }}
+      behind: ${{ steps.route.outputs.behind }}
+      reason: ${{ steps.route.outputs.reason }}
+      flows: ${{ steps.route.outputs.flows }}
+      required: ${{ steps.route.outputs.required }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: route
+        run: node scripts/gate.js route --workflow ready
+
+  # GitHub's merge of the head into the lane as it is now: what the lane holds after the merge
+  checks:
+    needs: route
+    if: needs.route.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts # no Electron download (checks.yml says why)
+      - uses: oven-sh/setup-bun@v2
+      - run: npm run lint
+      - run: npm run check
+
+  flows:
+    needs: route
+    if: needs.route.outputs.ok == 'true' && needs.route.outputs.flows == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run flows
+
+  ready:
+    needs: [route, checks, flows]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/gate.js
+          sparse-checkout-cone-mode: false
+      - run: node scripts/gate.js verdict
+        env:
+          NEEDS: ${{ toJSON(needs) }}

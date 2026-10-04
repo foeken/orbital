@@ -1,0 +1,9 @@
+# Andre reviews what decides whether a change was tested (docs/WORKFLOW.md): the workflows, the scripts behind the gate
+# and the npm scripts they run. GitHub enforces this only once main's ruleset asks for code owner review (Activation).
+/.github/ @foeken
+/package.json @foeken
+/scripts/gate.js @foeken
+/scripts/workflow-check.js @foeken
+/scripts/promote.js @foeken
+/scripts/promote-check.js @foeken
+/scripts/platform-check.js @foeken

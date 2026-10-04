@@ -42,6 +42,13 @@ From fastest to slowest. Each catches what the one before it cannot.
    is not in the database afterwards, and that no Orbital key or OAuth token is stored as itself (the subscriptions'
    signing secrets are kept as given: signing needs them). sdk-check drives Orbital's side of it
    (main/agents/linked.js) against the same relay.
+   Three more hold how a change reaches main (docs/WORKFLOW.md): `scripts/gate.js --self` (which checks a pull request
+   gets from its base, and a verdict that fails on a draft, a head behind main or any job skipped, cancelled or failed),
+   `scripts/workflow-check.js` (no privileged trigger, written permission, secret or pasted event value in a pull
+   request's workflow, no checkout keeping its token, no required check that can be skipped) and
+   `scripts/promote-check.js` (scripts/promote.js on throwaway repositories: a frozen lane stays frozen, a hotfix
+   during the freeze, a gate or approval on an older commit, nothing dropped by a merge or a sync, tags only on tested
+   merges).
 2. **`npm run flows`** (about 20 s, Chromium on the mock, `scripts/flow-check.js`). Whole journeys in the real page, each on a
    fresh page that fails on any uncaught error, unhandled rejection or `console.error`:
    - sensitive titles stay hidden on every page, in Cmd+K, in tooltips, labels and the window title;
@@ -96,9 +103,9 @@ From fastest to slowest. Each catches what the one before it cannot.
    eval.
 
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
-   It needs a loopback port and Chromium, so an agent runs it escalated; the scheduled checks run it on main (a pull request is tested on the machine that writes it, AGENTS.md).
+   It needs a loopback port and Chromium, so an agent runs it escalated; the full gate runs it on every ready pull request into main (docs/WORKFLOW.md), after it ran here.
 3. **iPhone UI tests** (about a minute, `ios/OrbitalUITests`). The app on `-sample`, driven by the labels VoiceOver reads; the
-   scheduled checks run them on a simulator on main. `scripts/ios-engine-check.js` covers the engine, and the desktop
+   full gate runs them on a simulator for every ready pull request into main. `scripts/ios-engine-check.js` covers the engine, and the desktop
    code it bundles, in `npm run check`.
 4. **The running app**, only for what the mock cannot reach: main's live subscriptions, real Tana answers, a restart.
    Read-only first (`node scripts/platform-cli.js`), escalated. Say in the PR what was and was not tried there.
