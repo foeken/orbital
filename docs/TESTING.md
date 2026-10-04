@@ -43,9 +43,10 @@ From fastest to slowest. Each catches what the one before it cannot.
    signing secrets are kept as given: signing needs them). sdk-check drives Orbital's side of it
    (main/agents/linked.js) against the same relay.
    Three more hold how a change reaches main (docs/WORKFLOW.md): `scripts/gate.js --self` (which checks a pull request
-   gets from its base, and a verdict that fails on a draft, a head behind main or any job skipped, cancelled or failed),
-   `scripts/workflow-check.js` (no privileged trigger, written permission, secret or pasted event value in a pull
-   request's workflow, no checkout keeping its token, no required check that can be skipped) and
+   gets from its base, and a verdict that fails on a refused route, a head behind main or any job skipped, cancelled or failed),
+   `scripts/workflow-check.js` (a draft runs only the secrets scan, no required check skipped under its own name, no
+   privileged trigger, written permission, secret or pasted event value in a pull request's workflow, no checkout
+   keeping its token, no value YAML would refuse) and
    `scripts/promote-check.js` (scripts/promote.js on throwaway repositories: a frozen lane stays frozen, a hotfix
    during the freeze, a gate or approval on an older commit, nothing dropped by a merge or a sync, tags only on tested
    merges).

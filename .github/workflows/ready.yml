@@ -3,8 +3,9 @@ name: Ready
 # The cheap checks, for a ready pull request into a developer's integration lane (integration/<developer>, AGENTS.md,
 # Pull requests): the linter and npm run check, and the user flows when the desktop's pages changed. The lane goes into
 # main later through the full gate (checks.yml), so nothing reaches main on these alone. The verdict job, "ready", is
-# the check a lane's ruleset requires: it fails on a draft, on a base that is no developer's lane, and on any job
-# skipped, cancelled or failed (scripts/gate.js). A fork runs here with a read-only token and no secrets.
+# the check a lane's ruleset requires: it fails on a base that is no developer's lane and on any job skipped, cancelled
+# or failed (scripts/gate.js). A draft runs none of it, as in checks.yml, and its skipped verdict is named
+# "ready (not run on drafts)". A fork runs here with a read-only token and no secrets.
 on:
   pull_request:
     branches: ['integration/**']
@@ -19,6 +20,7 @@ concurrency:
 
 jobs:
   route:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -71,8 +73,9 @@ jobs:
       - run: npm run flows
 
   ready:
+    name: ${{ github.event.pull_request.draft && 'ready (not run on drafts)' || 'ready' }}
     needs: [route, checks, flows]
-    if: always()
+    if: always() && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

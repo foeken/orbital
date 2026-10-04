@@ -11,7 +11,7 @@ The base of a pull request, and nothing about its head, decides what GitHub runs
 
 | State, base | What runs | Required check |
 |---|---|---|
-| Draft, any base | the secrets scan (`ci.yml`) and the Platforms description check (`platforms.yml`); `gate` or `ready` fails on purpose, "a draft runs only the secrets scan" | none passes |
+| Draft, any base | the secrets scan (`ci.yml`) and nothing else: every other job is skipped, and the required checks show only as "gate (not run on drafts)", "ready (not run on drafts)", "platforms (not run on drafts)" | none: a draft cannot merge |
 | Ready, into **main** (the default) | the full gate, `checks.yml`: lint, `npm run check` and `npm run flows`; Android's tests, lint and debug build; the iPhone UI tests on a simulator. On the head commit itself, which must contain main as it is | `gate`, `secrets`, `platforms` |
 | Ready, into **integration/<developer>** | the cheap checks, `ready.yml`: lint and `npm run check`, and the flows when the desktop's pages changed, on GitHub's merge of the head into the lane | `ready`, `secrets`, `platforms` |
 | Ready, into anything else (a stack layer) | the full gate, as into main | none: it reaches main through the gate anyway |
@@ -19,6 +19,12 @@ The base of a pull request, and nothing about its head, decides what GitHub runs
 The two workflows split on the base (`branches-ignore` and `branches: ['integration/**']`) and `scripts/gate.js route`
 checks it again: `integration/codex`, `integration/a/b` or a capital letter is no lane, and its pull request fails rather
 than getting the cheap checks. A head behind main still runs every job, and `gate` fails until main is merged in.
+
+`gh pr ready` (the `ready_for_review` event) starts the checks afresh on the head as it is. `gh pr ready --undo` (the
+`converted_to_draft` event) stops them: the new run skips everything, and it cancels the run in progress, whose verdict
+then reads cancelled, never passed. Each job but the secrets scan says `if: github.event.pull_request.draft != true`;
+the verdict says `always() && github.event.pull_request.draft != true`, so on a ready pull request or by hand it runs
+whatever happened before it, cancellation included.
 
 Most work goes straight into main, one pull request at a time: slow, a quarter of an hour of runners each, and safe.
 A lane is for a burst of related work that would otherwise wait on that gate once per pull request.
@@ -73,9 +79,11 @@ gate on the exact head and the head containing main. Their review is the focused
 - `checks.yml` checks out `pull_request.head.sha`, not GitHub's merge ref, and `gate.js route` fails the gate unless
   that head contains main as fetched when the run started. A head containing main merges into main with exactly its
   own tree: the three-way merge's base is main itself.
-- Its verdict job `gate` always runs and fails on a draft, a refused route, a head behind main, and any job skipped,
-  cancelled or failed. GitHub counts a skipped job as passed, so a check that could be skipped would pass a pull request
-  whose tests never ran: a draft made ready while a fork's first run waits for approval, say.
+- Its verdict job `gate` runs on every ready pull request and by hand, and fails on a refused route, a head behind main,
+  and any job skipped, cancelled or failed. GitHub counts a skipped job as passed, so a required check skipped under its
+  own name would pass a pull request whose tests never ran: a draft made ready while a fork's first run waits for
+  approval, say. On a draft the verdict is skipped, and so it is named "gate (not run on drafts)" there: no skipped
+  check named `gate`, `ready` or `platforms` is ever left on a head.
 - Pull requests from forks run the same workflows, as `pull_request`: a read-only token, no secrets, nothing written,
   and each checkout keeps no token in `.git/config`. No workflow uses `pull_request_target` or `workflow_run`, which run
   with the repository's own token beside the pull request's code. First-time contributors' runs wait for approval

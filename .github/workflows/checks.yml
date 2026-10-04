@@ -3,8 +3,11 @@ name: Checks
 # The full gate: the desktop's lint, checks and user flows, the Android app and the iPhone app's UI tests, on the
 # exact head of every ready pull request that does not go into a developer's lane (AGENTS.md, Pull requests): into
 # main, and into a stack layer. Into main the head must contain main as it is now, so the tree that passed is the tree a
-# merge commit gives main; the verdict job, "gate", is the check main's ruleset requires, and it fails on a draft, a
-# head behind main and any job skipped, cancelled or failed (scripts/gate.js). A pull request from a fork runs here
+# merge commit gives main; the verdict job, "gate", is the check main's ruleset requires, and it fails on a head behind
+# main and any job skipped, cancelled or failed (scripts/gate.js). A draft runs none of it (the secrets scan, ci.yml, is
+# all a draft runs): every job is skipped, and the skipped verdict is named "gate (not run on drafts)", so no skipped
+# "gate", which GitHub would count as passed, is left on a draft's head; ready_for_review runs it all afresh, and going
+# back to draft cancels a run in progress. A pull request from a fork runs here
 # with a read-only token and no secrets, as every job does: nothing here holds a credential.
 # By hand, on any branch: gh workflow run checks.yml --ref <branch>
 on:
@@ -22,9 +25,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # where the pull request goes and whether its head contains main (scripts/gate.js route); refuses a draft without
-  # failing, so the verdict below fails instead of reading as skipped
+  # where the pull request goes and whether its head contains main (scripts/gate.js route)
   route:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -137,11 +140,12 @@ jobs:
           -retry-tests-on-failure -test-iterations 2
           CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
 
-  # The one check a ruleset requires: always runs, and passes only when the route said ok, the head contains main
-  # (into main) and every job above succeeded on it
+  # The one check a ruleset requires: on a ready pull request or by hand it always runs, cancelled runs included, and
+  # passes only when the route said ok, the head contains main (into main) and every job above succeeded on it
   gate:
+    name: ${{ github.event.pull_request.draft && 'gate (not run on drafts)' || 'gate' }}
     needs: [route, desktop, android, ios]
-    if: always()
+    if: always() && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

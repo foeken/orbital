@@ -14,12 +14,13 @@ made from main.
 1. Branch from where it goes: `origin/main` by default, or a lane (`origin/integration/<developer>`) when its owner
    is running one and this change belongs to it. Your branch is your own (`codex/<topic>`): rebase it as you like.
 2. `gh pr create --draft --base <main or the lane>` (through `echo-git gh`, AGENTS.md). A draft runs only the secrets
-   scan and the Platforms description check; its `gate` or `ready` check is red on purpose until it is ready.
+   scan; every other check shows as "(not run on drafts)" until it is ready.
 3. Test here what it touches (AGENTS.md, Pull requests): lint and check always, flows for the desktop's pages, phones
    for ios/, android/, ios/engine and sdk/. Review your own diff (`git diff origin/<base>...HEAD`), each data path end
    to end, and leave a check that fails on the old code.
-4. Manual, Platforms lines, then `gh pr ready`. Into main that runs the full gate, about a quarter of an hour; into a
-   lane, the cheap checks. Ask for review.
+4. Manual, Platforms lines, then `gh pr ready`: that starts the checks, into main the full gate (about a quarter of an
+   hour), into a lane the cheap checks, and Platforms. Ask for review. Going back to draft (`gh pr ready --undo`)
+   stops them.
 5. Into main, merge with `node scripts/promote.js merge --pr <n>`, not the merge button and never a squash: it checks
    the gate passed on the exact head, merges only that head with a merge commit, and reads main back. Into a lane,
    `gh pr merge <n> --merge` once `ready` is green.

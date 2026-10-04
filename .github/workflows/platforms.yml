@@ -2,8 +2,9 @@ name: Platforms
 
 # Every pull request says, for the desktop app, the iPhone, Android and the manual, whether it updated each or why it
 # did not need to (AGENTS.md, Every platform; scripts/platform-check.js holds those lines to the diff). Its own
-# workflow so that editing the description runs this again without running the rest. Every pull request, the agents'
-# own included: dreetje-echo[bot] opens most of them, and a check skipped for bots reads as passed.
+# workflow so that editing the description runs this again without running the rest. Every ready pull request, the
+# agents' own included: dreetje-echo[bot] opens most of them, and a check skipped for bots reads as passed. A draft runs
+# none of it; its skipped job is named "platforms (not run on drafts)", so no skipped "platforms" stands for its head.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft]
@@ -17,6 +18,8 @@ concurrency:
 
 jobs:
   platforms:
+    name: ${{ github.event.pull_request.draft && 'platforms (not run on drafts)' || 'platforms' }}
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
