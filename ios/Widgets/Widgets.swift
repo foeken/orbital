@@ -5,7 +5,7 @@ import WidgetKit
 // The iPhone's widgets, as the Android app's (androidApp Widgets.kt): Today's Tasks across the widget's whole width, and
 // the Timeline on its rail in two: what is ahead today (today's tasks and the meetings to come) and Activity, what
 // happened. A widget does not scroll, so each draws as much as fits. They draw what the app last read
-// (Engine.swift keepGlimpse), left in the Keychain in Orbital's own access group as the Share extension leaves what it
+// (Engine.swift keepTimeline), left in the Keychain in Orbital's own access group as the Share extension leaves what it
 // shares: a widget cannot run the engine. A row opens its node in the app (orbital:<id>, Shell.swift), + Quick Add.
 // A task's box opens the app too (orbital:check:<id>, orbital:uncheck:<id>), which ticks it and writes it to Tana at once:
 // a widget's own button runs in this extension, which has no engine to write with. On the Lock Screen, Quick Add.
@@ -194,7 +194,7 @@ struct Glimpse: Decodable {
 }
 
 // An Activity line about a task's state ("completed Plan the offsite"), drawn as the task itself: its box in the state
-// the line left it in (the line's icon, main/timeline.js ICON) or a tick made since (Engine.keepGlimpse keeps it on the
+// the line left it in (the line's icon, main/timeline.js ICON) or a tick made since (Engine.keepTimeline keeps it on the
 // line), and its title. Nil for any other line: an edit, a meeting.
 // Android's Row.asTask (GlimpseTest) is the same.
 extension Glimpse.Row {

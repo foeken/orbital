@@ -71,6 +71,9 @@ interface Platform {
     // the clipboard's image as a JPEG, 2048 px at most, or null; read and made smaller off the main thread
     suspend fun pasteImage(): ByteArray?
     fun hasClipboardImage(): Boolean // what the clipboard holds, by its kind only: reading it would tell the user so
+    // the widgets' copy of the Timeline (Engine.keepTimeline): drawn by the platform's widgets, null once it is forgotten.
+    // Nothing where the platform has no widgets.
+    suspend fun keepGlimpse(read: Glimpse?) {}
     @Composable fun rememberPhotoPicker(picked: (ByteArray) -> Unit): () -> Unit // a JPEG, 2048 px at most
     @Composable fun EngineView(modifier: Modifier) // the engine's web view: Tana's sign-in while signed out
     @Composable fun ChatGPTSignIn(done: () -> Unit, failed: (String) -> Unit)
