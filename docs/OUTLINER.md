@@ -1299,11 +1299,13 @@ main lays two pages over the whole window, above every pane, as a transparent vi
 keeps its caret and gets the keys back when the overlay closes, with what it had to say (`onOverlayClosed`).
 
 - **Help** (help.html): eight short pages of the basics, each with a CSS loop of the keys at work; the rest is found in
-  Cmd+K as you go. The last page, Orbital on your phone (`#help-mobile`), is a choice of two: **iPhone · iOS 26 or
-  later**, a code to scan that joins its TestFlight beta (help-testflight.svg, made by `qrencode -t SVG -m 0
-  --svg-path`) and the same public link, https://testflight.apple.com/join/wgcnRVKx, to open on the phone (it opens in
-  the browser through main, `openExternal`); and **Android · Coming soon**, a dashed empty tile with nothing to scan,
-  press or follow until there is a release.
+  Cmd+K as you go. The last page, Orbital on your phone (`#help-mobile`), opens with a choice of phone, iPhone or
+  Android: a radio group drawn as the Settings window's segmented control (one tab stop; ← and → switch inside it and
+  do not page the tour; a click or Space picks), over one place that shows the phone picked, so there is only ever one
+  code on screen. **iPhone**, picked to begin with: a code to scan that joins its TestFlight beta (help-testflight.svg,
+  made by `qrencode -t SVG -m 0 --svg-path`) and the same public link, https://testflight.apple.com/join/wgcnRVKx, to
+  open on the phone (it opens in the browser through main, `openExternal`), iOS 26 or later. **Android**: "Coming
+  soon" in words, with no code, link or button until there is a release. The card keeps its size between the two.
   Cmd+K Install mobile app opens the tour on that page (`openHelp('mobile')`, main.js `openOverlay` passing `at=mobile`
   to help.html, and nothing else it is sent). The page before it offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
   and starts the sign-in (`onOverlayClosed` `chatgpt`); signed in already, it says so instead. Opened by Cmd+K Help, the ?

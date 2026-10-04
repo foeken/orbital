@@ -38,6 +38,25 @@ document.getElementById('helpMobileLink').onclick = (e) => {
   e.preventDefault();
   helpApi.openExternal(e.currentTarget.href).catch(() => {});
 };
+// The phone page's choice (#help-mobile): iPhone or Android, one at a time in one place, so a second code later takes
+// the same spot. A radio group: one tab stop, the arrows switch inside it (and do not page the tour), Space and a click pick.
+const helpOS = [...document.querySelectorAll('#help-mobile [role="radio"]')];
+function showHelpOS(os, focus) {
+  for (const b of helpOS) {
+    const on = b.dataset.os === os;
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); b.tabIndex = on ? 0 : -1;
+    if (on && focus) b.focus();
+  }
+  for (const part of document.querySelectorAll('#help-mobile [data-os]:not([role="radio"])')) part.hidden = part.dataset.os !== os;
+}
+for (const b of helpOS) {
+  b.onclick = () => showHelpOS(b.dataset.os);
+  b.onkeydown = (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault(); e.stopPropagation();
+    showHelpOS(helpOS[(helpOS.indexOf(b) + (e.key === 'ArrowRight' ? 1 : helpOS.length - 1)) % helpOS.length].dataset.os, true);
+  };
+}
 // The ChatGPT page: sign in with ChatGPT happens on its ⌘K page in the page that asked (renderer/agent.js startChatGPTLogin).
 // Signed in already, the line says so instead, at the button's height: the card is as tall as its tallest page, so a
 // line that came or went would move it after it had opened.
