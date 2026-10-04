@@ -548,7 +548,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect to your OpenAI Dot …, ChatGPT sign-in, Set OpenAI API
-  key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android coming soon": the Help tour opened on its last page, the
+  key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android with Obtainium" once the latest release has the APK, "…, Android coming soon" before: the Help tour opened on its last page, the
   choice of phone: the one place the phone apps are installed from), Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
@@ -1306,8 +1306,13 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
   do not page the tour; a click or Space picks), over one place that shows the phone picked, so there is only ever one
   code on screen. **iPhone**, picked to begin with: a code to scan that joins its TestFlight beta (help-testflight.svg,
   made by `qrencode -t SVG -m 0 --svg-path`) and the same public link, https://testflight.apple.com/join/wgcnRVKx, to
-  open on the phone (it opens in the browser through main, `openExternal`), iOS 26 or later. **Android**: "Coming
-  soon" in words, with no code, link or button until there is a release. The card keeps its size between the two.
+  open on the phone (it opens in the browser through main, `openExternal`), iOS 26 or later. **Android**: once the
+  latest release has the APK (main asks GitHub, updater.js `androidRelease`, `update:android`, once an hour at most), a code that
+  adds Orbital to Obtainium, which installs it and keeps it up to date (Obtainium's redirect page to
+  `obtainium://add/https://github.com/foeken/orbital`, help-android.svg, `qrencode -t SVG -m 0 -l L --svg-path`), a link to
+  Obtainium, and the APK's download (https://github.com/foeken/orbital/releases/latest/download/Orbital-android.apk) by hand,
+  Android 10 or later; until then, or when GitHub cannot be asked, "Coming soon" in
+  words, with no code, link or button. Cmd+K Install mobile app's hint says which. The card keeps its size between them.
   Cmd+K Install mobile app opens the tour on that page (`openHelp('mobile')`, main.js `openOverlay` passing `at=mobile`
   to help.html, and nothing else it is sent). The page before it offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
   and starts the sign-in (`onOverlayClosed` `chatgpt`); signed in already, it says so instead. Opened by Cmd+K Help, the ?

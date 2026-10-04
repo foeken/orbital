@@ -31,24 +31,32 @@ function helpStep(dir) { if (helpAt + dir >= helpPages.length) helpEl.close(); e
 helpEl.addEventListener('close', () => { if (helpApi && helpApi.closeOverlay) helpApi.closeOverlay({ palette: helpPalette, chatgpt: helpChatGPT }); });
 helpBack.onclick = () => helpStep(-1);
 helpNext.onclick = () => helpStep(1);
-// The iPhone page's link, the address its code holds: in the browser, as every link in Orbital opens. Without main (the
-// manual, the flows) it is a plain link.
-document.getElementById('helpMobileLink').onclick = (e) => {
+// The phone page's links, the addresses its codes hold: in the browser, as every link in Orbital opens. Without main (the
+// manual, the flows) each is a plain link.
+for (const id of ['helpMobileLink', 'helpObtainiumLink', 'helpAndroidLink']) document.getElementById(id).onclick = (e) => {
   if (!helpApi || !helpApi.openExternal) return;
   e.preventDefault();
   helpApi.openExternal(e.currentTarget.href).catch(() => {});
 };
 // The phone page's choice (#help-mobile): iPhone or Android, one at a time in one place, so a second code later takes
 // the same spot. A radio group: one tab stop, the arrows switch inside it (and do not page the tour), Space and a click pick.
+// Android is a download once the latest release has one (updater.js androidRelease, the APK release.sh attaches), and
+// coming soon until then or when GitHub cannot be asked: the code is never shown for a file that is not there.
 const helpOS = [...document.querySelectorAll('#help-mobile [role="radio"]')];
+let helpApk = 'no';
 function showHelpOS(os, focus) {
   for (const b of helpOS) {
     const on = b.dataset.os === os;
     b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); b.tabIndex = on ? 0 : -1;
     if (on && focus) b.focus();
   }
-  for (const part of document.querySelectorAll('#help-mobile [data-os]:not([role="radio"])')) part.hidden = part.dataset.os !== os;
+  for (const part of document.querySelectorAll('#help-mobile [data-os]:not([role="radio"])')) part.hidden = part.dataset.os !== os || (!!part.dataset.apk && part.dataset.apk !== helpApk);
 }
+if (helpApi && helpApi.androidRelease) helpApi.androidRelease().then((r) => {
+  if (!r) return;
+  helpApk = 'yes';
+  showHelpOS(helpOS.find((b) => b.getAttribute('aria-checked') === 'true').dataset.os);
+}, () => {});
 for (const b of helpOS) {
   b.onclick = () => showHelpOS(b.dataset.os);
   b.onkeydown = (e) => {

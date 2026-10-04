@@ -120,12 +120,14 @@
             <button type="button" role="radio" data-os="android" aria-checked="false" tabindex="-1">Android</button>
           </div>
           <div class="hv-os" data-os="ios"><img src="help-testflight.svg" alt="Code for the iPhone app in TestFlight"></div>
-          <div class="hv-os hv-soon" data-os="android" hidden><b>Coming soon</b>Nothing to install on Android yet</div>
+          <div class="hv-os hv-soon" data-os="android" data-apk="no" hidden><b>Coming soon</b>Nothing to install on Android yet</div>
+          <div class="hv-os" data-os="android" data-apk="yes" hidden><img src="help-android.svg" alt="Code that adds Orbital to Obtainium"></div>
         </div>
         <h2>Orbital on your phone</h2>
         <p>Your Timeline, saved searches and Quick Add on your phone, over the same Tana.</p>
         <p data-os="ios">Scan the code with the iPhone’s camera, or open <a id="helpMobileLink" href="https://testflight.apple.com/join/wgcnRVKx">testflight.apple.com/join/wgcnRVKx</a> on it. iOS 26 or later.</p>
-        <p data-os="android" hidden>Orbital for Android is coming soon.</p>
+        <p data-os="android" data-apk="no" hidden>Orbital for Android is coming soon.</p>
+        <p data-os="android" data-apk="yes" hidden>Get <a id="helpObtainiumLink" href="https://obtainium.imranr.dev/">Obtainium</a>, then scan the code: it installs Orbital and keeps it up to date. Or download <a id="helpAndroidLink" href="https://github.com/foeken/orbital/releases/latest/download/Orbital-android.apk">Orbital-android.apk</a>. Android 10 or later.</p>
       </section>
     </div>
     <footer class="hfoot">

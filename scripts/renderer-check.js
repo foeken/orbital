@@ -31,7 +31,7 @@ assert.ok(!tops.some(({ names }) => names.includes('api')), 'the renderer declar
   const read = (f) => fs.readFileSync(require('node:path').join(__dirname, '..', f), 'utf8');
   const qrText = (svg) => {
     const n = Number(svg.match(/viewBox="0 0 (\d+) \1"/)[1]), v = (n - 17) / 4;
-    assert.ok(Number.isInteger(v) && v >= 1 && v <= 5, 'help-testflight.svg: a code of version 1 to 5 without a margin (qrencode -m 0)');
+    assert.ok(Number.isInteger(v) && v >= 1 && v <= 5, 'a Help tour code: version 1 to 5 without a margin (qrencode -m 0)');
     const m = Array.from({ length: n }, () => new Array(n).fill(false));
     for (const [, x, y] of svg.matchAll(/(?:M|<rect x=")(\d+)(?:,|" y=")(\d+)(?:h1|" width="1" height="1")/g)) m[+y][+x] = true; // a module: a path step (qrencode --svg-path) or a rect
     let format = 0;
@@ -39,7 +39,7 @@ assert.ok(!tops.some(({ names }) => names.includes('api')), 'the renderer declar
     for (let y = 7; y >= 0; y--) if (y !== 6) format = (format << 1) | m[y][8];
     format ^= 0x5412;
     const blocks = { 0: [1, 1, 1, 2, 2], 1: [1, 1, 1, 1, 1], 2: [1, 1, 2, 4, 4], 3: [1, 1, 2, 2, 4] }[format >> 13][v - 1]; // M, L, H, Q
-    assert.equal(blocks, 1, 'help-testflight.svg: its data in one block (a short link, qrencode -l L or M)');
+    assert.equal(blocks, 1, 'a Help tour code: its data in one block (a short link, qrencode -l L or M)');
     const mask = (format >> 10) & 7;
     const flip = [(i, j) => (i + j) % 2 === 0, (i) => i % 2 === 0, (i, j) => j % 3 === 0, (i, j) => (i + j) % 3 === 0,
       (i, j) => (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0, (i, j) => ((i * j) % 2) + ((i * j) % 3) === 0,
@@ -52,7 +52,7 @@ assert.ok(!tops.some(({ names }) => names.includes('api')), 'the renderer declar
     }
     let at = 0;
     const take = (count) => { let out = 0; for (let k = 0; k < count; k++) out = (out << 1) | bits[at++]; return out; };
-    assert.equal(take(4), 4, 'help-testflight.svg: byte mode');
+    assert.equal(take(4), 4, 'a Help tour code: byte mode');
     const length = take(8);
     return Buffer.from(Array.from({ length }, () => take(8))).toString('utf8');
   };
@@ -62,6 +62,15 @@ assert.ok(!tops.some(({ names }) => names.includes('api')), 'the renderer declar
   assert.equal(link[2], link[1].replace('https://', ''), 'the link says where it goes');
   assert.equal(qrText(read('help-testflight.svg')), link[1], 'the code on the Help tour\u2019s iPhone page holds the link beside it');
   for (const f of ['README.md', 'manual/start.html']) assert.ok(read(f).includes(link[1]), f + ' gives the same iPhone link as the Help tour');
+  // Android's code (help-android.svg, qrencode -t SVG -m 0 -l L --svg-path) adds this repo to Obtainium, through Obtainium's
+  // own redirect page (a camera opens an https link, not obtainium://), which installs Orbital from the releases and keeps it
+  // up to date; the APK release.sh attaches is the link beside it, for a download by hand. The page shows them only once a
+  // release has the APK (updater.js androidRelease).
+  const android = read('help.html').match(/<a id="helpAndroidLink" href="([^"]+)">([^<]+)<\/a>/);
+  assert.ok(android, 'the Help tour\u2019s Android page has its link (help.html #helpAndroidLink)');
+  assert.equal(android[1], 'https://github.com/foeken/orbital/releases/latest/download/' + android[2], 'the Android link is the latest release\u2019s download of the file it names');
+  assert.equal(qrText(read('help-android.svg')), 'https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/foeken/orbital', 'the code on the Help tour\u2019s Android page adds this repo to Obtainium');
+  assert.ok(/id="helpObtainiumLink" href="https:\/\/obtainium\.imranr\.dev\/"/.test(read('help.html')), 'and the words beside it link to Obtainium itself');
 }
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
@@ -479,7 +488,7 @@ async function mockCreationPermissionCheck() {
 // fell behind broke the manual's scenes (#671, #607). A new call fails here until it is put in one list of each pair.
 // docs/TESTING.md has the reasoning.
 const DEMO_SAFE = new Set([
-  'accessOptions', 'activateWindow', 'addFilter', 'agentIds', 'agentList', 'agentReplies', 'agentStatus',
+  'accessOptions', 'androidRelease', 'activateWindow', 'addFilter', 'agentIds', 'agentList', 'agentReplies', 'agentStatus',
   'agentTasks', 'aiOptions', 'archivedTypes', 'attendeeSuggestions', 'cancelUpload', 'chatAgents', 'chatAnswers',
   'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
   'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList',
@@ -500,7 +509,7 @@ const DEMO_SAFE = new Set([
 // asks), and gaps the mock has not filled yet (indentMany, outdentMany, pasteMarkdown, archiveDocument, taskTypes):
 // fill one and take it off. The renderer guards each with `tana.x &&` or the flows (scripts/flow-check.js) fail.
 const NOT_MOCKED = new Set([
-  'activateWindow', 'agentStatus', 'archiveDocument', 'cancelUpload', 'checkUpdates', 'claimHelp', 'closeOverlay',
+  'activateWindow', 'androidRelease', 'agentStatus', 'archiveDocument', 'cancelUpload', 'checkUpdates', 'claimHelp', 'closeOverlay',
   'exportPdf', 'indentMany', 'installUpdate', 'onChatGPTStatus', 'onNotifyOpen', 'onOverlayClosed', 'onPresenceAsk',
   'onReleased', 'onSettings', 'onTimelinePart', 'onUpdateProgress', 'openOverlay', 'openSettings', 'outdentMany', 'pasteMarkdown',
   'prefs', 'prefsNow', 'rememberPlace', 'setDemoMode', 'setPref', 'settingsSize', 'summaryUri', 'taskTypes', 'updateInfo',

@@ -181,6 +181,8 @@ const withShims = (src) => {
   // the agents (renderer/state.js): Tana alone, the list a fresh install starts with
   if (/\b(agentList|agentsOn|agentNamed|agentPick)\b/.test(src) && !/let agentList\b/.test(src)) src = "globalThis.agentList ??= [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }]; globalThis.agentPick ??= 'tana'; globalThis.agentsOn ??= () => globalThis.agentList.filter((a) => a.enabled && a.installed); globalThis.agentNamed ??= (id) => globalThis.agentList.find((a) => a.id === id) || null;\n" + src;
   if (/\bloadAgentList\(/.test(src) && !/function loadAgentList\(/.test(src)) src = 'globalThis.loadAgentList ??= () => Promise.resolve();\n' + src;
+  // whether the latest release has the Android app (renderer/overlays.js): none yet, as for a page that has not heard back
+  if (/\bandroidDownload\b/.test(src) && !/let androidDownload\b/.test(src)) src = 'globalThis.androidDownload ??= null;\n' + src;
   // And for the sections a page has folded away: state.js reads them from localStorage at load, so a slice that only
   // groups rows gets an empty set rather than failing for want of the declaration.
   if (/\bcollapsedGroups\b/.test(src) && !/(const|let) collapsedGroups/.test(src)) src = 'globalThis.collapsedGroups ??= new Set();\n' + src;

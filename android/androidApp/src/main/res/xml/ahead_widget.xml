@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Today's tasks and the meetings to come, the Timeline above its line, on the Galaxy Z Flip's cover screen, the Flex
-     Window (Widgets.kt AheadWidget): the size and the
-     category Samsung asks for (developer.samsung.com/galaxy-z/flex_window.html), added in Settings, Cover screen,
-     Widgets; the debug build offers it on the home screen too (src/debug), as an emulator has no cover screen -->
+<!-- Today's tasks and the meetings to come, the Timeline above its line (Widgets.kt AheadWidget), on every screen a widget can go: the home screen, 4 by 3 cells to start and resized
+     either way (targetCell, minResize), and the lock screen or a Galaxy Z Flip's cover screen, the Flex Window, at the
+     size Samsung asks for (minWidth, minHeight; developer.samsung.com/galaxy-z/flex_window.html, with flex_window.xml
+     in the manifest), added there in Settings, Cover screen, Widgets -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/ahead_widget"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:minWidth="352dp"
     android:minHeight="339dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="110dp"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
-    android:widgetCategory="keyguard" />
+    android:widgetCategory="home_screen|keyguard" />
