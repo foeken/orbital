@@ -403,6 +403,39 @@ class Engine(
         return id
     }
 
+    // Quick Add closes the moment you press Add: what it asked for is made here while you go on, and the + in the bar turns
+    // while anything is on its way (Shell), so another can be added meanwhile. A task Tana did not take is kept as unsent,
+    // and the next Quick Add opens with it and says why; an image's node opens once it is made, as the desktop opens it.
+    var adding by mutableStateOf(0)
+        private set
+    val unsent = mutableStateListOf<Draft>()
+    var made by mutableStateOf<String?>(null)
+    data class Draft(val title: String, val type: String?, val search: String?, val assignee: Member?, val values: Map<String, Value>, val why: String? = null)
+    fun add(draft: Draft) {
+        adding++
+        scope.launch {
+            try { createTask(draft.title, draft.type, draft.search, draft.assignee?.id, draft.values) } catch (e: Failure) {
+                unsent.add(draft.copy(why = e.message))
+                error = "“${draft.title}” was not added: ${e.message}"
+            } finally { adding-- }
+        }
+    }
+    // load: the image, read once Quick Add has gone (a photo pick, the clipboard, something shared)
+    fun addImage(load: suspend () -> ByteArray?) {
+        adding++
+        scope.launch {
+            try {
+                val jpeg = load() ?: throw Failure("The image could not be read")
+                // shared while Orbital was not running: Tana connects first; signed out or failed, it says so rather than waiting for ever
+                while (phase != Phase.Ready) {
+                    if (phase != Phase.Starting) throw Failure("Sign in to Tana first, then share it again")
+                    delay(200)
+                }
+                made = processImage(jpeg)
+            } catch (e: Failure) { error = e.message } finally { adding-- }
+        }
+    }
+
     // Long press, Delete (orbital.remove): to Tana's trash; the row goes at once and comes back if Tana says no
     suspend fun remove(id: String): Boolean {
         removed = removed + id

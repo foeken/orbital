@@ -360,6 +360,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         Self.isSample ? [] : (try? await call("return await orbital.taskTypes()", [:])) ?? []
     }
     func createTask(_ title: String, type: String?, search: String? = nil, assignee: String? = nil, values: [String: Value] = [:]) async throws -> String {
+        guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
         let id: String = try await call("return await orbital.createTask(title, type, search, assignee, values)", ["title": title, "type": type ?? NSNull(), "search": search ?? NSNull(),
                                                                                                         "assignee": assignee ?? NSNull(), "values": values.mapValues(\.json)])
         // a new task is yours alone: given to someone else, they are asked about as Assign to asks
@@ -369,12 +370,49 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
     // The image made smaller (2048 px at most, JPEG) for the model and for Tana, read by ChatGPT, then made into its node
     func processImage(_ image: UIImage) async throws -> String {
+        guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
         guard let jpeg = image.fitted(2048).jpegData(compressionQuality: 0.9) else { throw Failure(errorDescription: "The image could not be read") }
         let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.ai["model"]!, effort: translator.ai["effort"]!)
         let id: String = try await call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
                                         ["kind": read.kind ?? "doc", "title": read.title ?? "", "notes": read.notes ?? [], "image": jpeg.base64EncodedString()])
         await refresh()
         return id
+    }
+
+    // Quick Add closes the moment you press Add: what it asked for is made here while you go on, and the + in the bar turns
+    // while anything is on its way (Shell), so another can be added meanwhile. A task Tana did not take is kept as unsent,
+    // and the next Quick Add opens with it and says why; an image's node opens once it is made, as the desktop opens it.
+    var adding = 0
+    var unsent: [Draft] = []
+    var made: String?
+    struct Draft { let title: String; let type: String?; let search: String?; let assignee: Member?; let values: [String: Value]; var why: String? }
+    func add(_ draft: Draft) {
+        adding += 1
+        Task {
+            defer { adding -= 1 }
+            do { _ = try await createTask(draft.title, type: draft.type, search: draft.search, assignee: draft.assignee?.id, values: draft.values) } catch {
+                var kept = draft
+                kept.why = error.localizedDescription
+                unsent.append(kept)
+                self.error = "“\(draft.title)” was not added: " + error.localizedDescription
+            }
+        }
+    }
+    // load: the image, read once Quick Add has gone (a Photos pick, the clipboard, something shared)
+    func addImage(_ load: @escaping () async throws -> UIImage?) {
+        adding += 1
+        Task {
+            defer { adding -= 1 }
+            do {
+                guard let image = try await load() else { throw Failure(errorDescription: "The image could not be read") }
+                // shared while Orbital was not running: Tana connects first; signed out or failed, it says so rather than waiting for ever
+                while phase != .ready {
+                    guard phase == .starting else { throw Failure(errorDescription: "Sign in to Tana first, then share it again") }
+                    try await Task.sleep(for: .milliseconds(200))
+                }
+                made = try await processImage(image)
+            } catch { self.error = error.localizedDescription }
+        }
     }
 
     // Long press, Delete (orbital.remove): to Tana's trash, then the Timeline read again; why not, when Tana says no

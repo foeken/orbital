@@ -77,8 +77,29 @@ final class SampleTests: XCTestCase {
         let sheet = app.navigationBars["Quick Add"]
         XCTAssert(sheet.waitForExistence(timeout: 15))
         XCTAssertFalse(sheet.buttons["Add"].isEnabled)
+        // closed by Cancel only: a swipe down leaves it where it is
+        sheet.swipeDown(velocity: .fast)
+        XCTAssertFalse(sheet.waitForNonExistence(timeout: 2))
         sheet.buttons["Cancel"].tap()
         XCTAssert(sheet.waitForNonExistence(timeout: 15))
+    }
+
+    // Add closes Quick Add at once, the task made behind it; one Tana did not take (the sample saves nothing) is back,
+    // words and all, the next time Quick Add opens, with why
+    func testQuickAddClosesAtOnceAndKeepsWhatWasNotAdded() {
+        app.buttons["Quick Add Task"].tap()
+        let sheet = app.navigationBars["Quick Add"]
+        XCTAssert(sheet.waitForExistence(timeout: 15))
+        app.textFields["New task"].tap()
+        app.textFields["New task"].typeText("Call the venue")
+        sheet.buttons["Add"].tap()
+        XCTAssert(sheet.waitForNonExistence(timeout: 15))
+        XCTAssert(app.navigationBars["Timeline"].exists)
+        app.buttons["Quick Add Task"].tap()
+        XCTAssert(sheet.waitForExistence(timeout: 15))
+        XCTAssertEqual(app.textFields["New task"].value as? String, "Call the venue")
+        XCTAssert(app.staticTexts["Not added: The sample saves nothing"].exists)
+        sheet.buttons["Cancel"].tap()
     }
 
     func testSettingsOpenFromTheMenu() {
