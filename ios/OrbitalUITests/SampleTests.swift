@@ -104,6 +104,20 @@ final class SampleTests: XCTestCase {
         sheet.buttons["Cancel"].tap()
     }
 
+    // Siri and Shortcuts' Add Task (Intents.swift) opens orbital:new, and the app makes the task at once; one Tana did not
+    // take (the sample saves nothing) is back in the next Quick Add as it was asked for, pinned to today included
+    func testAddTaskFromSiriIsMadeAsAskedPinnedToToday() {
+        app.open(URL(string: "orbital:new?title=Book%20the%20train&today=1")!)
+        sleep(1) // the task is made behind the Timeline, and refused by the sample, a moment after the link opens
+        app.buttons["Quick Add Task"].tap()
+        let sheet = app.navigationBars["Quick Add"]
+        XCTAssert(sheet.waitForExistence(timeout: 15))
+        XCTAssert(app.staticTexts["Not added: The sample saves nothing"].waitForExistence(timeout: 15), "the task was made, and the sample refused it")
+        XCTAssert(app.descendants(matching: .any).matching(NSPredicate(format: "value == %@", "Book the train")).firstMatch.exists)
+        XCTAssertEqual(app.switches["Pin to today"].value as? String, "1", "pinned to today, as Siri was asked")
+        sheet.buttons["Cancel"].tap()
+    }
+
     func testSettingsOpenFromTheMenu() {
         app.buttons["Menu"].tap()
         app.buttons["Settings"].tap()

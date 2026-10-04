@@ -126,7 +126,9 @@ struct Shell: View {
         // the Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
         // not open it. A widget's tap (ios/Widgets) is orbital:add for Quick Add, orbital:<id> for that node over the
         // Timeline, or orbital:timeline; its task box orbital:check:<id> (done) or orbital:uncheck:<id> (open: accepted, or
-        // ticked back on), written to Tana at once, with the Timeline in front where Today's Tasks shows it.
+        // ticked back on), written to Tana at once, with the Timeline in front where Today's Tasks shows it. Siri and
+        // Shortcuts (Intents.swift) use the same, and orbital:new?title=…&today=1 to add a task, orbital:pin:<id> or
+        // orbital:unpin:<id>.
         .onOpenURL { url in
             guard url.scheme == "orbital" else { shared = Shared.take() ?? shared; return }
             let what = String(url.absoluteString.dropFirst("orbital:".count))
@@ -135,6 +137,13 @@ struct Shell: View {
             for (prefix, state) in [("check:", "closed"), ("uncheck:", "open")] where what.hasPrefix(prefix + "tana:") {
                 page = .timeline; path = []
                 Task { await engine.tick(String(what.dropFirst(prefix.count)), to: state) }
+            }
+            for (prefix, on) in [("pin:", true), ("unpin:", false)] where what.hasPrefix(prefix + "tana:") {
+                Task { await engine.pin(String(what.dropFirst(prefix.count)), on) }
+            }
+            if what.hasPrefix("new?"), let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+               let title = items.first(where: { $0.name == "title" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+                engine.add(.init(title: title, type: nil, search: nil, assignee: nil, values: [:], today: items.contains { $0.name == "today" }))
             }
         }
         // shared words open Quick Add over nothing else; an image opens nothing, so whatever is open stays

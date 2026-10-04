@@ -63,3 +63,16 @@ and a profile for it: with no Apple account in Xcode, automatic signing falls ba
 older app id prefix makes iOS leave the widgets out. `WidgetTests` adds them on the simulator's home screen and uses them;
 built with signing off (`CODE_SIGNING_ALLOWED=NO`, as CI builds) the widgets have no Keychain group to read, so it skips
 once it has seen a widget added.
+
+## Siri, Shortcuts and Spotlight
+
+`Orbital/Intents.swift` (issue #723) gives Siri and Shortcuts Orbital's tasks as an App Entity (`TaskEntity`) and what can be
+done with one: **Add Task** (pinned to today or not), **Check Off Task**, **Uncheck Task**, **Pin Task to Today** (or unpin),
+**Open Task**, and **Today's Tasks**. Tana is written by the engine, which runs in the app, so whatever changes a task opens
+Orbital with the widgets' `orbital:` links (`orbital:new?title=…&today=1`, `orbital:check:<id>`, `orbital:pin:<id>`, …;
+`Shell.swift`) and the app does it as soon as Tana is connected. Today's Tasks runs in the background and answers from what
+the app last saved for the widgets; Siri finds a task among those by the words you say. A sensitive task is never said or
+indexed, only named as one. `OrbitalShortcuts` gives Siri its phrases with no shortcut set up first ("Add a task in
+Orbital", "What's on today in Orbital", "Check off … in Orbital"), Spotlight indexes the tasks the widgets show (none in
+Demo mode or once signed out), and each task box carries its entity (`appEntityIdentifier`) so "check this off" knows which.
+The Android app has no counterpart yet: Gemini's AppFunctions are an alpha (#723).

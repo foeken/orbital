@@ -251,6 +251,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         SavedTimeline.forget()
         Keychain.delete("glimpse") // nothing of the account left on a widget
         WidgetCenter.shared.reloadAllTimelines()
+        await Tasks.index(demo: true) // nor in Spotlight (Intents.swift)
         rows = []; states = [:]; removed = []; email = nil; account = nil; pages = 1
         note("signed out")
         start()
@@ -590,6 +591,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard let data = try? JSONEncoder().encode(Glimpse(read: Int64(Date.now.timeIntervalSince1970 * 1000), rows: kept(rows) ?? [])) else { return }
         Keychain.save(data, "glimpse")
         WidgetCenter.shared.reloadAllTimelines()
+        await Tasks.index(demo: demo) // what Siri and Spotlight find (Intents.swift)
     }
 
     // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a

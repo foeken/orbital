@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 // One row as the desktop renderer gets it: of the Timeline (main/timeline.js), a saved search or a meeting's documents
@@ -363,6 +364,7 @@ struct TaskBox: View {
         .accessibilityLabel(task.sensitive == true && !engine.reveal ? "Sensitive task" : task.words) // hidden from VoiceOver as from the eye
         .accessibilityValue(state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed")
         .accessibilityHint("Ticks the task off, or back on")
+        .appEntityIdentifier(EntityIdentifier(for: TaskEntity.self, identifier: task.id)) // "check this off": Siri knows which (Intents.swift)
     }
 }
 
