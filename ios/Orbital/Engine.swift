@@ -611,12 +611,41 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard let data = try? JSONEncoder().encode(Glimpse(read: Int64(Date.now.timeIntervalSince1970 * 1000), rows: kept(rows) ?? [])) else { return }
         Keychain.save(data, "glimpse")
         WidgetCenter.shared.reloadAllTimelines()
+        Task { await keepTasks(); await Tasks.index(demo: demo) } // what Siri and Spotlight find (Intents.swift)
+    }
+
+    // Siri and Shortcuts' List Tasks and their task lookup (Intents.swift): the tasks assigned to you in every state
+    // (orbital.tasks), kept in the Keychain beside the widgets' copy, a sensitive one without its words. Asked of Tana
+    // after a read, at most once in five minutes; the sample keeps its own tasks.
+    @ObservationIgnored private var tasksRead = Date.distantPast
+    private func keepTasks() async {
+        guard Date.now.timeIntervalSince(tasksRead) > 300 else { return }
+        let list: [Row]
+        if Self.isSample {
+            var found: [Row] = []
+            func walk(_ rows: [Row]) { for r in rows { if r.id.hasPrefix("tana:text:"), r.stateType != nil { found.append(r) }; walk(r.children ?? []) } }
+            walk(rows)
+            list = found
+        } else {
+            guard let read: [Row] = try? await call("return await orbital.tasks()", [:]) else { return }
+            list = read
+        }
+        tasksRead = .now
+        let kept = list.map { row in
+            var r = row
+            if r.sensitive == true { r.text = nil; r.title = nil; r.segments = nil }
+            r.stateType = states[r.id] ?? r.stateType
+            return r
+        }
+        if let data = try? JSONEncoder().encode(kept) { Keychain.save(data, "tasks") }
     }
 
     func forgetTimeline() {
         SavedTimeline.forget()
         Keychain.delete("glimpse") // nothing of the account left on a widget
+        Keychain.delete("tasks"); tasksRead = .distantPast // nor for Siri (keepTasks)
         WidgetCenter.shared.reloadAllTimelines()
+        Task { await Tasks.index(demo: true) } // nor in Spotlight (Intents.swift)
     }
 
     // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
