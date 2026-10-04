@@ -127,8 +127,9 @@ const owned = new Map();
 const release = (key) => { const e = owned.get(key); return e ? e.release() : Promise.resolve(); };
 const stop = () => { for (const e of [...owned.values()]) e.stop(); owned.clear(); }; // on the way out: no time for a round trip
 // instructions: developer instructions for the whole thread, for a task that has rules beyond its first message
-// (main/chatagents.js). The model is Codex's own default.
-async function createTask({ key, prompt, instructions, userData, timeoutMs = 30000, runMs = 15 * 60 * 1000 }) {
+// (main/chatagents.js). readOnly: Codex's own read-only sandbox with nothing to approve, for a task that only answers
+// (a chat question): what it may do is held by Codex, not only asked of it in words. The model is Codex's own default.
+async function createTask({ key, prompt, instructions, readOnly = false, userData, timeoutMs = 30000, runMs = 15 * 60 * 1000 }) {
   let id = null, cap = null, gone = false;
   // Let go the moment the turn ends, not on a timer: the thread is handed back through the protocol first
   // (thread/unsubscribe) and the child closed after.
@@ -147,6 +148,7 @@ async function createTask({ key, prompt, instructions, userData, timeoutMs = 300
     await rpc.ready;
     const params = { cwd: agent.agentWorkspace(userData), ephemeral: false };
     if (instructions) params.developerInstructions = instructions;
+    if (readOnly) Object.assign(params, { sandbox: 'read-only', approvalPolicy: 'never' });
     const started = await rpc.call('thread/start', params);
     id = started && started.thread && started.thread.id;
     if (!id) throw new Error('Codex did not return a task id');
@@ -173,8 +175,8 @@ const codex = agent.register({
   id: 'codex', label: 'Codex', icon: 'robot', missing: 'Install the ChatGPT app or the Codex CLI',
   available: () => !!codexBin(),
   // Assign to Agent opens the new task in Codex, where the work is watched; a chat question stays on its page.
-  async start({ key, nodeUri, title, rules, prompt, userData }) {
-    const id = await createTask({ key, prompt: nodeUri ? agent.agentPrompt(nodeUri, title) : prompt, instructions: rules, userData });
+  async start({ key, nodeUri, title, rules, prompt, readOnly, userData }) {
+    const id = await createTask({ key, prompt: nodeUri ? agent.agentPrompt(nodeUri, title, prompt) : prompt, instructions: rules, readOnly, userData });
     if (nodeUri) await openUrl(TASK + encodeURIComponent(id));
     return id;
   },
