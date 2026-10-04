@@ -17,7 +17,8 @@
 // way the verdict job is the one check a ruleset requires ("gate", "ready"). GitHub counts a skipped job as passed, so
 // a required check that can be skipped is no check: on a ready pull request the verdict always runs, and a refused
 // route and a skipped, cancelled or failed job all make it fail. A draft runs none of this (the workflows skip every
-// job, and name the skipped verdict "<check> (not run on drafts)"); a draft that reaches route anyway is refused.
+// job, and name each verdict by an expression GitHub shows unevaluated on a skipped job, so a skipped one never reads
+// as "gate" or "ready"); a draft that reaches route anyway is refused.
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 

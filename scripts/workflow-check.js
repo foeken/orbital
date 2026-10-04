@@ -14,7 +14,8 @@
 //     says if: github.event.pull_request.draft != true
 //   - a required check is never skipped under its own name: GitHub counts a skipped job as passed. On a ready pull
 //     request it runs (a verdict with always(), needing every other job of its workflow); on a draft, where it is
-//     skipped, its name is "<check> (not run on drafts)". A workflow holding one runs on ready_for_review and
+//     skipped, its name is an expression that reads <check> only when the job runs (GitHub shows it unevaluated on a
+//     skipped job, as #742's draft showed). A workflow holding one runs on ready_for_review and
 //     converted_to_draft, and has no paths filter (a filtered-out workflow leaves its check pending forever)
 //   - no other job anywhere takes a required check's name
 //   - no unquoted value holds ": ", which YAML reads as a key and GitHub refuses the whole file for

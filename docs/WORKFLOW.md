@@ -11,7 +11,7 @@ The base of a pull request, and nothing about its head, decides what GitHub runs
 
 | State, base | What runs | Required check |
 |---|---|---|
-| Draft, any base | the secrets scan (`ci.yml`) and nothing else: every other job is skipped, and the required checks show only as "gate (not run on drafts)", "ready (not run on drafts)", "platforms (not run on drafts)" | none: a draft cannot merge |
+| Draft, any base | the secrets scan (`ci.yml`) and nothing else: every other job is skipped, and no skipped job is named `gate`, `ready` or `platforms`: their names are expressions, which GitHub shows unevaluated on a skipped job | none: a draft cannot merge |
 | Ready, into **main** (the default) | the full gate, `checks.yml`: lint, `npm run check` and `npm run flows`; Android's tests, lint and debug build; the iPhone UI tests on a simulator. On the head commit itself, which must contain main as it is | `gate`, `secrets`, `platforms` |
 | Ready, into **integration/<developer>** | the cheap checks, `ready.yml`: lint and `npm run check`, and the flows when the desktop's pages changed, on GitHub's merge of the head into the lane | `ready`, `secrets`, `platforms` |
 | Ready, into anything else (a stack layer) | the full gate, as into main | none: it reaches main through the gate anyway |
@@ -82,8 +82,10 @@ gate on the exact head and the head containing main. Their review is the focused
 - Its verdict job `gate` runs on every ready pull request and by hand, and fails on a refused route, a head behind main,
   and any job skipped, cancelled or failed. GitHub counts a skipped job as passed, so a required check skipped under its
   own name would pass a pull request whose tests never ran: a draft made ready while a fork's first run waits for
-  approval, say. On a draft the verdict is skipped, and so it is named "gate (not run on drafts)" there: no skipped
-  check named `gate`, `ready` or `platforms` is ever left on a head.
+  approval, say. On a draft the verdict is skipped, and so its name is an expression that reads `gate` only
+  when it runs: GitHub shows it unevaluated on a skipped job (#742's draft showed
+  `github.event.pull_request.draft && 'gate (not run on drafts)' || 'gate'`), so no skipped check named `gate`,
+  `ready` or `platforms` is ever left on a head.
 - Pull requests from forks run the same workflows, as `pull_request`: a read-only token, no secrets, nothing written,
   and each checkout keeps no token in `.git/config`. No workflow uses `pull_request_target` or `workflow_run`, which run
   with the repository's own token beside the pull request's code. First-time contributors' runs wait for approval
