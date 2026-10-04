@@ -353,6 +353,10 @@ struct TaskBox: View {
 
     var body: some View {
         let state = engine.state(of: task)
+        // spelt out and typed, so the chain below type-checks in time on every Xcode (Xcode 26 gave up on it)
+        let label: String = task.sensitive == true && !engine.reveal ? "Sensitive task" : task.words // hidden from VoiceOver as from the eye
+        let value: String = state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed"
+        let entity = EntityIdentifier(for: TaskEntity.self, identifier: task.id) // "check this off": Siri knows which (Intents.swift)
         Button { Task { await engine.toggle(task) } } label: {
             CheckBox(state: state)
                 .padding(10).contentShape(Rectangle()).padding(-10) // a finger-sized target around a text-sized box
@@ -361,10 +365,10 @@ struct TaskBox: View {
         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 } // centred on the first line, as the markers are
         .sensoryFeedback(.success, trigger: engine.states[task.id]) { _, now in now == "closed" } // your own tick, not a change read from Tana
         .animation(reduceMotion ? nil : .snappy, value: state)
-        .accessibilityLabel(task.sensitive == true && !engine.reveal ? "Sensitive task" : task.words) // hidden from VoiceOver as from the eye
-        .accessibilityValue(state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed")
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
         .accessibilityHint("Ticks the task off, or back on")
-        .appEntityIdentifier(EntityIdentifier(for: TaskEntity.self, identifier: task.id)) // "check this off": Siri knows which (Intents.swift)
+        .appEntityIdentifier(entity)
     }
 }
 
