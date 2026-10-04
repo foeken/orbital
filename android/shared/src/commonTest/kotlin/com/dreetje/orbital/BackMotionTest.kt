@@ -1,31 +1,13 @@
 package com.dreetje.orbital
 
-import com.dreetje.orbital.ui.backMotion
 import com.dreetje.orbital.ui.predictiveDrawerOffset
 import com.dreetje.orbital.ui.snappy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class BackMotionTest {
-    @Test fun rightEdgeMovesTheCurrentPageTowardTheFinger() {
-        val motion = backMotion(-0.4f)
-
-        assertEquals(-0.4f, motion.currentTranslation, 0.001f)
-        assertEquals(0.15f, motion.previousTranslation, 0.001f)
-        assertEquals(0.928f, motion.previousAlpha, 0.001f)
-    }
-
-    @Test fun leftEdgeUsesTheMirroredPageTransition() {
-        val motion = backMotion(0.4f)
-
-        assertEquals(0.4f, motion.currentTranslation, 0.001f)
-        assertEquals(-0.15f, motion.previousTranslation, 0.001f)
-        assertEquals(0.928f, motion.previousAlpha, 0.001f)
-    }
-
-    @Test fun drawerBackProgressClosesFromEitherSystemEdge() {
+    @Test fun drawerBackProgressClosesTheMenu() {
         assertEquals(180f, predictiveDrawerOffset(300f, 0.4f), 0.001f)
-        assertEquals(180f, predictiveDrawerOffset(300f, -0.4f), 0.001f)
         assertEquals(0f, predictiveDrawerOffset(300f, 1.2f), 0.001f)
     }
 

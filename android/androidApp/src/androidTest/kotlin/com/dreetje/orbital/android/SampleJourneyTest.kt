@@ -159,6 +159,26 @@ class SampleJourneyTest {
         compose.waitUntil(5000) { home && compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isEmpty() }
     }
 
+    // the page a back swipe returns to is the one the swipe showed coming in: scrolled where it was left, not read
+    // again from the top
+    @Test fun predictiveBackKeepsTheTimelineWhereItWasScrolled() {
+        launch()
+        val meeting = hasText("Design review", substring = true) and hasClickAction()
+        val before = compose.onNode(meeting).fetchSemanticsNode().boundsInRoot.top
+        val y = device.displayHeight / 2
+        device.swipe(device.displayWidth / 2, y, device.displayWidth / 2, y - device.displayHeight / 8, 40)
+        compose.waitForIdle()
+        val scrolled = compose.onNode(meeting).fetchSemanticsNode().boundsInRoot.top
+        assertTrue("the Timeline should have scrolled ($before -> $scrolled)", scrolled < before - 20f)
+        compose.onNode(meeting).performClick()
+        compose.waitUntil(5000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
+        device.executeShellCommand("input swipe 0 $y ${device.displayWidth * 3 / 4} $y 450")
+        compose.waitUntil(5000) { home && compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isEmpty() }
+        compose.waitForIdle()
+        val after = compose.onNode(meeting).fetchSemanticsNode().boundsInRoot.top
+        assertTrue("the Timeline should be where it was scrolled ($scrolled), not at $after", kotlin.math.abs(after - scrolled) < 2f)
+    }
+
     @Test fun cancelledPredictiveBackKeepsTheCurrentPageOpen() {
         launch()
         compose.onNode(hasText("Design review", substring = true) and hasClickAction()).performClick()

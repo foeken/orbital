@@ -5,9 +5,14 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
@@ -148,11 +153,15 @@ fun Shell(engine: Engine, start: Start = Start()) {
     val drawer = remember { AnchoredDraggableState(false) }
     val move: AnimationSpec<Float> = if (still) snap() else snappy(0.3f)
     fun show(open: Boolean) { if (open) focus.clearFocus(); scope.launch { drawer.animateTo(open, move) } }
-    // a back gesture under way: how far it has come (Back.kt), and where the open menu was when it began
-    var back by remember { mutableFloatStateOf(0f) }
+    // a back gesture under way (Back.kt): the edge it came from, 1 the left and -1 the right, 0 while there is none; and
+    // where the open menu was when it began
+    var edge by remember { mutableFloatStateOf(0f) }
     var drawerAtStart by remember { mutableStateOf<Float?>(null) }
     var forward by remember { mutableStateOf(true) } // which way the next page change moves
-    var settled by remember { mutableStateOf(false) } // a page a gesture has already moved off: it goes without moving again
+    // The page on top as a transition a back gesture can hold partway, as the iPhone's NavigationStack swipe: the page
+    // it goes back to is drawn once, by the transition, so it is the same page when the gesture lets go, scrolled where
+    // it was left
+    val nav = remember { SeekableTransitionState(path.lastOrNull()) }
 
     // your saved searches for the menu, with the icons they were given in Orbital; the last list stays when a read fails
     suspend fun loadSearches() {
@@ -162,9 +171,14 @@ fun Shell(engine: Engine, start: Start = Start()) {
         secret = found.filter { it.sensitive == true }.map { it.id }.toSet()
         icons = found.mapNotNull { row -> row.glyph?.let { g -> runCatching { Base64.decode(g) }.getOrNull()?.let(engine.platform::decode)?.let { row.id to it } } }.toMap()
     }
-    fun push(id: String) { forward = true; settled = false; path.add(id) }
-    fun pop() { forward = false; settled = false; path.removeAt(path.lastIndex) }
+    fun push(id: String) { forward = true; path.add(id) }
+    fun pop() { forward = false; path.removeAt(path.lastIndex) }
     LaunchedEffect(engine.phase) { loadSearches() }
+    // a page pushed, popped or picked moves there; one a gesture already moved to is there
+    LaunchedEffect(path.lastOrNull()) {
+        val top = path.lastOrNull()
+        if (nav.currentState != top || nav.targetState != top) { if (still) nav.snapTo(top) else nav.animateTo(top) }
+    }
     // however it opens (the button, a swipe), the composer's keyboard goes and the saved searches are read again, so one
     // pinned or given an icon on the Mac since shows up
     LaunchedEffect(drawer.targetValue) { if (drawer.targetValue) { focus.clearFocus(); loadSearches() } }
@@ -181,22 +195,38 @@ fun Shell(engine: Engine, start: Start = Start()) {
         val x = drawer.offset.takeUnless { it.isNaN() }?.coerceIn(0f, widthPx) ?: 0f
         val menuShown = !wide && x > 0.5f
 
-        PlatformBack(menuShown || path.isNotEmpty(), onProgress = { p ->
+        PlatformBack(menuShown || path.isNotEmpty(), onProgress = { p, fromRight ->
             if (menuShown || drawerAtStart != null) {
-                val from = drawerAtStart ?: x.also { drawerAtStart = it }
-                drawer.dispatchRawDelta(predictiveDrawerOffset(from, p) - x)
-            } else back = p
+                val now = drawer.offset.takeUnless { it.isNaN() } ?: 0f // where it is now, a second event in a frame included
+                val from = drawerAtStart ?: now.also { drawerAtStart = it }
+                drawer.dispatchRawDelta(predictiveDrawerOffset(from, p) - now)
+            } else if (!still && path.isNotEmpty()) {
+                if (edge == 0f) edge = if (fromRight) -1f else 1f
+                val under = path.getOrNull(path.lastIndex - 1)
+                scope.launch { nav.seekTo(p.coerceIn(0f, 1f), under) }
+            }
         }, onCancel = {
             if (drawerAtStart != null) { drawerAtStart = null; show(true) }
-            else scope.launch { animate(back, 0f, animationSpec = if (still) snap() else snappy(0.3f)) { v, _ -> back = v } }
+            else if (edge != 0f) scope.launch {
+                // taken back: the page settles home, the seek run back to its start (as Navigation's NavHost does)
+                val top = path.lastOrNull()
+                if (nav.fraction == 0f) { nav.snapTo(top); edge = 0f }
+                else animate(nav.fraction, 0f, animationSpec = tween((nav.fraction * 300).toInt())) { v, _ ->
+                    launch { if (v > 0f) nav.seekTo(v) else { nav.snapTo(top); edge = 0f } }
+                }
+            }
         }) {
             when {
                 drawerAtStart != null || menuShown -> { drawerAtStart = null; show(false) }
-                back != 0f -> scope.launch {
-                    // let go to go back: the page carries on off the edge it was pulled to, then the one under it stays
-                    val to = if (back < 0f) -1f else 1f
-                    animate(back, to, animationSpec = if (still) snap() else smooth(0.3f)) { v, _ -> back = v }
-                    settled = true; forward = false; path.removeAt(path.lastIndex); back = 0f
+                edge != 0f -> {
+                    // let go to go back: the page carries on off the edge it was pulled to, the one under it already
+                    // there; once, however many Backs come while it moves
+                    val depth = path.size
+                    scope.launch {
+                        nav.animateTo(path.getOrNull(depth - 2), smooth(0.3f))
+                        if (path.size == depth) { forward = false; path.removeAt(path.lastIndex) }
+                        edge = 0f
+                    }
                 }
                 path.isNotEmpty() -> pop()
             }
@@ -205,13 +235,13 @@ fun Shell(engine: Engine, start: Start = Start()) {
         val zoom: (String?) -> Unit = { id -> if (id != null) { push(id); show(false) } }
         val sideMenu = @Composable { modifier: Modifier ->
             SideMenu(page, searches, icons, if (engine.reveal) emptySet() else secret, still, modifier,
-                pick = { page = it; path.clear(); show(false) },
+                pick = { page = it; forward = false; path.clear(); show(false) },
                 move = { i, by -> val to = i + by; if (to in searches.indices) { searches = searches.toMutableList().apply { add(to, removeAt(i)) }; saveOrder(searches, engine) } },
                 settings = { settings = true })
         }
         // One page: the menu's (its bar, the page, and the composer floating over its foot, as the iPhone's
         // .safeAreaInset: the page scrolls on under it and fades out behind it), or a node zoomed into
-        val pageOf = @Composable { top: String?, preview: Boolean ->
+        val pageOf = @Composable { top: String? ->
             // a node zoomed into and the menu's page are kept apart: a saved search can be both
             pages.SaveableStateProvider(top?.let { "node:$it" } ?: "page:" + page.key) {
                 if (top == null) Column(Modifier.fillMaxSize().background(c.page).imePadding().navigationBarsPadding()) {
@@ -226,7 +256,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
                         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(composer + 16.dp)
                             .background(Brush.verticalGradient(0f to c.page.copy(alpha = 0f), 0.45f to c.page.copy(alpha = 0.9f), 1f to c.page)))
                         // a new chat, opened as it starts, its warning shown there
-                        Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { if (!preview) composer = with(density) { it.height.toDp() } }) {
+                        Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { composer = with(density) { it.height.toDp() } }) {
                             Composer(engine) { text -> val sent = engine.ask(text); sent.warning?.let { notes[sent.id] = it }; asked[sent.id] = engine.now(); push(sent.id); null }
                         }
                     }
@@ -235,27 +265,21 @@ fun Shell(engine: Engine, start: Start = Start()) {
         }
         val content = @Composable { modifier: Modifier ->
             CompositionLocalProvider(LocalZoom provides zoom) {
-                Box(modifier) {
-                    val motion = backMotion(back)
-                    // under a back gesture, the page it goes back to, coming in under the finger
-                    if (back != 0f && path.isNotEmpty()) Box(Modifier.fillMaxSize().clearAndSetSemantics {}.graphicsLayer {
-                        translationX = size.width * motion.previousTranslation; alpha = motion.previousAlpha
-                    }) { pageOf(path.getOrNull(path.lastIndex - 1), true) }
-                    AnimatedContent(path.lastOrNull(), Modifier.fillMaxSize(), transitionSpec = {
-                        // a page pushed slides in over the one it came from, which drifts a quarter of the way off, as a
-                        // NavigationStack push; back is the same in reverse
-                        val slide: FiniteAnimationSpec<IntOffset> = smooth(0.35f)
-                        when {
-                            still || settled -> EnterTransition.None togetherWith ExitTransition.None
-                            forward -> slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 4 }
-                            else -> (slideInHorizontally(slide) { -it / 4 } togetherWith slideOutHorizontally(slide) { it }).apply { targetContentZIndex = -1f }
-                        }
-                    }) { top ->
-                        Box(Modifier.fillMaxSize().graphicsLayer {
-                            if (top == path.lastOrNull()) translationX = size.width * motion.currentTranslation
-                        }) { pageOf(top, false) }
+                rememberTransition(nav, "page").AnimatedContent(modifier, transitionSpec = {
+                    // a page pushed slides in over the one it came from, which drifts a quarter of the way off, as a
+                    // NavigationStack push; back is the same in reverse, toward the edge a gesture pulls it to, the page
+                    // under it a little dimmed until it is all there. Under a finger the moves are linear, so the page
+                    // stays under it.
+                    val gesture = edge != 0f
+                    val slide: FiniteAnimationSpec<IntOffset> = if (gesture) tween(300, easing = LinearEasing) else smooth(0.35f)
+                    val side = if (edge < 0f) -1 else 1
+                    when {
+                        still -> EnterTransition.None togetherWith ExitTransition.None
+                        forward && !gesture -> slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 4 }
+                        else -> ((slideInHorizontally(slide) { -side * it / 4 } + fadeIn(if (gesture) tween(300, easing = LinearEasing) else smooth(0.35f), 0.88f))
+                            togetherWith slideOutHorizontally(slide) { side * it }).apply { targetContentZIndex = -1f }
                     }
-                }
+                }) { top -> pageOf(top) }
             }
         }
 
