@@ -35,9 +35,12 @@ itself, driven in a vm made to look like the session page.
 
 `OrbitalUITests` drives the app itself on `-sample`, finding everything by the label VoiceOver reads: the Timeline, ticking a
 task, a sensitive task's hidden words, the menu and a saved search, a meeting's page, Ask Tana, Quick Add and Settings. The
-iOS workflow runs it on a simulator when anything under `ios/` changes; locally:
+iOS workflow runs it on a simulator when anything under `ios/` changes, a quarter of an hour a run; locally, in a minute or
+so, with the Android app's screen tests beside it (`scripts/phones.sh`):
 
 ```sh
-cd ios
-xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO
+npm run phones        # both; npm run phones ios, or android, for one
 ```
+
+A new Xcode needs its first-launch install (`sudo xcodebuild -runFirstLaunch`) before any simulator starts: without it
+`xcrun simctl` hangs and builds say "CoreSimulator is out of date".

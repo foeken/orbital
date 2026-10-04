@@ -22,6 +22,9 @@ jobs:
   ui-tests:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: macos-26
+    # a run takes about 13 minutes: one that has not finished in 25 is stuck (a simulator that never launched the app once
+    # held a run for over half an hour), and is ended rather than left for GitHub's six hours
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,4 +41,11 @@ jobs:
           echo "SIM=$id" >> "$GITHUB_ENV"
       - name: UI tests
         working-directory: ios
-        run: xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$SIM" CODE_SIGNING_ALLOWED=NO
+        # A test that hangs (most often the app launch, "Timed out while launching application via Xcode") is ended after
+        # three minutes, and a failed test runs once more on its own, so a flaky launch costs a test's retry, not a whole
+        # new run. The index store is only for the editor.
+        run: >-
+          xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$SIM"
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300
+          -retry-tests-on-failure -test-iterations 2
+          CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
