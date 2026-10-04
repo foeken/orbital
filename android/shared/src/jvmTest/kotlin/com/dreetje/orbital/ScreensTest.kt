@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.DesktopComposeUiTest
 import com.dreetje.orbital.ui.OrbitalApp
