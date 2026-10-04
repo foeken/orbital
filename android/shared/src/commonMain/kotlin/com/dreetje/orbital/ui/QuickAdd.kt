@@ -23,6 +23,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -37,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -77,6 +80,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
     var fields by remember { mutableStateOf(listOf<Field>()) } // the chosen type's, to set before adding
     var values by remember { mutableStateOf(mapOf<String, Value>()) } // field key -> what is set in it
     var assignee by remember { mutableStateOf<Member?>(null) } // whom a task is for; null: you
+    var today by rememberSaveable { mutableStateOf(false) } // Pin to today, off until you turn it on
     var settling by remember { mutableStateOf(false) } // Add pressed while dictating: the words are waited for (Dictate shows it)
     var failure by remember { mutableStateOf<String?>(null) }
     var kept by remember { mutableStateOf<Engine.Draft?>(null) } // a task Tana did not take, opened again (Engine.unsent)
@@ -104,7 +108,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
             }
             val words = title.trim()
             if (words.isEmpty()) return
-            engine.add(Engine.Draft(words, type, if (kept != null) kept?.search else search, assignee, values))
+            engine.add(Engine.Draft(words, type, if (kept != null) kept?.search else search, assignee, values, today))
             close()
         }
 
@@ -117,7 +121,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
             if (first && title.isEmpty()) shared?.text?.let { title = it }
             // a task Tana did not take: back as it was, with why
             if (first && shared == null && engine.unsent.isNotEmpty()) engine.unsent.removeAt(0).let { d ->
-                kept = d; title = d.title; assignee = d.assignee; failure = d.why?.let { "Not added: $it" }
+                kept = d; title = d.title; assignee = d.assignee; today = d.today; failure = d.why?.let { "Not added: $it" }
             }
             if (shared?.image == null) runCatching { focus.requestFocus() } // a shared image's row stays in view, not under the keyboard
             types = engine.taskTypes()
@@ -183,11 +187,18 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
                         }
                     }
                 }
-                // Details: whom a task is for, and the chosen type's fields, a saved search's values already in them
-                if (isTask || fields.isNotEmpty()) item("details") {
+                // Details: whom a task is for, whether it is pinned to today, and the chosen type's fields, a saved
+                // search's values already in them
+                item("details") {
                     Group("Details") {
-                        if (isTask) GroupRow(last = fields.isEmpty(), onClick = { picking = Field("", "Assign to", "member") }) {
+                        if (isTask) GroupRow(onClick = { picking = Field("", "Assign to", "member") }) {
                             Text("Assigned to", Modifier.weight(1f), color = c.text); Text(assignee?.name ?: "You", color = c.secondary)
+                        }
+                        // the whole row flips it, the switch in its own colour (in the rows' text colour it is white on white)
+                        GroupRow(last = fields.isEmpty(), onClick = { today = !today }) {
+                            Text("Pin to today", Modifier.weight(1f), color = c.text)
+                            Switch(today, { today = it }, Modifier.semantics { contentDescription = "Pin to today" },
+                                colors = SwitchDefaults.colors(checkedTrackColor = c.done, checkedThumbColor = Color.White, checkedBorderColor = c.done))
                         }
                         fields.forEachIndexed { i, f -> FieldRow(f, values[f.key], last = i == fields.size - 1, set = { v -> values = if (v == null) values - f.key else values + (f.key to v) },
                             pick = { picking = f }, date = { dating = f }) }

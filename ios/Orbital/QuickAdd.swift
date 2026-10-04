@@ -25,6 +25,7 @@ struct QuickAdd: View {
     @State private var fields: [Engine.Field] = [] // the chosen type's, to set before adding
     @State private var values: [String: Engine.Value] = [:] // field key -> what is set in it
     @State private var assignee: Engine.Member? // whom a task is for; nil: you
+    @State private var today = false // Pin to today, off until you turn it on
 
     var body: some View {
         NavigationStack {
@@ -53,15 +54,15 @@ struct QuickAdd: View {
                 } header: { Text("Type") } footer: {
                     if let preset, type == preset.uri, !preset.fields.isEmpty { Text("With the " + (preset.fields.count == 1 ? "value" : "values") + " this saved search sets.") }
                 }
-                // Details: whom a task is for, and the chosen type's fields, a saved search's values already in them
-                if isTask || !fields.isEmpty {
-                    Section {
-                        if isTask {
-                            NavigationLink { Choices(title: "Assign to", none: "You", load: people) { assignee = $0 } } label: { LabeledContent("Assigned to", value: assignee?.name ?? "You") }
-                        }
-                        ForEach(fields) { fieldRow($0) }
-                    } header: { Text("Details") }
-                }
+                // Details: whom a task is for, whether it is pinned to today, and the chosen type's fields, a saved
+                // search's values already in them
+                Section {
+                    if isTask {
+                        NavigationLink { Choices(title: "Assign to", none: "You", load: people) { assignee = $0 } } label: { LabeledContent("Assigned to", value: assignee?.name ?? "You") }
+                    }
+                    Toggle("Pin to today", isOn: $today).tint(.green) // the switch in its own colour: in the rows' text colour it is white on white
+                    ForEach(fields) { fieldRow($0) }
+                } header: { Text("Details") }
                 Section {
                     PhotosPicker(selection: $photo, matching: .images) { Label("Process image from Photos", systemImage: "photo") }
                     if UIPasteboard.general.hasImages {
@@ -99,7 +100,7 @@ struct QuickAdd: View {
                 // a task Tana did not take: back as it was, with why
                 if shared == nil, !engine.unsent.isEmpty {
                     let draft = engine.unsent.removeFirst()
-                    kept = draft; title = draft.title; assignee = draft.assignee; failure = draft.why.map { "Not added: " + $0 }
+                    kept = draft; title = draft.title; assignee = draft.assignee; today = draft.today; failure = draft.why.map { "Not added: " + $0 }
                 }
                 focused = true; types = await engine.taskTypes()
                 // a saved search of one type: that type, chosen, and listed even when it is no task type (a Goal is a document)
@@ -178,7 +179,7 @@ struct QuickAdd: View {
         }
         let words = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { return }
-        engine.add(.init(title: words, type: type, search: kept.map(\.search) ?? search, assignee: assignee, values: values))
+        engine.add(.init(title: words, type: type, search: kept.map(\.search) ?? search, assignee: assignee, values: values, today: today))
         dismiss()
     }
 }

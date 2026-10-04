@@ -1,6 +1,7 @@
 import Security
 import SwiftUI
 import WebKit
+import WidgetKit
 
 // The app's only link to Tana: one web view, hidden on https://home.tana.inc/api/auth/session running engine.js, which is
 // Orbital's own SDK and main/timeline.js bundled for the phone (ios/engine, issue #658). Same-origin there, the SDK
@@ -231,6 +232,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 if translator.catalogue.isEmpty, let list = try? await ChatGPT.models(), !list.isEmpty { translator.catalogue = list } // once: what this account may ask
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
+            await keepGlimpse()
             for issue in (try? await engineJS("return orbital.issues()")) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
@@ -263,6 +265,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
         SavedTimeline.forget()
+        Keychain.delete("glimpse") // nothing of the account left on a widget
+        WidgetCenter.shared.reloadAllTimelines()
         rows = []; states = [:]; removed = []; email = nil; account = nil; pages = 1
         note("signed out")
         start()
@@ -375,13 +379,21 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func taskTypes() async -> [TaskType] {
         Self.isSample ? [] : (try? await call("return await orbital.taskTypes()", [:])) ?? []
     }
-    func createTask(_ title: String, type: String?, search: String? = nil, assignee: String? = nil, values: [String: Value] = [:]) async throws -> String {
+    // today: Quick Add's Pin to today, the made task pinned as a long press pins one; a task made but not pinned is not
+    // made again, it says so
+    func createTask(_ title: String, type: String?, search: String? = nil, assignee: String? = nil, values: [String: Value] = [:], today: Bool = false) async throws -> String {
         guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
         let id: String = try await call("return await orbital.createTask(title, type, search, assignee, values)", ["title": title, "type": type ?? NSNull(), "search": search ?? NSNull(),
                                                                                                         "assignee": assignee ?? NSNull(), "values": values.mapValues(\.json)])
+        var notPinned: String? // said after the refresh below, which clears what was said before it
+        if today {
+            do { let _: Bool = try await call("return await orbital.pin(id, on)", ["id": id, "on": true]) }
+            catch { notPinned = "“\(title)” was added, but not pinned to today: " + error.localizedDescription }
+        }
         // a new task is yours alone: given to someone else, they are asked about as Assign to asks
         if assignee != nil, let access = await access(id), !access.hidden.isEmpty { asking = .init(id: id, access: access, shut: access.hidden, then: {}) }
         await refresh()
+        if let notPinned { self.error = notPinned }
         return id
     }
     // The image made smaller (2048 px at most, JPEG) for the model and for Tana, read by ChatGPT, then made into its node
@@ -401,12 +413,12 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var adding = 0
     var unsent: [Draft] = []
     var made: String?
-    struct Draft { let title: String; let type: String?; let search: String?; let assignee: Member?; let values: [String: Value]; var why: String? }
+    struct Draft { let title: String; let type: String?; let search: String?; let assignee: Member?; let values: [String: Value]; var today = false; var why: String? }
     func add(_ draft: Draft) {
         adding += 1
         Task {
             defer { adding -= 1 }
-            do { _ = try await awake("Quick Add") { try await createTask(draft.title, type: draft.type, search: draft.search, assignee: draft.assignee?.id, values: draft.values) } } catch {
+            do { _ = try await awake("Quick Add") { try await createTask(draft.title, type: draft.type, search: draft.search, assignee: draft.assignee?.id, values: draft.values, today: draft.today) } } catch {
                 var kept = draft
                 kept.why = error.localizedDescription
                 unsent.append(kept)
@@ -534,6 +546,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let before = state(of: task)
         states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
         ticked[task.id] = .now
+        defer { Task { await keepGlimpse() } } // the widgets show it ticked too
         guard !Self.isSample else { return } // the sample writes nothing
         do {
             states[task.id] = try await call("return await orbital.toggle(id)", ["id": task.id]) as String
@@ -552,8 +565,46 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         catch { states[id] = before; self.error = error.localizedDescription }
     }
 
+    // A widget's box (ios/Widgets): the task set to what the widget showed it becoming, drawn so at once and written as soon
+    // as the engine has connected (a cold start waits for it), put back with the reason if Tana refuses. Set outright,
+    // so a second tap on a widget not yet drawn again does not undo the first.
+    func tick(_ id: String, to next: String) async {
+        guard !demo else { return }
+        let before = states[id]
+        states[id] = next
+        ticked[id] = .now
+        defer { Task { await keepGlimpse() } } // the widgets drawn again with it
+        guard !Self.isSample else { return }
+        do { states[id] = try await call("return await orbital.toggle(id, to)", ["id": id, "to": next]) as String }
+        catch { states[id] = before; self.error = error.localizedDescription }
+    }
+
     func state(of task: Row) -> String {
         states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
+    }
+
+    // The widgets' Timeline (ios/Widgets; Glimpse.kt on Android): the rows on screen, a box ticked here ticked and what was
+    // deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget), left in the Keychain
+    // where the widgets read it, as the Share extension leaves what it shares
+    struct Glimpse: Encodable { let read: Int64; let rows: [Row] }
+
+    func keepGlimpse() async {
+        func kept(_ list: [Row]?, today: Bool = false) -> [Row]? {
+            list.map { shown($0).filter { !today || !unpinned.contains($0.id) }.map { row in
+                var r = row
+                if r.sensitive == true {
+                    r.text = nil; r.title = nil; r.segments = nil; r.subtext = nil; r.people = nil; r.reference?.label = nil
+                    r.timeline?.note = nil; r.timeline?.change = nil; r.timeline?.detail = nil
+                }
+                // a tick made here: on the task, and on an Activity line about it (its uri), which the widget draws as the task
+                r.stateType = states[r.id] ?? r.timeline?.uri.flatMap { states[$0] } ?? r.stateType
+                r.children = kept(r.children, today: r.timeline?.today == true)
+                return r
+            } }
+        }
+        guard let data = try? JSONEncoder().encode(Glimpse(read: Int64(Date.now.timeIntervalSince1970 * 1000), rows: kept(rows) ?? [])) else { return }
+        Keychain.save(data, "glimpse")
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
@@ -597,6 +648,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         // -history: the day's entries only, so a shot of them needs no scrolling
         if CommandLine.arguments.contains("-history") { rows.removeAll { $0.timeline?.today == true || $0.timeline?.upcoming == true || $0.timeline?.free != nil } }
         phase = .ready
+        Task { await keepGlimpse() }
     }
 
     // what engine.js threw, rather than WebKit's "A JavaScript exception occurred"

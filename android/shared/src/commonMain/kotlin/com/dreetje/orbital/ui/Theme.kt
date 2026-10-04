@@ -50,7 +50,8 @@ class Colors(
     val danger: Color,
 )
 
-private val Light = Colors(
+// public for what draws in the same colours outside Compose UI: the widgets (androidApp Widgets.kt)
+val Light = Colors(
     dark = false, page = Color(0xFFFFFFFF), grouped = Color(0xFFF2F2F4), card = Color(0xFFFFFFFF), text = Color(0xFF1A1A1A),
     secondary = Color(0xFF666666), tertiary = Color(0xFFA3A3A8), separator = Color(0xFFE2E2E4), fill = Color(0xFFEEEEF0),
     fillQuiet = Color(0xFFF4F4F6), accent = Color(0xFF007AFF), link = Color(0xFF3F7EAA), done = Color(0xFF5A9670),
@@ -59,7 +60,7 @@ private val Light = Colors(
     warning = Color(0xFFA15C00), danger = Color(0xFFC62828),
 )
 
-private val Dark = Colors(
+val Dark = Colors(
     dark = true, page = Color.Black, grouped = Color(0xFF121314), card = Color(0xFF242729), text = Color(0xFFE3E4E5),
     secondary = Color(0xFFA0A5A8), tertiary = Color(0xFF6B7073), separator = Color(0xFF34383A), fill = Color(0xFF2C3032),
     fillQuiet = Color(0xFF232628), accent = Color(0xFF0A84FF), link = Color(0xFF7FB8DD), done = Color(0xFF5A9670),

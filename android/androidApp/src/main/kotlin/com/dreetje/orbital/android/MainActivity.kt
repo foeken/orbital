@@ -8,12 +8,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.ui.OrbitalApp
 import com.dreetje.orbital.ui.Start
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 // The one screen: the shared app over an Engine kept across rotations (Holder), the engine's web view in it. Launched
@@ -41,13 +44,26 @@ class MainActivity : ComponentActivity() {
             window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         }
         val start = if (savedInstanceState == null) Start(intent.getStringExtra("zoom"), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false)) else Start()
+        if (savedInstanceState == null) tick(intent)
         setContent { OrbitalApp(engine, start) }
     }
 
-    // brought forward by ShareActivity: what it left is taken in onResume, which follows
+    // brought forward by ShareActivity (what it left is taken in onResume, which follows), or by a widget's tap: the
+    // node it opens, Quick Add, or the Timeline: its title, or a task's box (the Timeline in front, the task ticked)
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        holder.engine.widget = intent.getStringExtra("zoom") ?: "add".takeIf { intent.getBooleanExtra("add", false) }
+            ?: "timeline".takeIf { intent.hasExtra("tick") || intent.data?.schemeSpecificPart == "timeline" }
+        tick(intent)
+    }
+
+    // a widget's task box (Widgets.kt Tick): the task set as the widget asked and written to Tana at once, the engine
+    // waiting for Tana on a cold start
+    private fun tick(intent: Intent) {
+        val id = intent.getStringExtra("tick") ?: return
+        val to = intent.getStringExtra("to") ?: "closed"
+        holder.viewModelScope.launch { holder.engine.tick(id, to) }
     }
 
     override fun onResume() {
@@ -85,7 +101,17 @@ class MainActivity : ComponentActivity() {
             demoMode = if (activity.intent.hasExtra("demoMode")) activity.intent.getBooleanExtra("demoMode", false) else null,
         )
 
-        init { engine.start() }
+        init {
+            engine.start()
+            // the widgets' Timeline (Widgets.kt), kept a moment after each read or tick settles; gone once signed out
+            val app = activity.applicationContext
+            viewModelScope.launch {
+                snapshotFlow { listOf(engine.phase, engine.rows, engine.states.toMap(), engine.removed, engine.unpinned) }.collectLatest { (phase) ->
+                    delay(500)
+                    if (phase == Engine.Phase.Ready) Widgets.keep(app, engine.glimpse()) else if (phase == Engine.Phase.SignedOut) Widgets.keep(app, null)
+                }
+            }
+        }
 
         override fun onCleared() {
             web?.destroy()

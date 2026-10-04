@@ -12,6 +12,14 @@
 				<string>orbital-share</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.dreetje.orbital.widgets</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>orbital</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The debug build's cover screen Activity widget (src/main/res/xml/activity_widget.xml), offered on the home screen too:
+     an emulator has no cover screen to test it on -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/activity_widget"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minWidth="352dp"
+    android:minHeight="339dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen|keyguard" />

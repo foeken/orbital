@@ -405,11 +405,7 @@ fun Marker(icon: String?, tone: String?, now: Boolean, still: Boolean, modifier:
         }
         if (now) Pulse(still)
         Box(Modifier.size(24.dp).background(c.page, CircleShape)) // the rail passes behind the glyph, as on the desktop
-        val glyph = when (icon) {
-            "tlAccepted", "tlLater", "tlInbox", "tlNew", "updated", "robot", "tana", "free", "todayTasks", "pinRoute" -> icon
-            else -> "calendar" // a meeting (the desktop draws its type's glyph, calendar)
-        }
-        Glyph(glyph, Modifier.size(20.dp), if (now) c.accent else if (tone == "new" || tone == "faint") c.tertiary else c.secondary)
+        Glyph(Glyphs.marker(icon), Modifier.size(20.dp), if (now) c.accent else if (tone == "new" || tone == "faint") c.tertiary else c.secondary)
     }
 }
 

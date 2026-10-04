@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Samsung's own metadata for the Timeline's widgets, Today and Activity: they belong on the cover screen (sub_screen) -->
+<samsung-appwidget-provider display="sub_screen" />

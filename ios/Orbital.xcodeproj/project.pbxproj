@@ -8,38 +8,43 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000030 /* Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A10000000000000000000050 /* Widgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000052 /* Widgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		A10000000000000000000032 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = A10000000000000000000010 /* Project object */; proxyType = 1; remoteGlobalIDString = A10000000000000000000023; remoteInfo = Share; };
 		A10000000000000000000049 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = A10000000000000000000010 /* Project object */; proxyType = 1; remoteGlobalIDString = A10000000000000000000006; remoteInfo = Orbital; };
+		A10000000000000000000051 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = A10000000000000000000010 /* Project object */; proxyType = 1; remoteGlobalIDString = A10000000000000000000053; remoteInfo = Widgets; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		A10000000000000000000031 /* Embed Foundation Extensions */ = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A10000000000000000000030 /* Share.appex in Embed Foundation Extensions */, ); name = "Embed Foundation Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000031 /* Embed Foundation Extensions */ = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A10000000000000000000030 /* Share.appex in Embed Foundation Extensions */, A10000000000000000000050 /* Widgets.appex in Embed Foundation Extensions */, ); name = "Embed Foundation Extensions"; runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000001 /* Orbital.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orbital.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000021 /* Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Share.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000040 /* OrbitalUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrbitalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000052 /* Widgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Widgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A10000000000000000000002 /* Orbital */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Orbital; sourceTree = "<group>"; };
 		A10000000000000000000022 /* Share */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Share; sourceTree = "<group>"; };
 		A10000000000000000000041 /* OrbitalUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = OrbitalUITests; sourceTree = "<group>"; };
+		A10000000000000000000054 /* Widgets */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Widgets; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000000000000000000003 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A10000000000000000000026 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A10000000000000000000044 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000055 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A10000000000000000000004 = {isa = PBXGroup; children = (A10000000000000000000002 /* Orbital */, A10000000000000000000022 /* Share */, A10000000000000000000041 /* OrbitalUITests */, A10000000000000000000005 /* Products */); sourceTree = "<group>"; };
-		A10000000000000000000005 /* Products */ = {isa = PBXGroup; children = (A10000000000000000000001 /* Orbital.app */, A10000000000000000000021 /* Share.appex */, A10000000000000000000040 /* OrbitalUITests.xctest */); name = Products; sourceTree = "<group>"; };
+		A10000000000000000000004 = {isa = PBXGroup; children = (A10000000000000000000002 /* Orbital */, A10000000000000000000022 /* Share */, A10000000000000000000054 /* Widgets */, A10000000000000000000041 /* OrbitalUITests */, A10000000000000000000005 /* Products */); sourceTree = "<group>"; };
+		A10000000000000000000005 /* Products */ = {isa = PBXGroup; children = (A10000000000000000000001 /* Orbital.app */, A10000000000000000000021 /* Share.appex */, A10000000000000000000052 /* Widgets.appex */, A10000000000000000000040 /* OrbitalUITests.xctest */); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -54,7 +59,7 @@
 				A10000000000000000000031 /* Embed Foundation Extensions */,
 			);
 			buildRules = ();
-			dependencies = (A10000000000000000000033 /* PBXTargetDependency */);
+			dependencies = (A10000000000000000000033 /* PBXTargetDependency */, A10000000000000000000059 /* PBXTargetDependency */);
 			fileSystemSynchronizedGroups = (A10000000000000000000002 /* Orbital */);
 			name = Orbital;
 			productName = Orbital;
@@ -71,6 +76,18 @@
 			name = Share;
 			productName = Share;
 			productReference = A10000000000000000000021 /* Share.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A10000000000000000000053 /* Widgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000058 /* Build configuration list for PBXNativeTarget "Widgets" */;
+			buildPhases = (A10000000000000000000056 /* Sources */, A10000000000000000000055 /* Frameworks */, A10000000000000000000057 /* Resources */);
+			buildRules = ();
+			dependencies = ();
+			fileSystemSynchronizedGroups = (A10000000000000000000054 /* Widgets */);
+			name = Widgets;
+			productName = Widgets;
+			productReference = A10000000000000000000052 /* Widgets.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		A10000000000000000000042 /* OrbitalUITests */ = {
@@ -94,7 +111,7 @@
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
-				TargetAttributes = { A10000000000000000000006 = { CreatedOnToolsVersion = 26.0; }; A10000000000000000000023 = { CreatedOnToolsVersion = 26.0; }; A10000000000000000000042 = { CreatedOnToolsVersion = 26.0; TestTargetID = A10000000000000000000006; }; };
+				TargetAttributes = { A10000000000000000000006 = { CreatedOnToolsVersion = 26.0; }; A10000000000000000000023 = { CreatedOnToolsVersion = 26.0; }; A10000000000000000000053 = { CreatedOnToolsVersion = 26.0; }; A10000000000000000000042 = { CreatedOnToolsVersion = 26.0; TestTargetID = A10000000000000000000006; }; };
 			};
 			buildConfigurationList = A10000000000000000000012 /* Build configuration list for PBXProject "Orbital" */;
 			developmentRegion = en;
@@ -106,7 +123,7 @@
 			productRefGroup = A10000000000000000000005 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (A10000000000000000000006 /* Orbital */, A10000000000000000000023 /* Share */, A10000000000000000000042 /* OrbitalUITests */);
+			targets = (A10000000000000000000006 /* Orbital */, A10000000000000000000023 /* Share */, A10000000000000000000053 /* Widgets */, A10000000000000000000042 /* OrbitalUITests */);
 		};
 /* End PBXProject section */
 
@@ -114,6 +131,7 @@
 		A10000000000000000000008 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A10000000000000000000027 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A10000000000000000000045 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000057 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
@@ -135,11 +153,13 @@
 		A10000000000000000000007 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A10000000000000000000025 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A10000000000000000000043 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000056 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		A10000000000000000000033 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A10000000000000000000023 /* Share */; targetProxy = A10000000000000000000032 /* PBXContainerItemProxy */; };
 		A1000000000000000000004A /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A10000000000000000000006 /* Orbital */; targetProxy = A10000000000000000000049 /* PBXContainerItemProxy */; };
+		A10000000000000000000059 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A10000000000000000000053 /* Widgets */; targetProxy = A10000000000000000000051 /* PBXContainerItemProxy */; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -293,6 +313,49 @@
 			};
 			name = Release;
 		};
+		A1000000000000000000005A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Widgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6DA7MK99T2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Widgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Orbital;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreetje.orbital.widgets; /* the widgets (ios/Widgets): a device build needs this id registered for the team, as the Share extension's was */
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A1000000000000000000005B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Widgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6DA7MK99T2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Widgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Orbital;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreetje.orbital.widgets; /* the widgets (ios/Widgets): a device build needs this id registered for the team, as the Share extension's was */
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -317,6 +380,12 @@
 		A10000000000000000000046 /* Build configuration list for PBXNativeTarget "OrbitalUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (A10000000000000000000047 /* Debug */, A10000000000000000000048 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000058 /* Build configuration list for PBXNativeTarget "Widgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A1000000000000000000005A /* Debug */, A1000000000000000000005B /* Release */);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

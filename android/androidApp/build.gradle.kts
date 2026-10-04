@@ -70,6 +70,7 @@ dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.webkit)
+    implementation(libs.androidx.glance.appwidget)
     implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)
@@ -77,5 +78,6 @@ dependencies {
     androidTestImplementation(libs.androidx.uiautomator)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.compose.ui.test.junit4.android)
+    androidTestImplementation(libs.androidx.glance.appwidget.testing)
     debugImplementation(libs.compose.ui.test.manifest)
 }

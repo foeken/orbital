@@ -194,7 +194,8 @@
     "text": "Write the launch checklist",
     "marks": {
      "strike": true
-    }
+    },
+    "content": true
    }
   ],
   "icon": "apply",
@@ -212,7 +213,8 @@
   "id": "s:e4",
   "segments": [
    {
-    "text": "Sam Lee "
+    "text": "Sam Lee ",
+    "person": true
    },
    {
     "text": "edited",
@@ -224,7 +226,8 @@
     "text": " "
    },
    {
-    "text": "Onboarding flow"
+    "text": "Onboarding flow",
+    "content": true
    }
   ],
   "icon": "updated",
@@ -269,7 +272,8 @@
   "id": "s:e6",
   "segments": [
    {
-    "text": "Jordan Park "
+    "text": "Jordan Park ",
+    "person": true
    },
    {
     "text": "accepted",
@@ -281,7 +285,8 @@
     "text": " "
    },
    {
-    "text": "Fix the sync retry on flaky networks"
+    "text": "Fix the sync retry on flaky networks",
+    "content": true
    }
   ],
   "icon": "tlAccepted",
@@ -325,7 +330,8 @@
   "id": "s:e8",
   "segments": [
    {
-    "text": "Alex Kim "
+    "text": "Alex Kim ",
+    "person": true
    },
    {
     "text": "moved to Later",
@@ -337,7 +343,8 @@
     "text": " "
    },
    {
-    "text": "Clean up the old dashboards"
+    "text": "Clean up the old dashboards",
+    "content": true
    }
   ],
   "icon": "tlLater",
