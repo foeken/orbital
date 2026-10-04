@@ -102,11 +102,16 @@ enum Tasks {
 
 // what changes a task opens Orbital, which does it at once (Shell.swift)
 
-// The task a view shows, for the new Siri: "check this off" knows which (Timeline.swift TaskBox). Here rather than
-// there: importing AppIntents beside a SwiftUI Button brings in Button(intent:), and CI's Xcode 26 could no longer
-// type-check the task box's body in time.
+// The task a view shows, for the new Siri: "check this off" knows which (Timeline.swift TaskBox). appEntityIdentifier
+// comes with the iOS 27 SDK (Xcode 27, Swift 6.4); built with Xcode 26, as CI builds, the task box carries none.
 extension View {
-    func taskEntity(_ id: String) -> some View { appEntityIdentifier(EntityIdentifier(for: TaskEntity.self, identifier: id)) }
+    @ViewBuilder func taskEntity(_ id: String) -> some View {
+        #if compiler(>=6.4)
+        appEntityIdentifier(EntityIdentifier(for: TaskEntity.self, identifier: id))
+        #else
+        self
+        #endif
+    }
 }
 private func opening(_ link: String) -> some IntentResult & OpensIntent { .result(opensIntent: OpenURLIntent(URL(string: link)!)) }
 

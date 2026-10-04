@@ -352,8 +352,7 @@ struct TaskBox: View {
 
     var body: some View {
         let state = engine.state(of: task)
-        // spelt out and typed, each a statement of its own, so the chain below type-checks in time on every Xcode (CI's
-        // Xcode 26 gave up on it as one expression once AppIntents' Button(intent:) was in the module, Intents.swift)
+        // spelt out and typed, each a statement of its own, so the chain below is quick to type-check
         let label: String = task.sensitive == true && !engine.reveal ? "Sensitive task" : task.words // hidden from VoiceOver as from the eye
         let value: String = state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed"
         let button = Button(action: tick) { Self.box(state) }.buttonStyle(.plain)
