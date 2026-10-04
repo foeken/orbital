@@ -22,6 +22,47 @@ assert.ok(!tops.some(({ names }) => names.includes('api')), 'the renderer declar
   const missing = [...source.matchAll(/\$\('([A-Za-z0-9_-]+)'\)/g)].map((m) => m[1]).filter((id) => !ids.has(id));
   assert.deepEqual([...new Set(missing)], [], 'every $(id) the renderer looks up is in index.html');
 }
+// The iPhone app is installed from one address: the TestFlight link on the Help tour's last page, which Cmd+K Install
+// mobile app opens (help.html #help-mobile). Its code (help-testflight.svg, made by qrencode) is a picture nobody reads by
+// eye, so it is decoded here and held to that link, and the README and the manual give the same one: a new code or a
+// new link that left the other behind would send iPhones somewhere else. Read without error correction, in byte mode
+// (what qrencode writes for a URL), from a code whose data is one block, as a short link's is.
+{
+  const read = (f) => fs.readFileSync(require('node:path').join(__dirname, '..', f), 'utf8');
+  const qrText = (svg) => {
+    const n = Number(svg.match(/viewBox="0 0 (\d+) \1"/)[1]), v = (n - 17) / 4;
+    assert.ok(Number.isInteger(v) && v >= 1 && v <= 5, 'help-testflight.svg: a code of version 1 to 5 without a margin (qrencode -m 0)');
+    const m = Array.from({ length: n }, () => new Array(n).fill(false));
+    for (const [, x, y] of svg.matchAll(/(?:M|<rect x=")(\d+)(?:,|" y=")(\d+)(?:h1|" width="1" height="1")/g)) m[+y][+x] = true; // a module: a path step (qrencode --svg-path) or a rect
+    let format = 0;
+    for (let x = 0; x <= 8; x++) if (x !== 6) format = (format << 1) | m[8][x];
+    for (let y = 7; y >= 0; y--) if (y !== 6) format = (format << 1) | m[y][8];
+    format ^= 0x5412;
+    const blocks = { 0: [1, 1, 1, 2, 2], 1: [1, 1, 1, 1, 1], 2: [1, 1, 2, 4, 4], 3: [1, 1, 2, 2, 4] }[format >> 13][v - 1]; // M, L, H, Q
+    assert.equal(blocks, 1, 'help-testflight.svg: its data in one block (a short link, qrencode -l L or M)');
+    const mask = (format >> 10) & 7;
+    const flip = [(i, j) => (i + j) % 2 === 0, (i) => i % 2 === 0, (i, j) => j % 3 === 0, (i, j) => (i + j) % 3 === 0,
+      (i, j) => (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0, (i, j) => ((i * j) % 2) + ((i * j) % 3) === 0,
+      (i, j) => (((i * j) % 2) + ((i * j) % 3)) % 2 === 0, (i, j) => (((i + j) % 2) + ((i * j) % 3)) % 2 === 0][mask];
+    const fixed = (i, j) => (i <= 8 && (j <= 8 || j >= n - 8)) || (i >= n - 8 && j <= 8) || i === 6 || j === 6 || (v > 1 && Math.abs(i - (n - 7)) <= 2 && Math.abs(j - (n - 7)) <= 2);
+    const bits = [];
+    for (let x = n - 1, up = true; x > 0; x -= 2, up = !up) {
+      if (x === 6) x = 5;
+      for (let k = 0; k < n; k++) for (const j of [x, x - 1]) { const i = up ? n - 1 - k : k; if (!fixed(i, j)) bits.push(m[i][j] !== flip(i, j)); }
+    }
+    let at = 0;
+    const take = (count) => { let out = 0; for (let k = 0; k < count; k++) out = (out << 1) | bits[at++]; return out; };
+    assert.equal(take(4), 4, 'help-testflight.svg: byte mode');
+    const length = take(8);
+    return Buffer.from(Array.from({ length }, () => take(8))).toString('utf8');
+  };
+  const link = read('help.html').match(/<a id="helpMobileLink" href="([^"]+)">([^<]+)<\/a>/);
+  assert.ok(link, 'the Help tour\u2019s iPhone page has its link (help.html #helpMobileLink)');
+  assert.match(link[1], /^https:\/\/testflight\.apple\.com\/join\/[A-Za-z0-9]+$/, 'the iPhone link is a public TestFlight join link');
+  assert.equal(link[2], link[1].replace('https://', ''), 'the link says where it goes');
+  assert.equal(qrText(read('help-testflight.svg')), link[1], 'the code on the Help tour\u2019s iPhone page holds the link beside it');
+  for (const f of ['README.md', 'manual/start.html']) assert.ok(read(f).includes(link[1]), f + ' gives the same iPhone link as the Help tour');
+}
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
 // top-level statement that runs immediately and reaches for something a later file declares (a ReferenceError).

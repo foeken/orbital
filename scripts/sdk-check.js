@@ -37,7 +37,7 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; this.once = this.on; this.loadFile = (file) => { this.file = file; }; this.sizes = []; this.setContentSize = (...size) => { this.sizes.push(size); }; this.isVisible = () => false; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
+  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; this.once = this.on; this.loadFile = (file) => { this.file = file; }; this.sizes = []; this.setContentSize = (...size) => { this.sizes.push(size); }; this.isVisible = () => false; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile(file, options) { this.loaded = { file: require('node:path').basename(file), ...options }; }, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } },
     clipboard: { items: [], read: async () => electron.clipboard.items } }; // items: what a check puts on it, as clipboard.read() hands them over
   const context = vm.createContext({
@@ -1479,6 +1479,26 @@ async function main() {
     backend.S.windows.delete(covered.win);
     await settings.flush(); // before the next block's database: a write still on its way would land its pointer there
     console.log('ok  help:claim: the first-start tour goes to one page, once');
+  }
+  // Cmd+K Install mobile app asks for the tour on its iPhone page (renderer/overlays.js openHelp('mobile')): main hands
+  // help.html that page and nothing else a page might send, and no other overlay gets one.
+  {
+    const backend = mainHelpers(), open = backend.handlers.get('overlay:open'), close = backend.handlers.get('overlay:close');
+    const loaded = async (...args) => {
+      const wc = { frame: {}, isDestroyed: () => false, focus() {}, send() {} };
+      const win = wc.win = { panes: [wc], overlay: null, isDestroyed: () => false, getContentBounds: () => ({ width: 800, height: 600 }), contentView: { addChildView() {}, removeChildView() {} } };
+      backend.S.windows.add(win);
+      await open({ senderFrame: wc.frame }, ...args);
+      const what = win.overlay && JSON.parse(JSON.stringify(win.overlay.webContents.loaded)); // out of main's vm context
+      if (win.overlay) await close({ sender: win.overlay.webContents }, {});
+      backend.S.windows.delete(win);
+      return what;
+    };
+    assert.deepEqual(await loaded('help', 'dark', 'mobile'), { file: 'help.html', query: { theme: 'dark', at: 'mobile' } }, 'Install mobile app: the tour on its iPhone page, in the page\u2019s theme');
+    assert.deepEqual(await loaded('help', 'light'), { file: 'help.html', query: { theme: 'light' } }, 'Help: the tour from its first page');
+    assert.deepEqual(await loaded('help', 'light', '../settings'), { file: 'help.html', query: { theme: 'light' } }, 'any other page asked for: the first page');
+    assert.deepEqual(await loaded('task', 'light', 'mobile'), { file: 'task.html', query: { theme: 'light' } }, 'and only the tour has an iPhone page');
+    console.log('ok  overlay:open: Install mobile app opens the tour on its iPhone page');
   }
   // Two machines that each made a settings document before either could find the other's, and a document deleted in
   // Tana: the next launch settles on the oldest one standing, merges this machine's choices into it and tells the page.

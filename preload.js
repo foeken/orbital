@@ -70,7 +70,7 @@ contextBridge.exposeInMainWorld('api', {
   windowLayout: () => ipcRenderer.invoke('window:layout'), // this window's layout (Trellis's document), null for one page never rearranged
   setWindowLayout: (doc, keys) => ipcRenderer.invoke('window:setLayout', doc, keys), // true: the window reloads into it, each page on its keys
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the shell's Trellis theme and the window behind it follow the page
-  openOverlay: (page, theme) => ipcRenderer.invoke('overlay:open', page, theme), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme
+  openOverlay: (page, theme, at) => ipcRenderer.invoke('overlay:open', page, theme, at), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme; at 'mobile': the tour on its iPhone page
   closeOverlay: (result) => ipcRenderer.invoke('overlay:close', result), // help.html and task.html: done; { palette?: true, note?: string } for the page that asked
   onOverlayClosed: (cb) => ipcRenderer.on('overlay:closed', (_e, result) => cb(result || {})), // the page that asked hears what the overlay had to say
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser

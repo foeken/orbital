@@ -2,9 +2,9 @@
 // The pages main lays over the whole window, above every pane (main.js openOverlay): the Help tour
 // (help.html) and Quick Add Task (task.html). This page asks for one in its own theme and keeps its caret meanwhile;
 // main hands it the keys back when the overlay closes, with what the overlay had to say.
-function openOverlay(page) {
+function openOverlay(page, at) {
   if (!palette.hidden) closePalette();
-  if (tana.openOverlay) tana.openOverlay(page, theme);
+  if (tana.openOverlay) tana.openOverlay(page, theme, at);
 }
 // ⌘K closed it (the key the tour teaches): the palette opens here; the tour's last page asks for ChatGPT sign-in. A
 // note is the task Quick Add Task made.
@@ -15,10 +15,11 @@ if (tana.onOverlayClosed) tana.onOverlayClosed((result) => {
   if (result.note) showNote(result.note, false, result.open); // a click on it opens the task it names
 });
 // Help: from ⌘K Help, the ? in the window's header (shell.js, renderer/app.js), and once by itself on a first start (helpOnce,
-// renderer/app.js); helpSeen is a synced preference, so that is once per person.
-function openHelp() {
+// renderer/app.js); helpSeen is a synced preference, so that is once per person. ⌘K Install mobile app opens it on its
+// last page (at 'mobile'), the one place the iPhone app is installed from: its TestFlight code and link.
+function openHelp(at) {
   if (!pref('helpSeen', false)) setPref('helpSeen', true);
-  openOverlay('help');
+  openOverlay('help', at);
 }
 // A first start, from the first page: the Work View's second pane opens beside it and stays quiet. Only once signed
 // in and connected (renderer/app.js), and only if main says so (help:claim): it answers once the settings document has

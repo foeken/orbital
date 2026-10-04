@@ -31,6 +31,32 @@ function helpStep(dir) { if (helpAt + dir >= helpPages.length) helpEl.close(); e
 helpEl.addEventListener('close', () => { if (helpApi && helpApi.closeOverlay) helpApi.closeOverlay({ palette: helpPalette, chatgpt: helpChatGPT }); });
 helpBack.onclick = () => helpStep(-1);
 helpNext.onclick = () => helpStep(1);
+// The iPhone page's link, the address its code holds: in the browser, as every link in Orbital opens. Without main (the
+// manual, the flows) it is a plain link.
+document.getElementById('helpMobileLink').onclick = (e) => {
+  if (!helpApi || !helpApi.openExternal) return;
+  e.preventDefault();
+  helpApi.openExternal(e.currentTarget.href).catch(() => {});
+};
+// The phone page's choice (#help-mobile): iPhone or Android, one at a time in one place, so a second code later takes
+// the same spot. A radio group: one tab stop, the arrows switch inside it (and do not page the tour), Space and a click pick.
+const helpOS = [...document.querySelectorAll('#help-mobile [role="radio"]')];
+function showHelpOS(os, focus) {
+  for (const b of helpOS) {
+    const on = b.dataset.os === os;
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); b.tabIndex = on ? 0 : -1;
+    if (on && focus) b.focus();
+  }
+  for (const part of document.querySelectorAll('#help-mobile [data-os]:not([role="radio"])')) part.hidden = part.dataset.os !== os;
+}
+for (const b of helpOS) {
+  b.onclick = () => showHelpOS(b.dataset.os);
+  b.onkeydown = (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault(); e.stopPropagation();
+    showHelpOS(helpOS[(helpOS.indexOf(b) + (e.key === 'ArrowRight' ? 1 : helpOS.length - 1)) % helpOS.length].dataset.os, true);
+  };
+}
 // The ChatGPT page: sign in with ChatGPT happens on its ⌘K page in the page that asked (renderer/agent.js startChatGPTLogin).
 // Signed in already, the line says so instead, at the button's height: the card is as tall as its tallest page, so a
 // line that came or went would move it after it had opened.
@@ -50,4 +76,5 @@ helpEl.addEventListener('keydown', (e) => {
   e.preventDefault();
 });
 helpEl.showModal();
-showHelpPage(0);
+// Cmd+K Install mobile app opens the tour on its iPhone page (?at=mobile, main.js openOverlay); everything else at the start
+showHelpPage(Math.max(0, helpPages.findIndex((p) => p.id === 'help-' + new URLSearchParams(location.search).get('at'))));

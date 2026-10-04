@@ -1684,7 +1684,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show graph', 'Smaller text', 'Open settings', 'Reset text size', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show graph', 'Smaller text', 'Open settings', 'Reset text size', 'Install mobile app', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1738,6 +1738,7 @@ async function runSyncShortcutCheck() {
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
     const LINKS = false, toShell = (m) => posted.push(m); // a page of its own, asking the shell about the Graph pane (renderer/rail.js)
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, toggleDatePin = (doc, date) => pinCalls.push([doc.id, date]), copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = (id) => went.push(id), setView = (id) => went.push('view:' + id), openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
+    const openHelp = (at) => went.push('help' + (at ? ':' + at : '')); // renderer/overlays.js, run for real in runInstallMobileCheck
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${sourceBetween('const PANE_ROWS', 'const shellRun')}${sourceLine('const shellRun')}
     ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
@@ -1760,8 +1761,10 @@ async function runSyncShortcutCheck() {
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home',
     'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Show graph', 'Window: Reload',
     'Settings: Open settings', 'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
-    'Help: Help',
+    'Help: Help', 'Help: Install mobile app',
   ], 'the palette lists its rows in one fixed, meaningful order');
+  order.went(); order.row('installMobile').run(); order.row('help').run();
+  assert.deepEqual(plain(order.went()), ['help:mobile', 'help'], 'Install mobile app opens the Help tour on its iPhone page; Help opens it at the start');
   // A window of more pages (the shell's word, renderer/app.js) offers the workspace's moves, each a key's row asking
   // the shell to run Trellis's command.
   order.panes({ pages: 3 });
@@ -9713,6 +9716,24 @@ async function runHelpOnceCheck() {
   console.log('ok  Help tour first start: after login, once across windows, and not again on a machine that has not read your settings yet');
 }
 checks.push(runHelpOnceCheck);
+// Cmd+K Install mobile app (renderer/palette.js) opens the Help tour on its iPhone page, the one place the app is installed
+// from: the real openHelp and openOverlay ask main for the tour with at 'mobile', in this page's theme, and close the
+// palette first, as Help does. main.js openOverlay passes it on to help.js (sdk-check), which starts there (flows).
+function runInstallMobileCheck() {
+  const page = vm.runInNewContext(`
+    const asked = [], prefs = {}, theme = 'dark';
+    const pref = (key, fallback) => (key in prefs ? prefs[key] : fallback), setPref = (key, value) => { prefs[key] = value; };
+    const palette = { hidden: false }, closePalette = () => { palette.hidden = true; };
+    const tana = { openOverlay: (which, theme, at) => asked.push({ which, theme, at }) };
+    ${functionSource('openOverlay')}
+    ${functionSource('openHelp')}
+    ({ open: (at) => { palette.hidden = false; openHelp(at); return { asked: asked.splice(0), paletteClosed: palette.hidden, seen: !!prefs.helpSeen }; } });
+  `);
+  assert.deepEqual(plain(page.open('mobile')), { asked: [{ which: 'help', theme: 'dark', at: 'mobile' }], paletteClosed: true, seen: true }, 'Install mobile app: the tour on its iPhone page, the palette closed');
+  assert.deepEqual(plain(page.open()), { asked: [{ which: 'help', theme: 'dark' }], paletteClosed: true, seen: true }, 'Help: the tour from its first page');
+  console.log('ok  Install mobile app: the Help tour on its iPhone page');
+}
+checks.push(runInstallMobileCheck);
 // The palette over both halves of a split (issue #409): opening a centred page asks the shell to lay this page's iframe
 // over the window, once; the page moves itself into its half only once it is wider than that half, so no frame is
 // drawn out of place; the @ and / menus stay in the half; closing lets go once the scrim has faded, unless it opens
