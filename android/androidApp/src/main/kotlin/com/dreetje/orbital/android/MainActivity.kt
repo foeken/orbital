@@ -44,15 +44,25 @@ class MainActivity : ComponentActivity() {
             window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         }
         val start = if (savedInstanceState == null) Start(intent.getStringExtra("zoom"), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false)) else Start()
+        if (savedInstanceState == null) tick(intent)
         setContent { OrbitalApp(engine, start) }
     }
 
     // brought forward by ShareActivity (what it left is taken in onResume, which follows), or by a widget's tap: the
-    // node it opens, or Quick Add
+    // node it opens, Quick Add, or a task's box: the Timeline in front, the task ticked
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        holder.engine.widget = intent.getStringExtra("zoom") ?: "add".takeIf { intent.getBooleanExtra("add", false) }
+        holder.engine.widget = intent.getStringExtra("zoom") ?: "add".takeIf { intent.getBooleanExtra("add", false) } ?: "timeline".takeIf { intent.hasExtra("tick") }
+        tick(intent)
+    }
+
+    // a widget's task box (Widgets.kt Tick): the task set as the widget asked and written to Tana at once, the engine
+    // waiting for Tana on a cold start
+    private fun tick(intent: Intent) {
+        val id = intent.getStringExtra("tick") ?: return
+        val to = intent.getStringExtra("to") ?: "closed"
+        holder.viewModelScope.launch { holder.engine.tick(id, to) }
     }
 
     override fun onResume() {

@@ -47,12 +47,19 @@ A new Xcode needs its first-launch install (`sudo xcodebuild -runFirstLaunch`) b
 
 ## Widgets
 
-`ios/Widgets` is a WidgetKit extension with two widgets, as the Android app's: **Today's Tasks** (small, medium, large),
-each task a whole line that opens it, and **Timeline** (large), the Timeline on its rail, a meeting's chevron (an App Intent)
-showing its documents in place. They draw what the app last read (`Engine.keepGlimpse`, the same JSON as Android's
-`Glimpse`), left in the Keychain in Orbital's own access group as the Share extension leaves what it shares; a sensitive row
-comes without its words. A tap opens `orbital:<id>`, `orbital:add` or `orbital:timeline` in the app (`Shell.swift`). The
-extension's glyphs are its own catalog, made with the app's (`node scripts/build-ios-glyphs.js`). A device build needs the
-`com.dreetje.orbital.widgets` id registered for the team. `WidgetTests` adds both on the simulator's home screen and uses
-them; built with signing off (`CODE_SIGNING_ALLOWED=NO`, as CI builds) the widgets have no Keychain group to read, so it
-skips once it has seen a widget added.
+`ios/Widgets` is a WidgetKit extension, as the Android app's widgets: **Today's Tasks** (small, medium, large), each task a
+whole line; **Today's Tasks and Upcoming Meetings** (medium, large), the Timeline above its line, with + for Quick Add; and
+**Activity** (medium, large), what happened by day, each line its marker and the task or node itself, each task once at the
+latest thing that happened to it (`Glimpse.activity`, `Row.asTask`), with no +. On the Lock Screen, **Quick Add**. A widget
+does not scroll, so each draws as much as fits its height. They draw what the app last read (`Engine.keepGlimpse`, the same
+JSON as Android's `Glimpse`), left in the Keychain in Orbital's own access group as the Share extension leaves what it
+shares; a sensitive row comes without its words. On a tinted or clear Home Screen iOS draws everything in one tint, so the
+markers have nothing laid behind them and the boxes are outlines there (`widgetRenderingMode`). A tap opens `orbital:<id>`,
+`orbital:add` or `orbital:timeline` in the app (`Shell.swift`); a task's box opens `orbital:check:<id>` or
+`orbital:uncheck:<id>`, and the app ticks it and writes it to Tana at once (`Engine.tick`): a widget's own button runs in
+the extension, which has no engine to write with. The extension's glyphs are its own catalog, made with the app's
+(`node scripts/build-ios-glyphs.js`). A device build needs the `com.dreetje.orbital.widgets` id registered for the team,
+and a profile for it: with no Apple account in Xcode, automatic signing falls back to the team's wildcard profile, whose
+older app id prefix makes iOS leave the widgets out. `WidgetTests` adds them on the simulator's home screen and uses them;
+built with signing off (`CODE_SIGNING_ALLOWED=NO`, as CI builds) the widgets have no Keychain group to read, so it skips
+once it has seen a widget added.

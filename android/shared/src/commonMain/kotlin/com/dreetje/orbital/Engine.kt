@@ -22,7 +22,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.io.encoding.Base64
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -340,24 +339,15 @@ class Engine(
     fun cached(id: String): Page? = pagesSample?.pages?.get(id) ?: opened[id]
 
     // The widgets' Timeline (Glimpse): the rows on screen, a box ticked here ticked and what was deleted or unpinned here
-    // gone, each sensitive one without its words, and the documents of the meetings in it. Those are asked of Tana when a
-    // meeting first shows, then once in five minutes: a read follows every change Tana tells.
-    suspend fun glimpse(): Glimpse {
+    // gone, each sensitive one without its words
+    fun glimpse(): Glimpse {
         fun keep(list: List<Row>?): List<Row>? = list?.let(::shown)?.map { r ->
             val words = if (r.sensitive == true) r.copy(text = null, title = null, segments = null, subtext = null, people = null, reference = r.reference?.copy(label = null),
                 timeline = r.timeline?.copy(note = null, change = null, detail = null)) else r
             words.copy(stateType = states[r.id] ?: r.stateType, children = keep(if (r.timeline?.today == true) r.children?.filter { it.id !in unpinned } else r.children))
         }
-        val meetings = rows.flatMap { r -> if (r.timeline?.upcoming == true) r.children.orEmpty().map { it.id } else listOfNotNull(r.timeline?.uri) }.filter { kindOf(it) == "event" }
-        if (meetings.any { it !in meetingDocs } || now() - docsRead > 5.minutes) maybe { docs(meetings) }?.let { meetingDocs = it; docsRead = now() }
-        return Glimpse(now().toEpochMilliseconds(), keep(rows)!!, meetings.associateWith { keep(meetingDocs[it]).orEmpty() }.filterValues { it.isNotEmpty() })
+        return Glimpse(now().toEpochMilliseconds(), keep(rows)!!)
     }
-    private var meetingDocs = mapOf<String, List<Row>>()
-    private var docsRead = Instant.DISTANT_PAST
-
-    // the documents each meeting owns (orbital.docs), as a meeting's page lists them, without opening the meetings
-    private suspend fun docs(ids: List<String>): Map<String, List<Row>> =
-        if (isSample) ids.associateWith { pagesSample?.pages?.get(it)?.rows.orEmpty() } else call("return await orbital.docs(ids)", mapOf("ids" to ids))
 
     // Long press: Pin to Today and Mark as Sensitive, then the Timeline read again. Remove Pin takes the task out of
     // Today's Tasks at once; the read after says where it is now.
@@ -413,10 +403,15 @@ class Engine(
     suspend fun searchPreset(id: String): Preset? = if (isSample) null else maybe { call<Preset?>("return await orbital.searchPreset(id)", mapOf("id" to id)) }
     suspend fun taskTypes(): List<TaskType> = if (isSample) emptyList() else maybe { call<List<TaskType>>("return await orbital.taskTypes()") } ?: emptyList()
 
-    suspend fun createTask(title: String, type: String?, search: String? = null, assignee: String? = null, values: Map<String, Value> = emptyMap()): String {
+    // today: Quick Add's Pin to today, the made task pinned as a long press pins one; a task made but not pinned is not
+    // made again, it says so
+    suspend fun createTask(title: String, type: String?, search: String? = null, assignee: String? = null, values: Map<String, Value> = emptyMap(), today: Boolean = false): String {
         if (isSample) throw Failure("The sample saves nothing")
         val id: String = call("return await orbital.createTask(title, type, search, assignee, values)",
             mapOf("title" to title, "type" to type, "search" to search, "assignee" to assignee, "values" to values.mapValues { it.value.asJson() }))
+        if (today) try { call<Boolean>("return await orbital.pin(id, on)", mapOf("id" to id, "on" to true)) } catch (e: Failure) {
+            error = "“$title” was added, but not pinned to today: ${e.message}"
+        }
         // a new task is yours alone: given to someone else, they are asked about as Assign to asks
         if (assignee != null) access(id)?.takeIf { it.hidden.isNotEmpty() }?.let { asking = ShareAsk(id, it, it.hidden) {} }
         refresh()
@@ -440,11 +435,11 @@ class Engine(
         private set
     val unsent = mutableStateListOf<Draft>()
     var made by mutableStateOf<String?>(null)
-    data class Draft(val title: String, val type: String?, val search: String?, val assignee: Member?, val values: Map<String, Value>, val why: String? = null)
+    data class Draft(val title: String, val type: String?, val search: String?, val assignee: Member?, val values: Map<String, Value>, val today: Boolean = false, val why: String? = null)
     fun add(draft: Draft) {
         adding++
         scope.launch {
-            try { createTask(draft.title, draft.type, draft.search, draft.assignee?.id, draft.values) } catch (e: Failure) {
+            try { createTask(draft.title, draft.type, draft.search, draft.assignee?.id, draft.values, draft.today) } catch (e: Failure) {
                 unsent.add(draft.copy(why = e.message))
                 error = "“${draft.title}” was not added: ${e.message}"
             } finally { adding-- }
@@ -525,6 +520,23 @@ class Engine(
     }
 
     fun state(task: Row): String = states[task.id] ?: task.stateType ?: if (task.done == true) "closed" else "open"
+
+    // A widget's box (Widgets.kt; Engine.swift tick): the task set to what the widget showed it becoming, drawn so at once
+    // and written as soon as the engine has connected (a cold start waits for it), put back with the reason if Tana
+    // refuses. Set outright, so a second tap on a widget not yet drawn again does not undo the first.
+    suspend fun tick(id: String, to: String) {
+        if (demo) return
+        val before = states[id]
+        states[id] = to
+        ticked[id] = now()
+        if (isSample) return
+        try {
+            states[id] = call<String>("return await orbital.toggle(id, to)", mapOf("id" to id, "to" to to))
+        } catch (e: Failure) {
+            if (before == null) states.remove(id) else states[id] = before
+            error = e.message
+        }
+    }
 
     // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
     // minute on: the graph can trail a write by seconds, never by that long. One not in the rows read keeps its tick.

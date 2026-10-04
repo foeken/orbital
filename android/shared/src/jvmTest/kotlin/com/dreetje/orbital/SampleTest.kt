@@ -31,8 +31,8 @@ class SampleTest {
     }
 
     // The widgets' Timeline (androidApp Widgets.kt, ios/Widgets): the rows as the app shows them, a box ticked here
-    // ticked, the words of anything sensitive left out (nobody shakes a widget), and each meeting's documents
-    @Test fun theWidgetsGlimpseLeavesOutSensitiveWordsAndCarriesMeetingDocuments() = runTest {
+    // ticked, the words of anything sensitive left out (nobody shakes a widget)
+    @Test fun theWidgetsGlimpseLeavesOutSensitiveWords() = runTest {
         val engine = Engine(null, FakePlatform(), backgroundScope, sample = sampleFile("timeline-sample.json") to sampleFile("pages-sample.json"), demoMode = false)
         engine.toggle(engine.rows.first { it.timeline?.today == true }.children!!.first())
         val glimpse = engine.glimpse()
@@ -40,7 +40,6 @@ class SampleTest {
         assertEquals(listOf("closed", "open", "closed"), today.map { it.stateType })
         assertEquals(true, today[1].sensitive)
         assertFalse("offsite agenda" in json.encodeToString(glimpse))
-        assertEquals(listOf("Offsite planning"), glimpse.docs["tana:event:0000000000000000000000000d"]?.map { it.words })
     }
 
     // drawn later than it was read: a meeting that has started is no longer to come, and free time that ended is gone

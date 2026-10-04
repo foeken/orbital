@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -238,6 +239,7 @@ class SampleJourneyTest {
         compose.onNodeWithContentDescription("Quick Add Task").performClick()
         compose.waitUntil(5000) { seen("Quick Add") }
         compose.onNodeWithText("Add").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Pin to today").assertIsOff() // there, and off until turned on
         compose.onNodeWithText("Cancel").performClick()
         compose.waitUntil(5000) { !seen("Quick Add") }
     }

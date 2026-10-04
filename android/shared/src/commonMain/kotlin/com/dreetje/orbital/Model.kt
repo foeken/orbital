@@ -40,7 +40,9 @@ data class Row(
     val group: String? = null, // the section a saved search files it under (ios/engine/arrange.js)
     val glyph: String? = null, // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
 ) {
-    @Serializable data class Segment(val text: String? = null, val marks: Marks? = null, val mention: Ref? = null)
+    // content: the node's own words in a sentence of the app's (main/timeline.js), person: a person's name; the widgets'
+    // Activity draws a line from them, title first (Widgets.kt Brief)
+    @Serializable data class Segment(val text: String? = null, val marks: Marks? = null, val mention: Ref? = null, val content: Boolean? = null, val person: Boolean? = null)
     @Serializable data class Marks(val bold: Boolean? = null, val italic: Boolean? = null, val strike: Boolean? = null, val code: Boolean? = null, val link: String? = null)
     @Serializable data class Ref(val uri: String, val label: String? = null)
     @Serializable data class Chat(val mine: Boolean? = null, val status: Boolean? = null, val streaming: Boolean? = null, val author: String? = null)

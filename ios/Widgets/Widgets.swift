@@ -1,17 +1,21 @@
-import AppIntents
 import Security
 import SwiftUI
 import WidgetKit
 
 // The iPhone's widgets, as the Android app's (androidApp Widgets.kt): Today's Tasks across the widget's whole width, and
-// the Timeline on its rail, a meeting's documents opened in place by its chevron. They draw what the app last read
+// the Timeline on its rail in two: what is ahead today (today's tasks and the meetings to come) and Activity, what
+// happened. A widget does not scroll, so each draws as much as fits. They draw what the app last read
 // (Engine.swift keepGlimpse), left in the Keychain in Orbital's own access group as the Share extension leaves what it
 // shares: a widget cannot run the engine. A row opens its node in the app (orbital:<id>, Shell.swift), + Quick Add.
+// A task's box opens the app too (orbital:check:<id>, orbital:uncheck:<id>), which ticks it and writes it to Tana at once:
+// a widget's own button runs in this extension, which has no engine to write with. On the Lock Screen, Quick Add.
 @main
 struct OrbitalWidgets: WidgetBundle {
     var body: some Widget {
         TodayWidget()
-        TimelineWidget()
+        AheadWidget()
+        ActivityWidget()
+        QuickAddWidget()
     }
 }
 
@@ -24,51 +28,73 @@ struct TodayWidget: Widget {
     }
 }
 
-struct TimelineWidget: Widget {
+// the Timeline above its line: Now, today's tasks, the free time and the meetings to come
+struct AheadWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "Timeline", provider: Provider()) { RailTimeline(entry: $0) }
-            .configurationDisplayName("Timeline")
-            .description("Today's tasks, the meetings to come with their documents, and what happened")
-            .supportedFamilies([.systemLarge])
+        StaticConfiguration(kind: "Ahead", provider: Provider()) { RailTimeline(entry: $0, part: .ahead) }
+            .configurationDisplayName("Today's Tasks and Upcoming Meetings")
+            .description("Today's tasks and the meetings to come, with their documents, on the Timeline's rail")
+            .supportedFamilies([.systemMedium, .systemLarge])
     }
 }
 
-// What the app left, and which meetings this widget has opened (ShowDocuments)
+// the Timeline under its line: what happened, by day; nothing to add there, so no +
+struct ActivityWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "Activity", provider: Provider()) { RailTimeline(entry: $0, part: .activity) }
+            .configurationDisplayName("Activity")
+            .description("What happened to your tasks and meetings, day by day")
+            .supportedFamilies([.systemMedium, .systemLarge])
+    }
+}
+
+// Quick Add on the Lock Screen: a round + that opens Quick Add in the app (orbital:add), as the widgets' + does. Android
+// has no such place: a phone's lock screen there takes no widgets of an app's own.
+struct QuickAddWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "QuickAdd", provider: Still()) { _ in QuickAddButton() }
+            .configurationDisplayName("Quick Add")
+            .description("A new task, straight from the Lock Screen")
+            .supportedFamilies([.accessoryCircular])
+    }
+}
+
+struct QuickAddButton: View {
+    var body: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            Image(systemName: "plus").font(.title2.weight(.semibold))
+        }
+        .widgetURL(URL(string: "orbital:add"))
+        .containerBackground(.clear, for: .widget)
+        .accessibilityLabel("Quick Add Task")
+    }
+}
+
+// what never changes: drawn once
+struct Still: TimelineProvider {
+    func placeholder(in context: Context) -> Entry { Entry(date: .now, glimpse: nil) }
+    func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) { completion(placeholder(in: context)) }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
+        completion(Timeline(entries: [placeholder(in: context)], policy: .never))
+    }
+}
+
+// What the app left
 struct Entry: TimelineEntry {
     let date: Date
     let glimpse: Glimpse?
-    let open: Set<String>
 }
 
 struct Provider: TimelineProvider {
-    func placeholder(in context: Context) -> Entry { Entry(date: .now, glimpse: nil, open: []) }
-    func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) { completion(entry(.now, Glimpse.read())) }
+    func placeholder(in context: Context) -> Entry { Entry(date: .now, glimpse: nil) }
+    func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) { completion(Entry(date: .now, glimpse: Glimpse.read())) }
     // drawn again as each meeting to come starts, so it leaves Upcoming meetings, and in half an hour anyway; the app has
     // it drawn again after every read (WidgetCenter)
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
         let glimpse = Glimpse.read(), now = Date.now
         let starts = glimpse?.upcoming(now).compactMap { $0.start.flatMap(Glimpse.parse) } ?? []
-        completion(Timeline(entries: ([now] + starts).map { entry($0, glimpse) }, policy: .after(now.addingTimeInterval(1800))))
-    }
-    private func entry(_ date: Date, _ glimpse: Glimpse?) -> Entry {
-        Entry(date: date, glimpse: glimpse, open: Set(UserDefaults.standard.stringArray(forKey: ShowDocuments.key) ?? []))
-    }
-}
-
-// A meeting's chevron: its documents shown under it, or hidden again; kept by this extension, and WidgetKit draws again
-struct ShowDocuments: AppIntent {
-    static let title: LocalizedStringResource = "Show a meeting's documents"
-    static let key = "open"
-    @Parameter(title: "Meeting") var meeting: String
-
-    init() {}
-    init(meeting: String) { self.meeting = meeting }
-
-    func perform() async throws -> some IntentResult {
-        var open = Set(UserDefaults.standard.stringArray(forKey: Self.key) ?? [])
-        if open.remove(meeting) == nil { open.insert(meeting) }
-        UserDefaults.standard.set(Array(open), forKey: Self.key)
-        return .result()
+        completion(Timeline(entries: ([now] + starts).map { Entry(date: $0, glimpse: glimpse) }, policy: .after(now.addingTimeInterval(1800))))
     }
 }
 
@@ -76,7 +102,6 @@ struct ShowDocuments: AppIntent {
 struct Glimpse: Decodable {
     let read: Double
     let rows: [Row]
-    let docs: [String: [Row]]?
 
     struct Row: Decodable {
         let id: String
@@ -91,7 +116,7 @@ struct Glimpse: Decodable {
         let children: [Row]?
         let timeline: Info?
 
-        struct Segment: Decodable { let text: String?; let mention: Mention? }
+        struct Segment: Decodable { let text: String?; let mention: Mention?; let content: Bool?; let person: Bool? }
         struct Mention: Decodable { let label: String? }
         struct Free: Decodable { let until: Double }
         struct Info: Decodable {
@@ -146,10 +171,38 @@ struct Glimpse: Decodable {
         if let before = Calendar.current.date(byAdding: .day, value: -1, to: now), key == before.formatted(format) { return "Yesterday" }
         return title ?? key
     }
+    // What happened, under each day, for the Activity widget, each task once: at the latest thing that happened to it
+    // (the rows come newest first), so a task added and then completed is the completion alone. A line of tasks added
+    // keeps the ones nothing happened to since, and goes when none is left; a day left empty goes too; a meeting is
+    // always itself. With each line, the tasks it brought. Android's Glimpse.activity (GlimpseTest) is the same.
+    func activity(_ now: Date) -> [(title: String, lines: [(row: Row, added: [Row])])] {
+        var seen = Set<String>()
+        return days(now).map { day in
+            (day.title, day.rows.compactMap { e -> (row: Row, added: [Row])? in
+                let added = e.children ?? []
+                if Self.kind(e.timeline?.uri) == "event" { return (e, added) }
+                if added.isEmpty { return e.timeline?.uri.map { seen.insert($0).inserted } == false ? nil : (e, added) }
+                let fresh = added.filter { seen.insert($0.id).inserted }
+                return fresh.isEmpty ? nil : (e, fresh)
+            })
+        }.filter { !$0.lines.isEmpty }
+    }
     static func parse(_ s: String) -> Date? {
         (try? Date(s, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true))) ?? (try? Date(s, strategy: .iso8601))
     }
     static func kind(_ uri: String?) -> String? { uri?.split(separator: ":").dropFirst().first.map(String.init) }
+}
+
+// An Activity line about a task's state ("completed Plan the offsite"), drawn as the task itself: its box in the state
+// the line left it in (the line's icon, main/timeline.js ICON) and its title. Nil for any other line: an edit, a meeting.
+// Android's Row.asTask (GlimpseTest) is the same.
+extension Glimpse.Row {
+    private static let stateOfIcon = ["apply": "closed", "tlAccepted": "open", "tlLater": "not_now", "tlInbox": "proposed"]
+    func asTask() -> Glimpse.Row? {
+        guard let uri = timeline?.uri, Glimpse.kind(uri) == "text", let state = Self.stateOfIcon[icon ?? ""] else { return nil }
+        return Glimpse.Row(id: uri, text: nil, title: segments?.last { $0.content == true }?.text ?? words, segments: nil, icon: nil, stateType: state,
+                           subtext: nil, start: nil, sensitive: sensitive, children: nil, timeline: nil)
+    }
 }
 
 // Today's Tasks, each a whole line: its box and its words; a tap opens the task
@@ -165,8 +218,9 @@ struct TodayTasks: View {
             else if tasks.isEmpty { Note(words: "Nothing pinned to today.") }
             else {
                 ForEach(Array(tasks.prefix(family == .systemLarge ? 9 : 3).enumerated()), id: \.offset) { _, task in
-                    Link(destination: URL(string: "orbital:" + task.id)!) {
-                        HStack(spacing: 10) { TaskBox(state: task.stateType); Words(row: task) }.frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                    HStack(spacing: 0) {
+                        Tick(task: task, room: 10)
+                        Link(destination: URL(string: "orbital:" + task.id)!) { Words(row: task).frame(maxWidth: .infinity, minHeight: 30, alignment: .leading) }
                     }
                 }
             }
@@ -177,35 +231,60 @@ struct TodayTasks: View {
     }
 }
 
-// The Timeline as the app draws it (Timeline.swift): Now and Today's Tasks, the free time, Upcoming meetings, a line,
-// then what happened under each day, the tasks an entry brought hanging under it, on one rail; as much as fits
+// The Timeline as the app draws it (Timeline.swift), in two widgets: Now and Today's Tasks, the free time and Upcoming
+// meetings (ahead); or what happened under each day, the tasks an entry brought hanging under it (activity); on one
+// rail, as much as fits
 struct RailTimeline: View {
+    enum Part { case ahead, activity }
     let entry: Entry
+    let part: Part
+    @Environment(\.widgetFamily) private var family
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Bar(title: "Timeline")
+            Bar(title: part == .ahead ? "Today" : "Activity", plus: part == .ahead)
             if let glimpse = entry.glimpse {
-                let stops = Self.stops(glimpse, entry.date, entry.open)
-                if stops.isEmpty { Note(words: "Nothing yet. Changes to your tasks, new Inbox tasks and your meetings show up here.") }
-                ForEach(stops.prefix(13)) { $0 }
+                let stops = Self.stops(glimpse, entry.date, part)
+                if stops.isEmpty { Note(words: part == .ahead ? "Nothing pinned to today, and no meetings to come." : "Nothing yet. Changes to your tasks, new Inbox tasks and your meetings show up here.") }
+                ForEach(Self.fit(stops, family == .systemLarge ? 312 : 100)) { $0 }
             } else {
-                Note(words: "Open Orbital to see your Timeline here.")
+                Note(words: part == .ahead ? "Open Orbital to see today's tasks and meetings here." : "Open Orbital to see what happened here.")
             }
             Spacer(minLength: 0)
         }
         .containerBackground(Color.page, for: .widget)
+        .widgetURL(URL(string: "orbital:timeline"))
     }
 
-    static func stops(_ g: Glimpse, _ now: Date, _ open: Set<String>) -> [Stop] {
+    static func stops(_ g: Glimpse, _ now: Date, _ part: Part) -> [Stop] {
         var out: [Stop] = []
         func rail(_ stop: Stop) { var stop = stop; stop.first = !out.contains { $0.heading == nil && !$0.line }; out.append(stop) }
         func link(_ id: String?) -> URL? { id.flatMap { URL(string: "orbital:" + $0) } }
         func tasks(_ list: [Glimpse.Row]) { for task in list { rail(Stop(task: task, opens: link(task.id))) } }
         func meeting(_ m: Glimpse.Row, label: String, mark: (String, String?)?, glyph: String?) {
-            let id = m.timeline?.uri ?? m.id, docs = g.docs?[id] ?? []
-            rail(Stop(label: label, mark: mark, row: m, glyph: glyph, quiet: m.timeline?.tone == "faint", opens: link(id), toggle: docs.isEmpty ? nil : id, opened: open.contains(id)))
-            if open.contains(id) { for doc in docs { rail(Stop(row: doc, glyph: "doc", opens: link(doc.id))) } }
+            rail(Stop(label: label, mark: mark, row: m, glyph: glyph, quiet: m.timeline?.tone == "faint", opens: link(m.timeline?.uri ?? m.id)))
+        }
+        if part == .activity { // what happened, under each day, each task once (Glimpse.activity)
+            for (title, entries) in g.activity(now) {
+                out.append(Stop(heading: title))
+                for (e, added) in entries {
+                    let mark = (Self.marker(e.icon), e.timeline?.recording == true ? "live" : e.timeline?.tone)
+                    let time = e.timeline?.time ?? ""
+                    if Glimpse.kind(e.timeline?.uri) == "event" { meeting(e, label: time, mark: mark, glyph: nil); tasks(added) }
+                    else if let first = added.first {
+                        // tasks added: the first on the time's line, its marker saying who added it, the rest under it
+                        rail(Stop(label: time, mark: mark, task: first, opens: link(first.id)))
+                        tasks(Array(added.dropFirst()))
+                    } else if let task = e.asTask() {
+                        // a task's state changed: the task itself, the marker says what happened
+                        rail(Stop(label: time, mark: mark, task: task, opens: link(task.id)))
+                    } else {
+                        // anything else: its title, the marker says what (Words brief)
+                        rail(Stop(label: time, mark: mark, row: e, quiet: e.timeline?.tone == "faint", opens: link(e.timeline?.uri), brief: true))
+                    }
+                }
+            }
+            return out
         }
         if let today = g.today {
             rail(Stop(label: "Now", mark: ("todayTasks", "new"), words: "Today's Tasks"))
@@ -219,18 +298,13 @@ struct RailTimeline: View {
             rail(Stop(mark: ("calendar", nil), words: "Upcoming meetings"))
             for m in upcoming { meeting(m, label: m.subtext?.components(separatedBy: "–").first ?? "", mark: nil, glyph: m.icon == "pinRoute" ? "pinRoute" : "calendar") }
         }
-        let days = g.days(now)
-        if !out.isEmpty, !days.isEmpty { out.append(Stop(line: true)) }
-        for (title, entries) in days {
-            out.append(Stop(heading: title))
-            for e in entries {
-                let mark = (Self.marker(e.icon), e.timeline?.recording == true ? "live" : e.timeline?.tone)
-                if Glimpse.kind(e.timeline?.uri) == "event" { meeting(e, label: e.timeline?.time ?? "", mark: mark, glyph: nil) }
-                else { rail(Stop(label: e.timeline?.time ?? "", mark: mark, row: e, quiet: e.timeline?.tone == "faint", opens: link(e.timeline?.uri))) }
-                tasks(e.children ?? [])
-            }
-        }
         return out
+    }
+
+    // as many stops as fit the widget's height: a line 24, a day's heading 18, the line under what is to come 13
+    static func fit(_ stops: [Stop], _ height: CGFloat) -> [Stop] {
+        var used: CGFloat = 0
+        return Array(stops.prefix { stop in used += stop.heading != nil ? 18 : stop.line ? 13 : 24; return used <= height })
     }
 
     // the rail's marker for a row's icon (main/timeline.js ICON, Timeline.swift Marker): a meeting by its calendar
@@ -243,7 +317,7 @@ struct RailTimeline: View {
 }
 
 // One stop on the rail, a day's heading, or the line under what is still to come: the time, the marker on a line through
-// the markers' middle, what happened; a meeting with documents ends in its chevron
+// the markers' middle, what happened
 struct Stop: View, Identifiable {
     var id = UUID()
     var label = ""
@@ -257,34 +331,27 @@ struct Stop: View, Identifiable {
     var words: String? = nil // words of the widget's own: Today's Tasks, Upcoming meetings, the free time
     var quiet = false
     var opens: URL? = nil
-    var toggle: String? = nil // the meeting whose documents the chevron shows
-    var opened = false
+    var brief = false // an Activity line: the node's title first (Words)
+    @Environment(\.widgetRenderingMode) private var mode
 
     var body: some View {
         if let heading {
-            Text(heading).font(.subheadline.weight(.medium)).foregroundStyle(Color.grey).frame(height: 24).padding(.leading, 8)
+            // smaller than a line, so more of what happened fits
+            Text(heading).font(.caption.weight(.semibold)).foregroundStyle(Paint.grey.on(mode)).frame(height: 18, alignment: .bottom).padding(.leading, 8)
         } else if line {
-            Rectangle().fill(Color.rule).frame(height: 1).padding(.vertical, 6).padding(.leading, 8)
+            Rectangle().fill(Paint.rule.on(mode)).frame(height: 1).padding(.vertical, 6).padding(.leading, 8)
         } else {
+            let target = opens ?? URL(string: "orbital:timeline")!
             HStack(spacing: 0) {
-                Link(destination: opens ?? URL(string: "orbital:timeline")!) {
+                Link(destination: target) {
                     HStack(spacing: 8) {
-                        Text(label).font(.caption.monospacedDigit()).foregroundStyle(Color.grey).lineLimit(1).frame(width: 40, alignment: .trailing)
-                        ZStack {
-                            Rectangle().fill(Color.rule).frame(width: 1).padding(.top, first ? 12 : 0)
-                            if let mark { Marker(glyph: mark.0, tone: mark.1) }
-                        }.frame(width: 20)
-                        content
-                        Spacer(minLength: 0)
+                        Text(label).font(.caption.monospacedDigit()).foregroundStyle(Paint.grey.on(mode)).lineLimit(1).frame(width: 40, alignment: .trailing)
+                        Rail(first: first, mark: mark)
                     }
+                    .padding(.trailing, 8)
                 }
-                if let toggle {
-                    Button(intent: ShowDocuments(meeting: toggle)) {
-                        Image(systemName: opened ? "chevron.up" : "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(Color.grey).frame(width: 30, height: 24)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(opened ? "Hide documents" : "Show documents")
-                }
+                if let task { Tick(task: task, room: 8) }
+                Link(destination: target) { HStack(spacing: 0) { content; Spacer(minLength: 0) } }
             }
             .frame(height: 24)
         }
@@ -292,24 +359,63 @@ struct Stop: View, Identifiable {
 
     @ViewBuilder private var content: some View {
         if let task {
-            HStack(spacing: 8) { TaskBox(state: task.stateType); Words(row: task) }
+            Words(row: task)
         } else if let row {
-            HStack(spacing: 6) { if let glyph { GlyphImage(name: glyph, size: 14).foregroundStyle(Color.grey) }; Words(row: row, quiet: quiet) }
+            HStack(spacing: 6) { if let glyph { GlyphImage(name: glyph, size: 14).foregroundStyle(Paint.grey.on(mode)) }; Words(row: row, quiet: quiet, brief: brief) }
         } else if let words {
-            Text(words).font(.subheadline).foregroundStyle(quiet ? Color.grey : Color.ink).lineLimit(1)
+            Text(words).font(.subheadline).foregroundStyle((quiet ? Paint.grey : Paint.ink).on(mode)).lineLimit(1)
         }
+    }
+}
+
+// the rail through the markers' middle, left out where a marker sits: nothing is laid behind a marker to hide it, as on
+// a tinted or clear Home Screen iOS draws everything in its one tint, and a disc in the page's colour came out solid
+struct Rail: View {
+    let first: Bool // the line starts at the first marker, as the app's does
+    let mark: (String, String?)?
+    @Environment(\.widgetRenderingMode) private var mode
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                Rectangle().frame(width: 1, height: mark == nil ? 12 : 2).opacity(first ? 0 : 1)
+                Spacer(minLength: mark == nil ? 0 : 20)
+                Rectangle().frame(width: 1, height: mark == nil ? 12 : 2)
+            }
+            .foregroundStyle(Paint.rule.on(mode))
+            if let mark { Marker(glyph: mark.0, tone: mark.1) }
+        }
+        .frame(width: 20, height: 24)
+    }
+}
+
+// a task's box: a tap opens the app, which ticks it (or unticks a done one) and writes it to Tana at once (Shell.swift)
+struct Tick: View {
+    let task: Glimpse.Row
+    let room: CGFloat // between the box and the words, part of what a finger can tap
+
+    var body: some View {
+        let done = task.stateType == "closed"
+        Link(destination: URL(string: (done ? "orbital:uncheck:" : "orbital:check:") + task.id)!) {
+            TaskBox(state: task.stateType).frame(width: 16 + room, height: 30, alignment: .leading).contentShape(Rectangle())
+        }
+        .accessibilityLabel((done ? "Mark as not done" : "Mark as done") + (task.sensitive == true ? "" : ", " + task.words)) // never a sensitive one's words
     }
 }
 
 // the widget's bar: its title, and + for Quick Add
 struct Bar: View {
     let title: String
+    var plus = true
+    @Environment(\.widgetRenderingMode) private var mode
     var body: some View {
         HStack {
-            Text(title).font(.headline).foregroundStyle(Color.ink).lineLimit(1)
+            Text(title).font(.headline).foregroundStyle(Paint.ink.on(mode)).lineLimit(1)
             Spacer()
-            Link(destination: URL(string: "orbital:add")!) { Image(systemName: "plus").font(.body.weight(.medium)).foregroundStyle(Color.ink) }
-                .accessibilityLabel("Quick Add Task")
+            if plus {
+                Link(destination: URL(string: "orbital:add")!) { Image(systemName: "plus").font(.body.weight(.medium)).foregroundStyle(Paint.ink.on(mode)) }
+                    .accessibilityLabel("Quick Add Task")
+            }
         }
         .padding(.bottom, 6)
     }
@@ -317,7 +423,8 @@ struct Bar: View {
 
 struct Note: View {
     let words: String
-    var body: some View { Text(words).font(.subheadline).foregroundStyle(Color.grey) }
+    @Environment(\.widgetRenderingMode) private var mode
+    var body: some View { Text(words).font(.subheadline).foregroundStyle(Paint.grey.on(mode)) }
 }
 
 // a row's words, a done task struck; a sensitive one a bar, as the app draws it until a shake (its words are never in
@@ -325,42 +432,79 @@ struct Note: View {
 struct Words: View {
     let row: Glimpse.Row
     var quiet = false
+    // brief: an Activity line, its sentence (main/timeline.js "Sam edited Onboarding flow") cut to the node's title, as
+    // the marker beside it says what happened. VoiceOver still reads the whole sentence.
+    var brief = false
+    @Environment(\.widgetRenderingMode) private var mode
     var body: some View {
         if row.sensitive == true {
             RoundedRectangle(cornerRadius: 3).fill(Color.barred).frame(width: 64 + CGFloat(row.id.utf8.reduce(0) { $0 + Int($1) } % 56), height: 9).accessibilityLabel("Sensitive")
+        } else if brief, let title = row.segments?.last(where: { $0.content == true })?.text {
+            Text(title).font(.subheadline).foregroundStyle((quiet ? Paint.grey : Paint.ink).on(mode)).lineLimit(1).accessibilityLabel(row.words)
         } else {
             let done = row.stateType == "closed"
-            Text(row.words).font(.subheadline).strikethrough(done).foregroundStyle(quiet || done ? Color.grey : Color.ink).lineLimit(1)
+            Text(row.words).font(.subheadline).strikethrough(done).foregroundStyle((quiet || done ? Paint.grey : Paint.ink).on(mode)).lineLimit(1)
         }
     }
 }
 
-// the app's box (Timeline.swift CheckBox): grey, green with a tick once done, a dashed outline for an Inbox task
+// the app's box (Timeline.swift CheckBox): grey, green with a tick once done, a dashed outline for an Inbox task; drawn
+// in outline on a tinted or clear Home Screen, where a filled box would be solid tint
 struct TaskBox: View {
     let state: String?
+    @Environment(\.widgetRenderingMode) private var mode
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 4.5, style: .continuous)
         ZStack {
-            switch state {
-            case "proposed": shape.strokeBorder(Color.pair(0xc8c8c8, 0x5d6467), style: StrokeStyle(lineWidth: 1.2, dash: [2.6, 2.4]))
-            case "closed": shape.fill(Color.pair(0x6fae82, 0x5b976c)); GlyphImage(name: "applyDone", size: 10).foregroundStyle(.white)
-            default: shape.fill(Color.pair(0xe4e4e4, 0x3a3e40))
+            if mode == .fullColor {
+                switch state {
+                case "proposed": shape.strokeBorder(Color.pair(0xc8c8c8, 0x5d6467), style: StrokeStyle(lineWidth: 1.2, dash: [2.6, 2.4]))
+                case "closed": shape.fill(Color.pair(0x6fae82, 0x5b976c)); GlyphImage(name: "applyDone", size: 10).foregroundStyle(.white)
+                default: shape.fill(Color.pair(0xe4e4e4, 0x3a3e40))
+                }
+            } else {
+                switch state {
+                case "proposed": shape.strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.2, dash: [2.6, 2.4]))
+                case "closed": shape.strokeBorder(.secondary, lineWidth: 1.2); GlyphImage(name: "applyDone", size: 10).foregroundStyle(.primary)
+                default: shape.strokeBorder(.secondary, lineWidth: 1.2)
+                }
             }
         }
         .frame(width: 16, height: 16)
     }
 }
 
-// finished work a green disc with a white check; a new task or a meeting with no write-up quieter; one being recorded blue
+// finished work a green disc with a white check (a ring round the check when tinted); a new task or a meeting with no
+// write-up quieter; one being recorded blue
 struct Marker: View {
     let glyph: String
     let tone: String?
+    @Environment(\.widgetRenderingMode) private var mode
     var body: some View {
-        if tone == "done" {
+        if tone == "done", mode == .fullColor {
             GlyphImage(name: "applyDone", size: 10).foregroundStyle(.white).frame(width: 18, height: 18).background(Circle().fill(Color.done))
+        } else if tone == "done" {
+            GlyphImage(name: "applyDone", size: 10).foregroundStyle(.primary).frame(width: 18, height: 18).overlay(Circle().strokeBorder(.secondary, lineWidth: 1.2))
         } else {
-            GlyphImage(name: glyph, size: 16).foregroundStyle(tone == "live" ? Color.blue : tone == "new" || tone == "faint" ? Color.faint : Color.grey)
-                .frame(width: 20, height: 20).background(Circle().fill(Color.page)) // the rail passes behind it
+            let paint = tone == "live" ? (mode == .fullColor ? AnyShapeStyle(Color.blue) : AnyShapeStyle(.primary)) : (tone == "new" || tone == "faint" ? Paint.faint : Paint.grey).on(mode)
+            GlyphImage(name: glyph, size: 16).foregroundStyle(paint).frame(width: 20, height: 20)
+        }
+    }
+}
+
+// the app's colours where the widget is drawn in full colour; on a tinted or clear Home Screen iOS draws every colour in
+// its one tint, so there the levels are the system's own, which it draws at their strengths
+enum Paint {
+    case ink, grey, faint, rule
+    func on(_ mode: WidgetRenderingMode) -> AnyShapeStyle {
+        if mode == .fullColor {
+            let color: Color = switch self { case .ink: .ink; case .grey: .grey; case .faint: .faint; case .rule: .rule }
+            return AnyShapeStyle(color)
+        }
+        switch self {
+        case .ink: return AnyShapeStyle(.primary)
+        case .grey: return AnyShapeStyle(.secondary)
+        case .faint, .rule: return AnyShapeStyle(.tertiary)
         }
     }
 }

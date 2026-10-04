@@ -31,7 +31,9 @@ struct Row: Codable, Identifiable {
     let group: String? // the section a saved search files it under (ios/engine/arrange.js)
     let glyph: String? // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
 
-    struct Segment: Codable { let text: String?; let marks: Marks?; let mention: Ref? }
+    // content: the node's own words in a sentence of the app's (main/timeline.js), person: a person's name; the widgets'
+    // Activity draws a line from them, title first (ios/Widgets Brief)
+    struct Segment: Codable { let text: String?; let marks: Marks?; let mention: Ref?; var content: Bool? = nil; var person: Bool? = nil }
     struct Marks: Codable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
     struct Ref: Codable { let uri: String; var label: String? }
     struct Chat: Codable { let mine: Bool?; let status: Bool?; let streaming: Bool?; let author: String? }

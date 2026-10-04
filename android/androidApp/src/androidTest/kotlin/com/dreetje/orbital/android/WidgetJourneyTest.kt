@@ -40,17 +40,16 @@ class WidgetJourneyTest {
         device.pressHome()
     }
 
-    @Test fun aMeetingsDocumentsOpenInPlaceOnTheTimelineAndOneOpensInTheApp() {
-        pinned(TimelineWidgetReceiver::class.java)
-        device.wait(Until.findObject(By.desc("Show documents")), 20_000).also { shot("timeline") }.click()
-        device.wait(Until.findObject(By.text("Offsite planning")), 10_000).also { shot("timeline-documents") }.click()
-        check(device.wait(Until.hasObject(By.text("Goals")), 15_000)) { "the document opens in the app" }
-        shot("document-in-the-app")
+    @Test fun aMeetingOnTheTodayWidgetOpensInTheApp() {
+        pinned(AheadWidgetReceiver::class.java)
+        device.wait(Until.findObject(By.text("Design review")), 20_000).also { shot("today") }.click()
+        check(device.wait(Until.hasObject(By.text("Offsite planning")), 15_000)) { "the meeting opens in the app, its documents on its page" }
+        shot("meeting-in-the-app")
     }
 
-    @Test fun theTimelineWidgetScrollsToWhatHappenedEarlier() {
-        pinned(TimelineWidgetReceiver::class.java)
-        val rail = device.wait(Until.findObject(By.clazz("android.widget.ListView").hasDescendant(By.text("Upcoming meetings"))), 20_000)
+    @Test fun theActivityWidgetScrollsToWhatHappenedEarlier() {
+        pinned(ActivityWidgetReceiver::class.java)
+        val rail = device.wait(Until.findObject(By.clazz("android.widget.ListView").hasDescendant(By.text("Rotate the staging API keys"))), 20_000)
         check(rail.scrollUntil(Direction.DOWN, Until.findObject(By.text("Retro, sprint 42"))) != null) { "further down the rail" }
         shot("timeline-scrolled")
     }
@@ -61,5 +60,16 @@ class WidgetJourneyTest {
         shot("todays-tasks")
         device.findObject(By.desc("Quick Add Task")).click()
         check(device.wait(Until.hasObject(By.text("Quick Add")), 15_000)) { "Quick Add opens in the app" }
+    }
+
+    // a task's box opens the app, which ticks it at once; the widget, drawn again from what the app kept, shows it done
+    @Test fun aTasksBoxOnTheWidgetTicksItInTheApp() {
+        pinned(TodayWidgetReceiver::class.java)
+        device.wait(Until.findObject(By.desc("Mark as done, Draft the Q4 hiring plan")), 20_000).also { shot("todays-tasks-box") }.click()
+        check(device.wait(Until.hasObject(By.text("Today's Tasks")), 15_000)) { "the app opens on its Timeline" }
+        Thread.sleep(2000) // kept half a second after the tick settles
+        device.pressHome()
+        check(device.wait(Until.hasObject(By.desc("Mark as not done, Draft the Q4 hiring plan")), 15_000)) { "the widget shows it ticked" }
+        shot("todays-tasks-ticked")
     }
 }

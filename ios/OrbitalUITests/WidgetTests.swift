@@ -25,7 +25,7 @@ final class WidgetTests: XCTestCase {
     }
 
     // edit the home screen, Add Widget, Orbital, the gallery's page for the widget (Today's Tasks small, medium and large,
-    // then the Timeline), Add Widget, Done
+    // then Today's Tasks and Upcoming Meetings medium and large, then Activity medium and large), Add Widget, Done
     private func add(page: Int) throws {
         springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).press(forDuration: 1.6)
         found(springboard.buttons["Edit"], "Edit").tap()
@@ -54,17 +54,21 @@ final class WidgetTests: XCTestCase {
         XCTAssert(app.wait(for: .runningForeground, timeout: 15), "the task opens in the app")
     }
 
-    func testTheTimelineOpensAMeetingsDocumentsInPlace() throws {
-        try add(page: 3)
-        // which meetings are open is kept by the extension, so one opened in an earlier run is open still: hidden first
-        if springboard.buttons["Hide documents"].waitForExistence(timeout: 5) {
-            springboard.buttons["Hide documents"].tap()
-            XCTAssert(springboard.buttons["Show documents"].waitForExistence(timeout: 15), "its documents hidden again")
-        }
-        found(springboard.buttons["Show documents"], "a meeting's chevron").tap()
-        let doc = found(springboard.buttons.containing(NSPredicate(format: "label CONTAINS 'Offsite planning'")).firstMatch, "the meeting's document")
-        doc.tap()
+    // a task's box opens the app, which ticks it at once: its box in the app says Completed
+    func testATasksBoxOnTheWidgetTicksItInTheApp() throws {
+        try add(page: 1)
+        // the first: a widget added by an earlier run may still be on the home screen
+        found(springboard.buttons.matching(NSPredicate(format: "label == %@", "Mark as done, Draft the Q4 hiring plan")).firstMatch, "the task's box").tap()
+        XCTAssert(app.wait(for: .runningForeground, timeout: 15), "the app opens")
+        let ticked = app.buttons.matching(NSPredicate(format: "label == %@ AND value == %@", "Draft the Q4 hiring plan", "Completed")).firstMatch
+        XCTAssert(ticked.waitForExistence(timeout: 15), "the task ticked in the app")
+    }
+
+    func testAMeetingOnTheTodayWidgetOpensInTheApp() throws {
+        try add(page: 4) // large: Design review, a meeting to come with a document, is on it
+        XCTAssertFalse(springboard.buttons["Show documents"].exists, "nothing opens in place: a widget does not expand")
+        found(springboard.buttons.containing(NSPredicate(format: "label CONTAINS 'Design review'")).firstMatch, "the meeting").tap()
         XCTAssert(app.wait(for: .runningForeground, timeout: 15))
-        XCTAssert(app.staticTexts["Goals"].waitForExistence(timeout: 15), "the document, open in the app")
+        XCTAssert(app.staticTexts["Offsite planning"].waitForExistence(timeout: 15), "the meeting open in the app, its documents on its page")
     }
 }

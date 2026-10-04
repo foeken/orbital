@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -19,13 +18,9 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.action.Action
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.action.ActionCallback
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
@@ -33,10 +28,8 @@ import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.LazyListScope
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
-import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -58,7 +51,6 @@ import androidx.glance.text.TextDecoration
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.dreetje.orbital.Glimpse
-import com.dreetje.orbital.Lists
 import com.dreetje.orbital.Row
 import com.dreetje.orbital.Times
 import com.dreetje.orbital.json
@@ -74,10 +66,12 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import androidx.glance.color.ColorProvider as DayNight
 
-// The iPhone's ios/Widgets: two widgets over what the app last read (Glimpse, kept after every read; a widget cannot run
-// the engine). On the home screen, Today's Tasks across the widget's whole width; on the Galaxy Z Flip's cover screen,
-// the Timeline on its rail, scrolled as the app's is, a meeting's documents opened in place by its chevron. A row
-// opens its node in the app, + opens Quick Add, the title the Timeline.
+// The iPhone's ios/Widgets: three widgets over what the app last read (Glimpse, kept after every read; a widget cannot
+// run the engine). On the home screen, Today's Tasks across the widget's whole width; on the Galaxy Z Flip's cover
+// screen, the Timeline on its rail in two, scrolled as the app's is: what is ahead today (today's tasks and the meetings
+// to come) and Activity, what happened. A row
+// opens its node in the app, + opens Quick Add, the title the Timeline; a task's box opens the app too, which ticks it
+// and writes it to Tana at once (MainActivity tick), as the iPhone's does.
 object Widgets {
     private const val KEY = "glimpse"
     private val glimpse = MutableStateFlow<Glimpse?>(null)
@@ -93,7 +87,8 @@ object Widgets {
         Files(context).set(KEY, read?.let { json.encodeToString(it) })
         synchronized(this) { loaded = true; glimpse.value = read }
         TodayWidget().updateAll(context)
-        TimelineWidget().updateAll(context)
+        AheadWidget().updateAll(context)
+        ActivityWidget().updateAll(context)
     }
 }
 
@@ -104,10 +99,17 @@ class TodayWidget : GlanceAppWidget() {
     }
 }
 
-class TimelineWidget : GlanceAppWidget() {
+class AheadWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) = provideContent {
         val glimpse by remember { Widgets.glimpse(context) }.collectAsState()
-        RailTimeline(glimpse)
+        RailTimeline(glimpse, Part.Ahead)
+    }
+}
+
+class ActivityWidget : GlanceAppWidget() {
+    override suspend fun provideGlance(context: Context, id: GlanceId) = provideContent {
+        val glimpse by remember { Widgets.glimpse(context) }.collectAsState()
+        RailTimeline(glimpse, Part.Activity)
     }
 }
 
@@ -115,22 +117,12 @@ class TodayWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = TodayWidget()
 }
 
-class TimelineWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = TimelineWidget()
+class AheadWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = AheadWidget()
 }
 
-// A meeting's chevron: its documents shown under it in this widget, or hidden again (kept per widget, Glance's state)
-class ShowDocuments : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val id = parameters[MEETING] ?: return
-        updateAppWidgetState(context, glanceId) { it[OPEN] = it[OPEN].orEmpty().let { open -> if (id in open) open - id else open + id } }
-        TimelineWidget().update(context, glanceId)
-    }
-
-    companion object {
-        val MEETING = ActionParameters.Key<String>("meeting")
-        val OPEN = stringSetPreferencesKey("open")
-    }
+class ActivityWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = ActivityWidget()
 }
 
 // Today's Tasks, each a whole line: its box and its words; a tap opens the task
@@ -142,9 +134,8 @@ internal fun TodayTasks(glimpse: Glimpse?) = Frame("Today's Tasks") {
         today.isNullOrEmpty() -> Note("Nothing pinned to today.")
         else -> LazyColumn {
             items(today) { task ->
-                Row(GlanceModifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp).clickable(open(LocalContext.current, task.id)), verticalAlignment = Alignment.CenterVertically) {
-                    TaskBox(task.stateType)
-                    Spacer(GlanceModifier.width(12.dp))
+                Row(GlanceModifier.fillMaxWidth().padding(end = 16.dp).clickable(open(LocalContext.current, task.id)), verticalAlignment = Alignment.CenterVertically) {
+                    Tick(task, GlanceModifier.padding(start = 16.dp, end = 12.dp, top = 9.dp, bottom = 9.dp))
                     Words(task)
                 }
             }
@@ -152,37 +143,38 @@ internal fun TodayTasks(glimpse: Glimpse?) = Frame("Today's Tasks") {
     }
 }
 
-// The Timeline as the app draws it (TimelineScreen): Now and Today's Tasks, the free time, Upcoming meetings, a line,
-// then what happened under each day, the tasks an entry brought hanging under it, all on one rail, scrolled
+// The Timeline as the app draws it (TimelineScreen), in two widgets: Now and Today's Tasks, the free time and Upcoming
+// meetings (Ahead); or what happened under each day, the tasks an entry brought hanging under it (Activity, with no +:
+// nothing is added there); on one rail, scrolled
+enum class Part { Ahead, Activity }
+
 @Composable
-internal fun RailTimeline(glimpse: Glimpse?) = Frame("Timeline") {
-    if (glimpse == null) return@Frame Note("Open Orbital to see your Timeline here.", GlanceModifier.clickable(openApp(LocalContext.current)))
+internal fun RailTimeline(glimpse: Glimpse?, part: Part) = Frame(if (part == Part.Ahead) "Today" else "Activity", plus = part == Part.Ahead) {
+    val ahead = part == Part.Ahead
+    if (glimpse == null) return@Frame Note(if (ahead) "Open Orbital to see today's tasks and meetings here." else "Open Orbital to see what happened here.", GlanceModifier.clickable(openApp(LocalContext.current)))
     val context = LocalContext.current
     val now = Clock.System.now()
-    val open = currentState(ShowDocuments.OPEN).orEmpty()
     val scale = context.resources.configuration.fontScale
     val line = (14 + 18 * scale).dp // one line a stop, at this phone's font size
     val time = (2 + 34 * scale).dp // the time column, as wide as "00:00"
-    val today = glimpse.today
-    val free = glimpse.free(now)
-    val upcoming = glimpse.upcoming(now)
-    val days = Lists.days(glimpse.rows, now)
-    if (today == null && free == null && upcoming.isEmpty() && days.isEmpty()) return@Frame Note("Nothing yet. Changes to your tasks, new Inbox tasks and your meetings show up here.")
+    val today = if (ahead) glimpse.today else null
+    val free = if (ahead) glimpse.free(now) else null
+    val upcoming = if (ahead) glimpse.upcoming(now) else emptyList()
+    val days = if (ahead) emptyList() else glimpse.activity(now)
+    if (today == null && free == null && upcoming.isEmpty() && days.isEmpty()) {
+        return@Frame Note(if (ahead) "Nothing pinned to today, and no meetings to come." else "Nothing yet. Changes to your tasks, new Inbox tasks and your meetings show up here.")
+    }
     LazyColumn {
         var first = true
-        fun LazyListScope.stop(label: String, opens: Action, marker: (@Composable () -> Unit)?, toggle: Action? = null, opened: Boolean = false, content: @Composable () -> Unit) {
+        fun LazyListScope.stop(label: String, opens: Action, marker: (@Composable () -> Unit)?, content: @Composable () -> Unit) {
             val top = first
             first = false
-            item { RailRow(label, opens, line, time, top, marker, toggle, opened, content) }
+            item { RailRow(label, opens, line, time, top, marker, content) }
         }
-        fun LazyListScope.meeting(m: Row, label: String, marker: (@Composable () -> Unit)?, content: @Composable () -> Unit) {
-            val docs = glimpse.docs[m.timeline?.uri ?: m.id].orEmpty()
-            val id = m.timeline?.uri ?: m.id
-            stop(label, open(context, id), marker, docs.takeIf { it.isNotEmpty() }?.let { actionRunCallback<ShowDocuments>(actionParametersOf(ShowDocuments.MEETING to id)) }, id in open, content)
-            if (id in open) docs.forEach { d -> stop("", open(context, d.id), null) { Row(verticalAlignment = Alignment.CenterVertically) { Glyph(Glyphs.ofUri(d.id), 16.dp, paint { it.secondary }); Spacer(GlanceModifier.width(8.dp)); Words(d) } } }
-        }
+        fun LazyListScope.meeting(m: Row, label: String, marker: (@Composable () -> Unit)?, content: @Composable () -> Unit) =
+            stop(label, open(context, m.timeline?.uri ?: m.id), marker, content)
         fun LazyListScope.tasks(list: List<Row>) = list.forEach { t ->
-            stop("", open(context, t.id), null) { Row(verticalAlignment = Alignment.CenterVertically) { TaskBox(t.stateType); Spacer(GlanceModifier.width(10.dp)); Words(t) } }
+            stop("", open(context, t.id), null) { Row(verticalAlignment = Alignment.CenterVertically) { Tick(t, GlanceModifier.padding(end = 10.dp).fillMaxHeight()); Words(t) } }
         }
         if (today != null) {
             stop("Now", openApp(context), { Marker("todayTasks", "new") }) { Words("Today's Tasks") }
@@ -199,26 +191,37 @@ internal fun RailTimeline(glimpse: Glimpse?) = Frame("Timeline") {
         }
         if ((today != null || free != null || upcoming.isNotEmpty()) && days.isNotEmpty()) item { Divider() }
         days.forEach { (title, entries) ->
-            item { Heading(title, line) }
-            entries.forEach { e ->
+            item { Heading(title) }
+            entries.forEach { (e, added) ->
                 val marker: @Composable () -> Unit = { Marker(Glyphs.marker(e.icon), if (e.timeline?.recording == true) "live" else e.tone) }
                 val label = e.timeline?.time ?: ""
-                if (kindOf(e.timeline?.uri ?: "") == "event") meeting(e, label, marker) { Words(e, quiet = e.tone == "faint") }
-                else stop(label, e.timeline?.uri?.let { open(context, it) } ?: openApp(context), marker) { Words(e, quiet = e.tone == "faint") }
-                tasks(e.children.orEmpty())
+                if (kindOf(e.timeline?.uri ?: "") == "event") { meeting(e, label, marker) { Words(e, quiet = e.tone == "faint") }; tasks(added) }
+                else if (added.isNotEmpty()) {
+                    // tasks added: the first on the time's line, its marker saying who added it, the rest under it
+                    val first = added.first()
+                    stop(label, open(context, first.id), marker) { Row(verticalAlignment = Alignment.CenterVertically) { Tick(first, GlanceModifier.padding(end = 10.dp).fillMaxHeight()); Words(first) } }
+                    tasks(added.drop(1))
+                }
+                // a task's state changed: the task itself, the marker says what happened (asTask)
+                else if (e.asTask() != null) {
+                    val task = e.asTask()!!
+                    stop(label, open(context, task.id), marker) { Row(verticalAlignment = Alignment.CenterVertically) { Tick(task, GlanceModifier.padding(end = 10.dp).fillMaxHeight()); Words(task) } }
+                }
+                // anything else: its title, the marker says what (Brief)
+                else stop(label, e.timeline?.uri?.let { open(context, it) } ?: openApp(context), marker) { Brief(e, quiet = e.tone == "faint") }
             }
         }
     }
 }
 
-// the widget: its bar (the title opens the app, + opens Quick Add), then what it shows, in the app's colours
+// the widget: its bar (the title opens the app, + opens Quick Add where there is one), then what it shows, in the app's colours
 @Composable
-private fun Frame(title: String, content: @Composable () -> Unit) {
+private fun Frame(title: String, plus: Boolean = true, content: @Composable () -> Unit) {
     val context = LocalContext.current
     Column(GlanceModifier.fillMaxSize().appWidgetBackground().cornerRadius(android.R.dimen.system_app_widget_background_radius).background(paint { it.page })) {
         Row(GlanceModifier.fillMaxWidth().height(48.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, GlanceModifier.defaultWeight().clickable(openApp(context)), style = TextStyle(paint { it.text }, 16.sp, FontWeight.Medium), maxLines = 1)
-            Box(GlanceModifier.size(44.dp).clickable(openApp(context, "add") { putExtra("add", true) }), contentAlignment = Alignment.Center) {
+            if (plus) Box(GlanceModifier.size(44.dp).clickable(openApp(context, "add") { putExtra("add", true) }), contentAlignment = Alignment.Center) {
                 Image(ImageProvider(R.drawable.add), "Quick Add Task", GlanceModifier.size(22.dp), colorFilter = ColorFilter.tint(paint { it.text }))
             }
         }
@@ -226,10 +229,9 @@ private fun Frame(title: String, content: @Composable () -> Unit) {
     }
 }
 
-// One stop on the rail: the time, the marker on a line through the markers' middle, what happened; a meeting with
-// documents ends in its chevron
+// One stop on the rail: the time, the marker on a line through the markers' middle, what happened
 @Composable
-private fun RailRow(label: String, opens: Action, height: Dp, time: Dp, first: Boolean, marker: (@Composable () -> Unit)?, toggle: Action?, opened: Boolean, content: @Composable () -> Unit) {
+private fun RailRow(label: String, opens: Action, height: Dp, time: Dp, first: Boolean, marker: (@Composable () -> Unit)?, content: @Composable () -> Unit) {
     Row(GlanceModifier.fillMaxWidth().height(height).padding(start = 12.dp, end = 4.dp).clickable(opens), verticalAlignment = Alignment.CenterVertically) {
         Text(label, GlanceModifier.width(time), style = TextStyle(paint { it.secondary }, 13.sp, textAlign = TextAlign.End), maxLines = 1)
         Spacer(GlanceModifier.width(10.dp))
@@ -239,9 +241,7 @@ private fun RailRow(label: String, opens: Action, height: Dp, time: Dp, first: B
         }
         Spacer(GlanceModifier.width(10.dp))
         Box(GlanceModifier.defaultWeight()) { content() }
-        if (toggle != null) Box(GlanceModifier.size(40.dp).clickable(toggle).semantics { contentDescription = if (opened) "Hide documents" else "Show documents" }, contentAlignment = Alignment.Center) {
-            Image(ImageProvider(if (opened) R.drawable.expand_less else R.drawable.expand_more), null, GlanceModifier.size(20.dp), colorFilter = ColorFilter.tint(paint { it.secondary }))
-        } else Spacer(GlanceModifier.width(10.dp))
+        Spacer(GlanceModifier.width(10.dp))
     }
 }
 
@@ -270,6 +270,17 @@ private fun TaskBox(state: String?) {
     }
 }
 
+// a task's box on a widget: a tap opens the app, which ticks it (or unticks a done one) and writes it to Tana at once
+// (MainActivity tick); the row around it opens the task
+@Composable
+private fun Tick(task: Row, modifier: GlanceModifier) {
+    val done = task.stateType == "closed"
+    val context = LocalContext.current
+    val tick = openApp(context, (if (done) "uncheck:" else "check:") + task.id) { putExtra("tick", task.id); putExtra("to", if (done) "open" else "closed") }
+    val said = (if (done) "Mark as not done" else "Mark as done") + if (task.sensitive == true) "" else ", " + task.words // never a sensitive one's words
+    Box(modifier.clickable(tick).semantics { contentDescription = said }, contentAlignment = Alignment.Center) { TaskBox(task.stateType) }
+}
+
 @Composable
 private fun Glyph(name: String, size: Dp, tint: ColorProvider) =
     Image(ImageProvider(glyphBitmap(name, 72)), null, GlanceModifier.size(size), colorFilter = ColorFilter.tint(tint))
@@ -286,9 +297,21 @@ private fun Words(row: Row, quiet: Boolean = false) {
     Box(GlanceModifier.width((72 + (row.id.hashCode() and 63)).dp).height(10.dp).cornerRadius(3.dp).background(paint { it.redacted }).semantics { contentDescription = "Sensitive" }) {}
 }
 
+// an Activity line: its sentence (main/timeline.js "Sam edited Onboarding flow") cut to the node's title, as the marker
+// beside it says what happened. TalkBack still reads the whole sentence.
 @Composable
-private fun Heading(title: String, height: Dp) =
-    Text(title, GlanceModifier.fillMaxWidth().height(height).padding(start = 20.dp, top = 6.dp), style = TextStyle(paint { it.secondary }, 14.sp, FontWeight.Medium), maxLines = 1)
+private fun Brief(row: Row, quiet: Boolean) {
+    val segments = row.segments.orEmpty() // Row is another module's: no smart cast on its fields
+    val title = segments.lastOrNull { it.content == true }?.text
+    if (row.sensitive == true || title == null) return Words(row, quiet)
+    val said = segments.joinToString("") { it.text ?: it.mention?.label ?: "" }
+    Box(GlanceModifier.semantics { contentDescription = said }) { Words(title, quiet) }
+}
+
+// a day's heading, smaller than a line so more of what happened fits
+@Composable
+private fun Heading(title: String) =
+    Text(title, GlanceModifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, bottom = 2.dp), style = TextStyle(paint { it.secondary }, 12.sp, FontWeight.Medium), maxLines = 1)
 
 @Composable
 private fun Divider() =

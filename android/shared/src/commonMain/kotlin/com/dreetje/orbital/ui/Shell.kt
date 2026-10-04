@@ -194,12 +194,13 @@ fun Shell(engine: Engine, start: Start = Start()) {
     }
     // an image's node, made: opened, as the desktop opens it
     LaunchedEffect(engine.made) { engine.made?.let { engine.made = null; push(it); show(false) } }
-    // a widget's tap with the app already open (Widgets.kt): Quick Add, or that node over the Timeline
+    // a widget's tap with the app already open (Widgets.kt): Quick Add, that node over the Timeline, or the Timeline
+    // itself (a task's box, ticked by MainActivity)
     LaunchedEffect(engine.widget) {
         val tapped = engine.widget ?: return@LaunchedEffect
         engine.widget = null
         settings = false
-        if (tapped == "add") adding = true else { adding = false; page = Menu.Timeline; path.clear(); push(tapped) }
+        if (tapped == "add") adding = true else { adding = false; page = Menu.Timeline; path.clear(); if (tapped != "timeline") push(tapped) }
         show(false)
     }
 

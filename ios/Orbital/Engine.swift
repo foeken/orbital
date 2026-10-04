@@ -363,10 +363,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func taskTypes() async -> [TaskType] {
         Self.isSample ? [] : (try? await call("return await orbital.taskTypes()", [:])) ?? []
     }
-    func createTask(_ title: String, type: String?, search: String? = nil, assignee: String? = nil, values: [String: Value] = [:]) async throws -> String {
+    // today: Quick Add's Pin to today, the made task pinned as a long press pins one; a task made but not pinned is not
+    // made again, it says so
+    func createTask(_ title: String, type: String?, search: String? = nil, assignee: String? = nil, values: [String: Value] = [:], today: Bool = false) async throws -> String {
         guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
         let id: String = try await call("return await orbital.createTask(title, type, search, assignee, values)", ["title": title, "type": type ?? NSNull(), "search": search ?? NSNull(),
                                                                                                         "assignee": assignee ?? NSNull(), "values": values.mapValues(\.json)])
+        if today {
+            do { let _: Bool = try await call("return await orbital.pin(id, on)", ["id": id, "on": true]) }
+            catch { self.error = "“\(title)” was added, but not pinned to today: " + error.localizedDescription }
+        }
         // a new task is yours alone: given to someone else, they are asked about as Assign to asks
         if assignee != nil, let access = await access(id), !access.hidden.isEmpty { asking = .init(id: id, access: access, shut: access.hidden, then: {}) }
         await refresh()
@@ -389,12 +395,12 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var adding = 0
     var unsent: [Draft] = []
     var made: String?
-    struct Draft { let title: String; let type: String?; let search: String?; let assignee: Member?; let values: [String: Value]; var why: String? }
+    struct Draft { let title: String; let type: String?; let search: String?; let assignee: Member?; let values: [String: Value]; var today = false; var why: String? }
     func add(_ draft: Draft) {
         adding += 1
         Task {
             defer { adding -= 1 }
-            do { _ = try await awake("Quick Add") { try await createTask(draft.title, type: draft.type, search: draft.search, assignee: draft.assignee?.id, values: draft.values) } } catch {
+            do { _ = try await awake("Quick Add") { try await createTask(draft.title, type: draft.type, search: draft.search, assignee: draft.assignee?.id, values: draft.values, today: draft.today) } } catch {
                 var kept = draft
                 kept.why = error.localizedDescription
                 unsent.append(kept)
@@ -542,17 +548,28 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         catch { states[id] = before; self.error = error.localizedDescription }
     }
 
+    // A widget's box (ios/Widgets): the task set to what the widget showed it becoming, drawn so at once and written as soon
+    // as the engine has connected (a cold start waits for it), put back with the reason if Tana refuses. Set outright,
+    // so a second tap on a widget not yet drawn again does not undo the first.
+    func tick(_ id: String, to next: String) async {
+        guard !demo else { return }
+        let before = states[id]
+        states[id] = next
+        ticked[id] = .now
+        defer { Task { await keepGlimpse() } } // the widgets drawn again with it
+        guard !Self.isSample else { return }
+        do { states[id] = try await call("return await orbital.toggle(id, to)", ["id": id, "to": next]) as String }
+        catch { states[id] = before; self.error = error.localizedDescription }
+    }
+
     func state(of task: Row) -> String {
         states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
     }
 
     // The widgets' Timeline (ios/Widgets; Glimpse.kt on Android): the rows on screen, a box ticked here ticked and what was
-    // deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget), and the documents of
-    // the meetings in it, left in the Keychain where the widgets read it, as the Share extension leaves what it shares.
-    // The documents are asked of Tana when a meeting first shows, then once in five minutes: a read follows every change.
-    struct Glimpse: Encodable { let read: Int64; let rows: [Row]; let docs: [String: [Row]] }
-    @ObservationIgnored private var meetingDocs: [String: [Row]] = [:]
-    @ObservationIgnored private var docsRead = Date.distantPast
+    // deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget), left in the Keychain
+    // where the widgets read it, as the Share extension leaves what it shares
+    struct Glimpse: Encodable { let read: Int64; let rows: [Row] }
 
     func keepGlimpse() async {
         func kept(_ list: [Row]?, today: Bool = false) -> [Row]? {
@@ -567,18 +584,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 return r
             } }
         }
-        let meetings = rows.flatMap { r in r.timeline?.upcoming == true ? (r.children ?? []).map(\.id) : [r.timeline?.uri].compactMap { $0 } }.filter { Glyph.kind(of: $0) == "event" }
-        if meetings.contains(where: { meetingDocs[$0] == nil }) || Date.now.timeIntervalSince(docsRead) > 300, let read = try? await docs(meetings) { meetingDocs = read; docsRead = .now }
-        let docs = meetings.reduce(into: [String: [Row]]()) { out, id in if let list = kept(meetingDocs[id]), !list.isEmpty { out[id] = list } }
-        guard let data = try? JSONEncoder().encode(Glimpse(read: Int64(Date.now.timeIntervalSince1970 * 1000), rows: kept(rows) ?? [], docs: docs)) else { return }
+        guard let data = try? JSONEncoder().encode(Glimpse(read: Int64(Date.now.timeIntervalSince1970 * 1000), rows: kept(rows) ?? [])) else { return }
         Keychain.save(data, "glimpse")
         WidgetCenter.shared.reloadAllTimelines()
-    }
-
-    // the documents each meeting owns (orbital.docs), as a meeting's page lists them, without opening the meetings
-    private func docs(_ ids: [String]) async throws -> [String: [Row]] {
-        if let s = Self.sample { return ids.reduce(into: [:]) { $0[$1] = s.pages[$1]?.rows ?? [] } }
-        return try await call("return await orbital.docs(ids)", ["ids": ids])
     }
 
     // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Timeline on the Galaxy Z Flip's cover screen, the Flex Window (Widgets.kt TimelineWidget): the size and the
+<!-- What happened, the Timeline under its line, on the Galaxy Z Flip's cover screen, the Flex Window
+     (Widgets.kt ActivityWidget): the size and the
      category Samsung asks for (developer.samsung.com/galaxy-z/flex_window.html), added in Settings, Cover screen,
      Widgets; the debug build offers it on the home screen too (src/debug), as an emulator has no cover screen -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:description="@string/timeline_widget"
+    android:description="@string/activity_widget"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:minWidth="352dp"
     android:minHeight="339dp"

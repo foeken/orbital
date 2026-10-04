@@ -53,7 +53,8 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
-        <!-- the widgets (Widgets.kt): Today's Tasks on the home screen, the Timeline on a Galaxy Z Flip's cover screen -->
+        <!-- the widgets (Widgets.kt): Today's Tasks on the home screen; the Timeline, as Today's Tasks and Upcoming
+             Meetings and as Activity, on a Galaxy Z Flip's cover screen -->
         <receiver
             android:name=".TodayWidgetReceiver"
             android:exported="false"
@@ -66,15 +67,29 @@
                 android:resource="@xml/today_widget" />
         </receiver>
         <receiver
-            android:name=".TimelineWidgetReceiver"
+            android:name=".AheadWidgetReceiver"
             android:exported="false"
-            android:label="Timeline">
+            android:label="Today's Tasks and Upcoming Meetings">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/timeline_widget" />
+                android:resource="@xml/ahead_widget" />
+            <meta-data
+                android:name="com.samsung.android.appwidget.provider"
+                android:resource="@xml/flex_window" />
+        </receiver>
+        <receiver
+            android:name=".ActivityWidgetReceiver"
+            android:exported="false"
+            android:label="Activity">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/activity_widget" />
             <meta-data
                 android:name="com.samsung.android.appwidget.provider"
                 android:resource="@xml/flex_window" />

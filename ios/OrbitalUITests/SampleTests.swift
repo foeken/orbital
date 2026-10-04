@@ -77,6 +77,7 @@ final class SampleTests: XCTestCase {
         let sheet = app.navigationBars["Quick Add"]
         XCTAssert(sheet.waitForExistence(timeout: 15))
         XCTAssertFalse(sheet.buttons["Add"].isEnabled)
+        XCTAssertEqual(app.switches["Pin to today"].value as? String, "0", "Pin to today is there, and off until turned on")
         // closed by Cancel only: a swipe down leaves it where it is
         sheet.swipeDown(velocity: .fast)
         XCTAssertFalse(sheet.waitForNonExistence(timeout: 2))
