@@ -51,6 +51,13 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     static let home = URL(string: "https://home.tana.inc")!
     // -sample: invented content in place of Tana (timeline-sample.json, pages-sample.json), for design shots; writes nothing
     static let isSample = CommandLine.arguments.contains("-sample")
+    // -stall page | read, for the UI tests only (OrbitalUITests/LoadingTests.swift): Tana's page never says it is ready, or
+    // it connects and its first Timeline read never answers, as a request in the page that never answers leaves them
+    #if DEBUG
+    static let stall: String? = CommandLine.arguments.firstIndex(of: "-stall").flatMap { CommandLine.arguments.dropFirst($0 + 1).first }
+    #else
+    static let stall: String? = nil
+    #endif
     // Google and others refuse sign-in in a web view that does not say it is Safari
     static let safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
@@ -70,7 +77,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         web.navigationDelegate = self
         if Self.isSample { showSample(); return }
         // the last Timeline read, on screen at once while Tana connects (SavedTimeline); never in demo mode
-        if !demo, let saved = SavedTimeline.load() { rows = saved.rows; savedFor = saved.account }
+        if !demo, Self.stall == nil, let saved = SavedTimeline.load() { rows = saved.rows; savedFor = saved.account }
         Task {
             await SavedSession.restore(into: web.configuration.websiteDataStore.httpCookieStore)
             start()
@@ -82,6 +89,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         watch?.cancel()
         phase = .starting
         note("loading the session page")
+        if Self.stall == "read" { phase = .ready; Task { await refresh() }; return } // connected, as far as the app can tell
+        if Self.stall != nil { return } // the page never says ready
         web.load(URLRequest(url: Self.session, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))
     }
 
@@ -571,6 +580,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             try await connected()
             // a tap on a row of another account's, made before Tana said who signed in: not done to this one
             if let owner, owner != account { throw Failure(errorDescription: "Another Tana account is signed in now, so this was not done") }
+            if Self.stall == "read" { try await Task.sleep(for: .seconds(86_400)) } // a request in the page that never answers
             // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
             // moment it is turned on, not from the next Timeline read, which a read already under way puts off
             let json = try await engineJS("orbital.demo(demo); " + js, arguments.merging(["demo": demo]) { _, now in now }) as? String ?? "null"

@@ -437,4 +437,95 @@ class EngineTest {
         runCurrent()
         assertTrue(host.calls.none { "orbital.sensitive" in it.first }, "asked of someone else's row: never written to this account")
     }
+
+    // A request inside Tana's page has no time limit of the WebView's: a page that never said ready, or a first Timeline
+    // read that never came back, left the Timeline building itself for good, with nothing to say why (a TestFlight report
+    // on the iPhone). Past PATIENCE the app says so (Can't reach Tana, Try again, Details); what comes later still shows.
+    @Test fun aPageThatNeverConnectsSaysSoAndStillConnectsLate() = runTest {
+        val host = page()
+        val engine = launched(host, FakePlatform(), scope = this)
+        engine.start()
+        advanceTimeBy(Engine.PATIENCE - 1.seconds)
+        runCurrent()
+        assertEquals(Engine.Phase.Starting, engine.phase, "still connecting within it")
+        advanceTimeBy(2.seconds)
+        runCurrent()
+        assertTrue(engine.phase is Engine.Phase.Failed, "past it, said: " + engine.phase)
+        assertTrue(engine.log.any { "did not connect" in it }, "Details names the step")
+        host.listener!!.said("ready") // it answers after all
+        runCurrent()
+        assertEquals(Engine.Phase.Ready, engine.phase)
+        assertEquals("s:e1", engine.rows.single().id)
+    }
+
+    @Test fun anEarlierStartsDeadlineLeavesTryAgainAlone() = runTest {
+        val engine = launched(page(), FakePlatform(), scope = this)
+        engine.start()
+        advanceTimeBy(Engine.PATIENCE - 5.seconds)
+        engine.start() // Try again, just before the first one's time is up
+        advanceTimeBy(10.seconds)
+        runCurrent()
+        assertEquals(Engine.Phase.Starting, engine.phase, "the first start's deadline is not the second's")
+        advanceTimeBy(Engine.PATIENCE)
+        runCurrent()
+        assertTrue(engine.phase is Engine.Phase.Failed)
+    }
+
+    @Test fun aFirstReadThatNeverAnswersSaysSoAndShowsWhatComesLate() = runTest {
+        val whole = CompletableDeferred<String>()
+        val answers = page()
+        val host = FakeHost { body, args -> if ("orbital.timeline" in body) text(whole.await()) else answers.answer(body, args) }
+        val engine = launched(host, FakePlatform(), scope = this)
+        engine.start()
+        host.listener!!.said("ready")
+        runCurrent()
+        assertTrue(engine.loading && engine.rows.isEmpty())
+        advanceTimeBy(Engine.PATIENCE + 1.seconds)
+        runCurrent()
+        assertTrue(engine.phase is Engine.Phase.Failed, "nothing on screen and nothing coming: said: " + engine.phase)
+        assertTrue(engine.log.any { "did not send the Timeline" in it })
+        whole.complete(timeline) // it comes after all
+        runCurrent()
+        assertEquals(Engine.Phase.Ready, engine.phase)
+        assertEquals("s:e1", engine.rows.single().id)
+        assertNull(engine.error)
+    }
+
+    // Try again loads the page again: what the page before it answers late is not shown over the new one's
+    @Test fun aReadFromThePageBeforeTryAgainIsNotShown() = runTest {
+        val whole = CompletableDeferred<String>()
+        val answers = page()
+        val host = FakeHost { body, args -> if ("orbital.timeline" in body) text(whole.await()) else answers.answer(body, args) }
+        val engine = launched(host, FakePlatform(), scope = this)
+        engine.start()
+        host.listener!!.said("ready")
+        runCurrent()
+        advanceTimeBy(Engine.PATIENCE + 1.seconds)
+        runCurrent()
+        engine.start()
+        whole.complete(timeline)
+        runCurrent()
+        assertTrue(engine.rows.isEmpty(), "the old page's read")
+        assertEquals(Engine.Phase.Starting, engine.phase)
+    }
+
+    // with the saved Timeline on screen there is something to read: a slow read is left to finish
+    @Test fun aSlowReadUnderTheSavedTimelineIsLeftToFinish() = runTest {
+        val platform = FakePlatform()
+        SavedTimeline.save(platform.files, saved, ME, clock)
+        val whole = CompletableDeferred<String>()
+        val answers = page()
+        val host = FakeHost { body, args -> if ("orbital.timeline" in body) text(whole.await()) else answers.answer(body, args) }
+        val engine = launched(host, platform, scope = this)
+        engine.start()
+        host.listener!!.said("ready")
+        runCurrent()
+        advanceTimeBy(Engine.PATIENCE * 2)
+        runCurrent()
+        assertEquals(Engine.Phase.Ready, engine.phase)
+        assertEquals(listOf("today", "s:old"), engine.rows.map { it.id })
+        whole.complete(timeline)
+        runCurrent()
+        assertEquals(listOf("s:e1"), engine.rows.map { it.id })
+    }
 }

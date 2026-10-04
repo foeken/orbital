@@ -669,6 +669,9 @@ class Engine(
     companion object {
         const val SESSION = "https://home.tana.inc/api/auth/session"
         const val HOME = "https://home.tana.inc"
+        // how long Tana's page has to connect, and a first Timeline read with nothing on screen to answer, before the app
+        // says so (Engine.swift patience)
+        val PATIENCE = 30.seconds
         const val PROBE = "const r = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' }); const j = await r.json().catch(() => ({})); " +
             "return r.status + ' ' + (j.authenticated === true ? 'signed in' : 'signed out' + (j.reason ? ' (' + j.reason + ')' : ''))"
 
