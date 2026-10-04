@@ -24,7 +24,7 @@ module.exports = [
   { name: 'start-help', video: true, clip: [300, 40, 680, 560], setup: [{ wait: 800 }, help, { wait: 300 }], steps: [
     { wait: 1800 }, { key: '→' }, { wait: 2600 }, { key: '→' }, { wait: 2200 }, { key: '→' }, { wait: 2000 }, { key: '→' }, { wait: 2400 },
   ] },
-  // the tour's last page, where Install mobile app opens it: the iPhone app's TestFlight code and link
+  // the tour's last page, where Install mobile app opens it: iPhone's TestFlight code and link, Android coming soon
   { name: 'start-help-iphone', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, helpMobile, { wait: 900 }] },
   // Cmd+K Install mobile app, under Help
   { name: 'start-install-mobile', setup: [{ wait: 900 }, { key: '⌘K' }, { type: 'install' }, { wait: 400 }, bare], clip: { sel: '#palette .card', pad: 14 } },
@@ -45,7 +45,6 @@ module.exports = [
   ] },
   { name: 'start-logout', setup: [library, { wait: 800 }, { key: '⌘K' }, { type: 'log out' }, { key: '↩' }, { wait: 500 }, bare], clip: { sel: '#palette .card', pad: 28 } },
 ];
-
 
 
 

@@ -55,8 +55,9 @@ From fastest to slowest. Each catches what the one before it cannot.
    - the Settings window (settings.html, on a stand-in for main) stores what you pick, keeps the newest answer when an
      older read lands after it, keeps the keyboard on a switch through its redraw, and masks your email and hidden
      titles in demo mode.
-   - Cmd+K Install mobile app: the Help tour (help.html) opens on its iPhone page in either theme, with the code drawn,
-     and its TestFlight link opens in the browser through main while the tour stays. `scripts/renderer-check.js` decodes
+   - Cmd+K Install mobile app: the Help tour (help.html) opens on its phone page in either theme, a choice of iPhone
+     (iOS 26 or later, the code drawn, its TestFlight link opening in the browser through main while the tour stays)
+     and Android (coming soon, with nothing to press or follow). `scripts/renderer-check.js` decodes
      the code itself (help-testflight.svg) and holds it to that link and to the README's and the manual's, so a new
      TestFlight link has to come with a new code.
 

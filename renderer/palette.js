@@ -430,7 +430,7 @@ function paletteRows(q, typed = q) {
   if (tana.setOpenAIKey && chatgptAuth?.apiKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
-  rows.push({ id: 'installMobile', group: 'Help', icon: 'mobile', label: 'Install mobile app', hint: 'Orbital for iPhone, from TestFlight', run: () => openHelp('mobile') }); // the tour's iPhone page: its code and link (help.html)
+  rows.push({ id: 'installMobile', group: 'Help', icon: 'mobile', label: 'Install mobile app', hint: 'iPhone from TestFlight, Android coming soon', run: () => openHelp('mobile') }); // the tour's phone page: the iPhone's code and link, Android to come (help.html)
   if (tana.openExternal) rows.push({ id: 'manual', group: 'Help', icon: 'help', label: 'Open Manual', hint: 'Every feature, with pictures', run: () => run(() => tana.openExternal('https://orbital.md/manual/?theme=' + theme)) }); // manual/, published there at each release
   if (tana.openExternal) rows.push({ id: 'about', group: 'Help', icon: 'info', label: 'About Orbital', keepOpen: true, run: openAboutPalette });
   if (tana.checkUpdates) rows.push({ id: 'checkUpdates', group: 'Help', icon: 'reload', label: 'Check for updates', run: () => tana.checkUpdates() }); // a newer release opens the update card (update.html), a dialog says up to date

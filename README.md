@@ -17,7 +17,7 @@ thing from a browser tab, and because the round trip through a web view makes a 
 |----------|-------|------------|--------|
 | Mac | the repository root | Electron, plain JavaScript | Released; signed, notarized and updating itself (Apple Silicon) |
 | iPhone | [`ios/`](ios/README.md) | SwiftUI | Beta in TestFlight: [join it](https://testflight.apple.com/join/wgcnRVKx) on iOS 26 or later |
-| Android | `android/` | Kotlin Multiplatform, Jetpack Compose | Builds and passes its tests in CI; not distributed yet |
+| Android | `android/` | Kotlin Multiplatform, Jetpack Compose | Builds and passes its tests in CI; not distributed yet (coming soon) |
 
 There is no iPad, Windows, Linux or web version.
 
@@ -135,7 +135,7 @@ moved to the new name the first time the app or the CLI starts (`userdata.js`).
 
 To use it, open https://testflight.apple.com/join/wgcnRVKx on the iPhone (iOS 26 or later) to join the
 TestFlight beta, or Cmd+K **Install mobile app** in the Mac app and scan the code it shows with the
-iPhone's camera. To build it, you need Xcode 26 or later, [Bun](https://bun.sh) (it bundles the
+iPhone's camera; the same page lists Android as coming soon. To build it, you need Xcode 26 or later, [Bun](https://bun.sh) (it bundles the
 engine in an Xcode build phase) and this repository's `node_modules`. [ios/README.md](ios/README.md) has
 the build and install commands, the simulator's launch arguments on invented content, and the UI tests.
 

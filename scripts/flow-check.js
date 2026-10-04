@@ -535,11 +535,12 @@ flow('golden path: Quick Add Task makes a typed task for someone', async (p) => 
 });
 
 // 16b. Cmd+K Install mobile app (renderer/overlays.js openHelp('mobile'), main.js openOverlay): the Help tour opens on
-// its iPhone page, in either theme, with the code drawn and the TestFlight link beside it, which opens in the browser
-// through main and leaves the tour where it is; without the page asked for, the tour starts at the beginning
+// its phone page, in either theme: iPhone with the code drawn and the TestFlight link, which opens in the browser
+// through main and leaves the tour where it is, and Android labelled coming soon with nothing to press or follow;
+// without the page asked for, the tour starts at the beginning
 const HELP_API = String.raw`if (location.pathname === '/help.html') { window.__opened = [];
   window.api = { openExternal: async (url) => { __opened.push(url); }, closeOverlay: () => {}, chatgptStatus: async () => ({ signedIn: false }) }; }`;
-flow('Install mobile app opens the Help tour on its iPhone page, with the code and its link', async (p) => {
+flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s code and link, Android coming soon', async (p) => {
   const link = fs.readFileSync(path.join(root, 'help.html'), 'utf8').match(/id="helpMobileLink" href="([^"]+)"/)[1];
   await p.beforeLoad(HELP_API);
   for (const theme of ['light', 'dark']) {
@@ -548,6 +549,9 @@ flow('Install mobile app opens the Help tour on its iPhone page, with the code a
     assert.deepEqual(await p.js('[document.querySelector(".hpage.on").id, document.getElementById("helpNext").textContent, document.documentElement.dataset.theme || "light"]'),
       ['help-mobile', 'Get started', theme], 'it opens on its last page, the iPhone app, in the theme asked for');
     await p.waitFor('(() => { const i = document.querySelector("#help-mobile img"); return i.complete && i.naturalWidth > 0; })()', 'the code to be drawn');
+    assert.deepEqual(await p.js('[...document.querySelectorAll("#help-mobile .hv-os figcaption")].map((c) => c.textContent)'), ['iPhone · iOS 26 or later', 'Android · Coming soon'], 'a choice of two phones, each with its state');
+    assert.deepEqual(await p.js('[document.querySelectorAll("#helpAndroid :is(a, button, img, [tabindex])").length, [...document.querySelectorAll("#help-mobile a")].map((a) => a.href)]'), [0, [link]],
+      'Android has nothing to scan, press or follow; the one link on the page is the iPhone\u2019s');
     await p.js('document.getElementById("helpMobileLink").click(); 1'); await settle(p, 100);
     assert.deepEqual(await p.js('[__opened, location.pathname, document.querySelector(".hpage.on").id]'), [[link], '/help.html', 'help-mobile'], 'the link opens in the browser and the tour stays');
   }
