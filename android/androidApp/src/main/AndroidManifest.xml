@@ -54,7 +54,7 @@
             </intent-filter>
         </activity>
         <!-- the widgets (Widgets.kt): Today's Tasks on the home screen; the Timeline, as Today's Tasks and Upcoming
-             Meetings and as Activity, on a Galaxy Z Flip's cover screen -->
+             Meetings and as Activity, on the home screen and on a Galaxy Z Flip's cover screen -->
         <receiver
             android:name=".TodayWidgetReceiver"
             android:exported="false"

@@ -19,7 +19,8 @@ import java.util.regex.Pattern
 
 // The widgets end to end, on the device's own home screen (UI Automator: the launcher is another app): the app opened
 // on the iPhone's invented sample keeps what the widgets show, the launcher is asked to pin one, and it is used as a
-// finger would. The cover screen's Timeline is offered on the home screen by the debug build (src/debug).
+// finger would. The cover screen's Timeline is offered on the home screen too, in every build (res/xml), so this pins
+// the very widgets a release offers.
 @RunWith(AndroidJUnit4::class)
 class WidgetJourneyTest {
     private val device get() = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())

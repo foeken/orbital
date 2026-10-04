@@ -143,8 +143,9 @@ the build and install commands, the simulator's launch arguments on invented con
 
 To use it, open https://github.com/foeken/orbital/releases/latest/download/Orbital-android.apk on the phone
 (Android 10 or later), open the download and install it, allowing your browser to install apps when Android
-asks; or scan the code Cmd+K **Install mobile app** shows on the Mac. It does not update itself yet: a newer
-release's APK installs over it the same way. To build one, you need the Android SDK with API 37, a JDK 17 or later,
+asks; or scan the code Cmd+K **Install mobile app** shows on the Mac. For updates, add https://github.com/foeken/orbital to
+[Obtainium](https://github.com/ImranR98/Obtainium), which offers each new release's APK; or install a newer one
+over it the same way. To build one, you need the Android SDK with API 37, a JDK 17 or later,
 [Bun](https://bun.sh) and this repository's `node_modules` (`npm install`, or `npm run modules` in a
 worktree). The Gradle build bundles the phones' engine into the app itself.
 
