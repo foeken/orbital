@@ -97,8 +97,9 @@ final class SampleTests: XCTestCase {
         XCTAssert(app.navigationBars["Timeline"].exists)
         app.buttons["Quick Add Task"].tap()
         XCTAssert(sheet.waitForExistence(timeout: 15))
-        XCTAssertEqual(app.textFields["New task"].value as? String, "Call the venue")
-        XCTAssert(app.staticTexts["Not added: The sample saves nothing"].exists)
+        XCTAssert(app.staticTexts["Not added: The sample saves nothing"].waitForExistence(timeout: 15))
+        // with words in it the field is a text view to XCUITest, so it is found by what it holds
+        XCTAssert(app.descendants(matching: .any).matching(NSPredicate(format: "value == %@", "Call the venue")).firstMatch.exists)
         sheet.buttons["Cancel"].tap()
     }
 
