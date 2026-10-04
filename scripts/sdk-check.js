@@ -6315,6 +6315,8 @@ async function main() {
 
     const local = await agent.createTask({ key: NODES[0], prompt: 'Draft it', userData });
     assert.equal(local, THREADS[0], 'the task is created and its id comes back');
+    assert.deepEqual(spawned[0].sent[0], { jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'orbital', title: 'Orbital', version: require('../package.json').version } } },
+      'Orbital names itself to the app-server first, with the version it is, which Codex passes on in its User-Agent (docs/CHATGPT-SIGN-IN.md)');
     assert.deepEqual(['sandbox', 'approvalPolicy'].map((k) => Object.hasOwn(spawned[0].sent.find((m) => m.method === 'thread/start').params, k)), [false, false], 'a node\'s task runs with the user\'s own Codex settings');
     assert.equal(spawned[0].cmd, fakeCodex, 'on this machine the app-server is run directly, by the codex PATH finds');
     assert.equal([...spawned[0].args].join(' '), 'app-server', 'with no shell line and nothing else on the command');
