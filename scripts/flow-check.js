@@ -557,7 +557,8 @@ flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s co
       ['help-mobile', 'Get started', theme], 'it opens on its last page, the iPhone app, in the theme asked for');
     await p.waitFor('(() => { const i = document.querySelector("#help-mobile img"); return i.complete && i.naturalWidth > 0; })()', 'the code to be drawn');
     const ios = await shown();
-    const card = () => p.js('(() => { const r = document.querySelector("#help .card").getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })()');
+    // layout size: the card opens with a scale-in (styles.css @starting-style), which a bounding box would catch part-way
+    const card = () => p.js('(() => { const c = document.querySelector("#help .card"); return [c.offsetWidth, c.offsetHeight]; })()');
     const iosCard = await card();
     assert.deepEqual([ios.chosen, ios.code, ios.links, ios.soon], [[['iPhone', 'true', 0], ['Android', 'false', -1]], 1, [link], []], 'iPhone chosen: one code and its link, one tab stop');
     assert.match(await p.js('document.querySelector("#help-mobile p[data-os=ios]").textContent'), /iOS 26 or later/, 'with the iOS it needs');
