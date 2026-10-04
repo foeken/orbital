@@ -49,4 +49,4 @@ gh release create "v$version" "$zip" --repo "$releases" --title "v$version" --no
 [ -z "$mirror" ] || gh release create "v$version" "$zip" --repo "$mirror" --title "v$version" --notes "$notes"
 echo "released v$version to $releases${mirror:+ and $mirror}"
 # Slack has no token here: the agent cutting the release posts the notes with its Slack connector.
-echo "next: publish manual/ to https://orbital.md/manual (.agents/skills/orbital-manual/SKILL.md, Publishing), write the release notes (gh release edit v$version --repo $releases --notes-file …${mirror:+, and the same for --repo $mirror, whose copy old installs read}) and post them in #orbital on Slack (channel C0C5D5C07EH) with a link to https://github.com/$releases/releases/tag/v$version"
+echo "next: publish what npm run manual-diff -- v$version lists to https://orbital.md/manual (.agents/skills/orbital-manual/SKILL.md, Publishing), write the release notes (gh release edit v$version --repo $releases --notes-file …${mirror:+, and the same for --repo $mirror, whose copy old installs read}) and post them in #orbital on Slack (channel C0C5D5C07EH) with a link to https://github.com/$releases/releases/tag/v$version"

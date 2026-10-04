@@ -10,6 +10,9 @@ const crypto = require('node:crypto');
 const EventEmitter = require('node:events');
 const { Readable } = require('node:stream');
 const { createRelay, sqliteStore, postgresStore, safePost, TTL, LIMITS, isPublicAddress } = require('../relay/server');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 let clock = Date.UTC(2026, 9, 3, 12);
 // RELAY_CHECK_DATABASE_URL runs the same check on PostgreSQL (an empty database: it makes its tables), as a host would
@@ -23,7 +26,12 @@ const posted = [];
 const echo = (body) => ({ status: 200, text: JSON.parse(body).type === 'verification' ? JSON.stringify({ challenge: JSON.parse(body).challenge }) : '' });
 let answer = echo;
 const post = async (url, headers, body) => { posted.push({ url, headers, body }); return answer(body); };
-const relay = createRelay({ store, publicUrl: 'http://127.0.0.1', now: () => clock, post });
+// a published manual of two files, one in a folder, as orbital.md keeps it beside the relay
+const manualDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-manual-'));
+fs.mkdirSync(path.join(manualDir, 'media'));
+fs.writeFileSync(path.join(manualDir, 'index.html'), '<h1>Welcome</h1>\n');
+fs.writeFileSync(path.join(manualDir, 'media', 'start.webp'), Buffer.from([0, 1, 2, 255]));
+const relay = createRelay({ store, publicUrl: 'http://127.0.0.1', now: () => clock, post, manual: manualDir });
 const server = http.createServer(relay.handle);
 
 (async () => {
@@ -308,6 +316,18 @@ const server = http.createServer(relay.handle);
   assert.deepEqual(strays.map((k) => kept.includes(keyHash(k))), strays.map(() => false), 'and an Orbital that never linked an agent goes after a day');
   // which server.js runs, to hold against the repository
   assert.equal((await call('GET', '/mcp/health')).json.sha256, crypto.createHash('sha256').update(require('node:fs').readFileSync(require.resolve('../relay/server'))).digest('hex'), '/health names the file it runs');
+  // and the manual beside it: each file by its SHA-256, and one SHA-256 over them as sha256sum lists them, sorted
+  const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+  const files = { 'index.html': sha('<h1>Welcome</h1>\n'), 'media/start.webp': sha(Buffer.from([0, 1, 2, 255])) };
+  const digest = sha(files['index.html'] + '  index.html\n' + files['media/start.webp'] + '  media/start.webp\n');
+  assert.deepEqual((await call('GET', '/mcp/health')).json.manual, { sha256: digest, files: 2 }, '/health names the published manual');
+  assert.deepEqual((await call('GET', '/mcp/health/manual')).json, { sha256: digest, files }, '/health/manual lists its files');
+  const bare = createRelay({ store: sqliteStore() });
+  const health = await new Promise((resolve) => bare.handle(Object.assign(Readable.from([]), { method: 'GET', url: '/mcp/health', headers: {}, socket: { remoteAddress: '127.0.0.1' } }),
+    { headersSent: false, setHeader() {}, writeHead() { this.headersSent = true; }, end(text) { resolve(JSON.parse(text)); } }));
+  await bare.close();
+  assert.equal(health.manual, null, 'a relay with no manual beside it says so');
+  fs.rmSync(manualDir, { recursive: true });
   assert.equal(isPublicAddress('::7f00:1'), false, 'an IPv4 address written the old IPv6 way is not public either');
 
   // ---- what the database holds: ids, and no key or token as itself (only their hashes) ----
