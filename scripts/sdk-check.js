@@ -797,7 +797,7 @@ async function main() {
     let fetches = 0;
     globalThis.fetch = async (url) => { fetches++; return String(url).includes('/images/by-uri/')
       ? { status: 302, headers: { getSetCookie: () => [], get: () => 'https://images.example/x' } }
-      : { ok: true, headers: { get: () => 'image/png' }, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }; };
+      : new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png' } }); };
     S.session = { getAccessToken: async () => 'token' }; S.userData = dir;
     try {
       const uri = 'tana:image:' + ulid();
@@ -809,6 +809,26 @@ async function main() {
       fs.rmSync(nodePath.join(dir, 'images'), { recursive: true });
       assert.equal(await images.image(uri), a);
       assert.equal(fetches, 4, 'and with the file gone it is fetched again: no map kept the image in memory');
+      // What collaborators' images may cost (security review finding 7): a few fetches at once, the rest waiting their turn
+      let open = 0, most = 0; const release = [];
+      globalThis.fetch = async (url) => { if (String(url).includes('/images/by-uri/')) return { status: 302, headers: { getSetCookie: () => [], get: () => 'https://images.example/x' } };
+        open++; most = Math.max(most, open); await new Promise((r) => release.push(r)); open--; return new Response(new Uint8Array(1000), { headers: { 'content-type': 'image/png' } }); };
+      let all = false;
+      const many = Promise.all(Array.from({ length: 10 }, () => images.image('tana:image:' + ulid()))).then(() => { all = true; });
+      while (!all) { await new Promise((r) => setTimeout(r, 5)); release.splice(0).forEach((r) => r()); }
+      await many;
+      assert.equal(most, images.LIMITS.parallel, 'ten images on one page are fetched a few at a time, never all at once');
+      // and the file cache keeps to its size: past it, the least recently shown files go first
+      const quota = images.LIMITS.cache, cacheDir = nodePath.join(dir, 'images');
+      const total = () => fs.readdirSync(cacheDir).reduce((n, f) => n + fs.statSync(nodePath.join(cacheDir, f)).size, 0);
+      images.LIMITS.cache = 5000;
+      globalThis.fetch = async (url) => (String(url).includes('/images/by-uri/') ? { status: 302, headers: { getSetCookie: () => [], get: () => 'https://images.example/x' } } : new Response(new Uint8Array(1000), { headers: { 'content-type': 'image/png' } }));
+      const shownFirst = 'tana:image:' + ulid(); await images.image(shownFirst);
+      fs.utimesSync(nodePath.join(cacheDir, require('node:crypto').createHash('sha1').update(shownFirst).digest('hex')), new Date(1), new Date(1)); // shown long ago
+      for (let i = 0; i < 6; i++) await images.image('tana:image:' + ulid());
+      assert.ok(total() <= images.LIMITS.cache, 'the cache stays within its size (' + total() + ' bytes)');
+      assert.equal(fs.existsSync(nodePath.join(cacheDir, require('node:crypto').createHash('sha1').update(shownFirst).digest('hex'))), false, 'the image shown longest ago went first');
+      images.LIMITS.cache = quota;
     } finally { globalThis.fetch = saved.fetch; S.session = saved.session; S.userData = saved.userData; fs.rmSync(dir, { recursive: true, force: true }); }
     console.log('ok  images: one fetch per load in flight, then the file cache, nothing held in memory');
   }
@@ -5605,6 +5625,16 @@ async function main() {
     assert.equal(calls.length, 3, '401 retried with a refreshed token, then the CDN');
     assert.equal(calls[0][0], 'https://api.test/images/by-uri/tana%3Aimage%3A01examplev0000000000000000');
     await assert.rejects(fetchImage('tana:text:01examplew0000000000000000', { fetch: fakeFetch, getAccessToken: async () => 'x' }), /not a tana:image uri/);
+    // An image is read within its limit as it arrives (security review finding 7): one that says it is bigger is not
+    // read at all, and one that says nothing is stopped where it passes the limit
+    const sized = (body, headers) => async (url) => (url.startsWith('https://api.test/images/by-uri/') ? new Response(null, { status: 302, headers: { location: 'https://cdn.test/signed' } }) : new Response(body, { status: 200, headers }));
+    const opts = (fetch) => ({ baseUrl: 'https://api.test', fetch, getAccessToken: async () => 'x', maxBytes: 10 });
+    await assert.rejects(fetchImage('tana:image:01examplev0000000000000000', opts(sized(new Uint8Array(4), { 'content-length': '11' }))), /larger than/, 'one that says it is past the limit is not read');
+    let pulled = 0;
+    const endless = new ReadableStream({ pull(c) { if (++pulled > 1000) c.close(); else c.enqueue(new Uint8Array(4)); } }); // long past the limit, then done
+    await assert.rejects(fetchImage('tana:image:01examplev0000000000000000', opts(sized(endless, {}))), /larger than/, 'one that says nothing is stopped where it passes the limit');
+    assert.ok(pulled < 10, 'and not read on after that');
+    assert.equal((await fetchImage('tana:image:01examplev0000000000000000', opts(sized(new Uint8Array(10), {})))).bytes.length, 10, 'while one within it is read whole');
     console.log('ok  image asset fetch (redirect + CDN cookie)');
   }
   // 3e. Upload (#28): multipart field `file` to /files/upload with the bearer token, one retry on 401, over 50 MB refused
