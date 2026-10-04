@@ -1709,7 +1709,8 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
    lit in turn as if the moon of page 1 passed it. Still under reduced motion: the ring, the core and the five names. */
 .hv-ai, .hv-phone { align-items: center; padding: 0; }
 /* 8 the phone: a choice of iPhone or Android (the Settings window's segmented control), then one place for the chosen
-   one: the iPhone's code, Android's "Coming soon". One code at a time, however many phones there come to be. */
+   one: the iPhone's code; Android's code once the latest release has the app, "Coming soon" until then. One code at a
+   time, however many phones there come to be. */
 .hv-phone { flex-direction: column; gap: 14px; }
 .hseg { display: inline-flex; padding: 2px; border-radius: 8px; background: #e6e8ea; }
 .hseg button { padding: 3px 16px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: 13px; color: #45484c; cursor: pointer; }
@@ -1717,7 +1718,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .hseg button:focus-visible { outline: 2px solid #508fbb; outline-offset: 1px; }
 .hv-os { width: 156px; height: 156px; }
 .help [data-os][hidden] { display: none; }
-.hv-phone img { display: block; width: 156px; height: 156px; padding: 12px; background: #fff; border-radius: 12px; } /* the TestFlight link (help-testflight.svg, qrencode): dark on white in either theme, as a camera reads it */
+.hv-phone img { display: block; width: 156px; height: 156px; padding: 12px; background: #fff; border-radius: 12px; } /* the TestFlight link and the Android download (help-testflight.svg, help-android.svg, qrencode): dark on white in either theme, as a camera reads it */
 .hv-soon { width: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; color: #6b6f73; text-align: center; } /* Android: words only, nothing to scan */
 .hv-soon b { font-size: 15px; font-weight: 600; color: #1c2024; }
 .help p a { color: #3a75a3; text-underline-offset: 2px; } /* the same TestFlight link, to open on the phone (AA on the white card) */

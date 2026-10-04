@@ -538,11 +538,15 @@ flow('golden path: Quick Add Task makes a typed task for someone', async (p) => 
 // its phone page, in either theme, with iPhone chosen: its code drawn and the TestFlight link, which opens in the
 // browser through main and leaves the tour where it is. The choice is one radio group over one place: Android shows
 // coming soon and no code, link or button; the arrows switch inside the group and do not page or close the tour, and
-// the group is one tab stop. Without the page asked for, the tour starts at the beginning
+// the group is one tab stop. Once the latest release has the Android app (updater.js androidRelease; here ?apk), Android
+// shows its code and download link in that same place instead, and the card keeps its size. Without the page asked
+// for, the tour starts at the beginning
 const HELP_API = String.raw`if (location.pathname === '/help.html') { window.__opened = [];
-  window.api = { openExternal: async (url) => { __opened.push(url); }, closeOverlay: () => {}, chatgptStatus: async () => ({ signedIn: false }) }; }`;
-flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s code and link, Android coming soon', async (p) => {
+  window.api = { openExternal: async (url) => { __opened.push(url); }, closeOverlay: () => {}, chatgptStatus: async () => ({ signedIn: false }),
+    androidRelease: async () => (new URLSearchParams(location.search).has('apk') ? { version: '0.10.0' } : null) }; }`;
+flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s code and link, Android coming soon or its download', async (p) => {
   const link = fs.readFileSync(path.join(root, 'help.html'), 'utf8').match(/id="helpMobileLink" href="([^"]+)"/)[1];
+  const apk = fs.readFileSync(path.join(root, 'help.html'), 'utf8').match(/id="helpAndroidLink" href="([^"]+)"/)[1];
   // what the page shows: the chosen phone, the radios' state and tab stops, and what can be seen of the code, links and buttons
   const shown = () => p.js(`(() => { const seen = (e) => !!e.offsetParent, page = document.getElementById('help-mobile');
     return { chosen: [...page.querySelectorAll('[role=radio]')].map((b) => [b.textContent, b.getAttribute('aria-checked'), b.tabIndex]),
@@ -577,6 +581,22 @@ flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s co
     assert.deepEqual(await shown().then((s) => [s.chosen[0][1], s.focus, s.page]), ['true', 'iPhone', 'help-mobile'], '\u2192 wraps round to iPhone, and Space keeps it');
     await p.js('document.getElementById("helpMobileLink").click(); 1'); await settle(p, 100);
     assert.deepEqual(await p.js('[__opened, location.pathname, document.querySelector(".hpage.on").id]'), [[link], '/help.html', 'help-mobile'], 'the link opens in the browser and the tour stays');
+  }
+  // a latest release with the Android app: its code and download link where coming soon was, the card the same size
+  for (const theme of ['light', 'dark']) {
+    await p.open('help.html?at=mobile&apk=1&theme=' + theme);
+    await p.waitFor('(() => { const i = document.querySelector("#help-mobile img"); return i.complete && i.naturalWidth > 0; })()', 'the iPhone code');
+    const size = () => p.js('(() => { const c = document.querySelector("#help .card"); return [c.offsetWidth, c.offsetHeight]; })()');
+    const iosCard = await size();
+    assert.equal((await shown()).chosen[0][1], 'true', 'iPhone is chosen first, a release for Android or not');
+    await p.js('document.querySelector("#help-mobile [data-os=android][role=radio]").click(); 1');
+    await p.waitFor('(() => { const i = document.querySelector("#help-mobile img[src=\'help-android.svg\']"); return !!i.offsetParent && i.complete && i.naturalWidth > 0; })()', 'the Android code');
+    const android = await shown();
+    assert.deepEqual([android.code, android.links, android.soon], [1, [apk], []], 'Android with a release: one code and its download link, and nothing says coming soon');
+    assert.match(await p.js('document.querySelector("#help-mobile p[data-os=android][data-apk=yes]").textContent'), /Android 10 or later/, 'with the Android it needs');
+    assert.deepEqual(await size(), iosCard, 'the card keeps its size from one phone to the other');
+    await p.js('document.getElementById("helpAndroidLink").click(); 1'); await settle(p, 100);
+    assert.deepEqual(await p.js('__opened'), [apk], 'the download opens in the browser');
   }
   await p.open('help.html?theme=light');
   await p.waitFor('document.querySelector(".hpage.on")', 'the tour');

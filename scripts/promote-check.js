@@ -167,7 +167,7 @@ assert.ok(!holds(main, f2));
 // tagged only as the tested merge; once
 assert.equal(p.tag({}).tag, 'v1.1.0');
 assert.equal(tip('refs/tags/v1.1.0^{commit}'), main);
-assert.equal(p.releaseCheck({ tag: 'v1.1.0' }).ok, true);
+assert.equal(p.verifyTag({ tag: 'v1.1.0' }).ok, true);
 fails(() => p.tag({}), /v1\.1\.0 is already/);
 
 // main back into the lane, by a pull request merged with a merge commit: the lane keeps f2, nothing is dropped
@@ -209,7 +209,7 @@ const pushed = land('main', 'direct.txt', 'd');
 assert.match(p.tested('origin/main').problems.join(' '), /not the merge of a pull request/);
 fails(() => p.tag({}), /main is not tagged/);
 g(tool, 'tag', 'v9.9.9', pushed); g(tool, 'push', '-q', 'origin', 'refs/tags/v9.9.9');
-assert.equal(p.releaseCheck({ tag: 'v9.9.9' }).ok, false);
+assert.equal(p.verifyTag({ tag: 'v9.9.9' }).ok, false);
 const old = land('codex/old', 'h.txt', 'h', 'main');
 setRef('refs/heads/codex/old', old);
 land('main', 'i.txt', 'i');

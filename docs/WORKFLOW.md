@@ -99,7 +99,7 @@ gate on the exact head and the head containing main. Their review is the focused
 | Workflow and gate changes reviewed by Andre | nothing | GitHub: code owner review (verify on a test pull request after activation) |
 | A batch frozen, its combined review approving its head | `promote check` and `merge` only | the same; GitHub enforces it only if main requires an approval (below) |
 | A lane's cheap checks | nothing (there is no lane) | GitHub: required check `ready` on `integration/**` |
-| A release is a tested merge | `promote tag` and `release-check`; not yet `npm run release` | after release.sh moves onto the tag |
+| A release is a tested merge | `npm run release`: `promote tag` and `verify-tag` before it builds, from the tag | the same (it runs on this Mac, where the keys are) |
 
 Nothing here is enforced by GitHub until the rulesets below are applied and read back.
 
@@ -114,7 +114,9 @@ A release is main after everything in it is green: merged, then tagged, then bui
    head whose gate passed, with that head's tree, and only once per version.
 3. The builds are made from the tag, on this Mac, where the keys are: the Mac app signed with the Developer ID and
    notarized (Keychain), and the Android APK signed with Orbital's release key (#740). They are attached to the
-   tag's GitHub release. `node scripts/promote.js release-check v<version>` is what the release script asks first.
+   tag's GitHub release. `npm run release` does steps 2 and 3: it tags main (or takes the version's tag), checks the
+   tag with `node scripts/promote.js verify-tag`, checks the commit out with `node_modules` that match it, builds,
+   checks it is still on that commit, and publishes on that tag (`gh release create --verify-tag`).
 4. Nothing is announced (release notes, the manual on orbital.md, #orbital) until every build the release carries is
    made and read back. A build that fails leaves the tag and no release: it is fixed by a new change and a new version
    through the gate, never by building something other than the tag.
@@ -123,20 +125,26 @@ The gate already builds what CI can without keys: the Android debug build and th
 iPhone's TestFlight beta is uploaded by hand from Xcode and is not part of this flow; nothing here uploads to the App
 Store or Google Play (each needs its own credentials, and docs/ANDROID.md has Play's).
 
-`scripts/release.sh` still bumps the version and merges its own pull request at once. It moves onto the steps above
-after #740 (the Android release, which changes the same script) has landed: no bump, the tag's commit checked out,
-`promote.js release-check` first. Until then the gate is not made a required check, because its pull request would wait
-on it.
+Before this, `scripts/release.sh` bumped the version itself and merged its bump's pull request at once, so what it built
+had passed no gate. It now takes no version and makes no commit; `scripts/release-check.js` runs it on stubs and fails
+if it bumps, merges or pushes a branch, tags before every credential is checked, builds from a tag `promote.js` does not
+pass, builds anything but the tagged commit, or publishes on any other tag. It builds on #740's script (the Android
+APK, its key checked with the Mac's credentials, the mirror getting the zip alone), so this pull request merges after
+#740.
+
+A release needs a `gate` check on the head main merged, and only this pull request's `checks.yml` makes one: the first
+release after it lands is the first version bump merged through the gate.
 
 ## Activation
 
 Each step changes the repository's settings or branches and needs Andre's approval when it is taken. This pull request
 changes none of them.
 
-1. **Merge this pull request**, after #740 or before it (both change AGENTS.md's release paragraphs and package.json's `check` line,
-   next to each other; whichever lands second merges main in and keeps both). Ready, its full gate green: it is the first pull request the new
-   `checks.yml` gates.
-2. **Move `scripts/release.sh` onto the tag** (Releasing above), in its own pull request after #740.
+1. **Merge #740 first.** This pull request contains #740 as published at e452d43 (merged in, not rebased) and
+   builds its `release.sh` on it; once #740 lands, main is merged in here and the diff is this change alone. If #740
+   changes again before it lands, this branch merges its new head and runs the release checks again.
+2. **Merge this pull request**, ready and with its full gate green: it is the first pull request the new `checks.yml`
+   gates.
 3. **Give dreetje-echo the Workflows permission** (read and write) if agents are to push changes to
    `.github/workflows/`: GitHub refuses those pushes from an App without it. Otherwise such changes are pushed by Andre.
 4. **Update main's ruleset** (id 23756367, "Protect default branch") to this, then read it back
@@ -178,8 +186,7 @@ changes none of them.
 
 ## The pull requests open when this lands
 
-- **#740** (Android release, draft, into main) stays into main: an ordinary pull request, gated in full once ready.
-  Its `release.sh` changes are what step 2 builds on.
+- **#740** (Android release, draft, into main) stays into main and lands first (Activation, step 1).
 - **#15** (Automations, Andre's draft since 2026-09) stays into main and gets the gate once it is ready. A pull request
   opened before this lands runs the new workflows on its next push, since a pull request runs the workflows of its
   merge with main.

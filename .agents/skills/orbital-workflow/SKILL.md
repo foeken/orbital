@@ -54,9 +54,9 @@ Only after everything in it is merged and green:
 
 1. `node scripts/promote.js bump patch` (or `start --bump` for a batch) puts the bump through the gate; merge it.
 2. `node scripts/promote.js tag` tags main, only if its tip is the merge of a head whose gate passed, with its tree.
-3. The builds come from that tag, on this Mac (AGENTS.md, Releasing), after `promote.js release-check v<version>`.
-   Until scripts/release.sh moves onto the tag after #740, it still bumps and merges by itself (docs/WORKFLOW.md,
-   Releasing). A failed build means a new change and a new version, never a build of something else.
+3. `npm run release` (AGENTS.md, Releasing): no version. It tags tested main (step 2) if the version has no tag yet,
+   holds the tag to the gate (`promote.js verify-tag`), and builds the Mac zip and the Android APK from that commit
+   checked out. A failed build means a new change and a new version, never a build of something else.
 4. Announce nothing until every build the release carries is made and read back.
 
 ## Stop and say so

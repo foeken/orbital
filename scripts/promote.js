@@ -20,7 +20,7 @@
 //                                                the version bump as its own pull request into main (release/v<x>)
 //   node scripts/promote.js tag [--dry-run]      tag main's tip v<package.json version>, only when it is the merge of a
 //                                                head whose gate passed and has that head's tree
-//   node scripts/promote.js release-check <tag>  read-only, for the release: the tag is on main and is such a merge
+//   node scripts/promote.js verify-tag <tag>     read-only, for scripts/release.sh: the tag is on main and is such a merge
 // scripts/promote-check.js runs every command on throwaway repositories (npm run check).
 //
 // A pull request into main may merge when: it is open and ready; its head contains main as it is now; and the gate
@@ -307,7 +307,7 @@ function make(ctx) {
       return { tag, ...t };
     },
 
-    releaseCheck({ tag }) {
+    verifyTag({ tag }) {
       fetch();
       if (!has('refs/tags/' + tag)) return { ok: false, problems: ['no tag ' + tag] };
       const t = tested('refs/tags/' + tag);
@@ -379,7 +379,7 @@ if (require.main === module) {
     else if (cmd === 'sync') show(p.sync({ lane: arg('--lane'), dryRun: argv.includes('--dry-run') }));
     else if (cmd === 'bump') show(p.bump({ kind: argv[1], dryRun: argv.includes('--dry-run') }));
     else if (cmd === 'tag') show(p.tag({ dryRun: argv.includes('--dry-run') }));
-    else if (cmd === 'release-check') { const r = p.releaseCheck({ tag: argv[1] }); show(r); process.exit(r.ok ? 0 : 1); }
+    else if (cmd === 'verify-tag') { const r = p.verifyTag({ tag: argv[1] }); show(r); process.exit(r.ok ? 0 : 1); }
     else { console.error('usage: see the top of scripts/promote.js'); process.exit(2); }
   } catch (e) { console.error('promote: ' + e.message); process.exit(1); }
 }
