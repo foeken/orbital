@@ -98,13 +98,9 @@ extension View {
     func nodeMenu(_ id: String?, engine: Engine, task: String? = nil, assignees: [String]? = nil, then done: @escaping () async -> Void = {}) -> some View {
         contextMenu {
             if let id, id.hasPrefix("tana:") {
-                if task != nil { Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, then: done) } }
-                // your Dot, and any other agent linked through orbital.md that is on (Agents.swift): the default first
-                if Engine.handable(id) {
-                    ForEach(engine.agentsOn) { a in Button { engine.handing = .init(id: id, agent: a, then: done) } label: { Label("Assign to \(a.name) …", image: "Glyphs/robot") } }
-                    if let held = engine.handed[id], let a = engine.agents.first(where: { $0.id == held }) {
-                        Button("Unassign \(a.name)", systemImage: "person.crop.circle.badge.xmark") { Task { await engine.unhand(id); await done() } }
-                    }
+                // a task's people, with your Dot on top (Agents.swift); a note has only your Dot to go to
+                if task != nil || (Engine.handable(id) && !engine.agentsOn.isEmpty) {
+                    Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, people: task != nil, then: done) }
                 }
                 if let task, task != "proposed" { Button("Move to Inbox", systemImage: "tray") { Task { await engine.moveToInbox(id); await done() } } }
                 let pinned = engine.pinned.contains(id), secret = engine.sensitiveIds.contains(id)

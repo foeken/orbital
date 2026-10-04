@@ -95,7 +95,8 @@ class Engine(
             scope.launch { refresh() }
         }
 
-    data class Assigning(val id: String, val current: List<String>?, val then: suspend () -> Unit)
+    // people: false on a node that is not a task, whose Assign to lists only your agents
+    data class Assigning(val id: String, val current: List<String>?, val then: suspend () -> Unit, val people: Boolean = true)
     data class Handing(val id: String, val agent: Agent, val then: suspend () -> Unit)
     data class ShareAsk(val id: String, val access: Access, val shut: List<Member>, val then: suspend () -> Unit)
     class Shared(val text: String?, val image: ByteArray?) {
@@ -441,6 +442,18 @@ class Engine(
     suspend fun unhand(id: String) {
         if (isSample) return
         try { call<Boolean>("return await orbital.unhand(id)", mapOf("id" to id)); handed = handed - id } catch (e: Failure) { error = e.message }
+    }
+    // Settings' swipes on an agent: Make Default, and Unlink, which also unassigns its nodes (orbital.setDefault, orbital.unlink)
+    suspend fun makeDefault(agent: Agent) {
+        if (isSample) return
+        try { agents = call("return await orbital.setDefault(agent)", mapOf("agent" to agent.id)) } catch (e: Failure) { error = e.message }
+    }
+    suspend fun unlink(agent: Agent) {
+        if (isSample) return
+        try {
+            agents = call("return await orbital.unlink(agent)", mapOf("agent" to agent.id))
+            handed = handed.filterValues { it != agent.id }
+        } catch (e: Failure) { error = e.message }
     }
 
     suspend fun share(id: String, rule: String, uris: List<String> = emptyList(), token: String? = null) =

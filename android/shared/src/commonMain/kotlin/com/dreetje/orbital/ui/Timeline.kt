@@ -39,10 +39,8 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.MoveToInbox
-import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.DropdownMenu
@@ -471,14 +469,9 @@ fun NodeMenu(
         content()
         if (node != null) DropdownMenu(open, { open = false }) {
             val run: (suspend () -> Unit) -> () -> Unit = { act -> { open = false; engine.scope.launch { act() } } }
-            if (task != null) MenuItem("Assign to …", Icons.Outlined.AccountCircle, onClick = run { engine.assigning = Engine.Assigning(node, assignees, then) })
-            // your Dot, and any other agent linked through orbital.md that is on (Agents.kt): the default first
-            if (handable(node)) {
-                for (a in engine.agentsOn) MenuItem("Assign to ${a.name} …", Icons.Outlined.SmartToy, onClick = run { engine.handing = Engine.Handing(node, a, then) })
-                engine.handed[node]?.let { held -> engine.agents.firstOrNull { it.id == held } }?.let { a ->
-                    MenuItem("Unassign ${a.name}", Icons.Outlined.PersonRemove, onClick = run { engine.unhand(node); then() })
-                }
-            }
+            // a task's people, with your Dot on top (Agents.kt); a note has only your Dot to go to
+            if (task != null || (handable(node) && engine.agentsOn.isNotEmpty()))
+                MenuItem("Assign to …", Icons.Outlined.AccountCircle, onClick = run { engine.assigning = Engine.Assigning(node, assignees, then, people = task != null) })
             if (task != null && task != "proposed") MenuItem("Move to Inbox", Icons.Outlined.MoveToInbox, onClick = run { engine.moveToInbox(node); then() })
             val pinned = node in engine.pinned
             val secret = node in engine.sensitiveIds

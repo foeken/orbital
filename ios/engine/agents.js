@@ -137,6 +137,34 @@ function agents({ hold, settled }) {
       await settings.flush();
       return JSON.stringify(true);
     },
+    // Settings' swipe, Make Default: the agent Assign to puts first, switched on with it (main/agent.js setDefault asks for
+    // an agent that is on; a swipe on one that is off means both)
+    async setDefault(agentId) {
+      await settled();
+      if (!relay.cached().some((a) => ID + a.id === agentId)) throw new Error('No such linked agent');
+      settings.set('agents', [...enabled().filter((x) => x !== 'tana' && x !== agentId), agentId]);
+      settings.set('defaultAgent', agentId);
+      await settings.flush();
+      return JSON.stringify(linked());
+    },
+    // Settings' swipe, Unlink, as linked.js unlink: the relay lets the agent go, it is switched off (and no longer the
+    // default), and its nodes are unassigned, status line and all: an agent that is gone keeps no badge
+    async unlink(agentId) {
+      await settled();
+      const a = relay.cached().find((x) => ID + x.id === agentId);
+      if (!a) throw new Error('No such linked agent');
+      await relay.call('DELETE', '/orbital/agents/' + a.id);
+      if (enabled().includes(agentId)) settings.set('agents', enabled().filter((x) => x !== 'tana' && x !== agentId));
+      if (settings.get('defaultAgent') === agentId) settings.set('defaultAgent', null);
+      for (const [id, link] of Object.entries(object('codexTask'))) {
+        if (!link || link.agent !== agentId) continue;
+        const doc = await hold(id).catch(() => null);
+        if (doc && writable(doc)) { relay.clearStatus(doc); await written(id, doc).catch(() => {}); }
+        mark(id, null);
+      }
+      await refresh();
+      return JSON.stringify(linked());
+    },
   };
 }
 

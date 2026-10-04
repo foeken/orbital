@@ -142,13 +142,15 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     S.settingsReadOnly = true; // the phone's: nothing here finds or makes a settings document, the mirror is enough
     S.client = { sync: { flushed: async () => {}, getDocument: () => null }, graph: { listNodes: async () => ({ nodes: [] }) } };
     let answer = { subscribers: 1, delivered: 1 };
+    let unlinked = false;
     const sent = [], json = (o) => new Response(JSON.stringify(o));
     relay.relay.fetch = async (url, init = {}) => {
       const p = url.slice(relay.relay.base.length);
       assert.match(new Headers(init.headers).get('authorization'), /^Orbital [\w-]{43}$/, 'every call carries your Orbital\'s key');
       if (p === '/orbital/codes') return json({ code: 'ABCD-1234', expiresAt: Date.now() + 9e5 });
       if (p === '/orbital/codes/ABCD-1234') return json({ state: 'linked', agent: { id: AGENT, name: 'Echo', app: 'ChatGPT' } });
-      if (p === '/orbital/agents') return json({ agents: [{ id: AGENT, name: 'Echo', app: 'ChatGPT' }] });
+      if (p === '/orbital/agents') return json({ agents: unlinked ? [] : [{ id: AGENT, name: 'Echo', app: 'ChatGPT' }] });
+      if (p === '/orbital/agents/' + AGENT && init.method === 'DELETE') { unlinked = true; return json({ ok: true }); }
       if (p === '/orbital/agents/' + AGENT + '/events') { sent.push(JSON.parse(init.body)); return json(answer); }
       return new Response('{}', { status: 404 });
     };
@@ -196,6 +198,16 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     await api.unhand(doc.id);
     assert.deepStrictEqual(lines(), ['Venue options'], 'Unassign takes the status line out');
     assert.deepStrictEqual([settings.get('codex'), settings.get('codexTask')[doc.id], agentOf(doc.id, doc)], [[], undefined, null], 'and the mark and the link');
+
+    // Settings' swipes: Make Default switches an agent that was off on as well; Unlink lets it go at the relay, switches it
+    // off, makes it no one's default and unassigns its nodes, status line and all
+    settings.set('agents', ['codex']); settings.set('defaultAgent', null);
+    assert.deepStrictEqual(JSON.parse(await api.setDefault(ID)).map((a) => [a.on, a.isDefault]), [[true, true]], 'made the default, and on');
+    await api.handTo(doc.id, ID, 'Book the venue');
+    assert.deepStrictEqual(JSON.parse(await api.unlink(ID)), [], 'unlinked: the relay no longer lists it');
+    assert.ok(unlinked, 'the relay was told');
+    assert.deepStrictEqual([settings.get('agents'), settings.get('defaultAgent'), settings.get('codex'), settings.get('codexTask')[doc.id], lines()], [['codex'], null, [], undefined, ['Venue options']],
+      'off, no longer the default, and its node unassigned with its status line gone');
     Object.assign(S, { me: was.me, client: was.client, settingsReadOnly: was.readOnly });
   }
 

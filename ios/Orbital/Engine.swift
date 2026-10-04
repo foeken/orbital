@@ -332,6 +332,18 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard !Self.isSample else { return }
         do { let _: Bool = try await call("return await orbital.unhand(id)", ["id": id]); handed[id] = nil } catch { self.error = error.localizedDescription }
     }
+    // Settings' swipes on an agent: Make Default, and Unlink, which also unassigns its nodes (orbital.setDefault, orbital.unlink)
+    func makeDefault(_ agent: Agent) async {
+        guard !Self.isSample else { return }
+        do { agents = try await call("return await orbital.setDefault(agent)", ["agent": agent.id]) } catch { self.error = error.localizedDescription }
+    }
+    func unlink(_ agent: Agent) async {
+        guard !Self.isSample else { return }
+        do {
+            agents = try await call("return await orbital.unlink(agent)", ["agent": agent.id])
+            handed = handed.filter { $0.value != agent.id }
+        } catch { self.error = error.localizedDescription }
+    }
 
     // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
     // Remove Pin takes the task out of Today's Tasks at once, collapsing as a deleted row does; the read after says where it
@@ -360,7 +372,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
     func markSensitive(_ id: String, _ on: Bool) async { await act("return await orbital.sensitive(id, on)", ["id": id, "on": on]) }
     // Long press, Assign to …: the task whose picker is open (AssignSheet), the people to pick from, and the one picked
-    struct Assigning: Identifiable { let id: String; let current: [String]?; let then: () async -> Void }
+    // people: false on a node that is not a task, whose Assign to lists only your agents
+    struct Assigning: Identifiable { let id: String; let current: [String]?; var people = true; let then: () async -> Void }
     var assigning: Assigning?
     struct Member: Decodable, Identifiable { let id: String; let name: String }
     func members() async -> [Member] { Self.isSample ? [] : (try? await call("return await orbital.members()", [:])) ?? [] }

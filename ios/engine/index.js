@@ -588,7 +588,7 @@ window.orbital = {
   ...agents({ hold, settled }),
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage', 'linkCode', 'handTo', 'unhand']) {
+for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage', 'linkCode', 'handTo', 'unhand', 'setDefault', 'unlink']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

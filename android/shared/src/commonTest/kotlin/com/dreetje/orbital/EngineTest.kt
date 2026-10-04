@@ -153,6 +153,8 @@ class EngineTest {
             when {
                 "orbital.handTo" in body -> if (refuse) throw Exception("Echo is not listening yet") else text("""{"id":"relay:a1","name":"Echo","status":"assigned"}""")
                 "orbital.unhand" in body -> text("true")
+                "orbital.setDefault" in body -> text("""[{"id":"relay:a1","name":"Echo","on":true,"isDefault":false},{"id":"relay:a2","name":"Off one","on":true,"isDefault":true}]""")
+                "orbital.unlink" in body -> text("""[{"id":"relay:a2","name":"Off one","on":true,"isDefault":true}]""")
                 else -> answer(body, args)
             }
         }
@@ -168,6 +170,14 @@ class EngineTest {
         assertEquals("relay:a1", engine.handed["tana:text:a"])
         engine.unhand("tana:text:a")
         assertNull(engine.handed["tana:text:a"])
+        // Settings' swipes: Make Default reads back the agents as the engine left them; Unlink takes the agent's nodes too
+        engine.makeDefault(engine.agents.last())
+        assertEquals(listOf("Off one", "Echo"), engine.agentsOn.map { it.name }, "the default first in Assign to")
+        engine.hand("tana:text:a", echo, "Book the venue")
+        engine.unlink(echo)
+        assertEquals(mapOf("agent" to "relay:a1", "demo" to false), host.calls.last { "orbital.unlink" in it.first }.second)
+        assertEquals(listOf("Off one"), engine.agents.map { it.name })
+        assertNull(engine.handed["tana:text:a"], "an unlinked agent keeps no node")
     }
 
     @Test fun demoModeTicksNothing() = runTest {

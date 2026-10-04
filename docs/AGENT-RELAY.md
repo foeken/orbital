@@ -48,10 +48,12 @@ client, the link message, the event's words and the status line) run in the phon
 same synced settings: `relayKey`, `agents` and `defaultAgent`, and each node's `codex`, `codexPrompt` and `codexTask`.
 So a Dot linked on the phone is in the Mac's Choose agents, and a node handed over from the phone has the Mac's badge.
 **Settings → Agents → Connect to your OpenAI Dot** is the Connect page (the two servers, the message with its code, the
-wait), and a long press on a node offers **Assign to <its name> …** for each linked agent that is on, then a sheet for
-the request, and **Unassign <its name>**; a node's page shows the agent and its last status line. The relay sends
-`access-control-allow-origin: *`, which is what lets the engine call it from its page on home.tana.inc. Renaming,
-switching off, unlinking and Reset agent link key stay on the Mac; Tana, Codex and Claude run on a Mac only.
+wait), and an agent there swipes right to Make Default and left to Unlink (linked.js unlink: its nodes unassigned too).
+A long press's **Assign to …** lists each linked agent that is on above the people (on a note, alone): a tap asks for
+the request in the same sheet, and a tap on the ticked agent, or Unassigned, takes the node back. A node's page shows
+the agent and its last status line. The relay sends `access-control-allow-origin: *`, which is what lets the engine
+call it from its page on home.tana.inc. Renaming, switching off and Reset agent link key stay on the Mac; Tana, Codex and
+Claude run on a Mac only.
 
 ## Why the request travels in the event
 

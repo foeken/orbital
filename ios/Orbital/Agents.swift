@@ -5,7 +5,8 @@ import SwiftUI
 // request written here and the node's own words left in Tana. What is linked and handed over is in your settings
 // document, so the Mac sees it too.
 
-// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, then Connect to your OpenAI Dot
+// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped right to make it the default
+// and left to unlink it, then Connect to your OpenAI Dot
 struct AgentsSection: View {
     let engine: Engine
     @State private var problem: String?
@@ -16,13 +17,17 @@ struct AgentsSection: View {
                 LabeledContent { Text([a.app, a.isDefault ? "Default" : nil, a.on ? nil : "Off"].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")) } label: {
                     SettingsView.Row(glyph: "robot", title: a.name)
                 }
+                .swipeActions(edge: .trailing) {
+                    Button("Unlink", role: .destructive) { Task { await engine.unlink(a) } }
+                }
+                .swipeActions(edge: .leading) {
+                    if !a.isDefault { Button("Make Default") { Task { await engine.makeDefault(a) } }.tint(.blue) }
+                }
             }
             NavigationLink { ConnectDot(engine: engine) } label: { SettingsView.Row(glyph: "chatgpt", title: "Connect to your OpenAI Dot") }
         } header: { SettingsView.Header("Agents") } footer: {
             if let problem { Text(problem) }
-            Text(engine.agents.isEmpty
-                 ? "Link your Dot, OpenAI's agent in ChatGPT, and hand it a task or a note with a long press. It reads the node in Tana itself."
-                 : "Hand a task or a note to " + (engine.agentsOn.first?.name ?? "your Dot") + " with a long press: Assign to … Switching agents on or off is in Cmd+K Choose agents on your Mac.")
+            if engine.agents.isEmpty { Text("Link your Dot, OpenAI's agent in ChatGPT, and hand it a task or a note with a long press. It reads the node in Tana itself.") }
         }
         .task { problem = await engine.loadAgents() }
     }
@@ -120,37 +125,35 @@ struct ConnectDot: View {
     }
 }
 
-// Assign to <its name> …: what it should do with the node, written here and sent with the handoff; the node itself is only
-// read, as content. Assign stays until the agent took it, and says why not when it did not (not listening yet, read-only).
-struct HandSheet: View {
+// Your Dot picked in Assign to …, or asked again from a node's Agent field: what it should do with the node, written here
+// and sent with the handoff; the node itself is only read, as content. Assign stays until the agent took it, and says why
+// not when it did not (not listening yet, read-only). done closes whatever it was opened in.
+struct HandForm: View {
     let engine: Engine
     let handing: Engine.Handing
-    @Environment(\.dismiss) private var dismiss
+    let done: () -> Void
     @State private var request = ""
     @State private var sending = false
     @State private var failure: String?
     @FocusState private var focused: Bool
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("What should \(handing.agent.name) do?", text: $request, axis: .vertical).lineLimit(4...12).focused($focused)
-                } footer: {
-                    Text("\(handing.agent.name) reads the node in Tana. Only what you write here tells it what to do.")
-                }
-                if let failure { Section { Text(failure).foregroundStyle(.red) } }
+        Form {
+            Section {
+                TextField("What should \(handing.agent.name) do?", text: $request, axis: .vertical).lineLimit(4...12).focused($focused)
+            } footer: {
+                Text("\(handing.agent.name) reads the node in Tana. Only what you write here tells it what to do.")
             }
-            .navigationTitle("Assign to " + handing.agent.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    if sending { ProgressView() } else { Button("Assign") { Task { await send() } }.disabled(request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
-                }
-            }
-            .onAppear { focused = true }
+            if let failure { Section { Text(failure).foregroundStyle(.red) } }
         }
+        .navigationTitle("Assign to " + handing.agent.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                if sending { ProgressView() } else { Button("Assign") { Task { await send() } }.disabled(request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+            }
+        }
+        .onAppear { focused = true }
         .interactiveDismissDisabled(sending || !request.isEmpty)
     }
 
@@ -159,9 +162,23 @@ struct HandSheet: View {
         defer { sending = false }
         do {
             try await engine.hand(handing.id, to: handing.agent, request)
-            dismiss()
+            done()
             await handing.then()
         } catch { failure = error.localizedDescription }
+    }
+}
+
+// The same, in a sheet of its own: Ask again from a node's Agent field
+struct HandSheet: View {
+    let engine: Engine
+    let handing: Engine.Handing
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            HandForm(engine: engine, handing: handing) { dismiss() }
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
     }
 }
 
