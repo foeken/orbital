@@ -54,7 +54,9 @@ jobs:
       - run: npm run flows
 
   # The Android app (android/): the shared module's tests, the screens among them drawn headless on the desktop target,
-  # and a debug build of the app. The glyphs it draws are checked fresh by npm run check above (scripts/glyph-check.js).
+  # the app module's own JVM tests, its lint, and a debug build of the app. The journeys on a device
+  # (connectedDebugAndroidTest) need an emulator and run by hand. The glyphs it draws are checked fresh by npm run check
+  # above (scripts/glyph-check.js).
   android:
     runs-on: ubuntu-latest
     steps:
@@ -77,5 +79,5 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :shared:jvmTest :androidApp:assembleDebug --console=plain
+      - run: ./gradlew :shared:jvmTest :androidApp:testDebugUnitTest :androidApp:lintDebug :androidApp:assembleDebug --console=plain
         working-directory: android

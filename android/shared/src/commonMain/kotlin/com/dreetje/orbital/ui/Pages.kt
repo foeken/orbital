@@ -139,7 +139,7 @@ fun NodeScreen(
                     "search", "event" -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                         val rows = engine.shown(current.rows)
                         // in the sections the search was saved with (Row.group), as the desktop shows it
-                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) {
+                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = 6.dp + LocalBottomInset.current)) {
                             val key = uniqueKeys()
                             Lists.sections(rows).forEachIndexed { s, (title, list) ->
                                 if (title != null) item("h$s") { Text(title, Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp).semantics { heading() }, style = Type.headline, color = c.secondary) }
@@ -150,7 +150,7 @@ fun NodeScreen(
                     }
                     else -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                         val flat = Lists.flat(current.rows)
-                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
+                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp + LocalBottomInset.current)) {
                             val key = uniqueKeys()
                             access?.let { a -> item("details") { NodeDetails(id, a, engine, open = { assigningVisibility = true }) { load() } } }
                             flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine.reveal) } }
@@ -325,7 +325,8 @@ private fun Field(name: String, change: () -> Unit, value: @Composable () -> Uni
 @Composable
 fun Dots(still: Boolean, modifier: Modifier = Modifier) {
     val c = Theme.colors
-    val t by rememberInfiniteTransition().animateFloat(0f, 6.2832f, infiniteRepeatable(tween(1570, easing = LinearEasing)))
+    // with animations off no clock runs at all: three still dots
+    val t = if (still) 0f else rememberInfiniteTransition().animateFloat(0f, 6.2832f, infiniteRepeatable(tween(1570, easing = LinearEasing))).value
     Row(modifier.clearAndSetSemantics { contentDescription = "Tana is writing" }, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         for (i in 0 until 3) {
             val a = if (still) 0.5f else 0.25f + 0.75f * kotlin.math.max(0f, kotlin.math.sin(t * 4 - i * 0.9f))

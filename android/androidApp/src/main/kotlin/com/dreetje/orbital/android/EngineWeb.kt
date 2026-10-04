@@ -62,6 +62,9 @@ class EngineWeb(private val app: Context, private val engine: String, screen: Co
 
     fun use(screen: Context?) { context.baseContext = screen ?: app }
 
+    // webkit 1.14 (libs.versions.toml says why that one) marks REQUESTED_WITH_HEADER_ALLOW_LIST's name restricted, though
+    // isFeatureSupported is the documented way to ask for it
+    @SuppressLint("RestrictedApi")
     private fun make(): WebView = browser(context).also { web ->
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true) // Tana's sign-in hands over through WorkOS
         // no X-Requested-With: Google refuses to sign in a page that says it is an app's web view

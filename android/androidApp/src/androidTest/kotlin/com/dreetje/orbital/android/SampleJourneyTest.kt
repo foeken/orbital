@@ -1,9 +1,12 @@
 package com.dreetje.orbital.android
 
 import android.content.Intent
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -16,6 +19,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
+import org.junit.Assert.assertTrue
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -69,6 +75,18 @@ class SampleJourneyTest {
         compose.waitUntil(3000) { runCatching { draft.assert(hasStateDescription("Not completed")) }.isSuccess }
     }
 
+    @Test fun taskCheckboxHasA48DpTargetAndAcceptsATapOutsideTheVisibleBox() {
+        launch()
+        val draft = box("Draft the Q4 hiring plan")
+        val bounds = draft.fetchSemanticsNode().boundsInRoot
+        val minimumTarget = with(compose.density) { 48.dp.toPx() }
+        assertTrue("Task checkbox needs a 48dp hit target", bounds.width >= minimumTarget && bounds.height >= minimumTarget)
+        draft.performTouchInput {
+            click(Offset(center.x, center.y - with(density) { 20.dp.toPx() }))
+        }
+        compose.waitUntil(3000) { runCatching { draft.assert(hasStateDescription("Completed")) }.isSuccess }
+    }
+
     @Test fun aSensitiveTaskShowsNoWords() {
         launch()
         box("Sensitive task").assertExists()
@@ -88,12 +106,104 @@ class SampleJourneyTest {
         compose.waitUntil(5000) { seen("Book the offsite venue") }
     }
 
+    // a long press picks a saved search up and it follows the finger, as the iPhone's List reorders: the one under it
+    // makes way. Whatever order an earlier run left, the top two change places.
+    @Test fun savedSearchesReorderByDragging() {
+        launch()
+        openMenu()
+        compose.waitUntil(5000) { seen("My open tasks") }
+        compose.waitForIdle()
+        // the menu's rows start where its own Timeline row's words do; on a wide window the page beside it says Timeline too
+        val timeline = compose.onAllNodes(hasText("Timeline"), useUnmergedTree = true).fetchSemanticsNodes().minBy { it.boundsInRoot.left }.boundsInRoot
+        val searches = compose.onAllNodes(hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+            .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.let { t -> Triple(t, n.boundsInRoot.left, n.boundsInRoot.top) } }
+            .filter { (_, left, top) -> kotlin.math.abs(left - timeline.left) < 2f && top > timeline.bottom }
+            .map { (t, _, top) -> t to top }
+            .sortedBy { it.second }
+        val (first, second) = searches[0].first to searches[1].first
+        val step = searches[1].second - searches[0].second
+        compose.onNodeWithText(first, useUnmergedTree = true).performTouchInput {
+            down(center)
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 200)
+            repeat(10) { moveBy(Offset(0f, step * 0.12f)) }
+            up()
+        }
+        compose.waitForIdle()
+        val top = { t: String -> compose.onNodeWithText(t, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top }
+        assertTrue("$second should now be above $first", top(second) < top(first))
+    }
+
     @Test fun aMeetingOpensItsPageAndBackComesHome() {
         launch()
         compose.onNode(hasText("Design review", substring = true) and hasClickAction()).performClick()
         compose.waitUntil(5000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
         device.pressBack() // the system's Back, as the gesture sends it
         compose.waitUntil(5000) { home && compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test fun predictiveEdgeBackReturnsFromANodeToItsPreviousPage() {
+        launch()
+        compose.onNode(hasText("Design review", substring = true) and hasClickAction()).performClick()
+        compose.waitUntil(5000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
+        val y = device.displayHeight / 2
+        device.executeShellCommand("input swipe 0 $y ${device.displayWidth * 3 / 4} $y 450")
+        compose.waitUntil(5000) { home && compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test fun rightEdgePredictiveBackReturnsFromANodeToItsPreviousPage() {
+        launch()
+        compose.onNode(hasText("Design review", substring = true) and hasClickAction()).performClick()
+        compose.waitUntil(5000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
+        val y = device.displayHeight / 2
+        device.executeShellCommand("input swipe ${device.displayWidth - 1} $y ${device.displayWidth / 4} $y 450")
+        compose.waitUntil(5000) { home && compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    // the page a back swipe returns to is the one the swipe showed coming in: scrolled where it was left, not read
+    // again from the top
+    @Test fun predictiveBackKeepsTheTimelineWhereItWasScrolled() {
+        launch()
+        val meeting = hasText("Design review", substring = true) and hasClickAction()
+        val before = compose.onNode(meeting).fetchSemanticsNode().boundsInRoot.top
+        val y = device.displayHeight / 2
+        device.swipe(device.displayWidth / 2, y, device.displayWidth / 2, y - device.displayHeight / 8, 40)
+        compose.waitForIdle()
+        val scrolled = compose.onNode(meeting).fetchSemanticsNode().boundsInRoot.top
+        assertTrue("the Timeline should have scrolled ($before -> $scrolled)", scrolled < before - 20f)
+        compose.onNode(meeting).performClick()
+        compose.waitUntil(5000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
+        device.executeShellCommand("input swipe 0 $y ${device.displayWidth * 3 / 4} $y 450")
+        compose.waitUntil(5000) { home && compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isEmpty() }
+        compose.waitForIdle()
+        val after = compose.onNode(meeting).fetchSemanticsNode().boundsInRoot.top
+        assertTrue("the Timeline should be where it was scrolled ($scrolled), not at $after", kotlin.math.abs(after - scrolled) < 2f)
+    }
+
+    @Test fun cancelledPredictiveBackKeepsTheCurrentPageOpen() {
+        launch()
+        compose.onNode(hasText("Design review", substring = true) and hasClickAction()).performClick()
+        compose.waitUntil(5000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
+        // a back swipe is taken back by bringing the finger to the edge again before letting go; let go anywhere past
+        // the start, the system goes back
+        val y = device.displayHeight / 2
+        val w = device.displayWidth
+        device.swipe(arrayOf(android.graphics.Point(1, y), android.graphics.Point(w * 3 / 8, y), android.graphics.Point(1, y)), 40)
+        Thread.sleep(1500) // the page settles home
+        compose.waitUntil(3000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Design review", useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun predictiveBackClosesTheOpenCompactMenu() {
+        launch()
+        if (compose.onAllNodes(hasContentDescription("Menu")).fetchSemanticsNodes().isEmpty()) return // a wide window's menu stays beside the page
+        openMenu()
+        compose.waitUntil(5000) { seen("My open tasks") }
+        val y = device.displayHeight / 2
+        device.executeShellCommand("input swipe ${device.displayWidth - 1} $y ${device.displayWidth / 2} $y 450")
+        compose.waitUntil(5000) {
+            compose.onAllNodes(hasContentDescription("Menu")).fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodes(hasText("My open tasks", substring = true)).fetchSemanticsNodes().isEmpty()
+        }
     }
 
     @Test fun aRotationKeepsThePageOpen() {
@@ -103,6 +213,15 @@ class SampleJourneyTest {
         scenario!!.recreate()
         compose.waitUntil(5000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Design review", useUnmergedTree = true).assertExists()
+    }
+
+    // a wide window (a tablet, an unfolded phone) keeps the menu beside the page; a phone's is behind its button
+    @Test fun aWideWindowKeepsTheMenuBesideThePage() {
+        val metrics = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics
+        val wide = metrics.widthPixels / metrics.density >= 840f
+        launch()
+        assertTrue(compose.onAllNodes(hasContentDescription("Menu")).fetchSemanticsNodes().isEmpty() == wide)
+        if (wide) compose.onNodeWithText("My open tasks", useUnmergedTree = true).assertExists()
     }
 
     @Test fun askTanaOpensTheChat() {
