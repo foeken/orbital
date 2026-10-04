@@ -296,6 +296,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 html.framed .navbtns { visibility: hidden; }
 html.framed #crumbs { display: none; }
 html.framed .titlebar { padding-top: 18px; }
+html.framed #pagehead { margin-top: 14px; } /* a page's title starts where a page without one starts its first heading (the Timeline's Today): its letters level with that heading's, in every pane */
 .navbtn {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: 0;
