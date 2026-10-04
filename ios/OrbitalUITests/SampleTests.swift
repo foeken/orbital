@@ -105,9 +105,13 @@ final class SampleTests: XCTestCase {
     }
 
     // Siri and Shortcuts' Add Task (Intents.swift) opens orbital:new, and the app makes the task at once; one Tana did not
-    // take (the sample saves nothing) is back in the next Quick Add as it was asked for, pinned to today included
+    // take (the sample saves nothing) is back in the next Quick Add as it was asked for, pinned to today included. The link
+    // comes in as -open: one opened from outside the app asks first whether to open Orbital, which the test would wait on.
     func testAddTaskFromSiriIsMadeAsAskedPinnedToToday() {
-        app.open(URL(string: "orbital:new?title=Book%20the%20train&today=1")!)
+        app.terminate()
+        app.launchArguments = ["-sample", "-demoMode", "NO", "-open", "orbital:new?title=Book%20the%20train&today=1"]
+        app.launch()
+        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 15))
         sleep(1) // the task is made behind the Timeline, and refused by the sample, a moment after the link opens
         app.buttons["Quick Add Task"].tap()
         let sheet = app.navigationBars["Quick Add"]

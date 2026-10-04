@@ -123,29 +123,7 @@ struct Shell: View {
         .sheet(item: Binding { shared?.image == nil ? shared : nil } set: { shared = $0 }) { QuickAdd(engine: engine, shared: $0) }
         .onChange(of: shared?.id) { if let image = shared?.image { shared = nil; engine.addImage { image } } }
         .onChange(of: engine.made) { if let id = engine.made { engine.made = nil; path.append(id) } } // an image's node, made: opened
-        // the Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
-        // not open it. A widget's tap (ios/Widgets) is orbital:add for Quick Add, orbital:<id> for that node over the
-        // Timeline, or orbital:timeline; its task box orbital:check:<id> (done) or orbital:uncheck:<id> (open: accepted, or
-        // ticked back on), written to Tana at once, with the Timeline in front where Today's Tasks shows it. Siri and
-        // Shortcuts (Intents.swift) use the same, and orbital:new?title=…&today=1 to add a task, orbital:pin:<id> or
-        // orbital:unpin:<id>.
-        .onOpenURL { url in
-            guard url.scheme == "orbital" else { shared = Shared.take() ?? shared; return }
-            let what = String(url.absoluteString.dropFirst("orbital:".count))
-            settings = false; adding = what == "add"; show(false)
-            if what.hasPrefix("tana:") { page = .timeline; path = [what] } else if what == "timeline" { page = .timeline; path = [] }
-            for (prefix, state) in [("check:", "closed"), ("uncheck:", "open")] where what.hasPrefix(prefix + "tana:") {
-                page = .timeline; path = []
-                Task { await engine.tick(String(what.dropFirst(prefix.count)), to: state) }
-            }
-            for (prefix, on) in [("pin:", true), ("unpin:", false)] where what.hasPrefix(prefix + "tana:") {
-                Task { await engine.pin(String(what.dropFirst(prefix.count)), on) }
-            }
-            if what.hasPrefix("new?"), let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
-               let title = items.first(where: { $0.name == "title" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-                engine.add(.init(title: title, type: nil, search: nil, assignee: nil, values: [:], today: items.contains { $0.name == "today" }))
-            }
-        }
+        .onOpenURL(perform: open)
         // shared words open Quick Add over nothing else; an image opens nothing, so whatever is open stays
         .onChange(of: scene, initial: true) { if scene == .active, let found = Shared.take() { if found.image == nil { adding = false; settings = false }; shared = found } }
         .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
@@ -154,6 +132,9 @@ struct Shell: View {
             // -zoom <id>: a node open at launch, for design shots
             let args = CommandLine.arguments
             if let i = args.firstIndex(of: "-zoom"), i + 1 < args.count { path = [args[i + 1]] }
+            // -open <link>: an orbital: link opened at launch, as Siri or a widget opens one, for the UI tests (a link
+            // opened from outside asks first whether to open Orbital, which a test would wait on)
+            if let i = args.firstIndex(of: "-open"), i + 1 < args.count, let url = URL(string: args[i + 1]) { open(url) }
             // -menudemo: open the menu and close it again, for filming the move
             guard args.contains("-menudemo") else { return }
             try? await Task.sleep(for: .seconds(2)); show(true)
@@ -163,6 +144,30 @@ struct Shell: View {
 
     private func show(_ open: Bool) {
         withAnimation(reduceMotion ? nil : Self.move) { menu = open }
+    }
+
+    // The Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
+    // not open it. A widget's tap (ios/Widgets) is orbital:add for Quick Add, orbital:<id> for that node over the
+    // Timeline, or orbital:timeline; its task box orbital:check:<id> (done) or orbital:uncheck:<id> (open: accepted, or
+    // ticked back on), written to Tana at once, with the Timeline in front where Today's Tasks shows it. Siri and
+    // Shortcuts (Intents.swift) use the same, and orbital:new?title=…&today=1 to add a task, orbital:pin:<id> or
+    // orbital:unpin:<id>.
+    private func open(_ url: URL) {
+        guard url.scheme == "orbital" else { shared = Shared.take() ?? shared; return }
+        let what = String(url.absoluteString.dropFirst("orbital:".count))
+        settings = false; adding = what == "add"; show(false)
+        if what.hasPrefix("tana:") { page = .timeline; path = [what] } else if what == "timeline" { page = .timeline; path = [] }
+        for (prefix, state) in [("check:", "closed"), ("uncheck:", "open")] where what.hasPrefix(prefix + "tana:") {
+            page = .timeline; path = []
+            Task { await engine.tick(String(what.dropFirst(prefix.count)), to: state) }
+        }
+        for (prefix, on) in [("pin:", true), ("unpin:", false)] where what.hasPrefix(prefix + "tana:") {
+            Task { await engine.pin(String(what.dropFirst(prefix.count)), on) }
+        }
+        if what.hasPrefix("new?"), let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+           let title = items.first(where: { $0.name == "title" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            engine.add(.init(title: title, type: nil, search: nil, assignee: nil, values: [:], today: items.contains { $0.name == "today" }))
+        }
     }
 
     // your saved searches for the menu, with the icons they were given in Orbital; the last list stays when a read fails
