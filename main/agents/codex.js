@@ -45,7 +45,9 @@ function appServerRpc(timeoutMs = 20000, onNote, options = {}) {
     setTimeout(() => { if (waiting.delete(id)) reject(new Error('app-server timed out')); }, timeoutMs).unref?.();
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
-  return { call, stop, ready: call('initialize', { clientInfo: { name: 'orbital', title: 'Orbital', version: '1' } }) };
+  // clientInfo names Orbital to OpenAI: Codex sends its name as the request originator and its name and version in the
+  // User-Agent, and enterprise compliance logs show it. It authenticates nothing (docs/CHATGPT-SIGN-IN.md).
+  return { call, stop, ready: call('initialize', { clientInfo: { name: 'orbital', title: 'Orbital', version: require('../../package.json').version } }) };
 }
 function isolatedCodexEnv(home) {
   const env = { ...process.env, CODEX_HOME: home };
