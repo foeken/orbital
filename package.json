@@ -13,7 +13,7 @@
     "start": "electron .",
     "tana": "electron scripts/platform-cli.js",
     "lint": "eslint .",
-    "check": "node scripts/platform-check.js --self && node scripts/db-check.js && node scripts/sdk-check.js && node scripts/renderer-check.js && node scripts/renderer-behavior-check.js && node scripts/updater-check.js && node scripts/pdf-check.js && node scripts/livequery-check.js && node scripts/presence-check.js && node scripts/ios-engine-check.js && node scripts/phone-model-check.js && node scripts/glyph-check.js && node scripts/relay-check.js",
+    "check": "node scripts/platform-check.js --self && node scripts/db-check.js && node scripts/sdk-check.js && node scripts/renderer-check.js && node scripts/renderer-behavior-check.js && node scripts/updater-check.js && node scripts/release-check.js && node scripts/pdf-check.js && node scripts/livequery-check.js && node scripts/presence-check.js && node scripts/ios-engine-check.js && node scripts/phone-model-check.js && node scripts/glyph-check.js && node scripts/relay-check.js",
     "relay": "node relay/server.js",
     "flows": "node scripts/flow-check.js",
     "manual-diff": "node scripts/manual-diff.js",

@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('api', {
   // installUpdate downloads the newest and quits to swap it in (rejects with why it could not), onUpdateProgress hearing
   // { got, total } bytes as it downloads and { verifying: true } once it is being checked
   updateInfo: () => ipcRenderer.invoke('update:info'),
+  androidRelease: () => ipcRenderer.invoke('update:android'), // { version } while the latest release has the Android app (Orbital-android.apk), else null: help.html, the Install mobile app row
   installUpdate: () => ipcRenderer.invoke('update:install'),
   onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p || {})),
   setDemoMode: (on) => ipcRenderer.send('app:demoMode', on === true), // demo mode is on in the outliner: main posts no notification banners

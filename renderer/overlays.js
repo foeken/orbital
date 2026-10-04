@@ -21,6 +21,10 @@ function openHelp(at) {
   if (!pref('helpSeen', false)) setPref('helpSeen', true);
   openOverlay('help', at);
 }
+// Whether the latest release has the Android app (updater.js androidRelease): the Install mobile app row says so, as the
+// tour's phone page does. Asked once as the page loads; main asks GitHub once an hour at most for every page.
+let androidDownload = null;
+if (tana.androidRelease) tana.androidRelease().then((r) => { androidDownload = r; }, () => {});
 // A first start, from the first page: the Work View's second pane opens beside it and stays quiet. Only once signed
 // in and connected (renderer/app.js), and only if main says so (help:claim): it answers once the settings document has
 // been read, and yes to one page only. Over the login the tour taught a window nobody could use yet, a new machine went

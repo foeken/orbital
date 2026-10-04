@@ -93,6 +93,22 @@ async function stage(asset, progress = () => {}, verify = async () => {}, get = 
 
 let offer = null, installing = null; // the releases the card shows; the one install under way, whichever card asked
 
+// The Android app (scripts/release.sh attaches it to a release as ANDROID_APK): the Help tour's phone page offers it,
+// with a code for the latest release's download address, only while the latest release has one (help.html), and says
+// coming soon otherwise. { version } or null; asked of GitHub once an hour at most, however many pages ask.
+const ANDROID_APK = 'Orbital-android.apk';
+const androidIn = (release) => (release && !release.draft && (release.assets || []).some((a) => a.name === ANDROID_APK) ? { version: String(release.tag_name).replace(/^v/, '') } : null);
+let android = null; // { at, answer }: a promise, so pages asking at once share one request
+function androidRelease() {
+  if (!android || Date.now() - android.at > 3600e3) {
+    const answer = fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10e3) })
+      .then((res) => { if (!res.ok) throw new Error(`GitHub returned ${res.status} for the latest release`); return res.json(); }).then(androidIn);
+    android = { at: Date.now(), answer };
+    answer.catch(() => { if (android && android.answer === answer) android = null; }); // a failure is asked again next time
+  }
+  return android.answer;
+}
+
 // manual = the menu item or Cmd+K, which report "up to date" and failures; the launch and daily checks stay silent.
 // show() lays the update card over a window (main.js), false when it cannot (no window, or an overlay already there).
 async function check({ manual = false, show = () => false } = {}) {
@@ -118,6 +134,7 @@ async function check({ manual = false, show = () => false } = {}) {
 // offers the button again; success never answers, because the app quits.
 const ipc = {
   'update:info': () => offer && { current: app.getVersion(), releases: offer.map((r) => ({ version: r.tag_name.replace(/^v/, ''), date: r.published_at, notes: notes(r.body) })) },
+  'update:android': () => androidRelease().catch(() => null),
   'update:install': (e) => {
     if (!offer) throw new Error('There is no update to install');
     const tell = (p) => { if (!e.sender.isDestroyed()) e.sender.send('update:progress', p); };
@@ -174,4 +191,4 @@ const signedBy = (team) => {
   return `=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "${team}"`;
 };
 
-module.exports = { check, ipc, isNewer, newer, notes, counting, unpacked, stage, BOUNDS, teamOf, signedBy, canReplace };
+module.exports = { check, ipc, isNewer, newer, notes, counting, unpacked, stage, BOUNDS, teamOf, signedBy, canReplace, androidIn, ANDROID_APK };

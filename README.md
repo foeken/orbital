@@ -17,7 +17,7 @@ thing from a browser tab, and because the round trip through a web view makes a 
 |----------|-------|------------|--------|
 | Mac | the repository root | Electron, plain JavaScript | Released; signed, notarized and updating itself (Apple Silicon) |
 | iPhone | [`ios/`](ios/README.md) | SwiftUI | Beta in TestFlight: [join it](https://testflight.apple.com/join/wgcnRVKx) on iOS 26 or later |
-| Android | `android/` | Kotlin Multiplatform, Jetpack Compose | Builds and passes its tests in CI; not distributed yet (coming soon) |
+| Android | `android/` | Kotlin Multiplatform, Jetpack Compose | A signed APK with each release, installed by download on Android 10 or later; not on Google Play |
 
 There is no iPad, Windows, Linux or web version.
 
@@ -135,13 +135,16 @@ moved to the new name the first time the app or the CLI starts (`userdata.js`).
 
 To use it, open https://testflight.apple.com/join/wgcnRVKx on the iPhone (iOS 26 or later) to join the
 TestFlight beta, or Cmd+K **Install mobile app** in the Mac app and scan the code it shows with the
-iPhone's camera; the same page lists Android as coming soon. To build it, you need Xcode 26 or later, [Bun](https://bun.sh) (it bundles the
+iPhone's camera; the same page offers Android's download once the latest release has it. To build it, you need Xcode 26 or later, [Bun](https://bun.sh) (it bundles the
 engine in an Xcode build phase) and this repository's `node_modules`. [ios/README.md](ios/README.md) has
 the build and install commands, the simulator's launch arguments on invented content, and the UI tests.
 
 ### Android
 
-There is no build to install yet; to build one, you need the Android SDK with API 37, a JDK 17 or later,
+To use it, open https://github.com/foeken/orbital/releases/latest/download/Orbital-android.apk on the phone
+(Android 10 or later), open the download and install it, allowing your browser to install apps when Android
+asks; or scan the code Cmd+K **Install mobile app** shows on the Mac. It does not update itself yet: a newer
+release's APK installs over it the same way. To build one, you need the Android SDK with API 37, a JDK 17 or later,
 [Bun](https://bun.sh) and this repository's `node_modules` (`npm install`, or `npm run modules` in a
 worktree). The Gradle build bundles the phones' engine into the app itself.
 
@@ -156,27 +159,33 @@ adb shell am start -n com.dreetje.orbital/com.dreetje.orbital.android.MainActivi
 [docs/ANDROID.md](docs/ANDROID.md) records the research behind the Android choices (the web view bridge,
 sign-in, WebAssembly limits, versions), with a source for each.
 
-## Releasing the Mac app
+## Releasing
 
 Mac releases are signed, notarized and published to a public repo, so the source repo can stay private
-and the updater needs no token. The iPhone beta goes out through TestFlight; Android has no release yet.
+and the updater needs no token. The Android app goes in the same release as a signed APK. The iPhone beta
+goes out through TestFlight.
 
 ```sh
 npm run release            # patch; also accepts minor, major or an explicit version
+ORBITAL_ANDROID=0 npm run release   # the Mac alone, without the APK
 ```
 
-It refuses to start on a dirty tree, then checks both credentials **before** bumping anything, since a
+It refuses to start on a dirty tree, then checks every credential **before** bumping anything, since a
 failure afterwards would leave a local commit and tag to undo:
 
 - a **Developer ID Application** certificate in the Keychain, and
 - a `notarytool` keychain profile that still authenticates (`xcrun notarytool store-credentials`).
   Override the profile name with `ORBITAL_NOTARY_PROFILE`.
+- Orbital's Android release key (`~/.android/orbital-release.jks`, its password from 1Password), which must
+  be the one pinned in `android/release-key.sha256` and never a debug key (`scripts/android-release.sh --check`;
+  [docs/ANDROID.md](docs/ANDROID.md), Releasing).
 
 Then it bumps the version, packages the arm64 bundle with the hardened runtime, notarizes and staples
 it, validates the staple, prints the verdict Gatekeeper will give on someone else's Mac, zips the
-bundle with `ditto` (which preserves both the signature and the ticket), pushes the commit and tag,
-and publishes the zip as a release of this repo — override with `ORBITAL_RELEASES_REPO`. Copies up
-to 0.9.1 look for updates in `foeken/orbital-releases`, so each release is mirrored there as well
+bundle with `ditto` (which preserves both the signature and the ticket), builds the Android APK of the
+same commit and reads it back (signature, version, not debuggable), pushes the commit and tag,
+and publishes the zip and `Orbital-android.apk` as a release of this repo — override with `ORBITAL_RELEASES_REPO`. Copies up
+to 0.9.1 look for updates in `foeken/orbital-releases`, so each release's zip is mirrored there as well
 (`ORBITAL_MIRROR_REPO`, empty to stop) until they have all updated once. The release notes are then
 written by hand and posted in **#orbital** on Slack; the script prints that reminder last.
 Signing every nested file takes a few minutes; let it finish, and never run two packager builds at
