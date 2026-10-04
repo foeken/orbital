@@ -37,7 +37,11 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; this.once = this.on; this.loadFile = (file) => { this.file = file; }; this.sizes = []; this.setContentSize = (...size) => { this.sizes.push(size); }; this.isVisible = () => false; }, windows: [], WebContentsView: function () { this.webContents = { once() {}, loadFile(file, options) { this.loaded = { file: require('node:path').basename(file), ...options }; }, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
+  // main answers only Orbital's own pages (main.js fromApp): a call a check makes comes from index.html unless the
+  // check names the frame's url itself, as the one checking that a foreign page is refused does
+  const appPage = require('node:url').pathToFileURL(nodePath.join(root, 'index.html')).href;
+  const asPage = (e) => { e = e || {}; if (!e.senderFrame) e.senderFrame = {}; if (!('url' in e.senderFrame)) e.senderFrame.url = appPage; return e; };
+  const electron = { app: { getPath: () => require('node:os').tmpdir() }, BrowserWindow: function (options) { electron.windows.push(this); this.options = options; const on = {}; this.webContents = { on: (name, fn) => { on[name] = fn; }, handlers: on, css: [], getUserAgent: () => 'Mozilla/5.0 Orbital/1.0 Chrome/140.0 Electron/44.0.0 Safari/537.36', setUserAgent: (ua) => { this.userAgent = ua; }, insertCSS: (css) => { this.webContents.css.push(css); }, setWindowOpenHandler: (fn) => { this.openHandler = fn; } }; this.on = (name, fn) => { on['window:' + name] = fn; }; this.isDestroyed = () => !!this.destroyed; this.destroy = () => { this.destroyed = true; on["window:closed"]?.(); }; this.focus = () => { this.focused = (this.focused || 0) + 1; }; this.loadURL = (url) => { this.url = url; }; this.once = this.on; this.loadFile = (file) => { this.file = file; }; this.sizes = []; this.setContentSize = (...size) => { this.sizes.push(size); }; this.isVisible = () => false; }, windows: [], WebContentsView: function () { this.webContents = { handlers: {}, on(name, fn) { this.handlers[name] = fn; }, setWindowOpenHandler(fn) { this.openHandler = fn; }, once() {}, loadFile(file, options) { this.loaded = { file: require('node:path').basename(file), ...options }; }, focus() {}, isDestroyed: () => false, close() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, (e, ...args) => fn(asPage(e), ...args)); }, on: (name, fn) => handlers.set(name, (e, ...args) => fn(asPage(e), ...args)) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } },
     clipboard: { items: [], read: async () => electron.clipboard.items } }; // items: what a check puts on it, as clipboard.read() hands them over
   const context = vm.createContext({
@@ -59,7 +63,7 @@ function mainHelpers(childProcess) {
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
   const loaded = load(nodePath.join(root, 'main.js'));
-  return { ...loaded, handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
+  return { ...loaded, handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
 }
 
 // An agent's MCP connection to a relay (relay/server.js), signed in as an MCP client signs in: registered, PKCE, a token
@@ -1226,7 +1230,7 @@ async function main() {
     const shellWc = { isDestroyed: () => false, focus() {}, send: (channel, cmd, arg) => toShell.push([cmd, own(arg)]) };
     const shown = { isDestroyed: () => false, shell: { webContents: shellWc }, panes: [], pages: ['', '2'], doc: null, saveSoon() {}, close() { this.closed = true; } };
     backend.S.windows.add(shown);
-    const frame = (name, side) => ({ processId: 1, frameToken: name, url: 'file:///orbital/index.html?side=' + side, parent: {}, detached: false, isDestroyed: () => false, send: (channel, ...args) => told.push([name, channel, ...own(args)]) });
+    const frame = (name, side) => ({ processId: 1, frameToken: name, url: backend.appPage + '?side=' + side, parent: {}, detached: false, isDestroyed: () => false, send: (channel, ...args) => told.push([name, channel, ...own(args)]) });
     const ask = (channel, f, ...args) => { const e = { sender: shellWc, senderFrame: f }; const out = backend.handlers.get(channel)(e, ...args); return own(e.returnValue !== undefined ? e.returnValue : out); };
     const leftPage = frame('left', ''), rightPage = frame('right', '2'), thirdPage = frame('third', '3');
     assert.deepEqual(ask('window:getSide', rightPage), { side: '2' }, 'a restored page that loads first keeps its own id');
@@ -1252,7 +1256,7 @@ async function main() {
     assert.equal(backend.S.pane && backend.S.pane.frame, fourth, 'the page \u2325\u2318N opened is the one \u2318W and a notification click aim at');
     assert.equal(ask('window:split', leftPage, 'links', { view: 'library', place: '{}' }), '5');
     assert.deepEqual(toShell.splice(0), [['open', { id: '5', where: 'links', from: '', focus: false }]], 'Show graph: the Graph pane opens beside the page that asked, which keeps the keys (issue #462)');
-    const linksFrame = { ...frame('linksPane', '5'), url: 'file:///orbital/index.html?side=5&links=1' };
+    const linksFrame = { ...frame('linksPane', '5'), url: backend.appPage + '?side=5&links=1' };
     ask('window:getSide', linksFrame);
     const activeBefore = backend.S.activeView, otherView = activeBefore === 'inbox' ? 'library' : 'inbox';
     const linksRows = own(await backend.handlers.get('view:list')({ sender: shellWc, senderFrame: linksFrame }, otherView));
@@ -1355,6 +1359,18 @@ async function main() {
     assert.deepEqual([made.length - before, sw.focused, sw.file.endsWith('settings.html'), sw.options.resizable], [1, 1, true, false], 'one Settings window, of a fixed size, brought forward when asked again');
     sizeSettings({ sender: sw.webContents }, 333.4); sizeSettings({ sender: {} }, 999); sizeSettings({ sender: sw.webContents }, 'tall');
     assert.deepEqual(sw.sizes, [[600, 333, false]], 'it takes the height its page measured, and nothing else sets it');
+    // A view of Orbital's own stays on its pages: a link or a file dropped on it navigates nowhere, and a new window it
+    // asks for is none, a web link going to the browser (main.js keepHome). Its own pages still load, query and all.
+    const stays = (url) => { let stopped = false; sw.webContents.handlers['will-frame-navigate']({ url, preventDefault: () => { stopped = true; } }); return !stopped; };
+    assert.deepEqual([stays('https://evil.example/'), stays('file:///tmp/dropped.html'), stays(backend.appPage.replace('index.html', 'settings.html')), stays(backend.appPage + '?side=2'), stays('about:blank')], [false, false, true, true, true], 'a view goes to none but Orbital\'s own pages');
+    assert.equal(sw.openHandler({ url: 'https://example.com/out' }).action, 'deny', 'and opens no window of its own');
+    assert.equal(backend.opened.at(-1), 'https://example.com/out', 'a web link it asked for goes to the browser');
+    // and should a foreign page get the preload anyway, main answers none of its calls (main.js fromApp)
+    await assert.rejects(async () => backend.handlers.get('sync:status')({ senderFrame: { url: 'https://evil.example/' } }), /Not an Orbital page/, 'a page from elsewhere is refused');
+    await assert.rejects(async () => backend.handlers.get('sync:status')({ senderFrame: { url: 'file:///tmp/index.html' } }), /Not an Orbital page/, 'as is a file of the same name that is not the app\'s');
+    const foreign = { senderFrame: { url: 'https://evil.example/' } };
+    backend.handlers.get('prefs:snapshot')(foreign);
+    assert.equal(foreign.returnValue, null, 'and a sync call from it gets nothing');
     sw.webContents.handlers['window:closed']();
     await openSettings();
     assert.equal(made.length - before, 2, 'and a closed one opens anew');

@@ -1,8 +1,15 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
+// Only Orbital's own pages get anything, each where it belongs: the shell and the windows' own pages as the main frame,
+// an outliner page as an iframe of the shell. A view that navigated elsewhere runs this preload too; it gets nothing
+// (and main answers no call from it either, main.js fromApp).
+const PAGES = { 'shell.html': 'top', 'index.html': 'frame', 'help.html': 'top', 'task.html': 'top', 'update.html': 'top', 'settings.html': 'top' };
+const file = location.protocol === 'file:' ? location.pathname.split('/').pop() : '';
+if (!Object.hasOwn(PAGES, file) || (PAGES[file] === 'top') !== (window.top === window)) return;
+
 // The shell (shell.html): the window's own page, which lays the outliner pages out with Trellis (main.js). It gets only
 // what that takes; each outliner page is an iframe of it (nodeIntegrationInSubFrames) and gets window.api below.
-if (window.top === window && location.pathname.endsWith('/shell.html')) {
+if (file === 'shell.html') {
   contextBridge.exposeInMainWorld('shell', {
     state: () => ipcRenderer.sendSync('shell:state'), // { doc: Trellis document | null, theme, signedOut } at its start
     // 'open' { id, where: 'right' | 'tab' | 'float' | 'links', from: the asking page's id, focus } | 'close' id | 'focus' id
