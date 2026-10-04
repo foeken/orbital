@@ -1,7 +1,7 @@
 // The two branches in the updater: which release counts as newer than the running build, and whose signature a
 // downloaded bundle carries (an ad-hoc signature is nobody's, so it can never replace a signed app).
 const assert = require('node:assert');
-const { isNewer, newer, notes, counting, teamOf, signedBy, canReplace } = require('../updater');
+const { isNewer, newer, notes, counting, teamOf, signedBy, canReplace, androidIn, ANDROID_APK } = require('../updater');
 
 assert.equal(isNewer('v0.2.1', '0.2.0'), true);
 assert.equal(isNewer('v0.2.0', '0.2.0'), false);
@@ -16,6 +16,18 @@ assert.deepEqual(notes('Orbital 0.9.1 for Apple Silicon. Signed and notarized; u
   [{ block: 'heading2', segments: [{ text: 'Editing' }] }, { block: 'bullet', segments: [{ text: 'Markdown', marks: { bold: true } }, { text: ' typed (#601).' }] }],
   'release.sh\'s download line goes, headings and marks stay');
 assert.deepEqual(notes('- Chat\n  - **Thinking** shimmers').map((b) => b.depth), [undefined, 1], 'a sub-bullet keeps its depth');
+// The Android app is offered only by a latest release that has it, under the one name release.sh gives it and the Help
+// tour's code downloads (help.html #helpAndroidLink): a Mac-only release, or an APK under another name, is coming soon
+const zip = { name: 'Orbital-0.10.0-arm64.zip' };
+assert.deepEqual(androidIn({ tag_name: 'v0.10.0', assets: [zip, { name: ANDROID_APK }] }), { version: '0.10.0' }, 'the latest release with the APK');
+assert.equal(androidIn({ tag_name: 'v0.10.0', assets: [zip] }), null, 'a Mac-only release');
+assert.equal(androidIn({ tag_name: 'v0.10.0', assets: [zip, { name: 'Orbital-0.10.0.apk' }] }), null, 'an APK under another name than the code downloads');
+assert.equal(androidIn({ message: 'Not Found' }), null, 'no release at all');
+{
+  const read = (f) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', f), 'utf8');
+  assert.ok(read('scripts/release.sh').includes('dist/' + ANDROID_APK), 'release.sh attaches the APK under the name the updater looks for');
+  assert.ok(read('help.html').includes('href="https://github.com/foeken/orbital/releases/latest/download/' + ANDROID_APK + '"'), 'the Help tour downloads that name from the latest release of this repo');
+}
 // The download's progress: each new whole percent once, the bytes all passed on
 (async () => {
   const { Readable, Writable } = require('node:stream'), { pipeline } = require('node:stream/promises');

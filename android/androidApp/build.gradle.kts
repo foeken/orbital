@@ -44,6 +44,20 @@ val orbitalAssets = tasks.register<OrbitalAssets>("orbitalAssets") {
     output.set(layout.buildDirectory.dir("generated/orbital"))
 }
 
+// The version is the desktop's: package.json's, which npm version bumps (scripts/release.sh) and every release is tagged
+// with. versionCode, which has to grow for a phone to take an APK as an update, is read off it: 0.10.0 is 10000, 1.2.3 is
+// 1002003, so minor and patch stay under 1000.
+val orbitalVersion = providers.fileContents(layout.projectDirectory.file("../../package.json")).asText.map { json ->
+    val (major, minor, patch) = Regex("\"version\"\\s*:\\s*\"(\\d+)\\.(\\d+)\\.(\\d+)\"").find(json)?.destructured
+        ?: error("package.json has no x.y.z version")
+    check(minor.toInt() < 1000 && patch.toInt() < 1000) { "versionCode needs minor and patch under 1000" }
+    "$major.$minor.$patch" to major.toInt() * 1_000_000 + minor.toInt() * 1_000 + patch.toInt()
+}
+
+// The release key (scripts/android-release.sh hands it over): a keystore outside the repo, never in it. Without one the
+// release build is unsigned (CI's), and nothing installs it.
+val releaseKey = providers.environmentVariable("ORBITAL_ANDROID_KEYSTORE")
+
 android {
     namespace = "com.dreetje.orbital.android"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -52,9 +66,23 @@ android {
         applicationId = "com.dreetje.orbital"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.compileSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.9.1"
+        versionName = orbitalVersion.get().first
+        versionCode = orbitalVersion.get().second
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (releaseKey.isPresent) create("release") {
+            storeFile = file(releaseKey.get())
+            storePassword = providers.environmentVariable("ORBITAL_ANDROID_KEYSTORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("ORBITAL_ANDROID_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("ORBITAL_ANDROID_KEY_PASSWORD").get()
+        }
+    }
+
+    buildTypes {
+        // no shrinking: the engine's bridge and the serializers are reached by name
+        release { if (releaseKey.isPresent) signingConfig = signingConfigs.getByName("release") }
     }
 
     buildFeatures { compose = true }
