@@ -534,6 +534,54 @@ flow('golden path: Quick Add Task makes a typed task for someone', async (p) => 
     ['closeOverlay', { note: 'Task created: Fix the login loop, assigned to Priya Raman', open: 'tana:text:quick1' }]], 'the task made as a Bug, handed to Priya, and the window told');
 });
 
+// 16b. Cmd+K Install mobile app (renderer/overlays.js openHelp('mobile'), main.js openOverlay): the Help tour opens on
+// its phone page, in either theme, with iPhone chosen: its code drawn and the TestFlight link, which opens in the
+// browser through main and leaves the tour where it is. The choice is one radio group over one place: Android shows
+// coming soon and no code, link or button; the arrows switch inside the group and do not page or close the tour, and
+// the group is one tab stop. Without the page asked for, the tour starts at the beginning
+const HELP_API = String.raw`if (location.pathname === '/help.html') { window.__opened = [];
+  window.api = { openExternal: async (url) => { __opened.push(url); }, closeOverlay: () => {}, chatgptStatus: async () => ({ signedIn: false }) }; }`;
+flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s code and link, Android coming soon', async (p) => {
+  const link = fs.readFileSync(path.join(root, 'help.html'), 'utf8').match(/id="helpMobileLink" href="([^"]+)"/)[1];
+  // what the page shows: the chosen phone, the radios' state and tab stops, and what can be seen of the code, links and buttons
+  const shown = () => p.js(`(() => { const seen = (e) => !!e.offsetParent, page = document.getElementById('help-mobile');
+    return { chosen: [...page.querySelectorAll('[role=radio]')].map((b) => [b.textContent, b.getAttribute('aria-checked'), b.tabIndex]),
+      code: [...page.querySelectorAll('img')].filter(seen).length, links: [...page.querySelectorAll('a')].filter(seen).map((a) => a.href),
+      soon: [...page.querySelectorAll('.hv-soon, p')].filter(seen).map((e) => e.innerText.replace(/\\s+/g, ' ').trim()).filter((t) => /soon/i.test(t)),
+      buttons: [...page.querySelectorAll('.hv button')].filter(seen).length, focus: document.activeElement.textContent, page: document.querySelector('.hpage.on').id }; })()`);
+  await p.beforeLoad(HELP_API);
+  for (const theme of ['light', 'dark']) {
+    await p.open('help.html?at=mobile&theme=' + theme);
+    await p.waitFor('document.querySelector(".hpage.on")', 'the tour');
+    assert.deepEqual(await p.js('[document.querySelector(".hpage.on").id, document.getElementById("helpNext").textContent, document.documentElement.dataset.theme || "light"]'),
+      ['help-mobile', 'Get started', theme], 'it opens on its last page, the iPhone app, in the theme asked for');
+    await p.waitFor('(() => { const i = document.querySelector("#help-mobile img"); return i.complete && i.naturalWidth > 0; })()', 'the code to be drawn');
+    const ios = await shown();
+    const card = () => p.js('(() => { const r = document.querySelector("#help .card").getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })()');
+    const iosCard = await card();
+    assert.deepEqual([ios.chosen, ios.code, ios.links, ios.soon], [[['iPhone', 'true', 0], ['Android', 'false', -1]], 1, [link], []], 'iPhone chosen: one code and its link, one tab stop');
+    assert.match(await p.js('document.querySelector("#help-mobile p[data-os=ios]").textContent'), /iOS 26 or later/, 'with the iOS it needs');
+    await p.js('document.querySelector("#help-mobile [data-os=android][role=radio]").click(); 1');
+    const android = await shown();
+    assert.deepEqual([android.chosen, android.code, android.links, android.buttons, android.soon.length > 0], [[['iPhone', 'false', -1], ['Android', 'true', 0]], 0, [], 2, true],
+      'Android chosen: coming soon in the same place, and no code, link or button besides the choice');
+    assert.deepEqual(await card(), iosCard, 'the card keeps its size from one phone to the other: nothing moves under the pointer');
+    // by keyboard: the chosen radio has focus, the arrows switch and keep the tour on this page
+    await p.js('document.querySelector("#help-mobile [aria-checked=true]").focus(); 1');
+    await p.key('←');
+    assert.deepEqual(await shown().then((s) => [s.chosen[0][1], s.focus, s.code, s.page]), ['true', 'iPhone', 1, 'help-mobile'], '\u2190 picks iPhone again, focus with it, and the tour stays');
+    await p.key('→');
+    assert.deepEqual(await shown().then((s) => [s.chosen[1][1], s.focus, s.code, s.page]), ['true', 'Android', 0, 'help-mobile'], '\u2192 picks Android, and the tour stays on its last page');
+    await p.key('→'); await p.key('Space');
+    assert.deepEqual(await shown().then((s) => [s.chosen[0][1], s.focus, s.page]), ['true', 'iPhone', 'help-mobile'], '\u2192 wraps round to iPhone, and Space keeps it');
+    await p.js('document.getElementById("helpMobileLink").click(); 1'); await settle(p, 100);
+    assert.deepEqual(await p.js('[__opened, location.pathname, document.querySelector(".hpage.on").id]'), [[link], '/help.html', 'help-mobile'], 'the link opens in the browser and the tour stays');
+  }
+  await p.open('help.html?theme=light');
+  await p.waitFor('document.querySelector(".hpage.on")', 'the tour');
+  assert.equal(await p.js('[...document.querySelectorAll(".hpage")].indexOf(document.querySelector(".hpage.on"))'), 0, 'Help: the first page');
+});
+
 // 17. Writing on today's page: ⌘K Today opens it, "/" turns a row into a heading or a checklist, "@" links a node or a
 // day, and every row is saved as it reads
 flow('golden path: write on Today\u2019s page with / blocks, @ links and dates', async (p) => {

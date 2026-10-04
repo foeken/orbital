@@ -548,7 +548,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect to your OpenAI Dot …, ChatGPT sign-in, Set OpenAI API
-  key (only while a key is stored). **Help**: Help, Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
+  key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android coming soon": the Help tour opened on its last page, the
+  choice of phone: the one place the phone apps are installed from), Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is
   not affiliated with Tana (renderer/palette.js `openAboutPalette`, the same words as the README's License section).
@@ -1298,8 +1299,15 @@ main lays two pages over the whole window, above every pane, as a transparent vi
 keeps its caret and gets the keys back when the overlay closes, with what it had to say (`onOverlayClosed`).
 
 - **Help** (help.html): eight short pages of the basics, each with a CSS loop of the keys at work; the rest is found in
-  Cmd+K as you go. The last page is the iPhone app: a code to scan that joins its TestFlight beta (help-testflight.svg,
-  made by qrencode; iPhone only for now). The page before it offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
+  Cmd+K as you go. The last page, Orbital on your phone (`#help-mobile`), opens with a choice of phone, iPhone or
+  Android: a radio group drawn as the Settings window's segmented control (one tab stop; ← and → switch inside it and
+  do not page the tour; a click or Space picks), over one place that shows the phone picked, so there is only ever one
+  code on screen. **iPhone**, picked to begin with: a code to scan that joins its TestFlight beta (help-testflight.svg,
+  made by `qrencode -t SVG -m 0 --svg-path`) and the same public link, https://testflight.apple.com/join/wgcnRVKx, to
+  open on the phone (it opens in the browser through main, `openExternal`), iOS 26 or later. **Android**: "Coming
+  soon" in words, with no code, link or button until there is a release. The card keeps its size between the two.
+  Cmd+K Install mobile app opens the tour on that page (`openHelp('mobile')`, main.js `openOverlay` passing `at=mobile`
+  to help.html, and nothing else it is sent). The page before it offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
   and starts the sign-in (`onOverlayClosed` `chatgpt`); signed in already, it says so instead. Opened by Cmd+K Help, the ?
   in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference): after login, once
   the connection is up and the page the launch came back to is drawn. Main opens it (`api.claimHelp`, main.js

@@ -51,13 +51,14 @@ import kotlinx.coroutines.launch
 // choices
 
 // A sheet over the page, as the iPhone's are: full height, the grouped background, closed by its own buttons, by a
-// swipe down or by Back. content gets close, which slides it away first.
+// swipe down (unless swipe is false, as Quick Add's, the iPhone's interactiveDismissDisabled) or by Back. content gets
+// close, which slides it away first.
 @Composable
-fun Sheet(onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
+fun Sheet(onDismiss: () -> Unit, swipe: Boolean = true, content: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val close: () -> Unit = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
-    ModalBottomSheet(onDismiss, sheetState = state, containerColor = Theme.colors.grouped, dragHandle = null, contentWindowInsets = { WindowInsets.statusBars }) {
+    ModalBottomSheet(onDismiss, sheetState = state, sheetGesturesEnabled = swipe, containerColor = Theme.colors.grouped, dragHandle = null, contentWindowInsets = { WindowInsets.statusBars }) {
         Column(Modifier.fillMaxWidth().fillMaxHeight()) { content(close) }
     }
 }

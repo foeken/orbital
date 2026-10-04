@@ -72,6 +72,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -109,6 +110,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -183,8 +185,15 @@ fun Shell(engine: Engine, start: Start = Start()) {
     // pinned or given an icon on the Mac since shows up
     LaunchedEffect(drawer.targetValue) { if (drawer.targetValue) { focus.clearFocus(); loadSearches() } }
     LaunchedEffect(Unit) { if (start.menuDemo) { delay(2000); show(true); delay(2000); show(false) } }
-    // something shared to Orbital opens Quick Add on its own, over nothing else (Shell.swift: adding and settings shut)
-    LaunchedEffect(engine.shared) { if (engine.shared != null) { adding = false; settings = false } }
+    // shared words open Quick Add on their own, over nothing else (Shell.swift: adding and settings shut); a shared image
+    // is read at once, behind the turning +, with nothing opened over the page
+    LaunchedEffect(engine.shared) {
+        val s = engine.shared ?: return@LaunchedEffect
+        val image = s.image
+        if (image != null) { engine.shared = null; engine.addImage { image } } else { adding = false; settings = false }
+    }
+    // an image's node, made: opened, as the desktop opens it
+    LaunchedEffect(engine.made) { engine.made?.let { engine.made = null; push(it); show(false) } }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(c.page)) {
         val wide = maxWidth >= 840.dp
@@ -245,7 +254,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
             // a node zoomed into and the menu's page are kept apart: a saved search can be both
             pages.SaveableStateProvider(top?.let { "node:$it" } ?: "page:" + page.key) {
                 if (top == null) Column(Modifier.fillMaxSize().background(c.page).imePadding().navigationBarsPadding()) {
-                    PageBar(page.title, onMenu = if (wide) null else ({ show(true) }), onAdd = { adding = true })
+                    PageBar(page.title, onMenu = if (wide) null else ({ show(true) }), onAdd = { adding = true }, busy = engine.adding > 0)
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         CompositionLocalProvider(LocalBottomInset provides composer) {
                             when (val p = page) {
@@ -310,7 +319,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
 
     if (settings) SettingsSheet(engine) { settings = false }
     if (adding) QuickAdd(engine, search = if (path.isEmpty()) (page as? Menu.Search)?.id else null) { adding = false } // on a saved search: a row of it
-    engine.shared?.let { s -> QuickAdd(engine, shared = s) { engine.shared = null } }
+    engine.shared?.takeIf { it.image == null }?.let { s -> QuickAdd(engine, shared = s) { engine.shared = null } }
     engine.assigning?.let { a -> AssignSheet(engine, a) { engine.assigning = null } }
     ShareAskDialog(engine)
 }
@@ -334,8 +343,10 @@ private fun ordered(list: List<Menu.Search>, engine: Engine): List<Menu.Search> 
 
 private fun saveOrder(list: List<Menu.Search>, engine: Engine) = engine.platform.store.set("searchOrder", json.encodeToString(list.map { it.id }))
 
+// busy: what Quick Add handed over is still being made (Engine.adding), and a thin ring turns around the +, which stays
+// the button it was, so another task can be added meanwhile (Shell.swift AddGlyph)
 @Composable
-fun PageBar(title: String, onBack: (() -> Unit)? = null, onMenu: (() -> Unit)? = null, onAdd: (() -> Unit)? = null) {
+fun PageBar(title: String, onBack: (() -> Unit)? = null, onMenu: (() -> Unit)? = null, onAdd: (() -> Unit)? = null, busy: Boolean = false) {
     val c = Theme.colors
     CenterAlignedTopAppBar(
         title = { Text(title, style = Type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -345,7 +356,14 @@ fun PageBar(title: String, onBack: (() -> Unit)? = null, onMenu: (() -> Unit)? =
                 onMenu != null -> IconButton(onMenu) { Icon(Icons.Filled.Menu, "Menu") }
             }
         },
-        actions = { if (onAdd != null) IconButton(onAdd) { Icon(Icons.Filled.Add, "Quick Add Task") } },
+        actions = {
+            if (onAdd != null) IconButton(onAdd, Modifier.semantics { if (busy) stateDescription = "Adding" }) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Add, "Quick Add Task")
+                    if (busy) CircularProgressIndicator(Modifier.size(32.dp), color = c.secondary, strokeWidth = 1.5.dp)
+                }
+            }
+        },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = c.page, scrolledContainerColor = c.page, titleContentColor = c.text, navigationIconContentColor = c.text, actionIconContentColor = c.text),
     )
 }

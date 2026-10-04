@@ -1,9 +1,6 @@
 package com.dreetje.orbital.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,7 +17,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -39,7 +34,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -51,7 +45,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.dreetje.orbital.Dictation
 import com.dreetje.orbital.Engine
-import com.dreetje.orbital.Failure
 import com.dreetje.orbital.Field
 import com.dreetje.orbital.Lists
 import com.dreetje.orbital.Member
@@ -72,11 +65,11 @@ import kotlinx.datetime.toLocalDateTime
 // Quick Add Task, as the desktop's (task.js, ⇧⌘Space): a title and the type the task is made with, plain Task or one of
 // the workflow types you may create in, the type's fields and whom it is for, or an image read into a task or a note
 // instead (main.js ai:processImage): from the photo picker, or from the clipboard when it holds one. A made task is
-// never reported as a failure.
+// never reported as a failure. Add closes it at once and the engine makes the task while you go on (Engine.add); it is
+// closed by Cancel or Back, never by a swipe down, so what you were typing is not lost to a stray swipe.
 @Composable
 fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = null, onDismiss: () -> Unit) {
     val c = Theme.colors
-    val zoom = LocalZoom.current
     var title by rememberSaveable { mutableStateOf("") } // what you typed survives a rotation
     var types by remember { mutableStateOf(listOf<TaskType>()) }
     var type by remember { mutableStateOf<String?>(null) } // null: plain Task
@@ -84,67 +77,63 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
     var fields by remember { mutableStateOf(listOf<Field>()) } // the chosen type's, to set before adding
     var values by remember { mutableStateOf(mapOf<String, Value>()) } // field key -> what is set in it
     var assignee by remember { mutableStateOf<Member?>(null) } // whom a task is for; null: you
-    var working by remember { mutableStateOf<String?>(null) } // "Adding…", "Reading the image…"
+    var settling by remember { mutableStateOf(false) } // Add pressed while dictating: the words are waited for (Dictate shows it)
     var failure by remember { mutableStateOf<String?>(null) }
+    var kept by remember { mutableStateOf<Engine.Draft?>(null) } // a task Tana did not take, opened again (Engine.unsent)
     var picking by remember { mutableStateOf<Field?>(null) } // a person or link field's list open; assignee when key is ""
     var dating by remember { mutableStateOf<Field?>(null) } // a date field's picker open
     val dictation = remember { Dictation(engine.platform, engine.scope) }
     DisposableEffect(Unit) { onDispose { dictation.cancel() } } // closed or rotated while listening: the microphone stops
-    var taken by rememberSaveable { mutableStateOf(false) } // what was shared is read once, not again after a rotation
+    var taken by rememberSaveable { mutableStateOf(false) } // what was shared or not added is read once, not again after a rotation
     val focus = remember { FocusRequester() }
     val hasClip = remember { engine.platform.hasClipboardImage() }
     // a task is assigned; a document of a type without a workflow (a Goal) is not
     val isTask = type?.let { t -> types.firstOrNull { it.uri == t } }?.task != false
 
-    Sheet({ dictation.cancel(); onDismiss() }) { close ->
+    Sheet({ dictation.cancel(); onDismiss() }, swipe = false) { close ->
         fun append(said: String) { title = if (title.isEmpty()) said else "$title $said" }
-
-        // the image read and made into its node, which then opens, as the desktop opens it
-        suspend fun process(jpeg: ByteArray) {
-            working = "Reading the image…"
-            // shared while Orbital was not running: Tana connects first; signed out or failed, it says so rather than waiting for ever
-            while (engine.phase != Engine.Phase.Ready) {
-                if (engine.phase != Engine.Phase.Starting) { failure = "Sign in to Tana first, then share it again"; working = null; return }
-                delay(200)
-            }
-            try { val id = engine.processImage(jpeg); close(); zoom(id) } catch (e: Failure) { failure = e.message }
-            working = null
-        }
 
         // Add while listening or still transcribing: the words are waited for, then the task is made; one whose words did
         // not come is not made, so nothing said is lost without a word
         suspend fun add() {
+            if (settling) return
             if (dictation.recording || dictation.transcribing) {
-                working = "Transcribing…"
-                if (!dictation.settle(::append)) { working = null; return }
+                settling = true
+                val heard = try { dictation.settle(::append) } finally { settling = false }
+                if (!heard) return
             }
             val words = title.trim()
-            if (words.isEmpty()) { working = null; return }
-            working = "Adding…"
-            try { engine.createTask(words, type, search, assignee?.id, values); close() } catch (e: Failure) { failure = e.message }
-            working = null
+            if (words.isEmpty()) return
+            engine.add(Engine.Draft(words, type, if (kept != null) kept?.search else search, assignee, values))
+            close()
         }
 
-        val pickPhoto = engine.platform.rememberPhotoPicker { jpeg -> engine.scope.launch { process(jpeg) } }
+        // an image is read and made into its node behind the turning +, and opens once it is made (Engine.addImage)
+        val pickPhoto = engine.platform.rememberPhotoPicker { jpeg -> engine.addImage { jpeg }; close() }
 
         LaunchedEffect(Unit) {
             val first = !taken
             taken = true
-            if (first) shared?.image?.let { process(it); return@LaunchedEffect }
             if (first && title.isEmpty()) shared?.text?.let { title = it }
+            // a task Tana did not take: back as it was, with why
+            if (first && shared == null && engine.unsent.isNotEmpty()) engine.unsent.removeAt(0).let { d ->
+                kept = d; title = d.title; assignee = d.assignee; failure = d.why?.let { "Not added: $it" }
+            }
             runCatching { focus.requestFocus() }
             types = engine.taskTypes()
             // a saved search of one type: that type, chosen, and listed even when it is no task type (a Goal is a document)
-            if (search != null) engine.searchPreset(search)?.let { found ->
+            val from = if (kept != null) kept?.search else search
+            if (from != null) engine.searchPreset(from)?.let { found ->
                 preset = found
                 if (types.none { it.uri == found.uri }) types = listOf(TaskType(found.uri, found.title, found.task)) + types
                 type = found.uri
             }
+            kept?.let { type = it.type }
         }
         // the chosen type's fields, with the saved search's values when it is its type
         LaunchedEffect(type) {
             fields = type?.let { engine.typeFields(it) } ?: emptyList()
-            values = if (preset?.uri == type) preset?.fields ?: emptyMap() else emptyMap()
+            values = kept?.takeIf { it.type == type }?.values ?: preset?.takeIf { it.uri == type }?.fields ?: emptyMap()
         }
 
         val open = picking
@@ -157,7 +146,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
             return@Sheet
         }
 
-        val canAdd = (title.isNotBlank() || dictation.recording || dictation.transcribing) && working == null
+        val canAdd = (title.isNotBlank() || dictation.recording || dictation.transcribing) && !settling
         SheetBar("Quick Add", cancel = close, action = "Add", enabled = canAdd) { engine.scope.launch { add() } }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(Modifier.fillMaxSize()) {
@@ -199,15 +188,10 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
                 item("image") {
                     Group("Image", footer = "Read with your ChatGPT account into a task or a note, with the image under it.") {
                         GroupRow(last = !hasClip, onClick = pickPhoto) { Icon(Icons.Outlined.Image, null, tint = c.text); Text("Process image from Photos", color = c.text) }
-                        if (hasClip) GroupRow(last = true, onClick = { engine.scope.launch { engine.platform.pasteImage()?.let { process(it) } ?: run { failure = "The clipboard holds no image" } } }) {
+                        if (hasClip) GroupRow(last = true, onClick = { engine.addImage { engine.platform.pasteImage() }; close() }) {
                             Icon(Icons.Outlined.ContentPaste, null, tint = c.text); Text("Process image from clipboard", color = c.text)
                         }
                     }
-                }
-            }
-            working?.let { label ->
-                Column(Modifier.align(Alignment.Center).background(c.card, RoundedCornerShape(14.dp)).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CircularProgressIndicator(color = c.secondary); Text(label, color = c.text)
                 }
             }
         }

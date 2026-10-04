@@ -164,8 +164,8 @@ class Engine(
         error = message
     }
 
-    // Android stopped Tana's page to free memory and EngineWeb made a new one (onRenderProcessGone; the iPhone has no
-    // such moment): started again on it, the rows kept on screen until the new read lands
+    // Android stopped Tana's page to free memory and EngineWeb made a new one (onRenderProcessGone; the iPhone's
+    // webViewWebContentProcessDidTerminate): started again on it, the rows kept on screen until the new read lands
     override fun restarted(why: String) {
         note(why)
         start()
@@ -247,6 +247,14 @@ class Engine(
         // set, every refresh after it only said "again" and the Timeline never moved
         try { read() } finally { loading = false }
         if (again) { again = false; refresh() }
+    }
+
+    // Back in front (MainActivity onResume): a sync stream that died while the app was away is made again first
+    // (orbital.resume), so the read that follows is not answered short, Today's Tasks empty, by a dead one
+    suspend fun foreground() {
+        val host = host
+        if (phase == Phase.Ready && !isSample && host != null) maybe { host.run("return await orbital.resume()") }
+        refresh()
     }
 
     private suspend fun read() {
@@ -401,6 +409,39 @@ class Engine(
             mapOf("kind" to (read.kind ?: "doc"), "title" to (read.title ?: ""), "notes" to (read.notes ?: emptyList()), "image" to Base64.encode(jpeg)))
         refresh()
         return id
+    }
+
+    // Quick Add closes the moment you press Add: what it asked for is made here while you go on, and the + in the bar turns
+    // while anything is on its way (Shell), so another can be added meanwhile. A task Tana did not take is kept as unsent,
+    // and the next Quick Add opens with it and says why; an image's node opens once it is made, as the desktop opens it.
+    var adding by mutableStateOf(0)
+        private set
+    val unsent = mutableStateListOf<Draft>()
+    var made by mutableStateOf<String?>(null)
+    data class Draft(val title: String, val type: String?, val search: String?, val assignee: Member?, val values: Map<String, Value>, val why: String? = null)
+    fun add(draft: Draft) {
+        adding++
+        scope.launch {
+            try { createTask(draft.title, draft.type, draft.search, draft.assignee?.id, draft.values) } catch (e: Failure) {
+                unsent.add(draft.copy(why = e.message))
+                error = "“${draft.title}” was not added: ${e.message}"
+            } finally { adding-- }
+        }
+    }
+    // load: the image, read once Quick Add has gone (a photo pick, the clipboard, something shared)
+    fun addImage(load: suspend () -> ByteArray?) {
+        adding++
+        scope.launch {
+            try {
+                val jpeg = load() ?: throw Failure("The image could not be read")
+                // shared while Orbital was not running: Tana connects first; signed out or failed, it says so rather than waiting for ever
+                while (phase != Phase.Ready) {
+                    if (phase != Phase.Starting) throw Failure("Sign in to Tana first, then share it again")
+                    delay(200)
+                }
+                made = processImage(jpeg)
+            } catch (e: Failure) { error = e.message } finally { adding-- }
+        }
     }
 
     // Long press, Delete (orbital.remove): to Tana's trash; the row goes at once and comes back if Tana says no

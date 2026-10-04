@@ -113,11 +113,19 @@
         <p>One sign-in turns on the AI in Orbital: notes in other languages shown in yours, who to discuss a page with, the type it should have, a screenshot made into a task, and an icon for every type.</p>
         <p class="hact" id="helpAI"><button id="helpChatGPT" class="button">Sign in with ChatGPT</button> or later from <kbd>⌘K</kbd></p>
       </section>
-      <section class="hpage">
-        <div class="hv hv-phone" aria-hidden="true"><img src="help-testflight.svg" alt=""></div>
-        <h2>Orbital on your iPhone</h2>
-        <p>Your Timeline, saved searches and Quick Add on your iPhone, over the same Tana. Point the iPhone’s camera at the code to join the beta in TestFlight.</p>
-        <p>iPhone only, for now.</p>
+      <section class="hpage" id="help-mobile">
+        <div class="hv hv-phone">
+          <div class="hseg" role="radiogroup" aria-label="Phone">
+            <button type="button" role="radio" data-os="ios" aria-checked="true" class="on">iPhone</button>
+            <button type="button" role="radio" data-os="android" aria-checked="false" tabindex="-1">Android</button>
+          </div>
+          <div class="hv-os" data-os="ios"><img src="help-testflight.svg" alt="Code for the iPhone app in TestFlight"></div>
+          <div class="hv-os hv-soon" data-os="android" hidden><b>Coming soon</b>Nothing to install on Android yet</div>
+        </div>
+        <h2>Orbital on your phone</h2>
+        <p>Your Timeline, saved searches and Quick Add on your phone, over the same Tana.</p>
+        <p data-os="ios">Scan the code with the iPhone’s camera, or open <a id="helpMobileLink" href="https://testflight.apple.com/join/wgcnRVKx">testflight.apple.com/join/wgcnRVKx</a> on it. iOS 26 or later.</p>
+        <p data-os="android" hidden>Orbital for Android is coming soon.</p>
       </section>
     </div>
     <footer class="hfoot">

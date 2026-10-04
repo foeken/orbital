@@ -165,7 +165,8 @@ const relayout = () => { for (const w of S.windows) if (!w.isDestroyed() && w.si
 // is on top, and there is one at a time. Closing it hands the keys back to the page that asked, whose caret is where it
 // was, with what it has to say: open the palette (⌘K closed the tour), or a note for its toast (the task it made).
 const OVERLAYS = { help: 'help.html', task: 'task.html', update: 'update.html' };
-function openOverlay(page, which, theme) { // page: the handle that asked (main/state.js pageOf)
+// at: where the tour starts, its iPhone page for Cmd+K Install mobile app (help.js); any other value is the first page
+function openOverlay(page, which, theme, at) { // page: the handle that asked (main/state.js pageOf)
   const win = page && page.win;
   if (!win || win.overlay || !Object.hasOwn(OVERLAYS, which)) return false;
   const view = new WebContentsView({ webPreferences: { preload: PRELOAD } });
@@ -174,7 +175,7 @@ function openOverlay(page, which, theme) { // page: the handle that asked (main/
   view.which = which;
   win.overlay = view; win.contentView.addChildView(view); fit(win);
   view.webContents.once('did-finish-load', () => view.webContents.focus());
-  view.webContents.loadFile(path.join(__dirname, OVERLAYS[which]), { query: { theme: theme === 'dark' ? 'dark' : 'light' } });
+  view.webContents.loadFile(path.join(__dirname, OVERLAYS[which]), { query: { theme: theme === 'dark' ? 'dark' : 'light', ...(which === 'help' && at === 'mobile' && { at }) } });
   return true;
 }
 function closeOverlay(win, result = {}) {
@@ -354,7 +355,7 @@ ipcMain.on('page:gone', (e) => {
   if (page) dropPage(page);
   if (win) for (const p of [...win.panes]) if (p.isDestroyed()) dropPage(p);
 });
-ipcMain.handle('overlay:open', (e, which, theme) => { openOverlay(pageOf(e), which, theme); });
+ipcMain.handle('overlay:open', (e, which, theme, at) => { openOverlay(pageOf(e), which, theme, at); });
 ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].find((w) => w.overlay && w.overlay.webContents === e.sender), result && typeof result === 'object' ? result : {}); });
 // Cmd+K Save view and Saved views (issue #442): the layout this window has (null: page '' alone, never rearranged), and
 // one to put it back to; 'workView' is the Work View's, the one a first launch opens (pair). The pages' places are

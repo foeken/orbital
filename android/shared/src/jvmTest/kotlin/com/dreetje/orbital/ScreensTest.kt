@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.DesktopComposeUiTest
 import com.dreetje.orbital.ui.OrbitalApp
@@ -96,8 +97,26 @@ class ScreensTest {
         onNodeWithContentDescription("Quick Add Task").performClick()
         waitUntil(timeoutMillis = 3000) { onAllWithText("Quick Add").isNotEmpty() }
         onNodeWithText("Add").assertIsNotEnabled()
+        // closed by Cancel or Back only: a swipe down leaves it where it is
+        onNodeWithText("Quick Add").performTouchInput { swipeDown(startY = centerY, endY = bottom + 2000f) }
+        waitForIdle()
+        assertTrue(onAllWithText("Quick Add").isNotEmpty())
         onNodeWithText("Cancel").performClick()
         waitUntil(timeoutMillis = 3000) { onAllWithText("Quick Add").isEmpty() }
+    }
+
+    // Add closes Quick Add at once, the task made behind it; one Tana did not take (the sample saves nothing) is back,
+    // words and all, the next time Quick Add opens, with why
+    @Test fun quickAddClosesAtOnceAndKeepsWhatWasNotAdded() = sample {
+        onNodeWithContentDescription("Quick Add Task").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Quick Add").isNotEmpty() }
+        onNode(hasContentDescription("New task") and androidx.compose.ui.test.hasSetTextAction()).performTextInput("Call the venue")
+        onNodeWithText("Add").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Quick Add").isEmpty() }
+        onNodeWithContentDescription("Quick Add Task").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Not added: The sample saves nothing").isNotEmpty() }
+        onNode(hasContentDescription("New task") and androidx.compose.ui.test.hasSetTextAction()).assert(hasText("Call the venue"))
+        onNodeWithText("Cancel").performClick()
     }
 
     @Test fun settingsOpenFromTheMenu() = sample {
