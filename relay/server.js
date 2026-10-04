@@ -22,8 +22,13 @@ const crypto = require('node:crypto');
 
 const MINUTE = 60e3, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 const TTL = { code: 15 * MINUTE, grant: 10 * MINUTE, access: HOUR, refresh: 90 * DAY,
-  subscription: 7 * DAY, subscriptionMin: HOUR, subscriptionMax: 30 * DAY, verified: DAY };
-const LIMITS = { body: 32 * 1024, eventData: 16 * 1024, codes: 5, agents: 50, name: 60, perMinute: 120, links: 10, subscriptions: 10, linkFailures: 300, authorize: 30, newOrbitals: 5 };
+  subscription: 7 * DAY, subscriptionMin: HOUR, subscriptionMax: 30 * DAY, verified: DAY,
+  unlinked: 7 * DAY, idleAgent: 90 * DAY }; // a connection that never linked, and an agent never heard from, are let go
+const LIMITS = { body: 32 * 1024, eventData: 16 * 1024, codes: 5, agents: 50, name: 60, perMinute: 120, links: 10, subscriptions: 10, linkFailures: 300, authorize: 30, newOrbitals: 5,
+  // what anyone can make without an account, in all, a day: counted in the database, so no address and no restart buys more
+  clientsPerDay: 1000, installsPerDay: 1000, orbitalsPerDay: 200,
+  // callbacks being called at once, in all and per connection: more waits for nobody, it is not taken
+  calls: 100, callsPerConnection: 10, callBytes: 64 * 1024, callers: 50000 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODE = /^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/;
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']; // the handshake ones: initialize answers in one of these
@@ -62,19 +67,44 @@ const SCHEMA = [...Object.entries(TABLES).map(([name, cols]) => 'CREATE TABLE IF
   'DROP TABLE IF EXISTS messages', 'DROP TABLE IF EXISTS tasks', 'DROP TABLE IF EXISTS updates'];
 
 // ---- where the rows live: one(sql, ...args) a row, all() rows, run() how many changed ----
+// serial(key, fn): fn(db) with db's one/all/run, one at a time per key, so a count and the insert it allows cannot be
+// split by a twin request: in this process by a queue per key, and in PostgreSQL also across instances, by a transaction
+// holding an advisory lock on the key.
+function keyed() {
+  const tails = new Map();
+  return (key, fn) => {
+    const run = (tails.get(key) || Promise.resolve()).then(() => fn());
+    const tail = run.catch(() => {});
+    tails.set(key, tail);
+    tail.then(() => { if (tails.get(key) === tail) tails.delete(key); });
+    return run;
+  };
+}
 function sqliteStore(file = ':memory:') {
   const { DatabaseSync } = require('node:sqlite');
-  const db = new DatabaseSync(file);
-  return { exec: async (sql) => { db.exec(sql); }, one: async (sql, ...a) => db.prepare(sql).get(...a), all: async (sql, ...a) => db.prepare(sql).all(...a),
-    run: async (sql, ...a) => Number(db.prepare(sql).run(...a).changes), close: async () => db.close() };
+  const db = new DatabaseSync(file), queue = keyed();
+  const rows = { one: async (sql, ...a) => db.prepare(sql).get(...a), all: async (sql, ...a) => db.prepare(sql).all(...a), run: async (sql, ...a) => Number(db.prepare(sql).run(...a).changes) };
+  return { exec: async (sql) => { db.exec(sql); }, ...rows, serial: (key, fn) => queue(key, () => fn(rows)), close: async () => db.close() };
 }
 // pg is the host's (Replit's PostgreSQL comes with it), so Orbital itself depends on nothing
 function postgresStore(url, pg = require('pg')) {
-  const pool = new pg.Pool({ connectionString: url, max: 5 });
+  const pool = new pg.Pool({ connectionString: url, max: 5 }), queue = keyed();
   const types = { getTypeParser: (oid, format) => (oid === 20 ? Number : pg.types.getTypeParser(oid, format)) }; // BIGINT and count(*) as numbers
-  const query = (sql, values) => { let i = 0; return pool.query({ text: sql.replace(/\?/g, () => '$' + ++i), values, types }); };
-  return { exec: async (sql) => { await pool.query(sql); }, one: async (sql, ...a) => (await query(sql, a)).rows[0], all: async (sql, ...a) => (await query(sql, a)).rows,
-    run: async (sql, ...a) => (await query(sql, a)).rowCount, close: () => pool.end() };
+  const rowsOf = (on) => {
+    const query = (sql, values) => { let i = 0; return on.query({ text: sql.replace(/\?/g, () => '$' + ++i), values, types }); };
+    return { one: async (sql, ...a) => (await query(sql, a)).rows[0], all: async (sql, ...a) => (await query(sql, a)).rows, run: async (sql, ...a) => (await query(sql, a)).rowCount };
+  };
+  const serial = (key, fn) => queue(key, async () => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
+      const out = await fn(rowsOf(client));
+      await client.query('COMMIT');
+      return out;
+    } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+  });
+  return { exec: async (sql) => { await pool.query(sql); }, ...rowsOf(pool), serial, close: () => pool.end() };
 }
 
 // What an agent is told when it connects, its one tool and the events it can subscribe to. How to handle an event is not
@@ -138,22 +168,29 @@ function publicLookup(hostname, options, callback) {
     callback(null, addresses[0].address, addresses[0].family);
   });
 }
-// POST body to url; answers { status, text }. https only; the https module follows no redirects
-function safePost(url, headers, body, timeout = 10e3) {
+// POST body to url; answers { status, text }. https only; the https module follows no redirects. The whole call, answer
+// and all, ends within timeout and maxBytes of answer: a callback that trickles bytes, or sends too many, is cut off
+// rather than holding the socket and whoever waits on it (security review finding 3).
+function safePost(url, headers, body, { timeout = 10e3, maxBytes = LIMITS.callBytes, request = https.request } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     if (u.protocol !== 'https:') return reject(Object.assign(new Error('https only'), { code: 'EBLOCKED' }));
     const host = u.hostname.replace(/^\[|\]$/g, '');
     if (net.isIP(host) && !isPublicAddress(host)) return reject(Object.assign(new Error('blocked address'), { code: 'EBLOCKED' }));
-    const req = https.request({ hostname: host, servername: net.isIP(host) ? undefined : host, port: u.port || 443, path: u.pathname + u.search, method: 'POST', lookup: publicLookup, timeout,
+    let done = false;
+    const finish = (settle, value) => { if (done) return; done = true; clearTimeout(deadline); settle(value); };
+    const cut = (code) => { const e = Object.assign(new Error(code), { code }); finish(reject, e); req.destroy(e); };
+    const req = request({ hostname: host, servername: net.isIP(host) ? undefined : host, port: u.port || 443, path: u.pathname + u.search, method: 'POST', lookup: publicLookup, timeout,
       headers: { ...headers, 'content-length': Buffer.byteLength(body) } }, (res) => {
-      let text = '';
-      res.setEncoding('utf8');
-      res.on('data', (chunk) => { if (text.length < 65536) text += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, text }));
+      const parts = []; let size = 0;
+      res.on('data', (chunk) => { size += chunk.length; if (size > maxBytes) { cut('ETOOBIG'); res.destroy(); } else parts.push(chunk); });
+      res.on('end', () => finish(resolve, { status: res.statusCode, text: Buffer.concat(parts).toString('utf8') }));
+      res.on('error', (e) => finish(reject, e));
+      res.on('close', () => finish(reject, Object.assign(new Error('closed'), { code: 'ECONNRESET' })));
     });
-    req.on('timeout', () => req.destroy(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })));
-    req.on('error', reject);
+    const deadline = setTimeout(() => cut('ETIMEDOUT'), timeout);
+    req.on('timeout', () => cut('ETIMEDOUT'));
+    req.on('error', (e) => finish(reject, e));
     req.end(body);
   });
 }
@@ -165,17 +202,24 @@ const canonical = (v) => (Array.isArray(v) ? '[' + v.map(canonical).join(',') + 
 function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now, post = safePost } = {}) {
   const PATH = '/' + String(path).replace(/^\/+|\/+$/g, '');
   const ISSUER = publicUrl.replace(/\/+$/, '') + PATH;
-  const { one, all, run } = store;
+  const { one, all, run, serial } = store;
   const ready = (async () => { for (const sql of SCHEMA) await store.exec(sql); })();
-  const count = async (sql, ...args) => Number((await one(sql, ...args)).n);
+  const countIn = async (db, sql, ...args) => Number((await db.one(sql, ...args)).n);
+  // a row anyone can make without an account, within the day's ceiling for all of them together (LIMITS.*PerDay)
+  const busy = () => fail(429, 'busy', 'The relay is taking no more new connections today: try again tomorrow');
+  const madeToday = (db, table, max) => countIn(db, 'SELECT count(*) AS n FROM ' + table + ' WHERE created > ?', now() - DAY).then((n) => { if (n >= max) throw busy(); });
 
   // ---- limits: a fixed window per caller, in memory (a restart forgives) ----
-  const windows = new Map();
+  // At most LIMITS.callers windows: past that, the ended ones are let go (once a second at most), and while it is still
+  // full a new caller is turned away rather than growing the map or scanning it on every request.
+  const windows = new Map(); let swept = 0;
   function limit(key, max = LIMITS.perMinute) {
     const t = now(), w = windows.get(key);
     if (!w || w.until <= t) {
-      // windows that ended are let go; a flood of new callers drops only those, never the count of one still running
-      if (windows.size > 50000) for (const [k, v] of windows) if (v.until <= t) windows.delete(k);
+      if (!w && windows.size >= LIMITS.callers) {
+        if (t - swept >= 1000) { swept = t; for (const [k, v] of windows) if (v.until <= t) windows.delete(k); }
+        if (windows.size >= LIMITS.callers) throw fail(429, 'rate_limited', 'Too many requests: try again in a minute');
+      }
       windows.set(key, { until: t + MINUTE, count: 1 }); return;
     }
     if (++w.count > max) throw fail(429, 'rate_limited', 'Too many requests: try again in a minute');
@@ -185,6 +229,10 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     const t = now();
     await run('DELETE FROM codes WHERE expires < ?', t - HOUR); // a used code still answers Orbital's "linked?" for an hour
     for (const table of ['grants', 'tokens', 'subscriptions']) await run('DELETE FROM ' + table + ' WHERE expires < ?', t);
+    // an agent not heard from in TTL.idleAgent is let go (a live one renews its subscription at least monthly), and a
+    // connection that never linked in TTL.unlinked loses its tokens: then both go below, as anything nobody holds
+    await run('DELETE FROM agents WHERE COALESCE(seen, linked) < ?', t - TTL.idleAgent);
+    await run('DELETE FROM tokens WHERE install IN (SELECT id FROM installs WHERE created < ? AND id NOT IN (SELECT install FROM agents))', t - TTL.unlinked);
     // a connection with no token left and no link is nobody's; a client registered a day ago that never signed in either
     await run('DELETE FROM installs WHERE created < ? AND id NOT IN (SELECT install FROM tokens) AND id NOT IN (SELECT install FROM agents)', t - HOUR);
     await run('DELETE FROM subscriptions WHERE install NOT IN (SELECT id FROM installs)');
@@ -213,9 +261,15 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     if (String(req.headers['content-type'] || '').includes('application/x-www-form-urlencoded')) return Object.fromEntries(new URLSearchParams(raw));
     try { return JSON.parse(raw); } catch { throw fail(400, 'invalid_request', 'Not JSON', -32700); }
   }
-  // behind a host's proxy every request comes from the proxy: the address it appended, the last one, is the caller's (the
-  // ones before it are whatever the caller wrote in the header, so a limit keyed on them is one the caller picks)
-  const ip = (req) => String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean).pop() || req.socket.remoteAddress || '';
+  // The caller's address, for the limits. Behind a host's proxy every request comes from the proxy, on this machine or its
+  // private network: the address it appended, the last of X-Forwarded-For, is the caller's (the ones before it are
+  // whatever the caller wrote, so a limit keyed on them is one the caller picks). A request straight from a public address
+  // came through no proxy of ours, and its header is whatever it wrote: it is counted by its own address (finding 5).
+  const ip = (req) => {
+    const peer = String((req.socket && req.socket.remoteAddress) || '');
+    if (isPublicAddress(peer)) return peer;
+    return String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean).pop() || peer;
+  };
 
   async function handle(req, res) {
     res.setHeader('access-control-allow-origin', '*');
@@ -257,7 +311,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     const b = await body(req), uris = b.redirect_uris;
     if (!Array.isArray(uris) || !uris.length || uris.length > 10 || !uris.every((u) => typeof u === 'string' && u.length < 2000 && safeRedirect(u))) throw fail(400, 'invalid_redirect_uri', 'redirect_uris: https, a loopback http, or an app\'s own scheme');
     const id = crypto.randomUUID(), name = text(b.client_name, 100);
-    await run('INSERT INTO clients VALUES (?, ?, ?, ?)', id, JSON.stringify(uris), name || null, now());
+    await serial('new:clients', async (db) => { await madeToday(db, 'clients', LIMITS.clientsPerDay); await db.run('INSERT INTO clients VALUES (?, ?, ?, ?)', id, JSON.stringify(uris), name || null, now()); });
     return send(res, 201, { client_id: id, client_id_issued_at: Math.floor(now() / 1000), redirect_uris: uris, client_name: name || undefined, token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] });
   }
   // No one signs in here: the connection gets an identity of its own, which can do nothing until a code links it to an
@@ -289,7 +343,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
       const challenge = crypto.createHash('sha256').update(String(b.code_verifier || '')).digest('base64url');
       if (!sameHash(challenge, grant.challenge)) throw bad('code_verifier does not match');
       const install = crypto.randomUUID();
-      await run('INSERT INTO installs VALUES (?, ?, ?, ?)', install, grant.client, null, now());
+      await serial('new:installs', async (db) => { await madeToday(db, 'installs', LIMITS.installsPerDay); await db.run('INSERT INTO installs VALUES (?, ?, ?, ?)', install, grant.client, null, now()); });
       return send(res, 200, await issue(install, grant.client));
     }
     if (b.grant_type === 'refresh_token') {
@@ -393,7 +447,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     const challenge = newToken(), id = 'msg_verification_' + crypto.randomBytes(12).toString('hex'), body = JSON.stringify({ type: 'verification', challenge });
     const refuse = (reason) => Object.assign(fail(400, 'callback', 'The callback did not answer the verification challenge (' + reason + ')', -32015), { data: { reason } });
     let res;
-    try { res = await post(s.url, signed(s, id, body), body); } catch (e) { throw refuse(e.code === 'ETIMEDOUT' ? 'timeout' : e.code === 'EBLOCKED' ? 'blocked_address' : 'unreachable'); }
+    try { res = await callOut(install.id, s.url, signed(s, id, body), body); } catch (e) { throw refuse(e.code === 'ETIMEDOUT' ? 'timeout' : e.code === 'EBLOCKED' ? 'blocked_address' : e.code === 'EBUSY' ? 'busy' : 'unreachable'); }
     let echoed = ''; try { echoed = String(JSON.parse(res.text).challenge || ''); } catch { /* not JSON: refused below */ }
     if (res.status < 200 || res.status > 299 || !sameHash(echoed, challenge)) throw refuse('challenge_failed');
     if (verified.size > 10000) verified.clear();
@@ -401,20 +455,36 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   }
   async function subscribe(install, params) {
     const s = subscription(install, params, true);
-    const known = await one('SELECT id FROM subscriptions WHERE id = ? AND install = ?', s.id, install.id);
-    if (!known && await count('SELECT count(*) AS n FROM subscriptions WHERE install = ?', install.id) >= LIMITS.subscriptions) throw invalid('This connection has as many subscriptions as it can');
+    const full = () => invalid('This connection has as many subscriptions as it can');
+    const room = async (db) => !!(await db.one('SELECT id FROM subscriptions WHERE id = ? AND install = ?', s.id, install.id)) || await countIn(db, 'SELECT count(*) AS n FROM subscriptions WHERE install = ?', install.id) < LIMITS.subscriptions;
+    if (!(await room(store))) throw full(); // before calling anybody; asked again below, where it counts
     await verifyCallback(install, s);
     // the lifetime asked for, within an hour and thirty days; none asked (or "forever") is a week
     const asked = params.ttlMs, expires = now() + (typeof asked === 'number' && asked > 0 ? Math.min(Math.max(asked, TTL.subscriptionMin), TTL.subscriptionMax) : TTL.subscription);
-    const update = () => run('UPDATE subscriptions SET secret = ?, expires = ? WHERE id = ?', s.secret, expires, s.id);
-    if (known) await update();
-    else try { await run('INSERT INTO subscriptions VALUES (?, ?, ?, ?, ?, ?)', s.id, install.id, s.name, s.url, s.secret, expires); } catch { await update(); } // made a moment ago by a twin request
+    // the count and the insert at once, so twin requests cannot both take the last place
+    await serial('install:' + install.id, async (db) => {
+      if (await db.run('UPDATE subscriptions SET secret = ?, expires = ? WHERE id = ?', s.secret, expires, s.id)) return;
+      if (!(await room(db))) throw full();
+      await db.run('INSERT INTO subscriptions VALUES (?, ?, ?, ?, ?, ?)', s.id, install.id, s.name, s.url, s.secret, expires);
+    });
     return { id: s.id, refreshBefore: new Date(expires).toISOString(), cursor: null, truncated: false };
   }
   async function unsubscribe(install, params) {
     const s = subscription(install, params, false);
     await run('DELETE FROM subscriptions WHERE id = ? AND install = ?', s.id, install.id);
     return {};
+  }
+  // Every call to a callback goes through here: at most LIMITS.calls at once in all and LIMITS.callsPerConnection for one
+  // connection, each ending within safePost's deadline. A call past either is refused before a socket is opened.
+  const calling = new Map(); let callingAll = 0;
+  async function callOut(installId, url, headers, body) {
+    const mine = calling.get(installId) || 0;
+    if (callingAll >= LIMITS.calls || mine >= LIMITS.callsPerConnection) throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+    callingAll++; calling.set(installId, mine + 1);
+    try { return await post(url, headers, body); } finally {
+      callingAll--; const left = calling.get(installId) - 1;
+      if (left) calling.set(installId, left); else calling.delete(installId);
+    }
   }
   // Orbital sent an event: each live subscription of the agent's connection to it hears of it, once, before Orbital is
   // answered how many took it. No retry: a retry would hold the event (the node, the request) in memory after the
@@ -427,7 +497,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   }
   async function deliver(s, id, body) {
     let status = 0;
-    try { status = (await post(s.url, signed(s, id, body), body)).status; } catch { /* unreachable: not taken */ }
+    try { status = (await callOut(s.install, s.url, signed(s, id, body), body)).status; } catch { /* unreachable, cut off or busy: not taken */ }
     if (status >= 200 && status < 300) return true;
     if (status === 410) { await run('DELETE FROM subscriptions WHERE id = ?', s.id); return false; } // the receiver is gone for good
     return false;
@@ -441,13 +511,16 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     // failed codes count for every connection together as well: new connections are cheap, so guessing is held to a few
     // hundred tries a minute in all, against codes of 40 bits that last fifteen minutes
     if (!row || row.agent || row.expires < now()) { limit('link-failures', LIMITS.linkFailures); throw fail(400, 'bad_code', used); }
-    if (await count('SELECT count(*) AS n FROM agents WHERE orbital = ?', row.orbital) >= LIMITS.agents) throw fail(400, 'too_many', 'That Orbital has as many agents as it can link.');
     const id = crypto.randomUUID();
-    // the code is claimed before anything is made: of two connections using it at once, one gets it
-    if (!(await run('UPDATE codes SET agent = ? WHERE code = ? AND agent IS NULL AND expires >= ?', id, code, now()))) throw fail(400, 'bad_code', used);
-    if (agent) await run('DELETE FROM agents WHERE id = ?', agent.id); // linking again moves this connection
     const app = install.app || (await one('SELECT name FROM clients WHERE id = ?', install.client))?.name || null;
-    await run('INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, ?)', id, row.orbital, install.id, name, app, now(), now());
+    // the count, the claim and the insert at once per Orbital, so twin links cannot pass its cap together
+    await serial('orbital:' + row.orbital, async (db) => {
+      if (await countIn(db, 'SELECT count(*) AS n FROM agents WHERE orbital = ? AND install <> ?', row.orbital, install.id) >= LIMITS.agents) throw fail(400, 'too_many', 'That Orbital has as many agents as it can link.');
+      // the code is claimed before anything is made: of two connections using it at once, one gets it
+      if (!(await db.run('UPDATE codes SET agent = ? WHERE code = ? AND agent IS NULL AND expires >= ?', id, code, now()))) throw fail(400, 'bad_code', used);
+      if (agent) await db.run('DELETE FROM agents WHERE id = ?', agent.id); // linking again moves this connection
+      await db.run('INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, ?)', id, row.orbital, install.id, name, app, now(), now());
+    });
     return 'Linked to Orbital as ' + name + '. Now subscribe to the task.assigned event: it wakes you when a node is handed to you, and carries the request and how to handle it.';
   }
   // ---- Orbital's own door: "Authorization: Orbital <key>" ----
@@ -466,7 +539,11 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     // a new key is a new row, and the caller picks the key: new Orbitals are counted by the address the proxy saw
     limit('new-orbital:' + ip(req), LIMITS.newOrbitals);
     // a twin request may make it first: the one row the key has is the Orbital, whichever request wrote it
-    await run('INSERT INTO orbitals VALUES (?, ?, ?) ON CONFLICT DO NOTHING', crypto.randomUUID(), keyHash, now());
+    await serial('new:orbitals', async (db) => {
+      if (await db.one('SELECT id FROM orbitals WHERE secret = ?', keyHash)) return;
+      await madeToday(db, 'orbitals', LIMITS.orbitalsPerDay);
+      await db.run('INSERT INTO orbitals VALUES (?, ?, ?) ON CONFLICT DO NOTHING', crypto.randomUUID(), keyHash, now());
+    });
     return find();
   }
   const agentView = (a) => ({ id: a.id, name: a.name, app: a.app || '', linkedAt: Number(a.linked), seenAt: a.seen == null ? null : Number(a.seen) });
@@ -482,9 +559,13 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     if (parts[0] === 'codes') {
       if (method === 'POST' && parts.length === 1) {
         await sweep();
-        if (await count('SELECT count(*) AS n FROM codes WHERE orbital = ? AND agent IS NULL AND expires > ?', o.id, now()) >= LIMITS.codes) throw fail(429, 'too_many_codes', 'Too many codes waiting: cancel one or let it expire');
-        let code; do code = newCode(); while (await one('SELECT 1 AS ok FROM codes WHERE code = ?', code));
-        await run('INSERT INTO codes VALUES (?, ?, ?, NULL)', code, o.id, now() + TTL.code);
+        // the count and the insert at once, so twin requests cannot pass the cap together
+        const code = await serial('orbital:' + o.id, async (db) => {
+          if (await countIn(db, 'SELECT count(*) AS n FROM codes WHERE orbital = ? AND agent IS NULL AND expires > ?', o.id, now()) >= LIMITS.codes) throw fail(429, 'too_many_codes', 'Too many codes waiting: cancel one or let it expire');
+          let made; do made = newCode(); while (await db.one('SELECT 1 AS ok FROM codes WHERE code = ?', made));
+          await db.run('INSERT INTO codes VALUES (?, ?, ?, NULL)', made, o.id, now() + TTL.code);
+          return made;
+        });
         return send(res, 201, { code, expiresAt: now() + TTL.code });
       }
       const row = parts[1] && await one('SELECT * FROM codes WHERE code = ? AND orbital = ?', parts[1], o.id);
@@ -534,4 +615,4 @@ if (require.main === module) {
     (e) => { console.error('agent relay: the database could not be prepared:', e.message); process.exit(1); });
 }
 
-module.exports = { createRelay, sqliteStore, postgresStore, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, signature };
+module.exports = { createRelay, sqliteStore, postgresStore, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, signature };
