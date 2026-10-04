@@ -1,0 +1,59 @@
+name: Main green
+
+# A pull request waits while the scheduled checks on main are failing: checks.yml opens "Scheduled checks failed", and
+# until it is closed the one pull request let through is its fix, which names it with a closing keyword in its title or
+# description ("Fixes #123") and so closes it when it merges. main's ruleset requires this check (the check "main
+# green"), so a red one cannot merge. Its own workflow, so that editing the description runs it again (as platforms.yml
+# does). The issue opening or closing gives every open pull request its answer again (again, below): checks.yml asks
+# for that by hand (an issue its token opens or closes starts no workflow), and an issue closed by a merge or by hand
+# starts it itself.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  issues:
+    types: [opened, closed, reopened]
+  workflow_dispatch:
+
+permissions:
+  issues: read
+  pull-requests: read
+  actions: write
+
+concurrency:
+  group: main-green-${{ github.event_name == 'pull_request' && github.ref || 'again' }}
+  cancel-in-progress: true
+
+jobs:
+  main-green:
+    name: main green
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_TEXT: ${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}
+        run: |
+          title="Scheduled checks failed"
+          open=$(gh issue list -R "$REPO" --state open --search "\"$title\" in:title" --json number,title --jq "map(select(.title == \"$title\"))[0].number // \"\"")
+          if [ -z "$open" ]; then echo "main is green"; exit 0; fi
+          if printf '%s' "$PR_TEXT" | grep -Eiq "\b(fix(e[sd])?|close[sd]?|resolve[sd]?):? #$open\b"; then echo "this pull request fixes #$open, so it may land"; exit 0; fi
+          echo "::error::The scheduled checks on main are failing (#$open): fix them first. The fix says Fixes #$open in its description; this check runs again once #$open is closed."
+          exit 1
+
+  # main's state changed: the last answer of every open pull request is given again
+  again:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'issues' && github.event.issue.title == 'Scheduled checks failed')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for branch in $(gh pr list -R "$REPO" --state open --limit 100 --json headRefName --jq '.[].headRefName'); do
+            id=$(gh run list -R "$REPO" --workflow main-green.yml --event pull_request --branch "$branch" --limit 1 --json databaseId --jq '.[0].databaseId // ""')
+            [ -z "$id" ] || gh run rerun "$id" -R "$REPO" || echo "$branch: still running, so its answer is already current"
+          done
+

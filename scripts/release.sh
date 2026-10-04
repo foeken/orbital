@@ -14,6 +14,10 @@
 set -e
 cd "$(dirname "$0")/.."
 [ -z "$(git status --porcelain)" ] || { echo "working tree is dirty; commit first"; exit 1; }
+# main is what a release ships: while its scheduled checks are failing ("Scheduled checks failed", checks.yml) there is
+# no release, and its bump could not merge anyway (main-green.yml). Asked first, before anything is built or bumped.
+gh issue list --state open --search '"Scheduled checks failed" in:title' --json title --jq '.[].title' | grep -qx 'Scheduled checks failed' \
+  && { echo "the scheduled checks on main are failing (an open 'Scheduled checks failed' issue): fix them first"; exit 1; }
 
 # Every credential is checked before the version is bumped: a failure afterwards leaves a local commit and tag
 # to undo. `store-credentials` created the profile; `history` is the cheapest proof that it still authenticates. The
@@ -49,6 +53,8 @@ git push -u origin "release/v$version"
 # the Platforms lines every PR carries (AGENTS.md, Every platform): a version bump lands on none of them
 body=$(printf 'Version bump for v%s.\n\n## Platforms\n- **Desktop**: not needed: the version number only\n- **iOS**: not needed: the version number only\n- **Android**: not needed: the version number only\n- **Manual**: nothing user-visible\n' "$version")
 gh pr create --title "v$version" --body "$body"
+# the checks main's ruleset requires (main-green.yml) start a few seconds after the pull request; merged once they pass
+for _ in 1 2 3 4 5 6; do gh pr checks --required --watch >/dev/null 2>&1 && break; sleep 5; done
 gh pr merge --merge --delete-branch # a merge commit keeps the tagged commit reachable from main; squash would not
 git switch main
 git pull --ff-only
