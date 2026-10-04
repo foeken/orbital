@@ -72,8 +72,9 @@ class EngineWeb(private val app: Context, private val engine: String, screen: Co
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(web, Bridge.LISTENER, setOf(Bridge.ORIGIN)) { view, message, origin, mainFrame, _ ->
                 // the rule above already keeps it to Tana's origin; the page itself, the view on screen and that origin
-                // again, as docs/ANDROID.md has it
-                if (view === this.web && Bridge.trusted(origin.toString(), mainFrame)) message.data?.let(::receive)
+                // again, as docs/ANDROID.md has it. What engine.js says counts from the session page alone (security
+                // review finding 6); a call's answer is matched to the call by its number, from any page of Tana's
+                if (view === this.web && Bridge.trusted(origin.toString(), mainFrame)) message.data?.let { receive(it, fromEngine = Bridge.onSessionPage(view.url)) }
             }
         }
         web.webViewClient = Client()
@@ -126,9 +127,9 @@ class EngineWeb(private val app: Context, private val engine: String, screen: Co
         pending.clear()
     }
 
-    private fun receive(data: String) {
+    private fun receive(data: String, fromEngine: Boolean) {
         when (val heard = Bridge.read(data)) {
-            is Bridge.Heard.Said -> listener?.said(heard.message) // 'ready', 'changed'
+            is Bridge.Heard.Said -> if (fromEngine) listener?.said(heard.message) // 'ready', 'changed'
             is Bridge.Heard.Answer -> {
                 val call = pending.remove(heard.id) ?: return
                 val error = heard.error
@@ -141,7 +142,11 @@ class EngineWeb(private val app: Context, private val engine: String, screen: Co
     // A call that is never answered (a page replaced under it without a load, a script that never settles) gives up,
     // as callAsyncJavaScript fails on the iPhone, rather than holding what waits on it for ever. Two minutes: the first
     // read of a large Timeline on a slow network takes tens of seconds.
-    override suspend fun run(body: String, args: Map<String, Any?>): JsonElement = withContext(Dispatchers.Main.immediate) {
+    override suspend fun run(body: String, args: Map<String, Any?>, anyTanaPage: Boolean): JsonElement = withContext(Dispatchers.Main.immediate) {
+        // what the call carries goes to no other page than the session page (security review finding 6), the sign-in
+        // probe to none but Tana's own
+        val here = web.url
+        if (!(if (anyTanaPage) here?.startsWith(Bridge.ORIGIN + "/") == true else Bridge.onSessionPage(here))) throw Failure("Tana's page is not the one open")
         val id = next++
         val answer = CompletableDeferred<JsonElement>()
         pending[id] = answer

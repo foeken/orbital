@@ -4,8 +4,11 @@
 // signed imgproxy URL on images.tana.inc plus a Cloud-CDN-Cookie; the signed URL is 403 without that cookie.
 // (/images/<cid> and /files/<cid>/download exist too; by-uri saves reading the image document for its cid.)
 const IMAGE_URI = /^tana:image:[0-9a-z]{26}$/;
+// The most an image may be, read as it arrives: Tana takes uploads of up to 50 MB (UPLOAD_LIMIT below), so a picture
+// past this is no picture of Tana's, and a collaborator's huge one cannot fill memory before anything looks at it.
+const IMAGE_LIMIT = 64 * 1024 * 1024;
 
-async function fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch = globalThis.fetch }) {
+async function fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch = globalThis.fetch, maxBytes = IMAGE_LIMIT }) {
   if (!IMAGE_URI.test(uri)) throw new Error('not a tana:image uri: ' + uri);
   const url = baseUrl + '/images/by-uri/' + encodeURIComponent(uri);
   const locate = async (refresh) => fetch(url, { headers: { authorization: 'Bearer ' + await getAccessToken({ refresh }) }, redirect: 'manual' });
@@ -15,7 +18,15 @@ async function fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.in
   const cookie = r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
   const res = await fetch(r.headers.get('location'), { headers: cookie ? { cookie } : {} });
   if (!res.ok) throw new Error('image ' + uri + ': CDN HTTP ' + res.status);
-  return { mime: res.headers.get('content-type') || 'application/octet-stream', bytes: Buffer.from(await res.arrayBuffer()) };
+  const tooBig = () => new Error('image ' + uri + ': larger than ' + Math.round(maxBytes / 1048576) + ' MB');
+  if (Number(res.headers.get('content-length')) > maxBytes) { await res.body?.cancel().catch(() => {}); throw tooBig(); }
+  const parts = []; let size = 0;
+  for await (const chunk of res.body) { // leaving the loop early cancels the rest of the download
+    size += chunk.length;
+    if (size > maxBytes) throw tooBig();
+    parts.push(chunk);
+  }
+  return { mime: res.headers.get('content-type') || 'application/octet-stream', bytes: Buffer.concat(parts) };
 }
 
 // Upload, the way the web client's uploadFile does it (CNt/uK): POST <POLARIS_SERVICE_API_URL>/files/upload with the
@@ -59,4 +70,4 @@ function initImage(loro, { ownerUri, cid, width, height, blurhash, filename, mim
   data.set('createdInUri', ownerUri);
 }
 
-module.exports = { fetchImage, uploadFile, initImage, UPLOAD_LIMIT, SIGNED_OUT };
+module.exports = { fetchImage, uploadFile, initImage, UPLOAD_LIMIT, IMAGE_LIMIT, SIGNED_OUT };

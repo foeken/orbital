@@ -7,14 +7,17 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { createRelay, sqliteStore, postgresStore, TTL, LIMITS, isPublicAddress } = require('../relay/server');
+const EventEmitter = require('node:events');
+const { Readable } = require('node:stream');
+const { createRelay, sqliteStore, postgresStore, safePost, TTL, LIMITS, isPublicAddress } = require('../relay/server');
 
 let clock = Date.UTC(2026, 9, 3, 12);
 // RELAY_CHECK_DATABASE_URL runs the same check on PostgreSQL (an empty database: it makes its tables), as a host would
 const base = process.env.RELAY_CHECK_DATABASE_URL ? postgresStore(process.env.RELAY_CHECK_DATABASE_URL) : sqliteStore();
-// slow: an Orbital's lookup answered late while it is set, so two requests both miss it before either writes (the twin test below)
-let slow = false;
-const store = { ...base, one: async (sql, ...a) => { const row = await base.one(sql, ...a); if (slow && /FROM orbitals/.test(sql)) await new Promise((r) => setTimeout(r, 30)); return row; } };
+// slow: lookups the pattern matches answered late while it is set, so twin requests both read before either writes (the
+// twin tests below)
+let slow = null;
+const store = { ...base, one: async (sql, ...a) => { const row = await base.one(sql, ...a); if (slow && slow.test(sql)) await new Promise((r) => setTimeout(r, 30)); return row; } };
 // the agents' event callbacks (MCP Events): every POST the relay makes is kept here, and answered as a receiver would
 const posted = [];
 const echo = (body) => ({ status: 200, text: JSON.parse(body).type === 'verification' ? JSON.stringify({ challenge: JSON.parse(body).challenge }) : '' });
@@ -34,6 +37,35 @@ const server = http.createServer(relay.handle);
     const text = await res.text();
     return { status: res.status, headers: res.headers, json: text ? JSON.parse(text) : null };
   };
+  // a request straight to the relay from `from`, with no proxy in between: what a caller reaching the listener sees
+  const direct = (method, path, { from, headers = {}, body } = {}) => new Promise((resolve) => {
+    const req = Object.assign(Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]), { method, url: path, headers: { 'content-type': 'application/json', ...headers }, socket: { remoteAddress: from } });
+    relay.handle(req, { headersSent: false, statusCode: 0, setHeader() {}, writeHead(status) { this.statusCode = status; this.headersSent = true; }, end(text) { resolve({ status: this.statusCode, json: text ? JSON.parse(text) : null }); } });
+  });
+  const until = async (done) => { for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setTimeout(r, 5)); };
+  // a promise that has to settle within ms, or the check fails rather than waits for ever
+  const within = (ms, promise, message) => { let timer; return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new assert.AssertionError({ message })), ms); })]).finally(() => clearTimeout(timer)); };
+
+  // ---- calling a callback (finding 3): the whole call within its deadline, an answer within its bytes ----
+  {
+    const made = [];
+    const request = (script) => (options, onResponse) => {
+      const req = new EventEmitter(), res = new EventEmitter(); let timer = null;
+      res.statusCode = 200; res.destroy = () => { clearInterval(timer); };
+      req.destroy = (e) => { req.destroyed = true; clearInterval(timer); if (e) req.emit('error', e); };
+      req.end = () => { onResponse(res); req.timer = timer = script(res); };
+      made.push(req); return req;
+    };
+    const trickle = (res) => setInterval(() => res.emit('data', Buffer.from('x')), 5);
+    const started = Date.now();
+    await assert.rejects(within(2000, safePost('https://8.8.8.8/cb', {}, '{}', { timeout: 60, request: request(trickle) }), 'a callback that trickles its answer is cut off at the deadline, however busy its socket'), { code: 'ETIMEDOUT' }, 'a callback that trickles its answer is cut off at the deadline, however busy its socket');
+    clearInterval(made.at(-1).timer);
+    assert.ok(made.at(-1).destroyed && Date.now() - started < 1000, 'and its socket closed then');
+    await assert.rejects(safePost('https://8.8.8.8/cb', {}, '{}', { request: request((res) => { res.emit('data', Buffer.alloc(LIMITS.callBytes + 1)); }) }), { code: 'ETOOBIG' }, 'an answer past the byte cap is cut off');
+    assert.ok(made.at(-1).destroyed, 'there and then');
+    assert.deepEqual(await safePost('https://8.8.8.8/cb', {}, '{}', { request: request((res) => { res.emit('data', Buffer.from('{"challenge":"c"}')); res.emit('end'); }) }), { status: 200, text: '{"challenge":"c"}' }, 'an ordinary answer is read whole');
+    await assert.rejects(safePost('https://127.0.0.1/cb', {}, '{}', { request: request(() => {}) }), { code: 'EBLOCKED' }, 'and a private address is still never called');
+  }
 
   // ---- an agent's MCP connection signs in on its own ----
   const meta = await call('GET', '/.well-known/oauth-authorization-server/mcp');
@@ -205,6 +237,17 @@ const server = http.createServer(relay.handle);
   global.setTimeout = realTimeout;
   assert.deepEqual([posted.length, again.length], [1, 0], 'tried once, with no retry holding it to send again');
   answer = echo;
+  // a callback that never finishes its answer holds a call; a connection with as many open as it may has the next refused
+  // before a socket is opened, so no receiver can pile up the relay's connections (finding 3)
+  const holds = [], perConnection = LIMITS.callsPerConnection;
+  answer = () => new Promise((resolve) => holds.push(resolve)); posted.length = 0; LIMITS.callsPerConnection = 1;
+  const held = send(D, crypto.randomUUID());
+  await until(() => posted.length === 1);
+  assert.deepEqual((await within(2000, send(D, crypto.randomUUID()), 'a connection with as many calls open as it may has the next one refused at once')).json, { subscribers: 1, delivered: 0 }, 'a connection with as many calls open as it may has the next one refused at once');
+  assert.equal(posted.length, 1, 'without calling its callback');
+  for (const resolve of holds) resolve({ status: 200, text: '' });
+  assert.deepEqual((await held).json, { subscribers: 1, delivered: 1 }, 'while the one it was waiting on still counts');
+  LIMITS.callsPerConnection = perConnection; answer = echo;
   // a receiver that is gone (410) ends the subscription; unsubscribing ends one too
   answer = () => ({ status: 410, text: '' }); posted.length = 0;
   await send(D, crypto.randomUUID());
@@ -227,6 +270,16 @@ const server = http.createServer(relay.handle);
   const reg = (first) => call('POST', '/mcp/oauth/register', { forwarded: first + ', 198.51.100.7', body: { redirect_uris: ['https://agents.example/r'] } });
   for (let i = 0; i < 20; i++) assert.equal((await reg('203.0.113.' + i)).status, 201);
   assert.equal((await reg('203.0.113.99')).status, 429, 'whatever a caller writes before it, the address the proxy appended is the one the limit counts');
+  // a caller reaching the listener straight from a public address came through no proxy: its header is its own words,
+  // and it is counted by its own address however it rewrites it (finding 5)
+  const straight = (n) => direct('POST', '/mcp/oauth/register', { from: '8.8.4.4', headers: { 'x-forwarded-for': '198.18.0.' + n }, body: { redirect_uris: ['https://agents.example/r'] } });
+  for (let i = 0; i < 20; i++) assert.equal((await straight(i)).status, 201);
+  assert.equal((await straight(99)).status, 429, 'a public caller writing a new X-Forwarded-For each time is still one caller');
+  // the limits' own memory is bounded: when it holds LIMITS.callers windows, ended ones go, and a new caller waits while it is full
+  const callers = LIMITS.callers; LIMITS.callers = 3; clock += 61e3;
+  for (const from of ['8.8.8.1', '8.8.8.2', '8.8.8.3']) assert.equal((await direct('GET', '/mcp/oauth/authorize?client_id=nobody', { from })).status, 400, 'room for a new caller once the ended windows are let go');
+  assert.equal((await direct('GET', '/mcp/oauth/authorize?client_id=nobody', { from: '8.8.8.4' })).status, 429, 'and none past the cap, rather than a map that grows with every made-up caller');
+  LIMITS.callers = callers; clock += 61e3;
   const failures = LIMITS.linkFailures; LIMITS.linkFailures = 3;
   for (let i = 0; i < 3; i++) assert.match((await grok.tool('link_orbital', { code: 'ZZZZ-ZZZ' + i, name: 'Guess' })).text, /unknown, used or expired/);
   assert.match((await grok.tool('link_orbital', { code: 'ZZZZ-ZZZ9', name: 'Guess' })).text, /Too many requests/, 'failed codes are held to a cap across every connection, so new connections do not buy more guesses');
@@ -239,6 +292,13 @@ const server = http.createServer(relay.handle);
   for (let i = 0; i < LIMITS.newOrbitals; i++) { strays.push(newKey()); assert.equal((await newOrbital(strays.at(-1))).status, 201); }
   assert.equal((await newOrbital(newKey())).status, 429, 'new keys from one address make a few Orbitals a minute, no more');
   assert.notEqual((await newOrbital(strays[0])).json.error, 'rate_limited', 'while an Orbital that exists is not held back by it');
+  // twin requests for codes cannot pass the cap together: the count and the insert are one step per Orbital (finding 8)
+  const racer = { key: newKey() };
+  assert.equal((await call('POST', '/mcp/orbital/codes', { auth: as(racer), forwarded: '198.51.100.10' })).status, 201);
+  slow = /FROM codes WHERE orbital/;
+  const raced = await Promise.all(Array.from({ length: 9 }, () => call('POST', '/mcp/orbital/codes', { auth: as(racer) })));
+  slow = null;
+  assert.deepEqual([raced.filter((r) => r.status === 201).length, raced.filter((r) => r.status === 429).length], [LIMITS.codes - 1, 10 - LIMITS.codes], 'nine at once make only the codes the cap has room for');
   const keyHash = (k) => crypto.createHash('sha256').update(k).digest('base64url');
   // a client that never signed in and a connection with no token and no link are swept away, the linked ones stay
   const lone = (await call('POST', '/mcp/oauth/register', { body: { redirect_uris: ['https://agents.example/lone'] } })).json.client_id;
@@ -253,13 +313,38 @@ const server = http.createServer(relay.handle);
   // ---- what the database holds: ids, and no key or token as itself (only their hashes) ----
   // two first asks for a code at once, with a key the relay has not seen: one Orbital, not two
   const twin = { key: newKey() }, twinHash = crypto.createHash('sha256').update(twin.key).digest('base64url');
-  slow = true;
+  slow = /FROM orbitals/;
   const asked = await Promise.all([1, 2].map(() => call('POST', '/mcp/orbital/codes', { auth: as(twin) })));
-  slow = false;
+  slow = null;
   assert.deepEqual(asked.map((a) => a.status), [201, 201], 'both get a code');
   assert.equal((await relay.dump()).split(twinHash).length - 1, 1, 'and the key is one Orbital');
   const rows = await relay.dump();
   for (const secret of [firstKey, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
+
+  // ---- what anyone can make without an account has a ceiling a day, in all, kept in the database (finding 8) ----
+  clock += 2 * 24 * 3600e3; await relay.sweep();
+  const daily = { orbitals: LIMITS.orbitalsPerDay, installs: LIMITS.installsPerDay, clients: LIMITS.clientsPerDay };
+  LIMITS.orbitalsPerDay = 2;
+  const newcomer = (n) => call('POST', '/mcp/orbital/codes', { auth: 'Orbital ' + newKey(), forwarded: '198.51.100.' + (20 + n) });
+  assert.deepEqual([(await newcomer(1)).status, (await newcomer(2)).status], [201, 201]);
+  const third = await newcomer(3);
+  assert.deepEqual([third.status, third.json.error], [429, 'busy'], 'a third new Orbital that day is refused, from whatever address');
+  LIMITS.installsPerDay = 1;
+  await signIn('Quota');
+  const late2 = 'https://agents.example/late/callback', lateClient = (await call('POST', '/mcp/oauth/register', { body: { redirect_uris: [late2] } })).json.client_id;
+  const lateVerifier = crypto.randomBytes(32).toString('base64url'), lateChallenge = crypto.createHash('sha256').update(lateVerifier).digest('base64url');
+  const lateCode = new URL((await call('GET', '/mcp/oauth/authorize?' + new URLSearchParams({ response_type: 'code', client_id: lateClient, redirect_uri: late2, code_challenge: lateChallenge, code_challenge_method: 'S256' }))).headers.get('location')).searchParams.get('code');
+  const lateToken = await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'authorization_code', code: lateCode, client_id: lateClient, redirect_uri: late2, code_verifier: lateVerifier } });
+  assert.deepEqual([lateToken.status, lateToken.json.error], [429, 'busy'], 'and a second new connection that day, once the ceiling is one');
+  LIMITS.clientsPerDay = 2;
+  assert.equal((await call('POST', '/mcp/oauth/register', { body: { redirect_uris: [late2] } })).json.error, 'busy', 'as is a third registration');
+  Object.assign(LIMITS, { orbitalsPerDay: daily.orbitals, installsPerDay: daily.installs, clientsPerDay: daily.clients });
+  // a connection that never linked loses its tokens after a week; an agent not heard from in ninety days is let go
+  clock += TTL.unlinked + 1; await relay.sweep();
+  assert.equal((await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: grok.tokens.refresh_token, client_id: grok.client } })).status, 400, 'grok, unlinked a week ago, signs in afresh');
+  assert.ok((await relay.dump()).includes(D.id), 'while the linked Dot stays');
+  clock += TTL.idleAgent; await relay.sweep();
+  assert.equal((await relay.dump()).includes(D.id), false, 'until it has not been heard from in ninety days');
 
   console.log('relay-check: ok');
   await relay.close(); server.close();

@@ -223,7 +223,7 @@ class Engine(
                 var answer = "no answer"
                 try {
                     // a page that never answers (it was replaced under the call) must not stop the asking
-                    answer = withTimeoutOrNull(10.seconds) { host.run(PROBE) }?.jsonPrimitive?.contentOrNull ?: answer
+                    answer = withTimeoutOrNull(10.seconds) { host.run(PROBE, anyTanaPage = true) }?.jsonPrimitive?.contentOrNull ?: answer
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

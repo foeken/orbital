@@ -89,8 +89,12 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it, and
-    // 'part:' with the first rows of a Timeline read still under way
+    // 'part:' with the first rows of a Timeline read still under way. Only the session page's own frame speaks for it:
+    // any other page in this web view (sign-in goes through several) could post the same words (security review finding 6).
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        let frame = message.frameInfo
+        guard frame.isMainFrame, frame.securityOrigin.protocol == "https", frame.securityOrigin.host == Self.session.host,
+              Self.isSessionPage(frame.request.url), Self.isSessionPage(web.url) else { return }
         if let said = message.body as? String, said.hasPrefix("part:") { show(part: String(said.dropFirst(5))); return }
         if message.body as? String == "changed" { Task { await refresh() }; return }
         guard message.body as? String == "ready" else { return }
@@ -125,15 +129,27 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         Self.allowHere
     }
 
+    // The one page engine.js runs on (ios/engine/build.js): https://home.tana.inc/api/auth/session
+    static func isSessionPage(_ url: URL?) -> Bool {
+        guard let url else { return false }
+        return url.scheme == "https" && url.host == session.host && url.path == session.path
+    }
+    // A call into engine.js, made only while the session page is the one in the web view: a page that took its place
+    // could define orbital itself and be handed what the call carries (security review finding 6)
+    private func engineJS(_ js: String, _ arguments: [String: Any] = [:]) async throws -> Any? {
+        guard Self.isSessionPage(web.url) else { throw Failure(errorDescription: "Tana's page is not the one open") }
+        return try await web.callAsyncJavaScript(js, arguments: arguments, contentWorld: .page)
+    }
+
     private func connect() async {
         do {
-            let ok = try await web.callAsyncJavaScript("return await orbital.connect()", contentWorld: .page) as? Bool == true
-            note("engine: session " + ((try? await web.callAsyncJavaScript("return orbital.why()", contentWorld: .page) as? String) ?? "?"))
+            let ok = try await engineJS("return await orbital.connect()") as? Bool == true
+            note("engine: session " + ((try? await engineJS("return orbital.why()") as? String) ?? "?"))
             if ok {
                 justSignedIn = false
-                email = try? await web.callAsyncJavaScript("return orbital.email()", contentWorld: .page) as? String
+                email = try? await engineJS("return orbital.email()") as? String
                 let was = savedFor ?? account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
-                account = try? await web.callAsyncJavaScript("return orbital.account()", contentWorld: .page) as? String
+                account = try? await engineJS("return orbital.account()") as? String
                 if let was, was != account { rows = []; SavedTimeline.forget() } // another account's, or another workspace's: off the screen and off the phone
                 savedFor = nil
                 // the cookies kept at once, as the refresh may not finish, and beside it: the Timeline waits on no Keychain
@@ -217,7 +233,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
             await keepGlimpse()
-            for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
+            for issue in (try? await engineJS("return orbital.issues()")) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
             guard started == session else { return }
@@ -244,7 +260,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Keychain, and the page starts over at Tana's sign-in. A refresh still under way sees the count move and keeps nothing.
     func signOut() async {
         session += 1
-        _ = try? await web.callAsyncJavaScript("await orbital.signOut()", contentWorld: .page)
+        _ = try? await engineJS("await orbital.signOut()")
         let store = web.configuration.websiteDataStore.httpCookieStore
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
@@ -437,7 +453,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Back in front (ContentView): a sync stream that died while iOS held the page suspended is made again first
     // (orbital.resume), so the read that follows is not answered short, Today's Tasks empty, by a dead one
     func foreground() async {
-        if phase == .ready, !Self.isSample { _ = try? await web.callAsyncJavaScript("return await orbital.resume()", contentWorld: .page) }
+        if phase == .ready, !Self.isSample { _ = try? await engineJS("return await orbital.resume()") }
         await refresh()
     }
 
@@ -502,8 +518,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             if let owner, owner != account { throw Failure(errorDescription: "Another Tana account is signed in now, so this was not done") }
             // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
             // moment it is turned on, not from the next Timeline read, which a read already under way puts off
-            let json = try await web.callAsyncJavaScript("orbital.demo(demo); " + js, arguments: arguments.merging(["demo": demo]) { _, now in now },
-                                                         contentWorld: .page) as? String ?? "null"
+            let json = try await engineJS("orbital.demo(demo); " + js, arguments.merging(["demo": demo]) { _, now in now }) as? String ?? "null"
             return try decode(json)
         } catch {
             note("\(js.firstMatch(of: /orbital\.(\w+)/)?.1 ?? "engine") failed: \(Self.message(error))")

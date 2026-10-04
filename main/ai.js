@@ -13,7 +13,7 @@ const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
 const settings = require('./settings');
 const db = require('../db');
-const { signedBy } = require('../updater');
+const { counting, signedBy } = require('../updater');
 const { send } = require('./state');
 
 // The fast AI, for both pages: Terra with a little reasoning. Measured on 2026-09-24 through a ChatGPT sign-in against
@@ -46,18 +46,26 @@ let authRpc = null, authHome = null, authReady = null, activeLogin = null, login
 // the AI rows alone: handing work to a Codex task still needs a real Codex (main/agents/codex.js codexBin).
 // ponytail: fetched once and never updated; replace the file when the sign-in protocol moves past it.
 const SERVER = 'codex-app-server', OPENAI_TEAM = '2DC432GLL2';
+// what that download may be before its signature is checked (security review finding 4): packed, unpacked, and how long
+// fetching and unpacking may take; a real one is a fraction of either
+const SERVER_BOUNDS = { packed: 300 * 1024 ** 2, unpacked: 1024 ** 3, download: 5 * 60e3, unpack: 2 * 60e3 };
 const ownServer = (userData) => path.join(userData, SERVER);
 const serverBin = (userData) => require('./agents/codex').codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
 let installing = null;
 async function downloadServer(userData) {
   const run = promisify(require('node:child_process').execFile);
   const name = SERVER + '-' + (process.arch === 'arm64' ? 'aarch64' : 'x86_64') + '-apple-darwin';
-  const res = await fetch('https://github.com/openai/codex/releases/latest/download/' + name + '.tar.gz'); // follows the redirect to the asset
+  const res = await fetch('https://github.com/openai/codex/releases/latest/download/' + name + '.tar.gz', { signal: AbortSignal.timeout(SERVER_BOUNDS.download) }); // follows the redirect to the asset
   if (!res.ok) throw new Error('Downloading ChatGPT sign-in failed with ' + res.status);
   const dir = fs.mkdtempSync(path.join(userData, '.' + SERVER + '-'));
   try {
-    await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(path.join(dir, 'server.tar.gz')));
-    await run('/usr/bin/tar', ['-xzf', path.join(dir, 'server.tar.gz'), '-C', dir, name]);
+    const archive = path.join(dir, 'server.tar.gz');
+    await pipeline(Readable.fromWeb(res.body), counting(0, () => {}, SERVER_BOUNDS.packed), fs.createWriteStream(archive));
+    // the one file it is for, by the size the archive lists for it, before a byte of it is written
+    const listed = (await run('/usr/bin/tar', ['-tvzf', archive, name], { timeout: SERVER_BOUNDS.unpack })).stdout;
+    const size = Number((/^\S+\s+\S+\s+\S+\s+\S+\s+(\d+)\s/m.exec(listed) || [])[1]);
+    if (!(size > 0 && size <= SERVER_BOUNDS.unpacked)) throw new Error('The ChatGPT sign-in download is not what it should be');
+    await run('/usr/bin/tar', ['-xzf', archive, '-C', dir, name], { timeout: SERVER_BOUNDS.unpack });
     const bin = path.join(dir, name);
     // Intact, and a Developer ID signature of OpenAI's team chained to Apple; anything else is deleted unrun.
     await run('/usr/bin/codesign', ['--verify', '--strict', '-R', signedBy(OPENAI_TEAM), bin])
