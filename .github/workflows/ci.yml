@@ -1,15 +1,16 @@
 name: CI
 
+# A pull request and main are scanned for keys, tokens and real work content, and nothing else runs here: a change is
+# checked on the machine that writes it before it merges (AGENTS.md, Pull requests), in about half a minute against
+# minutes of runner setup, and everything runs on main a few times a day when it has moved (checks.yml). Nobody waits
+# on a runner, a release's version bump included.
 on:
   push:
     branches: [main]
-  # a draft pull request is tested on the machine that writes it (AGENTS.md, Pull requests); the checks run here when it is
-  # marked ready for review, and again on every push after that
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
-# a newer push to a pull request replaces its run; a merge to main gets a group of its own, its commit, because a group keeps
-# one waiting run and a newer one replaces it: so every commit on main finishes its run
+# a newer push to a pull request replaces its run; a merge to main gets a group of its own, its commit
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
@@ -32,52 +33,3 @@ jobs:
           echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
           tar -xzf gitleaks.tgz gitleaks
           ./gitleaks git --redact --no-banner --log-opts="$RANGE" .
-
-  check:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22' # node:sqlite in db.js needs >= 22.5
-          cache: npm
-      # --ignore-scripts skips the postinstall: it downloads the 360 MB Electron binary (electron 44's install.js
-      # ignores ELECTRON_SKIP_BINARY_DOWNLOAD) and then brands the bundle with plutil and codesign, macOS-only tools.
-      # Neither the linter nor the checks touch the binary.
-      - run: npm ci --ignore-scripts
-      # Bun bundles the iPhone engine (ios/engine/build.js), which scripts/ios-engine-check.js builds and runs
-      - uses: oven-sh/setup-bun@v2
-      - run: npm run lint
-      - run: npm run check
-      # whole user flows in Chromium on the mock (scripts/flow-check.js, docs/TESTING.md); the runner image has Chrome
-      - run: npm run flows
-
-  # The Android app (android/): the shared module's tests, the screens among them drawn headless on the desktop target,
-  # the app module's own JVM tests, its lint, and a debug build of the app. The journeys on a device
-  # (connectedDebugAndroidTest) need an emulator and run by hand. The glyphs it draws are checked fresh by npm run check
-  # above (scripts/glyph-check.js).
-  android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      # loro-crdt and friends for the engine bundle; the Electron download is not needed (as in check above)
-      - run: npm ci --ignore-scripts
-      # Bun bundles the engine into the app's assets (androidApp's orbitalAssets task runs ios/engine/build.js)
-      - uses: oven-sh/setup-bun@v2
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      # compileSdk 37 (android/gradle/libs.versions.toml), which the runner's own SDK may not have yet; the licences are
-      # accepted by the action
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
-      - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :shared:jvmTest :androidApp:testDebugUnitTest :androidApp:lintDebug :androidApp:assembleDebug --console=plain
-        working-directory: android
