@@ -87,7 +87,7 @@ module.exports = {
     const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
     return allDayFlag === true || !!(e && midnight && (e - s) % 864e5 === 0);
   },
-  // the workspace's people, asked once per session (a chat on screen is read every two seconds); asked again after a failure
+  // the workspace's people, asked once per session (a chat on screen is read again as its answer is written); asked again after a failure
   members: () => (people ||= S.client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
     .then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: memberTitle(n) })), (e) => { people = null; throw e; })),
   // ./views inboxFrom

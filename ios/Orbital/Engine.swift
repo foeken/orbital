@@ -28,6 +28,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var agents: [Agent] = [] // your Dot and any other agent linked through orbital.md (Agents.swift), for the long-press menu
     var handed: [String: String] = [:] // node -> the linked agent it is handed to
     var removed: Set<String> = [] // deleted here: gone from every list at once, before Tana confirms it
+    var changes: [String: Int] = [:] // page id -> how often it changed in Tana since it was opened (engine.js 'changed:<id>', live.js): NodeScreen reads it again
     var reveal = false // sensitive items shown, after a shake; never kept, as the desktop keeps it on the machine only
     // Settings' Demo mode, as the desktop's: made-up words and names on screen, nothing saved (ios/engine/demo.js); kept on this phone
     var demo = UserDefaults.standard.bool(forKey: "demoMode") {
@@ -90,14 +91,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         if log.count > 100 { log.removeFirst() }
     }
 
-    // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it, and
-    // 'part:' with the first rows of a Timeline read still under way. Only the session page's own frame speaks for it:
+    // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it,
+    // 'changed:<id>' when a page opened here changed (ios/engine/live.js), and 'part:' with the first rows of a Timeline
+    // read still under way. Only the session page's own frame speaks for it:
     // any other page in this web view (sign-in goes through several) could post the same words (security review finding 6).
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let frame = message.frameInfo
         guard frame.isMainFrame, frame.securityOrigin.protocol == "https", frame.securityOrigin.host == Self.session.host,
               Self.isSessionPage(frame.request.url), Self.isSessionPage(web.url) else { return }
         if let said = message.body as? String, said.hasPrefix("part:") { show(part: String(said.dropFirst(5))); return }
+        if let said = message.body as? String, said.hasPrefix("changed:") { changes[String(said.dropFirst(8)), default: 0] += 1; return }
         if message.body as? String == "changed" { Task { await refresh() }; return }
         guard message.body as? String == "ready" else { return }
         Task { await connect() }
