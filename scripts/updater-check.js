@@ -24,6 +24,39 @@ assert.deepEqual(notes('- Chat\n  - **Thinking** shimmers').map((b) => b.depth),
     new Writable({ write(c, _e, cb) { bytes += c.length; cb(); } }));
   assert.deepEqual(seen, [3, 16, 1000], '0%, then 1%, then 100%: the second 0% chunk says nothing');
   assert.equal(bytes, 1000, 'every byte reaches the file');
+  // and stops past the bytes it may have, whatever the server said it would send (security review finding 4)
+  await assert.rejects(pipeline(Readable.from([Buffer.alloc(8), Buffer.alloc(8)]), counting(0, () => {}, 10), new Writable({ write(c, _e, cb) { cb(); } })), /larger than it should be/);
+})().catch((e) => { console.error(e); process.exit(1); });
+// A release download is staged within bounds before its signature is looked at, and nothing of a failed try stays behind
+(async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), { execFileSync } = require('node:child_process');
+  const { stage, unpacked, BOUNDS } = require('../updater');
+  const staging = () => fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('orbital-update-')).sort().join();
+  const before = staging();
+  const serve = (chunks, length) => async () => ({ ok: true, status: 200, headers: { get: () => (length == null ? null : String(length)) }, body: ReadableStream.from(chunks) });
+  await assert.rejects(stage({ name: 'Orbital.zip', size: BOUNDS.zip + 1 }, () => {}, undefined, serve([])), /larger than an Orbital release/, 'a release that says it is too big is not fetched');
+  await assert.rejects(stage({ name: 'Orbital.zip', size: 10 }, () => {}, undefined, serve([new Uint8Array(8), new Uint8Array(8)])), /larger than it should be/, 'a body longer than the release says is stopped there');
+  await assert.rejects(stage({ name: 'Orbital.zip', size: 0 }, () => {}, undefined, serve([new Uint8Array(4)])), /not a zip/, 'bytes that are no zip go no further');
+  if (process.platform === 'darwin') { // ditto is Apple's, and CI runs on Linux
+    const src = fs.mkdtempSync(path.join(os.tmpdir(), 'orbital-zip-'));
+    try {
+      fs.mkdirSync(path.join(src, 'Orbital.app', 'Contents'), { recursive: true });
+      fs.writeFileSync(path.join(src, 'Orbital.app', 'Contents', 'Info.plist'), 'x'.repeat(1000));
+      execFileSync('/usr/bin/ditto', ['-ck', '--keepParent', path.join(src, 'Orbital.app'), path.join(src, 'o.zip')]);
+      const zip = fs.readFileSync(path.join(src, 'o.zip'));
+      assert.ok((await unpacked(path.join(src, 'o.zip'))).bytes >= 1000, 'what a zip unpacks to is read from its own directory');
+      let seen = null;
+      await assert.rejects(stage({ name: 'Orbital.zip', size: zip.length }, () => {}, async (fresh) => { seen = fs.existsSync(path.join(fresh, 'Contents', 'Info.plist')); throw new Error('not signed'); }, serve([zip])), /not signed/, 'a bundle its check refuses');
+      assert.equal(seen, true, 'is checked unpacked');
+      const unpackedBound = BOUNDS.unpacked; BOUNDS.unpacked = 999;
+      await assert.rejects(stage({ name: 'Orbital.zip', size: zip.length }, () => {}, undefined, serve([zip])), /unpacks to more/, 'and one that would unpack past the bound is not unpacked');
+      BOUNDS.unpacked = unpackedBound;
+      const { dir } = await stage({ name: 'Orbital.zip', size: zip.length }, () => {}, async () => {}, serve([zip]));
+      assert.ok(fs.existsSync(path.join(dir, 'Orbital.app')), 'a good one is left staged for the swap');
+      fs.rmSync(dir, { recursive: true, force: true });
+    } finally { fs.rmSync(src, { recursive: true, force: true }); }
+  }
+  assert.equal(staging(), before, 'and no failed try leaves its staging folder behind');
 })().catch((e) => { console.error(e); process.exit(1); });
 assert.equal(teamOf('Executable=/x\nIdentifier=com.dreetje.orbital\nTeamIdentifier=ABCDE12345\nSealed Resources=none'), 'ABCDE12345');
 assert.equal(teamOf('Identifier=com.dreetje.orbital\nSignature=adhoc\nTeamIdentifier=not set'), null, 'an ad-hoc build belongs to no team');
