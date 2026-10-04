@@ -44,4 +44,14 @@ class BridgeTest {
         assertFalse(Bridge.trusted("http://home.tana.inc", mainFrame = true))
         assertFalse(Bridge.trusted(null, mainFrame = true))
     }
+
+    @Test fun onlyTheSessionPage() {
+        assertTrue(Bridge.onSessionPage("https://home.tana.inc/api/auth/session"))
+        assertTrue(Bridge.onSessionPage("https://home.tana.inc/api/auth/session?refresh=true"))
+        assertFalse(Bridge.onSessionPage("https://home.tana.inc/")) // Tana's sign-in, in the same view
+        assertFalse(Bridge.onSessionPage("https://home.tana.inc/api/auth/session/other"))
+        assertFalse(Bridge.onSessionPage("https://evil.example/api/auth/session"))
+        assertFalse(Bridge.onSessionPage("http://home.tana.inc/api/auth/session"))
+        assertFalse(Bridge.onSessionPage(null))
+    }
 }

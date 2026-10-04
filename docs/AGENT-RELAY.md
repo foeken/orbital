@@ -111,16 +111,26 @@ hold a deploy (or a change nobody meant) against this repository.
   passes them on: keep the Replit App's access tight, and hold `/mcp/health` against the repository after a deploy.
 - **A code is a short secret**: 40 bits, once, fifteen minutes, ten tries a minute per connection, and failed codes
   held to 300 a minute across every connection together, so new connections buy no more guesses.
-- **Limits a caller cannot pick**: behind the host's proxy, the address it appended (the last of `X-Forwarded-For`) is
-  the one a limit counts; the ones before it are whatever the caller wrote.
+- **Limits a caller cannot pick**: behind the host's proxy, which reaches the relay from this machine or its private
+  network, the address it appended (the last of `X-Forwarded-For`) is the one a limit counts; the ones before it are
+  whatever the caller wrote. A request straight from a public address came through no proxy, so its header is ignored
+  and it is counted by its own address. The limits' own memory holds at most 50,000 callers: ended windows are let go,
+  and while it is still full a new caller is told to wait.
 - **Lifetimes**: a subscription as long as granted; a code an hour after it ran out; access tokens last an hour, refresh
   tokens 90 days; a connection with no token and no link goes after an hour, a registered client that never signed
-  in after a day, and an Orbital that never linked an agent (and has no code left) after a day. Nothing is logged but
-  the kind of an unexpected failure.
+  in after a day, a connection that never linked loses its tokens after a week, an agent not heard from in ninety days
+  (a live one renews its subscription at least monthly) is unlinked, and an Orbital that never linked an agent (or no
+  longer has one, and has no code left) after a day. Nothing is logged but the kind of an unexpected failure.
 - **Limits**: 32 KB a request, 16 KB of data an event (in UTF-8 bytes, as it goes over the wire), 50 agents, ten
   subscriptions a connection, five open codes, 120 calls a minute per caller. What writes a row a caller could make
   up is counted by the address the proxy saw: twenty registrations, thirty sign-in pages (each writes a grant) and five
-  new Orbitals (each new key is one) a minute.
+  new Orbitals (each new key is one) a minute. And whatever the address, in all, a day, counted in the database: 1,000
+  registrations, 1,000 new connections and 200 new Orbitals. The caps on codes, agents and subscriptions are counted
+  and written in one step per Orbital or connection (`serial`: a queue per key, and in PostgreSQL a transaction holding
+  an advisory lock on it), so twin requests cannot pass one together.
+- **Calling a callback is bounded**: each call, the answer included, ends within ten seconds and 64 KB of answer, cut
+  off rather than held open by a receiver that trickles bytes; at most ten calls are open for one connection and a
+  hundred in all, and one past either is not made.
 - **Callbacks reach public addresses only**: every address a callback's name resolves to, and an IP literal itself, is
   checked against loopback, private, link-local and metadata ranges, an IPv4 address written as IPv6 in any spelling
   included (`::ffff:7f00:1` is how the URL parser writes `[::ffff:127.0.0.1]`). No redirects are followed.

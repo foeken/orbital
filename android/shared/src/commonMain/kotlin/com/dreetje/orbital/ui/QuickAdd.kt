@@ -123,7 +123,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
             if (first && shared == null && engine.unsent.isNotEmpty()) engine.unsent.removeAt(0).let { d ->
                 kept = d; title = d.title; assignee = d.assignee; today = d.today; failure = d.why?.let { "Not added: $it" }
             }
-            runCatching { focus.requestFocus() }
+            if (shared?.image == null) runCatching { focus.requestFocus() } // a shared image's row stays in view, not under the keyboard
             types = engine.taskTypes()
             // a saved search of one type: that type, chosen, and listed even when it is no task type (a Goal is a document)
             val from = if (kept != null) kept?.search else search
@@ -154,6 +154,14 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
         SheetBar("Quick Add", cancel = close, action = "Add", enabled = canAdd) { engine.scope.launch { add() } }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(Modifier.fillMaxSize()) {
+                // an image shared to Orbital, read only once it is tapped (Shell: any app can start the share screen)
+                shared?.image?.let { image ->
+                    item("shared") {
+                        Group("Shared image", footer = "Read with your ChatGPT account into a task or a note, with the image under it.") {
+                            GroupRow(last = true, onClick = { engine.addImage { image }; close() }) { Icon(Icons.Outlined.Image, null, tint = c.text); Text("Process the shared image", color = c.text) }
+                        }
+                    }
+                }
                 item("title") {
                     // the title, and dictating it: the microphone starts listening; while it listens, ✕ throws the
                     // recording away and ■ stops it, its words then added to the title

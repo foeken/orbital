@@ -7,7 +7,7 @@ import SwiftUI
 // today's. Tana is written by the engine, which runs in the app (Engine.swift), so whatever changes a task opens Orbital
 // with the orbital: links the widgets use (Shell.swift onOpenURL) and the app writes it as soon as Tana is connected.
 // What is known without the app is what it last saved: for the widgets, today's tasks and the Timeline's
-// (Engine.keepGlimpse), and for Siri, the tasks assigned to you in every state (Engine.keepTasks); a sensitive one
+// (Engine.keepTimeline), and for Siri, the tasks assigned to you in every state (Engine.keepTasks); a sensitive one
 // without its words. List Tasks answers from those. The Android app has no counterpart yet (issue #723).
 
 struct TaskEntity: AppEntity, IndexedEntity {
@@ -88,7 +88,7 @@ enum Tasks {
     }
 
     // Spotlight finds what the widgets show, once it changes; nothing sensitive, and nothing at all in Demo mode or once
-    // signed out (Engine.keepGlimpse, Engine.signOut)
+    // signed out (Engine.keepTimeline, Engine.forgetTimeline)
     private static var indexed: [String] = []
     static func index(demo: Bool) async {
         let shown = demo ? [] : known().filter { $0.title != "Sensitive task" }

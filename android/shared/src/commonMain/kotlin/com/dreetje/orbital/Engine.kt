@@ -121,6 +121,7 @@ class Engine(
                 if (history) all.filter { !it.top } else all
             }
             phase = Phase.Ready
+            scope.launch { keepTimeline() } // the widgets draw the sample too
         } else if (host != null && !demoOn) {
             // the last Timeline read, on screen at once while Tana connects (SavedTimeline); never in demo mode
             SavedTimeline.load(platform.files, now())?.let { (whose, saved) -> rows = saved; savedFor = whose }
@@ -184,7 +185,7 @@ class Engine(
                     val was = savedFor ?: account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
                     account = maybe { host.run("return orbital.account()").jsonPrimitive.contentOrNull }
                     // another account's, or another workspace's: off the screen and off the phone, with the pages read for it
-                    if (was != null && was != account) { rows = emptyList(); opened.clear(); SavedTimeline.forget(platform.files) }
+                    if (was != null && was != account) { rows = emptyList(); opened.clear(); forgetTimeline() }
                     savedFor = null
                     host.keepCookies() // at once: the refresh may not finish
                     phase = Phase.Ready
@@ -223,7 +224,7 @@ class Engine(
                 var answer = "no answer"
                 try {
                     // a page that never answers (it was replaced under the call) must not stop the asking
-                    answer = withTimeoutOrNull(10.seconds) { host.run(PROBE) }?.jsonPrimitive?.contentOrNull ?: answer
+                    answer = withTimeoutOrNull(10.seconds) { host.run(PROBE, anyTanaPage = true) }?.jsonPrimitive?.contentOrNull ?: answer
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -269,7 +270,6 @@ class Engine(
             partsFor = null // a part told late is older than this
             if (started != session || masked != demo) return // signed out meanwhile, or demo mode switched: the read it asked for shows
             rows = read
-            account?.let { if (!demo && pages == 1) SavedTimeline.save(platform.files, raw, it, now()) } // what the next launch shows first
             error = null
             settle(rows)
             maybe { call<Setup>("return await orbital.setup()") }?.let { setup ->
@@ -278,6 +278,7 @@ class Engine(
                 sensitiveIds = setup.sensitive.toSet()
                 pinned = setup.pinned.toSet()
             }
+            keepTimeline(raw)
             maybe { host.run("return orbital.issues()").jsonArray.map { it.jsonPrimitive.content } }?.forEach(::note)
             host.keepCookies() // Tana rotates the session: keep the newest
         } catch (e: CancellationException) {
@@ -313,7 +314,7 @@ class Engine(
         session += 1
         maybe { host.run("await orbital.signOut()") }
         host.forgetCookies()
-        SavedTimeline.forget(platform.files)
+        forgetTimeline()
         rows = emptyList(); states.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear()
         note("signed out")
         start()
@@ -338,8 +339,25 @@ class Engine(
     // what open(id) last read, to draw until it reads again; null when never opened (or since signing out)
     fun cached(id: String): Page? = pagesSample?.pages?.get(id) ?: opened[id]
 
-    // The widgets' Timeline (Glimpse): the rows on screen, a box ticked here ticked and what was deleted or unpinned here
-    // gone, each sensitive one without its words
+    // The Timeline is kept on this phone twice, both written here and nowhere else (Engine.swift keepTimeline the same):
+    //   - SavedTimeline, for the next launch to draw while Tana connects: the first page as engine.js answered it, a
+    //     sensitive row's words included (drawn blurred), tied to the account it is for, in Platform.files.
+    //   - the widgets' Glimpse (Platform.keepGlimpse; androidApp Widgets.kt): the rows on screen, a box ticked here ticked
+    //     and what was deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget).
+    // raw: the Timeline as engine.js answered it, after a read; null after a change made here, which only the widgets show
+    // before the next read. In demo mode the widgets get the masked rows on screen, so nothing real shows on a home screen
+    // either, and the launch copy is left as it was: masked words are no launch's to show. Both go together
+    // (forgetTimeline): signed out, or another account signed in.
+    suspend fun keepTimeline(raw: String? = null) {
+        if (raw != null && !demo && pages == 1) account?.let { SavedTimeline.save(platform.files, raw, it, now()) }
+        platform.keepGlimpse(glimpse())
+    }
+
+    suspend fun forgetTimeline() {
+        SavedTimeline.forget(platform.files)
+        platform.keepGlimpse(null) // nothing of the account left on a widget
+    }
+
     fun glimpse(): Glimpse {
         fun keep(list: List<Row>?): List<Row>? = list?.let(::shown)?.map { r ->
             val words = if (r.sensitive == true) r.copy(text = null, title = null, segments = null, subtext = null, people = null, reference = r.reference?.copy(label = null),
@@ -501,13 +519,15 @@ class Engine(
         val before = state(task)
         states[task.id] = if (before == "proposed" || before == "closed") "open" else "closed"
         ticked[task.id] = now()
-        if (isSample) return // the sample writes nothing
         try {
-            states[task.id] = call<String>("return await orbital.toggle(id)", mapOf("id" to task.id))
-        } catch (e: Failure) {
-            states[task.id] = before
-            error = e.message
-        }
+            if (isSample) return // the sample writes nothing
+            try {
+                states[task.id] = call<String>("return await orbital.toggle(id)", mapOf("id" to task.id))
+            } catch (e: Failure) {
+                states[task.id] = before
+                error = e.message
+            }
+        } finally { keepTimeline() } // the widgets show it ticked too
     }
 
     // Long press, Move to Inbox: the task back to Tana's Inbox state (proposed)
@@ -516,11 +536,13 @@ class Engine(
         val before = states[id]
         states[id] = "proposed"
         try {
-            states[id] = call<String>("return await orbital.toggle(id, 'proposed')", mapOf("id" to id))
-        } catch (e: Failure) {
-            if (before == null) states.remove(id) else states[id] = before
-            error = e.message
-        }
+            try {
+                states[id] = call<String>("return await orbital.toggle(id, 'proposed')", mapOf("id" to id))
+            } catch (e: Failure) {
+                if (before == null) states.remove(id) else states[id] = before
+                error = e.message
+            }
+        } finally { keepTimeline() } // the widgets show it in the Inbox too
     }
 
     fun state(task: Row): String = states[task.id] ?: task.stateType ?: if (task.done == true) "closed" else "open"
@@ -533,13 +555,15 @@ class Engine(
         val before = states[id]
         states[id] = to
         ticked[id] = now()
-        if (isSample) return
         try {
-            states[id] = call<String>("return await orbital.toggle(id, to)", mapOf("id" to id, "to" to to))
-        } catch (e: Failure) {
-            if (before == null) states.remove(id) else states[id] = before
-            error = e.message
-        }
+            if (isSample) return
+            try {
+                states[id] = call<String>("return await orbital.toggle(id, to)", mapOf("id" to id, "to" to to))
+            } catch (e: Failure) {
+                if (before == null) states.remove(id) else states[id] = before
+                error = e.message
+            }
+        } finally { keepTimeline() } // the widgets drawn again with it
     }
 
     // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a

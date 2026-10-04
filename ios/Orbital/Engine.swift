@@ -89,8 +89,12 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it, and
-    // 'part:' with the first rows of a Timeline read still under way
+    // 'part:' with the first rows of a Timeline read still under way. Only the session page's own frame speaks for it:
+    // any other page in this web view (sign-in goes through several) could post the same words (security review finding 6).
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        let frame = message.frameInfo
+        guard frame.isMainFrame, frame.securityOrigin.protocol == "https", frame.securityOrigin.host == Self.session.host,
+              Self.isSessionPage(frame.request.url), Self.isSessionPage(web.url) else { return }
         if let said = message.body as? String, said.hasPrefix("part:") { show(part: String(said.dropFirst(5))); return }
         if message.body as? String == "changed" { Task { await refresh() }; return }
         guard message.body as? String == "ready" else { return }
@@ -125,16 +129,28 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         Self.allowHere
     }
 
+    // The one page engine.js runs on (ios/engine/build.js): https://home.tana.inc/api/auth/session
+    static func isSessionPage(_ url: URL?) -> Bool {
+        guard let url else { return false }
+        return url.scheme == "https" && url.host == session.host && url.path == session.path
+    }
+    // A call into engine.js, made only while the session page is the one in the web view: a page that took its place
+    // could define orbital itself and be handed what the call carries (security review finding 6)
+    private func engineJS(_ js: String, _ arguments: [String: Any] = [:]) async throws -> Any? {
+        guard Self.isSessionPage(web.url) else { throw Failure(errorDescription: "Tana's page is not the one open") }
+        return try await web.callAsyncJavaScript(js, arguments: arguments, contentWorld: .page)
+    }
+
     private func connect() async {
         do {
-            let ok = try await web.callAsyncJavaScript("return await orbital.connect()", contentWorld: .page) as? Bool == true
-            note("engine: session " + ((try? await web.callAsyncJavaScript("return orbital.why()", contentWorld: .page) as? String) ?? "?"))
+            let ok = try await engineJS("return await orbital.connect()") as? Bool == true
+            note("engine: session " + ((try? await engineJS("return orbital.why()") as? String) ?? "?"))
             if ok {
                 justSignedIn = false
-                email = try? await web.callAsyncJavaScript("return orbital.email()", contentWorld: .page) as? String
+                email = try? await engineJS("return orbital.email()") as? String
                 let was = savedFor ?? account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
-                account = try? await web.callAsyncJavaScript("return orbital.account()", contentWorld: .page) as? String
-                if let was, was != account { rows = []; SavedTimeline.forget() } // another account's, or another workspace's: off the screen and off the phone
+                account = try? await engineJS("return orbital.account()") as? String
+                if let was, was != account { rows = []; forgetTimeline() } // another account's, or another workspace's: off the screen and off the phone
                 savedFor = nil
                 // the cookies kept at once, as the refresh may not finish, and beside it: the Timeline waits on no Keychain
                 Task { await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) }
@@ -208,7 +224,6 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             partsFor = nil // a part told late is older than this
             guard started == session, masked == demo else { return } // signed out meanwhile, or demo mode switched: the read it asked for shows
             rows = read
-            if !demo, pages == 1, let account { SavedTimeline.save(json, account: account) } // what the next launch shows first
             error = nil
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
@@ -216,8 +231,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 if translator.catalogue.isEmpty, let list = try? await ChatGPT.models(), !list.isEmpty { translator.catalogue = list } // once: what this account may ask
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
-            await keepGlimpse()
-            for issue in (try? await web.callAsyncJavaScript("return orbital.issues()", contentWorld: .page)) as? [String] ?? [] { note(issue) }
+            keepTimeline(read: json)
+            for issue in (try? await engineJS("return orbital.issues()")) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
             guard started == session else { return }
@@ -244,15 +259,11 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Keychain, and the page starts over at Tana's sign-in. A refresh still under way sees the count move and keeps nothing.
     func signOut() async {
         session += 1
-        _ = try? await web.callAsyncJavaScript("await orbital.signOut()", contentWorld: .page)
+        _ = try? await engineJS("await orbital.signOut()")
         let store = web.configuration.websiteDataStore.httpCookieStore
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
-        SavedTimeline.forget()
-        Keychain.delete("glimpse") // nothing of the account left on a widget
-        Keychain.delete("tasks"); tasksRead = .distantPast // nor for Siri (keepTasks)
-        WidgetCenter.shared.reloadAllTimelines()
-        await Tasks.index(demo: true) // nor in Spotlight (Intents.swift)
+        forgetTimeline()
         rows = []; states = [:]; removed = []; email = nil; account = nil; pages = 1
         note("signed out")
         start()
@@ -439,7 +450,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Back in front (ContentView): a sync stream that died while iOS held the page suspended is made again first
     // (orbital.resume), so the read that follows is not answered short, Today's Tasks empty, by a dead one
     func foreground() async {
-        if phase == .ready, !Self.isSample { _ = try? await web.callAsyncJavaScript("return await orbital.resume()", contentWorld: .page) }
+        if phase == .ready, !Self.isSample { _ = try? await engineJS("return await orbital.resume()") }
         await refresh()
     }
 
@@ -504,8 +515,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             if let owner, owner != account { throw Failure(errorDescription: "Another Tana account is signed in now, so this was not done") }
             // every call says first whether Demo mode is on (ios/engine/demo.js), so the engine refuses a write from the
             // moment it is turned on, not from the next Timeline read, which a read already under way puts off
-            let json = try await web.callAsyncJavaScript("orbital.demo(demo); " + js, arguments: arguments.merging(["demo": demo]) { _, now in now },
-                                                         contentWorld: .page) as? String ?? "null"
+            let json = try await engineJS("orbital.demo(demo); " + js, arguments.merging(["demo": demo]) { _, now in now }) as? String ?? "null"
             return try decode(json)
         } catch {
             note("\(js.firstMatch(of: /orbital\.(\w+)/)?.1 ?? "engine") failed: \(Self.message(error))")
@@ -533,7 +543,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let before = state(of: task)
         states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
         ticked[task.id] = .now
-        defer { Task { await keepGlimpse() } } // the widgets show it ticked too
+        defer { keepTimeline() } // the widgets show it ticked too
         guard !Self.isSample else { return } // the sample writes nothing
         do {
             states[task.id] = try await call("return await orbital.toggle(id)", ["id": task.id]) as String
@@ -548,6 +558,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard !demo, !Self.isSample else { return }
         let before = states[id]
         states[id] = "proposed"
+        defer { keepTimeline() } // the widgets show it in the Inbox too
         do { states[id] = try await call("return await orbital.toggle(id, 'proposed')", ["id": id]) as String }
         catch { states[id] = before; self.error = error.localizedDescription }
     }
@@ -560,7 +571,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let before = states[id]
         states[id] = next
         ticked[id] = .now
-        defer { Task { await keepGlimpse() } } // the widgets drawn again with it
+        defer { keepTimeline() } // the widgets drawn again with it
         guard !Self.isSample else { return }
         do { states[id] = try await call("return await orbital.toggle(id, to)", ["id": id, "to": next]) as String }
         catch { states[id] = before; self.error = error.localizedDescription }
@@ -570,12 +581,20 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
     }
 
-    // The widgets' Timeline (ios/Widgets; Glimpse.kt on Android): the rows on screen, a box ticked here ticked and what was
-    // deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget), left in the Keychain
-    // where the widgets read it, as the Share extension leaves what it shares
+    // The Timeline is kept on this phone twice, both written here and nowhere else (Android's Engine.kt the same):
+    //   - SavedTimeline, for the next launch to draw while Tana connects: the first page as engine.js answered it, a
+    //     sensitive row's words included (drawn blurred), tied to the account it is for, in the app's own Caches.
+    //   - the widgets' Glimpse (ios/Widgets, Glimpse.kt on Android): the rows on screen, a box ticked here ticked and what
+    //     was deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget), left in the
+    //     Keychain where the widgets read it, as the Share extension leaves what it shares (no App Group is registered).
+    // read: the Timeline as engine.js answered it, after a read; nil after a change made here, which only the widgets show
+    // before the next read. In demo mode the widgets get the masked rows on screen, so nothing real shows on a Home Screen
+    // either, and the launch copy is left as it was: masked words are no launch's to show. Both go together
+    // (forgetTimeline): signed out, or another account signed in.
     struct Glimpse: Encodable { let read: Int64; let rows: [Row] }
 
-    func keepGlimpse() async {
+    func keepTimeline(read json: String? = nil) {
+        if let json, !demo, pages == 1, let account { SavedTimeline.save(json, account: account) }
         func kept(_ list: [Row]?, today: Bool = false) -> [Row]? {
             list.map { shown($0).filter { !today || !unpinned.contains($0.id) }.map { row in
                 var r = row
@@ -592,8 +611,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard let data = try? JSONEncoder().encode(Glimpse(read: Int64(Date.now.timeIntervalSince1970 * 1000), rows: kept(rows) ?? [])) else { return }
         Keychain.save(data, "glimpse")
         WidgetCenter.shared.reloadAllTimelines()
-        await keepTasks()
-        await Tasks.index(demo: demo) // what Siri and Spotlight find (Intents.swift)
+        Task { await keepTasks(); await Tasks.index(demo: demo) } // what Siri and Spotlight find (Intents.swift)
     }
 
     // Siri and Shortcuts' List Tasks and their task lookup (Intents.swift): the tasks assigned to you in every state
@@ -620,6 +638,14 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             return r
         }
         if let data = try? JSONEncoder().encode(kept) { Keychain.save(data, "tasks") }
+    }
+
+    func forgetTimeline() {
+        SavedTimeline.forget()
+        Keychain.delete("glimpse") // nothing of the account left on a widget
+        Keychain.delete("tasks"); tasksRead = .distantPast // nor for Siri (keepTasks)
+        WidgetCenter.shared.reloadAllTimelines()
+        Task { await Tasks.index(demo: true) } // nor in Spotlight (Intents.swift)
     }
 
     // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
@@ -663,7 +689,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         // -history: the day's entries only, so a shot of them needs no scrolling
         if CommandLine.arguments.contains("-history") { rows.removeAll { $0.timeline?.today == true || $0.timeline?.upcoming == true || $0.timeline?.free != nil } }
         phase = .ready
-        Task { await keepGlimpse() }
+        keepTimeline()
     }
 
     // what engine.js threw, rather than WebKit's "A JavaScript exception occurred"

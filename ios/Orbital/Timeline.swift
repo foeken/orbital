@@ -2,7 +2,7 @@ import SwiftUI
 
 // One row as the desktop renderer gets it: of the Timeline (main/timeline.js), a saved search or a meeting's documents
 // (ios/engine/index.js listRow), an outline (sdk/content.js) or a chat (sdk/chat.js); only what this draws. Encoded again
-// for the widgets (Engine.swift keepGlimpse), with a sensitive row's words taken out.
+// for the widgets (Engine.swift keepTimeline), with a sensitive row's words taken out.
 struct Row: Codable, Identifiable {
     let id: String
     var text: String?

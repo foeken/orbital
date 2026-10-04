@@ -15,7 +15,7 @@ class FakeHost(var answer: suspend (String, Map<String, Any?>) -> JsonElement = 
     val calls = mutableListOf<Pair<String, Map<String, Any?>>>()
     val loaded = mutableListOf<String>()
     var cookiesForgotten = 0
-    override suspend fun run(body: String, args: Map<String, Any?>): JsonElement { calls += body to args; return answer(body, args) }
+    override suspend fun run(body: String, args: Map<String, Any?>, anyTanaPage: Boolean): JsonElement { calls += body to args; return answer(body, args) }
     override fun load(url: String) { loaded += url }
     override val url: String? get() = loaded.lastOrNull()
     override fun cookieNames() = listOf("__session")
@@ -59,6 +59,8 @@ class FakePlatform(
     override fun open(url: String) {}
     override suspend fun pasteImage(): ByteArray? = null
     override fun hasClipboardImage() = false
+    val glimpses = mutableListOf<Glimpse?>() // what the widgets were given (Engine.keepTimeline), null when it was forgotten
+    override suspend fun keepGlimpse(read: Glimpse?) { glimpses += read }
     @Composable override fun rememberPhotoPicker(picked: (ByteArray) -> Unit): () -> Unit = {}
     @Composable override fun EngineView(modifier: Modifier) {}
     @Composable override fun ChatGPTSignIn(done: () -> Unit, failed: (String) -> Unit) {}
