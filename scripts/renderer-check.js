@@ -62,12 +62,15 @@ assert.ok(!tops.some(({ names }) => names.includes('api')), 'the renderer declar
   assert.equal(link[2], link[1].replace('https://', ''), 'the link says where it goes');
   assert.equal(qrText(read('help-testflight.svg')), link[1], 'the code on the Help tour\u2019s iPhone page holds the link beside it');
   for (const f of ['README.md', 'manual/start.html']) assert.ok(read(f).includes(link[1]), f + ' gives the same iPhone link as the Help tour');
-  // Android's code (help-android.svg, qrencode -t SVG -m 0 -l L --svg-path) holds the latest release's download of the APK
-  // release.sh attaches, the link beside it, which the page shows only once a release has it (updater.js androidRelease)
+  // Android's code (help-android.svg, qrencode -t SVG -m 0 -l L --svg-path) adds this repo to Obtainium, through Obtainium's
+  // own redirect page (a camera opens an https link, not obtainium://), which installs Orbital from the releases and keeps it
+  // up to date; the APK release.sh attaches is the link beside it, for a download by hand. The page shows them only once a
+  // release has the APK (updater.js androidRelease).
   const android = read('help.html').match(/<a id="helpAndroidLink" href="([^"]+)">([^<]+)<\/a>/);
   assert.ok(android, 'the Help tour\u2019s Android page has its link (help.html #helpAndroidLink)');
   assert.equal(android[1], 'https://github.com/foeken/orbital/releases/latest/download/' + android[2], 'the Android link is the latest release\u2019s download of the file it names');
-  assert.equal(qrText(read('help-android.svg')), android[1], 'the code on the Help tour\u2019s Android page holds the link beside it');
+  assert.equal(qrText(read('help-android.svg')), 'https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/foeken/orbital', 'the code on the Help tour\u2019s Android page adds this repo to Obtainium');
+  assert.ok(/id="helpObtainiumLink" href="https:\/\/obtainium\.imranr\.dev\/"/.test(read('help.html')), 'and the words beside it link to Obtainium itself');
 }
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a

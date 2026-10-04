@@ -547,6 +547,7 @@ const HELP_API = String.raw`if (location.pathname === '/help.html') { window.__o
 flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s code and link, Android coming soon or its download', async (p) => {
   const link = fs.readFileSync(path.join(root, 'help.html'), 'utf8').match(/id="helpMobileLink" href="([^"]+)"/)[1];
   const apk = fs.readFileSync(path.join(root, 'help.html'), 'utf8').match(/id="helpAndroidLink" href="([^"]+)"/)[1];
+  const obtainium = fs.readFileSync(path.join(root, 'help.html'), 'utf8').match(/id="helpObtainiumLink" href="([^"]+)"/)[1];
   // what the page shows: the chosen phone, the radios' state and tab stops, and what can be seen of the code, links and buttons
   const shown = () => p.js(`(() => { const seen = (e) => !!e.offsetParent, page = document.getElementById('help-mobile');
     return { chosen: [...page.querySelectorAll('[role=radio]')].map((b) => [b.textContent, b.getAttribute('aria-checked'), b.tabIndex]),
@@ -592,11 +593,12 @@ flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s co
     await p.js('document.querySelector("#help-mobile [data-os=android][role=radio]").click(); 1');
     await p.waitFor('(() => { const i = document.querySelector("#help-mobile img[src=\'help-android.svg\']"); return !!i.offsetParent && i.complete && i.naturalWidth > 0; })()', 'the Android code');
     const android = await shown();
-    assert.deepEqual([android.code, android.links, android.soon], [1, [apk], []], 'Android with a release: one code and its download link, and nothing says coming soon');
+    assert.deepEqual([android.code, android.links, android.soon], [1, [obtainium, apk], []], 'Android with a release: the code that adds it to Obtainium, a link to Obtainium and the download, and nothing says coming soon');
     assert.match(await p.js('document.querySelector("#help-mobile p[data-os=android][data-apk=yes]").textContent'), /Android 10 or later/, 'with the Android it needs');
     assert.deepEqual(await size(), iosCard, 'the card keeps its size from one phone to the other');
     await p.js('document.getElementById("helpAndroidLink").click(); 1'); await settle(p, 100);
-    assert.deepEqual(await p.js('__opened'), [apk], 'the download opens in the browser');
+    await p.js('document.getElementById("helpObtainiumLink").click(); 1'); await settle(p, 100);
+    assert.deepEqual(await p.js('__opened'), [apk, obtainium], 'the download and Obtainium open in the browser');
   }
   await p.open('help.html?theme=light');
   await p.waitFor('document.querySelector(".hpage.on")', 'the tour');

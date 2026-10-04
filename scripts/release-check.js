@@ -41,7 +41,7 @@ const releases = (calls, repo) => calls.filter((c) => c.startsWith('gh release c
   assert.ok(build > at(calls, 'npm run package') && build < at(calls, 'git push'), 'the APK is built from the bumped commit, before anything is pushed');
   const [main] = releases(calls, 'foeken/orbital ');
   assert.ok(main.startsWith('gh release create v0.10.1 dist/Orbital-0.10.1-arm64.zip dist/Orbital-android.apk '), 'this repo\u2019s release carries the zip and the APK');
-  assert.match(main, /Signed and notarized; unzip and move it to Applications\. For Android 10 or later: open Orbital-android\.apk/, 'its notes open with the Mac line and the Android one, in the one paragraph the update card leaves out');
+  assert.match(main, /Signed and notarized; unzip and move it to Applications\. For Android 10 or later: add https:\/\/github\.com\/foeken\/orbital to Obtainium/, 'its notes open with the Mac line and the Android one, in the one paragraph the update card leaves out');
   const [mirror] = releases(calls, 'foeken/orbital-releases');
   assert.ok(mirror.startsWith('gh release create v0.10.1 dist/Orbital-0.10.1-arm64.zip --repo') && !/apk|Android/i.test(mirror), 'the mirror, for old Mac copies, gets the zip alone');
 }

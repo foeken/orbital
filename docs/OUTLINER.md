@@ -1307,9 +1307,11 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
   code on screen. **iPhone**, picked to begin with: a code to scan that joins its TestFlight beta (help-testflight.svg,
   made by `qrencode -t SVG -m 0 --svg-path`) and the same public link, https://testflight.apple.com/join/wgcnRVKx, to
   open on the phone (it opens in the browser through main, `openExternal`), iOS 26 or later. **Android**: once the
-  latest release has the APK (main asks GitHub, updater.js `androidRelease`, `update:android`, once an hour at most), a code for
-  its download, https://github.com/foeken/orbital/releases/latest/download/Orbital-android.apk (help-android.svg, `qrencode -t SVG
-  -m 0 -l L --svg-path`), and that link, with Obtainium for updates (github.com/foeken/orbital), Android 10 or later; until then, or when GitHub cannot be asked, "Coming soon" in
+  latest release has the APK (main asks GitHub, updater.js `androidRelease`, `update:android`, once an hour at most), a code that
+  adds Orbital to Obtainium, which installs it and keeps it up to date (Obtainium's redirect page to
+  `obtainium://add/https://github.com/foeken/orbital`, help-android.svg, `qrencode -t SVG -m 0 -l L --svg-path`), a link to
+  Obtainium, and the APK's download (https://github.com/foeken/orbital/releases/latest/download/Orbital-android.apk) by hand,
+  Android 10 or later; until then, or when GitHub cannot be asked, "Coming soon" in
   words, with no code, link or button. Cmd+K Install mobile app's hint says which. The card keeps its size between them.
   Cmd+K Install mobile app opens the tour on that page (`openHelp('mobile')`, main.js `openOverlay` passing `at=mobile`
   to help.html, and nothing else it is sent). The page before it offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page

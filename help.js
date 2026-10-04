@@ -33,7 +33,7 @@ helpBack.onclick = () => helpStep(-1);
 helpNext.onclick = () => helpStep(1);
 // The phone page's links, the addresses its codes hold: in the browser, as every link in Orbital opens. Without main (the
 // manual, the flows) each is a plain link.
-for (const id of ['helpMobileLink', 'helpAndroidLink']) document.getElementById(id).onclick = (e) => {
+for (const id of ['helpMobileLink', 'helpObtainiumLink', 'helpAndroidLink']) document.getElementById(id).onclick = (e) => {
   if (!helpApi || !helpApi.openExternal) return;
   e.preventDefault();
   helpApi.openExternal(e.currentTarget.href).catch(() => {});

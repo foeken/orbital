@@ -58,7 +58,7 @@ notes="Orbital $version for Apple Silicon. Signed and notarized; unzip and move 
 set -- "$zip"
 [ -z "$apk" ] || set -- "$@" "$apk"
 gh release create "v$version" "$@" --repo "$releases" --title "v$version" \
-  --notes "$notes${apk:+ For Android 10 or later: open Orbital-android.apk on the phone and allow your browser to install it when Android asks; for updates, add github.com/foeken/orbital to Obtainium.}"
+  --notes "$notes${apk:+ For Android 10 or later: add https://github.com/foeken/orbital to Obtainium (obtainium.imranr.dev), which installs Orbital and keeps it up to date, or download Orbital-android.apk.}"
 # the mirror is for old Mac copies only: the zip, and no APK
 [ -z "$mirror" ] || gh release create "v$version" "$zip" --repo "$mirror" --title "v$version" --notes "$notes"
 echo "released v$version${apk:+ with Android} to $releases${mirror:+ and $mirror}"
