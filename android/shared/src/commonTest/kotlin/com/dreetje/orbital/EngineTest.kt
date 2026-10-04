@@ -199,7 +199,24 @@ class EngineTest {
         assertTrue(engine.rows.isEmpty())
         assertNull(engine.email)
         assertNull(SavedTimeline.load(platform.files, clock), "the saved Timeline goes with the session")
+        assertNull(platform.glimpses.last(), "and the widgets' copy with it")
         assertEquals(Engine.SESSION, host.loaded.last())
+    }
+
+    // The Timeline is kept twice, both by keepTimeline: the read for the next launch, and what is on screen for the widgets
+    @Test fun aReadKeepsBothCopiesAndATickOnlyTheWidgets() = runTest {
+        val platform = FakePlatform()
+        var answer = "\"closed\"" // what Tana answers a change of state with
+        val engine = ready(page(toggle = { answer }), platform)
+        assertEquals(listOf("s:e1"), SavedTimeline.load(platform.files, clock)!!.second.map { it.id }, "the read, for the next launch")
+        assertEquals(listOf("s:e1"), platform.glimpses.last()!!.rows.map { it.id }, "and for the widgets")
+        val task = engine.rows.single().children!!.single()
+        engine.toggle(task)
+        assertEquals("closed", platform.glimpses.last()!!.rows.single().children!!.single().stateType, "a tick here is on the widgets at once")
+        assertEquals("open", SavedTimeline.load(platform.files, clock)!!.second.single().children!!.single().stateType, "the launch copy stays the read")
+        answer = "\"proposed\""
+        engine.moveToInbox(task.id)
+        assertEquals("proposed", platform.glimpses.last()!!.rows.single().children!!.single().stateType, "and so is Move to Inbox")
     }
 
     private val ME = "tana:user-profile:me@org_1" // orbital.account: who, in which workspace
@@ -241,6 +258,7 @@ class EngineTest {
         runCurrent()
         assertTrue(engine.rows.isEmpty())
         assertNull(SavedTimeline.load(platform.files, clock), "and off the phone: a read that never lands leaves nothing of it for the next launch")
+        assertNull(platform.glimpses.last(), "nor on a widget")
     }
 
     @Test fun demoModeNeitherShowsNorKeepsTheTimeline() = runTest {
@@ -253,6 +271,7 @@ class EngineTest {
         host.listener!!.said("ready")
         runCurrent()
         assertEquals(listOf("today", "s:old"), SavedTimeline.load(platform.files, clock)!!.second.map { it.id }, "a masked read is not kept")
+        assertEquals(listOf("s:e1"), platform.glimpses.last()!!.rows.map { it.id }, "while the widgets get the masked rows on screen, so nothing real stays on a home screen")
     }
 
     @Test fun theFirstPartShowsAheadOfThePage() = runTest {

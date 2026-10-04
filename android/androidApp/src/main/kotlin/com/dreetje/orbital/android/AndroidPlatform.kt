@@ -32,6 +32,7 @@ import androidx.core.content.ContextCompat
 import androidx.webkit.ProfileStore
 import androidx.webkit.WebViewFeature
 import com.dreetje.orbital.ChatGPT
+import com.dreetje.orbital.Glimpse
 import com.dreetje.orbital.Platform
 import com.dreetje.orbital.Recorder
 import com.dreetje.orbital.Store
@@ -102,6 +103,7 @@ class AndroidPlatform(private val context: Context) : Platform {
     private val clipboard get() = context.getSystemService(ClipboardManager::class.java)
 
     override fun hasClipboardImage(): Boolean = clipboard?.primaryClipDescription?.hasMimeType("image/*") == true
+    override suspend fun keepGlimpse(read: Glimpse?) = Widgets.keep(context, read) // the widgets' Timeline (Engine.keepTimeline)
 
     // the clip read where the tap was (Android lets the app in front read it), the image made smaller off the main thread
     override suspend fun pasteImage(): ByteArray? {

@@ -150,7 +150,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 email = try? await engineJS("return orbital.email()") as? String
                 let was = savedFor ?? account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
                 account = try? await engineJS("return orbital.account()") as? String
-                if let was, was != account { rows = []; SavedTimeline.forget() } // another account's, or another workspace's: off the screen and off the phone
+                if let was, was != account { rows = []; forgetTimeline() } // another account's, or another workspace's: off the screen and off the phone
                 savedFor = nil
                 // the cookies kept at once, as the refresh may not finish, and beside it: the Timeline waits on no Keychain
                 Task { await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) }
@@ -224,7 +224,6 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             partsFor = nil // a part told late is older than this
             guard started == session, masked == demo else { return } // signed out meanwhile, or demo mode switched: the read it asked for shows
             rows = read
-            if !demo, pages == 1, let account { SavedTimeline.save(json, account: account) } // what the next launch shows first
             error = nil
             settle(rows)
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
@@ -232,7 +231,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 if translator.catalogue.isEmpty, let list = try? await ChatGPT.models(), !list.isEmpty { translator.catalogue = list } // once: what this account may ask
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
             }
-            await keepGlimpse()
+            keepTimeline(read: json)
             for issue in (try? await engineJS("return orbital.issues()")) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
@@ -264,9 +263,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let store = web.configuration.websiteDataStore.httpCookieStore
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
-        SavedTimeline.forget()
-        Keychain.delete("glimpse") // nothing of the account left on a widget
-        WidgetCenter.shared.reloadAllTimelines()
+        forgetTimeline()
         rows = []; states = [:]; removed = []; email = nil; account = nil; pages = 1
         note("signed out")
         start()
@@ -546,7 +543,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let before = state(of: task)
         states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
         ticked[task.id] = .now
-        defer { Task { await keepGlimpse() } } // the widgets show it ticked too
+        defer { keepTimeline() } // the widgets show it ticked too
         guard !Self.isSample else { return } // the sample writes nothing
         do {
             states[task.id] = try await call("return await orbital.toggle(id)", ["id": task.id]) as String
@@ -561,6 +558,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard !demo, !Self.isSample else { return }
         let before = states[id]
         states[id] = "proposed"
+        defer { keepTimeline() } // the widgets show it in the Inbox too
         do { states[id] = try await call("return await orbital.toggle(id, 'proposed')", ["id": id]) as String }
         catch { states[id] = before; self.error = error.localizedDescription }
     }
@@ -573,7 +571,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let before = states[id]
         states[id] = next
         ticked[id] = .now
-        defer { Task { await keepGlimpse() } } // the widgets drawn again with it
+        defer { keepTimeline() } // the widgets drawn again with it
         guard !Self.isSample else { return }
         do { states[id] = try await call("return await orbital.toggle(id, to)", ["id": id, "to": next]) as String }
         catch { states[id] = before; self.error = error.localizedDescription }
@@ -583,12 +581,20 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
     }
 
-    // The widgets' Timeline (ios/Widgets; Glimpse.kt on Android): the rows on screen, a box ticked here ticked and what was
-    // deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget), left in the Keychain
-    // where the widgets read it, as the Share extension leaves what it shares
+    // The Timeline is kept on this phone twice, both written here and nowhere else (Android's Engine.kt the same):
+    //   - SavedTimeline, for the next launch to draw while Tana connects: the first page as engine.js answered it, a
+    //     sensitive row's words included (drawn blurred), tied to the account it is for, in the app's own Caches.
+    //   - the widgets' Glimpse (ios/Widgets, Glimpse.kt on Android): the rows on screen, a box ticked here ticked and what
+    //     was deleted or unpinned here gone, each sensitive one without its words (nobody shakes a widget), left in the
+    //     Keychain where the widgets read it, as the Share extension leaves what it shares (no App Group is registered).
+    // read: the Timeline as engine.js answered it, after a read; nil after a change made here, which only the widgets show
+    // before the next read. In demo mode the widgets get the masked rows on screen, so nothing real shows on a Home Screen
+    // either, and the launch copy is left as it was: masked words are no launch's to show. Both go together
+    // (forgetTimeline): signed out, or another account signed in.
     struct Glimpse: Encodable { let read: Int64; let rows: [Row] }
 
-    func keepGlimpse() async {
+    func keepTimeline(read json: String? = nil) {
+        if let json, !demo, pages == 1, let account { SavedTimeline.save(json, account: account) }
         func kept(_ list: [Row]?, today: Bool = false) -> [Row]? {
             list.map { shown($0).filter { !today || !unpinned.contains($0.id) }.map { row in
                 var r = row
@@ -604,6 +610,12 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         }
         guard let data = try? JSONEncoder().encode(Glimpse(read: Int64(Date.now.timeIntervalSince1970 * 1000), rows: kept(rows) ?? [])) else { return }
         Keychain.save(data, "glimpse")
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    func forgetTimeline() {
+        SavedTimeline.forget()
+        Keychain.delete("glimpse") // nothing of the account left on a widget
         WidgetCenter.shared.reloadAllTimelines()
     }
 
@@ -648,7 +660,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         // -history: the day's entries only, so a shot of them needs no scrolling
         if CommandLine.arguments.contains("-history") { rows.removeAll { $0.timeline?.today == true || $0.timeline?.upcoming == true || $0.timeline?.free != nil } }
         phase = .ready
-        Task { await keepGlimpse() }
+        keepTimeline()
     }
 
     // what engine.js threw, rather than WebKit's "A JavaScript exception occurred"

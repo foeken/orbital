@@ -51,7 +51,7 @@ A new Xcode needs its first-launch install (`sudo xcodebuild -runFirstLaunch`) b
 whole line; **Today's Tasks and Upcoming Meetings** (medium, large), the Timeline above its line, with + for Quick Add; and
 **Activity** (medium, large), what happened by day, each line its marker and the task or node itself, each task once at the
 latest thing that happened to it (`Glimpse.activity`, `Row.asTask`), with no +. On the Lock Screen, **Quick Add**. A widget
-does not scroll, so each draws as much as fits its height. They draw what the app last read (`Engine.keepGlimpse`, the same
+does not scroll, so each draws as much as fits its height. They draw what the app last read (`Engine.keepTimeline`, the same
 JSON as Android's `Glimpse`), left in the Keychain in Orbital's own access group as the Share extension leaves what it
 shares; a sensitive row comes without its words. On a tinted or clear Home Screen iOS draws everything in one tint, so the
 markers have nothing laid behind them and the boxes are outlines there (`widgetRenderingMode`). A tap opens `orbital:<id>`,
