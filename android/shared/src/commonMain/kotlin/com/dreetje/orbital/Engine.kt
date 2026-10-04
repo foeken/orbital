@@ -114,6 +114,7 @@ class Engine(
     private var watch: Job? = null
     private var justSignedIn = false
     private var session = 0 // counts sign-outs: a read that began before one never saves or shows what it got
+    private var attempt = 0 // counts the session page's loads (start): a deadline or a read of an earlier one does nothing now
     private var again = false // a change told while a read is under way: one more read follows it
     private var savedFor: String? = null // whose the saved Timeline on screen is, until Tana says who is signed in
     private var account: String? = null // who is signed in, in which workspace (orbital.account): what the saved Timeline is kept for
@@ -140,6 +141,15 @@ class Engine(
         val host = host ?: return
         watch?.cancel()
         phase = Phase.Starting
+        val load = ++attempt
+        // Tana's page connected within PATIENCE (connect), or the app says so, where it built the Timeline for good: a
+        // request inside the page has no time limit of the WebView's. Connected later, it goes on from there.
+        scope.launch {
+            delay(PATIENCE)
+            if (load != attempt || phase != Phase.Starting) return@launch
+            note("Tana's page did not connect in ${PATIENCE.inWholeSeconds} s")
+            fail("Tana did not answer in ${PATIENCE.inWholeSeconds} seconds.")
+        }
         note("loading the session page")
         host.load(SESSION)
     }
@@ -273,12 +283,23 @@ class Engine(
         val host = host ?: return
         val started = session
         val masked = demo
+        val load = attempt
         partsFor = session
+        // nothing on screen: the Timeline builds itself for PATIENCE at most, then the app says so (Try again loads the
+        // page again); with rows on screen, or a first part of them, there is something to read while it finishes
+        val deadline = scope.launch {
+            delay(PATIENCE)
+            if (load != attempt || phase != Phase.Ready || rows.isNotEmpty()) return@launch
+            note("Tana's page did not send the Timeline in ${PATIENCE.inWholeSeconds} s")
+            fail("Tana has not sent your Timeline in ${PATIENCE.inWholeSeconds} seconds. It may still come.")
+        }
         try {
             var raw = ""
             val read: List<Row> = reply("return await orbital.timeline(pages)", mapOf("pages" to pages)) { raw = it; json.decodeFromString(it) }
             partsFor = null // a part told late is older than this
-            if (started != session || masked != demo) return // signed out meanwhile, or demo mode switched: the read it asked for shows
+            // signed out meanwhile, demo mode switched (the read it asked for shows), or the page loaded again since
+            if (started != session || masked != demo || load != attempt) return
+            if (phase is Phase.Failed) phase = Phase.Ready // it answered after all
             rows = read
             error = null
             settle(rows)
@@ -296,10 +317,11 @@ class Engine(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (started != session) return
+            if (started != session || load != attempt) return
             if (e.message?.contains("not authenticated") == true) signIn() // the session ran out: sign in again
             error = e.message
         } finally {
+            deadline.cancel()
             partsFor = null
         }
     }

@@ -43,6 +43,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     @ObservationIgnored private var watch: Task<Void, Never>?
     @ObservationIgnored private var justSignedIn = false
     @ObservationIgnored private var session = 0 // counts sign-outs: a read that began before one never saves or shows what it got
+    @ObservationIgnored private var attempt = 0 // counts the session page's loads (start): a deadline or a read of an earlier one does nothing now
     @ObservationIgnored private var savedFor: String? // whose the saved Timeline on screen is, until Tana says who is signed in
     @ObservationIgnored private var account: String? // who is signed in, in which workspace (orbital.account): what the saved Timeline is kept for
     @ObservationIgnored private var partsFor: Int? // the session whose Timeline read is under way, taking its first part (show(part:))
@@ -58,6 +59,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     #else
     static let stall: String? = nil
     #endif
+    // How long Tana's page has to connect, and the first Timeline read to answer while nothing is on screen, before the
+    // app says so (Can't reach Tana, Try again, Details) rather than building the Timeline for good: a request inside the
+    // page has no time limit of WebKit's. What answers later still shows. -patience <seconds>: shorter, for the UI tests.
+    static let patience = UserDefaults.standard.double(forKey: "patience") > 0 ? UserDefaults.standard.double(forKey: "patience") : 30
     // Google and others refuse sign-in in a web view that does not say it is Safari
     static let safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
@@ -78,6 +83,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         if Self.isSample { showSample(); return }
         // the last Timeline read, on screen at once while Tana connects (SavedTimeline); never in demo mode
         if !demo, Self.stall == nil, let saved = SavedTimeline.load() { rows = saved.rows; savedFor = saved.account }
+        expect(attempt) // the cookies put back first (restore) are waited for no longer than the page itself
         Task {
             await SavedSession.restore(into: web.configuration.websiteDataStore.httpCookieStore)
             start()
@@ -88,10 +94,22 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard !Self.isSample else { return }
         watch?.cancel()
         phase = .starting
+        attempt += 1
+        expect(attempt)
         note("loading the session page")
         if Self.stall == "read" { phase = .ready; Task { await refresh() }; return } // connected, as far as the app can tell
         if Self.stall != nil { return } // the page never says ready
         web.load(URLRequest(url: Self.session, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))
+    }
+
+    // Tana's page connected within patience (connect), or the app says so; connected later, it goes on from there
+    private func expect(_ load: Int) {
+        Task {
+            try? await Task.sleep(for: .seconds(Self.patience))
+            guard load == attempt, phase == .starting else { return }
+            note("Tana's page did not connect in \(Int(Self.patience)) s")
+            fail("Tana did not answer in \(Int(Self.patience)) seconds.")
+        }
     }
 
     func note(_ line: String) {
@@ -228,15 +246,26 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     private func read() async {
-        let started = session, masked = demo
+        let started = session, masked = demo, load = attempt
         partsFor = session
         defer { partsFor = nil }
+        // nothing on screen: the Timeline builds itself for patience at most, then the app says so (Try again loads the
+        // page again); with rows on screen, or a first part of them, there is something to read while it finishes
+        let deadline = Task {
+            try? await Task.sleep(for: .seconds(Self.patience))
+            guard !Task.isCancelled, load == attempt, phase == .ready, rows.isEmpty else { return }
+            note("Tana's page did not send the Timeline in \(Int(Self.patience)) s")
+            fail("Tana has not sent your Timeline in \(Int(Self.patience)) seconds. It may still come.")
+        }
+        defer { deadline.cancel() }
         do {
             let (read, json): ([Row], String) = try await call("return await orbital.timeline(pages)", ["pages": pages]) {
                 (try JSONDecoder().decode([Row].self, from: Data($0.utf8)), $0)
             }
             partsFor = nil // a part told late is older than this
-            guard started == session, masked == demo else { return } // signed out meanwhile, or demo mode switched: the read it asked for shows
+            // signed out meanwhile, demo mode switched (the read it asked for shows), or the page loaded again since
+            guard started == session, masked == demo, load == attempt else { return }
+            if case .failed = phase { phase = .ready } // it answered after all
             rows = read
             error = nil
             settle(rows)
@@ -251,7 +280,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             for issue in (try? await engineJS("return orbital.issues()")) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
         } catch {
-            guard started == session else { return }
+            guard started == session, load == attempt else { return }
             if error.localizedDescription.contains("not authenticated") { signIn() } // the session ran out: sign in again
             self.error = error.localizedDescription
         }
