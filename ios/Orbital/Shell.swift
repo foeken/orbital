@@ -136,6 +136,8 @@ struct Shell: View {
             // -open <link>: an orbital: link opened at launch, as Siri or a widget opens one, for the UI tests (a link
             // opened from outside asks first whether to open Orbital, which a test would wait on)
             if let i = args.firstIndex(of: "-open"), i + 1 < args.count, let url = URL(string: args[i + 1]) { open(url) }
+            // -menu: the menu open and left so, for design shots (the manual's, manual/scenes/iphone.sh)
+            if args.contains("-menu") { show(true) }
             // -menudemo: open the menu and close it again, for filming the move
             guard args.contains("-menudemo") else { return }
             try? await Task.sleep(for: .seconds(2)); show(true)

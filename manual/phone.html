@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
+<title>On your iPhone · Orbital manual</title>
+<link rel="stylesheet" href="manual.css">
+<script src="search-index.js"></script>
+<script src="manual.js"></script>
+<style>
+  /* ---- hero: a task ticked on the iPhone is ticked on the Mac, through the same Tana ---- */
+  .phone-hero { --loop: 8s; gap: 0; }
+  .phone-hero .win { min-width: 0; }
+  .phone-hand { width: 178px; border-radius: 30px; padding: 30px 14px 22px; }
+  .phone-hand .ttl { font-size: 14px; text-align: center; margin-bottom: 10px; }
+  .phone-mac { width: 270px; }
+  .phone-hero .row { font-size: 13px; }
+  .phone-hero .lbl { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+  .phone-path { display: flex; align-items: center; padding: 0 14px; }
+  .phone-path .arrow { width: 64px; opacity: .3; }
+  /* the end state, which reduced motion shows: ticked on both */
+  .phone-task .box { background: var(--done-soft); border-color: var(--done-soft); }
+  .phone-task span:last-child { text-decoration: line-through; color: var(--faint); }
+  .mg.in .phone-a .box { animation: phone-box-a var(--loop) infinite; }
+  .mg.in .phone-a .box::after { animation: phone-tick-a var(--loop) infinite; }
+  .mg.in .phone-a span:last-child { animation: phone-words-a var(--loop) infinite; }
+  .mg.in .phone-b .box { animation: phone-box-b var(--loop) infinite; }
+  .mg.in .phone-b .box::after { animation: phone-tick-b var(--loop) infinite; }
+  .mg.in .phone-b span:last-child { animation: phone-words-b var(--loop) infinite; }
+  .mg.in .phone-path .arrow { animation: phone-path var(--loop) infinite; }
+  @keyframes phone-box-a { 0%, 20% { background: none; border-color: var(--faint); } 24%, 94% { background: var(--done-soft); border-color: var(--done-soft); } 100% { background: none; border-color: var(--faint); } }
+  @keyframes phone-tick-a { 0%, 20% { opacity: 0; } 24%, 94% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes phone-words-a { 0%, 20% { color: var(--ink); text-decoration-color: transparent; } 26%, 94% { color: var(--faint); text-decoration-color: currentColor; } 100% { color: var(--ink); text-decoration-color: transparent; } }
+  @keyframes phone-box-b { 0%, 48% { background: none; border-color: var(--faint); } 52%, 94% { background: var(--done-soft); border-color: var(--done-soft); } 100% { background: none; border-color: var(--faint); } }
+  @keyframes phone-tick-b { 0%, 48% { opacity: 0; } 52%, 94% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes phone-words-b { 0%, 48% { color: var(--ink); text-decoration-color: transparent; } 54%, 94% { color: var(--faint); text-decoration-color: currentColor; } 100% { color: var(--ink); text-decoration-color: transparent; } }
+  @keyframes phone-path { 0%, 26% { opacity: .3; } 32%, 46% { opacity: 1; } 52%, 100% { opacity: .3; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Chapter 16</p>
+    <h1>Your Tana in your pocket</h1>
+    <p class="lead">Orbital for iPhone shows your Timeline, your saved searches and Quick Add over the same Tana as the Mac. Tick a task on the train and it is ticked at your desk; nothing is copied, and there is nothing to sync.</p>
+    <div class="mg phone-hero" aria-hidden="true">
+      <div class="win phone-hand">
+        <div class="ttl">Timeline</div>
+        <span class="lbl">Today's Tasks</span>
+        <div class="row phone-task phone-a"><span class="box on"></span><span>Send the agenda</span></div>
+        <div class="row"><span class="box"></span><span class="bar" style="--w:90px"></span></div>
+        <div class="row"><span class="dot"></span><span class="bar" style="--w:70px"></span></div>
+      </div>
+      <div class="phone-path"><i class="arrow"></i></div>
+      <div class="win phone-mac">
+        <div class="ttl">My Tasks</div>
+        <div class="row phone-task phone-b"><span class="box on"></span><span>Send the agenda</span></div>
+        <div class="row"><span class="box"></span><span class="bar" style="--w:140px"></span></div>
+        <div class="row"><span class="box"></span><span class="bar" style="--w:110px"></span></div>
+      </div>
+    </div>
+    <ul class="learn"></ul>
+  </header>
+
+  <section class="topic">
+    <h2 id="install" data-short="Installing it" data-k="testflight beta install ios 26 sign in tana iphone app download">Installing it and signing in</h2>
+    <div class="split">
+      <div>
+        <p>The iPhone app is a beta in Apple's TestFlight, for iOS 26 or later. On the Mac, press <kbd>⌘K</kbd> and pick <b>Install mobile app</b>: the Help tour opens on its phone page with a code to scan and the TestFlight link (<a href="start.html#phone">First steps</a> shows it). On the iPhone, the link is <a href="https://testflight.apple.com/join/wgcnRVKx">testflight.apple.com/join/wgcnRVKx</a>.</p>
+        <p>The first time you open it, Orbital shows Tana's own sign-in, the one you use on the Mac. Once you are in, it opens on the Timeline. If Tana cannot be reached, the app says <b>Can't reach Tana</b> with <b>Try again</b>; <b>Details</b> shows what sign-in did, to copy or share when something goes wrong.</p>
+        <p>There is no iPad version. Android is <a href="#android">coming soon</a>.</p>
+      </div>
+      <figure class="shot"><img data-m="start-help-iphone" alt="The Help tour's phone page on the Mac: iPhone picked, the code to scan and its TestFlight link"><figcaption>On the Mac, <kbd>⌘K</kbd> <b>Install mobile app</b>.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="timeline" data-k="timeline today's tasks upcoming meetings tick check refresh pull new dot three more days">The Timeline</h2>
+    <div class="split">
+      <div>
+        <p>The app opens on the Timeline, drawn as the Mac draws it (<a href="timeline.html">Chapter 5</a>): a rail with the time on the left and what happened on the right. At the top, by <b>Now</b>, sit <b>Today's Tasks</b>, the free time before your next meeting, counted down, and <b>Upcoming meetings</b> with their times and the faces of who is coming. Under them come the days: Today, Yesterday and the days before, newest first. A blue dot marks what is new.</p>
+        <ul>
+          <li><b>Tap a task's box</b> to tick it off or back on; the phone gives a short buzz when it is done. An Inbox task has a dashed box, and its first tap accepts it.</li>
+          <li><b>Tap the words</b> of any row to open it (<a href="#pages">below</a>).</li>
+          <li><b>Pull down</b> to read the Timeline again, and <b>Show three more days</b> at the foot reaches further back.</li>
+        </ul>
+        <p>The Timeline you saw last is on screen the moment the app opens, while Orbital connects to Tana; the page building itself shows only the very first time.</p>
+      </div>
+      <figure class="shot phone"><img data-m="phone-timeline" alt="The iPhone Timeline: Today's Tasks, the free time, Upcoming meetings, then Today with an AI agent's new tasks"><figcaption>Today's Tasks and meetings above, the day's changes below.</figcaption></figure>
+    </div>
+    <h3 id="long-press">Long press a row</h3>
+    <p>A long press on a task or a node opens what you can do with it, as a right-click does on the Mac:</p>
+    <ul>
+      <li><b>Assign to …</b> lists your workspace's people, searchable; a tap gives the task to that person alone, and <b>Unassigned</b> takes everyone off it. When the person cannot open the task, Orbital asks once: <b>Grant access</b> shares it with them, <b>Keep private</b> leaves it as it is.</li>
+      <li><b>Assign to Echo …</b>, with your Dot's own name, hands the node to the Dot you linked (<a href="#settings">Settings</a>): write what it should do and tap <b>Assign</b>. It reads the node in Tana and keeps its last line saying how it is going, as on the Mac (<a href="ai.html#link-agent">Chapter 11</a>). <b>Unassign Echo</b> takes it back.</li>
+      <li><b>Move to Inbox</b> sends an accepted task back to the Inbox.</li>
+      <li><b>Pin to Today</b> puts it in Today's Tasks; on a pinned node it reads <b>Remove Pin</b>.</li>
+      <li><b>Mark as Sensitive</b> hides its words (<a href="#private">below</a>); <b>Not Sensitive</b> shows them again.</li>
+      <li><b>Delete</b> moves it to Tana's trash, where you are allowed to delete it.</li>
+    </ul>
+  </section>
+
+  <section class="topic">
+    <h2 id="menu" data-short="The menu" data-k="side menu saved searches swipe sideways reorder drag icon">The menu and your saved searches</h2>
+    <p>The <b>☰</b> button at the top left opens the menu, and so does a sideways swipe anywhere on the page. The menu lists the <b>Timeline</b> and, under it, your saved searches (<a href="views.html">Chapter 7</a>), each with the icon you gave it on the Mac. A tap opens one; a tap on the page beside the menu, or a swipe back, closes it.</p>
+    <p>To change their order, long press a search and drag it. The order stays on this iPhone; the Mac's sidebar keeps its own. The gear at the foot opens <a href="#settings">Settings</a>.</p>
+    <p>A saved search opens as its rows, in the sections it was saved with: here <b>My open tasks</b>, grouped by Inbox and Mine, with when each changed and who has it.</p>
+    <div class="grid phones">
+      <figure class="shot phone"><img data-m="phone-menu" alt="The iPhone menu: Orbital, the Timeline, then saved searches such as My open tasks, Hiring and Goals, and the settings gear"><figcaption>The menu: the Timeline, then your saved searches.</figcaption></figure>
+      <figure class="shot phone"><img data-m="phone-search" alt="The saved search My open tasks on the iPhone: an Inbox task with a dashed box, then two of your own"><figcaption>A saved search, in its sections.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="pages" data-short="Opening a node" data-k="zoom outline document meeting read only assigned to visible to grant access mention agent dot">Opening a node</h2>
+    <p>A tap on a row, a mention or a reference opens that node over the page, and the back button at the top left returns. What you see depends on what it is:</p>
+    <ul>
+      <li><b>A document or a task</b> shows its outline, every row unfolded. You read it here; writing in it is for the Mac. A mention in it opens the node it names. Above the outline, <b>Assigned to</b> and <b>Visible to</b> say who has it and who can see it, and a tap changes either, with the same <b>Grant access</b> question as Assign to. Handed to your Dot, it also shows <b>Agent</b>, its name and how it is going (Assigned, Working, Completed or Failed); a tap asks it again or unassigns it.</li>
+      <li><b>A meeting</b> lists the documents it holds, such as its notes and write-up.</li>
+      <li><b>A chat</b> shows the conversation (<a href="#ask">below</a>).</li>
+      <li><b>A saved search</b> shows its rows, as from the menu.</li>
+    </ul>
+    <p>With <b>Auto-translate</b> on, a note in another language reads in yours, with a small translate glyph to say so.</p>
+    <div class="grid phones">
+      <figure class="shot phone"><img data-m="phone-document" alt="The document Offsite planning on the iPhone: Goals and Venues headings with bullets and a mention"><figcaption>A document's outline.</figcaption></figure>
+      <figure class="shot phone"><img data-m="phone-meeting" alt="The meeting Design review on the iPhone: the document Offsite planning it holds"><figcaption>A meeting and its documents.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="ask" data-short="Ask Tana" data-k="ask tana composer chat follow up dictate microphone voice">Ask Tana and chats</h2>
+    <p>The box at the foot of the Timeline, <b>Ask Tana</b>, starts a chat with Tana's AI. Type a question and tap the blue arrow: the chat opens at once, and Tana's answer appears as it is written, after three dots. The box in a chat, <b>Follow up</b>, carries the conversation on. Your messages sit in blue on the right; Tana's are written across the page, with what it did while thinking in grey and the documents it touched as chips you can tap.</p>
+    <p>While you type, the box also has a microphone: tap it and speak, tap <b>■</b> to stop or <b>✕</b> to throw the recording away, and your words land in the box to send. Your ChatGPT account writes them down, so the first time it asks you to <a href="#settings">sign in with ChatGPT</a> and to allow the microphone.</p>
+    <div class="grid phones">
+      <figure class="shot phone"><img data-m="phone-ask" alt="The Ask Tana box opened over the Timeline with a question typed, the microphone and the blue send arrow"><figcaption>A question for Tana, from the Timeline.</figcaption></figure>
+      <figure class="shot phone"><img data-m="phone-chat" alt="A chat on the iPhone: your question in a blue bubble, Tana AI's answer with a document chip, and the Follow up box"><figcaption>The chat it starts.</figcaption></figure>
+    </div>
+    <p><a href="chats.html">Chapter 12</a> covers chats on the Mac, where the same conversations open.</p>
+  </section>
+
+  <section class="topic">
+    <h2 id="quick-add" data-short="Quick Add" data-k="quick add task plus new type assigned pin to today image photos clipboard share sheet dictate">Quick Add</h2>
+    <div class="split">
+      <div>
+        <p>The <b>+</b> at the top right is Quick Add, as <kbd>⇧⌘Space</kbd> is on the Mac. Type the task's title, or tap the microphone to say it, and pick its <b>Type</b>: a plain Task or one of your workspace's workflow types. Under <b>Details</b> you choose who it is <b>Assigned to</b> (you, unless you pick someone), switch on <b>Pin to today</b>, and fill in the type's own fields. Opened on a saved search, Quick Add starts with that search's type and values, so the new task shows up in it.</p>
+        <p><b>Add</b> closes the card at once, and a thin ring turns around the <b>+</b> while Tana makes the task, so you can add the next one meanwhile. Only <b>Cancel</b> closes the card without adding; a swipe down does not, so a stray swipe never loses what you typed.</p>
+        <h3 id="image">From an image</h3>
+        <p>Under <b>Image</b>, <b>Process image from Photos</b> and <b>Process image from clipboard</b> hand a picture to the AI with your ChatGPT account: a receipt, a whiteboard or a screenshot becomes a task or a note, with a title, the lines worth keeping and the image under it, then opens. The clipboard row shows only while you have copied an image.</p>
+        <h3 id="share">From the share sheet</h3>
+        <p>In any app, <b>Share</b> → <b>Orbital</b> sends what you shared: words or a link open Quick Add with them in the title, and an image is read straight away into a task or a note, the <b>+</b> turning while it is.</p>
+      </div>
+      <figure class="shot phone"><img data-m="phone-quickadd" alt="Quick Add on the iPhone: New task with a microphone, Type Task chosen, Details with Assigned to You and Pin to today, then Image"><figcaption>Quick Add: a title, a type, and the details.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="widgets" data-short="Widgets and Siri" data-k="widget home screen lock screen siri shortcuts spotlight today's tasks activity">Widgets, Siri and Shortcuts</h2>
+    <p>Orbital's widgets show what the app read last, so open the app now and then to keep them fresh. Add them as any widget, with a long press on the Home Screen:</p>
+    <ul>
+      <li><b>Today's Tasks</b> (small, medium, large): the tasks pinned to today. Tap a box to tick it off; Orbital opens and writes it to Tana.</li>
+      <li><b>Today's Tasks and Upcoming Meetings</b> (medium, large): the top of the Timeline on its rail, with <b>+</b> for Quick Add.</li>
+      <li><b>Activity</b> (medium, large): what happened to your tasks and meetings, day by day.</li>
+      <li><b>Quick Add</b> on the Lock Screen: a new task in one tap.</li>
+    </ul>
+    <p>Siri knows Orbital without any setup: say <b>"Add a task in Orbital"</b>, <b>"What's on today in Orbital"</b>, <b>"List my tasks in Orbital"</b>, <b>"Check off … in Orbital"</b> or <b>"Open … in Orbital"</b>. The Shortcuts app has the same actions to build with: Add Task (pinned to today or not), Check Off Task, Uncheck Task, Pin Task to Today, Open Task, Today's Tasks and List Tasks. Spotlight finds the tasks the widgets show. Whatever changes a task opens Orbital to do it, since the app is what writes to Tana.</p>
+    <div class="note">A sensitive task is never said aloud, shown in a widget or found by Spotlight: they name it only as a sensitive task.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="private" data-short="Sensitive and demo" data-k="sensitive shake hidden blur demo mode privacy show sensitive items">Sensitive items and demo mode</h2>
+    <div class="split flip">
+      <div>
+        <p>What you marked sensitive, on the Mac or with a long press here, shows as grey bars where its words were, and a sensitive node opens on a page that says <b>Hidden</b>. <b>Shake your iPhone</b> to show it all; shake again to hide it. Where you cannot shake the phone, <b>Show sensitive items</b> in Settings does the same until Orbital closes.</p>
+        <p><b>Demo mode</b>, in Settings, shows made-up words and names in place of yours, for showing Orbital to someone. Nothing is saved to Tana while it is on. <a href="sharing.html">Chapter 14</a> covers both on the Mac.</p>
+      </div>
+      <figure class="shot phone"><img data-m="phone-sensitive" alt="A sensitive node opened on the iPhone: Hidden, and how to see it with a shake or Settings"><figcaption>A sensitive node, until a shake shows it.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="settings" data-k="settings chatgpt sign in models quick regular agents connect to your openai dot auto-translate log out version">Settings</h2>
+    <div class="split">
+      <div>
+        <p>The gear at the foot of the menu opens Settings:</p>
+        <ul>
+          <li><b>Tana</b>: the account you are signed in with.</li>
+          <li><b>ChatGPT</b>: <b>Sign in with ChatGPT</b> for the AI on the phone (reading images, dictating, Auto-translate). The sign-in stays on this iPhone. Signed in, <b>Models</b> picks the Quick and the Regular AI and how hard each thinks, the same choices as on the Mac (<a href="settings.html">Chapter 15</a>).</li>
+          <li><b>Agents</b>: the Dots you linked, and <b>Connect to your OpenAI Dot</b>, the Mac's page for linking one (<a href="ai.html#link-agent">Chapter 11</a>): <b>Open ChatGPT plugins</b> and the Orbital and Tana addresses to add there (a tap copies one), then <b>Copy the message for your Dot</b> with its code, while the page waits for your Dot to use it. A Dot linked here is linked on your Mac too, and the other way round.</li>
+          <li><b>Orbital</b>: <b>Auto-translate</b>, the language notes are shown in, shared with the Mac; <b>Demo mode</b>; <b>Show sensitive items</b>; and the app's <b>Version</b>.</li>
+          <li><b>Log out of Tana</b>, and <b>Log out of ChatGPT</b> when you are signed in to it.</li>
+        </ul>
+      </div>
+      <figure class="shot phone"><img data-m="phone-settings" alt="iPhone Settings: Tana account, Sign in with ChatGPT, Agents with Connect to your OpenAI Dot, Auto-translate, Demo mode and Show sensitive items"><figcaption>Settings, from the gear in the menu.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="topic">
+    <h2 id="android" data-k="android google play coming soon">Android</h2>
+    <p>Orbital for Android is coming soon, with the same Timeline, menu, Quick Add and widgets as the iPhone. There is nothing to install yet: <b>Install mobile app</b> on the Mac says so when you pick Android.</p>
+  </section>
+</main>
+</body>
+</html>

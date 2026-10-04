@@ -2,7 +2,8 @@
 'use strict';
 // manual/search-index.js from the chapters' headings (what ⌘K in the manual searches). With --coverage it also reports
 // every Cmd+K row label in renderer/ that no chapter mentions, links to a page or anchor that is not there, pictures a
-// page names that are missing in a theme, and pictures no page uses; it exits 1 on a broken link or a missing picture.
+// page names that are missing in a theme, figures manual.js does not frame, and pictures no page uses; it exits 1 on a
+// broken link, a missing picture or an unframed figure.
 // Run after editing a chapter:
 //   node manual/scenes/index.js [--coverage]
 const fs = require('fs'), path = require('path');
@@ -48,6 +49,11 @@ if (process.argv.includes('--coverage')) {
     for (const [tag, name] of [...html.matchAll(/<(img|video)[^>]*data-m="([^"]+)"/g)].map((m) => [m[1], m[2]])) for (const theme of ['light', 'dark']) {
       const pic = name + '-' + theme + (tag === 'video' ? '.mp4' : '.webp'); used.add(pic);
       if (!media.has(pic)) broken.push(f + ': no media/' + pic);
+    }
+    // manual.js frames only figure.shot, .clip and .anno; any other figure draws its picture at full pixel size,
+    // twice the page's width and more (start.html #phone did)
+    for (const [, attrs, inner] of html.matchAll(/<figure\b([^>]*)>([\s\S]*?)<\/figure>/g)) {
+      if (/data-m="/.test(inner) && !/\bclass="[^"]*\b(shot|clip|anno)\b/.test(attrs)) broken.push(f + ': figure ' + /data-m="([^"]+)"/.exec(inner)[1] + ' is not a shot, clip or anno');
     }
   }
   const unused = [...media].filter((m) => !used.has(m));
