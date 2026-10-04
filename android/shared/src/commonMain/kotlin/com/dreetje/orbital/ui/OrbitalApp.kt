@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 
 // How the app opens, for design shots and tests (the iPhone's launch arguments): a node zoomed into, Settings or Quick
 // Add open, the menu opened and closed again
-data class Start(val zoom: String? = null, val settings: Boolean = false, val add: Boolean = false, val menuDemo: Boolean = false)
+data class Start(val zoom: String? = null, val settings: Boolean = false, val add: Boolean = false, val menuDemo: Boolean = false, val menu: Boolean = false)
 
 // The app: one web view in one place, Tana's sign-in while signed out and hidden behind the app once the engine runs;
 // the app's frame once it starts, its Timeline building itself while Tana connects

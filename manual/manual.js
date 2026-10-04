@@ -20,6 +20,7 @@ const CHAPTERS = [
   ['windows', 'Windows, panes & the Graph'],
   ['sharing', 'Sharing & privacy'],
   ['settings', 'Settings & housekeeping'],
+  ['phone', 'On your iPhone'],
   ['keys', 'Keyboard reference'],
 ];
 const here = (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '');

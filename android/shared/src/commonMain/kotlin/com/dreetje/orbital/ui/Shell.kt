@@ -184,7 +184,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
     // however it opens (the button, a swipe), the composer's keyboard goes and the saved searches are read again, so one
     // pinned or given an icon on the Mac since shows up
     LaunchedEffect(drawer.targetValue) { if (drawer.targetValue) { focus.clearFocus(); loadSearches() } }
-    LaunchedEffect(Unit) { if (start.menuDemo) { delay(2000); show(true); delay(2000); show(false) } }
+    LaunchedEffect(Unit) { if (start.menu) show(true); if (start.menuDemo) { delay(2000); show(true); delay(2000); show(false) } }
     // what was shared opens Quick Add on its own, over nothing else (Shell.swift: adding and settings shut). An image
     // waits there for a tap before it is read: any app on the phone can start Orbital's share screen without the person
     // choosing Orbital, so it must not spend their ChatGPT and Tana on its own (security review finding 9). The iPhone

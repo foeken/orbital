@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 
 // The one screen: the shared app over an Engine kept across rotations (Holder), the engine's web view in it. Launched
 // with sample=true it runs on the iPhone's invented content and never touches Tana (the iPhone's -sample), for design
-// shots and the instrumented tests; history, zoom, settings, add, menudemo and demoMode as the iPhone's arguments.
+// shots and the instrumented tests; history, zoom, settings, add, menu, menudemo and demoMode as the iPhone's arguments.
 // A turn of the phone, a fold or a keyboard does not make it again (AndroidManifest.xml configChanges): Compose lays
 // the same screen out anew, what is open and typed stays, and the web view never leaves its window.
 class MainActivity : ComponentActivity() {
@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
             engine.reveal = !engine.reveal
             window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         }
-        val start = if (savedInstanceState == null) Start(intent.getStringExtra("zoom"), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false)) else Start()
+        val start = if (savedInstanceState == null) Start(intent.getStringExtra("zoom"), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false), intent.getBooleanExtra("menu", false)) else Start()
         if (savedInstanceState == null) tick(intent)
         setContent { OrbitalApp(engine, start) }
     }
