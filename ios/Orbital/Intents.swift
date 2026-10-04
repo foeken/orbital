@@ -1,5 +1,6 @@
 import AppIntents
 import CoreSpotlight
+import SwiftUI
 
 // Siri, Shortcuts and Spotlight (issue #723): Orbital's tasks as an App Entity, and what can be done with one by voice or
 // in a shortcut: add a task (pinned to today or not), check one off or uncheck it, pin or unpin it, open it, and hear
@@ -100,6 +101,13 @@ enum Tasks {
 }
 
 // what changes a task opens Orbital, which does it at once (Shell.swift)
+
+// The task a view shows, for the new Siri: "check this off" knows which (Timeline.swift TaskBox). Here rather than
+// there: importing AppIntents beside a SwiftUI Button brings in Button(intent:), and CI's Xcode 26 could no longer
+// type-check the task box's body in time.
+extension View {
+    func taskEntity(_ id: String) -> some View { appEntityIdentifier(EntityIdentifier(for: TaskEntity.self, identifier: id)) }
+}
 private func opening(_ link: String) -> some IntentResult & OpensIntent { .result(opensIntent: OpenURLIntent(URL(string: link)!)) }
 
 struct AddTaskIntent: AppIntent {

@@ -1,4 +1,3 @@
-import AppIntents
 import SwiftUI
 
 // One row as the desktop renderer gets it: of the Timeline (main/timeline.js), a saved search or a meeting's documents
@@ -353,23 +352,24 @@ struct TaskBox: View {
 
     var body: some View {
         let state = engine.state(of: task)
-        // spelt out and typed, so the chain below type-checks in time on every Xcode (Xcode 26 gave up on it)
+        // spelt out and typed, each a statement of its own, so the chain below type-checks in time on every Xcode (CI's
+        // Xcode 26 gave up on it as one expression once AppIntents' Button(intent:) was in the module, Intents.swift)
         let label: String = task.sensitive == true && !engine.reveal ? "Sensitive task" : task.words // hidden from VoiceOver as from the eye
         let value: String = state == "closed" ? "Completed" : state == "proposed" ? "In your Inbox" : "Not completed"
-        let entity = EntityIdentifier(for: TaskEntity.self, identifier: task.id) // "check this off": Siri knows which (Intents.swift)
-        Button { Task { await engine.toggle(task) } } label: {
-            CheckBox(state: state)
-                .padding(10).contentShape(Rectangle()).padding(-10) // a finger-sized target around a text-sized box
-        }
-        .buttonStyle(.plain)
+        let button = Button(action: tick) { Self.box(state) }.buttonStyle(.plain)
+        button
         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 } // centred on the first line, as the markers are
         .sensoryFeedback(.success, trigger: engine.states[task.id]) { _, now in now == "closed" } // your own tick, not a change read from Tana
         .animation(reduceMotion ? nil : .snappy, value: state)
         .accessibilityLabel(label)
         .accessibilityValue(value)
         .accessibilityHint("Ticks the task off, or back on")
-        .appEntityIdentifier(entity)
+        .taskEntity(task.id) // "check this off": Siri knows which (Intents.swift)
     }
+
+    private func tick() { Task { await engine.toggle(task) } }
+    // a finger-sized target around a text-sized box
+    private static func box(_ state: String) -> some View { CheckBox(state: state).padding(10).contentShape(Rectangle()).padding(-10) }
 }
 
 // The tasks an entry lists, hanging under its words, each a row of its own on the rail, so a long press is about that
