@@ -185,13 +185,11 @@ fun Shell(engine: Engine, start: Start = Start()) {
     // pinned or given an icon on the Mac since shows up
     LaunchedEffect(drawer.targetValue) { if (drawer.targetValue) { focus.clearFocus(); loadSearches() } }
     LaunchedEffect(Unit) { if (start.menuDemo) { delay(2000); show(true); delay(2000); show(false) } }
-    // shared words open Quick Add on their own, over nothing else (Shell.swift: adding and settings shut); a shared image
-    // is read at once, behind the turning +, with nothing opened over the page
-    LaunchedEffect(engine.shared) {
-        val s = engine.shared ?: return@LaunchedEffect
-        val image = s.image
-        if (image != null) { engine.shared = null; engine.addImage { image } } else { adding = false; settings = false }
-    }
+    // what was shared opens Quick Add on its own, over nothing else (Shell.swift: adding and settings shut). An image
+    // waits there for a tap before it is read: any app on the phone can start Orbital's share screen without the person
+    // choosing Orbital, so it must not spend their ChatGPT and Tana on its own (security review finding 9). The iPhone
+    // reads one at once: a Share extension runs only when the person picks Orbital in the share sheet.
+    LaunchedEffect(engine.shared) { if (engine.shared != null) { adding = false; settings = false } }
     // an image's node, made: opened, as the desktop opens it
     LaunchedEffect(engine.made) { engine.made?.let { engine.made = null; push(it); show(false) } }
 
@@ -319,7 +317,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
 
     if (settings) SettingsSheet(engine) { settings = false }
     if (adding) QuickAdd(engine, search = if (path.isEmpty()) (page as? Menu.Search)?.id else null) { adding = false } // on a saved search: a row of it
-    engine.shared?.takeIf { it.image == null }?.let { s -> QuickAdd(engine, shared = s) { engine.shared = null } }
+    engine.shared?.let { s -> QuickAdd(engine, shared = s) { engine.shared = null } }
     engine.assigning?.let { a -> AssignSheet(engine, a) { engine.assigning = null } }
     ShareAskDialog(engine)
 }
