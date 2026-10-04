@@ -25,6 +25,28 @@ const settings = require('./main/settings');
 const meetings = require('./main/meetings');
 const presence = require('./main/presence');
 
+// Only Orbital's own pages may call main. Each page's preload hands it window.api, and a view that navigates elsewhere
+// (a link or a file dropped on it) runs the same preload on the page it lands on, so main checks every call's frame:
+// one of the packaged files below, nothing else. keepHome stops the views navigating away in the first place.
+const APP_PAGES = new Set(['shell.html', 'index.html', 'help.html', 'task.html', 'update.html', 'settings.html'].map((f) => require('node:url').pathToFileURL(path.join(__dirname, f)).href));
+const fromApp = (e) => { const frame = e && e.senderFrame; return !!frame && APP_PAGES.has(String(frame.url).split(/[?#]/)[0]); };
+for (const kind of ['handle', 'on']) {
+  const register = ipcMain[kind].bind(ipcMain);
+  ipcMain[kind] = (channel, fn) => register(channel, (e, ...args) => {
+    if (fromApp(e)) return fn(e, ...args);
+    if (kind === 'handle') throw new Error('Not an Orbital page');
+    e.returnValue = null; // a sendSync from elsewhere gets nothing rather than hanging
+  });
+}
+// A view showing one of Orbital's pages stays on them: a navigation anywhere else in any of its frames is refused, and a
+// page that asks for a new window gets none, an http(s) link opening in the browser instead.
+function keepHome(wc) {
+  const stay = (e) => { if (!APP_PAGES.has(String(e.url).split(/[?#]/)[0]) && !/^about:(blank|srcdoc)$/.test(e.url)) e.preventDefault(); };
+  wc.on('will-frame-navigate', stay);
+  wc.on('will-redirect', stay);
+  wc.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+}
+
 // A main/ module that answers the renderer keeps its channels beside the code they call, as a table it exports:
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
@@ -170,6 +192,7 @@ function openOverlay(page, which, theme, at) { // page: the handle that asked (m
   const win = page && page.win;
   if (!win || win.overlay || !Object.hasOwn(OVERLAYS, which)) return false;
   const view = new WebContentsView({ webPreferences: { preload: PRELOAD } });
+  keepHome(view.webContents);
   view.setBackgroundColor('#00000000');
   view.opener = page;
   view.which = which;
@@ -224,6 +247,7 @@ function openSettings() {
     title: 'Settings', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 13 }, // centred on the title's 38px line (settings.css #title)
     backgroundColor: dark ? '#262628' : '#f6f6f6', webPreferences: { preload: PRELOAD } }); // settings.css --bg
   S.settings = win;
+  keepHome(win.webContents);
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => { if (S.settings === win) S.settings = null; });
   win.loadFile(path.join(__dirname, 'settings.html'));
@@ -252,6 +276,7 @@ function createWindow() {
   if (front) setStart(win.pages[0], { view: null, place: null });
   // nodeIntegrationInSubFrames: preload.js runs in each page's iframe as well, which is what gives a page window.api
   win.shell = new WebContentsView({ webPreferences: { preload: PRELOAD, nodeIntegrationInSubFrames: true } });
+  keepHome(win.shell.webContents);
   win.contentView.addChildView(win.shell); fit(win);
   // a crash takes the pages with it; the reload that brings them back registers them again
   win.shell.webContents.on('render-process-gone', () => { for (const p of [...win.panes]) dropPage(p); });
