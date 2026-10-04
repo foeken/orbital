@@ -50,6 +50,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
     var failure by remember { mutableStateOf<String?>(null) }
     var models by remember { mutableStateOf(listOf<ChatGPT.Model>()) } // the choices for Models, read when signed in
     var showModels by remember { mutableStateOf(false) }
+    var connecting by remember { mutableStateOf(false) } // Connect to your OpenAI Dot (Agents.kt)
     LaunchedEffect(account) {
         models = if (account == null) emptyList() else maybe { ai.models() } ?: emptyList()
         if (models.isNotEmpty()) engine.translator.catalogue = models // the choices shown are the ones asked
@@ -64,6 +65,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
             return@Sheet
         }
         if (showModels) { Models(engine, models) { showModels = false }; return@Sheet }
+        if (connecting) { ConnectDot(engine) { connecting = false }; return@Sheet }
         Box(Modifier.fillMaxWidth().padding(4.dp)) {
             IconButton(close, Modifier.align(Alignment.CenterEnd)) { Icon(Icons.Filled.Close, "Close", tint = c.text) }
         }
@@ -76,14 +78,16 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                     val a = account
                     if (a == null) GroupRow(last = true, onClick = { signingIn = true }) { Label("chatgpt", "Sign in with ChatGPT") }
                     else {
-                        GroupRow(last = a.plan == null && models.isEmpty()) { Label("chatgpt", "Account"); Text(a.email ?: "ChatGPT", color = c.secondary) }
-                        a.plan?.let { GroupRow(last = models.isEmpty()) { Label("license", "Plan"); Text(it.replaceFirstChar { ch -> ch.uppercase() }, color = c.secondary) } }
+                        GroupRow(last = models.isEmpty()) { Label("chatgpt", "Account"); Text(a.email ?: "ChatGPT", color = c.secondary) }
                         if (models.isNotEmpty()) GroupRow(last = true, onClick = { showModels = true }) {
                             Label("brain", "Models")
                             Text(listOf("quickModel", "model").joinToString(", ") { ChatGPT.label(engine.translator.ai[it] ?: "") }, color = c.secondary, maxLines = 1)
                         }
                     }
                 }
+            }
+            item("agents") {
+                AgentsGroup(engine) { connecting = true } // your Dot (Agents.kt)
             }
             item("orbital") {
                 val notes = listOfNotNull(engine.translator.problem?.takeIf { engine.translator.to != null }?.let { "Auto-translate: $it" }, // why the last translation did not come

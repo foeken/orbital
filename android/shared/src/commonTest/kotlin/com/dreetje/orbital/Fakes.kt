@@ -57,6 +57,8 @@ class FakePlatform(
     override fun decode(image: ByteArray): ImageBitmap? = null
     override fun share(text: String) { shared += text }
     override fun open(url: String) {}
+    var copied = mutableListOf<String>()
+    override fun copy(text: String) { copied += text }
     override suspend fun pasteImage(): ByteArray? = null
     override fun hasClipboardImage() = false
     val glimpses = mutableListOf<Glimpse?>() // what the widgets were given (Engine.keepTimeline), null when it was forgotten

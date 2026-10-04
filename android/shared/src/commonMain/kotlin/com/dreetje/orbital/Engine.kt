@@ -67,6 +67,11 @@ class Engine(
         private set
     var pinned by mutableStateOf(setOf<String>()) // pinned to a day, any day, for the long-press menu
         private set
+    var agents by mutableStateOf(listOf<Agent>()) // your Dot and any other agent linked through orbital.md (ui/Agents.kt), for the long-press menu
+        private set
+    var handed by mutableStateOf(mapOf<String, String>()) // node -> the linked agent it is handed to
+        private set
+    var handing by mutableStateOf<Handing?>(null) // Assign to <its name> …: the node whose request is being written
     var removed by mutableStateOf(setOf<String>()) // deleted here: gone from every list at once, before Tana confirms it
         private set
     var unpinned by mutableStateOf(setOf<String>()) // pins being taken off here, out of Today's Tasks before Tana answers
@@ -90,7 +95,9 @@ class Engine(
             scope.launch { refresh() }
         }
 
-    data class Assigning(val id: String, val current: List<String>?, val then: suspend () -> Unit)
+    // people: false on a node that is not a task, whose Assign to lists only your agents
+    data class Assigning(val id: String, val current: List<String>?, val then: suspend () -> Unit, val people: Boolean = true)
+    data class Handing(val id: String, val agent: Agent, val then: suspend () -> Unit)
     data class ShareAsk(val id: String, val access: Access, val shut: List<Member>, val then: suspend () -> Unit)
     class Shared(val text: String?, val image: ByteArray?) {
         companion object {
@@ -277,6 +284,8 @@ class Engine(
                 if (translator.catalogue.isEmpty()) maybe { platform.chatgpt.models() }?.takeIf { it.isNotEmpty() }?.let { translator.catalogue = it } // once: what this account may ask
                 sensitiveIds = setup.sensitive.toSet()
                 pinned = setup.pinned.toSet()
+                setup.agents?.let { agents = it }
+                setup.handed?.let { handed = it }
             }
             keepTimeline(raw)
             maybe { host.run("return orbital.issues()").jsonArray.map { it.jsonPrimitive.content } }?.forEach(::note)
@@ -408,6 +417,44 @@ class Engine(
     }
 
     suspend fun access(id: String): Access? = if (isSample) null else maybe { call<Access>("return await orbital.access(id)", mapOf("id" to id)) }
+
+    // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, linking one with a code as the
+    // Mac's Connect to your OpenAI Dot does, and a node handed to one with a request (Assign to <its name> …) or taken back
+    val agentsOn: List<Agent> get() = agents.filter { it.on }.sortedBy { !it.isDefault } // what Assign to <its name> … offers, the default first
+    // the relay asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
+    suspend fun loadAgents(): String? {
+        if (isSample) return null
+        return try {
+            val list: AgentList = call("return await orbital.agents()")
+            agents = list.agents; handed = list.handed
+            list.problem
+        } catch (e: Failure) { e.message }
+    }
+    suspend fun linkCode(): LinkCode = if (isSample) throw Failure("The sample saves nothing") else call("return await orbital.linkCode()")
+    suspend fun linkStatus(code: String): LinkState = call("return await orbital.linkStatus(code)", mapOf("code" to code))
+    suspend fun linkCancel(code: String) { maybe { call<Boolean>("return await orbital.linkCancel(code)", mapOf("code" to code)) } } // gone anyway in fifteen minutes
+    // throws, so the sheet stays open with what went wrong (not listening yet, did not take it, read-only)
+    suspend fun hand(id: String, agent: Agent, request: String) {
+        if (isSample) throw Failure("The sample saves nothing")
+        call<HandedTo?>("return await orbital.handTo(id, agent, request)", mapOf("id" to id, "agent" to agent.id, "request" to request))
+        handed = handed + (id to agent.id)
+    }
+    suspend fun unhand(id: String) {
+        if (isSample) return
+        try { call<Boolean>("return await orbital.unhand(id)", mapOf("id" to id)); handed = handed - id } catch (e: Failure) { error = e.message }
+    }
+    // Settings' swipes on an agent: Make Default, and Unlink, which also unassigns its nodes (orbital.setDefault, orbital.unlink)
+    suspend fun makeDefault(agent: Agent) {
+        if (isSample) return
+        try { agents = call("return await orbital.setDefault(agent)", mapOf("agent" to agent.id)) } catch (e: Failure) { error = e.message }
+    }
+    suspend fun unlink(agent: Agent) {
+        if (isSample) return
+        try {
+            agents = call("return await orbital.unlink(agent)", mapOf("agent" to agent.id))
+            handed = handed.filterValues { it != agent.id }
+        } catch (e: Failure) { error = e.message }
+    }
 
     suspend fun share(id: String, rule: String, uris: List<String> = emptyList(), token: String? = null) =
         act("return await orbital.share(id, rule, uris, token)", mapOf("id" to id, "rule" to rule, "uris" to uris, "token" to token))

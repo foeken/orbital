@@ -469,7 +469,9 @@ fun NodeMenu(
         content()
         if (node != null) DropdownMenu(open, { open = false }) {
             val run: (suspend () -> Unit) -> () -> Unit = { act -> { open = false; engine.scope.launch { act() } } }
-            if (task != null) MenuItem("Assign to …", Icons.Outlined.AccountCircle, onClick = run { engine.assigning = Engine.Assigning(node, assignees, then) })
+            // a task's people, with your Dot on top (Agents.kt); a note has only your Dot to go to
+            if (task != null || (handable(node) && engine.agentsOn.isNotEmpty()))
+                MenuItem("Assign to …", Icons.Outlined.AccountCircle, onClick = run { engine.assigning = Engine.Assigning(node, assignees, then, people = task != null) })
             if (task != null && task != "proposed") MenuItem("Move to Inbox", Icons.Outlined.MoveToInbox, onClick = run { engine.moveToInbox(node); then() })
             val pinned = node in engine.pinned
             val secret = node in engine.sensitiveIds

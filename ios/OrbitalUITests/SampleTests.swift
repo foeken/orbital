@@ -206,4 +206,18 @@ final class SampleTests: XCTestCase {
         app.buttons["Close"].tap()
         XCTAssert(app.buttons.matching(NSPredicate(format: "label CONTAINS 'offsite agenda'")).firstMatch.waitForExistence(timeout: 5))
     }
+
+    // Settings' Agents has Connect to your OpenAI Dot (Agents.swift): ChatGPT's plugins named first, and the sample, which
+    // saves nothing, asks the relay for no code and says so, with Try again
+    func testConnectToYourDotFromSettings() {
+        app.terminate()
+        app.launchArguments.append("-settings")
+        app.launch()
+        let connect = app.buttons["Connect to your OpenAI Dot"]
+        XCTAssert(connect.waitForExistence(timeout: 5))
+        connect.tap()
+        XCTAssert(app.descendants(matching: .any)["Open ChatGPT plugins"].waitForExistence(timeout: 5)) // a Link: neither a button nor a link to XCUITest everywhere
+        XCTAssert(app.staticTexts["The sample saves nothing"].waitForExistence(timeout: 5))
+        XCTAssert(app.buttons["Try again"].exists)
+    }
 }

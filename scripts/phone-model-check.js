@@ -13,7 +13,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8').replace(/(
 const SWIFT = ['ios/Orbital/Timeline.swift', 'ios/Orbital/Engine.swift', 'ios/Orbital/Translator.swift'];
 const KOTLIN = ['android/shared/src/commonMain/kotlin/com/dreetje/orbital/Model.kt', 'android/shared/src/commonMain/kotlin/com/dreetje/orbital/Translator.kt'];
 // the engine's answers, each named the same on both sides (Row.Segment and friends nested in Row on both)
-const TYPES = ['Row', 'Segment', 'Marks', 'Ref', 'Chat', 'Person', 'Free', 'Info', 'Page', 'Setup', 'Member', 'Audience', 'Access', 'TaskType', 'Value', 'Preset', 'Field', 'Sent', 'Sample', 'Answer'];
+const TYPES = ['Row', 'Segment', 'Marks', 'Ref', 'Chat', 'Person', 'Free', 'Info', 'Page', 'Setup', 'Member', 'Audience', 'Access', 'TaskType', 'Value', 'Preset', 'Field', 'Sent', 'Sample', 'Answer',
+  'Agent', 'HandedTo', 'AgentList', 'LinkCode', 'LinkState', 'Linked']; // your Dot (ios/engine/agents.js)
 
 // the text between the bracket at i and the one that closes it
 function inside(text, i, open, close) {
