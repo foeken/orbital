@@ -22,8 +22,9 @@ interface EngineHost {
     }
 
     // body run as an async function's in the page, args bound by name (callAsyncJavaScript on the iPhone): what it
-    // returned, as JSON. Throws what the engine threw.
-    suspend fun run(body: String, args: Map<String, Any?> = emptyMap()): JsonElement
+    // returned, as JSON. Throws what the engine threw. Only on the session page (Bridge.onSessionPage), unless
+    // anyTanaPage: the sign-in watch's own probe, which carries nothing and runs on Tana's sign-in pages
+    suspend fun run(body: String, args: Map<String, Any?> = emptyMap(), anyTanaPage: Boolean = false): JsonElement
     fun load(url: String)
     val url: String? // where the page is now: host and path, for the sign-in log
     fun cookieNames(): List<String> // Tana's cookies, by name only: never a value
@@ -97,6 +98,10 @@ object Bridge {
     // A message the listener may act on: from Tana's own origin, and from the page itself rather than a frame in it
     // (docs/ANDROID.md: the origin rule is the first check, not the only one)
     fun trusted(origin: String?, mainFrame: Boolean): Boolean = mainFrame && origin?.trimEnd('/') == ORIGIN
+
+    // The one page engine.js runs on (ios/engine/build.js), as Engine.swift isSessionPage: a message is acted on, and a
+    // call made, only while it is the page in the view, never a page that took its place (security review finding 6)
+    fun onSessionPage(url: String?): Boolean = url != null && url.substringBefore('#').substringBefore('?') == Engine.SESSION
 
     // What the page posted: a word of engine.js's own ('ready', 'changed'), or a call's answer by its number
     sealed interface Heard {

@@ -15,8 +15,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 // Share to Orbital (ios/Share/ShareViewController.swift): what was shared is left where the app finds it (Handoff), and
-// Orbital brought forward in its own task on Quick Add: an image to be read at once, anything else as words to edit
-// there. No screen of its own. Android starts a share's target in the sharing app's task, so MainActivity taking it
+// Orbital brought forward in its own task on Quick Add: an image to be read once it is tapped there (any app can start
+// this exported screen, Shell.kt), anything else as words to edit. No screen of its own. Android starts a share's target in the sharing app's task, so MainActivity taking it
 // there was a second Orbital, its own Tana page and engine, inside the other app.
 class ShareActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
