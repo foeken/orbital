@@ -169,7 +169,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     const again = await read({ rows: async () => [{ id: 'read ' + ++n }], settled: async () => { follows = 'watching b'; }, follows: () => follows, redact: (r) => r, part: () => {} });
     assert.deepStrictEqual(again, [{ id: 'read 2' }], 'the settings moved a watch choice: the Timeline read again');
   }
-  if (!bun && process.env.CI) throw new Error('CI must build the engine: install Bun (.github/workflows/ci.yml)');
+  if (!bun && process.env.CI) throw new Error('CI must build the engine: install Bun (.github/workflows/checks.yml)');
   if (!bun) return console.log('ios engine check ok (the bundle skipped: no Bun)');
   const out = path.join(os.tmpdir(), 'orbital-engine-check.js');
   const built = spawnSync(bun, [path.join(__dirname, '../ios/engine/build.js'), out], { encoding: 'utf8' });

@@ -1,0 +1,143 @@
+name: Checks
+
+# Every check, on main, every six hours when main has moved since the last scheduled run: the desktop's lint, checks and
+# user flows, the Android app, and the iPhone app's UI tests. A pull request runs none of this on GitHub (ci.yml only scans
+# it for secrets): it is checked on the machine that writes it before it merges (AGENTS.md, Pull requests). A failure
+# opens one issue, "Scheduled checks failed", or adds the run to it; the next good run closes it.
+# By hand, on any branch: gh workflow run checks.yml --ref <branch>
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # a scheduled run goes on only when main is not the commit the last scheduled run checked; one by hand always does
+  moved:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.last.outputs.run }}
+    steps:
+      - id: last
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=""
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            last=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/checks.yml/runs?event=schedule&status=completed&per_page=10" --jq '[.workflow_runs[] | select(.conclusion != "cancelled")][0].head_sha // ""')
+          fi
+          if [ "$last" = "$GITHUB_SHA" ]; then echo "main has not moved since $last"; echo run=false >> "$GITHUB_OUTPUT"; else echo run=true >> "$GITHUB_OUTPUT"; fi
+
+  desktop:
+    needs: moved
+    if: needs.moved.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22' # node:sqlite in db.js needs >= 22.5
+          cache: npm
+      # --ignore-scripts skips the postinstall: it downloads the 360 MB Electron binary (electron 44's install.js
+      # ignores ELECTRON_SKIP_BINARY_DOWNLOAD) and then brands the bundle with plutil and codesign, macOS-only tools.
+      # Neither the linter nor the checks touch the binary.
+      - run: npm ci --ignore-scripts
+      # Bun bundles the iPhone engine (ios/engine/build.js), which scripts/ios-engine-check.js builds and runs
+      - uses: oven-sh/setup-bun@v2
+      - run: npm run lint
+      - run: npm run check
+      # whole user flows in Chromium on the mock (scripts/flow-check.js, docs/TESTING.md); the runner image has Chrome
+      - run: npm run flows
+
+  # The Android app (android/): the shared module's tests, the screens among them drawn headless on the desktop target,
+  # the app module's own JVM tests, its lint, and a debug build of the app. The journeys on a device
+  # (connectedDebugAndroidTest) need an emulator and run by hand (npm run phones).
+  android:
+    needs: moved
+    if: needs.moved.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      # loro-crdt and friends for the engine bundle; the Electron download is not needed (as in desktop above)
+      - run: npm ci --ignore-scripts
+      # Bun bundles the engine into the app's assets (androidApp's orbitalAssets task runs ios/engine/build.js)
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # compileSdk 37 (android/gradle/libs.versions.toml), which the runner's own SDK may not have yet; the licences are
+      # accepted by the action
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :shared:jvmTest :androidApp:testDebugUnitTest :androidApp:lintDebug :androidApp:assembleDebug --console=plain
+        working-directory: android
+
+  # The iPhone app's UI tests (ios/OrbitalUITests) on a simulator, on the invented -sample content
+  ios:
+    needs: moved
+    if: needs.moved.outputs.run == 'true'
+    runs-on: macos-26
+    # a run takes about 13 minutes: one that has not finished in 25 is stuck (a simulator that never launched the app once
+    # held a run for over half an hour), and is ended rather than left for GitHub's six hours
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts # loro-crdt for the engine bundle; the Electron download is not needed
+      - uses: oven-sh/setup-bun@v2
+      # the newest iOS runtime's first iPhone: the app needs iOS 26. Booting it in the background while the app builds was
+      # tried (#702) and made the build six times slower: the runner has few cores, and the boot takes them
+      - name: Pick a simulator
+        run: |
+          id=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices; const rt=Object.keys(d).filter(k=>k.includes('iOS')).sort().reverse()[0]; console.log(d[rt].find(x=>x.name.startsWith('iPhone')).udid)")
+          echo "SIM=$id" >> "$GITHUB_ENV"
+      - name: UI tests
+        working-directory: ios
+        # A test that hangs (most often the app launch, "Timed out while launching application via Xcode") is ended after
+        # three minutes, and a failed test runs once more on its own, so a flaky launch costs a test's retry, not a whole
+        # new run. The index store is only for the editor.
+        run: >-
+          xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$SIM"
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300
+          -retry-tests-on-failure -test-iterations 2
+          CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+
+  # main's result as one issue: opened (or added to) when a job fails, closed when a later run passes them all
+  report:
+    needs: [moved, desktop, android, ios]
+    if: always() && needs.moved.outputs.run == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+          RESULTS: desktop ${{ needs.desktop.result }}, android ${{ needs.android.result }}, ios ${{ needs.ios.result }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Scheduled checks failed"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title --jq "map(select(.title == \"$title\"))[0].number // \"\"")
+          note="main at ${GITHUB_SHA::7}: $RESULTS. $RUN"
+          if [ "$FAILED" = true ]; then
+            if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$note"
+            else gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "Fix this before anything else lands. $note"; fi
+          elif [ -n "$open" ]; then gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "Passing again. $note"; fi
