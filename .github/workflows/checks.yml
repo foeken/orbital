@@ -3,7 +3,8 @@ name: Checks
 # Every check, on main, every six hours when main has moved since the last scheduled run: the desktop's lint, checks and
 # user flows, the Android app, and the iPhone app's UI tests. A pull request runs none of this on GitHub (ci.yml only scans
 # it for secrets): it is checked on the machine that writes it before it merges (AGENTS.md, Pull requests). A failure
-# opens one issue, "Scheduled checks failed", or adds the run to it; the next good run closes it.
+# opens one issue, "Scheduled checks failed", or adds the run to it; the next good run closes it. While it is open a
+# pull request cannot merge unless it is the fix (main-green.yml, required by main's ruleset).
 # By hand, on any branch: gh workflow run checks.yml --ref <branch>
 on:
   schedule:
@@ -12,7 +13,7 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  actions: write # main-green.yml started again when the issue opens or closes
   issues: write
 
 concurrency:
@@ -139,5 +140,7 @@ jobs:
           note="main at ${GITHUB_SHA::7}: $RESULTS. $RUN"
           if [ "$FAILED" = true ]; then
             if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$note"
-            else gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "Fix this before anything else lands. $note"; fi
-          elif [ -n "$open" ]; then gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "Passing again. $note"; fi
+            else gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "Fix this before anything else lands: until it is closed, a pull request merges only if it says Fixes #<this issue> (main-green.yml). $note"
+              gh workflow run main-green.yml -R "$GITHUB_REPOSITORY"; fi # every open pull request's main green answer, again (this token's issue starts no workflow)
+          elif [ -n "$open" ]; then gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "Passing again. $note"
+            gh workflow run main-green.yml -R "$GITHUB_REPOSITORY"; fi
