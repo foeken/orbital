@@ -7125,6 +7125,22 @@ async function main() {
   setTitle(d, 'after reconnect');
   await until(() => readNode(server.serverDoc).title === 'after reconnect', 'the edit after the reconnect');
   assert.equal(readNode(server.serverDoc).title, 'after reconnect');
+  // flushed: answered once an edit has gone to Tana, not while it is only queued (the phones' orbital.createTask, which
+  // the iPhone keeps itself running for when you leave it right after Add)
+  setTitle(d, 'flushed before answering');
+  await sync.flushed(DOC);
+  assert.equal(readNode(server.serverDoc).title, 'flushed before answering', 'flushed waits for the send');
+  // resume: the phone's app back in front. A stream Tana spoke on lately is left as it is; one quiet for over two
+  // heartbeats (its watchdog's timer paused with the page) is taken for dead and made again at once, before a read
+  const beforeResume = connected;
+  assert.equal(await sync.resume(), true);
+  assert.equal(connected, beforeResume, 'a stream that is alive is not made again');
+  sync.lastFrameAt = Date.now() - 1000; // last heard a second ago: twenty 50 ms heartbeats missed while paused
+  assert.equal(await sync.resume(), true, 'connected again');
+  assert.equal(connected, beforeResume + 1, 'a quiet stream is made again on resume');
+  await until(() => server.session >= 4, 'the re-bootstrap on the new stream');
+  setTitle(d, 'after resume');
+  await until(() => readNode(server.serverDoc).title === 'after resume', 'the edit after the resume');
   // create: subscribe(id, init) on an unknown id -> MISSING -> full snapshot as catch-up -> live; later edits flow as usual
   const NEW = 'tana:text:' + ulid();
   const created = await sync.subscribe(NEW, (l) => initDocument(l, 'created offline', ME));

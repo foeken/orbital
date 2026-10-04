@@ -60,7 +60,8 @@ struct Shell: View {
                         Button { show(true) } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Menu")
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Quick Add Task")
+                        Button { adding = true } label: { AddGlyph(busy: engine.adding > 0) }
+                            .accessibilityLabel("Quick Add Task").accessibilityValue(engine.adding > 0 ? "Adding" : "")
                     }
                 }
                 .safeAreaInset(edge: .bottom) { Composer { let sent = try await engine.ask($0); notes[sent.id] = sent.warning; asked[sent.id] = .now; path.append(sent.id); return nil } } // a new chat, opened as it starts, its warning shown there
@@ -118,10 +119,14 @@ struct Shell: View {
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
         .sheet(isPresented: $adding) { QuickAdd(engine: engine, search: path.isEmpty ? page.searchID : nil) } // on a saved search: a row of it
-        .sheet(item: $shared) { QuickAdd(engine: engine, shared: $0) }
+        // shared words open Quick Add; a shared image is read at once, behind the turning +, with nothing opened over the page
+        .sheet(item: Binding { shared?.image == nil ? shared : nil } set: { shared = $0 }) { QuickAdd(engine: engine, shared: $0) }
+        .onChange(of: shared?.id) { if let image = shared?.image { shared = nil; engine.addImage { image } } }
+        .onChange(of: engine.made) { if let id = engine.made { engine.made = nil; path.append(id) } } // an image's node, made: opened
         // the Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS not open it
         .onOpenURL { _ in shared = Shared.take() ?? shared }
-        .onChange(of: scene, initial: true) { if scene == .active, let found = Shared.take() { adding = false; settings = false; shared = found } }
+        // shared words open Quick Add over nothing else; an image opens nothing, so whatever is open stays
+        .onChange(of: scene, initial: true) { if scene == .active, let found = Shared.take() { if found.image == nil { adding = false; settings = false }; shared = found } }
         .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
         .shareAsk(engine)
         .task {
@@ -163,6 +168,27 @@ struct Shell: View {
 
     // the menu's one move, quicker than SwiftUI's default half second
     static let move = Animation.snappy(duration: 0.3)
+}
+
+// The + in the bar: a thin ring turns around it while what Quick Add handed over is still being made (Engine.adding). It
+// stays the button it was, so another task can be added meanwhile.
+struct AddGlyph: View {
+    let busy: Bool
+    var body: some View {
+        Image(systemName: "plus")
+            .overlay {
+                if busy {
+                    TimelineView(.animation) { context in
+                        Circle().trim(from: 0, to: 0.3)
+                            .stroke(.secondary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                            .rotationEffect(.degrees(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360))
+                    }
+                    .frame(width: 28, height: 28)
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: busy)
+    }
 }
 
 // The side menu: the app's name, its pages, and settings at the foot

@@ -5,19 +5,21 @@ import SwiftUI
 // Quick Add Task, as the desktop's (task.js, ⇧⌘Space): a title and the type the task is made with, plain Task or one of
 // the workflow types you may create in (orbital.taskTypes), or an image read into a task or a note instead (main.js
 // ai:processImage): from Photos, or from the clipboard when it holds one. A made task is never reported as a failure.
+// Add closes it at once and the engine makes the task while you go on (Engine.add); it is closed by Cancel only, never by
+// a swipe down, so what you were typing is not lost to a stray swipe.
 struct QuickAdd: View {
     let engine: Engine
-    var shared: Shared? // shared to Orbital (Share): its words to edit, or its image to read at once
+    var shared: Shared? // shared to Orbital (Share): its words to edit (an image is read without opening Quick Add, Shell)
     var search: String? // opened on a saved search: a row of it, as Enter makes one there on the desktop (orbital.searchPreset)
     @State private var preset: Engine.Preset?
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
     @State private var title = ""
     @State private var types: [Engine.TaskType] = []
     @State private var type: String? // nil: plain Task
     @State private var photo: PhotosPickerItem?
-    @State private var working: String? // "Adding…", "Reading the image…"
+    @State private var settling = false // Add pressed while dictating: the words are waited for (Dictate shows it)
     @State private var failure: String?
+    @State private var kept: Engine.Draft? // a task Tana did not take, opened again (Engine.unsent)
     @FocusState private var focused: Bool
     @State private var dictation = Dictation()
     @State private var fields: [Engine.Field] = [] // the chosen type's, to set before adding
@@ -63,15 +65,17 @@ struct QuickAdd: View {
                 Section {
                     PhotosPicker(selection: $photo, matching: .images) { Label("Process image from Photos", systemImage: "photo") }
                     if UIPasteboard.general.hasImages {
-                        Button { Task { if let image = UIPasteboard.general.image { await process(image) } } } label: { Label("Process image from clipboard", systemImage: "doc.on.clipboard") }
+                        Button {
+                            guard let image = UIPasteboard.general.image else { failure = "The clipboard holds no image"; return }
+                            engine.addImage { image }; dismiss()
+                        } label: { Label("Process image from clipboard", systemImage: "doc.on.clipboard") }
                     }
                 } header: { Text("Image") } footer: {
                     Text("Read with your ChatGPT account into a task or a note, with the image under it.")
                 }
             }
             .tint(.primary)
-            .disabled(working != nil)
-            .overlay { if let working { ProgressView(working).padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)) } }
+            .disabled(settling)
             .safeAreaInset(edge: .bottom) {
                 if let failure { Text(failure).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar) }
             }
@@ -80,7 +84,7 @@ struct QuickAdd: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") { Task { await add() } }.disabled((title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !dictation.recording && !dictation.transcribing) || working != nil)
+                    Button("Add") { Task { await add() } }.disabled((title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !dictation.recording && !dictation.transcribing) || settling)
                 }
             }
             .onSubmit { Task { await add() } }
@@ -88,25 +92,32 @@ struct QuickAdd: View {
                 let found = if let type { await engine.typeFields(type) } else { [Engine.Field]() }
                 guard !Task.isCancelled else { return } // another type chosen meanwhile: its own read sets them
                 fields = found
-                values = preset?.uri == type ? preset?.fields ?? [:] : [:]
+                values = if let kept, kept.type == type { kept.values } else if let preset, preset.uri == type { preset.fields } else { [:] }
             }
             .task {
-                if let image = shared?.image { await process(image); return }
                 if title.isEmpty, let text = shared?.text { title = text }
+                // a task Tana did not take: back as it was, with why
+                if shared == nil, !engine.unsent.isEmpty {
+                    let draft = engine.unsent.removeFirst()
+                    kept = draft; title = draft.title; assignee = draft.assignee; failure = draft.why.map { "Not added: " + $0 }
+                }
                 focused = true; types = await engine.taskTypes()
                 // a saved search of one type: that type, chosen, and listed even when it is no task type (a Goal is a document)
-                if let search, let found = await engine.searchPreset(search) {
+                if let search = kept.map(\.search) ?? search, let found = await engine.searchPreset(search) {
                     preset = found
                     if !types.contains(where: { $0.uri == found.uri }) { types.insert(Engine.TaskType(uri: found.uri, title: found.title, task: found.task), at: 0) }
                     type = found.uri
                 }
+                if let kept { type = kept.type }
             }
             .onDisappear { dictation.cancel() } // closed while listening: nothing kept
             .onChange(of: photo) {
                 guard let photo else { return }
-                Task { if let data = try? await photo.loadTransferable(type: Data.self), let image = UIImage(data: data) { await process(image) } }
+                engine.addImage { try await photo.loadTransferable(type: Data.self).flatMap(UIImage.init(data:)) }
+                dismiss()
             }
         }
+        .interactiveDismissDisabled()
     }
 
     // a task is assigned; a document of a type without a workflow (a Goal) is not
@@ -159,31 +170,16 @@ struct QuickAdd: View {
     // Add while listening or still transcribing: listening stops, the words are waited for, then the task is made; one
     // whose words did not come is not made, so nothing said is lost without a word
     private func add() async {
+        guard !settling else { return }
         if dictation.recording || dictation.transcribing {
-            working = "Transcribing…"
-            guard await dictation.settle(into: append) else { working = nil; return }
+            settling = true
+            defer { settling = false }
+            guard await dictation.settle(into: append) else { return }
         }
         let words = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty else { working = nil; return }
-        working = "Adding…"
-        do { _ = try await engine.createTask(words, type: type, search: search, assignee: assignee?.id, values: values); dismiss() } catch { failure = error.localizedDescription }
-        working = nil
-    }
-
-    // the image read and made into its node, which then opens, as the desktop opens it
-    private func process(_ image: UIImage) async {
-        working = "Reading the image…"
-        // shared while Orbital was not running: Tana connects first; signed out or failed, it says so rather than waiting for ever
-        while engine.phase != .ready {
-            guard !Task.isCancelled, engine.phase == .starting else { failure = "Sign in to Tana first, then share it again"; working = nil; return }
-            do { try await Task.sleep(for: .milliseconds(200)) } catch { working = nil; return }
-        }
-        do {
-            let id = try await engine.processImage(image)
-            dismiss()
-            openURL.zoom(id)
-        } catch { failure = error.localizedDescription }
-        working = nil
+        guard !words.isEmpty else { return }
+        engine.add(.init(title: words, type: type, search: kept.map(\.search) ?? search, assignee: assignee, values: values))
+        dismiss()
     }
 }
 

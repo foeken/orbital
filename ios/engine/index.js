@@ -338,10 +338,17 @@ window.orbital = {
       S.client.sync.on('change', (id) => {
         if (id === settings.settingsDocId()) Promise.resolve(settings.applyRemote(id)).then(() => S.win.webContents.send('outline:changed'));
       });
+      // the stream made again (back from the background, the network back): what was read while it was down may have come
+      // back short, Today's Tasks empty among it, so the app reads the Timeline again on the new one
+      let streams = 0;
+      S.client.sync.on('connected', () => { if (streams++) S.win.webContents.send('outline:changed'); });
       S.client.sync.connect().catch((e) => issues.push('sync: ' + (e && e.message || e)));
     }
     return true;
   },
+  // the app in front again (Engine.swift and Engine.kt foreground): a stream that died while the phone held the page
+  // paused is made again before anything is read on it (sdk/sync.js resume)
+  resume: () => (S.client ? S.client.sync.resume() : false),
   // the Timeline page, three days per page, as the rows the desktop renderer gets, with the words for their times
   // (labels.js); its first part (Today's Tasks and Upcoming meetings) told to the app ahead of the rest, as 'part:' and
   // the rows (read.js, Engine.swift show(part:)): a string, as both phones' bridges carry it
@@ -543,6 +550,9 @@ window.orbital = {
     const fields = values ? own : fromSearch ? preset.fields : {}; // Quick Add sends what it shows, the preset's included
     if (Object.keys(fields).length) await presetFields(doc, fields);
     if (assignee && assignee !== S.me.userUri && (!type || type.task)) setAssignees(doc, [assignee], S.me.userUri);
+    // answered once Tana has it, not when it is only queued here: the app keeps itself running until then when you leave
+    // it right after Add (Engine.swift add), and a page paused with the task still queued could lose it
+    await S.client.sync.flushed(id);
     return JSON.stringify(id);
   },
   // Process image (main.js ai:processImage): what the model read from it (QuickAdd.swift ChatGPT.readImage) made a task
@@ -559,6 +569,7 @@ window.orbital = {
     await hold(uri, (loro) => initImage(loro, { ownerUri: id, cid: up.cid, width: up.width, height: up.height, blurhash: up.blurhash, filename: 'image', mimeType, fileSize: bytes.length }))
       .catch((e) => S.client.sync.getDocument(uri) || Promise.reject(e));
     insertImage(doc, null, uri);
+    await Promise.all([S.client.sync.flushed(uri), S.client.sync.flushed(id)]); // once Tana has it, as createTask
     return JSON.stringify(id);
   },
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
