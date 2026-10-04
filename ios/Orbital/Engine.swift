@@ -369,13 +369,15 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
         let id: String = try await call("return await orbital.createTask(title, type, search, assignee, values)", ["title": title, "type": type ?? NSNull(), "search": search ?? NSNull(),
                                                                                                         "assignee": assignee ?? NSNull(), "values": values.mapValues(\.json)])
+        var notPinned: String? // said after the refresh below, which clears what was said before it
         if today {
             do { let _: Bool = try await call("return await orbital.pin(id, on)", ["id": id, "on": true]) }
-            catch { self.error = "“\(title)” was added, but not pinned to today: " + error.localizedDescription }
+            catch { notPinned = "“\(title)” was added, but not pinned to today: " + error.localizedDescription }
         }
         // a new task is yours alone: given to someone else, they are asked about as Assign to asks
         if assignee != nil, let access = await access(id), !access.hidden.isEmpty { asking = .init(id: id, access: access, shut: access.hidden, then: {}) }
         await refresh()
+        if let notPinned { self.error = notPinned }
         return id
     }
     // The image made smaller (2048 px at most, JPEG) for the model and for Tana, read by ChatGPT, then made into its node
@@ -579,7 +581,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                     r.text = nil; r.title = nil; r.segments = nil; r.subtext = nil; r.people = nil; r.reference?.label = nil
                     r.timeline?.note = nil; r.timeline?.change = nil; r.timeline?.detail = nil
                 }
-                r.stateType = states[r.id] ?? r.stateType
+                // a tick made here: on the task, and on an Activity line about it (its uri), which the widget draws as the task
+                r.stateType = states[r.id] ?? r.timeline?.uri.flatMap { states[$0] } ?? r.stateType
                 r.children = kept(r.children, today: r.timeline?.today == true)
                 return r
             } }

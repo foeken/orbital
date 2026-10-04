@@ -36,12 +36,13 @@ data class Glimpse(val read: Long, val rows: List<Row>) {
 }
 
 // An Activity line about a task's state ("completed Plan the offsite"), drawn as the task itself: its box in the state
-// the line left it in (the line's icon, main/timeline.js ICON) and its title. Null for any other line: an edit, a meeting.
+// the line left it in (the line's icon, main/timeline.js ICON) or a tick made since (Engine.glimpse keeps it on the line),
+// and its title. Null for any other line: an edit, a meeting.
 // The iPhone's ios/Widgets Row.asTask is the same.
 private val stateOfIcon = mapOf("apply" to "closed", "tlAccepted" to "open", "tlLater" to "not_now", "tlInbox" to "proposed")
 fun Row.asTask(): Row? {
     val uri = timeline?.uri ?: return null
     val state = stateOfIcon[icon] ?: return null
     if (kindOf(uri) != "text") return null
-    return Row(uri, title = segments?.lastOrNull { it.content == true }?.text ?: words, stateType = state, sensitive = sensitive)
+    return Row(uri, title = segments?.lastOrNull { it.content == true }?.text ?: words, stateType = stateType ?: state, sensitive = sensitive)
 }

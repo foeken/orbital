@@ -344,7 +344,9 @@ class Engine(
         fun keep(list: List<Row>?): List<Row>? = list?.let(::shown)?.map { r ->
             val words = if (r.sensitive == true) r.copy(text = null, title = null, segments = null, subtext = null, people = null, reference = r.reference?.copy(label = null),
                 timeline = r.timeline?.copy(note = null, change = null, detail = null)) else r
-            words.copy(stateType = states[r.id] ?: r.stateType, children = keep(if (r.timeline?.today == true) r.children?.filter { it.id !in unpinned } else r.children))
+            // a tick made here: on the task, and on an Activity line about it (its uri), which the widget draws as the task
+            words.copy(stateType = states[r.id] ?: r.timeline?.uri?.let { states[it] } ?: r.stateType,
+                children = keep(if (r.timeline?.today == true) r.children?.filter { it.id !in unpinned } else r.children))
         }
         return Glimpse(now().toEpochMilliseconds(), keep(rows)!!)
     }
@@ -409,12 +411,14 @@ class Engine(
         if (isSample) throw Failure("The sample saves nothing")
         val id: String = call("return await orbital.createTask(title, type, search, assignee, values)",
             mapOf("title" to title, "type" to type, "search" to search, "assignee" to assignee, "values" to values.mapValues { it.value.asJson() }))
+        var notPinned: String? = null // said after the refresh below, which clears what was said before it
         if (today) try { call<Boolean>("return await orbital.pin(id, on)", mapOf("id" to id, "on" to true)) } catch (e: Failure) {
-            error = "“$title” was added, but not pinned to today: ${e.message}"
+            notPinned = "“$title” was added, but not pinned to today: ${e.message}"
         }
         // a new task is yours alone: given to someone else, they are asked about as Assign to asks
         if (assignee != null) access(id)?.takeIf { it.hidden.isNotEmpty() }?.let { asking = ShareAsk(id, it, it.hidden) {} }
         refresh()
+        notPinned?.let { error = it }
         return id
     }
 

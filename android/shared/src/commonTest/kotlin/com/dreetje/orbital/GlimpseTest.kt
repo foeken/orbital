@@ -30,5 +30,7 @@ class GlimpseTest {
         val task = line.asTask()!!
         assertEquals(Triple("tana:text:a", "Plan the offsite", "closed"), Triple(task.id, task.title, task.stateType))
         assertEquals(null, line.copy(icon = "updated").asTask()) // an edit stays a line of its own
+        // ticked back on from the widget since: the tick the app keeps on the line (Engine.glimpse), not the line's icon
+        assertEquals("open", line.copy(stateType = "open").asTask()!!.stateType)
     }
 }

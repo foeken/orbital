@@ -125,8 +125,8 @@ struct Shell: View {
         .onChange(of: engine.made) { if let id = engine.made { engine.made = nil; path.append(id) } } // an image's node, made: opened
         // the Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
         // not open it. A widget's tap (ios/Widgets) is orbital:add for Quick Add, orbital:<id> for that node over the
-        // Timeline, or orbital:timeline; its task box orbital:check:<id> or orbital:uncheck:<id>, the task ticked (or not)
-        // and written to Tana at once, with the Timeline in front where Today's Tasks shows it.
+        // Timeline, or orbital:timeline; its task box orbital:check:<id> (done) or orbital:uncheck:<id> (open: accepted, or
+        // ticked back on), written to Tana at once, with the Timeline in front where Today's Tasks shows it.
         .onOpenURL { url in
             guard url.scheme == "orbital" else { shared = Shared.take() ?? shared; return }
             let what = String(url.absoluteString.dropFirst("orbital:".count))

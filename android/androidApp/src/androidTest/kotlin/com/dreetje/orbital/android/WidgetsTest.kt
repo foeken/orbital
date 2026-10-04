@@ -74,6 +74,8 @@ class WidgetsTest {
         onNode(hasText("completed")).assertDoesNotExist()
         // tasks added: the first on the time's line, no "An AI agent added 2 tasks to your Inbox" line above them
         onNode(hasText("Upgrade the build agents before 24 November")).assertExists()
+        // an Inbox task's box accepts it, as the app's box does (Engine.toggle), rather than ticking it off
+        onNode(hasContentDescription("Accept, Rotate the staging API keys")).assertExists()
         onNode(hasText("added 2 tasks")).assertDoesNotExist()
         onNode(hasText("Upcoming meetings")).assertDoesNotExist()
         onNode(hasText("Today's Tasks")).assertDoesNotExist()

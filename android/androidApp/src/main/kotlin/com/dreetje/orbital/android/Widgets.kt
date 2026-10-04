@@ -271,14 +271,17 @@ private fun TaskBox(state: String?) {
     }
 }
 
-// a task's box on a widget: a tap opens the app, which ticks it (or unticks a done one) and writes it to Tana at once
-// (MainActivity tick); the row around it opens the task
+// a task's box on a widget: a tap opens the app, which writes it to Tana at once (MainActivity tick), by the app's own
+// rule (Engine.toggle): an Inbox task is accepted and a done one ticked back on (open), any other ticked off; the row
+// around it opens the task
 @Composable
 private fun Tick(task: Row, modifier: GlanceModifier) {
-    val done = task.stateType == "closed"
+    val state = task.stateType
+    val opens = state == "closed" || state == "proposed"
     val context = LocalContext.current
-    val tick = openApp(context, (if (done) "uncheck:" else "check:") + task.id) { putExtra("tick", task.id); putExtra("to", if (done) "open" else "closed") }
-    val said = (if (done) "Mark as not done" else "Mark as done") + if (task.sensitive == true) "" else ", " + task.words // never a sensitive one's words
+    val tick = openApp(context, (if (opens) "uncheck:" else "check:") + task.id) { putExtra("tick", task.id); putExtra("to", if (opens) "open" else "closed") }
+    val said = (if (state == "closed") "Mark as not done" else if (state == "proposed") "Accept" else "Mark as done") +
+        if (task.sensitive == true) "" else ", " + task.words // never a sensitive one's words
     Box(modifier.clickable(tick).semantics { contentDescription = said }, contentAlignment = Alignment.Center) { TaskBox(task.stateType) }
 }
 

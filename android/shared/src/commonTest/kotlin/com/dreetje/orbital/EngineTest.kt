@@ -38,6 +38,8 @@ class EngineTest {
             "orbital.issues()" in body -> kotlinx.serialization.json.JsonArray(emptyList())
             "orbital.toggle" in body -> text(toggle())
             "orbital.remove" in body -> throw Exception("You cannot delete this")
+            "orbital.createTask" in body -> text("\"tana:text:new\"")
+            "orbital.pin" in body -> throw Exception("Tana refused the pin")
             "orbital.open" in body -> text("""{"title":"Plan","kind":"text","rows":[]}""")
             else -> JsonNull
         }
@@ -166,6 +168,16 @@ class EngineTest {
         assertFalse(engine.remove("tana:text:a"))
         assertTrue(engine.removed.isEmpty())
         assertEquals("You cannot delete this", engine.error)
+    }
+
+    // Quick Add's Pin to today: a task made but not pinned is not made again, and says so after the read that follows it,
+    // which clears what was said before it
+    @Test fun aTaskMadeButNotPinnedSaysSoAfterTheRead() = runTest {
+        val host = page()
+        val engine = ready(host)
+        assertEquals("tana:text:new", engine.createTask("Book the train", null, today = true))
+        assertTrue(host.calls.count { "orbital.timeline" in it.first } >= 2, "the read after the task was made")
+        assertEquals("“Book the train” was added, but not pinned to today: Tana refused the pin", engine.error)
     }
 
     @Test fun shownLeavesOutWhatWasDeletedHere() = runTest {

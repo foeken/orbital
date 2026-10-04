@@ -49,11 +49,12 @@ class MainActivity : ComponentActivity() {
     }
 
     // brought forward by ShareActivity (what it left is taken in onResume, which follows), or by a widget's tap: the
-    // node it opens, Quick Add, or a task's box: the Timeline in front, the task ticked
+    // node it opens, Quick Add, or the Timeline: its title, or a task's box (the Timeline in front, the task ticked)
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        holder.engine.widget = intent.getStringExtra("zoom") ?: "add".takeIf { intent.getBooleanExtra("add", false) } ?: "timeline".takeIf { intent.hasExtra("tick") }
+        holder.engine.widget = intent.getStringExtra("zoom") ?: "add".takeIf { intent.getBooleanExtra("add", false) }
+            ?: "timeline".takeIf { intent.hasExtra("tick") || intent.data?.schemeSpecificPart == "timeline" }
         tick(intent)
     }
 

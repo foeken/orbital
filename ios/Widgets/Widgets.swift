@@ -194,13 +194,14 @@ struct Glimpse: Decodable {
 }
 
 // An Activity line about a task's state ("completed Plan the offsite"), drawn as the task itself: its box in the state
-// the line left it in (the line's icon, main/timeline.js ICON) and its title. Nil for any other line: an edit, a meeting.
+// the line left it in (the line's icon, main/timeline.js ICON) or a tick made since (Engine.keepGlimpse keeps it on the
+// line), and its title. Nil for any other line: an edit, a meeting.
 // Android's Row.asTask (GlimpseTest) is the same.
 extension Glimpse.Row {
     private static let stateOfIcon = ["apply": "closed", "tlAccepted": "open", "tlLater": "not_now", "tlInbox": "proposed"]
     func asTask() -> Glimpse.Row? {
         guard let uri = timeline?.uri, Glimpse.kind(uri) == "text", let state = Self.stateOfIcon[icon ?? ""] else { return nil }
-        return Glimpse.Row(id: uri, text: nil, title: segments?.last { $0.content == true }?.text ?? words, segments: nil, icon: nil, stateType: state,
+        return Glimpse.Row(id: uri, text: nil, title: segments?.last { $0.content == true }?.text ?? words, segments: nil, icon: nil, stateType: stateType ?? state,
                            subtext: nil, start: nil, sensitive: sensitive, children: nil, timeline: nil)
     }
 }
@@ -389,17 +390,19 @@ struct Rail: View {
     }
 }
 
-// a task's box: a tap opens the app, which ticks it (or unticks a done one) and writes it to Tana at once (Shell.swift)
+// a task's box: a tap opens the app, which writes it to Tana at once (Shell.swift), by the app's own rule (Engine.toggle):
+// an Inbox task is accepted and a done one ticked back on (open, orbital:uncheck), any other ticked off (orbital:check)
 struct Tick: View {
     let task: Glimpse.Row
     let room: CGFloat // between the box and the words, part of what a finger can tap
 
     var body: some View {
-        let done = task.stateType == "closed"
-        Link(destination: URL(string: (done ? "orbital:uncheck:" : "orbital:check:") + task.id)!) {
+        let state = task.stateType, opens = state == "closed" || state == "proposed"
+        Link(destination: URL(string: (opens ? "orbital:uncheck:" : "orbital:check:") + task.id)!) {
             TaskBox(state: task.stateType).frame(width: 16 + room, height: 30, alignment: .leading).contentShape(Rectangle())
         }
-        .accessibilityLabel((done ? "Mark as not done" : "Mark as done") + (task.sensitive == true ? "" : ", " + task.words)) // never a sensitive one's words
+        .accessibilityLabel((state == "closed" ? "Mark as not done" : state == "proposed" ? "Accept" : "Mark as done")
+                            + (task.sensitive == true ? "" : ", " + task.words)) // never a sensitive one's words
     }
 }
 
