@@ -38,6 +38,25 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford's: no I, L, O 
 const TANA_MCP = 'https://home.tana.inc/mcp';
 // the SHA-256 of this file as it runs, said by /health, so a deploy (or a change nobody meant) can be held against the repository
 const SELF = (() => { try { return crypto.createHash('sha256').update(require('node:fs').readFileSync(__filename)).digest('hex'); } catch { return null; } })();
+// The manual orbital.md publishes (Replit keeps the site beside the relay), read once as the relay starts: every file's
+// SHA-256 by its path, and one SHA-256 over those lines as sha256sum writes them, sorted. /health says the one, so a
+// published manual can be named; /health/manual lists them all, for scripts/manual-diff.js to say what a release has
+// left to copy. Read from disk, so the script the host adds to every page it serves does not count.
+async function readManual(dir) {
+  const { readdir, readFile } = require('node:fs/promises'), { join } = require('node:path');
+  const files = {};
+  const walk = async (rel) => {
+    for (const e of await readdir(join(dir, rel), { withFileTypes: true })) {
+      const name = rel ? rel + '/' + e.name : e.name;
+      if (e.isDirectory()) await walk(name);
+      else if (e.isFile()) files[name] = crypto.createHash('sha256').update(await readFile(join(dir, name))).digest('hex');
+    }
+  };
+  await walk('');
+  const names = Object.keys(files).sort();
+  return { sha256: manualDigest(names.map((n) => [n, files[n]])), files: Object.fromEntries(names.map((n) => [n, files[n]])) };
+}
+const manualDigest = (entries) => crypto.createHash('sha256').update(entries.map(([name, sha]) => sha + '  ' + name + '\n').join('')).digest('hex');
 
 const hash = (text) => crypto.createHash('sha256').update(String(text)).digest('base64url');
 const sameHash = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -199,11 +218,13 @@ const signature = (secret, id, ts, body) => 'v1,' + crypto.createHmac('sha256', 
 const goodSecret = (s) => { if (typeof s !== 'string' || !/^whsec_[A-Za-z0-9+/]+={0,2}$/.test(s)) return false; const n = Buffer.from(s.slice(6), 'base64').length; return n >= 24 && n <= 64; };
 const canonical = (v) => (Array.isArray(v) ? '[' + v.map(canonical).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}' : JSON.stringify(v));
 
-function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now, post = safePost } = {}) {
+function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now, post = safePost, manual = null } = {}) {
   const PATH = '/' + String(path).replace(/^\/+|\/+$/g, '');
   const ISSUER = publicUrl.replace(/\/+$/, '') + PATH;
   const { one, all, run, serial } = store;
   const ready = (async () => { for (const sql of SCHEMA) await store.exec(sql); })();
+  // the manual's folder, or null where there is none (a relay run from this repository)
+  const published = manual ? readManual(manual).catch(() => null) : Promise.resolve(null);
   const countIn = async (db, sql, ...args) => Number((await db.one(sql, ...args)).n);
   // a row anyone can make without an account, within the day's ceiling for all of them together (LIMITS.*PerDay)
   const busy = () => fail(429, 'busy', 'The relay is taking no more new connections today: try again tomorrow');
@@ -286,7 +307,9 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
         if (req.method === 'POST') return await mcp(req, res);
         return send(res, 405, { error: 'method_not_allowed' }, { allow: 'POST' }); // no server-to-client stream: tools only
       }
-      if (p === PATH + '/health') return send(res, 200, { ok: true, sha256: SELF }); // which server.js runs, to hold against the repository
+      // which server.js runs, to hold against the repository, and which manual is published beside it
+      if (p === PATH + '/health') { const m = await published; return send(res, 200, { ok: true, sha256: SELF, manual: m && { sha256: m.sha256, files: Object.keys(m.files).length } }); }
+      if (p === PATH + '/health/manual') { const m = await published; return m ? send(res, 200, m) : send(res, 404, { error: 'no_manual' }); }
       if (p === PATH + '/oauth/register' && req.method === 'POST') return await register(req, res);
       if (p === PATH + '/oauth/authorize' && req.method === 'GET') { limit('authorize:' + ip(req), LIMITS.authorize); return await authorize(url, res); } // each one writes a grant
       if (p === PATH + '/oauth/token' && req.method === 'POST') return await tokenGrant(req, res);
@@ -610,9 +633,11 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
 if (require.main === module) {
   const port = Number(process.env.PORT) || 8787;
   const store = process.env.DATABASE_URL ? postgresStore(process.env.DATABASE_URL) : sqliteStore(process.env.RELAY_DB || ':memory:');
-  const relay = createRelay({ store, publicUrl: process.env.RELAY_PUBLIC_URL || 'http://localhost:' + port, path: process.env.RELAY_PATH || '/mcp' });
+  // the manual where orbital.md keeps it: artifacts/orbital/public/manual, beside lib/agent-relay/server.js
+  const manual = process.env.RELAY_MANUAL_DIR || require('node:path').join(__dirname, '../../artifacts/orbital/public/manual');
+  const relay = createRelay({ store, publicUrl: process.env.RELAY_PUBLIC_URL || 'http://localhost:' + port, path: process.env.RELAY_PATH || '/mcp', manual });
   relay.ready.then(() => http.createServer(relay.handle).listen(port, () => console.log('Agent relay at ' + relay.issuer + (process.env.DATABASE_URL ? ', rows in PostgreSQL' : process.env.RELAY_DB ? ', rows in ' + process.env.RELAY_DB : ', in memory'))),
     (e) => { console.error('agent relay: the database could not be prepared:', e.message); process.exit(1); });
 }
 
-module.exports = { createRelay, sqliteStore, postgresStore, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, signature };
+module.exports = { createRelay, sqliteStore, postgresStore, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, signature, manualDigest };

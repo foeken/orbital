@@ -91,7 +91,11 @@ answers 401 with the `WWW-Authenticate` challenge, the same challenge in the res
 **Orbital's calls.** `POST /orbital/codes` (the only one an unknown key may make: it becomes an Orbital), `POST /orbital/rotate { key }`,
 `GET|DELETE /orbital/codes/<code>`; `GET /orbital/agents`, `PATCH|DELETE /orbital/agents/<id>`,
 `POST /orbital/agents/<id>/events { id, name, data }`. `GET /mcp/health` answers the SHA-256 of the server.js it runs, to
-hold a deploy (or a change nobody meant) against this repository.
+hold a deploy (or a change nobody meant) against this repository, and `manual: { sha256, files }` for the manual orbital.md
+publishes beside it (`RELAY_MANUAL_DIR`, by default `artifacts/orbital/public/manual` next to `lib/agent-relay`), or
+`manual: null` where there is none. That SHA-256 is the one `sha256sum` gives over the manual's files, sorted, as
+`path` lines; `GET /mcp/health/manual` lists each file's, which `npm run manual-diff` holds against a tag. The relay
+reads the folder once, as it starts.
 
 ## What it knows, and what it does not
 
