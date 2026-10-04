@@ -111,6 +111,11 @@ a.card:hover { text-decoration: none; border-color: var(--line-strong); transfor
 /* ---- figures: stills, clips, annotated ---- */
 figure { margin: 26px auto; }
 figure.wide, .wide { max-width: var(--wide); }
+/* a phone's screen (phone.html): drawn at a phone's size, rounded as one; .phones sets several side by side */
+figure.phone .frame { max-width: 290px; margin: 0 auto; border-radius: 34px; }
+figure.phone figcaption { text-align: center; }
+.grid.phones { grid-template-columns: repeat(auto-fit, minmax(240px, 290px)); justify-content: center; gap: 36px; }
+.grid.phones figure { margin: 0; }
 .frame { position: relative; border-radius: 12px; overflow: hidden; background: var(--well); box-shadow: var(--shadow-soft); outline: 1px solid var(--line); outline-offset: -1px; }
 .frame img, .frame video { display: block; width: 100%; height: auto; }
 .shot .frame { cursor: zoom-in; }
