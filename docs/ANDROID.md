@@ -92,6 +92,34 @@ The widgets have no background of their own, as the iPhone's on a clear Home Scr
 
 All three carry Samsung's Flex Window metadata beside Android's: `com.samsung.android.appwidget.provider` pointing at `<samsung-appwidget-provider display="sub_screen" />`, with `minWidth` 352dp, `minHeight` 339dp and `widgetCategory="keyguard"`, as Samsung asks, and `home_screen` beside it with `targetCellWidth`/`targetCellHeight` and `minResizeWidth`/`minResizeHeight` for the home screen's own sizes; it is added in Settings, Cover screen, Widgets. The Flip5 measured here (SM-F731B, One UI on Android 16) reports its cover display as id 1, 748 × 720 px at 340 dpi, which is that 352 × 339 dp. The first release APK (0.10.0) offered the Timeline's two on the cover screen only and Today's Tasks on the home screen only, so a phone's home screen listed Today's Tasks alone; scripts/android-release.sh now refuses an APK with a widget missing from either. An emulator has no cover screen, and on its home screen `WidgetJourneyTest` pins them with `requestPinGlanceAppWidget` and drives it with UI Automator. ([Samsung Flex Window guide](https://developer.samsung.com/galaxy-z/flex_window.html), [Samsung widget codelab](https://developer.samsung.com/codelab/galaxy-z/widget-flex-window.html), [pinning a Glance widget](https://developer.android.com/develop/ui/compose/glance/pin-in-app))
 
+## Review guidelines: any Android phone
+
+Orbital for Android is for every Android phone with Android 10 (API 29) or later, from any maker, at any size, in any
+build. A review of a change to `android/` asks of it:
+
+- **Every screen a widget can go on.** Each widget is offered on the home screen and on the lock or cover screen
+  (`widgetCategory="home_screen|keyguard"`), with home-screen sizes (`targetCellWidth`/`targetCellHeight`,
+  `minResizeWidth`/`minResizeHeight`) beside the cover screen's minimum. Samsung's Flex Window metadata
+  (`com.samsung.android.appwidget.provider`, `flex_window.xml`) adds the Galaxy Z Flip's cover screen; it never replaces
+  the standard place. The same goes for any other maker's extras: they add, they do not gate.
+- **Features, not phones.** No branch on `Build.MANUFACTURER`, `Build.MODEL`, `Build.BRAND`, `Build.DEVICE` or a
+  maker's package. Ask for what is needed (`WebViewFeature.isFeatureSupported`, `Build.VERSION.SDK_INT`, the
+  `PackageManager` feature it uses) and fall back, or say why it cannot run, when it is missing: never leave it out
+  without a word.
+- **The release is what was tested.** The debug build ships what the release ships: no resources or manifest of its own
+  in `src/debug`. Debug-only tooling that changes nothing a user can do is fine (the Compose test manifest, web content
+  debugging). Tests drive the same widget and manifest definitions a release carries.
+- **Any size and any input.** Compact phones, foldables open and closed, tablets and large font sizes (the window size
+  classes and `fontScale` already in the screens), with TalkBack labels on what is tapped.
+- **Tested beyond the phone at hand.** `npm run phones android` on the emulator, plus the phone you have; a change for
+  one kind of screen (a cover screen, a tablet) is checked on the others too.
+
+`scripts/android-check.js` (`npm run check`) fails a change that offers a widget on one place only, adds `src/debug`
+resources or branches on the phone's maker or model; `scripts/android-release.sh` reads the widgets back from the signed
+APK and refuses one that misses a screen. Why it is written down: 0.10.0's first APK offered **Today's Tasks and Upcoming
+Meetings** and **Activity** on a Flip's cover screen only and **Today's Tasks** on the home screen only, because only the
+debug build put them everywhere, so a phone on the release listed one widget.
+
 ## Releasing: the APK beside the Mac's zip
 
 Every `npm run release` builds Orbital for Android at the release's version and attaches it to the release in foeken/orbital as **Orbital-android.apk**, beside the Mac's zip (scripts/release.sh). The mirror, foeken/orbital-releases, is for old Mac copies and gets the zip alone. There is no store: the way in is [Obtainium](https://obtainium.imranr.dev), which installs Orbital from this repo's releases and offers each new one as an update. The code on the Help tour's phone page adds it there (Obtainium's redirect page to `obtainium://add/https://github.com/foeken/orbital`, [deep links](https://wiki.obtainium.imranr.dev/deep_links/)); a phone can also open https://github.com/foeken/orbital/releases/latest/download/Orbital-android.apk and install it by hand, allowing its browser to install apps the first time. Android 10 (API 29) or later. Orbital on Android does not update itself; Obtainium does, and without it the next release's APK installs over the last the same way. Play stays the way to an update that arrives by itself (Beta distribution, below).
