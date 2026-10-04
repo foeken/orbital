@@ -548,7 +548,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect to your OpenAI Dot …, ChatGPT sign-in, Set OpenAI API
-  key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android coming soon": the Help tour opened on its last page, the
+  key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android with Obtainium" once the latest release has the APK, "…, Android coming soon" before: the Help tour opened on its last page, the
   choice of phone: the one place the phone apps are installed from), Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
   (Trellis, Electron, Loro) each opening its licence, then Good to know: the licence's main points and that Orbital is

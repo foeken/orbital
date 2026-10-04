@@ -26,11 +26,12 @@ module.exports = [
   ] },
   // the tour's last page, where Install mobile app opens it: iPhone chosen, its TestFlight code and link
   { name: 'start-help-iphone', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, helpMobile, { wait: 900 }] },
-  // the same page with Android chosen in its selector: coming soon, nothing to install
+  // the same page with Android chosen in its selector, as a page whose latest release has the APK sees it (updater.js
+  // androidRelease, which the mock has no main to ask): the code that adds Orbital to Obtainium and the download
   { name: 'start-help-android', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, helpMobile, { wait: 900 },
-    { page: 'shell', js: "document.getElementById('mc-help').contentDocument.querySelector('[role=radio][data-os=android]').click()" }, { wait: 300 }] },
-  // Cmd+K Install mobile app, under Help
-  { name: 'start-install-mobile', setup: [{ wait: 900 }, { key: '⌘K' }, { type: 'install' }, { wait: 400 }, bare], clip: { sel: '#palette .card', pad: 14 } },
+    { page: 'shell', js: "(() => { const h = document.getElementById('mc-help'); h.contentWindow.eval(\"helpApk = 'yes'\"); h.contentDocument.querySelector('[role=radio][data-os=android]').click(); })()" }, { wait: 500 }] },
+  // Cmd+K Install mobile app, under Help, once the latest release has the Android app
+  { name: 'start-install-mobile', setup: [{ wait: 900 }, { js: "androidDownload = { version: '0.10.0' }" }, { key: '⌘K' }, { type: 'install' }, { wait: 400 }, bare], clip: { sel: '#palette .card', pad: 14 } },
   // the loader: the page building itself, then the rows rising in
   { name: 'start-loader', video: true, setup: [{ wait: 800 }, { js: "document.getElementById('skeleton').classList.remove('gone'); document.body.classList.add('building')" }], steps: [
     { wait: 3200 }, { js: "document.getElementById('skeleton').classList.add('gone'); document.body.classList.remove('building')" }, { wait: 600 },
@@ -48,7 +49,6 @@ module.exports = [
   ] },
   { name: 'start-logout', setup: [library, { wait: 800 }, { key: '⌘K' }, { type: 'log out' }, { key: '↩' }, { wait: 500 }, bare], clip: { sel: '#palette .card', pad: 28 } },
 ];
-
 
 
 
