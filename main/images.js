@@ -12,20 +12,44 @@ const { S } = require('./state');
 // Only a load in flight is kept here, so two rows asking at once share one fetch; once it settles the file answers.
 // A map of every image ever shown held each one in memory for the session (issue #271), beside the file and the
 // renderer's own cache of 200 (renderer/render.js), which counts on this file cache and not on main's memory.
+// What collaborators' images may cost (security review finding 7): a few fetches at once, each within the SDK's
+// IMAGE_LIMIT, and a file cache of at most LIMITS.cache bytes, the least recently shown going first once it is past that.
+const LIMITS = { parallel: 4, cache: 512 * 1024 * 1024 };
 const loading = new Map(); // uri -> Promise<data URL>
 function image(uri) {
   if (!S.session) return Promise.reject(new Error('not logged in to Tana'));
   if (!loading.has(uri)) loading.set(uri, loadImage(uri).finally(() => loading.delete(uri)));
   return loading.get(uri);
 }
+// at most LIMITS.parallel fetches at once: the rest wait their turn, handed the slot one by one
+let fetching = 0;
+const queued = [];
+async function inTurn(fn) {
+  if (fetching < LIMITS.parallel) fetching++; else await new Promise((resolve) => queued.push(resolve));
+  try { return await fn(); } finally { const next = queued.shift(); if (next) next(); else fetching--; }
+}
+// What the cache holds, counted the first time a file is written, then kept as files come and go. Past LIMITS.cache it
+// is cut to three quarters, oldest shown first (a read touches its file).
+let cached = null, cachedIn = null;
+async function prune(dir) {
+  const files = (await Promise.all((await fs.readdir(dir)).map(async (f) => { const file = path.join(dir, f), s = await fs.stat(file).catch(() => null); return s && s.isFile() && { file, size: s.size, at: s.mtimeMs }; }))).filter(Boolean);
+  cached = files.reduce((n, f) => n + f.size, 0);
+  if (cached <= LIMITS.cache) return;
+  for (const f of files.sort((a, b) => a.at - b.at)) {
+    if (cached <= LIMITS.cache * 0.75) break;
+    await fs.rm(f.file, { force: true }); cached -= f.size;
+  }
+}
 async function loadImage(uri) {
   const dir = path.join(S.userData, 'images'), file = path.join(dir, createHash('sha1').update(uri).digest('hex'));
-  const cached = await fs.readFile(file, 'utf8').catch(() => null);
-  if (cached) return cached;
-  const { mime, bytes } = await fetchImage(uri, { getAccessToken: (o) => S.session.getAccessToken(o) });
+  const kept = await fs.readFile(file, 'utf8').catch(() => null);
+  if (kept) { const now = new Date(); fs.utimes(file, now, now).catch(() => {}); return kept; }
+  const { mime, bytes } = await inTurn(() => fetchImage(uri, { getAccessToken: (o) => S.session.getAccessToken(o) }));
   const url = 'data:' + mime + ';base64,' + bytes.toString('base64');
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(file, url);
+  if (cachedIn !== dir) { cached = null; cachedIn = dir; } // another account's folder (userData) counts afresh
+  if (cached === null || (cached += Buffer.byteLength(url)) > LIMITS.cache) await prune(dir);
   return url;
 }
 
@@ -60,4 +84,4 @@ const ipc = {
   'block:cancelUpload': (_e, uploadId) => cancelUpload(uploadId),
 };
 
-module.exports = { image, loadImage, insertImage, cancelUpload, ipc };
+module.exports = { image, loadImage, insertImage, cancelUpload, ipc, LIMITS };
