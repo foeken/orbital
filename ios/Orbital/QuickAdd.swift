@@ -206,8 +206,10 @@ extension ChatGPT {
     }
 }
 
-// Long press, Assign to …: the workspace's people, searchable, the task's assignee ticked; a tap gives the task to that
-// person alone, as the desktop's Assign to … does, and Unassigned takes everyone off it
+// Long press, Assign to …: your Dot on top (each agent linked through orbital.md that is on, the default first), then the
+// workspace's people, searchable, whoever has it ticked. A tap on your Dot asks what it should do (HandForm, in this same
+// sheet), and on your Dot when it has the node takes it back; a tap on a person gives the task to that person alone, as
+// the desktop's Assign to … does, and Unassigned takes everyone off it, your Dot included. A note lists only your Dot.
 struct AssignSheet: View {
     let engine: Engine
     let task: Engine.Assigning
@@ -218,8 +220,14 @@ struct AssignSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if query.isEmpty { pick(nil, "Unassigned") }
-                ForEach(people.filter { query.isEmpty || $0.name.localizedStandardContains(query) }) { pick($0.id, $0.name) }
+                let agents = engine.agentsOn.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
+                if !agents.isEmpty { Section { ForEach(agents) { agent($0) } } }
+                if task.people {
+                    Section {
+                        if query.isEmpty { pick(nil, "Unassigned") }
+                        ForEach(people.filter { query.isEmpty || $0.name.localizedStandardContains(query) }) { pick($0.id, $0.name) }
+                    }
+                }
             }
             .overlay { if people.isEmpty && !query.isEmpty { ContentUnavailableView.search } }
             .tint(.primary)
@@ -227,15 +235,34 @@ struct AssignSheet: View {
             .navigationTitle("Assign to")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-            .task { people = await engine.members().sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
+            .task { if task.people { people = await engine.members().sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } } }
+        }
+    }
+
+    // your Dot: ticked when it has the node, and then a tap takes it back; otherwise the request, pushed here
+    @ViewBuilder private func agent(_ a: Engine.Agent) -> some View {
+        let has = engine.handed[task.id] == a.id
+        let row = HStack {
+            Label { Text(a.name).foregroundStyle(.primary) } icon: { Image("Glyphs/robot").resizable().frame(width: 20, height: 20) }
+            Spacer()
+            if has { Image(systemName: "checkmark").fontWeight(.semibold) }
+        }
+        if has {
+            Button { dismiss(); Task { await engine.unhand(task.id); await task.then() } } label: { row }.accessibilityAddTraits(.isSelected)
+        } else {
+            NavigationLink { HandForm(engine: engine, handing: .init(id: task.id, agent: a, then: task.then)) { dismiss() } } label: { row }
         }
     }
 
     private func pick(_ uri: String?, _ name: String) -> some View {
-        let on = task.current.map { now in uri.map { now == [$0] } ?? now.isEmpty } ?? false // not known (a Timeline task): none ticked
+        // not known (a Timeline task): none ticked; Unassigned only when no one has it, your Dot included
+        let on = task.current.map { now in uri.map { now == [$0] } ?? (now.isEmpty && engine.handed[task.id] == nil) } ?? false
         return Button {
             dismiss()
-            Task { await engine.assign(task.id, to: uri, then: task.then); await task.then() }
+            Task {
+                if uri == nil, engine.handed[task.id] != nil { await engine.unhand(task.id) } // Unassigned: your Dot too
+                await engine.assign(task.id, to: uri, then: task.then); await task.then()
+            }
         } label: {
             HStack {
                 Text(name).foregroundStyle(.primary)

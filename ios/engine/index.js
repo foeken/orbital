@@ -10,7 +10,7 @@ import { insertAfter, insertImage, readOutline } from '../../sdk/content';
 import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
-import { addMeetingChats, completedInWindow, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
+import { addMeetingChats, completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { dateLabel, isDateUri } from '../../sdk/dates';
 import { canDelete, canWrite, capabilities, everyoneOnly, setSharing } from '../../sdk/access';
@@ -23,6 +23,8 @@ import { mark } from './sensitive';
 import { times } from './labels';
 import { read } from './read';
 import { demo, demoName, demoOn, demoTitle, isDemo } from './demo';
+import { agentOf, agents, handed, linked, refreshSoon } from './agents';
+import { createLive } from './live';
 import NUCLEO from 'nucleo-ui';
 
 // The phone reads Orbital's settings document and writes only the keys it sets (Mark as Sensitive): a Mac makes, merges
@@ -117,7 +119,7 @@ async function hold(id, init) {
   return within('opening ' + id, S.client.sync.subscribe(id, init));
 }
 // A reference with no label of its own is named by the graph, as main/documents.js resolveReferences does; each name is
-// asked once, since a chat on screen is read again every two seconds
+// asked once, since a chat on screen is read again as its answer is written (live.js)
 const names = new Map();
 async function titled(rows) {
   const refs = [], walk = (list) => list.forEach((r) => { if (r.reference && !r.reference.label) refs.push(r); walk(r.children || []); });
@@ -273,10 +275,14 @@ async function create(title, config) {
   return { id, doc };
 }
 
+// What is kept live on this client (live.js): the pages opened and the Timeline, told to the app as they change
+let live = null;
+const post = (message) => window.webkit?.messageHandlers?.orbital?.postMessage(message);
+
 // no session, or another one: the old client's stream is closed rather than left reconnecting
 function drop() {
   if (S.client) S.client.close().catch(() => {});
-  S.client = S.me = null;
+  S.client = S.me = live = null;
   settings.reset(); forget(); names.clear(); kept.length = 0; taskTypeList = null; workflow.clear(); // what the last account's session knew
 }
 
@@ -342,6 +348,7 @@ window.orbital = {
       // back short, Today's Tasks empty among it, so the app reads the Timeline again on the new one
       let streams = 0;
       S.client.sync.on('connected', () => { if (streams++) S.win.webContents.send('outline:changed'); });
+      live = createLive({ sync: S.client.sync, me: S.me.userUri, post, moved: () => S.win.webContents.send('outline:changed') });
       S.client.sync.connect().catch((e) => issues.push('sync: ' + (e && e.message || e)));
     }
     return true;
@@ -355,8 +362,10 @@ window.orbital = {
   demo: (on) => demoOn(on), // Settings' Demo mode, told before every call (Engine.swift and Engine.kt call)
   async timeline(pages = 1) {
     timeline.setPages(pages);
-    const part = (rows) => window.webkit?.messageHandlers?.orbital?.postMessage('part:' + JSON.stringify(times(rows)));
-    return JSON.stringify(times(await read({ rows: timeline.rows, settled, follows: () => JSON.stringify(settings.get('notify') || {}), redact, part })));
+    const part = (rows) => post('part:' + JSON.stringify(times(rows)));
+    const rows = await read({ rows: timeline.rows, settled, follows: () => JSON.stringify(settings.get('notify') || {}), redact, part });
+    live?.timeline(rows); // what it lists, followed until the next read
+    return JSON.stringify(times(rows));
   },
   // A task's box, as the desktop's does it (renderer/edit.js toggleDone, main/documents.js doc:setDone and mutTasks): an
   // Inbox task is accepted first (In Progress), a finished one is reopened, anything else is completed. Answers the state
@@ -399,6 +408,7 @@ window.orbital = {
       audience: meta.audience, space: space(meta.audienceSpace), people: meta.audience === 'everyone' ? [] : (meta.people || []).map(person), // everyone: the org, named by its word
       hidden: (meta.hiddenFrom || []).map(person), restricted: direct.restricted === true, participants: direct.participants.map((p) => p.uri).filter((uri) => uri !== S.me.userUri),
       rules: options.rules, reason: options.reason, inherit: { scope: options.inheritAudience.scope, space: space(options.inheritAudience) }, token: options.sharingToken,
+      agent: agentOf(id, doc), // the agent linked through orbital.md it is handed to, and how that is going (agents.js)
     });
   },
   // Visibility (renderer/access.js applySharing): only you, the people named (each keeping the role they had, editors
@@ -428,6 +438,12 @@ window.orbital = {
     } else if (kind === 'search') rows = await searchRows(doc);
     else if (kind === 'event') rows = (await S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest })).nodes.map(listRow);
     else rows = named(readOutline(doc));
+    // heard from now on (live.js): its own document, and for a saved search or a meeting the list its rows come from,
+    // the search as it is saved now (a Save while it is open listens with the new query). A meeting's notes and write-up
+    // only: its call, transcript and suggestion log are rewritten every second while the call runs (live 2026-10-04).
+    // ponytail: a chat or call newly owned by the meeting shows at the next read; add their kinds if that is missed
+    live?.page(id, kind === 'search' ? () => { const { query } = readSearch(doc); return query && Object.keys(query).length ? liveTrigger(searchQueryParams(query, S.me.userUri)) : null; }
+      : kind === 'event' ? () => ({ types: ['text'], ownerUris: [id], orderBy: ['-updatedAt'], limit: 100 }) : undefined);
     return JSON.stringify({ title: demoTitle(n.title || 'Untitled', id), kind, rows: redact(await titled(rows)), sensitive: secret().has(id) });
   },
   // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
@@ -497,8 +513,10 @@ window.orbital = {
   },
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
+    refreshSoon(); // the linked agents, asked of the relay now and then: what it answers is in the next setup
     return JSON.stringify({ to: LANGS.includes(to) ? to : null, ai: Object.fromEntries(Object.entries(settings.AI_KEYS).map(([k, s]) => [k, settings.get(s)]).filter(([, v]) => typeof v === 'string')),
-      sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length) }); // pinned to any day
+      sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length), // pinned to any day
+      agents: linked(), handed: handed() }); // your Dot and what it has, for the long press
   },
   // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced
   // setting the desktop's mark writes (main/documents.js setSensitive)
@@ -580,9 +598,11 @@ window.orbital = {
     return JSON.stringify(id);
   },
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
+  // Your Dot (agents.js): Settings' Connect to your OpenAI Dot, and the long press's Assign to <its name> … and Unassign
+  ...agents({ hold, settled }),
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
+for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage', 'linkCode', 'handTo', 'unhand', 'setDefault', 'unlink']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

@@ -72,6 +72,7 @@ struct NodeScreen: View {
     @State private var page: Engine.Page?
     @State private var error: String?
     @State private var waitingSince: Date?
+    @State private var waitOver = false // the two minutes an answer is waited for have passed: no dots any more (ChatView)
     @State private var access: Engine.Access? // a document's Assigned to and Visible to (NodeDetails)
 
     var body: some View {
@@ -82,8 +83,8 @@ struct NodeScreen: View {
             } else if let page {
                 switch page.kind {
                 case "chat":
-                    ChatView(rows: page.rows, since: waitingSince ?? asked, reveal: engine.reveal)
-                        // sent is sent: the read after it is the next poll's job, so a failed read never offers to send it twice
+                    ChatView(rows: page.rows, since: waitOver ? nil : waitingSince ?? asked, reveal: engine.reveal)
+                        // sent is sent: the read after it is the chat's own change's job, so a failed read never offers to send it twice
                         .safeAreaInset(edge: .bottom) {
                             Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); waitingSince = .now; await load(); return sent.warning }
                         }
@@ -128,14 +129,22 @@ struct NodeScreen: View {
         .task(id: engine.phase) {
             guard engine.phase == .ready else { return }
             await load()
-            // A chat is read again every two seconds while it is on screen, so Tana's answer shows as it is written: the
-            // document is live in the engine, so this is a local read, not a request. One that did not open yet (a chat
-            // just started, still on its way to Tana) keeps being tried the same way.
-            // ponytail: polled; have the engine call back on the chat's changes if this ever costs.
-            while (page?.kind ?? Glyph.kind(of: id)) == "chat", !Task.isCancelled {
+            // A chat that did not open yet (just started, still on its way to Tana) is tried every two seconds until it
+            // does; from then on its changes say when to read it again (below)
+            while page == nil, Glyph.kind(of: id) == "chat", !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 await load()
             }
+        }
+        // Changed in Tana, by anyone anywhere (ios/engine/live.js): read again, as the desktop's page on screen is. A chat's
+        // answer shows as it is written; a saved search or a meeting takes a row added, changed or gone.
+        .onChange(of: engine.changes[id]) { Task { await load() } }
+        // an answer waited for two minutes at most (renderer/chat.js CHAT_WAIT): the dots go then, with nothing to read
+        .task(id: waitingSince ?? asked) {
+            waitOver = false
+            guard let since = waitingSince ?? asked else { return }
+            try? await Task.sleep(for: .seconds(max(0, 120 - Date.now.timeIntervalSince(since))))
+            if !Task.isCancelled { waitOver = true }
         }
     }
 
@@ -325,6 +334,22 @@ struct NodeDetails: View {
             if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
         }
         .sheet(isPresented: $picking) { VisibilitySheet(id: id, access: access, engine: engine, done: reload) }
+        // handed to your Dot (Agents.swift): its name and its last Agent status line; a tap asks it again or takes it back
+        if let held = access.agent {
+            Menu {
+                if let a = engine.agents.first(where: { $0.id == held.id }) { Button("Ask \(a.name) again …") { engine.handing = .init(id: id, agent: a, then: reload) } }
+                Button("Unassign", role: .destructive) { Task { await engine.unhand(id); await reload() } }
+            } label: {
+                HStack(spacing: 12) {
+                    Text("Agent").foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
+                    Label { Text(held.name + " · " + held.word) } icon: { Image("Glyphs/robot").resizable().frame(width: 18, height: 18) }.foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .modifier(FieldLine())
+        }
         if !access.hidden.isEmpty {
             HStack {
                 Label("Not visible to " + access.hidden.names, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange)

@@ -1,0 +1,53 @@
+name: Main green
+
+# A pull request waits while the scheduled checks on main are failing: checks.yml opens "Scheduled checks failed", and
+# until it is closed the one pull request let through is its fix, which names it with a closing keyword in its title or
+# description ("Fixes #123") and so closes it when it merges. The answer is a commit status, "main green", on the
+# pull request's head commit, which main's ruleset requires. A status, not this job's own check: every open pull
+# request is given one whenever main's state changes, the ones opened before this workflow existed included, where a
+# check would exist only for pull requests that ran it (requiring it blocked every older one, 2026-10-04).
+#   a pull request opened, edited or pushed to: its own status
+#   the issue opened, closed or reopened, or run by hand (checks.yml runs it on opening or closing the issue, since an
+#   issue its token opens or closes starts no workflow): every open pull request's status
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  issues:
+    types: [opened, closed, reopened]
+  workflow_dispatch:
+
+permissions:
+  issues: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: main-green-${{ github.event_name == 'pull_request' && github.ref || 'every' }}
+  cancel-in-progress: true
+
+jobs:
+  status:
+    if: github.event_name != 'issues' || github.event.issue.title == 'Scheduled checks failed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          title="Scheduled checks failed"
+          open=$(gh issue list -R "$REPO" --state open --search "\"$title\" in:title" --json number,title --jq "map(select(.title == \"$title\"))[0].number // \"\"")
+          if [ -n "$PR" ]; then prs=$(gh pr view "$PR" -R "$REPO" --json number,headRefOid,title,body --jq '[.]')
+          else prs=$(gh pr list -R "$REPO" --state open --limit 200 --json number,headRefOid,title,body); fi
+          printf '%s' "$prs" | jq -c '.[]' | while read -r pr; do
+            n=$(printf '%s' "$pr" | jq -r .number); sha=$(printf '%s' "$pr" | jq -r .headRefOid)
+            text=$(printf '%s' "$pr" | jq -r '.title + " " + (.body // "")')
+            if [ -z "$open" ]; then state=success; say="main is green"
+            elif printf '%s' "$text" | grep -Eiq "\b(fix(e[sd])?|close[sd]?|resolve[sd]?):? #$open\b"; then state=success; say="fixes #$open, so it may land"
+            else state=failure; say="main's scheduled checks fail (#$open): only their fix merges, saying Fixes #$open"; fi
+            gh api -X POST "repos/$REPO/statuses/$sha" -f state="$state" -f context="main green" -f description="$say" \
+              -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" >/dev/null
+            echo "#$n $sha: $state, $say"
+          done
+

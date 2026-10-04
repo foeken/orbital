@@ -236,7 +236,8 @@ fun Entry(row: Node, engine: Engine) {
     val zoom = LocalZoom.current
     val uri = row.timeline?.uri
     val quiet = row.tone == "faint"
-    NodeMenu(uri, engine, Modifier.semantics { if (uri != null) role = Role.Button }, onClick = uri?.let { { zoom(it) } }) {
+    // no long press (null): an entry is something that happened ("Priya completed …"), not a task; its tasks have their own
+    NodeMenu(null, engine, Modifier.semantics { if (uri != null) role = Role.Button }, onClick = uri?.let { { zoom(it) } }) {
         RailRow(row.timeline?.time ?: "", bottom = if (engine.shown(row.children).isEmpty()) 14.dp else 0.dp,
             marker = { Marker(row.icon, row.tone, row.timeline?.recording == true, engine.platform.reduceMotion) }) {
             Sensitive(row, engine.reveal, Modifier.padding(end = if (row.unread == true) 18.dp else 0.dp)) {
@@ -298,7 +299,8 @@ fun TaskWords(row: Node, engine: Engine, globe: Boolean = true, modifier: Modifi
 fun Meeting(row: Node, engine: Engine, top: Dp, bottom: Dp) {
     val c = Theme.colors
     val zoom = LocalZoom.current
-    NodeMenu(row.id, engine, Modifier.semantics { role = Role.Button }, onClick = { zoom(row.id) }) {
+    // no long press (null): a meeting is not a task (the Timeline's long press is for its tasks alone)
+    NodeMenu(null, engine, Modifier.semantics { role = Role.Button }, onClick = { zoom(row.id) }) {
         RailRow("", top = top, bottom = bottom, marker = { Spacer(Modifier.height(1.dp)) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 // a calendar, or a route for Travel (main/timeline.js meetingIcon)
@@ -469,7 +471,9 @@ fun NodeMenu(
         content()
         if (node != null) DropdownMenu(open, { open = false }) {
             val run: (suspend () -> Unit) -> () -> Unit = { act -> { open = false; engine.scope.launch { act() } } }
-            if (task != null) MenuItem("Assign to …", Icons.Outlined.AccountCircle, onClick = run { engine.assigning = Engine.Assigning(node, assignees, then) })
+            // a task's people, with your Dot on top (Agents.kt); a note has only your Dot to go to
+            if (task != null || (handable(node) && engine.agentsOn.isNotEmpty()))
+                MenuItem("Assign to …", Icons.Outlined.AccountCircle, onClick = run { engine.assigning = Engine.Assigning(node, assignees, then, people = task != null) })
             if (task != null && task != "proposed") MenuItem("Move to Inbox", Icons.Outlined.MoveToInbox, onClick = run { engine.moveToInbox(node); then() })
             val pinned = node in engine.pinned
             val secret = node in engine.sensitiveIds

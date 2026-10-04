@@ -3,7 +3,9 @@ name: Checks
 # Every check, on main, every six hours when main has moved since the last scheduled run: the desktop's lint, checks and
 # user flows, the Android app, and the iPhone app's UI tests. A pull request runs none of this on GitHub (ci.yml only scans
 # it for secrets): it is checked on the machine that writes it before it merges (AGENTS.md, Pull requests). A failure
-# opens one issue, "Scheduled checks failed", or adds the run to it; the next good run closes it.
+# of the desktop or Android opens one issue, "Scheduled checks failed", or adds the run to it, and the next good run
+# closes it; while it is open a pull request cannot merge unless it is the fix (main-green.yml, required by main's
+# ruleset). An iPhone failure opens "Scheduled iPhone checks failed" the same way, which blocks nothing.
 # By hand, on any branch: gh workflow run checks.yml --ref <branch>
 on:
   schedule:
@@ -12,7 +14,7 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  actions: write # main-green.yml started again when the issue opens or closes
   issues: write
 
 concurrency:
@@ -130,14 +132,27 @@ jobs:
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
-          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+          # Desktop and Android run on Linux and fail only for a reason, so their failure blocks every pull request but
+          # its fix (main-green.yml reads "Scheduled checks failed"). The iPhone's simulator can fail on its own (a home
+          # screen in the wrong state, a launch that times out), so its failure is an issue of its own that blocks nothing.
+          BLOCKING: ${{ contains(fromJSON('["failure","cancelled"]'), needs.desktop.result) || contains(fromJSON('["failure","cancelled"]'), needs.android.result) }}
+          IPHONE: ${{ contains(fromJSON('["failure","cancelled"]'), needs.ios.result) }}
           RESULTS: desktop ${{ needs.desktop.result }}, android ${{ needs.android.result }}, ios ${{ needs.ios.result }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          title="Scheduled checks failed"
-          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title --jq "map(select(.title == \"$title\"))[0].number // \"\"")
           note="main at ${GITHUB_SHA::7}: $RESULTS. $RUN"
-          if [ "$FAILED" = true ]; then
-            if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$note"
-            else gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "Fix this before anything else lands. $note"; fi
-          elif [ -n "$open" ]; then gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "Passing again. $note"; fi
+          # one issue per title: opened (or added to) on a failure, closed on the next run that passes; says whether it moved
+          issue() {
+            open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$1\" in:title" --json number,title --jq "map(select(.title == \"$1\"))[0].number // \"\"")
+            if [ "$2" = true ]; then
+              if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$note"; return 1; fi
+              gh issue create -R "$GITHUB_REPOSITORY" --title "$1" --body "$3 $note"
+            elif [ -n "$open" ]; then gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "Passing again. $note"
+            else return 1; fi
+          }
+          # the blocking one opened or closed: every open pull request's main green status, again (an issue this token
+          # opens or closes starts no workflow)
+          if issue "Scheduled checks failed" "$BLOCKING" "Fix this before anything else lands: until it is closed, a pull request merges only if it says Fixes #<this issue> (main-green.yml)."; then
+            gh workflow run main-green.yml -R "$GITHUB_REPOSITORY"
+          fi
+          issue "Scheduled iPhone checks failed" "$IPHONE" "The iPhone UI tests failed on main. This blocks no pull request (the simulator can fail on its own): fix it, or close it when a run by hand passes." || true

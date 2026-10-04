@@ -127,6 +127,7 @@ struct Shell: View {
         // shared words open Quick Add over nothing else; an image opens nothing, so whatever is open stays
         .onChange(of: scene, initial: true) { if scene == .active, let found = Shared.take() { if found.image == nil { adding = false; settings = false }; shared = found } }
         .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
+        .sheet(item: Binding { engine.handing } set: { engine.handing = $0 }) { HandSheet(engine: engine, handing: $0) } // Assign to your Dot (Agents.swift)
         .shareAsk(engine)
         .task {
             // -zoom <id>: a node open at launch, for design shots

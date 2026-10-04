@@ -127,6 +127,90 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm');
 const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSync(b, ['--version']).status === 0);
 (async () => {
+  // Your Dot from the phone (ios/engine/agents.js): linked with a code as the Mac links it, the key and the agent kept in
+  // the synced settings, and a node handed over as the Mac hands it (main/agents/linked.js send): its one last line
+  // "Agent status: Assigned", then the event with the node, the request and Orbital's own instructions, then the mark and
+  // the link the Mac's badge reads. An event the Dot does not take puts back what an earlier Codex handoff wrote and keeps
+  // its mark; a blank request or a read-only node writes nothing; Unassign takes the line and the mark out.
+  {
+    require('../db').open(':memory:');
+    const { S } = require('../main/state'), settings = require('../main/settings'), relay = require('../main/relay');
+    const { Document } = require('../sdk/document'), { initDocument, contentText, ulid } = require('../sdk/node'), content = require('../sdk/content');
+    const { agents, agentOf } = require('../ios/engine/agents.js');
+    const was = { me: S.me, client: S.client, readOnly: S.settingsReadOnly }, ME = 'tana:user-profile:me', AGENT = '0b6f1c3e-5d2a-4c8e-9f10-2a3b4c5d6e7f', ID = 'relay:' + AGENT;
+    S.me = { userUri: ME, orgId: 'org' };
+    S.settingsReadOnly = true; // the phone's: nothing here finds or makes a settings document, the mirror is enough
+    S.client = { sync: { flushed: async () => {}, getDocument: () => null }, graph: { listNodes: async () => ({ nodes: [] }) } };
+    let answer = { subscribers: 1, delivered: 1 };
+    let unlinked = false;
+    const sent = [], json = (o) => new Response(JSON.stringify(o));
+    relay.relay.fetch = async (url, init = {}) => {
+      const p = url.slice(relay.relay.base.length);
+      assert.match(new Headers(init.headers).get('authorization'), /^Orbital [\w-]{43}$/, 'every call carries your Orbital\'s key');
+      if (p === '/orbital/codes') return json({ code: 'ABCD-1234', expiresAt: Date.now() + 9e5 });
+      if (p === '/orbital/codes/ABCD-1234') return json({ state: 'linked', agent: { id: AGENT, name: 'Echo', app: 'ChatGPT' } });
+      if (p === '/orbital/agents') return json({ agents: unlinked ? [] : [{ id: AGENT, name: 'Echo', app: 'ChatGPT' }] });
+      if (p === '/orbital/agents/' + AGENT && init.method === 'DELETE') { unlinked = true; return json({ ok: true }); }
+      if (p === '/orbital/agents/' + AGENT + '/events') { sent.push(JSON.parse(init.body)); return json(answer); }
+      return new Response('{}', { status: 404 });
+    };
+    const doc = new Document('tana:text:' + ulid());
+    doc.transact((l) => initDocument(l, 'Pilot brief', ME));
+    content.insertAfter(doc, null, 'Venue options');
+    const api = agents({ hold: async () => doc, settled: async () => {} }), lines = () => content.readOutline(doc).map((n) => n.text).filter(Boolean); // a new note's empty first line left out
+
+    const link = JSON.parse(await api.linkCode());
+    assert.strictEqual(link.code, 'ABCD-1234');
+    assert.ok(link.prompt.startsWith('Call Orbital\'s link_orbital tool with the code ABCD-1234'), 'the same message for your Dot as the Mac copies');
+    assert.deepStrictEqual([link.url, link.tana], ['https://orbital.md/mcp', 'https://home.tana.inc/mcp'], 'and both servers, as ChatGPT\'s form asks for them');
+    assert.match(settings.get('relayKey'), /^[\w-]{43}$/, 'your Orbital made from the phone: its key in the synced settings, so the Mac is the same Orbital');
+    const linked = JSON.parse(await api.linkStatus('ABCD-1234'));
+    assert.deepStrictEqual(linked.agent, { id: ID, name: 'Echo', app: 'ChatGPT' });
+    assert.deepStrictEqual([settings.get('agents'), settings.get('defaultAgent')], [['codex', ID], ID], 'linked, it is on and the default, Codex left on as the Mac had it');
+    assert.deepStrictEqual(JSON.parse(await api.agents()).agents, [{ id: ID, name: 'Echo', app: 'ChatGPT', seenAt: null, on: true, isDefault: true }]);
+
+    // a node a Mac handed to Codex: its request block, its mark and its link
+    relay.writeContext(doc, 'Summarise the venues');
+    settings.set('codex', [doc.id]); settings.set('codexPrompt', { [doc.id]: 'Summarise the venues' }); settings.set('codexTask', { [doc.id]: { agent: 'codex', taskId: 't1' } });
+    answer = { subscribers: 1, delivered: 0 };
+    await assert.rejects(api.handTo(doc.id, ID, 'Book the venue'), /Echo did not take it/);
+    assert.deepStrictEqual(lines(), ['Venue options', 'Agent context'], 'not taken: the Codex block is back and no status line stays');
+    assert.match(contentText(doc), /Summarise the venues/);
+    assert.deepStrictEqual(settings.get('codexTask')[doc.id], { agent: 'codex', taskId: 't1' }, 'and the node is still Codex\'s');
+
+    answer = { subscribers: 1, delivered: 1 };
+    const out = JSON.parse(await api.handTo(doc.id, ID, '  Book the venue  '));
+    assert.deepStrictEqual(lines(), ['Venue options', 'Agent status: Assigned'], 'handed over: the node ends with the status line, the request block gone');
+    const event = sent.at(-1);
+    assert.deepStrictEqual([event.name, event.data.node, event.data.request, event.data.instructions], ['task.assigned', doc.id, 'Book the venue', relay.HOW], 'the event the Mac sends: the node, the request, Orbital\'s instructions');
+    assert.deepStrictEqual([settings.get('codex'), settings.get('codexPrompt')[doc.id], settings.get('codexTask')[doc.id]], [[doc.id], 'Book the venue', { agent: ID, taskId: event.id }], 'marked and linked as the Mac\'s badge reads it');
+    assert.deepStrictEqual(out, { id: ID, name: 'Echo', status: 'assigned' });
+    relay.writeStatus(doc, 'Working');
+    assert.strictEqual(agentOf(doc.id, doc).status, 'working', 'the Dot\'s Working shows');
+
+    const before = sent.length;
+    await assert.rejects(api.handTo(doc.id, ID, '   '), /Say what Echo should do/);
+    doc.writeDenied = true;
+    await assert.rejects(api.handTo(doc.id, ID, 'Again'), /read-only/);
+    doc.writeDenied = false;
+    assert.deepStrictEqual([sent.length, lines().at(-1)], [before, 'Agent status: Working'], 'a blank request or a read-only node: nothing sent, nothing written');
+
+    await api.unhand(doc.id);
+    assert.deepStrictEqual(lines(), ['Venue options'], 'Unassign takes the status line out');
+    assert.deepStrictEqual([settings.get('codex'), settings.get('codexTask')[doc.id], agentOf(doc.id, doc)], [[], undefined, null], 'and the mark and the link');
+
+    // Settings' swipes: Make Default switches an agent that was off on as well; Unlink lets it go at the relay, switches it
+    // off, makes it no one's default and unassigns its nodes, status line and all
+    settings.set('agents', ['codex']); settings.set('defaultAgent', null);
+    assert.deepStrictEqual(JSON.parse(await api.setDefault(ID)).map((a) => [a.on, a.isDefault]), [[true, true]], 'made the default, and on');
+    await api.handTo(doc.id, ID, 'Book the venue');
+    assert.deepStrictEqual(JSON.parse(await api.unlink(ID)), [], 'unlinked: the relay no longer lists it');
+    assert.ok(unlinked, 'the relay was told');
+    assert.deepStrictEqual([settings.get('agents'), settings.get('defaultAgent'), settings.get('codex'), settings.get('codexTask')[doc.id], lines()], [['codex'], null, [], undefined, ['Venue options']],
+      'off, no longer the default, and its node unassigned with its status line gone');
+    Object.assign(S, { me: was.me, client: was.client, settingsReadOnly: was.readOnly });
+  }
+
   // The Timeline's read (ios/engine/read.js): the settings and the Timeline side by side, and nothing shown before the
   // settings are read: a part that lands first waits for them and goes marked; a refusal shows nothing; a watch choice
   // the settings moved reads the Timeline again
@@ -168,6 +252,79 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     let n = 0, follows = 'watching a';
     const again = await read({ rows: async () => [{ id: 'read ' + ++n }], settled: async () => { follows = 'watching b'; }, follows: () => follows, redact: (r) => r, part: () => {} });
     assert.deepStrictEqual(again, [{ id: 'read 2' }], 'the settings moved a watch choice: the Timeline read again');
+  }
+  // What the phone keeps live (ios/engine/live.js), over a fake sync stream and fake live queries: a page opened is told
+  // to the app as 'changed:<id>' when its document changes, once for a burst; a saved search's list is a live query,
+  // opened again only when the saved query changes, and only the newest few stay open; the Timeline is read again for a
+  // new Inbox task, a task you made changing state (not its words), a task it shows changing, today's node and the pins
+  {
+    const { EventEmitter } = require('node:events');
+    const { createLive, SETTLE, LISTS } = require('../ios/engine/live.js');
+    const tick = () => new Promise((r) => setImmediate(r)), settle = () => new Promise((r) => setTimeout(r, SETTLE + 50));
+    const sync = new EventEmitter(), posted = [], opened = [];
+    let moved = 0;
+    const open = async (_sync, query, { onRows }) => Object.assign(new EventEmitter(), { query, onRows, closed: false, close() { this.closed = true; return Promise.resolve(); } });
+    const live = createLive({ sync, me: 'tana:user-profile:me', post: (m) => posted.push(m), moved: () => moved++, open: (...a) => open(...a).then((h) => (opened.push(h), h)) });
+    await tick();
+    const rows = (o) => ({ added: [], removed: [], changed: [], initial: false, ...o });
+    const inbox = opened.find((h) => (h.query.stateTypes || []).join() === 'proposed'), mine = opened.find((h) => h.query.createdBy);
+    assert.deepStrictEqual([inbox.query.assignedTo, mine.query.createdBy], [['tana:user-profile:me'], ['tana:user-profile:me']], 'your Inbox and the tasks you made');
+    inbox.onRows(rows({ added: [{ uri: 'tana:text:a', title: 'A' }], initial: true }));
+    assert.strictEqual(moved, 0, 'the first answer is what was just read');
+    inbox.onRows(rows({ added: [{ uri: 'tana:text:b', title: 'B' }] }));
+    assert.strictEqual(moved, 1, 'a new Inbox task reads the Timeline again');
+    mine.onRows(rows({ added: [{ uri: 'tana:text:t', title: 'T', state: { type: 'open', enteredAt: 1 } }], initial: true }));
+    mine.onRows(rows({ changed: [{ uri: 'tana:text:t', title: 'T, renamed', state: { type: 'open', enteredAt: 1 } }] }));
+    assert.strictEqual(moved, 1, 'a task you made, renamed: nothing the Timeline shows');
+    mine.onRows(rows({ changed: [{ uri: 'tana:text:t', title: 'T, renamed', state: { type: 'closed', enteredAt: 2 } }] }));
+    assert.strictEqual(moved, 2, 'and completed by someone: read again');
+
+    live.page('tana:text:p');
+    for (const id of ['tana:text:p', 'tana:text:p', 'tana:text:elsewhere', 'tana:liveQuery:q']) sync.emit('change', id);
+    await settle();
+    assert.deepStrictEqual(posted, ['changed:tana:text:p'], 'a page opened, told once for a burst; nothing else');
+
+    let query = { types: ['text'], limit: 100 };
+    live.page('tana:search:s', () => query);
+    await tick();
+    const first = opened.at(-1);
+    assert.deepStrictEqual(first.query, query, "a saved search's list is a live query");
+    first.onRows(rows({ changed: [{ uri: 'tana:text:r' }] }));
+    sync.emit('change', 'tana:search:s'); // renamed: the same question
+    await settle();
+    assert.deepStrictEqual(posted.slice(1), ['changed:tana:search:s'], 'a row of it moved: the page read again, once');
+    assert.strictEqual(opened.at(-1), first, 'the same query is not opened again');
+    query = { types: ['text'], stateTypes: ['open'], limit: 100 };
+    sync.emit('change', 'tana:search:s');
+    await tick();
+    assert.ok(first.closed && opened.at(-1).query === query, 'saved with another query: listened to with that one');
+    const second = opened.at(-1);
+    query = () => { throw new Error('unreadable'); };
+    live.page('tana:search:bad', () => query());
+    sync.emit('change', 'tana:search:bad'); // must not throw out of the stream's listener
+    for (let i = 0; i < LISTS; i++) live.page('tana:event:' + i, () => ({ ownerUris: ['tana:event:' + i] }));
+    await tick();
+    assert.ok(second.closed, 'only the newest ' + LISTS + ' pages keep a list live');
+
+    live.timeline([
+      { id: 'orbital:timeline:today:x', timeline: { today: true, day: 'tana:text:day' }, children: [{ id: 'tana:text:t1' }] },
+      { id: 'orbital:timeline:edit:tana:text:t2:1', timeline: { uri: 'tana:text:t2' } },
+      { id: 'orbital:timeline:meeting:tana:event:m:1', timeline: { uri: 'tana:event:m' } },
+    ]);
+    await tick();
+    const shown = opened.at(-1);
+    assert.deepStrictEqual(shown.query.uris, ['tana:text:t1', 'tana:text:t2'], "the Timeline's tasks, its meetings left to main/timeline.js");
+    shown.onRows(rows({ added: [{ uri: 'tana:text:t1', title: 'One', state: { type: 'open' } }], initial: true }));
+    shown.onRows(rows({ changed: [{ uri: 'tana:text:t1', title: 'One', state: { type: 'closed' } }] }));
+    assert.strictEqual(moved, 3, 'a task on it ticked elsewhere: read again');
+    sync.emit('change', 'tana:text:day');
+    sync.emit('change', 'tana:pin-map:x');
+    assert.strictEqual(moved, 5, "today's node and the pins: read again");
+    live.timeline([{ id: 'orbital:timeline:edit:tana:text:t2:1', timeline: { uri: 'tana:text:t2' } }, { id: 'x', children: [{ id: 'tana:text:t1' }] }]);
+    await tick();
+    assert.strictEqual(opened.at(-1), shown, 'the same tasks: the same query');
+    sync.emit('change', 'tana:text:day');
+    assert.strictEqual(moved, 5, 'no Today stop on the page: its node is no longer followed');
   }
   if (!bun && process.env.CI) throw new Error('CI must build the engine: install Bun (.github/workflows/checks.yml)');
   if (!bun) return console.log('ios engine check ok (the bundle skipped: no Bun)');
@@ -226,7 +383,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.strictEqual(await page.orbital.connect(), true);
   const rows = JSON.parse(await page.orbital.timeline(1));
   // what the page tells the app is a string, as both phones' bridges carry it: a first part as 'part:' and its rows
-  for (const m of page.posted) assert.ok(typeof m === 'string' && (['ready', 'changed'].includes(m) || (m.startsWith('part:') && Array.isArray(JSON.parse(m.slice(5))))), 'told as a string: ' + String(m).slice(0, 80));
+  for (const m of page.posted) assert.ok(typeof m === 'string' && (['ready', 'changed'].includes(m) || /^changed:tana:/.test(m) || (m.startsWith('part:') && Array.isArray(JSON.parse(m.slice(5))))), 'told as a string: ' + String(m).slice(0, 80));
   // the graph answers nothing here, so the page is its Today's Tasks stop alone, in the shape Timeline.swift reads
   const today = rows.find((r) => r.timeline && r.timeline.today);
   assert.ok(today, 'the Timeline answers its Today stop: ' + JSON.stringify(rows).slice(0, 200));

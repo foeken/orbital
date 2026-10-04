@@ -20,7 +20,6 @@ struct SettingsView: View {
                 Section {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
-                        if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
                         if !models.isEmpty {
                             NavigationLink { Models(engine: engine, models: models) } label: {
                                 LabeledContent { Text(["quickModel", "model"].map { ChatGPT.label(engine.translator.ai[$0] ?? "") }.joined(separator: ", ")) } label: { Row(glyph: "brain", title: "Models") }
@@ -34,6 +33,7 @@ struct SettingsView: View {
                 } footer: {
                     Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone.")
                 }
+                AgentsSection(engine: engine) // your Dot (Agents.swift)
                 Section {
                     // the language notes are shown in, the same synced setting as Cmd+K Auto-translate … on the Mac
                     Picker(selection: Binding { engine.translator.to ?? "" } set: { lang in Task { await engine.translate(into: lang.isEmpty ? nil : lang) } }) {

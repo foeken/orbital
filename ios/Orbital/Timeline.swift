@@ -98,7 +98,10 @@ extension View {
     func nodeMenu(_ id: String?, engine: Engine, task: String? = nil, assignees: [String]? = nil, then done: @escaping () async -> Void = {}) -> some View {
         contextMenu {
             if let id, id.hasPrefix("tana:") {
-                if task != nil { Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, then: done) } }
+                // a task's people, with your Dot on top (Agents.swift); a note has only your Dot to go to
+                if task != nil || (Engine.handable(id) && !engine.agentsOn.isEmpty) {
+                    Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, people: task != nil, then: done) }
+                }
                 if let task, task != "proposed" { Button("Move to Inbox", systemImage: "tray") { Task { await engine.moveToInbox(id); await done() } } }
                 let pinned = engine.pinned.contains(id), secret = engine.sensitiveIds.contains(id)
                 // pinned to any day: only taking the pin off
@@ -336,7 +339,7 @@ struct Entry: View {
             }
         }
         .onTapGesture { openURL.zoom(row.timeline?.uri) }
-        .nodeMenu(row.timeline?.uri, engine: engine)
+        // no long press: an entry is something that happened ("Priya completed …"), not a task; its tasks have their own
         .accessibilityElement(children: .combine) // its tasks are rows of their own (TaskLines)
         .accessibilityAddTraits(row.timeline?.uri != nil ? .isButton : [])
         .accessibilityAction { openURL.zoom(row.timeline?.uri) } // VoiceOver's double tap: a tap gesture is not one
@@ -479,7 +482,7 @@ struct Meeting: View {
             }
         }
         .onTapGesture { openURL.zoom(row.id) }
-        .nodeMenu(row.id, engine: engine)
+        // no long press: a meeting is not a task (the Timeline's long press is for its tasks alone)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { openURL.zoom(row.id) }

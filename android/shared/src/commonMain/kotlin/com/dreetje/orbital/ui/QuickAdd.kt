@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.dreetje.orbital.Dictation
+import com.dreetje.orbital.Agent
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Field
 import com.dreetje.orbital.Lists
@@ -289,18 +290,54 @@ fun Choices(title: String, none: String, load: suspend (String) -> List<Member>,
     }
 }
 
-// Long press, Assign to …: the workspace's people, searchable, the task's assignee ticked; a pick gives the task to that
-// person alone, as the desktop's Assign to … does, and Unassigned takes everyone off it
+// Long press, Assign to …: your Dot on top (each agent linked through orbital.md that is on, the default first), then the
+// workspace's people, searchable, whoever has it ticked. A tap on your Dot asks what it should do (HandForm, in this same
+// sheet), and on your Dot when it has the node takes it back; a tap on a person gives the task to that person alone, as
+// the desktop's Assign to … does, and Unassigned takes everyone off it, your Dot included. A note lists only your Dot.
 @Composable
 fun AssignSheet(engine: Engine, task: Engine.Assigning, onDismiss: () -> Unit) {
-    var people by remember { mutableStateOf<List<Member>?>(null) }
-    Sheet(onDismiss) { close ->
-        Choices("Assign to", "Unassigned", { q ->
-            val all = people ?: engine.members().sortedBy { it.name.lowercase() }.also { people = it }
-            if (q.isEmpty()) all else all.filter { it.name.contains(q, ignoreCase = true) }
-        }, current = { uri -> task.current?.let { now -> if (uri != null) now == listOf(uri) else now.isEmpty() } ?: false }, cancel = close) { m ->
-            close()
-            engine.scope.launch { engine.assign(task.id, m?.id, task.then); task.then() }
+    val c = Theme.colors
+    var people by remember { mutableStateOf(listOf<Member>()) }
+    var query by remember { mutableStateOf("") }
+    var asking by remember { mutableStateOf<Agent?>(null) } // your Dot picked: what it should do, in this same sheet
+    var held by remember { mutableStateOf(false) } // a request written or on its way: no swipe throws it away
+    LaunchedEffect(Unit) { if (task.people) people = engine.members().sortedBy { it.name.lowercase() } }
+    Sheet(onDismiss, swipe = !held) { close ->
+        val a = asking
+        if (a != null) HandForm(engine, Engine.Handing(task.id, a, task.then), back = { asking = null; held = false }, done = close) { held = it }
+        else {
+            val handedTo = engine.handed[task.id]
+            val pick = { m: Member? ->
+                close()
+                engine.scope.launch {
+                    if (m == null && handedTo != null) engine.unhand(task.id) // Unassigned: your Dot too
+                    engine.assign(task.id, m?.id, task.then); task.then()
+                }
+            }
+            val agents = engine.agentsOn.filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
+            val shown = people.filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
+            SheetBar("Assign to", cancel = close)
+            SearchField(query, { query = it })
+            LazyColumn(Modifier.fillMaxWidth()) {
+                item { Spacer(Modifier.padding(top = 4.dp)) }
+                if (agents.isNotEmpty()) item("agents") {
+                    Group {
+                        agents.forEachIndexed { i, agent ->
+                            val on = handedTo == agent.id
+                            GroupRow(last = i == agents.size - 1, selected = on, onClick = {
+                                if (on) { close(); engine.scope.launch { engine.unhand(task.id); task.then() } } else asking = agent
+                            }) { Glyph("robot", Modifier.size(20.dp), c.text); Text(agent.name, Modifier.weight(1f), color = c.text); Tick(on) }
+                        }
+                    }
+                }
+                if (task.people && query.isEmpty()) item("none") {
+                    // not known (a Timeline task): none ticked; Unassigned only when no one has it, your Dot included
+                    Group { ChoiceRow("Unassigned", task.current?.let { it.isEmpty() && handedTo == null } ?: false, last = true) { pick(null) } }
+                }
+                if (task.people && shown.isNotEmpty()) item("people") {
+                    Group { shown.forEachIndexed { i, m -> ChoiceRow(m.name, task.current == listOf(m.id), last = i == shown.size - 1) { pick(m) } } }
+                }
+            }
         }
     }
 }

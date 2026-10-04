@@ -101,6 +101,7 @@ class AndroidPlatform(private val context: Context) : Platform {
     }
 
     private val clipboard get() = context.getSystemService(ClipboardManager::class.java)
+    override fun copy(text: String) { clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Orbital", text)) }
 
     override fun hasClipboardImage(): Boolean = clipboard?.primaryClipDescription?.hasMimeType("image/*") == true
     override suspend fun keepGlimpse(read: Glimpse?) = Widgets.keep(context, read) // the widgets' Timeline (Engine.keepTimeline)

@@ -64,9 +64,9 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 // The iPhone's ios/Widgets: three widgets over what the app last read (Glimpse, kept after every read; a widget cannot
-// run the engine). On the home screen, Today's Tasks across the widget's whole width; on the Galaxy Z Flip's cover
-// screen, the Timeline on its rail in two, scrolled as the app's is: what is ahead today (today's tasks and the meetings
-// to come) and Activity, what happened. A row
+// run the engine), each on the home screen, the lock screen and a Galaxy Z Flip's cover screen alike (res/xml; any phone,
+// docs/ANDROID.md Review guidelines): Today's Tasks across the widget's whole width, and the Timeline on its rail in two,
+// scrolled as the app's is: what is ahead today (today's tasks and the meetings to come) and Activity, what happened. A row
 // opens its node in the app, + opens Quick Add, the title the Timeline; a task's box opens the app too, which ticks it
 // and writes it to Tana at once (MainActivity tick), as the iPhone's does.
 object Widgets {

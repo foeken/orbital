@@ -25,7 +25,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     let translator = Translator() // auto-translate, set up from the settings document at each refresh
     var sensitiveIds: Set<String> = [] // marked sensitive in Orbital (synced), for the long-press menu
     var pinned: Set<String> = [] // pinned to a day, any day, for the long-press menu
+    var agents: [Agent] = [] // your Dot and any other agent linked through orbital.md (Agents.swift), for the long-press menu
+    var handed: [String: String] = [:] // node -> the linked agent it is handed to
     var removed: Set<String> = [] // deleted here: gone from every list at once, before Tana confirms it
+    var changes: [String: Int] = [:] // page id -> how often it changed in Tana since it was opened (engine.js 'changed:<id>', live.js): NodeScreen reads it again
     var reveal = false // sensitive items shown, after a shake; never kept, as the desktop keeps it on the machine only
     // Settings' Demo mode, as the desktop's: made-up words and names on screen, nothing saved (ios/engine/demo.js); kept on this phone
     var demo = UserDefaults.standard.bool(forKey: "demoMode") {
@@ -88,14 +91,16 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         if log.count > 100 { log.removeFirst() }
     }
 
-    // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it, and
-    // 'part:' with the first rows of a Timeline read still under way. Only the session page's own frame speaks for it:
+    // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it,
+    // 'changed:<id>' when a page opened here changed (ios/engine/live.js), and 'part:' with the first rows of a Timeline
+    // read still under way. Only the session page's own frame speaks for it:
     // any other page in this web view (sign-in goes through several) could post the same words (security review finding 6).
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let frame = message.frameInfo
         guard frame.isMainFrame, frame.securityOrigin.protocol == "https", frame.securityOrigin.host == Self.session.host,
               Self.isSessionPage(frame.request.url), Self.isSessionPage(web.url) else { return }
         if let said = message.body as? String, said.hasPrefix("part:") { show(part: String(said.dropFirst(5))); return }
+        if let said = message.body as? String, said.hasPrefix("changed:") { changes[String(said.dropFirst(8)), default: 0] += 1; return }
         if message.body as? String == "changed" { Task { await refresh() }; return }
         guard message.body as? String == "ready" else { return }
         Task { await connect() }
@@ -230,6 +235,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 translator.use(to: setup.to, ai: setup.ai)
                 if translator.catalogue.isEmpty, let list = try? await ChatGPT.models(), !list.isEmpty { translator.catalogue = list } // once: what this account may ask
                 sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
+                if let agents = setup.agents { self.agents = agents }
+                if let handed = setup.handed { self.handed = handed }
             }
             keepTimeline(read: json)
             for issue in (try? await engineJS("return orbital.issues()")) as? [String] ?? [] { note(issue) }
@@ -290,7 +297,56 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // What a refresh reads besides the rows (orbital.setup)
-    struct Setup: Decodable { let to: String?; let ai: [String: String]; let sensitive: [String]; let pinned: [String] }
+    struct Setup: Decodable { let to: String?; let ai: [String: String]; let sensitive: [String]; let pinned: [String]; let agents: [Agent]?; let handed: [String: String]? }
+
+    // Your Dot (ios/engine/agents.js, Agents.swift): the agents linked through orbital.md, linking one with a code as the
+    // Mac's Connect to your OpenAI Dot does, and a node handed to one with a request (Assign to <its name> …) or taken back
+    struct Agent: Decodable, Identifiable, Hashable { let id: String; let name: String; let app: String; let on: Bool; let isDefault: Bool }
+    struct HandedTo: Decodable { let id: String; let name: String; let status: String } // a node's agent, and its last Agent status line
+    struct AgentList: Decodable { let agents: [Agent]; let handed: [String: String]; let problem: String? }
+    struct LinkCode: Decodable { let code: String; let expiresAt: Double; let url: String; let tana: String; let prompt: String }
+    struct LinkState: Decodable { let state: String; let expiresAt: Double?; let agent: Linked?; struct Linked: Decodable { let id: String; let name: String; let app: String? } }
+    struct Handing: Identifiable { let id: String; let agent: Agent; let then: () async -> Void } // the node whose request is being written
+    var handing: Handing?
+    // the agents on, the default first: what Assign to <its name> … offers
+    var agentsOn: [Agent] { agents.filter(\.on).sorted { $0.isDefault && !$1.isDefault } }
+    // the relay asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
+    func loadAgents() async -> String? {
+        guard !Self.isSample else { return nil }
+        do {
+            let list: AgentList = try await call("return await orbital.agents()", [:])
+            agents = list.agents; handed = list.handed
+            return list.problem
+        } catch { return error.localizedDescription }
+    }
+    func linkCode() async throws -> LinkCode {
+        guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
+        return try await call("return await orbital.linkCode()", [:])
+    }
+    func linkStatus(_ code: String) async throws -> LinkState { try await call("return await orbital.linkStatus(code)", ["code": code]) }
+    func linkCancel(_ code: String) async { do { let _: Bool = try await call("return await orbital.linkCancel(code)", ["code": code]) } catch {} } // gone anyway in fifteen minutes
+    // throws, so the sheet stays open with what went wrong (not listening yet, did not take it, read-only)
+    func hand(_ id: String, to agent: Agent, _ request: String) async throws {
+        guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
+        let _: HandedTo? = try await call("return await orbital.handTo(id, agent, request)", ["id": id, "agent": agent.id, "request": request])
+        handed[id] = agent.id
+    }
+    func unhand(_ id: String) async {
+        guard !Self.isSample else { return }
+        do { let _: Bool = try await call("return await orbital.unhand(id)", ["id": id]); handed[id] = nil } catch { self.error = error.localizedDescription }
+    }
+    // Settings' swipes on an agent: Make Default, and Unlink, which also unassigns its nodes (orbital.setDefault, orbital.unlink)
+    func makeDefault(_ agent: Agent) async {
+        guard !Self.isSample else { return }
+        do { agents = try await call("return await orbital.setDefault(agent)", ["agent": agent.id]) } catch { self.error = error.localizedDescription }
+    }
+    func unlink(_ agent: Agent) async {
+        guard !Self.isSample else { return }
+        do {
+            agents = try await call("return await orbital.unlink(agent)", ["agent": agent.id])
+            handed = handed.filter { $0.value != agent.id }
+        } catch { self.error = error.localizedDescription }
+    }
 
     // Long press: Pin to Today and Mark as Sensitive (orbital.pin, orbital.sensitive), then the Timeline read again
     // Remove Pin takes the task out of Today's Tasks at once, collapsing as a deleted row does; the read after says where it
@@ -319,7 +375,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
     func markSensitive(_ id: String, _ on: Bool) async { await act("return await orbital.sensitive(id, on)", ["id": id, "on": on]) }
     // Long press, Assign to …: the task whose picker is open (AssignSheet), the people to pick from, and the one picked
-    struct Assigning: Identifiable { let id: String; let current: [String]?; let then: () async -> Void }
+    // people: false on a node that is not a task, whose Assign to lists only your agents
+    struct Assigning: Identifiable { let id: String; let current: [String]?; var people = true; let then: () async -> Void }
     var assigning: Assigning?
     struct Member: Decodable, Identifiable { let id: String; let name: String }
     func members() async -> [Member] { Self.isSample ? [] : (try? await call("return await orbital.members()", [:])) ?? [] }
@@ -342,6 +399,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let title: String, me: String, task: Bool, assignees: [Member]
         let audience: String, space: String?, people: [Member], hidden: [Member]
         let restricted: Bool, participants: [String], rules: [String], reason: String?, inherit: Audience, token: String?
+        let agent: HandedTo? // the linked agent it is handed to (Agents.swift)
         // Grant access is the pill's write (renderer/access.js hiddenFromFix): only where the node's own list is its audience
         var grants: Bool { restricted && rules.contains("people") }
         // the rule it is shared by now, as the visibility picker ticks it
