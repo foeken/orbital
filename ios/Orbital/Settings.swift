@@ -34,6 +34,7 @@ struct SettingsView: View {
                 } footer: {
                     Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone.")
                 }
+                AgentsSection(engine: engine) // your Dot (Agents.swift)
                 Section {
                     // the language notes are shown in, the same synced setting as Cmd+K Auto-translate … on the Mac
                     Picker(selection: Binding { engine.translator.to ?? "" } set: { lang in Task { await engine.translate(into: lang.isEmpty ? nil : lang) } }) {

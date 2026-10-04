@@ -31,6 +31,8 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
@@ -296,6 +298,17 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
         }
         Field("Visible to", open) {
             if (access.audience == "people" && access.people.isNotEmpty()) Faces(access.people.persons) else AudienceLabel(access.audience, access.space)
+        }
+        // handed to your Dot (Agents.kt): its name and its last Agent status line; a tap asks it again or takes it back
+        access.agent?.let { held ->
+            var menu by remember { mutableStateOf(false) }
+            Column {
+                Field("Agent", { menu = true }) { Glyph("robot", Modifier.size(18.dp), c.text); Text(held.name + " · " + held.word, color = c.text) }
+                DropdownMenu(menu, { menu = false }) {
+                    engine.agents.firstOrNull { it.id == held.id }?.let { a -> DropdownMenuItem({ Text("Ask ${a.name} again …", color = c.text) }, { menu = false; engine.handing = Engine.Handing(id, a, reload) }) }
+                    DropdownMenuItem({ Text("Unassign", color = c.danger) }, { menu = false; engine.scope.launch { engine.unhand(id); reload() } })
+                }
+            }
         }
         if (access.hidden.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

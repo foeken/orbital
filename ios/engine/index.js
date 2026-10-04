@@ -23,6 +23,7 @@ import { mark } from './sensitive';
 import { times } from './labels';
 import { read } from './read';
 import { demo, demoName, demoOn, demoTitle, isDemo } from './demo';
+import { agentOf, agents, handed, linked, refreshSoon } from './agents';
 import NUCLEO from 'nucleo-ui';
 
 // The phone reads Orbital's settings document and writes only the keys it sets (Mark as Sensitive): a Mac makes, merges
@@ -399,6 +400,7 @@ window.orbital = {
       audience: meta.audience, space: space(meta.audienceSpace), people: meta.audience === 'everyone' ? [] : (meta.people || []).map(person), // everyone: the org, named by its word
       hidden: (meta.hiddenFrom || []).map(person), restricted: direct.restricted === true, participants: direct.participants.map((p) => p.uri).filter((uri) => uri !== S.me.userUri),
       rules: options.rules, reason: options.reason, inherit: { scope: options.inheritAudience.scope, space: space(options.inheritAudience) }, token: options.sharingToken,
+      agent: agentOf(id, doc), // the agent linked through orbital.md it is handed to, and how that is going (agents.js)
     });
   },
   // Visibility (renderer/access.js applySharing): only you, the people named (each keeping the role they had, editors
@@ -497,8 +499,10 @@ window.orbital = {
   },
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
+    refreshSoon(); // the linked agents, asked of the relay now and then: what it answers is in the next setup
     return JSON.stringify({ to: LANGS.includes(to) ? to : null, ai: Object.fromEntries(Object.entries(settings.AI_KEYS).map(([k, s]) => [k, settings.get(s)]).filter(([, v]) => typeof v === 'string')),
-      sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length) }); // pinned to any day
+      sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length), // pinned to any day
+      agents: linked(), handed: handed() }); // your Dot and what it has, for the long press
   },
   // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced
   // setting the desktop's mark writes (main/documents.js setSensitive)
@@ -580,9 +584,11 @@ window.orbital = {
     return JSON.stringify(id);
   },
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
+  // Your Dot (agents.js): Settings' Connect to your OpenAI Dot, and the long press's Assign to <its name> … and Unassign
+  ...agents({ hold, settled }),
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage']) {
+for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage', 'linkCode', 'handTo', 'unhand']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

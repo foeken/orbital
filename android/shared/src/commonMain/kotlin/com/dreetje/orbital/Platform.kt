@@ -68,6 +68,7 @@ interface Platform {
     fun decode(image: ByteArray): ImageBitmap?
     fun share(text: String)
     fun open(url: String)
+    fun copy(text: String) // words on the clipboard (Connect to your OpenAI Dot's URLs and message)
     // the clipboard's image as a JPEG, 2048 px at most, or null; read and made smaller off the main thread
     suspend fun pasteImage(): ByteArray?
     fun hasClipboardImage(): Boolean // what the clipboard holds, by its kind only: reading it would tell the user so

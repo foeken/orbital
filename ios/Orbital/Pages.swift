@@ -325,6 +325,22 @@ struct NodeDetails: View {
             if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
         }
         .sheet(isPresented: $picking) { VisibilitySheet(id: id, access: access, engine: engine, done: reload) }
+        // handed to your Dot (Agents.swift): its name and its last Agent status line; a tap asks it again or takes it back
+        if let held = access.agent {
+            Menu {
+                if let a = engine.agents.first(where: { $0.id == held.id }) { Button("Ask \(a.name) again …") { engine.handing = .init(id: id, agent: a, then: reload) } }
+                Button("Unassign", role: .destructive) { Task { await engine.unhand(id); await reload() } }
+            } label: {
+                HStack(spacing: 12) {
+                    Text("Agent").foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
+                    Label { Text(held.name + " · " + held.word) } icon: { Image("Glyphs/robot").resizable().frame(width: 18, height: 18) }.foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .modifier(FieldLine())
+        }
         if !access.hidden.isEmpty {
             HStack {
                 Label("Not visible to " + access.hidden.names, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange)

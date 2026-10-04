@@ -41,6 +41,18 @@ agent should do: what to do comes with each event, written by Orbital.
 One Orbital has as many agents as you link; each agent's MCP connection is one link. Linking the same connection again
 with a new code moves it.
 
+## From a phone
+
+The iPhone and Android apps link and hand over exactly as the Mac does, through the same code (main/relay.js: the relay
+client, the link message, the event's words and the status line) run in the phones' engine (ios/engine/agents.js), and the
+same synced settings: `relayKey`, `agents` and `defaultAgent`, and each node's `codex`, `codexPrompt` and `codexTask`.
+So a Dot linked on the phone is in the Mac's Choose agents, and a node handed over from the phone has the Mac's badge.
+**Settings → Agents → Connect to your OpenAI Dot** is the Connect page (the two servers, the message with its code, the
+wait), and a long press on a node offers **Assign to <its name> …** for each linked agent that is on, then a sheet for
+the request, and **Unassign <its name>**; a node's page shows the agent and its last status line. The relay sends
+`access-control-allow-origin: *`, which is what lets the engine call it from its page on home.tana.inc. Renaming,
+switching off, unlinking and Reset agent link key stay on the Mac; Tana, Codex and Claude run on a Mac only.
+
 ## Why the request travels in the event
 
 The node is content. Anyone who can edit a node (a colleague in a shared space) could otherwise write an order into it

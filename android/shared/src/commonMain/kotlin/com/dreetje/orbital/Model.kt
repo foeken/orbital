@@ -84,7 +84,21 @@ fun parseTime(s: String): Instant? = runCatching { Instant.parse(s) }.getOrNull(
 @Serializable data class Page(val title: String, val kind: String, val rows: List<Row> = emptyList(), val sensitive: Boolean? = null)
 
 // What a refresh reads besides the rows (orbital.setup)
-@Serializable data class Setup(val to: String? = null, val ai: Map<String, String> = emptyMap(), val sensitive: List<String> = emptyList(), val pinned: List<String> = emptyList())
+@Serializable data class Setup(val to: String? = null, val ai: Map<String, String> = emptyMap(), val sensitive: List<String> = emptyList(), val pinned: List<String> = emptyList(),
+                               val agents: List<Agent>? = null, val handed: Map<String, String>? = null)
+
+// Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, a node's agent and its last Agent status
+// line, a link code with the two servers and the message for your Dot, and what became of the code
+@Serializable data class Agent(val id: String, val name: String, val app: String = "", val on: Boolean = false, val isDefault: Boolean = false)
+@Serializable data class HandedTo(val id: String, val name: String, val status: String = "assigned") {
+    // as the Mac's badge reads it: Assigned is waiting for the agent to pick it up
+    val word: String get() = mapOf("assigned" to "Assigned", "working" to "Working", "completed" to "Completed", "failed" to "Failed")[status] ?: "Assigned"
+}
+@Serializable data class AgentList(val agents: List<Agent> = emptyList(), val handed: Map<String, String> = emptyMap(), val problem: String? = null)
+@Serializable data class LinkCode(val code: String, val expiresAt: Double, val url: String, val tana: String, val prompt: String)
+@Serializable data class LinkState(val state: String, val expiresAt: Double? = null, val agent: Linked? = null) {
+    @Serializable data class Linked(val id: String, val name: String, val app: String? = null)
+}
 
 @Serializable data class Member(val id: String, val name: String)
 
@@ -107,6 +121,7 @@ data class Access(
     val reason: String? = null,
     val inherit: Audience = Audience("inherit"),
     val token: String? = null,
+    val agent: HandedTo? = null, // the linked agent it is handed to (ui/Agents.kt)
 ) {
     // Grant access is the pill's write (renderer/access.js hiddenFromFix): only where the node's own list is its audience
     val grants: Boolean get() = restricted && "people" in rules

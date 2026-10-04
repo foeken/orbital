@@ -328,6 +328,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
     if (adding) QuickAdd(engine, search = if (path.isEmpty()) (page as? Menu.Search)?.id else null) { adding = false } // on a saved search: a row of it
     engine.shared?.let { s -> QuickAdd(engine, shared = s) { engine.shared = null } }
     engine.assigning?.let { a -> AssignSheet(engine, a) { engine.assigning = null } }
+    engine.handing?.let { h -> HandSheet(engine, h) { engine.handing = null } } // Assign to your Dot (Agents.kt)
     ShareAskDialog(engine)
 }
 

@@ -142,6 +142,34 @@ class EngineTest {
         assertNull(Engine.Shared.words(null, "  "))
     }
 
+    // Your Dot (ios/engine/agents.js): the linked agents and the nodes they have come with the setup, only those on offered;
+    // a node handed over goes as arguments, never as code, and is kept as its; one the agent did not take says why and is
+    // not kept; Unassign lets it go
+    @Test fun aNodeHandedToYourDot() = runTest {
+        var refuse = false
+        val host = page(setup = { text("""{"sensitive":[],"pinned":[],"agents":[{"id":"relay:a1","name":"Echo","app":"ChatGPT","on":true,"isDefault":true},{"id":"relay:a2","name":"Off one","on":false}],"handed":{}}""") })
+        val answer = host.answer
+        host.answer = { body, args ->
+            when {
+                "orbital.handTo" in body -> if (refuse) throw Exception("Echo is not listening yet") else text("""{"id":"relay:a1","name":"Echo","status":"assigned"}""")
+                "orbital.unhand" in body -> text("true")
+                else -> answer(body, args)
+            }
+        }
+        val engine = ready(host)
+        assertEquals(listOf("Echo"), engine.agentsOn.map { it.name })
+        val echo = engine.agentsOn.single()
+        refuse = true
+        assertEquals("Echo is not listening yet", runCatching { engine.hand("tana:text:a", echo, "Book the venue") }.exceptionOrNull()?.message)
+        assertNull(engine.handed["tana:text:a"])
+        refuse = false
+        engine.hand("tana:text:a", echo, "Book the venue")
+        assertEquals(mapOf("id" to "tana:text:a", "agent" to "relay:a1", "request" to "Book the venue", "demo" to false), host.calls.last { "orbital.handTo" in it.first }.second)
+        assertEquals("relay:a1", engine.handed["tana:text:a"])
+        engine.unhand("tana:text:a")
+        assertNull(engine.handed["tana:text:a"])
+    }
+
     @Test fun demoModeTicksNothing() = runTest {
         val host = page()
         val engine = Engine(host, FakePlatform(), backgroundScope, demoMode = true, now = { clock })
