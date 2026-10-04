@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The ring round a done marker's check on the widgets, as the iPhone's on a clear Home Screen (Widgets.kt Marker) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@android:color/transparent" />
+    <stroke android:width="1.2dp" android:color="#FFFFFFFF" />
+    <size android:width="18dp" android:height="18dp" />
+</shape>

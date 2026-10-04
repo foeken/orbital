@@ -56,16 +56,12 @@ import com.dreetje.orbital.Times
 import com.dreetje.orbital.asTask
 import com.dreetje.orbital.json
 import com.dreetje.orbital.kindOf
-import com.dreetje.orbital.ui.Colors
-import com.dreetje.orbital.ui.Dark
 import com.dreetje.orbital.ui.Glyphs
-import com.dreetje.orbital.ui.Light
 import com.dreetje.orbital.ui.glyphBitmap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.time.Clock
 import kotlin.time.Instant
-import androidx.glance.color.ColorProvider as DayNight
 
 // The iPhone's ios/Widgets: three widgets over what the app last read (Glimpse, kept after every read; a widget cannot
 // run the engine). On the home screen, Today's Tasks across the widget's whole width; on the Galaxy Z Flip's cover
@@ -186,7 +182,7 @@ internal fun RailTimeline(glimpse: Glimpse?, part: Part) = Frame(if (part == Par
             stop("", openApp(context), { Marker("calendar", null) }) { Words("Upcoming meetings") }
             upcoming.forEach { m ->
                 meeting(m, m.subtext?.substringBefore("–") ?: "", null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Glyph(if (m.icon == "pinRoute") "pinRoute" else "calendar", 16.dp, paint { it.secondary }); Spacer(GlanceModifier.width(8.dp)); Words(m) }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Glyph(if (m.icon == "pinRoute") "pinRoute" else "calendar", 14.dp, Glass.grey); Spacer(GlanceModifier.width(8.dp)); Words(m) }
                 }
             }
         }
@@ -219,55 +215,68 @@ internal fun RailTimeline(glimpse: Glimpse?, part: Part) = Frame(if (part == Par
 @Composable
 private fun Frame(title: String, plus: Boolean = true, content: @Composable () -> Unit) {
     val context = LocalContext.current
-    Column(GlanceModifier.fillMaxSize().appWidgetBackground().cornerRadius(android.R.dimen.system_app_widget_background_radius).background(paint { it.page })) {
+    Column(GlanceModifier.fillMaxSize().appWidgetBackground().cornerRadius(android.R.dimen.system_app_widget_background_radius).background(Glass.back)) {
         Row(GlanceModifier.fillMaxWidth().height(48.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, GlanceModifier.defaultWeight().clickable(openApp(context)), style = TextStyle(paint { it.text }, 16.sp, FontWeight.Medium), maxLines = 1)
+            Text(title, GlanceModifier.defaultWeight().clickable(openApp(context)), style = TextStyle(Glass.ink, 17.sp, FontWeight.Bold), maxLines = 1)
             if (plus) Box(GlanceModifier.size(44.dp).clickable(openApp(context, "add") { putExtra("add", true) }), contentAlignment = Alignment.Center) {
-                Image(ImageProvider(R.drawable.add), "Quick Add Task", GlanceModifier.size(22.dp), colorFilter = ColorFilter.tint(paint { it.text }))
+                Image(ImageProvider(R.drawable.add), "Quick Add Task", GlanceModifier.size(22.dp), colorFilter = ColorFilter.tint(Glass.ink))
             }
         }
         content()
     }
 }
 
-// One stop on the rail: the time, the marker on a line through the markers' middle, what happened
+// One stop on the rail: the time, the marker on a line through the markers' middle, what happened. Nothing is laid
+// behind a marker to hide the line, as the widget has no colour of its own to lay there: the line stops short of it
+// (the iPhone's Rail), and the first stop's starts at its marker.
 @Composable
 private fun RailRow(label: String, opens: Action, height: Dp, time: Dp, first: Boolean, marker: (@Composable () -> Unit)?, content: @Composable () -> Unit) {
     Row(GlanceModifier.fillMaxWidth().height(height).padding(start = 12.dp, end = 4.dp).clickable(opens), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, GlanceModifier.width(time), style = TextStyle(paint { it.secondary }, 13.sp, textAlign = TextAlign.End), maxLines = 1)
-        Spacer(GlanceModifier.width(10.dp))
-        Box(GlanceModifier.width(24.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
-            Box(GlanceModifier.fillMaxHeight().padding(top = if (first) height / 2 else 0.dp)) { Box(GlanceModifier.width(1.dp).fillMaxHeight().background(paint { it.separator })) {} }
+        Text(label, GlanceModifier.width(time), style = TextStyle(Glass.grey, 12.sp, textAlign = TextAlign.End), maxLines = 1)
+        Spacer(GlanceModifier.width(8.dp))
+        Box(GlanceModifier.width(20.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            Column(GlanceModifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(GlanceModifier.width(1.dp).defaultWeight().background(if (first) Glass.none else Glass.rule)) {}
+                if (marker != null) Spacer(GlanceModifier.height(22.dp))
+                Box(GlanceModifier.width(1.dp).defaultWeight().background(Glass.rule)) {}
+            }
             marker?.invoke()
         }
-        Spacer(GlanceModifier.width(10.dp))
+        Spacer(GlanceModifier.width(8.dp))
         Box(GlanceModifier.defaultWeight()) { content() }
         Spacer(GlanceModifier.width(10.dp))
     }
 }
 
-// the app's colours, light and dark (Theme.kt), as RemoteViews take them
-private fun paint(pick: (Colors) -> Color): ColorProvider = DayNight(pick(Light), pick(Dark))
-private val white = DayNight(Color.White, Color.White)
-
-// the rail's marker (Timeline.kt Marker): finished work a green disc with a white check; a new task or a meeting with no
-// write-up quieter; one being recorded blue
-@Composable
-private fun Marker(glyph: String, tone: String?) {
-    if (tone == "done") Box(GlanceModifier.size(20.dp).cornerRadius(10.dp).background(paint { it.done }), contentAlignment = Alignment.Center) { Glyph("applyDone", 12.dp, white) }
-    else Box(GlanceModifier.size(22.dp).cornerRadius(11.dp).background(paint { it.page }), contentAlignment = Alignment.Center) { // the rail passes behind it
-        Glyph(glyph, 18.dp, paint { if (tone == "live") it.accent else if (tone == "new" || tone == "faint") it.tertiary else it.secondary })
-    }
+// The widgets have no background of their own, as the iPhone's on a clear Home Screen: the wallpaper shows through a
+// light veil that keeps white words legible on a bright one (RemoteViews cannot blur it, as iOS's glass does), and
+// everything is drawn in white at the iPhone's three strengths (primary, secondary, tertiary), in light and dark alike
+private object Glass {
+    val back = ColorProvider(Color.Black.copy(alpha = 0.3f))
+    val ink = ColorProvider(Color.White)
+    val grey = ColorProvider(Color.White.copy(alpha = 0.66f))
+    val faint = ColorProvider(Color.White.copy(alpha = 0.42f))
+    val rule = ColorProvider(Color.White.copy(alpha = 0.3f))
+    val none = ColorProvider(Color.Transparent)
 }
 
-// the app's box (Timeline.kt CheckBox): grey, green with a tick once done, an outline for an Inbox task
+// the rail's marker (the iPhone's Marker on a clear Home Screen): finished work a check in a ring; a new task or a
+// meeting with no write-up quieter; one being recorded in full white
+@Composable
+private fun Marker(glyph: String, tone: String?) {
+    if (tone == "done") Box(GlanceModifier.size(18.dp), contentAlignment = Alignment.Center) {
+        Image(ImageProvider(R.drawable.ring), null, GlanceModifier.size(18.dp), colorFilter = ColorFilter.tint(Glass.grey))
+        Glyph("applyDone", 10.dp, Glass.ink)
+    } else Glyph(glyph, 16.dp, if (tone == "live") Glass.ink else if (tone == "new" || tone == "faint") Glass.faint else Glass.grey)
+}
+
+// the app's box as the iPhone draws it on a clear Home Screen: an outline, a check in it once done, dashed for an Inbox task
 @Composable
 private fun TaskBox(state: String?) {
-    val box = GlanceModifier.size(18.dp).cornerRadius(5.dp)
-    when (state) {
-        "closed" -> Box(box.background(paint { it.checkOn }), contentAlignment = Alignment.Center) { Glyph("applyDone", 11.dp, white) }
-        "proposed" -> Box(box.background(paint { it.checkInbox }).padding(1.2.dp)) { Box(GlanceModifier.fillMaxSize().cornerRadius(4.dp).background(paint { it.page })) {} }
-        else -> Box(box.background(paint { it.checkOff })) {}
+    Box(GlanceModifier.size(16.dp), contentAlignment = Alignment.Center) {
+        if (state == "proposed") Image(ImageProvider(R.drawable.inbox_box), null, GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(Glass.faint))
+        else Image(ImageProvider(R.drawable.box), null, GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(Glass.grey))
+        if (state == "closed") Glyph("applyDone", 10.dp, Glass.ink)
     }
 }
 
@@ -291,14 +300,14 @@ private fun Glyph(name: String, size: Dp, tint: ColorProvider) =
 
 @Composable
 private fun Words(words: String, quiet: Boolean = false, done: Boolean = false) =
-    Text(words, style = TextStyle(paint { if (quiet || done) it.secondary else it.text }, 14.sp, textDecoration = if (done) TextDecoration.LineThrough else null), maxLines = 1)
+    Text(words, style = TextStyle(if (quiet || done) Glass.grey else Glass.ink, 14.sp, textDecoration = if (done) TextDecoration.LineThrough else null), maxLines = 1)
 
 // a row's words, a done task struck; a sensitive one a bar, as the app draws it until a shake (its words are never in a
 // Glimpse the app kept)
 @Composable
 private fun Words(row: Row, quiet: Boolean = false) {
     if (row.sensitive != true) return Words(row.segments?.joinToString("") { it.text ?: it.mention?.label ?: "" }?.takeIf { it.isNotBlank() } ?: row.words, quiet, done = row.stateType == "closed")
-    Box(GlanceModifier.width((72 + (row.id.hashCode() and 63)).dp).height(10.dp).cornerRadius(3.dp).background(paint { it.redacted }).semantics { contentDescription = "Sensitive" }) {}
+    Box(GlanceModifier.width((72 + (row.id.hashCode() and 63)).dp).height(9.dp).cornerRadius(3.dp).background(Glass.rule).semantics { contentDescription = "Sensitive" }) {}
 }
 
 // an Activity line: its sentence (main/timeline.js "Sam edited Onboarding flow") cut to the node's title, as the marker
@@ -315,15 +324,15 @@ private fun Brief(row: Row, quiet: Boolean) {
 // a day's heading, smaller than a line so more of what happened fits
 @Composable
 private fun Heading(title: String) =
-    Text(title, GlanceModifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, bottom = 2.dp), style = TextStyle(paint { it.secondary }, 12.sp, FontWeight.Medium), maxLines = 1)
+    Text(title, GlanceModifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, bottom = 2.dp), style = TextStyle(Glass.grey, 12.sp, FontWeight.Bold), maxLines = 1)
 
 @Composable
 private fun Divider() =
-    Box(GlanceModifier.fillMaxWidth().height(17.dp).padding(start = 20.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) { Box(GlanceModifier.fillMaxSize().background(paint { it.separator })) {} }
+    Box(GlanceModifier.fillMaxWidth().height(17.dp).padding(start = 20.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) { Box(GlanceModifier.fillMaxSize().background(Glass.rule)) {} }
 
 @Composable
 private fun Note(words: String, modifier: GlanceModifier = GlanceModifier) =
-    Text(words, modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = TextStyle(paint { it.secondary }, 14.sp))
+    Text(words, modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = TextStyle(Glass.grey, 14.sp))
 
 // a node opened in the app (MainActivity's zoom), or the app itself; each intent made unique by what it opens, as a
 // pending intent ignores the extras
