@@ -74,6 +74,7 @@ class Engine(
     var handing by mutableStateOf<Handing?>(null) // Assign to <its name> …: the node whose request is being written
     var removed by mutableStateOf(setOf<String>()) // deleted here: gone from every list at once, before Tana confirms it
         private set
+    val changes = mutableStateMapOf<String, Int>() // page id -> how often it changed in Tana since it was opened (engine.js 'changed:<id>', live.js): NodeScreen reads it again
     var unpinned by mutableStateOf(setOf<String>()) // pins being taken off here, out of Today's Tasks before Tana answers
         private set
     var reveal by mutableStateOf(false) // sensitive items shown, after a shake; never kept
@@ -150,9 +151,11 @@ class Engine(
     }
 
     override fun said(message: String) {
-        // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it, and
-        // 'part:' with the first rows of a Timeline read still under way
+        // engine.js says 'ready' once it is loaded on the session page, 'changed' when the Timeline moved under it,
+        // 'changed:<id>' when a page opened here changed (ios/engine/live.js), and 'part:' with the first rows of a
+        // Timeline read still under way
         if (message.startsWith("part:")) return show(message.removePrefix("part:"))
+        if (message.startsWith("changed:")) { val id = message.removePrefix("changed:"); changes[id] = (changes[id] ?: 0) + 1; return }
         when (message) {
             "changed" -> scope.launch { refresh() }
             "ready" -> scope.launch { connect() }

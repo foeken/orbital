@@ -91,7 +91,7 @@ const commands = {
     }
     out(nodes.length + ' types scanned');
   },
-  // livequery [--minutes 60] [--seconds 20] [--state proposed|open|closed|not_now]: open a live query (sdk/livequery.js)
+  // livequery [--minutes 60] [--seconds 20] [--state proposed|open|closed|not_now] [--query '<json>']: open a live query (sdk/livequery.js)
   // for text nodes created in the last N minutes, or that entered a state in that window, and print every change the
   // server pushes. Read-only: the only thing it writes is its own throwaway query document.
   // With --to <id> and/or --from <id> it is an edge query instead: the edges into / out of that node, of the types
@@ -113,7 +113,8 @@ const commands = {
       return live.close();
     }
     const since = Date.now() - Number(flag('minutes', 60)) * 6e4, state = flag('state');
-    const q = state ? { types: ['text'], stateTypes: [state], stateEnteredAtMin: since, limit: 50 } : { types: ['text'], createdAtMin: since, orderBy: ['-createdAt'], limit: 50 };
+    // --query '<json>': any node query of your own (sdk/livequery.js LISTS and SCALARS), as the phone's live.js asks them
+    const q = flag('query') ? JSON.parse(flag('query')) : state ? { types: ['text'], stateTypes: [state], stateEnteredAtMin: since, limit: 50 } : { types: ['text'], createdAtMin: since, orderBy: ['-createdAt'], limit: 50 };
     const live = await openLiveQuery(client.sync, q, { label: 'orbital probe' });
     const row = (r) => r.uri + ':' + ((r.state && r.state.type) || '-');
     out(live.id + '\t' + live.state().status);

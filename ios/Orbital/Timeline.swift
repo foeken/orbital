@@ -339,7 +339,7 @@ struct Entry: View {
             }
         }
         .onTapGesture { openURL.zoom(row.timeline?.uri) }
-        .nodeMenu(row.timeline?.uri, engine: engine)
+        // no long press: an entry is something that happened ("Priya completed …"), not a task; its tasks have their own
         .accessibilityElement(children: .combine) // its tasks are rows of their own (TaskLines)
         .accessibilityAddTraits(row.timeline?.uri != nil ? .isButton : [])
         .accessibilityAction { openURL.zoom(row.timeline?.uri) } // VoiceOver's double tap: a tap gesture is not one
@@ -482,7 +482,7 @@ struct Meeting: View {
             }
         }
         .onTapGesture { openURL.zoom(row.id) }
-        .nodeMenu(row.id, engine: engine)
+        // no long press: a meeting is not a task (the Timeline's long press is for its tasks alone)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { openURL.zoom(row.id) }

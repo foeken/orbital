@@ -143,6 +143,16 @@ class ScreensTest {
         listOf("Assign to …", "Mark as Sensitive", "Delete").forEach { onNodeWithText(it).assertExists() }
     }
 
+    // only a task has actions on the Timeline: what happened to one ("Priya Shah completed …") and a meeting open on a
+    // tap and offer nothing on a long press
+    @Test fun aLongPressOnAnEntryOffersNothing() = sample {
+        waitUntil(timeoutMillis = 3000) { onAllNodes(hasText("Priya Shah completed", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        onNode(hasText("Priya Shah completed", substring = true) and androidx.compose.ui.test.hasClickAction()).performTouchInput { longClick() }
+        mainClock.advanceTimeBy(1000)
+        waitForIdle()
+        assertTrue(onAllWithText("Pin to Today").isEmpty(), "no actions on an entry")
+    }
+
     // Settings' Agents has Connect to your OpenAI Dot (Agents.kt): ChatGPT's plugins named first, and the sample, which
     // saves nothing, asks the relay for no code and says so, with Try again
     @Test fun connectToYourDotFromSettings() = sample(start = com.dreetje.orbital.ui.Start(settings = true)) {

@@ -253,6 +253,79 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     const again = await read({ rows: async () => [{ id: 'read ' + ++n }], settled: async () => { follows = 'watching b'; }, follows: () => follows, redact: (r) => r, part: () => {} });
     assert.deepStrictEqual(again, [{ id: 'read 2' }], 'the settings moved a watch choice: the Timeline read again');
   }
+  // What the phone keeps live (ios/engine/live.js), over a fake sync stream and fake live queries: a page opened is told
+  // to the app as 'changed:<id>' when its document changes, once for a burst; a saved search's list is a live query,
+  // opened again only when the saved query changes, and only the newest few stay open; the Timeline is read again for a
+  // new Inbox task, a task you made changing state (not its words), a task it shows changing, today's node and the pins
+  {
+    const { EventEmitter } = require('node:events');
+    const { createLive, SETTLE, LISTS } = require('../ios/engine/live.js');
+    const tick = () => new Promise((r) => setImmediate(r)), settle = () => new Promise((r) => setTimeout(r, SETTLE + 50));
+    const sync = new EventEmitter(), posted = [], opened = [];
+    let moved = 0;
+    const open = async (_sync, query, { onRows }) => Object.assign(new EventEmitter(), { query, onRows, closed: false, close() { this.closed = true; return Promise.resolve(); } });
+    const live = createLive({ sync, me: 'tana:user-profile:me', post: (m) => posted.push(m), moved: () => moved++, open: (...a) => open(...a).then((h) => (opened.push(h), h)) });
+    await tick();
+    const rows = (o) => ({ added: [], removed: [], changed: [], initial: false, ...o });
+    const inbox = opened.find((h) => (h.query.stateTypes || []).join() === 'proposed'), mine = opened.find((h) => h.query.createdBy);
+    assert.deepStrictEqual([inbox.query.assignedTo, mine.query.createdBy], [['tana:user-profile:me'], ['tana:user-profile:me']], 'your Inbox and the tasks you made');
+    inbox.onRows(rows({ added: [{ uri: 'tana:text:a', title: 'A' }], initial: true }));
+    assert.strictEqual(moved, 0, 'the first answer is what was just read');
+    inbox.onRows(rows({ added: [{ uri: 'tana:text:b', title: 'B' }] }));
+    assert.strictEqual(moved, 1, 'a new Inbox task reads the Timeline again');
+    mine.onRows(rows({ added: [{ uri: 'tana:text:t', title: 'T', state: { type: 'open', enteredAt: 1 } }], initial: true }));
+    mine.onRows(rows({ changed: [{ uri: 'tana:text:t', title: 'T, renamed', state: { type: 'open', enteredAt: 1 } }] }));
+    assert.strictEqual(moved, 1, 'a task you made, renamed: nothing the Timeline shows');
+    mine.onRows(rows({ changed: [{ uri: 'tana:text:t', title: 'T, renamed', state: { type: 'closed', enteredAt: 2 } }] }));
+    assert.strictEqual(moved, 2, 'and completed by someone: read again');
+
+    live.page('tana:text:p');
+    for (const id of ['tana:text:p', 'tana:text:p', 'tana:text:elsewhere', 'tana:liveQuery:q']) sync.emit('change', id);
+    await settle();
+    assert.deepStrictEqual(posted, ['changed:tana:text:p'], 'a page opened, told once for a burst; nothing else');
+
+    let query = { types: ['text'], limit: 100 };
+    live.page('tana:search:s', () => query);
+    await tick();
+    const first = opened.at(-1);
+    assert.deepStrictEqual(first.query, query, "a saved search's list is a live query");
+    first.onRows(rows({ changed: [{ uri: 'tana:text:r' }] }));
+    sync.emit('change', 'tana:search:s'); // renamed: the same question
+    await settle();
+    assert.deepStrictEqual(posted.slice(1), ['changed:tana:search:s'], 'a row of it moved: the page read again, once');
+    assert.strictEqual(opened.at(-1), first, 'the same query is not opened again');
+    query = { types: ['text'], stateTypes: ['open'], limit: 100 };
+    sync.emit('change', 'tana:search:s');
+    await tick();
+    assert.ok(first.closed && opened.at(-1).query === query, 'saved with another query: listened to with that one');
+    const second = opened.at(-1);
+    query = () => { throw new Error('unreadable'); };
+    live.page('tana:search:bad', () => query());
+    sync.emit('change', 'tana:search:bad'); // must not throw out of the stream's listener
+    for (let i = 0; i < LISTS; i++) live.page('tana:event:' + i, () => ({ ownerUris: ['tana:event:' + i] }));
+    await tick();
+    assert.ok(second.closed, 'only the newest ' + LISTS + ' pages keep a list live');
+
+    live.timeline([
+      { id: 'orbital:timeline:today:x', timeline: { today: true, day: 'tana:text:day' }, children: [{ id: 'tana:text:t1' }] },
+      { id: 'orbital:timeline:edit:tana:text:t2:1', timeline: { uri: 'tana:text:t2' } },
+      { id: 'orbital:timeline:meeting:tana:event:m:1', timeline: { uri: 'tana:event:m' } },
+    ]);
+    await tick();
+    const shown = opened.at(-1);
+    assert.deepStrictEqual(shown.query.uris, ['tana:text:t1', 'tana:text:t2'], "the Timeline's tasks, its meetings left to main/timeline.js");
+    shown.onRows(rows({ added: [{ uri: 'tana:text:t1', title: 'One', state: { type: 'open' } }], initial: true }));
+    shown.onRows(rows({ changed: [{ uri: 'tana:text:t1', title: 'One', state: { type: 'closed' } }] }));
+    assert.strictEqual(moved, 3, 'a task on it ticked elsewhere: read again');
+    sync.emit('change', 'tana:text:day');
+    sync.emit('change', 'tana:pin-map:x');
+    assert.strictEqual(moved, 5, "today's node and the pins: read again");
+    live.timeline([{ id: 'orbital:timeline:edit:tana:text:t2:1', timeline: { uri: 'tana:text:t2' } }, { id: 'x', children: [{ id: 'tana:text:t1' }] }]);
+    await tick();
+    assert.strictEqual(opened.at(-1), shown, 'the same tasks: the same query');
+    sync.emit('change', 'tana:text:day');
+    assert.strictEqual(moved, 5, 'no Today stop on the page: its node is no longer followed');
+  }
   if (!bun && process.env.CI) throw new Error('CI must build the engine: install Bun (.github/workflows/checks.yml)');
   if (!bun) return console.log('ios engine check ok (the bundle skipped: no Bun)');
   const out = path.join(os.tmpdir(), 'orbital-engine-check.js');
@@ -310,7 +383,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.strictEqual(await page.orbital.connect(), true);
   const rows = JSON.parse(await page.orbital.timeline(1));
   // what the page tells the app is a string, as both phones' bridges carry it: a first part as 'part:' and its rows
-  for (const m of page.posted) assert.ok(typeof m === 'string' && (['ready', 'changed'].includes(m) || (m.startsWith('part:') && Array.isArray(JSON.parse(m.slice(5))))), 'told as a string: ' + String(m).slice(0, 80));
+  for (const m of page.posted) assert.ok(typeof m === 'string' && (['ready', 'changed'].includes(m) || /^changed:tana:/.test(m) || (m.startsWith('part:') && Array.isArray(JSON.parse(m.slice(5))))), 'told as a string: ' + String(m).slice(0, 80));
   // the graph answers nothing here, so the page is its Today's Tasks stop alone, in the shape Timeline.swift reads
   const today = rows.find((r) => r.timeline && r.timeline.today);
   assert.ok(today, 'the Timeline answers its Today stop: ' + JSON.stringify(rows).slice(0, 200));

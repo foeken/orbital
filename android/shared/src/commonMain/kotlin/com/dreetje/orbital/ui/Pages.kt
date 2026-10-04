@@ -76,6 +76,8 @@ import com.dreetje.orbital.kindOf
 import com.dreetje.orbital.names
 import com.dreetje.orbital.parseTime
 import com.dreetje.orbital.persons
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -100,13 +102,15 @@ fun NodeScreen(
     var page by remember(id) { mutableStateOf(engine.cached(id)) } // back to a page: the last read of it at once, as NavigationStack keeps it
     var error by remember(id) { mutableStateOf<String?>(null) }
     var waitingSince by remember(id) { mutableStateOf<Instant?>(null) }
+    var waitOver by remember(id) { mutableStateOf(false) } // the two minutes an answer is waited for have passed: no dots any more (ChatView)
+    var opened by remember(id) { mutableStateOf(false) } // read from the engine at least once (page may be the cached read)
     var access by remember(id) { mutableStateOf<Access?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var assigningVisibility by remember { mutableStateOf(false) }
 
     // A read keeps what is on screen when it fails, and says why only while there is nothing to show
     suspend fun load() {
-        try { page = engine.open(id); error = null } catch (e: Failure) { error = e.message }
+        try { page = engine.open(id); error = null; opened = true } catch (e: Failure) { error = e.message }
         val kind = page?.kind
         if (kind != null && kind !in listOf("chat", "search", "event")) access = engine.access(id) ?: access
     }
@@ -114,10 +118,21 @@ fun NodeScreen(
     LaunchedEffect(engine.phase, id) {
         if (engine.phase != Engine.Phase.Ready) return@LaunchedEffect
         load()
-        // A chat is read again every two seconds while it is on screen, so Tana's answer shows as it is written: the
-        // document is live in the engine, so this is a local read, not a request.
-        // ponytail: polled; have the engine call back on the chat's changes if this ever costs.
-        while ((page?.kind ?: kindOf(id)) == "chat") { delay(2000); load() }
+        // A chat that did not open yet (just started, still on its way to Tana) is tried every two seconds until it
+        // does; from then on its changes say when to read it again (below)
+        while (!opened && kindOf(id) == "chat") { delay(2000); load() }
+    }
+    // Changed in Tana, by anyone anywhere (ios/engine/live.js): read again, as the desktop's page on screen is. A chat's
+    // answer shows as it is written; a saved search or a meeting takes a row added, changed or gone.
+    val changed = engine.changes[id]
+    LaunchedEffect(changed) { if (changed != null) load() }
+    // an answer waited for two minutes at most (renderer/chat.js CHAT_WAIT): the dots go then, with nothing to read
+    val since = waitingSince ?: asked
+    LaunchedEffect(since) {
+        waitOver = false
+        if (since == null) return@LaunchedEffect
+        delay((since + 120.seconds - engine.now()).coerceAtLeast(Duration.ZERO))
+        waitOver = true
     }
     LaunchedEffect(engine.sensitiveIds) { if (page != null) load() } // marked or unmarked on another device: drawn again
     // Demo mode turned on or off with this page open: read again, and none of the words read before it shown meanwhile
@@ -134,8 +149,8 @@ fun NodeScreen(
                 current != null && hiddenPage -> Empty("Hidden", "You marked this sensitive in Orbital. Shake your phone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.", glyph = "hidden")
                 current != null -> when (current.kind) {
                     "chat" -> Column(Modifier.fillMaxSize()) {
-                        ChatView(current.rows, waitingSince ?: asked, engine, Modifier.weight(1f))
-                        // sent is sent: the read after it is the next poll's job, so a failed read never offers to send it twice
+                        ChatView(current.rows, if (waitOver) null else since, engine, Modifier.weight(1f))
+                        // sent is sent: the read after it is the chat's own change's job, so a failed read never offers to send it twice
                         Composer(engine, "Follow up", note) { text -> val sent = engine.send(text, id); waitingSince = engine.now(); load(); sent.warning }
                     }
                     "search", "event" -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {

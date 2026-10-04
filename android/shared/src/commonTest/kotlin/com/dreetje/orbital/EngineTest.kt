@@ -67,6 +67,20 @@ class EngineTest {
         assertEquals(mapOf("pages" to 1, "demo" to false), call.second)
     }
 
+    // A page opened here that changed in Tana (ios/engine/live.js 'changed:<id>'): counted for its screen (NodeScreen reads
+    // it again), and the Timeline is not read for it
+    @Test fun aPageChangedInTanaIsToldToItsScreen() = runTest {
+        val host = page()
+        val engine = ready(host)
+        val reads = host.calls.count { "orbital.timeline" in it.first }
+        host.listener!!.said("changed:tana:text:a")
+        host.listener!!.said("changed:tana:text:a")
+        runCurrent()
+        assertEquals(2, engine.changes["tana:text:a"])
+        assertNull(engine.changes["tana:text:b"])
+        assertEquals(reads, host.calls.count { "orbital.timeline" in it.first }, "a page's change is that page's to read")
+    }
+
     @Test fun signedOutShowsTanasSignIn() = runTest {
         val host = FakeHost { body, _ -> if ("orbital.connect()" in body) JsonPrimitive(false) else text("401 signed out") }
         val engine = ready(host)
