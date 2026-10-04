@@ -390,7 +390,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         adding += 1
         Task {
             defer { adding -= 1 }
-            do { _ = try await createTask(draft.title, type: draft.type, search: draft.search, assignee: draft.assignee?.id, values: draft.values) } catch {
+            do { _ = try await awake("Quick Add") { try await createTask(draft.title, type: draft.type, search: draft.search, assignee: draft.assignee?.id, values: draft.values) } } catch {
                 var kept = draft
                 kept.why = error.localizedDescription
                 unsent.append(kept)
@@ -403,7 +403,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         adding += 1
         Task {
             defer { adding -= 1 }
-            do {
+            do { try await awake("Process image") {
                 guard let image = try await load() else { throw Failure(errorDescription: "The image could not be read") }
                 // shared while Orbital was not running: Tana connects first; signed out or failed, it says so rather than waiting for ever
                 while phase != .ready {
@@ -411,8 +411,29 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                     try await Task.sleep(for: .milliseconds(200))
                 }
                 made = try await processImage(image)
-            } catch { self.error = error.localizedDescription }
+            } } catch { self.error = error.localizedDescription }
         }
+    }
+    // Left right after Add, the app asks iOS to keep it running until Tana has the task (orbital.createTask answers only
+    // then), rather than being suspended with it still on its way and losing it; iOS gives that half a minute or so
+    private func awake<T>(_ name: String, _ work: () async throws -> T) async rethrows -> T {
+        let running = Background(name)
+        defer { running.end() }
+        return try await work()
+    }
+
+    // Back in front (ContentView): a sync stream that died while iOS held the page suspended is made again first
+    // (orbital.resume), so the read that follows is not answered short, Today's Tasks empty, by a dead one
+    func foreground() async {
+        if phase == .ready, !Self.isSample { _ = try? await web.callAsyncJavaScript("return await orbital.resume()", contentWorld: .page) }
+        await refresh()
+    }
+
+    // iOS ended the page's process while the app was away (memory, or a crash): started again on a new one, the rows kept
+    // on screen until the new read lands; what was asked of the old one has failed already (an add is kept as unsent)
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        note("iOS stopped Tana's page: starting it again")
+        start()
     }
 
     // Long press, Delete (orbital.remove): to Tana's trash, then the Timeline read again; why not, when Tana says no
@@ -664,5 +685,16 @@ extension UIImage {
         let target = CGSize(width: (pixels.width * k).rounded(), height: (pixels.height * k).rounded()), format = UIGraphicsImageRendererFormat()
         format.scale = 1
         return UIGraphicsImageRenderer(size: target, format: format).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
+    }
+}
+
+// A UIKit background task (Engine.awake): begun, and ended when the work is done, or by iOS's own deadline
+@MainActor private final class Background {
+    private var id = UIBackgroundTaskIdentifier.invalid
+    init(_ name: String) { id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in MainActor.assumeIsolated { self?.end() } } }
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

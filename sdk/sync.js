@@ -110,6 +110,31 @@ class SyncConnection extends EventEmitter {
   // Subscribed and staying so: false while an unsubscribe waits for local updates to drain (getDocument still answers)
   isLive(id) { const e = this.docs.get(id); return !!e && !e.releasing; }
   stateOf(id) { const e = this.docs.get(id); return e ? e.state : null; } // 'live' once bootstrapped; anything else is on its way there
+  // Resolves once what was written to the document has gone to Tana. A document not live yet keeps its writes queued,
+  // and its bootstrap carries them (§2.1), so there is nothing to wait on here.
+  async flushed(id) {
+    const entry = this.docs.get(id);
+    while (entry && entry.state === 'live' && (entry.inflight || entry.queue.length)) await (entry.inflight || this._flush(entry));
+  }
+
+  // Back from a pause the page did not run in (the phone's app in the background, where iOS suspends the web view): a
+  // stream that has said nothing for over two heartbeats is taken for dead and made again at once, rather than when its
+  // watchdog's timer gets round to it, and a reconnect waiting out its delay goes now. Resolves true once connected,
+  // false after ms without.
+  resume(ms = 10000) {
+    if (this.closed) return Promise.resolve(false);
+    const quiet = this.connected && this.heartbeatMs > 0 && Date.now() - this.lastFrameAt > this.heartbeatMs * 2;
+    if (this.connected && !quiet) return Promise.resolve(true);
+    this._soon = true; // the next reconnect does not wait
+    if (quiet) this.abort?.abort(new Error('quiet for ' + (Date.now() - this.lastFrameAt) + ' ms after a pause, reconnecting'));
+    else this._wake?.();
+    return new Promise((resolve) => {
+      const done = (v) => { clearTimeout(t); this.off('connected', on); resolve(v); };
+      const on = () => done(true);
+      const t = setTimeout(() => done(false), ms);
+      this.on('connected', on);
+    });
+  }
 
   // `init(loro)` seeds a new document before bootstrap: the warm start turns MISSING into a create, the full
   // snapshot is the catch-up (§2.1). Without it, an unknown id fails with 'document not found'.
@@ -198,7 +223,9 @@ class SyncConnection extends EventEmitter {
         const first = await timeout(it.next(), HANDSHAKE_MS, 'sync connect handshake timed out');
         if (first.done || first.value.responseUnion.case !== 'peer') throw new Error('Expected peer info as first ServerSync frame');
         const hb = first.value.responseUnion.value.heartbeatIntervalMs;
+        this.heartbeatMs = hb;
         const arm = () => {
+          this.lastFrameAt = Date.now(); // the wall clock, which runs on while the page is paused (resume)
           clearTimeout(watchdog);
           if (hb > 0) watchdog = setTimeout(() => ac.abort(new Error('no heartbeat for ' + hb * 3 + ' ms, reconnecting')), hb * 3); // the reason is what the stream error below logs
         };
@@ -238,7 +265,8 @@ class SyncConnection extends EventEmitter {
         }
       }
       attempt = connectedAt && Date.now() - connectedAt > STABLE_MS ? 0 : attempt + 1;
-      const delay = everConnected ? jitter(1000, 30000, 2, attempt - 1) : jitter(250, 5000, 2, attempt - 1);
+      const delay = this._soon ? 0 : everConnected ? jitter(1000, 30000, 2, attempt - 1) : jitter(250, 5000, 2, attempt - 1);
+      this._soon = false;
       await new Promise((r) => { const t = setTimeout(r, delay); this._wake = () => { clearTimeout(t); r(); }; });
     }
     this.abort = null;

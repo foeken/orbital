@@ -48,7 +48,7 @@ struct ContentView: View {
         // a shake shows what is sensitive, and the next one hides it again
         .onReceive(NotificationCenter.default.publisher(for: .shake)) { _ in withAnimation { engine.reveal.toggle() } }
         .sensoryFeedback(.impact, trigger: engine.reveal)
-        .onChange(of: scene) { if scene == .active { Task { await engine.refresh() } } }
+        .onChange(of: scene) { if scene == .active { Task { await engine.foreground() } } }
     }
 }
 

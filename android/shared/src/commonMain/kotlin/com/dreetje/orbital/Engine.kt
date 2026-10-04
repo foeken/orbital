@@ -164,8 +164,8 @@ class Engine(
         error = message
     }
 
-    // Android stopped Tana's page to free memory and EngineWeb made a new one (onRenderProcessGone; the iPhone has no
-    // such moment): started again on it, the rows kept on screen until the new read lands
+    // Android stopped Tana's page to free memory and EngineWeb made a new one (onRenderProcessGone; the iPhone's
+    // webViewWebContentProcessDidTerminate): started again on it, the rows kept on screen until the new read lands
     override fun restarted(why: String) {
         note(why)
         start()
@@ -247,6 +247,14 @@ class Engine(
         // set, every refresh after it only said "again" and the Timeline never moved
         try { read() } finally { loading = false }
         if (again) { again = false; refresh() }
+    }
+
+    // Back in front (MainActivity onResume): a sync stream that died while the app was away is made again first
+    // (orbital.resume), so the read that follows is not answered short, Today's Tasks empty, by a dead one
+    suspend fun foreground() {
+        val host = host
+        if (phase == Phase.Ready && !isSample && host != null) maybe { host.run("return await orbital.resume()") }
+        refresh()
     }
 
     private suspend fun read() {

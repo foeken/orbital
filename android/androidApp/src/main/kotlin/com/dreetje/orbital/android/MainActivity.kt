@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
         shake.on()
         // shared to Orbital, should it have been left meanwhile (Shell.swift's scene .active: Shared.take())
         holder.viewModelScope.launch { Handoff.take(applicationContext)?.let { holder.engine.shared = it } }
-        holder.viewModelScope.launch { holder.engine.refresh() } // back in front: the Timeline read again
+        holder.viewModelScope.launch { holder.engine.foreground() } // back in front: the Timeline read again, on a live stream
     }
 
     override fun onPause() {
