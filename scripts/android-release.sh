@@ -76,11 +76,12 @@ badging=$("$tools/aapt2" dump badging "$apk")
 echo "$badging" | grep -q "^package: name='com.dreetje.orbital' versionCode='$code' versionName='$version'" \
   || { echo "android: the APK is not com.dreetje.orbital $version ($code): $(echo "$badging" | head -1)"; exit 1; }
 if echo "$badging" | grep -q 'application-debuggable'; then echo "android: the APK is debuggable"; exit 1; fi
-# every widget is offered on the home screen (widgetCategory has home_screen, 0x1): the first release APK offered the
-# Timeline's two on a Flip's cover screen only, so other phones listed Today's Tasks alone (the debug build had them)
+# every widget is offered on every screen (widgetCategory home_screen 0x1 and keyguard 0x2: the lock screen and a Flip's
+# cover screen): the first release APK offered the Timeline's two on the cover screen only and Today's Tasks on the home
+# screen only, so a phone's home screen listed Today's Tasks alone (the debug build had more)
 for xml in $("$tools/aapt2" dump resources "$apk" | awk '/ xml\/[a-z_]*_widget$/ { getline; print $3 }'); do
   category=$("$tools/aapt2" dump xmltree --file "$xml" "$apk" | sed -n 's/.*widgetCategory([^)]*)=0x//p')
-  [ -n "$category" ] && [ $((0x$category & 1)) = 1 ] || { echo "android: a widget ($xml) is not offered on the home screen"; exit 1; }
+  [ -n "$category" ] && [ $((0x$category & 3)) = 3 ] || { echo "android: a widget ($xml) is not offered on both the home screen and the lock or cover screen"; exit 1; }
 done
 cp "$apk" "$out"
 if [ "$mode" = --self-test ]; then echo "android: self-test ok: Orbital $version ($code) built, signed with the debug key (test-only) and read back; a debug key and an unpinned key are refused"

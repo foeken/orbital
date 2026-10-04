@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Today's Tasks on the home screen (Widgets.kt TodayWidget): 4 by 2 cells to start, resized either way; drawn again
-     every half hour, besides every read the app makes -->
+<!-- Today's Tasks (Widgets.kt TodayWidget), on every screen a widget can go: the home screen, 4 by 2 cells to start and
+     resized either way (targetCell, minResize), and the lock screen or a Galaxy Z Flip's cover screen, the Flex Window,
+     at the size Samsung asks for (minWidth, minHeight; developer.samsung.com/galaxy-z/flex_window.html, with
+     flex_window.xml in the manifest); drawn again every half hour, besides every read the app makes -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/today_widget"
     android:initialLayout="@layout/glance_default_loading_layout"
-    android:minWidth="250dp"
-    android:minHeight="110dp"
+    android:minWidth="352dp"
+    android:minHeight="339dp"
     android:targetCellWidth="4"
     android:targetCellHeight="2"
     android:minResizeWidth="180dp"
     android:minResizeHeight="110dp"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen|keyguard" />
