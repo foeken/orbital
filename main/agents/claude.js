@@ -84,14 +84,17 @@ async function inTerminal(command) {
   if (failed) throw new Error(failed);
 }
 
+// A task that only answers (a chat question) runs without the tools that change anything on this Mac, refused by
+// Claude Code itself whatever the user's own settings allow.
+const CHANGES = ['Bash', 'Edit', 'Write', 'NotebookEdit'];
 const claude = agent.register({
   // local: a session lives in this Mac's ~/.claude only, so its link names this Mac (main/agent.js setTask)
   id: 'claude', label: 'Claude', icon: 'robot', missing: 'Install Claude Code', local: true,
   available: () => !!claudeBin(),
-  async start({ nodeUri, title, prompt, rules }) {
+  async start({ nodeUri, title, prompt, rules, readOnly }) {
     const id = require('node:crypto').randomUUID();
     const name = agent.oneLine(title, 60);
-    await runDetached(['--session-id', id, ...(name ? ['-n', 'Tana: ' + name] : []), ...(rules ? ['--append-system-prompt', rules] : [])], nodeUri ? agent.agentPrompt(nodeUri, title) : prompt);
+    await runDetached(['--session-id', id, ...(name ? ['-n', 'Tana: ' + name] : []), ...(rules ? ['--append-system-prompt', rules] : []), ...(readOnly ? ['--disallowedTools', ...CHANGES] : [])], nodeUri ? agent.agentPrompt(nodeUri, title, prompt) : prompt);
     return id;
   },
   async resume(taskId, prompt) { if (prompt) await runDetached(['--resume', taskId], prompt); },

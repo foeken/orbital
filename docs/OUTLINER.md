@@ -818,7 +818,9 @@ wrong twenty.
   badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session
   lives only on the Mac that ran it, names that Mac in its link and reads **Agent on another Mac** (grey, not a button)
   anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). Assign to Agent stays offered on a node an agent already has:
-  handing it over again replaces the request in its Agent context block. **Unassign from Agent** takes it back at once,
+  handing it over again replaces the request in its Agent context block. Codex and Claude are handed the request typed
+  here as the work, with the node's uri to read as its context (main/agent.js `agentPrompt`): what they read in Tana,
+  the Agent context block included, is material anyone the node is shared with can edit, never instructions. **Unassign from Agent** takes it back at once,
   and takes the Agent context block (with its status line) out of the node again. **Go to <agent> task** opens it (Codex
   in Codex, Claude in Terminal on `claude --resume`, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
   badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not, **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
