@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -88,7 +89,7 @@ private fun AgentRow(engine: Engine, a: Agent) {
         GroupRow(Modifier.background(c.card)) {
             Glyph("robot", Modifier.size(22.dp), c.text)
             Text(a.name, Modifier.weight(1f), color = c.text)
-            Text(listOf(a.app, if (a.isDefault) "Default" else "", if (a.on) "" else "Off").filter { it.isNotEmpty() }.joinToString(" · "), color = c.secondary, maxLines = 1)
+            Text(listOf(if (a.isDefault) "Default" else "", if (a.on) "" else "Off").filter { it.isNotEmpty() }.joinToString(" · "), color = c.secondary, maxLines = 1)
         }
     }
 }
@@ -117,7 +118,7 @@ fun ConnectDot(engine: Engine, back: () -> Unit) {
             val s = maybe { engine.linkStatus(code) } ?: continue // a missed answer: the next one asks again
             val a = s.agent
             if (s.state == "linked" && a != null) {
-                linked = listOfNotNull(a.name, a.app?.takeIf { it.isNotEmpty() }).joinToString(" · ")
+                linked = a.name
                 state = "linked"
                 engine.loadAgents()
                 delay(1200)
@@ -169,7 +170,8 @@ fun ConnectDot(engine: Engine, back: () -> Unit) {
                                 Text("Waiting for your Dot to use the code…", Modifier.weight(1f), color = c.secondary)
                                 Text(left(l.expiresAt, now), color = c.secondary)
                             }
-                            GroupRow(last = true, onClick = { engine.scope.launch { engine.linkCancel(l.code) }; back() }) { Text("Cancel", color = c.danger) }
+                            // a glyph's column, as the rows above, so the words line up
+                            GroupRow(last = true, onClick = { engine.scope.launch { engine.linkCancel(l.code) }; back() }) { Icon(Icons.Outlined.Close, null, Modifier.size(20.dp), c.danger); Text("Cancel", color = c.danger) }
                         }
                     }
                 }

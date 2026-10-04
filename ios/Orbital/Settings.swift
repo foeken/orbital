@@ -20,7 +20,6 @@ struct SettingsView: View {
                 Section {
                     if let chatgpt {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
-                        if let plan = chatgpt.plan { LabeledContent { Text(plan.capitalized) } label: { Row(glyph: "license", title: "Plan") } }
                         if !models.isEmpty {
                             NavigationLink { Models(engine: engine, models: models) } label: {
                                 LabeledContent { Text(["quickModel", "model"].map { ChatGPT.label(engine.translator.ai[$0] ?? "") }.joined(separator: ", ")) } label: { Row(glyph: "brain", title: "Models") }

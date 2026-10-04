@@ -14,11 +14,12 @@ struct AgentsSection: View {
     var body: some View {
         Section {
             ForEach(engine.agents) { a in
-                LabeledContent { Text([a.app, a.isDefault ? "Default" : nil, a.on ? nil : "Off"].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")) } label: {
+                LabeledContent { Text([a.isDefault ? "Default" : nil, a.on ? nil : "Off"].compactMap { $0 }.joined(separator: " · ")) } label: {
                     SettingsView.Row(glyph: "robot", title: a.name)
                 }
+                // their own colours: the Form's tint (the rows' text colour) would draw them white on white
                 .swipeActions(edge: .trailing) {
-                    Button("Unlink", role: .destructive) { Task { await engine.unlink(a) } }
+                    Button("Unlink", role: .destructive) { Task { await engine.unlink(a) } }.tint(.red)
                 }
                 .swipeActions(edge: .leading) {
                     if !a.isDefault { Button("Make Default") { Task { await engine.makeDefault(a) } }.tint(.blue) }
@@ -74,9 +75,16 @@ struct ConnectDot: View {
                             Button("Get a new code") { Task { await ask() } }
                         } else {
                             TimelineView(.periodic(from: .now, by: 1)) { _ in
-                                HStack { ProgressView(); Text("Waiting for your Dot to use the code…").foregroundStyle(.secondary); Spacer(); Text(Self.left(link.expiresAt)).monospacedDigit().foregroundStyle(.secondary) }
+                                // a glyph's column, as the rows above, so the words line up
+                                HStack {
+                                    Label { Text("Waiting for your Dot to use the code…").foregroundStyle(.secondary) } icon: { ProgressView() }
+                                    Spacer()
+                                    Text(Self.left(link.expiresAt)).monospacedDigit().foregroundStyle(.secondary)
+                                }
                             }
-                            Button("Cancel", role: .destructive) { Task { await engine.linkCancel(link.code); dismiss() } }
+                            Button(role: .destructive) { Task { await engine.linkCancel(link.code); dismiss() } } label: {
+                                Label("Cancel", systemImage: "xmark.circle").foregroundStyle(.red)
+                            }
                         }
                     }
                 }
@@ -111,7 +119,7 @@ struct ConnectDot: View {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled, let s = try? await engine.linkStatus(code) else { continue } // a missed answer: the next one asks again
             if s.state == "linked", let a = s.agent {
-                linked = [a.name, a.app].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+                linked = a.name
                 state = "linked"
                 _ = await engine.loadAgents()
                 try? await Task.sleep(for: .seconds(1.2))

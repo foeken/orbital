@@ -78,8 +78,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                     val a = account
                     if (a == null) GroupRow(last = true, onClick = { signingIn = true }) { Label("chatgpt", "Sign in with ChatGPT") }
                     else {
-                        GroupRow(last = a.plan == null && models.isEmpty()) { Label("chatgpt", "Account"); Text(a.email ?: "ChatGPT", color = c.secondary) }
-                        a.plan?.let { GroupRow(last = models.isEmpty()) { Label("license", "Plan"); Text(it.replaceFirstChar { ch -> ch.uppercase() }, color = c.secondary) } }
+                        GroupRow(last = models.isEmpty()) { Label("chatgpt", "Account"); Text(a.email ?: "ChatGPT", color = c.secondary) }
                         if (models.isNotEmpty()) GroupRow(last = true, onClick = { showModels = true }) {
                             Label("brain", "Models")
                             Text(listOf("quickModel", "model").joinToString(", ") { ChatGPT.label(engine.translator.ai[it] ?: "") }, color = c.secondary, maxLines = 1)
