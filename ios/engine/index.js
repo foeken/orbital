@@ -460,6 +460,13 @@ window.orbital = {
     order.splice(0, order.length, ...order.filter((_, i) => tasks[i]));
     return JSON.stringify(await Promise.all(order.map(async (n) => ({ ...listRow(n), glyph: await iconPng(chosen[n.id]).catch(() => null) }))));
   },
+  // Siri and Shortcuts' List Tasks and their task lookup (Intents.swift, Engine.swift keepTasks): the tasks assigned to
+  // you in every state, the last changed first, marked sensitive and masked in demo mode as every list here is
+  async tasks() {
+    await settled();
+    const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['text'], stateTypes: STATE_TYPES, assignedTo: [S.me.userUri], limit: 300, sortOptions: newest });
+    return JSON.stringify(redact(nodes.map(listRow)));
+  },
   // Long press, Delete: to Tana's trash, as the desktop deletes (main/documents.js documentAction), where you may
   async remove(id) {
     const doc = await hold(id);

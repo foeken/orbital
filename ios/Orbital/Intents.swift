@@ -5,17 +5,43 @@ import CoreSpotlight
 // in a shortcut: add a task (pinned to today or not), check one off or uncheck it, pin or unpin it, open it, and hear
 // today's. Tana is written by the engine, which runs in the app (Engine.swift), so whatever changes a task opens Orbital
 // with the orbital: links the widgets use (Shell.swift onOpenURL) and the app writes it as soon as Tana is connected.
-// What is known without the app is what it last saved for the widgets (Engine.keepGlimpse): today's tasks and the
-// Timeline's, a sensitive one without its words. Android offers the same to Gemini (OrbitalFunctions.kt).
+// What is known without the app is what it last saved: for the widgets, today's tasks and the Timeline's
+// (Engine.keepGlimpse), and for Siri, the tasks assigned to you in every state (Engine.keepTasks); a sensitive one
+// without its words. List Tasks answers from those. The Android app has no counterpart yet (issue #723).
 
 struct TaskEntity: AppEntity, IndexedEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Task"
     static let defaultQuery = TaskQuery()
     let id: String
     let title: String
-    let done: Bool
+    let state: String // proposed, open, not_now or closed: Inbox, In Progress, Later or Completed
+    var done: Bool { state == "closed" }
     var displayRepresentation: DisplayRepresentation {
-        done ? DisplayRepresentation(title: "\(title)", subtitle: "Completed") : DisplayRepresentation(title: "\(title)")
+        DisplayRepresentation(title: "\(title)", subtitle: "\(TaskStatus.named(state))")
+    }
+}
+
+// What List Tasks shows: everything but what is completed unless you ask, or one state of Tana's
+enum TaskStatus: String, AppEnum {
+    case notDone, inbox, inProgress, later, completed, all
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Status"
+    static let caseDisplayRepresentations: [TaskStatus: DisplayRepresentation] = [
+        .notDone: DisplayRepresentation(title: "Not completed", synonyms: ["open", "to do", "unfinished"]),
+        .inbox: "Inbox", .inProgress: DisplayRepresentation(title: "In Progress", synonyms: ["accepted"]),
+        .later: "Later", .completed: DisplayRepresentation(title: "Completed", synonyms: ["done", "finished"]), .all: "All",
+    ]
+    func includes(_ state: String) -> Bool {
+        switch self {
+        case .notDone: state != "closed"
+        case .inbox: state == "proposed"
+        case .inProgress: state == "open"
+        case .later: state == "not_now"
+        case .completed: state == "closed"
+        case .all: true
+        }
+    }
+    static func named(_ state: String) -> String {
+        switch state { case "proposed": "Inbox"; case "not_now": "Later"; case "closed": "Completed"; default: "In Progress" }
     }
 }
 
@@ -29,13 +55,15 @@ struct TaskQuery: EntityStringQuery {
     func suggestedEntities() async throws -> [TaskEntity] { Tasks.known() }
 }
 
-// The tasks the app last saved for the widgets: today's first, then the rest of the Timeline's, each once. A sensitive
-// task is there without its words, so it is named only as one, and kept out of Spotlight.
+// The tasks the app last saved: today's first, then the rest of the Timeline's, then the rest of yours, each once (the
+// widgets' copy is the fresher, so it is read first). A sensitive task is there without its words, so it is named only
+// as one, and kept out of Spotlight.
 enum Tasks {
     private struct Saved: Decodable { let rows: [Row] }
     private static func saved() -> [Row]? { Keychain.load("glimpse").flatMap { try? JSONDecoder().decode(Saved.self, from: $0).rows } }
+    private static func yours() -> [Row]? { Keychain.load("tasks").flatMap { try? JSONDecoder().decode([Row].self, from: $0) } }
     private static func entity(_ row: Row) -> TaskEntity {
-        TaskEntity(id: row.id, title: row.sensitive == true ? "Sensitive task" : row.words, done: row.stateType == "closed")
+        TaskEntity(id: row.id, title: row.sensitive == true ? "Sensitive task" : row.words, state: row.stateType ?? "open")
     }
     private static func isTask(_ row: Row) -> Bool { row.id.hasPrefix("tana:text:") && row.stateType != nil }
 
@@ -49,7 +77,13 @@ enum Tasks {
         let rows = saved() ?? []
         walk(rows.filter { $0.timeline?.today == true })
         walk(rows)
+        walk(yours() ?? [])
         return out
+    }
+    // nil before the app has saved any
+    static func listed(_ status: TaskStatus) -> [TaskEntity]? {
+        guard saved() != nil || yours() != nil else { return nil }
+        return known().filter { status.includes($0.state) }
     }
 
     // Spotlight finds what the widgets show, once it changes; nothing sensitive, and nothing at all in Demo mode or once
@@ -57,7 +91,7 @@ enum Tasks {
     private static var indexed: [String] = []
     static func index(demo: Bool) async {
         let shown = demo ? [] : known().filter { $0.title != "Sensitive task" }
-        let key = shown.map { $0.id + ($0.done ? "+" : "-") + $0.title }
+        let key = shown.map { $0.id + $0.state + $0.title }
         guard key != indexed else { return }
         indexed = key
         try? await CSSearchableIndex.default().deleteAppEntities(ofType: TaskEntity.self)
@@ -134,6 +168,24 @@ struct TodaysTasksIntent: AppIntent {
     }
 }
 
+// Your tasks, filtered by status (all but the completed ones unless you ask), said and handed on without opening the
+// app: as it last read them
+struct ListTasksIntent: AppIntent {
+    static let title: LocalizedStringResource = "List Tasks"
+    static let description = IntentDescription("Lists your tasks by status, as Orbital last read them: all but the completed ones, unless you choose.")
+    static let supportedModes: IntentModes = .background
+    @Parameter(title: "Status", default: .notDone) var status: TaskStatus
+    static var parameterSummary: some ParameterSummary { Summary("List \(\.$status) tasks") }
+
+    func perform() async throws -> some IntentResult & ReturnsValue<[TaskEntity]> & ProvidesDialog {
+        guard let tasks = Tasks.listed(status) else { return .result(value: [], dialog: "Open Orbital once, so it can read your tasks.") }
+        let names = tasks.map { $0.title == "Sensitive task" ? "a sensitive task" : $0.title }
+        let said = tasks.isEmpty ? "No tasks there."
+            : "\(tasks.count) \(tasks.count == 1 ? "task" : "tasks"): " + (names.count > 8 ? Array(names.prefix(8)) + ["\(names.count - 8) more"] : names).formatted(.list(type: .and)) + "."
+        return .result(value: tasks, dialog: "\(said)")
+    }
+}
+
 // what Siri knows to say, with no shortcut set up first
 struct OrbitalShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
@@ -141,9 +193,10 @@ struct OrbitalShortcuts: AppShortcutsProvider {
                     shortTitle: "Add Task", systemImageName: "plus.circle")
         AppShortcut(intent: TodaysTasksIntent(), phrases: ["What's on today in \(.applicationName)", "Today's tasks in \(.applicationName)"],
                     shortTitle: "Today's Tasks", systemImageName: "checklist")
+        AppShortcut(intent: ListTasksIntent(), phrases: ["List my tasks in \(.applicationName)", "List my \(\.$status) tasks in \(.applicationName)"],
+                    shortTitle: "List Tasks", systemImageName: "list.bullet")
         AppShortcut(intent: CheckTaskIntent(), phrases: ["Check off \(\.$task) in \(.applicationName)", "Check off a task in \(.applicationName)"],
                     shortTitle: "Check Off Task", systemImageName: "checkmark.circle")
         AppShortcut(intent: OpenTaskIntent(), phrases: ["Open \(\.$target) in \(.applicationName)"], shortTitle: "Open Task", systemImageName: "arrow.up.forward.app")
     }
 }
-

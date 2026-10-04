@@ -236,6 +236,10 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   assert.strictEqual(today.timeline.time, 'Now', 'the Today stop keeps its own time through labels.js');
   assert.ok(page.calls.some((c) => c.includes('GraphService/ListNodes')), 'the Timeline asks the graph');
   assert.strictEqual(page.orbital.email(), 'a@b.c');
+  // Siri's List Tasks (Engine.swift keepTasks): the tasks assigned to you, asked of the graph in every state
+  const asked = page.calls.length;
+  assert.deepStrictEqual(JSON.parse(await page.orbital.tasks()), []);
+  assert.ok(page.calls.slice(asked).some((c) => c.includes('GraphService/ListNodes')), 'List Tasks asks the graph');
   fs.rmSync(out, { force: true });
   console.log('ios engine check ok');
   process.exit(0); // the fake sync stream keeps retrying
