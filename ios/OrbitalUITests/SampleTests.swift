@@ -109,6 +109,22 @@ final class SampleTests: XCTestCase {
         sheet.buttons["Cancel"].tap()
     }
 
+    // The keyboard goes away once a title is typed: choosing a type puts it away, the details under it in reach, and
+    // Return adds the task as Done does on Android (a vertical TextField took it as a new line, and the keyboard stayed)
+    func testQuickAddPutsTheKeyboardAway() {
+        app.buttons["Quick Add Task"].tap()
+        let sheet = app.navigationBars["Quick Add"]
+        XCTAssert(sheet.waitForExistence(timeout: 15))
+        app.textFields["New task"].tap()
+        app.textFields["New task"].typeText("Call the venue")
+        XCTAssert(app.keyboards.firstMatch.exists)
+        app.buttons["Task"].firstMatch.tap()
+        XCTAssert(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "choosing a type puts the keyboard away")
+        app.descendants(matching: .any).matching(NSPredicate(format: "value == %@", "Call the venue")).firstMatch.tap()
+        app.typeText("\n")
+        XCTAssert(sheet.waitForNonExistence(timeout: 15), "Return adds the task")
+    }
+
     // Siri and Shortcuts' Add Task (Intents.swift) opens orbital:new, and the app makes the task at once; one Tana did not
     // take (the sample saves nothing) is back in the next Quick Add as it was asked for, pinned to today included. The link
     // comes in as -open: one opened from outside the app asks first whether to open Orbital, which the test would wait on.

@@ -42,7 +42,7 @@ struct QuickAdd: View {
                 }
                 Section {
                     ForEach([Engine.TaskType(uri: nil, title: "Task")] + types) { t in
-                        Button { type = t.uri } label: {
+                        Button { type = t.uri; focused = false } label: { // the keyboard put away, the details under it in reach
                             HStack {
                                 Label { Text(t.title) } icon: { Image(t.task == false ? "Glyphs/doc" : "Glyphs/task").resizable().frame(width: 20, height: 20) }
                                 Spacer()
@@ -77,6 +77,7 @@ struct QuickAdd: View {
             }
             .tint(.primary)
             .disabled(settling)
+            .scrollDismissesKeyboard(.interactively) // a swipe through the form tucks the keyboard away, as the Timeline's
             .safeAreaInset(edge: .bottom) {
                 if let failure { Text(failure).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar) }
             }
@@ -89,6 +90,12 @@ struct QuickAdd: View {
                 }
             }
             .onSubmit { Task { await add() } }
+            // Return in the title adds the task, as Done on Android: a vertical TextField takes it as a new line and never
+            // submits, so the keyboard stayed up
+            .onChange(of: title) { old, new in
+                guard focused, new.count == old.count + 1, new.filter(\.isNewline).count > old.filter(\.isNewline).count else { return }
+                title = old; Task { await add() }
+            }
             .task(id: type) { // the chosen type's fields, with the saved search's values when it is its type
                 let found = if let type { await engine.typeFields(type) } else { [Engine.Field]() }
                 guard !Task.isCancelled else { return } // another type chosen meanwhile: its own read sets them

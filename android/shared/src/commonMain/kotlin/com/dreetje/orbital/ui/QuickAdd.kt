@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -91,6 +92,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
     DisposableEffect(Unit) { onDispose { dictation.cancel() } } // closed or rotated while listening: the microphone stops
     var taken by rememberSaveable { mutableStateOf(false) } // what was shared or not added is read once, not again after a rotation
     val focus = remember { FocusRequester() }
+    val keyboard = LocalFocusManager.current
     val hasClip = remember { engine.platform.hasClipboardImage() }
     // a task is assigned; a document of a type without a workflow (a Goal) is not
     val isTask = type?.let { t -> types.firstOrNull { it.uri == t } }?.task != false
@@ -180,7 +182,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
                     val all = listOf(TaskType(null, "Task")) + types
                     Group("Type", footer = preset?.takeIf { type == it.uri && it.fields.isNotEmpty() }?.let { "With the " + (if (it.fields.size == 1) "value" else "values") + " this saved search sets." }) {
                         all.forEachIndexed { i, t ->
-                            GroupRow(last = i == all.size - 1, selected = type == t.uri, onClick = { type = t.uri }) {
+                            GroupRow(last = i == all.size - 1, selected = type == t.uri, onClick = { type = t.uri; keyboard.clearFocus() }) { // the keyboard put away, the details under it in reach
                                 Glyph(if (t.task == false) "doc" else "task", Modifier.size(20.dp), c.text)
                                 Text(t.title, Modifier.weight(1f), color = c.text)
                                 if (type == t.uri) Icon(Icons.Filled.Check, null, Modifier.size(20.dp), c.accent)
