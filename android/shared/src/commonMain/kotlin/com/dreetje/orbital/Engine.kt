@@ -441,7 +441,7 @@ class Engine(
         } catch (e: Failure) { error = e.message }
     }
 
-    suspend fun access(id: String): Access? = if (isSample) null else maybe { call<Access>("return await orbital.access(id)", mapOf("id" to id)) }
+    suspend fun access(id: String): Access? = if (isSample) pagesSample?.access?.get(id) else maybe { call<Access>("return await orbital.access(id)", mapOf("id" to id)) }
 
     // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, linking one with a code as the
     // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back

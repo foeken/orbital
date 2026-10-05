@@ -395,8 +395,10 @@ struct FieldLine: ViewModifier {
 }
 
 extension Engine.Access {
-    // renderer/tasks.js AUDIENCES: the scope's glyph and its word, a space by its name
-    static func label(_ scope: String, _ space: String?) -> some View {
+    // renderer/tasks.js AUDIENCES: the scope's glyph and its word, a space by its name; the glyph close to its word, as
+    // Android's AudienceLabel draws it (a Label in a List row puts its glyph in the list's icon column, far from the
+    // word, #753), and read by VoiceOver as the word alone
+    static func label(_ scope: String, _ space: String?, glyphs: Bool = true) -> some View {
         let (word, glyph) = switch scope {
         case "only-me": ("Only you", "lock")
         case "people": ("Selected people", "userLock")
@@ -404,7 +406,11 @@ extension Engine.Access {
         case "everyone": ("Everyone", "users")
         default: ("Unknown", "hidden")
         }
-        return Label { Text(word) } icon: { Image("Glyphs/" + glyph).resizable().frame(width: 18, height: 18) }.foregroundStyle(.secondary)
+        return HStack(spacing: 6) {
+            if glyphs { Image("Glyphs/" + glyph).resizable().frame(width: 18, height: 18).accessibilityHidden(true) }
+            Text(word)
+        }
+        .foregroundStyle(.secondary)
     }
 }
 
@@ -456,7 +462,7 @@ struct VisibilitySheet: View {
         HStack {
             Label { Text(title) } icon: { Image("Glyphs/" + glyph).resizable().frame(width: 20, height: 20) }
             Spacer()
-            if let detail { Engine.Access.label(detail.scope, detail.space).labelStyle(.titleOnly) }
+            if let detail { Engine.Access.label(detail.scope, detail.space, glyphs: false) }
             if on { Image(systemName: "checkmark").fontWeight(.semibold) }
         }
         .accessibilityAddTraits(on ? .isSelected : [])

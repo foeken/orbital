@@ -443,7 +443,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         // the rule it is shared by now, as the visibility picker ticks it
         var rule: String { !restricted ? "inherit" : participants.isEmpty ? "me" : "people" }
     }
-    func access(_ id: String) async -> Access? { Self.isSample ? nil : try? await call("return await orbital.access(id)", ["id": id]) }
+    func access(_ id: String) async -> Access? {
+        if let s = Self.sample { return s.access?[id] } // -sample: the invented audiences of pages-sample.json
+        return try? await call("return await orbital.access(id)", ["id": id])
+    }
     func share(_ id: String, _ rule: String, _ uris: [String] = [], token: String? = nil) async {
         await act("return await orbital.share(id, rule, uris, token)", ["id": id, "rule": rule, "uris": uris, "token": token ?? NSNull()])
     }
@@ -646,7 +649,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // -sample: pages-sample.json in place of Tana for these pages, invented content only
-    private struct Sample: Decodable { let searches: [Row]; let pages: [String: Page] }
+    private struct Sample: Decodable { let searches: [Row]; let pages: [String: Page]; let access: [String: Access]? }
     private static let sample: Sample? = isSample
         ? Bundle.main.url(forResource: "pages-sample", withExtension: "json").flatMap { try? JSONDecoder().decode(Sample.self, from: Data(contentsOf: $0)) } : nil
 
