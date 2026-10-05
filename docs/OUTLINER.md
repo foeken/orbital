@@ -1082,6 +1082,11 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   On a Timeline row (under the caret, right-clicked, or the one selected) it is the link of the node the row is
   about — the meeting, the task someone completed — since the row is the Timeline's own (renderer/timeline.js
   `timelineUriAt`).
+  On a meeting, with Cmd+K open, **Copy link to notes** and **Copy link to summary** follow it (`meetingLinkRows`,
+  rank `copyLink`, no id of their own): your private notes (`meetingNotes`, found and never made) and the write-up
+  (`summaryUri`), asked once per open (`loadMeetingLinks`) with the meeting's time. The notes row is left out once the
+  meeting has finished with no notes, the summary row while it has not started and has no write-up; a row whose
+  document does not exist yet is greyed with why, and both say Checking… until Tana has answered.
   **Open in Tana** (`openInTana`, the Tana glyph) opens that url in Tana's web app, and on a meeting or its write-up
   **Join call** (`joinCall`, `callRow`) opens its call link, the readable link as the row's hint.
 

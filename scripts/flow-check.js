@@ -363,6 +363,28 @@ flow('Copy link on a Timeline meeting copies the meeting', async (p) => {
   assert.equal(await p.js('window.__copied'), await p.js('tana.nodeLink(' + J(uri) + ')'), 'Copy link copied the meeting\u2019s link');
   await p.key('esc');
 });
+// 8b. Copy link on a meeting's page: the meeting, your notes and its summary, each while it exists or may still come
+flow('Copy link on a meeting offers the meeting, your notes and its summary', async (p) => {
+  await p.start({ real: true }); // Copy link needs a real id
+  await p.js('window.copyText = (text) => { window.__copied = text; }');
+  const links = async (id) => {
+    await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 300);
+    await p.key('\u2318K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type('copy link');
+    await p.waitFor('palRows.some((r) => r.label === "Copy link") && palRows.some((r) => r.label === "Copy link to notes" || r.label === "Copy link to summary") && !palRows.some((r) => r.hint === "Checking\u2026")', 'the meeting\u2019s links');
+    const rows = await p.js('palRows.filter((r) => /^Copy link/.test(r.label)).map((r) => r.label + (r.disabled ? " (" + r.hint + ")" : ""))');
+    return rows;
+  };
+  assert.deepEqual(await links('tana:event:mockmeeting4'), ['Copy link', 'Copy link to notes (No notes yet)', 'Copy link to summary'], 'tomorrow, written up: notes to come, the summary');
+  await p.js('palRows.find((r) => r.label === "Copy link to summary").run()');
+  await p.waitFor('window.__copied', 'the link copied');
+  assert.equal(await p.js('window.__copied'), await p.js('tana.nodeLink("tana:text:mockwriteup4")'), 'the summary\u2019s link');
+  await closePalette(p);
+  assert.deepEqual(await links('tana:event:mockmeeting5'), ['Copy link', 'Copy link to notes'], 'in three days, with notes: no summary yet');
+  await closePalette(p);
+  assert.deepEqual(await links('tana:event:mockmeeting1'), ['Copy link', 'Copy link to summary (No summary yet)'], 'two days ago, nothing written: no notes row');
+  await closePalette(p);
+  assert.equal(await p.js('__notes.made'), 0, 'asking made no notes');
+});
 // 9. The Settings window (settings.html): each control makes its call, an answer older than a newer one is dropped
 // (#673 review), the keyboard stays on the control that had it, and demo mode masks your email and hidden titles
 const SETTINGS_API = String.raw`(() => {

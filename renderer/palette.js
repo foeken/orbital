@@ -6,6 +6,7 @@ const palette = $('palette'), palInput = $('paletteInput'), palText = $('palette
 let palMode = 'cmd', palPage = {}, palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: { create, where }, applied when the rows land
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
+let meetingLinks = null; // Copy link's meeting as last read: { id, pending, notes, summary, start, end }, reset at every open
 let meetingList = null, pinMeetingDoc = null; // the meeting picker: loadList's answer, and the node being pinned
 let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
@@ -210,7 +211,11 @@ function paletteRows(q, typed = q) {
   // the node's web link, for pasting into Slack or a doc; on a Timeline row, the link of the node it is about
   const tlUri = timelineUriAt(), linkId = tlUri || (palDoc && isRealId(palDoc.id) ? palDoc.id : null);
   if (linkId && tana.nodeLink) {
-    rows.push({ id: 'copyLink', group: tlUri && selKeys().length ? 'Selection' : docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(linkId), 'Link copied')) });
+    const group = tlUri && selKeys().length ? 'Selection' : docGroup;
+    // on a meeting, with ⌘K open: its notes and its summary too (meetingLinkRows); a key with it closed copies the meeting
+    const meeting = !palette.hidden && tana.meetingNotes && tana.summaryUri && tana.meetingInfo && (/^tana:event:/.test(linkId) || (palDoc && palDoc.id === linkId && palDoc.icon === 'meeting'));
+    rows.push({ id: 'copyLink', group, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(linkId), 'Link copied')) });
+    if (meeting) rows.push(...meetingLinkRows(loadMeetingLinks(linkId), group));
   }
   // the node in Tana's own web app (what Show in Tana in the Graph pane's Details did)
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ id: 'openInTana', group: docGroup, icon: 'tana', label: 'Open in Tana', run: () => run(async () => tana.openExternal(await tana.nodeLink(doc.id))) }); }
@@ -737,6 +742,32 @@ function loadMeeting() {
   tana.currentMeeting().then((meeting) => { meetingNow = { meeting }; }, (e) => { meetingNow = { meeting: null, error: (e && e.message) || String(e) }; })
     .then(() => { if (palMode === 'cmd' && !palette.hidden) renderPalette(); });
 }
+// Copy link on a meeting: your notes on it (found, never made: main/meeting-notes.js), its summary (the write-up,
+// main/related.js summaryUri) and its time, asked once per open of ⌘K. A lookup that fails reads as none.
+function loadMeetingLinks(id) {
+  if (meetingLinks && meetingLinks.id === id) return meetingLinks;
+  const mine = meetingLinks = { id, pending: true }, none = () => null;
+  Promise.all([
+    tana.meetingNotes(id).then((a) => (a && a.id && a.owner === myUri() ? a.id : null), none), // another account's are not yours (askNotes)
+    tana.summaryUri(id).catch(none),
+    tana.meetingInfo(id).catch(none),
+  ]).then(([notes, summary, info]) => {
+    Object.assign(mine, { pending: false, notes, summary: summary || null, start: info && info.start, end: info && info.end });
+    if (meetingLinks === mine && palMode === 'cmd' && !palette.hidden) renderPalette();
+  });
+  return mine;
+}
+// The notes are offered until the meeting has finished, or once there are some; the summary once it has started, or
+// once Tana has written one. Offered before the document exists, the row says so and copies nothing.
+function meetingLinkRows(m, group, now = Date.now()) {
+  const at = (t) => (t ? new Date(t).getTime() : NaN);
+  const row = (label, uri, hint) => ({ rank: 'copyLink', group, icon: 'link', label, hint: uri ? '' : hint, disabled: !uri, run: () => run(async () => copyText(await tana.nodeLink(uri), 'Link copied')) });
+  if (m.pending) return [row('Copy link to notes', null, 'Checking\u2026'), row('Copy link to summary', null, 'Checking\u2026')];
+  return [
+    ...(m.notes || !(at(m.end) <= now) ? [row('Copy link to notes', m.notes, 'No notes yet')] : []),
+    ...(m.summary || at(m.start) <= now ? [row('Copy link to summary', m.summary, 'No summary yet')] : []),
+  ];
+}
 // Pin the node onto the meeting, looking the meeting up again first: the palette may have been open for minutes and
 // "the meeting I am in" outlives that by not much. A lookup that fails is reported like any other failed action
 // rather than read as "no meeting". The pin itself is idempotent — sdk/pins.js dedups on uri — so a second press on
@@ -1139,7 +1170,7 @@ function togglePalette(mode, link, pin) {
     { cmd: { rows: paletteRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
-  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); loadClipImage(); }
+  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingLinks = null; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); loadClipImage(); }
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }
