@@ -167,7 +167,7 @@ assert.match(source, /const collapsedGroups = new Set\(pref\('collapsedGroups', 
 assert.match(source, /if \(!collapsedGroups\.delete\(key\)\) collapsedGroups\.add\(key\);\n(?:[^\n]*\n)?  setPref\('collapsedGroups', \[\.\.\.collapsedGroups\]\);/, 'and written on every toggle');
 // a page whose sections are all folded away is not an empty page: its headings are drawn, so neither the zoomed
 // "No content" nor a view's "Nothing here yet" may appear under them
-assert.match(source, /if \(parent && !list\.length && !\[\.\.\.outline\.children\]\.some\(\(el\) => !el\.classList\.contains\('tl-older'\)\)\) \{/, 'the zoomed empty note goes by what was drawn, not by the row count, and the Timeline\'s pager is not a row');
+assert.match(source, /if \(parent && !list\.length && !notesWaiting\(parent\) && !\[\.\.\.outline\.children\]\.some\(\(el\) => !el\.classList\.contains\('tl-older'\)\)\) \{/, 'the zoomed empty note goes by what was drawn, not by the row count, and the Timeline\'s pager is not a row');
 assert.match(source, /if \(!asking\) outline\.prepend\(note\);/, 'so the note sits above that pager');
 assert.match(source, /if \(!parent && !list\.length && !outline\.children\.length && !loading && !filterEl\.value\) \{/, 'and so does a view\'s');
 assert.doesNotMatch(source, /loadLibrary|loadChats|loadInbox|taskFilter|libraryFilter/);
@@ -491,7 +491,7 @@ const DEMO_SAFE = new Set([
   'accessOptions', 'androidRelease', 'activateWindow', 'addFilter', 'agentIds', 'agentList', 'agentReplies', 'agentStatus',
   'agentTasks', 'aiOptions', 'archivedTypes', 'attendeeSuggestions', 'cancelUpload', 'chatAgents', 'chatAnswers',
   'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
-  'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList',
+  'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList', 'meetingNotes', // meetingNotes: found only, never made (renderer/state.js)
   'docTypes', 'enableAgent', 'exportPdf', 'filters', 'image', 'inboxUnread', 'installUpdate', 'login', 'logout',
   'mcpHidden', 'meetingInfo', 'members', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
   'onChatGPTStatus', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
@@ -512,7 +512,7 @@ const NOT_MOCKED = new Set([
   'activateWindow', 'androidRelease', 'agentStatus', 'archiveDocument', 'cancelUpload', 'checkUpdates', 'claimHelp', 'closeOverlay',
   'exportPdf', 'indentMany', 'installUpdate', 'onChatGPTStatus', 'onNotifyOpen', 'onOverlayClosed', 'onPresenceAsk',
   'onReleased', 'onSettings', 'onTimelinePart', 'onUpdateProgress', 'openOverlay', 'openSettings', 'outdentMany', 'pasteMarkdown',
-  'prefs', 'prefsNow', 'rememberPlace', 'setDemoMode', 'setPref', 'settingsSize', 'summaryUri', 'taskTypes', 'updateInfo',
+  'prefs', 'prefsNow', 'rememberPlace', 'setDemoMode', 'setPref', 'settingsSize', 'taskTypes', 'updateInfo',
   'windowTheme', 'zoom']);
 function apiContractCheck() {
   const preload = fs.readFileSync(require.resolve('../preload.js'), 'utf8');

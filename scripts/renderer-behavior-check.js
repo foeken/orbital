@@ -2366,7 +2366,7 @@ function runInlineFieldsCheck() {
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
     const ensureLoaded = (host) => loaded.push(host.docId);
     const renderSegs = (el, segments) => { el.textContent = segments.map(s => s.text).join(''); };
-    const withDraftTail = (rows) => rows;
+    const withDraftTail = (rows) => rows; const notesBody = (parent) => parent, notesHeadEl = () => null, notesWaiting = () => false; // renderer/meetingnotes.js: none of these pages is a meeting
     const childEl = (node, host) => { built.push({ id: host.docId, editable: host.node.editable }); const el = makeEl('div'); el.textContent = node.text; return el; };
     ${functionSource('renderFields')}
     const parent = { docId: 'doc', node: { kind: 'document', editable: true } };
@@ -3638,7 +3638,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const outline = { dataset: {}, parentElement: {}, get children() { return kept; }, replaceChildren(...els) { kept = els; } };
     const kids = new Map(), filterEl = { value: '' }, tana = {}, PROPOSALS_PAGE = 'proposals', TIMELINE_PAGE = 'timeline';
     let animView = null, caretOnOpen = false;
-    const ensureLoaded = () => {}, loadSearchFilter = () => {}, previewRows = () => {}, withDraftTail = (list) => list, mkItem = () => {};
+    const ensureLoaded = () => {}, loadSearchFilter = () => {}, previewRows = () => {}, withDraftTail = (list) => list, mkItem = () => {}; const notesBody = (parent) => parent, notesHeadEl = () => null, notesWaiting = () => false; // renderer/meetingnotes.js: none of these pages is a meeting
     const isSearchDoc = () => false, isTypeDoc = (n) => n.id.startsWith('tana:type:');
     const isChatPage = () => false, chatAfterRender = () => {}; // renderer/chat.js: none of these pages is a chat
     let writable = true; const canEditNode = () => writable;

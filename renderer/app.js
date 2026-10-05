@@ -13,6 +13,7 @@ function showStatus(s) {
   const state = authView(s);
   const wasConnected = connected;
   authed = state.authenticated; authChecking = state.checking; signedOut = state.signedOut; connected = !!s.connected;
+  if (((wasConnected && !connected) || !state.authenticated) && typeof forgetNotes === 'function') forgetNotes(!state.authenticated); // a meeting's notes are asked again by whoever is signed in next (renderer/meetingnotes.js)
   // The first fetch of a view can run before the sync client exists and fail quietly, so the view refetches the
   // moment the connection comes up; otherwise the Library or Chats stay empty until a filter is touched.
   // restorePlace waits for this too: reopening the last page needs a connection to ask for its children, and boot
@@ -126,6 +127,7 @@ tana.onChanged((docId, info) => {
     // a read still out may predate the change, so it is read once more when it lands (#477)
     if (!info || info.meta !== false) { notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); if (taskMetaById.has(docId) || taskMetaLoading.has(docId)) loadTaskMeta(docId, true); }
     if (meetingInfos.has(docId)) meetingInfoOf(docId, true); // a meeting's attendees, read again for its page's field
+    if (info && info.notes && typeof noteNotesChanged === 'function') noteNotesChanged(docId); // its private notes were made in another pane, or are no longer private
     // and a node linked to an agent task asks what its task is doing: another page may have relinked it to another task
     if (info && info.meta && (agentStates.has(docId) || agentTasks.has(docId))) loadAgentStates();
     // The sidebar is read once per page and left alone while the page is edited: its sections are relations, and

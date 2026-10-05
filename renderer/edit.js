@@ -341,7 +341,9 @@ const opensCanvas = (docId) => /^tana:canvas:/.test(String(docId)) && !!tana.ope
 // redirect behaves the same from a list row, search, the rail, a pin, a breadcrumb or a link.
 function followSummary(docId) {
   // the Graph pane never redirects itself: the page it follows does, and tells it the write-up (renderer/rail.js)
-  if (LINKS || !tana.summaryUri || typeof docId !== 'string' || !docId.startsWith('tana:event:')) return;
+  // A meeting is a page of its own wherever your private notes are its editor (renderer/meetingnotes.js): it stays on
+  // the meeting, and its write-up, shared with whoever sees the meeting, is a link over the notes.
+  if (LINKS || !tana.summaryUri || tana.meetingNotes || typeof docId !== 'string' || !docId.startsWith('tana:event:')) return;
   tana.summaryUri(docId).then((uri) => { if (uri && zoom && zoom.docId === docId) { navReplace = true; goTo(uri); } }, () => {}); // the event page is a hop, not a place to come back to
 }
 async function goTo(uri) {

@@ -134,7 +134,7 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   The meeting button (`navMeeting`, renderer/rail.js `drawMeetingBtn`, issue #630) is there when the page belongs to a
   meeting — a task Tana's AI filed under it, a note written in it — and never on the meeting's own write-up: main names
   it with the page's read (main/related.js `meeting`), its tooltip reads as the meeting glyph on a task's row does
-  ("From Studio LT weekly · Wed 30 Sep"), and a click opens the meeting, which forwards to its write-up.
+  ("From Studio LT weekly · Wed 30 Sep"), and a click opens the meeting, whose editor is your private notes.
   does not apply is gone rather than empty, and the others move up to the edge. Back and Forward run `navigate(-1)` and
   `navigate(1)`, the history ⌘[ and ⌘] walk; `renderNav()` runs after `noteNavigation()` on every render, disables
   them when the move does nothing and puts the current combo in the tooltip. Every header button with a Cmd+K row
@@ -458,9 +458,21 @@ Cmd+K leads with a Selection group for it (§8).
   the draft tail out of sight: it is parked with `focus({ preventScroll: true })`, the render pins the scroll to 0 while
   `caretOnOpen` is set, and the first character typed scrolls that row into view once (`scrollOnType`,
   `block: 'nearest'`). A read-only row neither scrolls nor spends that one-shot.
-- **A meeting opens at its write-up.** An event has no content of its own, so zooming one forwards to the document it
-  owns whose title is the event's tagline (`api.summaryUri`, `writeUpOf` in sdk/events.js), from every route; the write-up is
-  never repeated in the sidebar ([MEETINGS.md](MEETINGS.md)).
+- **A meeting's editor is your private notes** (renderer/meetingnotes.js, main/meeting-notes.js, [MEETINGS.md](MEETINGS.md)
+  Private notes). An event has no content of its own, so a meeting page stays the meeting's — title, Visible to,
+  Attendees, sidebar, ⌘K, Back and Forward — and the rows under it are the whole outline of a document only you can see (no owner and
+  no edge into the meeting; found by its id; its first row "Open the meeting in Tana", a link to the meeting's page, so
+  the reference shows in Tana too; no pin on the meeting, which its people would see): every row's `docId` is that document, so every edit, Enter, "/" and paste is an edit of it. A
+  grey line over the rows says so ("Your notes · only you can see them", the lock of Visible to), with the meeting's
+  write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js), shared with whoever sees the meeting, as a link on it: the
+  meeting no longer forwards there (`followSummary` stands down wherever `api.meetingNotes` exists). Opening makes
+  nothing; an empty page has one draft row, and its first character makes the notes (`materialiseNotes`), with the
+  words written once Tana has confirmed them private. Until then, and when that fails, the words stay in that meeting's
+  own row (one per meeting, `notesDrafts`), the error is said once, and the page tries again by itself every few
+  seconds while the row holds words, as typing on does; an answer landing after you moved on changes only
+  its own meeting. Notes shared in Tana since are not the editor any more and the line says so; new words start new
+  private notes. A meeting that does have content of its own (the mock's) keeps showing it. In demo mode notes are found,
+  never made.
 - **A canvas opens in a window of its own** (issue #611). A canvas is a tldraw board with no outline, and tldraw needs a
   licence Orbital does not have, so `openDoc` and `zoomTo` hand a `tana:canvas:` id to main (`api.openCanvas`,
   main.js `canvas:open`): a window on Tana's own page for it (`doc:link`), in the `persist:tana` session, with

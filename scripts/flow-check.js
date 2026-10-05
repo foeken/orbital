@@ -631,6 +631,79 @@ flow('golden path: write on Today\u2019s page with / blocks, @ links and dates',
     { block: null, done: 0, segments: [{ text: 'Buy cake' }] }], 'a heading, a row linking a task and a day, and a checklist row, saved as they read');
 });
 
+// 17b. A meeting's editor is your private notes (renderer/meetingnotes.js, main/meeting-notes.js, docs/MEETINGS.md
+// "Private notes"): the meeting stays the page, write-up or not, and nothing is made by opening it; its first words
+// make notes only you can see, and the rest is any outline. Tana slow or refusing keeps each meeting's words in its own
+// row, an answer landing after you moved on changes nothing on screen, and notes shared in Tana stop being the editor.
+flow('golden path: type under a meeting into notes only you can see', async (p) => {
+  await p.start();
+  const draft = '#outline .node.draft .text';
+  const typeIn = async (words) => {
+    await p.waitFor('document.querySelector(' + J(draft) + ')', 'the row to type in');
+    await p.js('(() => { const el = document.querySelector(' + J(draft) + '); el.focus(); placeCaret(keyOfEl(el), el.textContent.length); return 1; })()');
+    await p.type(words);
+  };
+  const open = async (id) => { await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 400); };
+  const draftText = () => p.js('document.querySelector(' + J(draft) + ')?.textContent ?? null');
+  const notesOf = (ev) => p.js('meetingNotes.get(' + J(ev) + ')?.id || null');
+  // 1-1 with Sam: a write-up shared with the meeting, and no notes of yours yet
+  await open('mockmeeting4');
+  await p.waitFor('document.querySelector(".notes-head .notes-writeup")', 'the line over the notes, with the write-up');
+  assert.match(await p.js('document.querySelector(".notes-head").textContent'), /only you can see them/, 'the notes say who sees them');
+  assert.deepEqual([await p.js('zoom.docId'), await p.js('__notes.made')], ['mockmeeting4', 0], 'the meeting is the page, and opening it made nothing');
+  await typeIn('Synthetic first thought');
+  await p.waitFor('__notes.made === 1 && meetingNotes.get("mockmeeting4")?.id', 'the notes made');
+  await p.js('flushAll()'); await settle(p, 500);
+  const notes = await notesOf('mockmeeting4');
+  assert.deepEqual(await p.js('__saved(' + J(notes) + ')'), ['Open the meeting in Tana', 'Synthetic first thought'], 'the meeting, linked, then every word');
+  assert.deepEqual(await p.js('tana.children(' + J(notes) + ').then((rows) => rows[0].segments)'), [{ text: 'Open the meeting in Tana', marks: { link: 'https://home.tana.inc/o/mock/e/mockmeeting4' } }], 'the meeting as a link to its page in Tana');
+  assert.deepEqual([await p.js('__saved("mockmeeting4")'), await p.js('zoom.docId')], [[], 'mockmeeting4'], 'none in the meeting, which is still the page');
+  await p.key('↩'); await p.type('Synthetic second thought'); await p.js('flushAll()'); await settle(p, 500);
+  assert.deepEqual(await p.js('__saved(' + J(notes) + ')'), ['Open the meeting in Tana', 'Synthetic first thought', 'Synthetic second thought'], 'Enter makes a row, as anywhere');
+  // the write-up opens on its own, and Back is the meeting with its notes
+  await p.js('document.querySelector(".notes-writeup").click()'); await at(p, 'tana:text:mockwriteup4');
+  await p.key('⌘['); await at(p, 'mockmeeting4'); await settle(p, 500);
+  assert.deepEqual(await p.js('__screen()'), ['Open the meeting in Tana', 'Synthetic first thought', 'Synthetic second thought'], 'reopened: the whole note, its link row too');
+  // Offsite: your notes already there are its editor, used as they are
+  await open('mockmeeting5');
+  await p.waitFor(T('Bring the synthetic agenda'), 'your notes on Offsite');
+  assert.equal(await p.js('__notes.made'), 1, 'nothing new made');
+  // Tana refusing twice, slowly: each meeting keeps its own words, and typing on tries again
+  await p.js('__notes.fail = 2; __notes.delay = 300; 1');
+  await open('mockmeeting3'); await typeIn('Alpha');
+  await p.waitFor('__notes.fail === 1', 'the first try refused'); await settle(p, 400);
+  await open('mockmeeting1'); await typeIn('Beta');
+  await p.waitFor('__notes.fail === 0', 'the second refused'); await settle(p, 400);
+  await open('mockmeeting3');
+  assert.equal(await draftText(), 'Alpha', 'Platform Guild keeps its words');
+  await open('mockmeeting1');
+  assert.equal(await draftText(), 'Beta', 'and Board prep its own');
+  assert.equal(await p.js('__notes.made'), 1, 'nothing was made while Tana refused');
+  // typed on, made now, slowly: the answer lands after you moved on and leaves the page you are on alone
+  await p.js('__notes.delay = 900; 1');
+  await typeIn(' more');
+  await open('mockmeeting3');
+  await p.waitFor('meetingNotes.get("mockmeeting1")?.id', 'Board prep\u2019s notes made after you left', 5000);
+  await settle(p, 700); await p.js('flushAll()'); await settle(p, 300);
+  assert.deepEqual([await p.js('zoom.docId'), await draftText()], ['mockmeeting3', 'Alpha'], 'the late answer moved nothing here');
+  assert.deepEqual(await p.js('__saved(' + J(await notesOf('mockmeeting1')) + ')'), ['Open the meeting in Tana', 'Beta more'], 'and Board prep\u2019s notes hold all of its words');
+  // Tana has not said yet whether they exist: said once, and tried again by itself, no more typing needed
+  await p.js('__notes.delay = 0; __notes.failKept = 2; 1');
+  await typeIn(' too');
+  await p.waitFor('meetingNotes.get("mockmeeting3")?.id', 'Platform Guild\u2019s notes, made by the retries', 15000); await p.js('flushAll()'); await settle(p, 500);
+  assert.deepEqual([await p.js('__notes.failKept'), await p.js('__saved(' + J(await notesOf('mockmeeting3')) + ')')], [0, ['Open the meeting in Tana', 'Alpha too']]);
+  // shared in Tana: no longer the editor, said so, never written to again; new words start new private notes
+  await open('mockmeeting4');
+  const before = await p.js('__saved(' + J(notes) + ')');
+  await p.js('__notes.share("mockmeeting4"); 1');
+  await p.waitFor('/shared in Tana/.test(document.querySelector(".notes-head")?.textContent || "")', 'the line says they were shared');
+  assert.ok(!(await p.js('__screen()')).includes('Synthetic first thought'), 'shared notes are not the editor any more');
+  await typeIn('Fresh private words');
+  await p.waitFor('__notes.made === 4', 'new private notes'); await p.js('flushAll()'); await settle(p, 400);
+  assert.deepEqual(await p.js('__saved(' + J(notes) + ')'), before, 'the shared notes were not written to');
+  assert.notEqual(await notesOf('mockmeeting4'), notes);
+});
+
 // 18. A view (docs/VIEWS.md): the Library grouped, sorted and filtered from Cmd+K and ⌘F, then saved as a search that
 // opens on the same rows
 flow('golden path: group, sort and filter the Library, then save it as a search', async (p) => {

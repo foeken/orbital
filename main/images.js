@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto');
 const { fetchImage, uploadFile, initImage, SIGNED_OUT } = require('../sdk/assets');
 const content = require('../sdk/content');
 const { ulid } = require('../sdk/node');
-const { mut, subscribe } = require('./documents');
+const { mut, refusedWrite, subscribe } = require('./documents');
 const { S } = require('./state');
 
 // ---- images: tana:image: uri -> data URL, cached under userData/images/<sha1(uri)> (the data URL as text)
@@ -61,6 +61,8 @@ async function loadImage(uri) {
 const uploading = new Map(); // uploadId -> AbortController
 async function insertImage(docId, nodeId, { bytes, filename, mimeType }, uploadId) {
   if (!S.session) throw new Error(SIGNED_OUT);
+  const refused = refusedWrite(docId); // a meeting's notes shared since (main/meeting-notes.js): no image is made under them either
+  if (refused) throw new Error(refused);
   const ownerUri = String(docId).split('|')[0];
   const ctrl = new AbortController();
   if (uploadId) uploading.set(uploadId, ctrl);

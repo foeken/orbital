@@ -59,6 +59,9 @@ contextBridge.exposeInMainWorld('api', {
   meetingInfo: (docId) => ipcRenderer.invoke('meeting:info', docId),
   editMeeting: (docId, change) => ipcRenderer.invoke('meeting:edit', docId, change), // { start, end } | { location } | { attendees: [{ email?, userUri? }] }
   attendeeSuggestions: () => ipcRenderer.invoke('meeting:suggestions'), // [{ email, displayName, eventCount, identityUri }]
+  // a meeting's notes only you can see (main/meeting-notes.js): { id, node, owner, blockId? } | { id: null, shared };
+  // create: true makes them, writing first (the words typed) into them once Tana has confirmed they are private
+  meetingNotes: (docId, create, first) => ipcRenderer.invoke('meeting:privateNotes', docId, create === true, typeof first === 'string' ? first : undefined),
   summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
   todayNode: (offset, findOnly) => ipcRenderer.invoke('doc:todayNode', offset, findOnly === true), // the date-titled node pinned to that day (0 today, 1 tomorrow, or 'YYYY-MM-DD'), created if missing unless findOnly (demo mode)
   checkUpdates: () => ipcRenderer.send('app:checkUpdates'), // the app menu's Check for Updates…: a newer release opens the update card (update.html) over this page, a dialog says up to date

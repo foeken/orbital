@@ -400,10 +400,13 @@ function renderOutline() {
   };
   if (parent) {
     if (!parent.node.draft) ensureLoaded(parent);
-    list = parent.node.draft ? [] : childrenOf(parent) || [];
+    // a meeting's rows are its private notes' (renderer/meetingnotes.js): body is that document, any other page itself
+    const body = parent.node.draft ? parent : notesBody(parent);
+    if (body !== parent) ensureLoaded(body);
+    list = parent.node.draft ? [] : childrenOf(body) || [];
     // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page
     // filters: an outline's rows are content you are editing, not a result set you are searching through.
-    let groups = null, row = (n) => childEl(n, parent), searchRest = 0;
+    let groups = null, row = (n) => childEl(n, body), searchRest = 0;
     if (isSearchDoc(parent.node) || isTypeDoc(parent.node)) {
       row = rowEl;
       if (isSearchDoc(parent.node)) {
@@ -422,11 +425,13 @@ function renderOutline() {
       groups = timelineGroups(list);
       list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
     }
-    list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
+    list = withDraftTail(list, body); // an open node always has a row to type in; a read-only one (every chat) never does
     const chat = isChatPage(parent), stick = chat && chatStick(parent); // a chat is a conversation, not an outline (renderer/chat.js)
     outline.replaceChildren(...(chat ? chatEls(list, parent.docId) : groups
       ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [row(n), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map(row)));
+    const notesHead = notesHeadEl(parent); // who sees a meeting's notes, over them
+    if (notesHead) outline.prepend(notesHead);
     if (searchRest) outline.append(searchMoreEl(parent.docId, searchRest)); // the rest of a saved search or a type's page
     if (parent.docId === TIMELINE_PAGE && tana.timelinePages && kids.get(TIMELINE_PAGE) && !timelinePartial && timelinePages < TIMELINE_MAX_PAGES) outline.append(timelineOlderEl()); // three days a page: more as the end comes into view, once the first page is whole
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
@@ -462,7 +467,7 @@ function renderOutline() {
   // then it shows the loading animation, as a view does, rather than a line saying so.
   let asking = false;
   // the Timeline's "Show three more days" is a way to more rows, not a row: an empty Timeline still says so, above it
-  if (parent && !list.length && ![...outline.children].some((el) => !el.classList.contains('tl-older'))) {
+  if (parent && !list.length && !notesWaiting(parent) && ![...outline.children].some((el) => !el.classList.contains('tl-older'))) {
     // signed out, nothing is on its way: the login shows. A Timeline part with no rows in it is not an answer yet
     // either: the rest is still coming, so the whole-page loader stays rather than "Nothing yet" over a loader's tail.
     asking = !signedOut && (!(kids.has(parent.docId) && kids.get(parent.docId) !== null) || (parent.docId === TIMELINE_PAGE && timelinePartial));
@@ -1040,6 +1045,7 @@ function nodeEl(node, docId, parent) {
 
 // a draft becomes real on its first typed character: created with that text, caret kept
 async function materialise(item, el) {
+  if (item.parent && item.parent.node.notesFor) return materialiseNotes(item, el); // a meeting's first words make its private notes
   const { parent, node } = item, oldKey = item.key, text = el.textContent;
   let key, real, next = null;
   await run(async () => {

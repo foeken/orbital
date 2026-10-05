@@ -1028,6 +1028,12 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .children > .node.fullref > .line > .bullet { margin-right: 4px; } /* give the full-reference icon more room before its status or title */
 .children.loading { color: var(--muted); font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: var(--muted); font-size: 16px; padding: 8px 40px; }
+/* Over a meeting's rows, which are your private notes (renderer/meetingnotes.js): who sees them, quiet, the lock of
+   Visible to (only you) in the column the fields' glyphs above use, so it reads as the notes' line, not the meeting's */
+.notes-head { display: flex; align-items: center; gap: 10px; margin: 2px 0 6px 16px; color: var(--muted); font-size: 12px; user-select: none; }
+.notes-head .icon, .notes-head svg { display: block; width: 14px; height: 14px; flex: none; }
+.notes-head .notes-writeup { color: #508fbb; text-decoration: underline; cursor: pointer; } /* the meeting's write-up: a link, as in the fields */
+[data-theme="dark"] .notes-head .notes-writeup { color: #7fb8dd; }
 /* The last row just left the view (renderer/motion.js motionAfter): the note says so with a tick, and pops (Pop). */
 .empty-note.cleared { display: flex; align-items: center; gap: 10px; color: #5a9670; font-weight: 600; transform-origin: 40px 50%; animation: pop-in var(--dur-slow) var(--ease-spring) backwards; }
 .empty-note.cleared::before { content: '✓'; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #5a9670; color: #fff; font-size: 13px; }

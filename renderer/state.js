@@ -22,6 +22,7 @@ function readOnlyInDemo(api) {
       if (key === 'todayNode') return (offset) => found(own.todayNode(offset, true));
       if (key === 'weekNode') return () => found(own.weekNode(true));
       if (key === 'myTasks') return () => found(own.myTasks(true)); // the Work View's My Tasks, found and never made
+      if (key === 'meetingNotes') return (id) => own.meetingNotes(id, false); // a meeting's private notes, found and never made
       return own[key];
     },
   });

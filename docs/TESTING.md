@@ -78,6 +78,18 @@ From fastest to slowest. Each catches what the one before it cannot.
    - Quick Add Task (task.html): a title, a type with ↓, an assignee with ⇥, and ↩ makes it, hands it over and tells
      the window;
    - writing on Today's page: "/" makes a heading and a checklist row, "@" links a task and a day, saved as they read;
+   - typing under a meeting (renderer/meetingnotes.js): the meeting stays the page, write-up or not, and opening it
+     makes nothing; the first words make notes only you can see, under a first row linking to the meeting, and ↩ goes on
+     as anywhere; the write-up is a link and
+     ⌘[ comes back to the notes; notes already there are used; Tana refusing keeps each meeting's words in its own
+     row, a "what you typed is kept" answer is retried by the page itself, a late answer for one meeting changes nothing
+     on the next, and notes shared in Tana stop being the editor
+     and are never written again. Main's side (main/meeting-notes.js) is in sdk-check: what Tana must confirm before a
+     word is written, a create Tana has not confirmed asked about again after a restart, two panes, two machines and
+     two independent Loro documents making one note at once with every word kept (one seed, byte for byte), a slow
+     document of another kind never seeded, a rename, a deleted note, other people's, shared and meeting-owned notes
+     left untouched, a live share refusing the next write, and another account; the sync checks hold
+     subscribe's ifMissing to writing a seed on MISSING only;
    - a view: the Library grouped, sorted and filtered with ⌘F, Escape clearing it, then saved as a search that opens
      on the same rows;
    - Notifications read by bullet and by Mark all as read, a row opening its node; a proposal approved from Cmd+K and
