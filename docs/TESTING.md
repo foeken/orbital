@@ -84,7 +84,8 @@ From fastest to slowest. Each catches what the one before it cannot.
    - typing under a meeting (renderer/meetingnotes.js): the meeting stays the page, write-up or not, and opening it
      makes nothing; the first words make notes only you can see, under a first row linking to the meeting that the
      meeting's page never draws (it shows with the notes on their own, and once changed), and ↩ goes on as anywhere;
-     the write-up is a link and
+     the Tana glyph beside the title is there before any notes, says "Open in Tana" on hover and on keyboard focus
+     without moving the title, opens the meeting's own link and makes no notes; the write-up is a link and
      ⌘[ comes back to the notes; notes already there are used; Tana refusing keeps each meeting's words in its own
      row, a "what you typed is kept" answer is retried by the page itself, a late answer for one meeting changes nothing
      on the next; notes shared in Tana stay the editor with "Shared notes" and faces, link, everyone or read only said,

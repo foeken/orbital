@@ -52,7 +52,9 @@ ordinary paths (renderer/meetingnotes.js gives the page that document as its bod
 them, so the meeting's own Visible to is never read as theirs: "Your notes · only you can see them" with the lock of
 Visible to, or — once you shared them in Tana — "Shared notes" and who: the people's faces, everyone in your
 organization, anyone with the link, read only when your grant no longer lets you write; never a lock or "only you"
-then. A meeting no longer forwards to its write-up: the write-up, shared with whoever sees the meeting, is a link on
+then. Beside the meeting's title, the Tana glyph opens the meeting itself in Tana (never the notes), "Open in Tana" shown
+on hover and keyboard focus; it is there before any notes and makes none. A meeting no longer forwards to its write-up:
+the write-up, shared with whoever sees the meeting, is a link on
 that line. The notes' first row, which names the meeting for whoever opens them on their own (in Tana, or in Orbital),
 is left out of the meeting's own page while it is exactly the row the seed wrote — its block id, its words, its one
 link, nothing under it (main/meeting-notes.js `referenceOf`, renderer/meetingnotes.js `notesRows`); changed, it is

@@ -484,7 +484,10 @@ Cmd+K leads with a Selection group for it (§8).
   grey line over the rows says who sees them ("Your notes · only you can see them", the lock of Visible to; once you
   shared them in Tana, "Shared notes" and the faces, everyone, anyone with the link, or read only), with the meeting's
   write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js), shared with whoever sees the meeting, as a link on it: the
-  meeting no longer forwards there (`followSummary` stands down wherever `api.meetingNotes` exists). Opening makes
+  meeting no longer forwards there (`followSummary` stands down wherever `api.meetingNotes` exists). Beside the title, the
+  Tana glyph opens the meeting in Tana (`meetingTanaButton`, as ⌘K Open in Tana does): the glyph alone, "Open in Tana"
+  growing leftwards out of it on hover and keyboard focus so the title never moves, instant with reduced motion; on
+  every meeting page, notes or none, always the meeting's own link, and it makes nothing. Opening makes
   nothing; an empty page has one draft row, and its first character makes the notes (`materialiseNotes`), with the
   words written once Tana has confirmed them private. Until then, and when that fails, the words stay in that meeting's
   own row (one per meeting, `notesDrafts`), the error is said once, and the page tries again by itself every few

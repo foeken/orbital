@@ -137,6 +137,28 @@ function patchNotesHead(eventId) {
   if (el) old.replaceWith(el); else old.remove();
 }
 
+// The meeting's own page in Tana, from its title (option A, chosen 2026-10-05): the Tana glyph alone, "Open in Tana" grown
+// out of it on hover and keyboard focus (styles.css .meeting-tana), as the page's ⌘K row Open in Tana does it. On every
+// meeting page, notes or none: always the meeting's link, never the notes', and it makes nothing. Called with the title
+// (renderer/render.js), and left as it is while the same meeting stays the page, so a redraw keeps its focus and hover.
+function meetingTanaButton(parent) {
+  const head = titleEl.parentElement;
+  if (!head) return;
+  const old = head.querySelector(':scope > .meeting-tana-slot'), id = parent && parent.docId;
+  const show = !!id && !LINKS && !(zoom && zoom.nodeId) && !parent.node.draft && (String(id).startsWith('tana:event:') || parent.node.icon === 'meeting') && !!tana.nodeLink && !!tana.openExternal;
+  if (!show) { if (old) old.remove(); return; }
+  if (old && old.dataset.doc === id) return;
+  const slot = document.createElement('span'), b = document.createElement('button'), label = document.createElement('span');
+  slot.className = 'meeting-tana-slot'; slot.dataset.doc = id; // holds the glyph's width: the words grow over the title's end, which never moves
+  b.type = 'button'; b.className = 'meeting-tana'; b.title = 'Open in Tana'; b.setAttribute('aria-label', 'Open in Tana');
+  label.className = 'meeting-tana-label'; label.textContent = 'Open in Tana'; label.setAttribute('aria-hidden', 'true');
+  b.append(iconEl('tana', null), label);
+  b.onmousedown = (e) => e.preventDefault(); // a click leaves the caret where it was
+  b.onclick = () => run(async () => tana.openExternal(await tana.nodeLink(id)));
+  slot.append(b);
+  if (old) old.replaceWith(slot); else head.append(slot);
+}
+
 // The draft row's first character (render.js materialise): the notes made with it, and the row becomes their first row.
 async function materialiseNotes(item, el) {
   const eventId = item.parent.node.notesFor, text = el.isConnected ? el.textContent : item.node.text, oldKey = item.key, asked = notesAsked;

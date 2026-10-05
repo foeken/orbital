@@ -820,10 +820,33 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   await p.waitFor('document.querySelector(".notes-head .notes-writeup")', 'the line over the notes, with the write-up');
   assert.match(await p.js('document.querySelector(".notes-head").textContent'), /only you can see them/, 'the notes say who sees them');
   assert.deepEqual([await p.js('zoom.docId'), await p.js('__notes.made')], ['mockmeeting4', 0], 'the meeting is the page, and opening it made nothing');
+  // Open in Tana beside the title (option A): there before any notes, the glyph alone until hovered or focused by keyboard,
+  // then its words without the title moving; it opens the meeting's own link, never the notes', and makes nothing
+  const btn = '#pagehead .meeting-tana';
+  await p.waitFor('document.querySelector(' + J(btn) + ')', 'the Tana button beside the title');
+  const labelW = () => p.js('document.querySelector(' + J(btn + ' .meeting-tana-label') + ').getBoundingClientRect().width');
+  const titleBox = () => p.js('JSON.stringify(document.getElementById("title").getBoundingClientRect())');
+  assert.deepEqual([await p.js('document.querySelector(' + J(btn) + ').getAttribute("aria-label")'), await p.js('document.querySelector(' + J(btn) + ').title'), await labelW()], ['Open in Tana', 'Open in Tana', 0], 'named for screen readers and in its tooltip, the glyph alone');
+  const title0 = await titleBox();
+  const spot = await p.js('(() => { const r = document.querySelector(' + J(btn) + ').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()');
+  await p.hover(spot[0], spot[1]); await settle(p, 400);
+  assert.equal(await p.js('document.querySelector(' + J(btn + ' .meeting-tana-label') + ').textContent'), 'Open in Tana');
+  assert.ok((await labelW()) > 40, 'hovered: Open in Tana');
+  assert.equal(await titleBox(), title0, 'and the title has not moved');
+  await p.hover(5, 600); await settle(p, 400);
+  assert.equal(await labelW(), 0, 'left: the glyph alone again');
+  await p.key('esc'); await p.js('document.querySelector(' + J(btn) + ').focus(); 1'); await settle(p, 400);
+  assert.deepEqual([await p.js('document.querySelector(' + J(btn) + ').matches(":focus-visible")'), (await labelW()) > 40], [true, true], 'focused by keyboard: Open in Tana');
+  assert.equal(await titleBox(), title0, 'the title still where it was');
+  await p.js('window.__opened = []; const opener = tana.openExternal; tana.openExternal = (url) => { __opened.push(url); return opener(url); }; 1');
+  await p.click(spot[0], spot[1]); await settle(p, 300);
+  assert.deepEqual(await p.js('__opened'), [await p.js('tana.nodeLink("mockmeeting4")')], 'it opens the meeting in Tana');
+  assert.deepEqual([await p.js('__notes.made'), await p.js('meetingNotes.get("mockmeeting4")?.id || null')], [0, null], 'and makes no notes');
   // the row the notes start with, naming the meeting, is never drawn on the meeting's own page, not even for a moment
   await p.js('window.__refSeen = false; new MutationObserver(() => { if ([...document.querySelectorAll("#outline .node .text")].some((e) => e.textContent === "Open the meeting in Tana")) window.__refSeen = true; }).observe(outline, { subtree: true, childList: true, characterData: true }); 1');
   await typeIn('Synthetic first thought');
   await p.waitFor('__notes.made === 1 && meetingNotes.get("mockmeeting4")?.id', 'the notes made');
+  assert.ok(await p.js('!!document.querySelector(' + J(btn) + ')'), 'the Tana button stays once the notes exist');
   await p.js('flushAll()'); await settle(p, 500);
   const notes = await notesOf('mockmeeting4');
   assert.deepEqual(await p.js('__saved(' + J(notes) + ')'), ['Open the meeting in Tana', 'Synthetic first thought'], 'the meeting, linked, then every word');
@@ -1261,6 +1284,7 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
       await waitFor('document.readyState === "complete"', file + ' to load', 8000);
     };
     const click = async (x, y) => { for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 }); await sleep(80); };
+    const hover = async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await sleep(80); }; // the pointer over a point, nothing pressed
     // a drag as a hand makes one: pressed at one point, moved, let go at another. Chromium starts the drag itself from
     // the press (so whatever stops a drag from beginning shows here, as __drag cannot), hands it to us instead of the
     // OS, and we drop it through its own drag events. Answers what the drag carried ({ items: [{ mimeType, data }] }),
@@ -1282,7 +1306,7 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
     // window.api); taken away when the flow ends, so the next flow's pages are the mock's again
     const loaded = [];
     const beforeLoad = async (source) => { loaded.push((await send('Page.addScriptToEvaluateOnNewDocument', { source })).identifier); };
-    const page = { js, jsIn, waitFor, key, type, click, drag, start, open, sleep, beforeLoad };
+    const page = { js, jsIn, waitFor, key, type, click, hover, drag, start, open, sleep, beforeLoad };
 
     for (const f of flows) {
       if (only && !f.name.includes(only)) continue;

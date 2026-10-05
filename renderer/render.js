@@ -505,6 +505,7 @@ function renderOutline() {
   if (demoMode) { titleCheck.disabled = true; titleCheck.onclick = null; } // read-only while demo mode is on
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
   agentHeader(); // a rebuilt header loses the badge with everything else, so it is put back with the title
+  if (typeof meetingTanaButton === 'function') meetingTanaButton(parent); // a meeting's page in Tana, beside its title (renderer/meetingnotes.js)
   // a task's assignees and who can see a page are its first fields (renderFields), no longer in the sidebar;
   // under the title only the chips remain.
   // Any zoomed document shows its type, not only a task: what is dropped is the kind chip, whose label is the row's
