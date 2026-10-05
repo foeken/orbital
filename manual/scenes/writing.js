@@ -35,6 +35,12 @@ module.exports = [
     { type: 'Keep it **short** and ~~formal~~ friendly', delay: 55 }, { key: '↩' },
     { type: '[] Book the room', delay: 60 },
   ], clip: { page: '' } },
+  // ⌘↩ cycles a checkbox: on one row, then on every selected row at once
+  { name: 'writing-checkbox', video: true, size: '640x320', setup: blank('Offsite prep'), steps: [
+    { type: 'Book the room', delay: 55 }, { key: '↩' }, { type: 'Order lunch', delay: 55 }, { key: '↩' }, { type: 'Send the agenda', delay: 55 }, { wait: 400 },
+    row('Order lunch'), { key: '⌘↩' }, { wait: 700 }, { key: '⌘↩' }, { wait: 900 },
+    { key: '⌘A' }, { key: '⌘A' }, { wait: 700 }, { key: '⌘↩' }, { wait: 900 }, { key: '⌘↩' }, { wait: 2000 },
+  ], clip: { page: '' } },
   // the floating toolbar over a selection: B, then the style menu
   { name: 'writing-toolbar', video: true, size: '640x480', setup: [...doc0, scrollTo('Slots:')], steps: [
     { js: "T('Slots:').focus(); selectRange(K('Slots:'), 24, 38); 1" }, { wait: 700 },
@@ -89,8 +95,6 @@ module.exports = [
     { click: 'tr:last-child td:last-child' }, { type: 'Waiting', delay: 70 }, { key: '⌘K' }, { wait: 400 }, { type: 'row', delay: 80 },
   ], clip: { page: '' } },
 ];
-
-
 
 
 

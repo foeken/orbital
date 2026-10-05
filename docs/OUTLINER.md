@@ -316,7 +316,7 @@ debounce flushes it. Read-only rows ignore every edit key.
 | ⌘↑ / ⌘↓ | Collapse / expand (built-in keys, §8). |
 | ⇧⌘↑ / ⇧⌘↓ | Move the row, or the selection, one step among its siblings. |
 | ⇧⌘⌫ | Remove the current block with its children, wherever the caret is; the caret goes to the row before (or after). Document rows ignore it. |
-| ⌘↩ | Toggle done on a task, or a checkbox; a plain block becomes an unchecked checkbox in Tana's native structure, drawn with its bullet. |
+| ⌘↩ | Toggle done on a task. On a block it cycles the checkbox: no box → an empty box (Tana's native structure, drawn with its bullet) → ticked → no box (the row stays a bullet). On a selection of blocks every row takes the same step in one write and one undo; a mix takes the first step any of them still needs (rows without a box get one, then all are ticked, then all lose it), and rows that cannot hold a box are passed over. Only the tick plays the pop. |
 | Space on a read-only row | Zoom into it; on a reference row, open what it points at. With exactly one row selected and nothing focused, the same. Editable rows keep Space for typing. |
 | Escape | Blur. |
 
@@ -1050,6 +1050,9 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   Neither enters the undo stack.
 - **Copy link** (`copyLink`) copies the node's home.tana.inc url, which takes the route Tana's own resolver picks for
   the kind: `/t/` a type, `/u/` a person, `/e/` a meeting, `/s/` a space, `/l/` every other document (issue #88).
+  A link that opens in Orbital instead is `orbital:` and the node's id (`orbital:tana:text:…`): the Mac (main.js
+  `open-url`, the scheme registered by `npm run package`), the iPhone (Shell.swift `open`) and Android (MainActivity
+  `zoom`) open that node, and take nothing else from it.
   On a Timeline row (under the caret, right-clicked, or the one selected) it is the link of the node the row is
   about — the meeting, the task someone completed — since the row is the Timeline's own (renderer/timeline.js
   `timelineUriAt`).

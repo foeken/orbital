@@ -203,6 +203,7 @@ contextBridge.exposeInMainWorld('api', {
   setState: (docId, state) => ipcRenderer.invoke('doc:setState', docId, state),
   setStateMany: (docIds, state) => ipcRenderer.invoke('doc:setStateMany', docIds, state),
   toggleCheckbox: (docId, nodeId) => ipcRenderer.invoke('block:toggleCheckbox', docId, nodeId), // plain block -> unchecked; checkbox -> toggle; children returns done: 0|1
+  cycleCheckboxes: (docId, nodeIds) => ipcRenderer.invoke('block:cycleCheckboxes', docId, nodeIds), // ⌘↩: no box -> empty -> ticked -> no box, every row at once, one undo step
   accessOptions: (id) => ipcRenderer.invoke('doc:accessOptions', id), // {sharing,move,deletable,archivable,ownerUri,rules,roles,audience,inheritAudience,sharingToken,reason}; unknown disabled
   setSharing: (id, selection) => ipcRenderer.invoke('doc:setSharing', id, selection), // explicit {rule,participants?:[{uri,role}],token?}; inherit requires current sharingToken
   searchSpaces: (query) => ipcRenderer.invoke('spaces:search', query), // Nodes with selectable; rechecked on move
