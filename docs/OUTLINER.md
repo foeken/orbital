@@ -486,7 +486,8 @@ Cmd+K leads with a Selection group for it (§8).
   grey line over the rows says who sees them ("Your notes · only you can see them", the lock of Visible to; once you
   shared them in Tana, "Shared notes" and the faces, everyone, anyone with the link, or read only). A meeting with a
   write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js) opens on Summary, with Notes | Summary first on that line
-  (`notesSwitchEl`; nothing drawn until that answer, `writeUpKnown`): Summary shows the write-up's rows in the notes' place, the line then saying who sees the write-up and whether you may
+  when you have notes there or are in them (`notesSwitchEl`; nothing drawn until both answers, `writeUpKnown`), the
+  summary alone when you have none: Summary shows the write-up's rows in the notes' place, the line then saying who sees the write-up and whether you may
   edit it from the write-up's own metadata and node (`askSummary`, asked again on a live change, an older answer
   dropped), never the meeting's attendees; it makes no notes, a switch saves what was typed where it was typed, and
   Notes puts the caret back. The meeting no longer forwards to its write-up (`followSummary` stands down wherever `api.meetingNotes` exists). Beside the title, the

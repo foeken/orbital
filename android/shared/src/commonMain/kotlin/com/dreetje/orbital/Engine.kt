@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -205,7 +206,7 @@ class Engine(
                     val was = savedFor ?: account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
                     account = maybe { host.run("return orbital.account()").jsonPrimitive.contentOrNull }
                     // another account's, or another workspace's: off the screen and off the phone, with the pages read for it
-                    if (was != null && was != account) { rows = emptyList(); opened.clear(); forgetTimeline() }
+                    if (was != null && was != account) { rows = emptyList(); opened.clear(); images.clear(); forgetTimeline() }
                     savedFor = null
                     host.keepCookies() // at once: the refresh may not finish
                     phase = Phase.Ready
@@ -349,7 +350,7 @@ class Engine(
         maybe { host.run("await orbital.signOut()") }
         host.forgetCookies()
         forgetTimeline()
-        rows = emptyList(); states.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear()
+        rows = emptyList(); states.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear(); images.clear()
         note("signed out")
         start()
     }
@@ -372,6 +373,17 @@ class Engine(
 
     // what open(id) last read, to draw until it reads again; null when never opened (or since signing out)
     fun cached(id: String): Page? = pagesSample?.pages?.get(id) ?: opened[id]
+
+    // An outline's image (Row.image) as its picture, fetched by the platform with Tana's token (orbital.token) and kept
+    // for the session; null in the sample and when it did not come, which is tried again the next time it is drawn
+    // ponytail: every picture seen stays in memory until sign-out; an LRU cache if a long session runs short of memory
+    private val images = mutableMapOf<String, ImageBitmap>()
+    suspend fun image(uri: String): ImageBitmap? {
+        if (isSample) return null
+        images[uri]?.let { return it }
+        val bytes = maybe { platform.image(uri) { refresh -> call<String>("return await orbital.token(refresh)", mapOf("refresh" to refresh)) } } ?: return null
+        return platform.decode(bytes)?.also { images[uri] = it }
+    }
 
     // The Timeline is kept on this phone twice, both written here and nowhere else (Engine.swift keepTimeline the same):
     //   - SavedTimeline, for the next launch to draw while Tana connects: the first page as engine.js answered it, a

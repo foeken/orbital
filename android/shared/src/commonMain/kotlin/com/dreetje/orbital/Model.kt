@@ -39,12 +39,14 @@ data class Row(
     val sensitive: Boolean? = null, // marked sensitive in Orbital: drawn barred until a shake shows it (ios/engine/sensitive.js)
     val group: String? = null, // the section a saved search files it under (ios/engine/arrange.js)
     val glyph: String? = null, // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
+    val image: Image? = null, // an image block's picture (sdk/content.js), fetched by Engine.image; left out in Demo mode
 ) {
     // content: the node's own words in a sentence of the app's (main/timeline.js), person: a person's name; the widgets'
     // Activity draws a line from them, title first (Widgets.kt Brief)
     @Serializable data class Segment(val text: String? = null, val marks: Marks? = null, val mention: Ref? = null, val content: Boolean? = null, val person: Boolean? = null)
     @Serializable data class Marks(val bold: Boolean? = null, val italic: Boolean? = null, val strike: Boolean? = null, val code: Boolean? = null, val link: String? = null)
     @Serializable data class Ref(val uri: String, val label: String? = null)
+    @Serializable data class Image(val uri: String)
     @Serializable data class Chat(val mine: Boolean? = null, val status: Boolean? = null, val streaming: Boolean? = null, val author: String? = null)
     @Serializable data class Person(val name: String)
     @Serializable data class Free(val from: Double, val until: Double)
@@ -80,8 +82,10 @@ data class Row(
 // Tana's times, with or without fractional seconds ("2026-09-30T13:00:00Z", "…:00.000Z")
 fun parseTime(s: String): Instant? = runCatching { Instant.parse(s) }.getOrNull()
 
-// A node zoomed into (orbital.open): its title, its kind and what it holds
-@Serializable data class Page(val title: String, val kind: String, val rows: List<Row> = emptyList(), val sensitive: Boolean? = null)
+// A node zoomed into (orbital.open): its title, its kind and what it holds; a meeting Tana wrote up also its summary's
+// outline, and your private notes' when you have them
+@Serializable data class Page(val title: String, val kind: String, val rows: List<Row> = emptyList(), val sensitive: Boolean? = null,
+                              val summary: List<Row>? = null, val notes: List<Row>? = null)
 
 // What a refresh reads besides the rows (orbital.setup)
 @Serializable data class Setup(val to: String? = null, val ai: Map<String, String> = emptyMap(), val sensitive: List<String> = emptyList(), val pinned: List<String> = emptyList(),

@@ -88,6 +88,9 @@ struct NodeScreen: View {
                         .safeAreaInset(edge: .bottom) {
                             Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); waitingSince = .now; await load(); return sent.warning }
                         }
+                case "event" where page.summary != nil:
+                    MeetingSummary(summary: page.summary ?? [], notes: page.notes, engine: engine)
+                        .refreshable { await load() }
                 case "search", "event":
                     // in the sections the search was saved with (Row.group), as the desktop shows it: no lines between the
                     // rows or around a section, and the rows close together, closer still under headings, as the Timeline's
@@ -111,7 +114,7 @@ struct NodeScreen: View {
                 default:
                     List {
                         if let access { NodeDetails(id: id, access: access, engine: engine, reload: load) }
-                        ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal) }
+                        ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal, engine: engine) }
                     }
                         .listStyle(.plain)
                         .refreshable { await load() }
@@ -175,6 +178,44 @@ struct NodeScreen: View {
     }
 }
 
+// A meeting Tana has written up, as the desktop's page has it (renderer/meetingnotes.js): its summary, and Notes | Summary
+// over it when you have notes for it too; with none, the summary alone. Read only, as every page here.
+struct MeetingSummary: View {
+    let summary: [Row]
+    let notes: [Row]?
+    let engine: Engine
+    @State private var showNotes = false
+
+    var body: some View {
+        List {
+            if notes != nil {
+                Picker("Notes or summary", selection: $showNotes) { Text("Notes").tag(true); Text("Summary").tag(false) }
+                    .pickerStyle(.segmented)
+                    .listRowSeparator(.hidden)
+            }
+            ForEach(Array(NodeScreen.flat(showNotes ? notes ?? [] : summary).enumerated()), id: \.offset) {
+                OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal, engine: engine)
+            }
+        }
+        .listStyle(.plain)
+    }
+}
+
+// An image in an outline (Engine.image): the word Image until its picture has come, then the picture, the row's width
+struct OutlineImage: View {
+    let uri: String
+    let engine: Engine
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image { Image(uiImage: image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityLabel("Image") }
+            else { Text("Image").foregroundStyle(.secondary) }
+        }
+        .task(id: uri) { image = await engine.image(uri) }
+    }
+}
+
 // An empty line with nothing under it, which a new task's content often is only: left out, so it draws no lone bullet
 extension Row {
     var blank: Bool { words.trimmingCharacters(in: .whitespaces).isEmpty && (segments ?? []).isEmpty && type == nil && (children ?? []).isEmpty }
@@ -186,6 +227,7 @@ struct OutlineRow: View {
     let row: Row
     let depth: Int
     var reveal = false
+    var engine: Engine? // to fetch an image row's picture
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -200,7 +242,8 @@ struct OutlineRow: View {
                 }
             }
             Group {
-                if row.type == "image" || row.type == "table" { Text(row.type == "image" ? "Image" : "Table").foregroundStyle(.secondary) }
+                if row.type == "image", let uri = row.image?.uri, let engine { OutlineImage(uri: uri, engine: engine) }
+                else if row.type == "image" || row.type == "table" { Text(row.type == "image" ? "Image" : "Table").foregroundStyle(.secondary) }
                 else { Text(row.styled) }
             }
             .font(row.heading == 1 ? .title2.bold() : row.heading == 2 ? .title3.bold() : row.heading != nil ? .headline : .body)

@@ -77,12 +77,27 @@ class ScreensTest {
         onNodeWithText("Design review", useUnmergedTree = true).assertExists()
     }
 
-    // a row of a page opens its own page on top (found on the Galaxy: a meeting's document did not open)
-    @Test fun aMeetingsDocumentOpensOnTop() = sample {
+    // a row of a page opens its own page on top (found on the Galaxy: a meeting's document did not open; the sample's
+    // meeting is written up, so a saved search's row, drawn by the same ListRow)
+    @Test fun aListsRowOpensOnTop() = sample {
+        onNodeWithContentDescription("Menu").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("My open tasks").isNotEmpty() }
+        onNodeWithText("My open tasks", useUnmergedTree = true).performClick()
+        val row = hasText("Book the offsite venue") and androidx.compose.ui.test.hasClickAction()
+        waitUntil(timeoutMillis = 3000) { onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
+        onNode(row).performClick()
+        waitUntil(timeoutMillis = 3000) { onAllNodes(row).fetchSemanticsNodes().isEmpty() }
+    }
+
+    // a meeting Tana wrote up shows its summary, and Notes | Summary over it when you have notes too
+    @Test fun aWrittenUpMeetingShowsItsSummaryAndYourNotes() = sample {
         onNode(hasText("Design review", substring = true)).performClick()
-        waitUntil(timeoutMillis = 3000) { onAllWithText("Offsite planning").isNotEmpty() }
-        onNode(hasText("Offsite planning") and androidx.compose.ui.test.hasClickAction()).performClick()
-        waitUntil(timeoutMillis = 3000) { onAllNodes(hasText("Offsite planning") and androidx.compose.ui.test.hasClickAction()).fetchSemanticsNodes().isEmpty() }
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Ship the new onboarding in two steps").isNotEmpty() }
+        onNodeWithText("Summary").assertExists()
+        assertTrue(onAllWithText("Ask about the pilot budget").isEmpty())
+        onNodeWithText("Notes").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Ask about the pilot budget").isNotEmpty() }
+        assertTrue(onAllWithText("Ship the new onboarding").isEmpty())
     }
 
     @Test fun askTanaOpensTheChat() = sample {

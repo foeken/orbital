@@ -62,6 +62,11 @@ final class SampleTests: XCTestCase {
     func testMeetingOpensItsPage() {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Design review'")).firstMatch.tap()
         XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 15))
+        // written up, with notes of yours too: the summary first, and Notes | Summary over it (an outline row is a button)
+        XCTAssert(app.buttons["Ship the new onboarding in two steps"].waitForExistence(timeout: 15))
+        app.buttons["Notes"].tap()
+        XCTAssert(app.buttons["Ask about the pilot budget"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Ship the new onboarding in two steps"].exists)
     }
 
     func testAskTanaOpensTheChat() {

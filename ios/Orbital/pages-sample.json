@@ -370,6 +370,44 @@
      "icon": "text",
      "createdAt": "2026-09-30T10:05:00Z"
     }
+   ],
+   "summary": [
+    {
+     "id": "sum.0",
+     "text": "Ship the new onboarding in two steps",
+     "segments": [
+      {
+       "text": "Ship the new onboarding in two steps"
+      }
+     ]
+    },
+    {
+     "id": "sum.1",
+     "text": "Mia drafts the copy by Thursday",
+     "segments": [
+      {
+       "text": "Mia drafts the copy by Thursday"
+      }
+     ]
+    },
+    {
+     "id": "sum.2",
+     "type": "image",
+     "image": {
+      "uri": "tana:image:0000000000000000000000000i"
+     }
+    }
+   ],
+   "notes": [
+    {
+     "id": "notes.0",
+     "text": "Ask about the pilot budget",
+     "segments": [
+      {
+       "text": "Ask about the pilot budget"
+      }
+     ]
+    }
    ]
   },
   "tana:text:0000000000000000000000000b": {

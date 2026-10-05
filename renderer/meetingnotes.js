@@ -16,9 +16,10 @@ let notesAsked = 0; // a generation: an answer asked before a sign-out or a lost
 const notesSeq = new Map(); // event id -> the newest ask: an older answer landing after it is dropped
 const notesWaitSaid = new Set(); // event ids whose "what you typed is kept" was said: once, not at every retry
 const notesHeld = new Map(); // row key -> { item, segs }: a save main refused while who sees the notes changed, saved once the line says so
-// Notes / Summary: a meeting with a write-up (summaryUri) shows a switch over its rows; Summary shows the write-up's own
-// rows in the notes' place, with its own audience and permissions read from it, never from the meeting or the notes.
-// Summary is the default: once Tana has written a meeting up, that is what its page shows.
+// Notes / Summary: a meeting with a write-up (summaryUri) and notes of yours shows a switch over its rows; Summary shows
+// the write-up's own rows in the notes' place, with its own audience and permissions read from it, never from the
+// meeting or the notes. Summary is the default: once Tana has written a meeting up, that is what its page shows, and
+// with no notes of yours it is all the page shows.
 const notesOn = new Set(); // event ids showing your notes over their write-up, chosen with Notes, kept per meeting for the session
 const summaryMeta = new Map(); // write-up id -> its own taskMeta (who sees it), null while asked
 const summarySeq = new Map(); // write-up id -> the newest ask: an older answer, landing after a live change asked again, is dropped
@@ -98,7 +99,7 @@ const summaryShown = (eventId) => (!notesOn.has(eventId) && notesWriteUps.get(ev
 function noteWriteUp(eventId, uri) {
   if (!notesWriteUps.has(eventId) || notesWriteUps.get(eventId) === uri) return;
   if (zoom && zoom.docId === eventId && editingRow()) notesOn.add(eventId);
-  notesWriteUps.set(eventId, uri); renderSoon();
+  notesWriteUps.set(eventId, uri); patchNotesHead(eventId); renderSoon(); // the switch at once, a row being typed in or not
 }
 // Whether the meeting has a write-up is known: until then neither the notes nor their line are drawn, as it may be the summary
 const writeUpKnown = (eventId) => !tana.summaryUri || notesWriteUps.has(eventId);
@@ -163,12 +164,13 @@ const notesWaiting = (parent) => {
 function notesHeadEl(parent) { return notesPage(parent) ? notesHeadFor(parent.docId) : null; }
 function notesHeadFor(eventId) {
   const answer = meetingNotes.get(eventId), writeUp = notesWriteUps.get(eventId), wu = summaryShown(eventId);
-  if ((!answer && !wu) || !writeUpKnown(eventId)) return null;
+  // nothing until both are known: the switch depends on whether there are notes, so it never shows and then goes
+  if (!answer || !writeUpKnown(eventId)) return null;
   const el = document.createElement('div'), a = answer && answer.audience, span = (text) => Object.assign(document.createElement('span'), { textContent: text });
   el.className = 'notes-head';
-  if (writeUp) el.append(notesSwitchEl(eventId, !!wu));
+  // the switch only when there are notes to switch to, or you are in them already (their first words still being made)
+  if (writeUp && (answer.id || notesOn.has(eventId))) el.append(notesSwitchEl(eventId, !!wu));
   if (wu) el.append(...summaryAudienceEls(wu, span));
-  else if (!answer) { /* asked: the line says who sees them once main answers */ }
   else if (answer.failed) el.append(iconEl('lock', 'Visible only to you'), span('Your notes could not be checked just now'));
   else if (answer.checking) el.append(iconEl('pending', null), span('Checking who can see your notes…'));
   else if (!answer.id || !a || a.private) el.append(iconEl('lock', 'Visible only to you'), span(writeUp ? 'only you can see them' : 'Your notes · only you can see them'), ...(answer.node && answer.node.editable === false ? [span('· read only')] : []));
@@ -188,7 +190,7 @@ function notesHeadFor(eventId) {
   }
   return el;
 }
-// Notes | Summary, over the rows of a meeting that has a write-up: two tabs, the one shown pressed
+// Notes | Summary, over the rows of a meeting that has a write-up and your notes: two tabs, the one shown pressed
 function notesSwitchEl(eventId, summary) {
   const el = document.createElement('div');
   el.className = 'notes-switch'; el.setAttribute('role', 'tablist'); el.setAttribute('aria-label', 'Your notes or the meeting’s summary');
