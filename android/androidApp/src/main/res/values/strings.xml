@@ -3,4 +3,7 @@
     <string name="today_widget">The tasks pinned to today, each a tap from its page</string>
     <string name="ahead_widget">Today\'s tasks and the meetings to come, with their documents, on the Timeline\'s rail</string>
     <string name="activity_widget">What happened to your tasks and meetings, day by day</string>
+    <string name="shortcut_add">Quick Add</string>
+    <string name="shortcut_add_long">Quick Add Task</string>
+    <string name="shortcut_today">Today\'s Tasks</string>
 </resources>

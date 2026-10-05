@@ -119,13 +119,18 @@ struct Shell: View {
             })
         .sheet(isPresented: $settings) { SettingsView(engine: engine) }
         .sheet(isPresented: $adding) { QuickAdd(engine: engine, search: path.isEmpty ? page.searchID : nil) } // on a saved search: a row of it
-        // shared words open Quick Add; a shared image is read at once, behind the turning +, with nothing opened over the page
-        .sheet(item: Binding { shared?.image == nil ? shared : nil } set: { shared = $0 }) { QuickAdd(engine: engine, shared: $0) }
-        .onChange(of: shared?.id) { if let image = shared?.image { shared = nil; engine.addImage { image } } }
+        // what was shared opens Quick Add: its words to edit, or its image, read only once tapped there (any app can start
+        // the share screen; security review finding 9, as Android's QuickAdd.kt)
+        .sheet(item: $shared) { QuickAdd(engine: engine, shared: $0) }
         .onChange(of: engine.made) { if let id = engine.made { engine.made = nil; path.append(id) } } // an image's node, made: opened
         .onOpenURL(perform: open)
-        // shared words open Quick Add over nothing else; an image opens nothing, so whatever is open stays
-        .onChange(of: scene, initial: true) { if scene == .active, let found = Shared.take() { if found.image == nil { adding = false; settings = false }; shared = found } }
+        // what was shared opens Quick Add over nothing else
+        .onChange(of: scene, initial: true) {
+            guard scene == .active else { return }
+            if let found = Shared.take() { adding = false; settings = false; shared = found }
+            // a widget's box ticked where the app could not take it at once (TickTaskIntent): with the Timeline in front
+            for t in Writes.take() { page = .timeline; path = []; Task { await engine.tick(t.id, to: t.to) } }
+        }
         .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
         .sheet(item: Binding { engine.handing } set: { engine.handing = $0 }) { HandSheet(engine: engine, handing: $0) } // Assign to your Dot (Agents.swift)
         .shareAsk(engine)
@@ -150,26 +155,21 @@ struct Shell: View {
     }
 
     // The Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
-    // not open it. A widget's tap (ios/Widgets) is orbital:add for Quick Add, orbital:<id> for that node over the
-    // Timeline, or orbital:timeline; its task box orbital:check:<id> (done) or orbital:uncheck:<id> (open: accepted, or
-    // ticked back on), written to Tana at once, with the Timeline in front where Today's Tasks shows it. Siri and
-    // Shortcuts (Intents.swift) use the same, and orbital:new?title=…&today=1 to add a task, orbital:pin:<id> or
-    // orbital:unpin:<id>.
+    // not open it. An orbital: link only opens, whoever sends it (a widget's tap, another app, a web page), since iOS
+    // does not say who did, and Orbital's own writes go through intents (TickTaskIntent, Intents.swift): orbital:add
+    // Quick Add, orbital:timeline the Timeline, orbital:<id> that node over it; orbital:check:, uncheck:, pin: and
+    // unpin:<id> that node too, where you tick or pin it yourself, and orbital:new?title=… Quick Add with its title,
+    // added only when you press Add (Android's Link.parse with own false, docs/ANDROID.md Security).
     private func open(_ url: URL) {
         guard url.scheme == "orbital" else { shared = Shared.take() ?? shared; return }
         let what = String(url.absoluteString.dropFirst("orbital:".count))
         settings = false; adding = what == "add"; show(false)
-        if what.hasPrefix("tana:") { page = .timeline; path = [what] } else if what == "timeline" { page = .timeline; path = [] }
-        for (prefix, state) in [("check:", "closed"), ("uncheck:", "open")] where what.hasPrefix(prefix + "tana:") {
-            page = .timeline; path = []
-            Task { await engine.tick(String(what.dropFirst(prefix.count)), to: state) }
-        }
-        for (prefix, on) in [("pin:", true), ("unpin:", false)] where what.hasPrefix(prefix + "tana:") {
-            Task { await engine.pin(String(what.dropFirst(prefix.count)), on) }
-        }
+        if what == "timeline" { page = .timeline; path = [] }
+        if let id = ["", "check:", "uncheck:", "pin:", "unpin:"].lazy.compactMap({ what.hasPrefix($0) ? String(what.dropFirst($0.count)) : nil })
+            .first(where: { $0.wholeMatch(of: /tana:[a-z-]+:[0-9a-z]{26}/) != nil }) { page = .timeline; path = [id] }
         if what.hasPrefix("new?"), let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
            let title = items.first(where: { $0.name == "title" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            engine.add(.init(title: title, type: nil, search: nil, assignee: nil, values: [:], today: items.contains { $0.name == "today" }))
+            shared = Shared(text: title)
         }
     }
 
@@ -321,7 +321,7 @@ struct Composer: View {
     var body: some View {
         let empty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         // Codex's composer: a capsule at rest, a card while you type in it (the words on top, send in its corner)
-        let busy = dictation.recording || dictation.transcribing // listening, or writing down what was said
+        let busy = dictation.busy // listening, or writing down what was said
         let open = focused || !empty || busy
         VStack(spacing: 6) {
             if let failure = failure ?? dictation.problem {
@@ -340,7 +340,7 @@ struct Composer: View {
                     // while it listens ✕, the dots and ■ take the row, as Codex's own dictation bar
                     HStack(spacing: 8) {
                         if !dictation.recording { Spacer(minLength: 0) }
-                        if focused || busy { Dictate(dictation: dictation, into: append) }
+                        if focused || busy { Dictate(dictation: dictation, into: $text) }
                         Button { Task { await submit() } } label: {
                             // the Codex app's send: a grey circle while there is nothing to send, blue once there is
                             Image(systemName: "arrow.up").font(.body.weight(.semibold))
@@ -349,7 +349,7 @@ struct Composer: View {
                                 .background(Circle().fill(empty && !busy ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.blue)))
                         }
                         .buttonStyle(.plain)
-                        .disabled((empty && !busy) || sending)
+                        .disabled((empty && !busy) || sending || dictation.settling)
                         .accessibilityLabel(prompt)
                     }
                     .padding(open ? 10 : 6)
@@ -366,17 +366,9 @@ struct Composer: View {
         .task { if CommandLine.arguments.contains("-typing") { try? await Task.sleep(for: .seconds(1)); focused = true } } // -typing: with the keyboard up
     }
 
-    // dictated words land after what is typed
-    private func append(_ said: String) { text = text.isEmpty ? said : text + " " + said }
-
     // Send, while listening or writing down too: listening stops and the words are waited for first, as Add in Quick Add
     private func submit() async {
-        if dictation.recording || dictation.transcribing {
-            sending = true
-            let heard = await dictation.settle(into: append)
-            sending = false
-            guard heard else { return }
-        }
+        guard !dictation.settling, await dictation.settled(into: $text) else { return }
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { return }
         text = ""; focused = false; sending = true

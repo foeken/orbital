@@ -76,6 +76,52 @@ Use `currentWindowAdaptiveInfo()` or window size classes to switch between compa
 | Record voice as `.m4a` | Configure `MediaRecorder` with `MIC`, `MPEG_4`, and `AAC`, name the output `.m4a`, and request `RECORD_AUDIO` at runtime because it is a dangerous permission. ([MediaRecorder](https://developer.android.com/reference/android/media/MediaRecorder), [MPEG-4 output](https://developer.android.com/reference/android/media/MediaRecorder.OutputFormat#MPEG_4), [RECORD_AUDIO](https://developer.android.com/reference/android/Manifest.permission#RECORD_AUDIO), [runtime permissions](https://developer.android.com/training/permissions/requesting)) |
 | Paste image | In a user-initiated paste while the app has focus, inspect `ClipboardManager.getPrimaryClip()` and the clip description/items for `image/*` or a URI; clipboard access is subject to Android's foreground privacy behavior. ([ClipboardManager](https://developer.android.com/reference/android/content/ClipboardManager), [ClipData](https://developer.android.com/reference/android/content/ClipData)) |
 
+### Where Android does what only the iPhone has a place for
+
+Android has no Siri, Shortcuts app or Lock Screen widget of an app's own; each of those iPhone features has its nearest
+Android place, and all of them are the iPhone's own `orbital:` links (Shell.swift `open`), which `MainActivity` hands to
+the Shell and `Link.parse` in `ui/Shell.kt` reads (`LinkTest`): `add`, `timeline`, `<id>`, `check:<id>`, `uncheck:<id>`,
+`pin:<id>`, `unpin:<id>` and `new?title=…&today=1`.
+
+| iPhone | Android |
+|---|---|
+| Siri and Shortcuts (`ios/Orbital/Intents.swift`): Add Task, Open | `res/xml/shortcuts.xml`: the launcher icon's long-press shortcuts Quick Add (`orbital:add`) and Today's Tasks (`orbital:timeline`), and Assistant's create a task (App Actions `actions.intent.CREATE_THING`, `orbital:new?title=…`) |
+| Siri's Check Off, Uncheck, Pin, Today's Tasks, List Tasks over tasks as App Entities (`Engine.swift` keepTasks) | Your newest tasks still to do as the launcher icon's dynamic shortcuts (`AndroidPlatform.keepTasks`, `Row.forShortcuts`): `Engine.keepTasks` reads `orbital.tasks()` after a Timeline read at most once in five minutes, never shows a sensitive one, and each opens its task through `FromOrbital`; checking off and pinning are on the task's page (Status, Pin to Today). No AppSearch |
+| Lock Screen Quick Add widget (`ios/Widgets/Widgets.swift` QuickAddWidget) | `QuickAddTile`, a Quick Settings tile that opens Quick Add, from the lock screen once unlocked (`scripts/android-check.js` holds it to `BIND_QUICK_SETTINGS_TILE`) |
+| Widgets' taps | The same `orbital:` links as the iPhone's (`Widgets.kt` `openApp`) |
+
+### What is kept on the phone, and when
+
+Everything `Platform.files` keeps (the saved Timeline, the widgets' copy, the translations, what is on its way to Tana) is written by `Files` on one thread of its own, in the order asked, so the screen never waits on the disk; until a value is on disk it is kept in memory, so a read right after a write has it (`FilesTest`).
+
+Quick Add's Add, an image to be read and Assign to <your agent> … close at once and go on behind the screen (`Engine.add`, `addImage`, `handOff`). Android may end the app before Tana answers, where the iPhone's background task only buys time, so each is kept on the phone (`Engine.fly`, key `pending`) until Tana has answered, and what was still on its way is offered again at the next launch to the account it was for: a task in Quick Add, saying to check the Inbox before adding it again (it may have been made), an image as one shared, read once tapped, and a request in its node's form. WorkManager would retry it unattended, but it is a dependency of its own and the engine runs only in the app's web view (`EngineTest.whatWasOnItsWayWhenOrbitalClosedIsOfferedAgainForItsAccount`).
+
+### Security: what another app can make Orbital do
+
+On Android any app can start an exported screen, with whatever it likes in the intent, without the person choosing
+Orbital; on the iPhone a Share extension runs only when the person picks Orbital. So Orbital holds what comes from outside
+to opening and asking:
+
+- **A shared image waits for a tap** (security review finding 9): `ShareActivity` is exported, so an image shared to it
+  opens Quick Add with Process the shared image, and is read by ChatGPT and made in Tana only once that is tapped
+  (`ui/Shell.kt`, `ui/QuickAdd.kt`). Words shared fill Quick Add's title.
+- **A link from another app writes nothing.** Orbital's own widgets, Quick Settings tile and launcher shortcuts open
+  `FromOrbital` (`MainActivity.kt`), a screen that is not exported, so Android starts it for Orbital alone; it leaves
+  their link in the app's memory, where no other app can put one, and brings `MainActivity` forward, which takes it as
+  Orbital's own. (An `activity-alias` was tried first and failed the device tests: with the app opened through it, a link or a share
+  sent to `MainActivity` left a screen paused under a new one that would not close.) Their
+  `orbital:check:`, `uncheck:`, `pin:`, `unpin:` and `new?` links write at once, as the iPhone's widgets do. The same links from anyone else come to the exported
+  `MainActivity` and only ask (`Link.parse(link, own = false)`): a tick or a pin opens its node, where you make it
+  yourself, and a new task opens Quick Add with its title filled in, added only when you press Add. Assistant's create a
+  task (App Actions `CREATE_THING`) is one of these: a request you made, landing in Quick Add rather than writing. Links
+  that only open (`<id>`, `timeline`, `add`) are the same from anyone. `LinkTest` and the device test
+  `SampleJourneyTest.anotherAppsWriteLinkOpensWhereYouCanMakeItAndWritesNothing` hold it.
+- **The launch extras** (`sample`, `demoMode`, `history`, `zoom`, `settings`, `add`, `menu`, `menudemo`: design shots,
+  the device tests and `adb shell am start`, README.md) count only on a debug build (`MainActivity.tooling`). A release
+  opened by another app with them opens as it always does.
+- **The engine's bridge** answers only Tana's session page in the main frame (security review finding 6; `Bridge.trusted`,
+  `Bridge.onSessionPage`).
+
 ## Testing and Android CLI
 
 The Android Compose testing guide's standard setup is instrumented `androidTest` with `androidx.compose.ui:ui-test-junit4`; KMP's Android plugin additionally offers opt-in `androidHostTest` for local tests and `androidDeviceTest` for instrumentation. Android's testing skill recommends Compose UI tests in `test` with Robolectric, and Robolectric can run host-side Android/Compose tests where its simulated APIs are sufficient; keep actual WebView, IME, renderer-lifecycle, and permission coverage in device tests. Use UI Automator for journeys that cross app/system UI boundaries. ([Compose testing](https://developer.android.com/develop/ui/compose/testing), [KMP host/device tests](https://developer.android.com/kotlin/multiplatform/plugin), [Android testing skill](https://github.com/android/skills/blob/main/testing/testing-setup/SKILL.md), [Robolectric](https://github.com/robolectric/robolectric), [UiAutomator](https://developer.android.com/jetpack/androidx/releases/test-uiautomator))
@@ -86,7 +132,7 @@ The Android CLI help returned these emulator and inspection forms: `android emul
 
 ## Widgets and the Galaxy Z Flip's cover screen
 
-Three Glance widgets (`androidApp/.../Widgets.kt`, the iPhone's `ios/Widgets` mirror them): each offered on the home screen, the lock screen and a Galaxy Z Flip's cover screen alike: **Today's Tasks**, each task a whole line across the widget's width with no rail; and the Timeline in two, on its rail as the app draws it, in a `LazyColumn` that scrolls: **Today's Tasks and Upcoming Meetings** (`AheadWidget`, with + for Quick Add) and **Activity** (`ActivityWidget`, no +), each line its marker and the task or node itself, each task once at the latest thing that happened to it (`Glimpse.activity`, `Row.asTask`, `GlimpseTest`). A widget cannot run the engine, so the app keeps a `Glimpse` after every read and every change made there (`Engine.keepTimeline`, which also keeps the launch copy, SavedTimeline; `forgetTimeline` drops both on sign-out or another account): the rows as shown, sensitive ones without their words. A row opens its node in the app (`zoom`), + opens Quick Add, and a task's box opens the app with `tick`, which ticks the task and writes it to Tana at once (`MainActivity`, `Engine.tick`); Glance's lambda actions cannot start an activity on Android 12 and later, so opening uses `actionStartActivity`. ([Glance interaction](https://developer.android.com/develop/ui/compose/glance/user-interaction), [Glance lists](https://developer.android.com/develop/ui/compose/glance/build-ui), [updating a widget](https://developer.android.com/develop/ui/compose/glance/glance-app-widget))
+Three Glance widgets (`androidApp/.../Widgets.kt`, the iPhone's `ios/Widgets` mirror them): each offered on the home screen, the lock screen and a Galaxy Z Flip's cover screen alike: **Today's Tasks**, each task a whole line across the widget's width with no rail; and the Timeline in two, on its rail as the app draws it, in a `LazyColumn` that scrolls: **Today's Tasks and Upcoming Meetings** (`AheadWidget`, with + for Quick Add) and **Activity** (`ActivityWidget`, no +), each line its marker and the task or node itself, each task once at the latest thing that happened to it (`Glimpse.activity`, `Row.asTask`, `GlimpseTest`). A widget cannot run the engine, so the app keeps a `Glimpse` after every read and every change made there (`Engine.keepTimeline`, which also keeps the launch copy, SavedTimeline; `forgetTimeline` drops both on sign-out or another account): the rows as shown, sensitive ones without their words. A row opens its node in the app (`orbital:<id>`), + opens Quick Add (`orbital:add`), and a task's box opens the app with `orbital:check:<id>` or `orbital:uncheck:<id>`, which ticks the task and writes it to Tana at once (`ui/Shell.kt` `Link`, `Engine.tick`); Glance's lambda actions cannot start an activity on Android 12 and later, so opening uses `actionStartActivity`. ([Glance interaction](https://developer.android.com/develop/ui/compose/glance/user-interaction), [Glance lists](https://developer.android.com/develop/ui/compose/glance/build-ui), [updating a widget](https://developer.android.com/develop/ui/compose/glance/glance-app-widget))
 
 The widgets have no background of their own, as the iPhone's on a clear Home Screen (foeken's screenshot on #718): the wallpaper shows through a light black veil (30 %) that keeps white words legible on a bright one, since RemoteViews cannot blur what is behind them as iOS's glass does, and everything is drawn in white at the iPhone's three strengths (primary, secondary, tertiary), in light and dark alike (`Glass` in `Widgets.kt`). As there, nothing is laid behind a marker to hide the rail, so the line stops short of each marker; a task's box is an outline (`drawable/box`), a check in it once done, dashed for an Inbox task (`drawable/inbox_box`); finished work's marker is a check in a ring (`drawable/ring`). The shapes say `<solid android:color="@android:color/transparent" />`: without it a tinted shape came out filled.
 

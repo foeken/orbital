@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What Siri and Shortcuts offer on the iPhone (ios/Orbital/Intents.swift), as Android has it: the launcher icon's
+     long-press shortcuts, Quick Add and Today's Tasks, and Assistant's "create a task" (App Actions CREATE_THING), each
+     an orbital: link the app follows as Shell.swift does (MainActivity link, ui/Shell.kt Link). The shortcuts come in
+     through Orbital's own way in (FromOrbital); Assistant through the exported MainActivity, so its task is Quick Add
+     with the title filled in, added once you press Add -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add"
+        android:enabled="true"
+        android:icon="@drawable/add"
+        android:shortcutShortLabel="@string/shortcut_add"
+        android:shortcutLongLabel="@string/shortcut_add_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="orbital:add"
+            android:targetClass="com.dreetje.orbital.android.FromOrbital"
+            android:targetPackage="com.dreetje.orbital" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="today"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_today"
+        android:shortcutLongLabel="@string/shortcut_today">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="orbital:timeline"
+            android:targetClass="com.dreetje.orbital.android.FromOrbital"
+            android:targetPackage="com.dreetje.orbital" />
+    </shortcut>
+    <!-- "Hey Google, create a task <name> in Orbital": the iPhone's Add Task (orbital:new?title=…) -->
+    <capability android:name="actions.intent.CREATE_THING">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.dreetje.orbital.android.MainActivity"
+            android:targetPackage="com.dreetje.orbital">
+            <url-template android:value="orbital:new{?title}" />
+            <parameter
+                android:name="thing.name"
+                android:key="title" />
+        </intent>
+    </capability>
+</shortcuts>

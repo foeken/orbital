@@ -12,7 +12,7 @@ which=${1:-both}
 if [ "$which" != ios ]; then
   . scripts/android-env.sh # the JDK and the Android SDK, if there is one (android_sdk)
   build=""
-  [ -n "$android_sdk" ] && build=":androidApp:assembleDebug :androidApp:lintDebug :androidApp:assembleDebugAndroidTest"
+  [ -n "$android_sdk" ] && build=":androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:lintDebug :androidApp:assembleDebugAndroidTest"
   [ -n "$build" ] || echo "phones: no Android SDK here, so the debug build is left to CI"
   # the device tests on whatever phone or emulator adb sees (emulator -avd <name>, or a phone over USB)
   adb="$android_sdk/platform-tools/adb"
@@ -26,10 +26,16 @@ fi
 if [ "$which" != android ]; then
   # Xcode's own components, CoreSimulator among them, come with its first launch; without them no simulator starts
   xcodebuild -checkFirstLaunchStatus || { echo "phones: Xcode needs its first-launch install: sudo xcodebuild -runFirstLaunch"; exit 1; }
-  # the newest iOS runtime's first iPhone, as .github/workflows/checks.yml picks it
-  sim=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices; const rt=Object.keys(d).filter(k=>k.includes('iOS')).sort().reverse()[0]; console.log(d[rt].find(x=>x.name.startsWith('iPhone')).udid)")
+  # A simulator of this checkout's own, made once on the newest iOS runtime as its first iPhone (the one
+  # .github/workflows/checks.yml picks) and reused: two checkouts testing at once on one shared iPhone killed each other's
+  # tests ("Test crashed with signal kill"). Named by the checkout's path, since every worktree's folder is "orbital".
+  # ponytail: one left behind per checkout and runtime; xcrun simctl delete unavailable, or by name, clears them.
+  name="Orbital $(pwd -P | shasum | cut -c1-8)"
+  sim=$(xcrun simctl list devices available -j | NAME="$name" node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices; const rt=Object.keys(d).filter(k=>k.includes('iOS')).sort().reverse()[0]; const mine=d[rt].find(x=>x.name===process.env.NAME); console.log(mine ? mine.udid : 'new '+d[rt].find(x=>x.name.startsWith('iPhone')).deviceTypeIdentifier+' '+rt)")
+  case "$sim" in new\ *) set -- $sim; sim=$(xcrun simctl create "$name" "$2" "$3"); echo "phones: made the simulator $name";; esac
   (cd ios && xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$sim" \
-    -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -retry-tests-on-failure -test-iterations 2 \
+    -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300 \
+    -retry-tests-on-failure -test-iterations 2 \
     CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO -quiet)
 fi
 echo "phones: ok ($which)"

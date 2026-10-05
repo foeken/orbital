@@ -18,6 +18,7 @@
 // Some agents come and go while the app runs: those linked through the relay (main/agents/linked.js), one per agent
 // linked, are registered by a source that is asked to catch up whenever the agents are looked at.
 const settings = require('./settings');
+const relay = require('./relay'); // the agents linked through orbital.md, as the relay lists them (storeLinked)
 
 const AGENTS = {}; // id -> plugin, in the order they registered
 const register = (plugin) => { AGENTS[plugin.id] = plugin; return plugin; };
@@ -35,17 +36,26 @@ const get = (id) => { catchUp(); return typeof id === 'string' && Object.hasOwn(
 // Which agents are on, and which one Assign to Agent uses. Both follow you (main/settings.js SYNCED). Unset is Tana and
 // Codex: Codex is what this app handed work to before agents were plugins, so nobody loses it on update; Claude is new
 // and waits to be switched on. Tana cannot be switched off: it needs nothing installed and is the one agent everybody has.
-const enabledIds = () => { const stored = settings.get('agents'); return ['tana', ...(Array.isArray(stored) ? stored : ['codex']).filter((id) => id !== 'tana' && get(id))]; };
+// The ids stored as on, every one: one this device does not run or know yet (a Dot linked on the phone and not heard of
+// here, Claude on the phone) is kept, so switching one agent here never switches off another device's.
+const storedIds = () => { const stored = settings.get('agents'); return (Array.isArray(stored) ? stored : ['codex']).filter((id) => id !== 'tana'); };
+const enabledIds = () => ['tana', ...storedIds().filter((id) => get(id))];
 const usable = (id) => !!get(id) && enabledIds().includes(id) && get(id).available();
 function setEnabled(id, on) {
   if (!get(id) || id === 'tana') throw new Error('No such agent');
-  const next = enabledIds().filter((x) => x !== 'tana' && x !== id);
-  if (on) next.push(id);
-  settings.set('agents', next);
-  // the default goes with it: kept, it would come back unannounced the day the agent is switched on again (#671 review)
-  if (!on && settings.get('defaultAgent') === id) settings.set('defaultAgent', null);
+  enable(id, on);
   return list();
 }
+// The setting alone, by id, for an agent this device need not run (the phones' engine runs none): on or off, and off
+// takes the default with it: kept, it would come back unannounced the day the agent is switched on again (#671 review)
+function enable(id, on) {
+  const next = storedIds().filter((x) => x !== id);
+  if (on) next.push(id);
+  settings.set('agents', next);
+  if (!on && settings.get('defaultAgent') === id) settings.set('defaultAgent', null);
+}
+// on and the default: what linking an agent is, and the phone's Make Default
+const choose = (id) => { enable(id, true); settings.set('defaultAgent', id); };
 // The default, when it can still run; Tana otherwise, so Assign to Agent always has somewhere to go.
 const defaultAgent = () => { const id = settings.get('defaultAgent'); return usable(id) ? id : 'tana'; };
 function setDefault(id) {
@@ -89,6 +99,16 @@ const elsewhere = (link) => !!(link && link.device && link.device !== deviceId()
 const clearTask = (id) => setTask(id, null);
 // nodeId -> { agent, taskId } for every linked node, for the badge and the rows that open a task
 const links = () => Object.fromEntries(Object.keys(tasks()).map((id) => [id, taskLink(id)]).filter(([, link]) => link));
+// The relay's list of linked agents mirrored (main/relay.js remember), as the Mac (main/agents/linked.js) and the phones'
+// engine (ios/engine/agents.js) keep it: one this account sees for the first time is chosen, once (linking your Dot is
+// choosing it; switched off or another picked later, that stays), and one the relay no longer lists (unlinked elsewhere,
+// or linked to another Orbital) lets go of its nodes: drop(nodeId) takes the mark, the request and the link, each side
+// its own way, the node itself left as it is. Read from the stored links, which keep an agent no longer registered.
+function storeLinked(list, drop) {
+  for (const a of relay.remember(list)) choose(relay.ID + a.id);
+  const listed = new Set(list.map((a) => relay.ID + a.id));
+  for (const [nodeId, stored] of Object.entries(tasks())) if (stored && typeof stored.agent === 'string' && stored.agent.startsWith(relay.ID) && !listed.has(stored.agent)) drop(nodeId);
+}
 
 // ---- what a coding agent is told ----
 // The node's title, made fit for one line. It is text from the graph and is treated as data: newlines, control
@@ -146,4 +166,4 @@ function findBin(name, extra = []) {
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-module.exports = { AGENTS, register, unregister, addSource, get, enabledIds, usable, setEnabled, defaultAgent, setDefault, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };
+module.exports = { AGENTS, register, unregister, addSource, get, storedIds, enabledIds, usable, setEnabled, enable, choose, storeLinked, defaultAgent, setDefault, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };

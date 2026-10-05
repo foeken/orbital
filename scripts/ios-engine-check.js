@@ -37,6 +37,43 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   assert.strictEqual(arrange([{ ...rows[5], id: 'g' }], { groupBy: 'responsibility' }, { ...c, pinned: new Set(['g']) })[0].group, 'Waiting', 'one you are waiting on leaves Pinned for Waiting');
 }
 
+// What the phone holds subscribed (ios/engine/held.js): a page's documents, the newest KEEP; one only looked at (the
+// menu reading every saved search's query) let go of once read, and never in a page's place, which had stopped the
+// changes to the page on screen; one held meanwhile, and one held for something else (the Timeline's), left alone
+{
+  const { createHeld, KEEP } = require('../ios/engine/held.js');
+  const docs = new Map();
+  const sync = { getDocument: (id) => docs.get(id), subscribe: async (id) => { if (!docs.has(id)) docs.set(id, { id }); return docs.get(id); }, unsubscribe: async (id) => { docs.delete(id); } };
+  const held = createHeld(() => sync, (_, p) => p);
+  (async () => {
+    docs.set('tana:text:timeline', { id: 'tana:text:timeline' });
+    await held.hold('tana:chat:open');
+    for (let i = 0; i < KEEP + 3; i++) assert.strictEqual(await held.peek('tana:search:' + i, (d) => d.id), 'tana:search:' + i);
+    await new Promise((r) => setImmediate(r));
+    assert.ok(docs.has('tana:chat:open'), 'the menu reading every saved search leaves the page on screen subscribed');
+    assert.ok(![...docs.keys()].some((id) => id.startsWith('tana:search:')), 'and lets each search go once read');
+    let answer;
+    sync.subscribe = (id) => { if (!docs.has(id)) docs.set(id, { id }); return new Promise((r) => { answer = () => r(docs.get(id)); }); };
+    const peeked = held.peek('tana:type:t', (d) => d.id), opened = held.hold('tana:type:t');
+    answer(); await peeked; await opened; await new Promise((r) => setImmediate(r));
+    assert.ok(docs.has('tana:type:t'), 'opened while a peek read it: it stays');
+    sync.subscribe = async (id) => { if (!docs.has(id)) docs.set(id, { id }); return docs.get(id); };
+    for (let i = 0; i < KEEP + 1; i++) await held.hold('tana:text:' + i);
+    await new Promise((r) => setImmediate(r));
+    assert.ok(!docs.has('tana:chat:open') && docs.has('tana:text:timeline'), 'past KEEP pages the oldest goes; the Timeline\u2019s never');
+  })().catch((e) => { console.error(e); process.exit(1); });
+}
+
+// A meeting's page finds your notes by the desktop's own rule (sdk/events.js notesOurs, shared with main/meeting-notes.js):
+// yours, owned by the meeting or by nothing, a document, not a task, not archived
+{
+  const { notesOurs } = require('../sdk/events.js');
+  const me = 'tana:user-profile:me', ev = 'tana:event:01aaaaaaaaaaaaaaaaaaaaaaaa', n = { id: 'tana:text:01aaaaaaaaaaaaaaaaaaaaaaaa', createdBy: me, ownerUri: ev };
+  assert.deepStrictEqual([n, { ...n, ownerUri: undefined }, { ...n, ownerUri: 'tana:space:x' }, { ...n, createdBy: 'tana:user-profile:sam' }, { ...n, state: { type: 'open' } }, { ...n, archivedAt: 1 }, { ...n, id: 'tana:chat:01aaaaaaaaaaaaaaaaaaaaaaaa' }]
+    .map((x) => notesOurs(x, me, ev)), [true, true, false, false, false, false, false]);
+  assert.strictEqual(notesOurs(undefined, me, ev), undefined, 'no row yet');
+}
+
 // Every list on the phone keeps your hidden titles and Hide MCP out, as the Mac's lists do (ios/engine/listed.js,
 // main/views.js listFilter): Block and Lunch never reached the phone's Upcoming meetings before. A lookup by id still
 // answers, and listNodesUnhidden is the graph untouched.
@@ -92,7 +129,21 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   assert.notStrictEqual(t.segments[2].text, 'Budget');
   assert.strictEqual(q.title, 'My Tasks', "a saved search's title is the app's");
   assert.notStrictEqual(demoTitle('Salary review', 'tana:text:a'), 'Salary review');
+  // Tana's words about a change are masked; a meeting's length is the app's own and stays (renderer/views.js subtextOf)
+  const [done, meeting] = demo([{ id: 'e1', timeline: { uri: 'tana:text:a', tone: 'done', note: 'Moved the budget review to Friday' } },
+    { id: 'e2', timeline: { uri: 'tana:event:m', tone: 'meeting', note: '45 min' } }]);
+  assert.notStrictEqual(done.timeline.note, 'Moved the budget review to Friday', "a status entry's note is masked");
+  assert.strictEqual(meeting.timeline.note, '45 min', "a meeting's length stays");
   demoOn(false);
+}
+
+// The names Settings gives the models (main/prompts.js modelLabel, which both phones read from the engine) are the
+// Mac's: renderer/settings.js keeps a classic script's copy, held to it here
+{
+  const { modelLabel } = require('../main/prompts');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../renderer/settings.js'), 'utf8');
+  const aiModelLabel = new Function(src.match(/^const aiModelLabel = .*$/m)[0] + '\nreturn aiModelLabel;')();
+  for (const id of ['gpt-6-sol', 'gpt-5.6-terra', 'gpt-5.5', 'gpt-oss-120b']) assert.strictEqual(modelLabel(id), aiModelLabel(id), id);
 }
 
 // What is sensitive is marked to be drawn blurred (ios/engine/sensitive.js): the node itself, an entry about it, a task
@@ -122,8 +173,10 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   const labels = require('../ios/engine/labels.js');
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../renderer/timeline.js'), 'utf8');
   const slice = (re) => { const m = src.match(re); assert.ok(m, 'renderer/timeline.js still has ' + re); return m[0]; };
-  const desktop = new Function([slice(/^const dayKey = .*$/m), slice(/^function timelineDay\(key\) \{[\s\S]*?\n\}/m), slice(/^const timelineTime = .*$/m),
-    'return { dayKey, timelineDay, timelineTime };'].join('\n'))();
+  // isoDay given to the slices, so renderer/timeline.js dayKey may be written with it (renderer/segments.js)
+  const { isoDay } = require('../renderer/segments.js');
+  const desktop = new Function('isoDay', [slice(/^const dayKey = .*$/m), slice(/^function timelineDay\(key\) \{[\s\S]*?\n\}/m), slice(/^const timelineTime = .*$/m),
+    'return { dayKey, timelineDay, timelineTime };'].join('\n'))(isoDay);
   const week = Date.now() - 5 * 864e5;
   for (const at of ['2026-10-02T07:05:00Z', '2026-10-02T21:59:00.000Z', new Date(week).toISOString()]) {
     assert.strictEqual(labels.time(at), desktop.timelineTime(at), 'the time of ' + at);
@@ -211,6 +264,10 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     assert.deepStrictEqual(out, { id: ID, name: 'Echo', status: 'assigned' });
     relay.writeStatus(doc, 'Working');
     assert.strictEqual(agentOf(doc.id, doc).status, 'working', 'the Dot\'s Working shows');
+    answer = { subscribers: 1, delivered: 0 };
+    await assert.rejects(api.handTo(doc.id, ID, 'Book it again'), /Echo did not take it/);
+    assert.deepStrictEqual([lines().at(-1), settings.get('codexPrompt')[doc.id]], ['Agent status: Working', 'Book the venue'], 'not taken: the Dot\'s own line is back (main/relay.js handOver), and its request kept');
+    answer = { subscribers: 1, delivered: 1 };
 
     const before = sent.length;
     await assert.rejects(api.handTo(doc.id, ID, '   '), /Say what Echo should do/);
@@ -421,6 +478,13 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   const asked = page.calls.length;
   assert.deepStrictEqual(JSON.parse(await page.orbital.tasks()), []);
   assert.ok(page.calls.slice(asked).some((c) => c.includes('GraphService/ListNodes')), 'List Tasks asks the graph');
+  // ChatGPT's words, as the Mac asks with them (main/prompts.js, orbital.prompts): Translator.swift and QuickAdd.swift
+  // read them from here, and Settings the models' names
+  const p = require('../main/prompts');
+  assert.deepStrictEqual(JSON.parse(page.orbital.prompts('Dutch', ['gpt-6-sol', 'gpt-5.5', 'gpt-oss-120b'], ['xhigh', 'low'])), {
+    translate: { instructions: p.TRANSLATE_INSTRUCTIONS('Dutch'), schema: p.TRANSLATE_SCHEMA }, image: { instructions: p.IMAGE_INSTRUCTIONS('Dutch') },
+    models: { 'gpt-6-sol': 'Sol 6', 'gpt-5.5': 'GPT-5.5', 'gpt-oss-120b': 'gpt-oss-120b' }, efforts: { xhigh: 'Extra high', low: 'Low' } });
+  assert.deepStrictEqual(JSON.parse(page.orbital.prompts('Klingon')), { translate: null, image: { instructions: p.IMAGE_INSTRUCTIONS(null) }, models: {}, efforts: {} }, 'a language Auto-translate does not offer: none');
   fs.rmSync(out, { force: true });
   console.log('ios engine check ok');
   process.exit(0); // the fake sync stream keeps retrying

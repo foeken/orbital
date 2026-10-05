@@ -26,9 +26,15 @@ the same kinds came back PR after PR.
 
 From fastest to slowest. Each catches what the one before it cannot.
 
-1. **`npm run lint` and `npm run check`** (about 10 s, Node, offline). The SDK against a fake SyncService, `main.js` and every
-   `main/` module in one vm with a fake Electron, the renderer's load order, and about 120 behavior checks that each slice a
+1. **`npm run lint` and `npm run check`** (about 20 s together, Node, offline). Offline, but not sandboxed: sdk-check and
+   relay-check listen on a loopback port, which the Codex sandbox refuses (`listen EPERM ... 127.0.0.1`), so an agent runs
+   `npm run check` escalated, as it does `npm run flows`. The SDK against a fake SyncService, `main.js` and every
+   `main/` module in one vm with a fake Electron, the renderer's load order, and about 160 behavior checks that each slice a
    renderer function and run it against a fake DOM. Most were written after one bug and guard that bug.
+   The scheduled checks run in UTC and a pull request is checked on a Mac in Amsterdam, which is coverage of two zones
+   worth keeping: a check about times reads the machine's zone (renderer-behavior-check.js `LOCAL_ZONE`) rather than
+   naming one, since a check that named Amsterdam passed here and turned main red on GitHub (#776). Run
+   `TZ=UTC npm run check` before a pull request that touches times.
    `scripts/renderer-check.js` also holds the **API contract**: every call `preload.js` hands the page is either refused in
    demo mode (`DEMO_WRITES`, renderer/state.js) or listed as writing no content (`DEMO_SAFE`), and either answered by the
    mock or listed in `NOT_MOCKED`. A new call fails until both are decided. Demo mode lets the synced settings through on
@@ -42,7 +48,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    is not in the database afterwards, and that no Orbital key or OAuth token is stored as itself (the subscriptions'
    signing secrets are kept as given: signing needs them). sdk-check drives Orbital's side of it
    (main/agents/linked.js) against the same relay.
-2. **`npm run flows`** (about 20 s, Chromium on the mock, `scripts/flow-check.js`). Whole journeys in the real page, each on a
+2. **`npm run flows`** (about a minute and a half, Chromium on the mock, `scripts/flow-check.js`). Whole journeys in the real page, each on a
    fresh page that fails on any uncaught error, unhandled rejection or `console.error`:
    - sensitive titles stay hidden on every page, in Cmd+K, in tooltips, labels and the window title;
    - demo mode shows none of your words and saves nothing, whatever is typed;
@@ -137,8 +143,10 @@ From fastest to slowest. Each catches what the one before it cannot.
 
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; the scheduled checks run it on main (a pull request is tested on the machine that writes it, AGENTS.md).
-3. **iPhone UI tests** (about a minute, `ios/OrbitalUITests`). The app on `-sample`, driven by the labels VoiceOver reads; the
-   scheduled checks run them on a simulator on main. `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
+3. **iPhone UI tests** (about five minutes of tests here, a quarter of an hour on GitHub's runner, `ios/OrbitalUITests`). The
+   app on `-sample`, driven by the labels VoiceOver reads; the scheduled checks run them on a simulator on main, and
+   `npm run phones` on a simulator of the checkout's own ("Orbital <hash of its path>", made once and reused): two
+   checkouts testing on one shared iPhone killed each other's tests ("Test crashed with signal kill"). `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
    build's stand-in for a Tana that never answers) with `-patience 3`, and expects Can't reach Tana in place of a Timeline
    that builds itself for good; Android's `EngineTest` drives the same on virtual time. `VisibleToTests` opens a note for
    each audience in `pages-sample.json` (`-zoom`), at the default and an accessibility text size, and measures the gap

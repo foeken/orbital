@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const updCard = $('update'), go = $('updateGo'), later = $('updateLater'), bar = $('updateBar'), statusEl = $('updateStatus');
 let running = false;
 const closeCard = () => { if (!running && updApi && updApi.closeOverlay) updApi.closeOverlay({}); };
-const errorText = (e) => String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+const errorText = (e) => String((e && e.message) || e); // as main said it: preload.js takes off Electron's wrapper
 const mb = (bytes) => Math.round(bytes / 1e6);
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '');
 

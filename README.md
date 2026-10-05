@@ -154,7 +154,7 @@ cd android
 ./gradlew :androidApp:installDebug                # build and install on a connected phone or emulator
 ./gradlew :shared:jvmTest                         # the shared module's tests, its screens drawn headless
 ./gradlew :androidApp:connectedDebugAndroidTest   # on a device: the journeys, Back, rotation, sharing, the engine
-adb shell am start -n com.dreetje.orbital/com.dreetje.orbital.android.MainActivity --ez sample true   # invented content, no Tana
+adb shell am start -n com.dreetje.orbital/com.dreetje.orbital.android.MainActivity --ez sample true   # invented content, no Tana (debug builds only)
 ```
 
 [docs/ANDROID.md](docs/ANDROID.md) records the research behind the Android choices (the web view bridge,

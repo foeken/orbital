@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const { files, source, tops } = require('./renderer-source');
+const { files, source, tops, functionSource: rendererFunction } = require('./renderer-source');
 
 // window.api, from contextBridge, is a global that cannot be declared again: a page with a top-level `api` of its own
 // dies at load on "Identifier 'api' has already been declared", which a browser without the bridge never shows (the
@@ -305,17 +305,7 @@ assert.match(source, /e\.key === 'Backspace' && document\.activeElement === docu
 // gets both routed to its stub, a harness that defines them keeps its own (assignment, so no redeclaration).
 const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n';
 const withShims = (src) => (/\b(renderSoon|patchMeta|iconNode)\b/.test(src) ? RENDER_SHIM + src : src);
-function functionSource(name) {
-  const asyncStart = source.indexOf('async function ' + name + '(');
-  const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
-  assert.notEqual(start, -1, 'renderer function ' + name + ' is present');
-  let depth = 0;
-  for (let end = start; end < source.length; end++) {
-    if (source[end] === '{') depth++;
-    if (source[end] === '}' && --depth === 0) return withShims(source.slice(start, end + 1));
-  }
-  assert.fail('renderer function ' + name + ' is complete');
-}
+const functionSource = (name) => withShims(rendererFunction(name));
 // ⌘K opens through togglePalette('cmd'), not openCommandPalette: without this read the row said "Checking sign-in" forever
 assert.match(functionSource('togglePalette'), /if \(mode === 'cmd'\) \{[^\n]*refreshChatGPTStatus\(\);/, 'opening Cmd+K reads the ChatGPT sign-in status');
 
@@ -526,6 +516,26 @@ function apiContractCheck() {
   assert.deepEqual(api.filter((k) => !mock.has(k) && !NOT_MOCKED.has(k)), [], 'a window.api call renderer/mock.js does not answer: mock it, or list it in NOT_MOCKED');
   assert.deepEqual(api.filter((k) => mock.has(k) && NOT_MOCKED.has(k)), [], 'a call the mock answers is still listed in NOT_MOCKED: take it off');
   assert.deepEqual([...stale(writes), ...stale(DEMO_SAFE), ...stale(NOT_MOCKED), ...[...mock].filter((k) => !api.includes(k))], [], 'names in these lists or the mock that window.api no longer has');
+}
+// What main threw reaches every page as main said it: preload.js takes off the "Error invoking remote method '…': Error: "
+// Electron puts round a refused invoke, once, for every call, so no page has to (task.js, update.js and settings.js did).
+// Run here on a stand-in for Electron: a refusal comes out unwrapped, anything else exactly as it was.
+async function preloadErrorsCheck() {
+  const exposed = {};
+  const electron = {
+    contextBridge: { exposeInMainWorld: (name, value) => { exposed[name] = value; } },
+    ipcRenderer: { invoke: (channel) => Promise.reject(channel === 'sync:status' ? new TypeError('plain') : new Error("Error invoking remote method '" + channel + "': Error: Node has been deleted")),
+      sendSync: () => ({ side: '' }), send() {}, on() { return this; } },
+    webFrame: {},
+  };
+  const window = { addEventListener() {} }; window.top = {};
+  vm.runInNewContext('(function () {' + fs.readFileSync(require.resolve('../preload.js'), 'utf8') + '\n})()',
+    { require: () => electron, location: { protocol: 'file:', pathname: '/app/index.html' }, window, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, Promise, Error, TypeError });
+  const failed = (call) => call().then(() => null, (e) => e);
+  assert.equal((await failed(() => exposed.api.roots())).message, 'Node has been deleted', 'a refusal reads as main said it');
+  const other = await failed(() => exposed.api.status());
+  assert.ok(other instanceof TypeError && other.message === 'plain', 'an error Electron did not wrap is passed on as it was');
+  assert.equal(exposed.api.side, '', 'and the values are values still');
 }
 
 // ---- formatting: marks, block types, the selection toolbar and the "/" menu ----
@@ -810,6 +820,7 @@ for (const property of ['width', 'height', 'margin', 'padding', 'top', 'left']) 
 }
 
 apiContractCheck();
+preloadErrorsCheck().catch((e) => { console.error(e); process.exitCode = 1; });
 Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck(), searchesReconnectCheck()]).then(() => console.log('renderer auth check passed'));
 // a mention lands in the row the caret is in (an @ at the caret, or over a selection): the render must not defer
 assert.match(functionSource('linkTo'), /render\(true\);[^\n]*\n\s*placeCaret\(/, 'linkTo forces the render before placing the caret after the mention');

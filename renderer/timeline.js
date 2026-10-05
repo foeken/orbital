@@ -11,7 +11,7 @@ function openTimeline(node, where = null) { // where: 'tab' or 'float' for a ⌘
   const uri = node.timeline && node.timeline.uri;
   if (!uri) return;
   if (zoomable({ id: uri })) { if (where) run(() => openElsewhere(where, uri)); else goTo(uri); }
-  else if (tana.nodeLink && tana.openExternal) run(async () => tana.openExternal(await tana.nodeLink(uri)));
+  else if (tana.nodeLink && tana.openExternal) openInTana(uri);
 }
 // The node a Timeline row is about (a meeting, the task someone completed), for ⌘K's Copy link on it: the one selected
 // row, or the row under the caret. The row itself is the Timeline's own and has no link (renderer/palette.js copyLink).
@@ -31,7 +31,7 @@ const WORK_VIEW = { id: 'workView', name: 'Work View', doc: 'workView', keys: {
 const openWorkView = () => openSavedView(savedViews().find((v) => v.id === WORK_VIEW.id) || WORK_VIEW);
 // Sections by local day: Today, Yesterday, then the date. Folded for as long as the window is open, like a group.
 const timelineFolded = new Set();
-const dayKey = (iso) => new Date(iso).toLocaleDateString('sv-SE');
+const dayKey = (iso) => isoDay(new Date(iso));
 function timelineDay(key) {
   const today = new Date(), yesterday = new Date(Date.now() - 864e5);
   if (key === dayKey(today)) return 'Today';
@@ -72,12 +72,8 @@ setInterval(() => { if (zoom?.docId === TIMELINE_PAGE && kids.get(TIMELINE_PAGE)
 // Join: a meeting still to come or under way is joined from Tana, so its Tana glyph after the title opens the meeting
 // there (row.join, the meeting's id; main/timeline.js). Its own click: the row around it opens the meeting here.
 function timelineJoinEl(node) {
-  const b = document.createElement('button');
-  b.type = 'button'; b.className = 'tl-join'; b.tabIndex = -1; b.title = 'Join in Tana'; b.setAttribute('aria-label', 'Join in Tana'); // icon only, so the name has to come from here
-  addIcon(b, 'tana');
-  b.onmousedown = (ev) => ev.preventDefault();
-  b.onclick = (ev) => { ev.stopPropagation(); run(async () => tana.openExternal(await tana.nodeLink(node.join))); };
-  return b;
+  // icon only, so its name comes from the label
+  return addIcon(quietButton('tl-join', 'Join in Tana', (ev) => { ev.stopPropagation(); openInTana(node.join); }, { tabIndex: -1 }), 'tana');
 }
 function timelineDividerEl() {
   const el = document.createElement('div'); el.className = 'tl-divider'; el.setAttribute('aria-hidden', 'true'); return el;
@@ -113,46 +109,35 @@ function timelineOlder(scrolled) {
 // place of the last, so a page still too short to scroll keeps reading until it fills the screen.
 const timelineEnd = typeof IntersectionObserver === 'function'
   ? new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) timelineOlder(true); }, { root: outline.parentElement, rootMargin: '0px 0px 100% 0px' }) : null;
+// The page's own links (Show three more days, Add more, New meeting, Plan one): quiet buttons in its words, label only
+// naming one for a screen reader where its words alone would not say enough
+function timelineLinkEl(cls, text, onclick, label) {
+  const el = quietButton('gmore ' + cls, null, onclick);
+  el.textContent = text;
+  if (label) el.setAttribute('aria-label', label);
+  return el;
+}
 function timelineOlderEl() {
-  const el = document.createElement('button');
-  el.type = 'button'; el.className = 'gmore tl-older';
-  el.textContent = timelineLoading ? 'Loading…' : 'Show three more days';
-  el.onmousedown = (e) => e.preventDefault();
-  el.onclick = () => timelineOlder();
+  const el = timelineLinkEl('tl-older', timelineLoading ? 'Loading…' : 'Show three more days', () => timelineOlder());
   if (timelineEnd) { timelineEnd.disconnect(); timelineEnd.observe(el); }
   return el;
 }
-function timelineAddMoreEl(node, inline = false) {
-  const el = document.createElement('button');
-  el.type = 'button'; el.className = 'gmore tl-add' + (inline ? ' tl-add-inline' : ''); el.textContent = 'Add more';
-  el.setAttribute('aria-label', 'Add more tasks pinned to today');
-  el.onmousedown = (e) => e.preventDefault();
-  el.onclick = () => openTodayTaskSearch(node);
-  return el;
-}
+const timelineAddMoreEl = (node, inline = false) => timelineLinkEl('tl-add' + (inline ? ' tl-add-inline' : ''), 'Add more', () => openTodayTaskSearch(node), 'Add more tasks pinned to today');
 // New meeting under today's meetings, and Plan one when none are left: ⌘K's Create new … → Meeting at its name
 // (renderer/palette.js openNamePage), which goes on to when.
 function openNewMeeting() {
   run(async () => {
     if (!creationChoices.length) creationChoices = (await tana.creationOptions()).options || [];
+    // one that cannot be made here (no rights, or none offered) is Create new …'s greyed row, which says why
     const meeting = creationChoices.find((c) => c.kind === 'meeting');
-    if (meeting) openNamePage(meeting); else openCreationPalette();
+    if (meeting && meeting.selectable) openNamePage(meeting); else openCreationPalette();
   });
 }
-function timelineNewMeetingEl() {
-  const el = document.createElement('button');
-  el.type = 'button'; el.className = 'gmore tl-add'; el.textContent = 'New meeting';
-  el.onmousedown = (e) => e.preventDefault();
-  el.onclick = openNewMeeting;
-  return el;
-}
+const timelineNewMeetingEl = () => timelineLinkEl('tl-add', 'New meeting', openNewMeeting);
 // " · Plan one" after "No more meetings today", in the row's own words: its click is the link's, not the row's
 function timelinePlanEl() {
-  const el = document.createElement('span'), b = document.createElement('button');
-  el.className = 'tl-plan'; el.append(' · ', b);
-  b.type = 'button'; b.className = 'gmore tl-add-inline'; b.textContent = 'Plan one'; b.setAttribute('aria-label', 'Plan a meeting');
-  b.onmousedown = (e) => e.preventDefault();
-  b.onclick = (e) => { e.stopPropagation(); openNewMeeting(); };
+  const el = document.createElement('span');
+  el.className = 'tl-plan'; el.append(' · ', timelineLinkEl('tl-add-inline', 'Plan one', (e) => { e.stopPropagation(); openNewMeeting(); }, 'Plan a meeting'));
   return el;
 }
 const timelineTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }); // a column of times: 24-hour, so they line up

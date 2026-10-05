@@ -56,9 +56,10 @@ does not scroll, so each draws as much as fits its height. They draw what the ap
 JSON as Android's `Glimpse`), left in the Keychain in Orbital's own access group as the Share extension leaves what it
 shares; a sensitive row comes without its words. On a tinted or clear Home Screen iOS draws everything in one tint, so the
 markers have nothing laid behind them and the boxes are outlines there (`widgetRenderingMode`). A tap opens `orbital:<id>`,
-`orbital:add` or `orbital:timeline` in the app (`Shell.swift`); a task's box opens `orbital:check:<id>` or
-`orbital:uncheck:<id>`, and the app ticks it and writes it to Tana at once (`Engine.tick`): a widget's own button runs in
-the extension, which has no engine to write with. The extension's glyphs are its own catalog, made with the app's
+`orbital:add` or `orbital:timeline` in the app (`Shell.swift`); a task's box is a button of Orbital's own
+(`WidgetIntents/TickTask.swift`, compiled into the app and the widgets) that opens the app, which ticks the task and writes
+it to Tana at once (`Engine.tick`); run in the widget's process, which has no engine, it leaves the tick in Orbital's own
+Keychain group for the app to take as it comes forward. The extension's glyphs are its own catalog, made with the app's
 (`node scripts/build-ios-glyphs.js`). A device build needs the `com.dreetje.orbital.widgets` id registered for the team,
 and a profile for it: with no Apple account in Xcode, automatic signing falls back to the team's wildcard profile, whose
 older app id prefix makes iOS leave the widgets out. `WidgetTests` adds them on the simulator's home screen and uses them;
@@ -69,11 +70,20 @@ once it has seen a widget added.
 
 `Orbital/Intents.swift` (issue #723) gives Siri and Shortcuts Orbital's tasks as an App Entity (`TaskEntity`) and what can be
 done with one: **Add Task** (pinned to today or not), **Check Off Task**, **Uncheck Task**, **Pin Task to Today** (or unpin),
-**Open Task**, and **Today's Tasks**. Tana is written by the engine, which runs in the app, so whatever changes a task opens
-Orbital with the widgets' `orbital:` links (`orbital:new?title=…&today=1`, `orbital:check:<id>`, `orbital:pin:<id>`, …;
-`Shell.swift`) and the app does it as soon as Tana is connected. Today's Tasks runs in the background and answers from what
-the app last saved for the widgets; Siri finds a task among those by the words you say. A sensitive task is never said or
+**Open Task**, **Today's Tasks**, and **List Tasks** (by status, all but the completed ones unless you choose). Tana is written
+by the engine, which runs in the app, so whatever changes a task opens Orbital and runs there, writing through its engine
+as soon as Tana is connected. Today's Tasks and List Tasks run in the background and answer
+from what the app last saved: the widgets' copy, and the tasks assigned to you, read at most every five minutes and again when
+Demo mode changes (`Engine.keepTasks`); Siri finds a task among those by the words you say. A sensitive task is never said or
 indexed, only named as one. `OrbitalShortcuts` gives Siri its phrases with no shortcut set up first ("Add a task in
-Orbital", "What's on today in Orbital", "Check off … in Orbital"), Spotlight indexes the tasks the widgets show (none in
+Orbital", "What's on today in Orbital", "Check off … in Orbital"), Spotlight indexes those same tasks (none in
 Demo mode or once signed out), and each task box carries its entity (`appEntityIdentifier`) so "check this off" knows which.
 The Android app has no counterpart yet: Gemini's AppFunctions are an alpha (#723).
+
+## Links from other apps
+
+iOS does not say who opened a link, so an `orbital:` link writes nothing, whoever sends it: Orbital's own widgets and Siri
+write through intents instead. `orbital:<id>`, `orbital:timeline` and `orbital:add` open as ever; `orbital:check:`,
+`uncheck:`, `pin:` and `unpin:<id>` open that node, where you tick it or pin it yourself (Pin to Today is on its page),
+and `orbital:new?title=…` opens Quick Add with the title filled in, added only when you press Add (`Shell.swift` open), as
+Android holds the same links (docs/ANDROID.md, Security). `SampleTests` holds both.

@@ -49,7 +49,7 @@ function openNotification(node) {
   if (node.unread) setNotificationRead(node, true);
   if (!uri) return;
   if (zoomable({ id: uri })) goTo(uri);
-  else if (tana.nodeLink && tana.openExternal) run(async () => tana.openExternal(await tana.nodeLink(uri)));
+  else if (tana.nodeLink && tana.openExternal) openInTana(uri);
 }
 // Cmd+K: the place, among the Views, with how much is waiting there
 function notificationsViewRow() {

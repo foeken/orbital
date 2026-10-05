@@ -44,7 +44,7 @@ class SampleJourneyTest {
 
     private fun launch(edit: Intent.() -> Unit = {}) {
         awake(device)
-        val intent = Intent(ApplicationProvider.getApplicationContext(), MainActivity::class.java).putExtra("sample", true).putExtra("demoMode", false).apply(edit)
+        val intent = Intent(ApplicationProvider.getApplicationContext(), MainActivity::class.java).putExtra("sample", true).putExtra("demoMode", false).apply(edit) // a debug build's extras
         scenario = ActivityScenario.launch(intent)
         compose.waitUntil(15_000) { seen("Today's Tasks") }
     }
@@ -65,6 +65,18 @@ class SampleJourneyTest {
         launch()
         box("Draft the Q4 hiring plan").assert(hasStateDescription("Not completed"))
         box("Review the design crit notes").assert(hasStateDescription("Completed"))
+    }
+
+    // the launcher's shortcuts for your tasks (the iPhone's Siri tasks): one still to do is there, one done is not, each
+    // opening its task through Orbital's own way in
+    @Test fun yourTasksAreLauncherShortcuts() {
+        launch()
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        compose.waitUntil(5000) { androidx.core.content.pm.ShortcutManagerCompat.getDynamicShortcuts(context).isNotEmpty() }
+        val shortcuts = androidx.core.content.pm.ShortcutManagerCompat.getDynamicShortcuts(context)
+        val draft = shortcuts.single { it.shortLabel == "Draft the Q4 hiring plan" }
+        assertTrue(shortcuts.none { it.shortLabel == "Review the design crit notes" })
+        assertTrue(draft.intent.component?.className == FromOrbital::class.java.name && draft.intent.dataString == "orbital:" + draft.id)
     }
 
     @Test fun tickingATaskOffAndBackOn() {
@@ -277,6 +289,30 @@ class SampleJourneyTest {
         context.startActivity(Intent(context, ShareActivity::class.java).setAction(Intent.ACTION_SEND).setType("text/plain")
             .putExtra(Intent.EXTRA_SUBJECT, "Offsite venue").putExtra(Intent.EXTRA_TEXT, "Call the venue about Thursday").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         compose.waitUntil(10_000) { seen("Quick Add") && seen("Offsite venue\nCall the venue about Thursday") }
+    }
+
+    // another app's orbital: write link comes to the exported screen, not Orbital's own way in: it ticks nothing, it opens
+    // the task, where you can tick it yourself; a new task from it is Quick Add with its title, added only by you
+    @Test fun anotherAppsWriteLinkOpensWhereYouCanMakeItAndWritesNothing() {
+        // started as the widget journeys start it, not by ActivityScenario, which never closes a screen once a VIEW intent
+        // has come to it (its close waits on a screen left paused)
+        awake(device)
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        context.startActivity(Intent(context, MainActivity::class.java).putExtra("sample", true).putExtra("demoMode", false)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        compose.waitUntil(15_000) { seen("Today's Tasks") }
+        // to the running Orbital, as another app's link lands: its task, MainActivity singleTop
+        fun send(link: String) = context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link))
+            .setClassName(context, MainActivity::class.java.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        send("orbital:check:tana:text:0000000000000000000000000a")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Back")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(5000) { home }
+        box("Draft the Q4 hiring plan").assert(hasStateDescription("Not completed"))
+        send("orbital:new?title=Call%20the%20caterer")
+        compose.waitUntil(10_000) { seen("Quick Add") && seen("Call the caterer") }
+        compose.onNodeWithText("Cancel").performClick()
+        device.pressHome()
     }
 }
 

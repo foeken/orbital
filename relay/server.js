@@ -25,7 +25,8 @@ const TTL = { code: 15 * MINUTE, grant: 10 * MINUTE, access: HOUR, refresh: 90 *
   subscription: 7 * DAY, subscriptionMin: HOUR, subscriptionMax: 30 * DAY, verified: DAY,
   unlinked: 7 * DAY, idleAgent: 90 * DAY }; // a connection that never linked, and an agent never heard from, are let go
 const LIMITS = { body: 32 * 1024, eventData: 16 * 1024, codes: 5, agents: 50, name: 60, perMinute: 120, links: 10, subscriptions: 10, linkFailures: 300, authorize: 30, newOrbitals: 5,
-  // what anyone can make without an account, in all, a day: counted in the database, so no address and no restart buys more
+  // what anyone can make without an account in a day, per network (an IPv4 address or an IPv6 /64), counted in the
+  // database so no restart buys more: client registrations, connections and Orbitals; nobody can use up anyone else's
   clientsPerDay: 1000, installsPerDay: 1000, orbitalsPerDay: 200,
   // callbacks being called at once, in all and per connection: more waits for nobody, it is not taken
   calls: 100, callsPerConnection: 10, callBytes: 64 * 1024, callers: 50000 };
@@ -77,9 +78,13 @@ const TABLES = {
   agents: 'id TEXT PRIMARY KEY, orbital TEXT NOT NULL, install TEXT NOT NULL UNIQUE, name TEXT NOT NULL, app TEXT, linked BIGINT NOT NULL, seen BIGINT',
   // an agent's connection subscribed to an event: where to POST it and the secret to sign it with (kept: signing needs it)
   subscriptions: 'id TEXT PRIMARY KEY, install TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, secret TEXT NOT NULL, expires BIGINT NOT NULL',
+  // a row anyone could make (kind: clients, installs or orbitals): when, and the hash of the network it came from, for
+  // LIMITS.<kind>PerDay (madeBy); gone after a day
+  made: 'kind TEXT NOT NULL, who TEXT NOT NULL, created BIGINT NOT NULL',
 };
 const SCHEMA = [...Object.entries(TABLES).map(([name, cols]) => 'CREATE TABLE IF NOT EXISTS ' + name + ' (' + cols + ')'),
   'CREATE INDEX IF NOT EXISTS subscriptions_install ON subscriptions (install)',
+  'CREATE INDEX IF NOT EXISTS made_who ON made (who, kind)',
   // one Orbital per key: two first asks at once must not make two (orbitalFrom inserts, then reads the one row back)
   'CREATE UNIQUE INDEX IF NOT EXISTS orbitals_secret ON orbitals (secret)',
   // the queue and the statuses an earlier relay kept (node ids, task ids, statuses): nothing reads them any more
@@ -164,13 +169,26 @@ for (const [a, p] of [['::', 96], ['::1', 128], ['64:ff9b::', 96], ['100::', 64]
 // ::ffff:0:…), in any spelling: the IPv4 address inside, or null. (No ::ffff:0:0/96 rule in BLOCKED: BlockList would
 // match every IPv4 address against it.)
 function mappedIPv4(ip) {
+  const g = groups(ip);
+  if (!g || g.slice(0, 4).some(Boolean) || !((g[4] === 0 && g[5] === 0xffff) || (g[4] === 0xffff && g[5] === 0))) return null;
+  return [g[6] >> 8, g[6] & 255, g[7] >> 8, g[7] & 255].join('.');
+}
+// an IPv6 address's eight 16-bit groups, in any spelling, or null
+function groups(ip) {
   let s = ip.toLowerCase().replace(/%.*$/, '');
   const dotted = /^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(s);
   if (dotted) { const [a, b, c, d] = dotted.slice(2).map(Number); s = dotted[1] + ((a << 8) | b).toString(16) + ':' + ((c << 8) | d).toString(16); }
   const [head, tail] = s.split('::'), h = head ? head.split(':') : [], t = tail ? tail.split(':') : [];
   const g = (tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t]).map((x) => parseInt(x, 16));
-  if (g.length !== 8 || g.slice(0, 4).some(Boolean) || !((g[4] === 0 && g[5] === 0xffff) || (g[4] === 0xffff && g[5] === 0))) return null;
-  return [g[6] >> 8, g[6] & 255, g[7] >> 8, g[7] & 255].join('.');
+  return g.length === 8 ? g : null;
+}
+// The network an address stands for, for what it may make in a day: an IPv4 address (written as IPv6 or not), or an
+// IPv6 address's /64, which one machine is usually given whole
+function network(ip) {
+  const v4 = net.isIPv4(ip) ? ip : net.isIPv6(ip) && mappedIPv4(ip);
+  if (v4) return v4;
+  const g = net.isIPv6(ip) && groups(ip);
+  return g ? g.slice(0, 4).map((x) => x.toString(16)).join(':') + '::/64' : ip;
 }
 function isPublicAddress(ip) {
   const family = net.isIP(ip);
@@ -228,7 +246,17 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   const countIn = async (db, sql, ...args) => Number((await db.one(sql, ...args)).n);
   // a row anyone can make without an account, within the day's ceiling for all of them together (LIMITS.*PerDay)
   const busy = () => fail(429, 'busy', 'The relay is taking no more new connections today: try again tomorrow');
-  const madeToday = (db, table, max) => countIn(db, 'SELECT count(*) AS n FROM ' + table + ' WHERE created > ?', now() - DAY).then((n) => { if (n >= max) throw busy(); });
+  // make(db) a row anyone could make, within its network's day (LIMITS.<kind>PerDay): the count, the row and its record in
+  // one step per network, so twin requests cannot pass the cap together; make answers false when it made nothing
+  const madeBy = (kind, req, make) => {
+    const who = hash(network(ip(req)));
+    return serial('new:' + kind + ':' + who, async (db) => {
+      if (await countIn(db, 'SELECT count(*) AS n FROM made WHERE who = ? AND kind = ? AND created > ?', who, kind, now() - DAY) >= LIMITS[kind + 'PerDay']) throw busy();
+      const out = await make(db);
+      if (out !== false) await db.run('INSERT INTO made VALUES (?, ?, ?)', kind, who, now());
+      return out;
+    });
+  };
 
   // ---- limits: a fixed window per caller, in memory (a restart forgives) ----
   // At most LIMITS.callers windows: past that, the ended ones are let go (once a second at most), and while it is still
@@ -249,6 +277,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   async function sweep() {
     const t = now();
     await run('DELETE FROM codes WHERE expires < ?', t - HOUR); // a used code still answers Orbital's "linked?" for an hour
+    await run('DELETE FROM made WHERE created < ?', t - DAY);
     for (const table of ['grants', 'tokens', 'subscriptions']) await run('DELETE FROM ' + table + ' WHERE expires < ?', t);
     // an agent not heard from in TTL.idleAgent is let go (a live one renews its subscription at least monthly), and a
     // connection that never linked in TTL.unlinked loses its tokens: then both go below, as anything nobody holds
@@ -334,7 +363,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     const b = await body(req), uris = b.redirect_uris;
     if (!Array.isArray(uris) || !uris.length || uris.length > 10 || !uris.every((u) => typeof u === 'string' && u.length < 2000 && safeRedirect(u))) throw fail(400, 'invalid_redirect_uri', 'redirect_uris: https, a loopback http, or an app\'s own scheme');
     const id = crypto.randomUUID(), name = text(b.client_name, 100);
-    await serial('new:clients', async (db) => { await madeToday(db, 'clients', LIMITS.clientsPerDay); await db.run('INSERT INTO clients VALUES (?, ?, ?, ?)', id, JSON.stringify(uris), name || null, now()); });
+    await madeBy('clients', req, (db) => db.run('INSERT INTO clients VALUES (?, ?, ?, ?)', id, JSON.stringify(uris), name || null, now()));
     return send(res, 201, { client_id: id, client_id_issued_at: Math.floor(now() / 1000), redirect_uris: uris, client_name: name || undefined, token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] });
   }
   // No one signs in here: the connection gets an identity of its own, which can do nothing until a code links it to an
@@ -366,7 +395,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
       const challenge = crypto.createHash('sha256').update(String(b.code_verifier || '')).digest('base64url');
       if (!sameHash(challenge, grant.challenge)) throw bad('code_verifier does not match');
       const install = crypto.randomUUID();
-      await serial('new:installs', async (db) => { await madeToday(db, 'installs', LIMITS.installsPerDay); await db.run('INSERT INTO installs VALUES (?, ?, ?, ?)', install, grant.client, null, now()); });
+      await madeBy('installs', req, (db) => db.run('INSERT INTO installs VALUES (?, ?, ?, ?)', install, grant.client, null, now()));
       return send(res, 200, await issue(install, grant.client));
     }
     if (b.grant_type === 'refresh_token') {
@@ -562,10 +591,9 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     // a new key is a new row, and the caller picks the key: new Orbitals are counted by the address the proxy saw
     limit('new-orbital:' + ip(req), LIMITS.newOrbitals);
     // a twin request may make it first: the one row the key has is the Orbital, whichever request wrote it
-    await serial('new:orbitals', async (db) => {
-      if (await db.one('SELECT id FROM orbitals WHERE secret = ?', keyHash)) return;
-      await madeToday(db, 'orbitals', LIMITS.orbitalsPerDay);
-      await db.run('INSERT INTO orbitals VALUES (?, ?, ?) ON CONFLICT DO NOTHING', crypto.randomUUID(), keyHash, now());
+    await madeBy('orbitals', req, async (db) => {
+      if (await db.one('SELECT id FROM orbitals WHERE secret = ?', keyHash)) return false;
+      return (await db.run('INSERT INTO orbitals VALUES (?, ?, ?) ON CONFLICT DO NOTHING', crypto.randomUUID(), keyHash, now())) > 0;
     });
     return find();
   }
@@ -640,4 +668,4 @@ if (require.main === module) {
     (e) => { console.error('agent relay: the database could not be prepared:', e.message); process.exit(1); });
 }
 
-module.exports = { createRelay, sqliteStore, postgresStore, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, signature, manualDigest };
+module.exports = { createRelay, sqliteStore, postgresStore, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, manualDigest };

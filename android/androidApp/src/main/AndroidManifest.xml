@@ -36,7 +36,20 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="orbital" />
             </intent-filter>
+            <!-- the launcher's shortcuts and Assistant's create a task (Siri and Shortcuts on the iPhone) -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+        <!-- Orbital's own way in: its widgets, its Quick Settings tile and its launcher shortcuts open this screen, which no
+             other app may start; it hands their link to MainActivity in the app's own memory, so only theirs write at once
+             (MainActivity.kt FromOrbital; docs/ANDROID.md Security). No screen of its own. -->
+        <activity
+            android:name=".FromOrbital"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- shared to Orbital: words or an image, opened in Quick Add (the iPhone's Share extension). It runs in the
              sharing app's task with no screen of its own (no task of ours to join: taskAffinity ""), leaves what was
              shared and brings Orbital forward in its own task. -->
@@ -104,5 +117,16 @@
                 android:name="com.samsung.android.appwidget.provider"
                 android:resource="@xml/flex_window" />
         </receiver>
+        <!-- Quick Add in Quick Settings, on the lock screen too (the iPhone's Lock Screen Quick Add): only the system binds it -->
+        <service
+            android:name=".QuickAddTile"
+            android:exported="true"
+            android:icon="@drawable/add"
+            android:label="@string/shortcut_add"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

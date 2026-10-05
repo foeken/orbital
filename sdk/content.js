@@ -5,6 +5,7 @@
 // and its remaining blocks are that node's children; bulletList/orderedList are transparent.
 const { LoroMap, LoroList, LoroText } = require('loro-crdt');
 const { contentText } = require('./node');
+const { isId } = require('./ids');
 
 const LISTS = ['bulletList', 'orderedList'];
 // Blocks that hold no inline content of their own (Tana's writer gives them attributes but no children list).
@@ -1057,7 +1058,7 @@ function blockAfter(document, id, make) {
 // An image is written as Tana's atom writer does (the(): blockId plus the attributes it has, no children list); a
 // paste, a drop and "/" Image all insert with displayWidth/displayHeight null, so neither is set.
 function insertImage(document, id, tanaUri) {
-  if (!/^tana:image:[0-9a-z]{26}$/.test(tanaUri)) throw new Error('not a tana:image uri: ' + tanaUri);
+  if (!isId(tanaUri, 'image')) throw new Error('not a tana:image uri: ' + tanaUri);
   const image = (list, index) => {
     const m = list.insertContainer(index, new LoroMap()), a = m.setContainer('attributes', new LoroMap()), bid = newId();
     m.set('nodeName', 'image');

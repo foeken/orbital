@@ -2,7 +2,8 @@
 // Settings (issue #672): Cmd+K Open settings and its key ⌘, open Orbital's Settings window (settings.html, a window
 // of its own: main.js openSettings), as the app menu's Settings… does. What stays here is Cmd+K's Choose models page.
 function openSettings() { if (tana.openSettings) run(() => tana.openSettings()); }
-// gpt-6-sol reads Sol 6, gpt-5.6-terra Terra 5.6, gpt-5.5 GPT-5.5: the list holds a name in more than one version
+// gpt-6-sol reads Sol 6, gpt-5.6-terra Terra 5.6, gpt-5.5 GPT-5.5: the list holds a name in more than one version.
+// The Settings window loads this file for these two (settings.html), so nothing at its top level may reach the outliner.
 const aiModelLabel = (id) => id.replace(/^gpt-([\d.]+)-?(.*)$/, (_, version, name) => (name ? name[0].toUpperCase() + name.slice(1) + ' ' : 'GPT-') + version);
 const aiEffortLabel = (x) => (x === 'xhigh' ? 'Extra high' : x[0].toUpperCase() + x.slice(1));
 // ---- Choose models: the Quick AI and the Regular AI (main/ai.js options), a segment each that ⇥ switches, as the chat
@@ -12,11 +13,11 @@ const MODELS_USE = { quick: 'for translating, Discuss with, types and icons', re
 const modelsPlaceholder = () => (modelsQuick ? 'Quick AI · ⇥ Regular AI' : 'Regular AI · ⇥ Quick AI');
 function modelsRows(q) {
   const ai = modelsOptions;
-  if (!ai || ai instanceof Error) return [{ group: 'Models', label: ai ? ai.message : 'Loading…', disabled: true, note: true }];
+  if (!ai || ai instanceof Error) return [{ group: 'Models', label: ai ? errorText(ai) : 'Loading…', disabled: true, note: true }];
   const k = (w) => (modelsQuick ? 'quick' + w : w.toLowerCase()), use = MODELS_USE[modelsQuick ? 'quick' : 'regular'];
   const rows = [...ai.models.map((m) => ({ group: 'Model · ' + use, icon: 'brain', label: aiModelLabel(m), hint: m === ai[k('Model')] ? '✓' : '', keepOpen: true, run: () => settingsSetAI(k('Model'), m) })),
     ...ai[k('Efforts')].map((x) => ({ group: 'Thinking', icon: 'sparkle', label: aiEffortLabel(x), hint: x === ai[k('Effort')] ? '✓' : '', keepOpen: true, run: () => settingsSetAI(k('Effort'), x) }))];
-  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
+  return matchRows(rows, q);
 }
 function settingsSetAI(key, value) {
   run(async () => { modelsOptions = await tana.setAiOption(key, value); renderPalette(); });

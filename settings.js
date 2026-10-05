@@ -1,12 +1,13 @@
 'use strict';
-/* global demoText, demoMode:writable */
+/* global demoText, demoMode:writable, aiModelLabel, aiEffortLabel */
 // Orbital's Settings window (settings.html; issue #672): a Mac app's settings, in a window of its own, opened by
 // ⌘, (Cmd+K Open settings) and the app menu's Settings… (main.js openSettings), one at a time. Toolbar tabs over grouped
 // rows, each a label and its control, and the window takes the height of the tab it shows (settingsSize). Nothing is
 // kept here: every control makes the same call its Cmd+K row does (the synced preferences, main's AI options, the
 // agents, the hidden titles, this Mac's ChatGPT sign-in), and main tells this window when any of them changes
 // elsewhere (main/state.js send, main/settings.js tellOthers). renderer/segments.js lends demo mode's masks (the email,
-// the hidden titles), on while the outliner's demo mode is (localStorage, shared with it).
+// the hidden titles), on while the outliner's demo mode is (localStorage, shared with it), and renderer/settings.js the
+// models' and thinking levels' names, as Cmd+K Choose models writes them.
 // Without window.api (the manual's scenes, flow-check) the window is empty until start() is handed one.
 const TABS = [['general', 'General', 'options'], ['ai', 'AI', 'brain'], ['agents', 'Agents', 'robot'], ['lists', 'Lists', 'hiddenItems']];
 const LANGS = ['English', 'Dutch', 'German', 'French', 'Spanish']; // renderer/translate.js TRANSLATE_LANGS
@@ -26,7 +27,7 @@ function load(part, call) {
   const n = asked[part] = (asked[part] || 0) + 1;
   failure = null;
   return Promise.resolve().then(call).then((value) => { if (asked[part] === n) { st[part] = value; draw(); } },
-    (e) => { if (asked[part] === n) { failure = String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''); draw(); } });
+    (e) => { if (asked[part] === n) { failure = String(e?.message || e); draw(); } }); // as main said it (preload.js unwraps it)
 }
 function reload() {
   for (const [part, call] of [['ai', 'aiOptions'], ['chatgpt', 'chatgptStatus'], ['agents', 'agentList'], ['hidden', 'filters'], ['mcpHidden', 'mcpHidden']]) if (host[call]) load(part, host[call]);
@@ -87,9 +88,6 @@ function group(head, note, rows) {
 }
 
 // ---- the tabs ----
-// gpt-6-sol reads Sol 6, gpt-5.6-terra Terra 5.6, gpt-5.5 GPT-5.5 (renderer/settings.js aiModelLabel)
-const modelLabel = (id) => id.replace(/^gpt-([\d.]+)-?(.*)$/, (_, version, name) => (name ? name[0].toUpperCase() + name.slice(1) + ' ' : 'GPT-') + version);
-const effortLabel = (x) => (x === 'xhigh' ? 'Extra high' : x[0].toUpperCase() + x.slice(1));
 const HERE = 'On this Mac';
 function chatgptRow(c) {
   const at = (controls, sub, dim) => row('chatgpt', 'ChatGPT', controls, sub, dim);
@@ -157,8 +155,8 @@ const SECTIONS = {
     if (ai) for (const [head, note, k] of [['Quick AI', 'translating, Discuss with, types and icons', (w) => 'quick' + w], ['Regular AI', 'reading images', (w) => w.toLowerCase()]]) {
       const set = (key) => (v) => load('ai', () => host.setAiOption(key, v));
       out.push(...group(head, note, [
-        row('brain', 'Model', popup(k('Model'), head + ' model', ai[k('Model')], ai.models.map((m) => [m, modelLabel(m)]), set(k('Model')))),
-        row('sparkle', 'Thinking', popup(k('Effort'), head + ' thinking', ai[k('Effort')], ai[k('Efforts')].map((x) => [x, effortLabel(x)]), set(k('Effort')))),
+        row('brain', 'Model', popup(k('Model'), head + ' model', ai[k('Model')], ai.models.map((m) => [m, aiModelLabel(m)]), set(k('Model')))),
+        row('sparkle', 'Thinking', popup(k('Effort'), head + ' thinking', ai[k('Effort')], ai[k('Efforts')].map((x) => [x, aiEffortLabel(x)]), set(k('Effort')))),
       ]));
     }
     return out;

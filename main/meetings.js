@@ -6,10 +6,11 @@ const access = require('../sdk/access');
 const calls = require('../sdk/calls');
 const events = require('../sdk/events');
 const { readNode } = require('../sdk/node');
+const { partsIn, wallTime } = require('../sdk/dates'); // a zone's wall clock, both ways
+const { EVENT_URI: EVENT } = require('../sdk/ids');
 const { NOT_CONNECTED, S } = require('./state');
 const { accessContext, op } = require('./documents');
 
-const EVENT = /^tana:event:[0-9a-z]{26}$/;
 const REFUSED = 'Only the event organizer can change this meeting'; // Tana's own words for its refusal
 const canEdit = async (doc) => access.canEditEvent(doc, S.me.userUri, await accessContext());
 const snapshot = async (doc) => {
@@ -64,21 +65,6 @@ async function currentMeeting() {
 // "until midnight", nothing lasts a day, and a time the clocks skip that day is refused, never moved. Only read: applying
 // it is editMeeting, behind Tana's organizer rule, or "/" Meeting's create.
 const DAY_MS = 864e5, HALF_HOUR = 18e5, UNREAD = 'The AI did not answer with a time';
-const formats = new Map();
-function partsIn(timeZone, t) { // the wall clock in a zone: { y, mo, d, h, mi, weekday }
-  let f = formats.get(timeZone);
-  if (!f) formats.set(timeZone, f = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'long' }));
-  const p = Object.fromEntries(f.formatToParts(t).map(({ type, value }) => [type, value]));
-  return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour % 24, mi: +p.minute, weekday: p.weekday };
-}
-// epoch ms of a wall-clock time in a zone, or NaN when the clocks skip it that day (the hour summer time starts)
-function wallTime(timeZone, y, mo, d, h, mi) {
-  const want = Date.UTC(y, mo - 1, d, h, mi);
-  let t = want;
-  for (let i = 0; i < 3; i++) { const p = partsIn(timeZone, t); t += want - Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi); }
-  const p = partsIn(timeZone, t), n = new Date(want);
-  return p.y === n.getUTCFullYear() && p.mo === n.getUTCMonth() + 1 && p.d === n.getUTCDate() && p.h === h && p.mi === mi ? t : NaN;
-}
 // a time zone Intl knows, by its own name for it, or null
 const knownZone = (timeZone) => {
   if (typeof timeZone !== 'string' || !timeZone.trim()) return null;
@@ -168,4 +154,4 @@ const ipc = {
   'meeting:read': (_e, words, id) => readTime(words, id),
 };
 
-module.exports = { meetingInfo, editMeeting, attendeeSuggestions, currentMeeting, readTime, resolveTime, wallTime, partsIn, ipc };
+module.exports = { meetingInfo, editMeeting, attendeeSuggestions, currentMeeting, readTime, resolveTime, ipc };

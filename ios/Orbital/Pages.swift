@@ -1,22 +1,5 @@
 import SwiftUI
 
-// The desktop's glyph for a node's kind (main/rows.js): a task by its box, a meeting by its calendar
-enum Glyph {
-    static func of(_ kind: String?) -> String {
-        switch kind {
-        case "event": "calendar"
-        case "space": "space"
-        case "user-profile": "member"
-        case "chat": "discuss"
-        case "search": "search"
-        default: "doc"
-        }
-    }
-    // a node's kind from its id (tana:<kind>:<ulid>), and the glyph for it
-    static func kind(of uri: String) -> String? { uri.split(separator: ":").dropFirst().first.map(String.init) }
-    static func of(uri: String) -> String { of(kind(of: uri)) }
-}
-
 // One node in a list: a task's box or its kind's glyph, then its words and when it last changed as the button that opens
 // it. The box is its own button beside it, so ticking a task never opens it too (TaskLine has them the same way).
 struct ListRow: View {
@@ -39,7 +22,7 @@ struct ListRow: View {
                     if row.stateType != nil { TaskWords(row: row, engine: engine, globe: false) } else { Text(words).sensitive(row.sensitive, engine: engine) }
                     // when, then who a task is assigned to, on one grey line as the desktop's subtext has them
                     // translated, when it changed, who has it: one grey line as the desktop's subtext, a bullet between each
-                    let at = row.createdAt.flatMap(Row.parse), people = row.people ?? []
+                    let at = row.createdAt.flatMap(Date.tana), people = row.people ?? []
                     HStack(spacing: 6) {
                         if from != nil { Image("Glyphs/language").resizable().frame(width: 15, height: 15).foregroundStyle(.secondary).accessibilityLabel("Translated from " + (from ?? "")) }
                         if from != nil, at != nil { Text("·").foregroundStyle(.secondary) }
@@ -201,15 +184,17 @@ struct MeetingSummary: View {
     }
 }
 
-// An image in an outline (Engine.image): the word Image until its picture has come, then the picture, the row's width
+// An image in an outline (Engine.image): the word Image until its picture has come, then the picture, the row's width;
+// under a sensitive mark the word stays (Blur bars text only, so a picture would show through)
 struct OutlineImage: View {
     let uri: String
     let engine: Engine
     @State private var image: UIImage?
+    @Environment(\.sensitiveHidden) private var hidden
 
     var body: some View {
         Group {
-            if let image { Image(uiImage: image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityLabel("Image") }
+            if let image, !hidden { Image(uiImage: image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityLabel("Image") }
             else { Text("Image").foregroundStyle(.secondary) }
         }
         .task(id: uri) { image = await engine.image(uri) }
@@ -386,12 +371,7 @@ struct NodeDetails: View {
                     }
                 }
             } label: {
-                HStack(spacing: 12) {
-                    Text("Status").foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
-                    Text(Self.states.first { $0.0 == now }?.1 ?? "In Progress").foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                }
-                .contentShape(Rectangle())
+                line("Status") { Text(Self.states.first { $0.0 == now }?.1 ?? "In Progress").foregroundStyle(.primary) }
             }
             .buttonStyle(.plain)
             .modifier(FieldLine())
@@ -403,18 +383,21 @@ struct NodeDetails: View {
             if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
         }
         .sheet(isPresented: $picking) { VisibilitySheet(id: id, access: access, engine: engine, done: reload) }
+        // pinned to today, or to any day: the long press's Pin to Today and Remove Pin, here too (an outside pin: link opens
+        // the node, where it is done)
+        let pinned = engine.pinned.contains(id)
+        Button { Task { await engine.pin(id, !pinned); await reload() } } label: {
+            Label(pinned ? "Remove Pin" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .modifier(FieldLine())
         // handed to your Dot (Agents.swift): its name and its last Agent status line; a tap asks it again or takes it back
         if let held = access.agent {
             Menu {
                 if let a = engine.agents.first(where: { $0.id == held.id }) { Button("Ask \(a.name) again …") { engine.handing = .init(id: id, agent: a, then: reload) } }
                 Button("Unassign", role: .destructive) { Task { await engine.unhand(id); await reload() } }
             } label: {
-                HStack(spacing: 12) {
-                    Text("Agent").foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
-                    Label { Text(held.name + " · " + held.word) } icon: { Image("Glyphs/robot").resizable().frame(width: 18, height: 18) }.foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                }
-                .contentShape(Rectangle())
+                line("Agent") { Label { Text(held.name + " · " + held.word) } icon: { Image("Glyphs/robot").resizable().frame(width: 18, height: 18) }.foregroundStyle(.primary) }
             }
             .buttonStyle(.plain)
             .modifier(FieldLine())
@@ -437,16 +420,18 @@ struct NodeDetails: View {
     // a field as the desktop draws one: its name in grey, its value after it, a line under it, the whole row the button
     // that changes it
     private func field(_ name: String, _ change: @escaping () -> Void, @ViewBuilder value: () -> some View) -> some View {
-        Button(action: change) {
-            HStack(spacing: 12) {
-                Text(name).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
-                value()
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-        }
+        Button(action: change) { line(name, value: value) }
         .buttonStyle(.plain)
         .modifier(FieldLine())
+    }
+    // its name in grey and its value after it, the whole width a target: a field's button, or a menu's label (Status, Agent)
+    private func line(_ name: String, @ViewBuilder value: () -> some View) -> some View {
+        HStack(spacing: 12) {
+            Text(name).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
+            value()
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
     }
 }
 

@@ -46,7 +46,7 @@ data class Row(
     @Serializable data class Segment(val text: String? = null, val marks: Marks? = null, val mention: Ref? = null, val content: Boolean? = null, val person: Boolean? = null)
     @Serializable data class Marks(val bold: Boolean? = null, val italic: Boolean? = null, val strike: Boolean? = null, val code: Boolean? = null, val link: String? = null)
     @Serializable data class Ref(val uri: String, val label: String? = null)
-    @Serializable data class Image(val uri: String)
+    @Serializable data class Image(val uri: String? = null) // none on a block whose image has no tanaUri (sdk/content.js)
     @Serializable data class Chat(val mine: Boolean? = null, val status: Boolean? = null, val streaming: Boolean? = null, val author: String? = null)
     @Serializable data class Person(val name: String)
     @Serializable data class Free(val from: Double, val until: Double)
@@ -152,6 +152,8 @@ class Failure(message: String) : Exception(message)
 // "Kor", "Kor and Stan", "Kor, Stan and Jeroen" (renderer/access.js namesOf)
 val List<Member>.names: String get() = if (size > 1) dropLast(1).joinToString(", ") { it.name } + " and " + last().name else firstOrNull()?.name ?: ""
 val List<Member>.persons: List<Row.Person> get() = map { Row.Person(it.name) }
+// the ones whose name has what was typed in a search field, all of them while it is empty
+fun List<Member>.matching(query: String): List<Member> = if (query.isEmpty()) this else filter { it.name.contains(query, ignoreCase = true) }
 
 // a node's kind from its id (tana:<kind>:<ulid>)
 fun kindOf(uri: String): String? = uri.split(":").getOrNull(1)

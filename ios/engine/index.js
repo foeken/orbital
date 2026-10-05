@@ -13,7 +13,7 @@ import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
 import { completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { dateLabel, isDateUri } from '../../sdk/dates';
-import { NOTES_SLOTS, notesSlotId, writeUpOf } from '../../sdk/events';
+import { NOTES_SLOTS, notesOurs, notesSlotId, writeUpOf } from '../../sdk/events';
 import { canDelete, canWrite, capabilities, everyoneOnly, setSharing } from '../../sdk/access';
 import { arrange } from './arrange';
 import { listFilter } from './listed';
@@ -24,9 +24,11 @@ import { forget, issues, members, within } from './stand-ins';
 import { mark } from './sensitive';
 import { times } from './labels';
 import { read } from './read';
+import { createHeld } from './held';
 import { demo, demoName, demoOn, demoTitle, isDemo } from './demo';
 import { agentOf, agents, handed, linked, refreshSoon } from './agents';
 import { createLive } from './live';
+import { IMAGE_INSTRUCTIONS, TRANSLATE_INSTRUCTIONS, TRANSLATE_SCHEMA, modelLabel, effortLabel } from '../../main/prompts';
 import NUCLEO from 'nucleo-ui';
 
 // The phone reads Orbital's settings document and writes only the keys it sets (Mark as Sensitive): a Mac makes, merges
@@ -95,8 +97,8 @@ const named = (rows, at = 'row') => rows.map((r, i) => ({ ...r, id: r.id || at +
 const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', ...(secret().has(n.id) ? { sensitive: true } : {}), icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
 
 // A meeting's page, as the desktop's (renderer/meetingnotes.js), read only here: written up by Tana (sdk/events.js
-// writeUpOf), its summary's outline, and your notes' too when you have them (main/meeting-notes.js: one of the places
-// made for them, yours, owned by the meeting or by nothing, not a task, not archived), for Notes | Summary over them.
+// writeUpOf), its summary's outline, and your notes' too when you have them (one of the places made for them that is
+// yours, sdk/events.js notesOurs, as main/meeting-notes.js reads them), for Notes | Summary over them.
 // Not written up yet: the documents it owns (rows), as before.
 async function meeting(id) {
   const me = S.me.userUri, places = Array.from({ length: NOTES_SLOTS }, (_, k) => notesSlotId(me, id, k));
@@ -107,7 +109,7 @@ async function meeting(id) {
   ]);
   const rows = owned.map(listRow), writeUp = writeUpOf(self[0], owned);
   if (!writeUp) return { rows };
-  const mine = places.map((p) => found.find((n) => n.id === p)).find((n) => n && n.createdBy === me && (!n.ownerUri || n.ownerUri === id) && !(n.state && n.state.type) && !n.archivedAt);
+  const mine = places.map((p) => found.find((n) => n.id === p)).find((n) => notesOurs(n, me, id));
   const outline = async (docId) => named(readOutline(await hold(docId)));
   const [summary, notes] = await Promise.all([outline(writeUp.id), mine ? outline(mine.id) : null]);
   // the notes' first row names the meeting for whoever opens them on their own (main/meeting-notes.js referenceOf):
@@ -130,18 +132,8 @@ async function settled() {
 const secret = () => new Set(Array.isArray(settings.get('sensitive')) ? settings.get('sensitive') : []);
 const redact = (rows) => demo(mark(rows, secret())); // marked sensitive, then masked in demo mode
 
-// The documents this page opened or ticked (open, toggle) are let go of once they are no longer among the last few, as
-// the desktop lets its on-demand reads go (main/documents.js onDemand): a subscription holds the whole document, and a
-// chat can be megabytes. One the page already held for something else (the Timeline's) is left alone.
-const KEEP = 12, kept = [];
-// init makes a new document (sdk/sync.js subscribe); it is counted before the wait, so one that times out is still let go.
-async function hold(id, init) {
-  const had = !!S.client.sync.getDocument(id), at = kept.indexOf(id);
-  if (at >= 0) kept.splice(at, 1);
-  if (at >= 0 || !had) kept.push(id); // newest last; one held for something else is never ours to let go
-  while (kept.length > KEEP) S.client.sync.unsubscribe(kept.shift()).catch(() => {}); // drains queued writes first
-  return within('opening ' + id, S.client.sync.subscribe(id, init));
-}
+// The documents this page opened or ticked (open, toggle) kept a while, and those only looked at let go of (held.js)
+const held = createHeld(() => S.client.sync, within), hold = held.hold, peek = (id, as = readNode) => held.peek(id, as);
 // A reference with no label of its own is named by the graph, as main/documents.js resolveReferences does; each name is
 // asked once, since a chat on screen is read again as its answer is written (live.js)
 const names = new Map();
@@ -214,10 +206,6 @@ const writable = async (doc) => canWrite(readNode(doc), S.me.userUri, await acce
 // to documents and that you may create in (a space's type keeps its tasks in that space). Each type is read and let go
 // again, and the list is kept for the session: types change rarely and there can be many.
 let taskTypeList = null;
-async function peek(id) {
-  const had = !!S.client.sync.getDocument(id);
-  try { return readNode(await within('reading ' + id, S.client.sync.subscribe(id))); } finally { if (!had) S.client.sync.unsubscribe(id).catch(() => {}); }
-}
 // What a document of a type is made as (main/documents.js customCreation): a task when the type has a workflow, else a
 // document of it; null for a type of meetings, or one whose space is not yours to write in
 async function creatable(uri, ctx) {
@@ -233,7 +221,7 @@ async function creatable(uri, ctx) {
 const workflow = new Map(); // type uri -> whether it has a workflow, for the session
 async function listsTasks(searchId) {
   try {
-    const types = searchQueryToFilter(readSearch(await hold(searchId)).query, S.me.userUri).types || [];
+    const types = searchQueryToFilter((await peek(searchId, readSearch)).query, S.me.userUri).types || [];
     for (const t of types) {
       if (t === 'tasks') continue;
       if (!/^tana:type:/.test(t)) return false;
@@ -307,7 +295,7 @@ const post = (message) => window.webkit?.messageHandlers?.orbital?.postMessage(m
 function drop() {
   if (S.client) S.client.close().catch(() => {});
   S.client = S.me = live = null;
-  settings.reset(); forget(); names.clear(); kept.length = 0; taskTypeList = null; workflow.clear(); // what the last account's session knew
+  settings.reset(); forget(); names.clear(); held.forget(); taskTypeList = null; workflow.clear(); // what the last account's session knew
 }
 
 // The icon a saved search was given with Set icon (the settings document's typeIcons, main/icons.js: search uri → Nucleo
@@ -541,6 +529,15 @@ window.orbital = {
     return JSON.stringify({ to: LANGS.includes(to) ? to : null, ai: Object.fromEntries(Object.entries(settings.AI_KEYS).map(([k, s]) => [k, settings.get(s)]).filter(([, v]) => typeof v === 'string')),
       sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length), // pinned to any day
       agents: linked(), handed: handed() }); // your Dot and what it has, for the long press
+  },
+  // What the phone asks ChatGPT with, as the Mac does (main/prompts.js): Auto-translate's instructions and the answer's
+  // schema for the language to (null: none), Process image's instructions writing in it, and the names Settings gives
+  // the models and the thinking levels asked for. Answers { translate: { instructions, schema } | null,
+  // image: { instructions }, models: { id: label }, efforts: { effort: label } }.
+  prompts(to, models = [], efforts = []) {
+    const lang = LANGS.includes(to) ? to : null, named = (list, label) => Object.fromEntries((Array.isArray(list) ? list : []).filter((x) => typeof x === 'string' && x).map((x) => [x, label(x)]));
+    return JSON.stringify({ translate: lang ? { instructions: TRANSLATE_INSTRUCTIONS(lang), schema: TRANSLATE_SCHEMA } : null, image: { instructions: IMAGE_INSTRUCTIONS(lang) },
+      models: named(models, modelLabel), efforts: named(efforts, effortLabel) });
   },
   // Long press: Pin to Today, as main/pins.js pins a date (your own pin map); and Mark as sensitive, the synced
   // setting the desktop's mark writes (main/documents.js setSensitive)
