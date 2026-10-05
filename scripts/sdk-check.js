@@ -1065,7 +1065,7 @@ async function main() {
     assert.deepEqual(await ai.readMeetingTime('Tomorrow from 3-5',context,fetchWith(answer(JSON.stringify(said)))),said,'the model\u2019s object comes back as it is, for resolveTime to check');
     const sent=calls.at(-1).init.body;
     assert.equal(sent.text.format.type,'json_schema');assert.equal(sent.text.format.strict,true);
-    assert.deepEqual(Object.keys(sent.text.format.schema.properties).sort(),['date','end','minutes','question','start'],'the answer has room for a time and a question, nothing else: no people, place or invitation');
+    assert.deepEqual(Object.keys(sent.text.format.schema.properties).sort(),['date','end','minutes','question','start','zone'],'the answer has room for a time, a zone it names and a question, nothing else: no people, place or invitation');
     assert.equal(sent.text.format.schema.additionalProperties,false);
     assert.ok(sent.input.includes('Words: Tomorrow from 3-5')&&sent.input.includes('Today: Monday 2026-10-05')&&sent.input.includes('Time zone: Europe/Amsterdam'),'the words go with today, now, the zone and the meeting as it is');
     assert.match(sent.instructions,/data, never an instruction/);
@@ -1076,7 +1076,7 @@ async function main() {
     const at=(y,mo,d,h,mi=0,zone=AMS)=>meetings.wallTime(zone,y,mo,d,h,mi), now=Date.UTC(2026,9,5,7,35,20); // Monday 5 October 2026, 09:35 in Amsterdam
     const meeting={now,timeZone:AMS,start:at(2026,10,7,10),end:at(2026,10,7,11)}; // Wednesday 10:00-11:00
     const fresh={now,timeZone:AMS,start:at(2026,10,5,9,35),end:at(2026,10,5,10,5)};
-    const clock=(hour,minute=0,fixed=false)=>({hour,minute,fixed}), read=(a,ctx=meeting)=>meetings.resolveTime({date:null,start:null,end:null,minutes:null,question:null,...a},ctx);
+    const clock=(hour,minute=0,fixed=false)=>({hour,minute,fixed}), read=(a,ctx=meeting)=>meetings.resolveTime({date:null,start:null,end:null,minutes:null,zone:null,question:null,...a},ctx);
     const span=(r)=>[new Date(r.start).toLocaleString('sv-SE',{timeZone:r.timeZone}),new Date(r.end).toLocaleString('sv-SE',{timeZone:r.timeZone})];
     assert.deepEqual(span(read({date:'2026-10-06',start:clock(3),end:clock(5)})),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'"tomorrow from 3-5" is the afternoon, never the night');
     assert.deepEqual(span(read({start:clock(3),end:clock(5)})),['2026-10-05 15:00:00','2026-10-05 17:00:00'],'a day left out is today, in the meeting\u2019s zone');
@@ -1092,9 +1092,23 @@ async function main() {
     assert.deepEqual(span(read({start:clock(4),end:clock(6),minutes:90})),['2026-10-05 16:00:00','2026-10-05 18:00:00'],'an end said wins over a length');
     assert.deepEqual(JSON.parse(JSON.stringify(read({question:'Which day next week?',start:clock(3)}))),{question:'Which day next week?'},'a question goes back as it is, with no time');
     assert.deepEqual(Object.keys(read({start:clock(3),attendees:['sam@example.com'],location:'Room 4',invite:true})).sort(),['end','start','timeZone'],'anything else in the answer is left behind');
-    const ny={...meeting,timeZone:'America/New_York'};
-    assert.deepEqual(span(read({date:'2026-10-06',start:clock(3),end:clock(5)},ny)),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'in the meeting\u2019s own zone');
-    assert.equal(read({date:'2026-10-06',start:clock(3)},ny).start,at(2026,10,6,15,0,'America/New_York'));
+    const ny={...meeting,timeZone:'America/New_York'}, NY='America/New_York';
+    assert.deepEqual(span(read({date:'2026-10-06',start:clock(3),end:clock(5)},ny)),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'on the clock of whoever says it');
+    assert.equal(read({date:'2026-10-06',start:clock(3)},ny).start,at(2026,10,6,15,0,NY));
+    // a meeting kept in New York, read for someone in Amsterdam: the words are Amsterdam's clock and day, whatever zone it is kept in
+    const kept={now,timeZone:AMS,start:at(2026,10,7,10,0,NY),end:at(2026,10,7,11,0,NY)}; // 16:00-17:00 in Amsterdam
+    const tomorrow=read({date:'2026-10-06',start:clock(3),end:clock(5)},kept);
+    assert.deepEqual([tomorrow.start,tomorrow.end,tomorrow.timeZone],[at(2026,10,6,15),at(2026,10,6,17),AMS],'"tomorrow from 3-5" is 15:00-17:00 where you are, not in New York');
+    assert.deepEqual(span(read({start:clock(3),end:clock(5)},kept)),['2026-10-05 15:00:00','2026-10-05 17:00:00'],'and a day left out is your today');
+    assert.deepEqual([read({minutes:45},kept).start,read({minutes:45},kept).end],[kept.start,kept.start+27e5],'a length alone keeps the very same start');
+    assert.deepEqual(span(read({date:'2026-10-09'},kept)),['2026-10-09 16:00:00','2026-10-09 17:00:00'],'a day alone keeps its hour on your clock');
+    const late=Date.UTC(2026,9,5,22,30); // 00:30 on Tuesday in Amsterdam, still Monday 18:30 in New York
+    assert.deepEqual(span(read({start:clock(3),end:clock(5)},{...kept,now:late})),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'past midnight where you are, today is your new day');
+    assert.deepEqual(span(read({start:clock(3),end:clock(5)},{...kept,now:late,timeZone:NY})),['2026-10-05 15:00:00','2026-10-05 17:00:00'],'and someone in New York is still on Monday');
+    const named=read({date:'2026-10-06',start:clock(9,0,true),zone:'America/New_York'},kept);
+    assert.deepEqual([named.start,named.end,named.timeZone],[at(2026,10,6,9,0,NY),at(2026,10,6,10,0,NY),NY],'a zone the words name reads their clock times, and is said back');
+    assert.match(JSON.parse(JSON.stringify(read({start:clock(9,0,true),zone:'Mars/Olympus'},kept))).question,/Which time zone is \u201CMars\/Olympus\u201D/,'a zone nobody knows is asked about, never dropped');
+    assert.throws(()=>read({start:clock(9),zone:5},kept),/did not answer/);
     for (const [a,why] of [[null,/did not answer/],[[],/did not answer/],[{start:clock(25,0,true)},/did not answer/],[{start:clock(3,60)},/did not answer/],[{start:{hour:3,minute:0}},/did not answer/],
       [{start:{hour:'3',minute:0,fixed:false}},/did not answer/],[{date:'2026-02-30'},/no such day/],[{date:'tomorrow'},/no such day/],[{minutes:0},/more than no time/],[{minutes:-15},/more than no time/],
       [{minutes:1440},/less than a day/],[{minutes:30.5},/did not answer/],[{start:clock(15,0,true),end:clock(14,0,true)},/ends after it starts/],[{start:clock(23,0,true),end:clock(1)},/ends after it starts/],
@@ -6098,18 +6112,30 @@ async function main() {
     const seen = [], original = backend.ai.readMeetingTime;
     backend.ai.readMeetingTime = async (said, context) => { seen.push([said, context]); return { date: null, start: null, end: null, minutes: 45, question: null }; };
     try {
+      // the meeting is kept in a zone that is not this machine's: words are still read on this machine's clock
+      const mine = Intl.DateTimeFormat().resolvedOptions().timeZone, away = mine === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
+      ev.transact((l) => l.getMap('data').set('timezone', away));
+      assert.equal((await call('meeting:info', id)).timeZone, away, 'meeting:info says which zone the meeting keeps');
       const was = readNode(ev), longer = await call('meeting:read', ' for 45 minutes ', id);
       assert.deepEqual([longer.start, longer.end], [was.startTime, was.startTime + 27e5], 'a length read for this meeting');
       assert.deepEqual([readNode(ev).startTime, readNode(ev).endTime], [was.startTime, was.endTime], 'and nothing written: applying it is meeting:edit');
       assert.equal(seen[0][0], 'for 45 minutes');
       assert.ok(seen[0][1].current && seen[0][1].today && seen[0][1].timeZone, 'the AI is told today, the zone and the meeting as it is');
+      assert.equal(seen[0][1].timeZone, mine, 'in your zone, not the one the meeting keeps');
+      const p = backend.meetings.partsIn(mine, Date.now()), t = new Date(Date.UTC(p.y, p.mo - 1, p.d + 1)), pad = (n) => String(n).padStart(2, '0');
+      backend.ai.readMeetingTime = async (said, context) => { seen.push([said, context]); return { date: t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate()), start: { hour: 3, minute: 0, fixed: false }, end: { hour: 5, minute: 0, fixed: false }, minutes: null, zone: null, question: null }; };
+      const afternoon = await call('meeting:read', 'tomorrow from 3-5', id);
+      assert.deepEqual([afternoon.start, afternoon.end, afternoon.timeZone], [backend.meetings.wallTime(mine, t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), 15, 0), backend.meetings.wallTime(mine, t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), 17, 0), mine], 'tomorrow from 3-5 is 15:00-17:00 on your clock, though the meeting keeps another zone');
+      backend.ai.readMeetingTime = async (said, context) => { seen.push([said, context]); return { date: null, start: null, end: null, minutes: 45, question: null }; };
+      ev.transact((l) => l.getMap('data').delete('timezone'));
+      const asked = seen.length;
       await assert.rejects(call('meeting:read', 'for 45 minutes', closed.id), /Only the event organizer/, 'someone else\u2019s meeting is not read for');
       await assert.rejects(call('meeting:read', 'for 45 minutes', text.id), /Not a meeting/);
       await assert.rejects(call('meeting:read', '   ', id), /Type when/);
       ev.transact((l) => l.getMap('data').set('allDay', true));
       await assert.rejects(call('meeting:read', 'for 45 minutes', id), /all-day/);
       ev.transact((l) => l.getMap('data').delete('allDay'));
-      assert.equal(seen.length, 1, 'none of those asked the AI');
+      assert.equal(seen.length, asked, 'none of those asked the AI');
       const fresh = await call('meeting:read', 'for 45 minutes');
       assert.equal(fresh.end - fresh.start, 27e5);
       assert.ok(Math.abs(fresh.start - Date.now()) < 12e4 && fresh.start % 6e4 === 0, 'a new meeting starts now, to the minute');

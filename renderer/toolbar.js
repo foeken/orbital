@@ -20,13 +20,15 @@ function startLink(item, el, [start, end]) {
   const box = el.getBoundingClientRect(), rect = rects.length ? { left: rects[0].left, top: rects[0].top, bottom: rects[rects.length - 1].bottom } : box;
   togglePalette('search', { item, segs, start, end, at, text: at ? '' : plainOf(segs).slice(start, end), rect });
 }
-async function linkTo(ctx, mention) {
+async function linkTo(ctx, mention, failed) { // failed(error): the write did not land, told to a caller that has to answer for it ("/" Meeting)
   if (ctx.composer) return chatMention(mention); // "@" in a chat's composer (renderer/chat.js)
   const { item, segs, start, end } = ctx;
   const isDoc = item.node.kind === 'document';
   const next = [...splitSegs(segs, start)[0], isDoc ? { text: mention.label } : { mention }, ...splitSegs(segs, end)[1]];
   item.node.text = plainOf(next); item.node.segments = isDoc ? undefined : next;
-  await run(async () => { if (isDoc) await tana.setTitle(item.docId, item.node.text); else { await tana.setText(item.docId, item.node.id, next); await reload(item.docId); } });
+  let error = null;
+  await run(async () => { try { if (isDoc) await tana.setTitle(item.docId, item.node.text); else { await tana.setText(item.docId, item.node.id, next); await reload(item.docId); } } catch (e) { error = e; throw e; } });
+  if (error && failed) return failed(error);
   render(true); // the caret is back in the row by now, and a plain render would wait for it to leave
   placeCaret(item.key, start + mention.label.length);
   popMention(item.key, mention.uri); // the chip just made lights up
@@ -440,9 +442,21 @@ function readRows(read, words, group, ask, timeRow) {
   if (read && read.busy) return [{ group, icon: 'sparkle', label: 'Reading “' + read.words + '”…', disabled: true, note: true }];
   const mine = read && read.words === words ? read : null, again = { group, icon: 'sparkle', label: tana.readMeetingTime ? 'Read “' + words + '” with AI' : 'No time in “' + words + '”', hint: tana.readMeetingTime ? '↩' : '', keepOpen: true, disabled: !tana.readMeetingTime, run: ask };
   if (mine && mine.answer && mine.answer.question) return [{ group, icon: 'sparkle', label: mine.answer.question, hint: 'Add it to your words', disabled: true, note: true }];
-  if (mine && mine.answer) return [timeRow(mine.answer)];
+  if (mine && mine.answer) return [timeRow(mine.answer), ...zoneNote(mine.answer, group)];
   if (mine && mine.error) return [{ group, label: mine.error, disabled: true, note: true }, again];
   return [again];
+}
+// Times are drawn on your clock (meetingSpan, this Mac's zone), which is the one words without a zone are read in
+// (main/meetings.js resolveTime). When the words named another zone, the same time on that zone's clock goes under it.
+const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+const zoneName = (timeZone) => String(timeZone).split('/').pop().replace(/_/g, ' ');
+function zoneSpan(timeZone, start, end) {
+  const f = (o) => new Intl.DateTimeFormat('en-GB', { timeZone, ...o }), at = f({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  return f({ weekday: 'short', day: 'numeric', month: 'short' }).format(start) + ' ' + at.format(start) + '\u2013' + at.format(end);
+}
+function zoneNote(answer, group) {
+  if (!answer.timeZone || answer.timeZone === localZone()) return [];
+  try { return [{ group, icon: 'globe', label: zoneName(answer.timeZone) + ' time: ' + zoneSpan(answer.timeZone, answer.start, answer.end), hint: 'As you said it', disabled: true, note: true }]; } catch { return []; }
 }
 // one reading at a time, of the words given; its answer is drawn only on the page it was asked from
 function readWords(current, set, words, docId, mode) {
@@ -465,6 +479,11 @@ function meetingHere(item, title, when) {
     if (!el) return showNote('“' + (n.title || title) + '” created', false, n.id); // the row or its page went meanwhile: the meeting stays, in the Library
     dropPending(item.key); // the reference is the row's words now: a save of the "/" still waiting must not land after it
     const segs = readSegs(el), words = plainOf(segs), at = words.trim() === '/' || !words.trim() ? 0 : words.length;
-    return linkTo({ item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) });
+    // The meeting exists either way: a reference that could not be written puts the row back as it was and says so, with
+    // the meeting a click away. Nothing offers to make it again; a new "/" Meeting is a new meeting, asked for again.
+    return linkTo({ item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }, (e) => {
+      item.node.text = words; item.node.segments = segs; render(true);
+      showNote('\u201C' + (n.title || title) + '\u201D was made, but its link could not be written here (' + ((e && e.message) || e) + '). Click to open it', true, n.id);
+    });
   }).catch(showError).finally(() => { slashMeetingBusy = false; if (palMode === 'slashMeetingWhen' && !palette.hidden) renderPalette(); });
 }

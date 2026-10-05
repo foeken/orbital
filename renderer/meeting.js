@@ -150,8 +150,10 @@ function openMeetingDetails() {
     const info = meetingCtx && meetingCtx.docId === docId ? meetingCtx.info : null, words = String(typed || '').trim(), group = 'Edit meeting details';
     if (!info) return [];
     const now = { group, icon: 'calendar', label: meetingSpan(info.start, info.end), hint: 'Now', disabled: true, note: true };
-    if (!words) return [now];
+    // a meeting kept in another zone: what this page shows, and what words mean, is your clock
+    const kept = info.timeZone && info.timeZone !== localZone() ? [{ group, icon: 'globe', label: 'Your time \u00B7 the meeting keeps ' + zoneName(info.timeZone) + ' time', disabled: true, note: true }] : [];
+    if (!words) return [now, ...kept];
     return [...readRows(meetingDetailsRead, words, group, () => readWords(meetingDetailsRead, (r) => { meetingDetailsRead = r; }, words, docId, 'meetingDetails'),
-      (t) => ({ group, icon: 'calendar', label: meetingSpan(t.start, t.end), hint: '↩ Apply · read by AI', run: () => { if (meetingCtx && meetingCtx.docId === docId) editMeetingNow({ start: t.start, end: t.end }); } })), now];
+      (t) => ({ group, icon: 'calendar', label: meetingSpan(t.start, t.end), hint: '↩ Apply · read by AI', run: () => { if (meetingCtx && meetingCtx.docId === docId) editMeetingNow({ start: t.start, end: t.end }); } })), now, ...kept];
   } });
 }

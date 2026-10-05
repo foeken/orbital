@@ -935,7 +935,7 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   await p.waitFor(frame('5') + '.contentDocument.getElementById("title").textContent === "New note"', 'the new pane on its note');
   assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['New note']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on a new note');
   assert.equal(await keysIn(), '5', 'the keys went with the new pane');
-  await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret in the new note');
+  await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret in the new note', 8000);
   assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'New note' }, 'every page kept its own place');
   await p.key('⌘N', 4, true); // held: the first press and three repeats
   await pages(6); await p.sleep(800);

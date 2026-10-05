@@ -368,7 +368,9 @@ details does (below): what it read becomes the row to press, marked “read by A
 a failure (no AI, no time in the words) says why. Nothing is made from words until a slot is shown and pressed. Enter makes one meeting (a second Enter while it is being made makes nothing more), in the Library
 with nobody on it, at that time (`api.createDocument(title, { kind: 'meeting', start, end })`), and the row becomes its
 reference. Escape walks back a page at a time: when → the name, kept → the menu → the row. A meeting that lands after
-its page was left leaves the row as it is, and the toast that says it was made opens it. Tana's server puts a meeting
+its page was left leaves the row as it is, and the toast that says it was made opens it. One made whose reference could
+not be written into the row (`linkTo`'s failure callback) puts the row back as it was and says so in a red toast that
+opens the meeting; nothing offers to make it again. Tana's server puts a meeting
 made in Tana into your own calendar ([MEETINGS.md](MEETINGS.md)); people are invited with Add attendee …, never here.
 
 ### @ linking

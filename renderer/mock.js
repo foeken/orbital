@@ -83,7 +83,7 @@ function mockApi() {
     const crowd = i !== 2 ? [] : [...['robin', 'sam', 'priya', 'tomas'].map((p) => ({ key: 'tana:mock' + p, identityUri: 'tana:user-profile:' + p })),
       ...['Noor Haddad', 'Jonas Berg', 'Mei Lin', 'Alex Moreau'].map((name) => ({ key: 'email:' + name.split(' ')[0].toLowerCase() + '@example.com', name, email: name.split(' ')[0].toLowerCase() + '@example.com' })),
       { key: 'email:room412@example.com', name: 'Room 4.12', email: 'room412@example.com', cutype: 'room' }];
-    meetingEdits['mockmeeting' + i] = { title: text, start, end: start + (soon ? mins * 6e4 : h == null ? 864e5 : 36e5), allDay: h == null && !soon, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: crowd };
+    meetingEdits['mockmeeting' + i] = { title: text, start, end: start + (soon ? mins * 6e4 : h == null ? 864e5 : 36e5), allDay: h == null && !soon, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: crowd, ...(i === 2 ? { timeZone: 'America/New_York' } : {}) }; // Leadership sync is kept on New York's clock (main/meetings.js timeZone)
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting], start: new Date(start).toISOString(), end: new Date(meetingEdits['mockmeeting' + i].end).toISOString() };
   });
   // two tasks Tana's AI took from Leadership sync (main/rows.js meetingOf): their rows link back to it on hover

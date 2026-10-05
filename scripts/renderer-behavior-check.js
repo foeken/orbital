@@ -2797,7 +2797,8 @@ function makeSlashMeetingHarness() {
     const closePalette = () => { palette.hidden = true; calls.push(['close']); };
     const renderPalette = () => {}, dropPending = () => {}, extra = new Map();
     const textEl = () => ({}), readSegs = () => node.segments, plainOf = (segs) => segs.map((s) => s.text || '').join('');
-    const linkTo = async (ctx, mention) => { if (linkFails) { calls.push(['error', 'could not write the row']); return; } calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]); };
+    const linkTo = async (ctx, mention, failed) => { if (linkFails) return failed(new Error('could not write the row')); calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]); }; // as renderer/toolbar.js linkTo: a failed write is the caller's to answer
+    const render = () => {};
     const showNote = (text, error, open) => calls.push(['note', text, open]), showError = (e) => calls.push(['error', String(e.message || e)]);
     const tana = { createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => pending.push({ resolve, reject })); },
       readMeetingTime: (words, docId) => { calls.push(['readMeetingTime', words, docId]); return new Promise((resolve, reject) => reads.push({ resolve, reject })); } };
@@ -2811,6 +2812,10 @@ function makeSlashMeetingHarness() {
     ${functionSource('readRows')}
     ${functionSource('readWords')}
     ${sourceLine('const readWhen')}
+    ${sourceLine('const localZone')}
+    ${sourceLine('const zoneName')}
+    ${functionSource('zoneSpan')}
+    ${functionSource('zoneNote')}
     ${functionSource('meetingFromSlash')}
     ${functionSource('meetingName')}
     ${functionSource('meetingWhen')}
@@ -2876,6 +2881,13 @@ async function runSlashMeetingCheck() {
   assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-6')), [['Read \u201Ctomorrow from 3-6\u201D with AI', '\u21A9', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'words typed since are not the ones it read');
   ai.page().rows('', 'tomorrow from 3-5')[0].run();
   assert.deepEqual(plain(ai.calls().slice(-1)), [['createDocument', 'Design review', { kind: 'meeting', start: from, end: from + 72e5 }]], 'the press makes the meeting it showed');
+  // a zone the words named: the time is drawn on your clock, and the same time on the clock it was said in goes under it
+  const zoned = makeSlashMeetingHarness(), away = Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
+  zoned.start(); zoned.page().rows('', 'Call')[0].run(); zoned.page().rows('', '9am tokyo time')[0].run();
+  await zoned.answer({ start: from, end: from + 36e5, timeZone: away });
+  const told = plain(zoned.rowsOf('9am tokyo time'));
+  assert.deepEqual([told.length, told[1][1], told[1][2]], [3, 'As you said it', true], 'a note under the time, nothing to press');
+  assert.ok(told[1][0].startsWith(away.split('/').pop().replace(/_/g, ' ') + ' time: '), 'naming the zone it was said in: ' + told[1][0]);
   const asks = makeSlashMeetingHarness();
   asks.start(); asks.page().rows('', 'Retro')[0].run(); asks.page().rows('', 'next week')[0].run();
   await asks.answer({ question: 'Which day next week?' });
@@ -2901,7 +2913,10 @@ async function runSlashMeetingCheck() {
   linkless.setLinkFails(true);
   linkless.start(); linkless.page().rows('', 'Retro')[0].run(); linkless.page().rows('', '')[0].run();
   await linkless.land({ id: 'tana:event:m3', title: 'Retro', icon: 'meeting' });
-  assert.deepEqual(plain(linkless.calls().slice(-1)), [['error', 'could not write the row']], 'a failed reference is reported');
+  assert.deepEqual(plain(linkless.calls().slice(-2)), [['close'], ['note', '\u201CRetro\u201D was made, but its link could not be written here (could not write the row). Click to open it', 'tana:event:m3']],
+    'made, but the row could not take its reference: said so, with the meeting a click away');
+  assert.deepEqual(plain([linkless.node.text, linkless.node.segments]), ['/', [{ text: '/' }]], 'the row is put back as it was, showing no link that was never saved');
+  assert.equal(linkless.calls().filter((c) => c[0] === 'createDocument').length, 1, 'and nothing offers to make it again');
   linkless.setLinkFails(false);
   linkless.start(); linkless.page().rows('', 'Retro')[0].run(); const again = linkless.page().rows('', '')[0]; again.run(); again.run();
   assert.equal(linkless.calls().filter((c) => c[0] === 'createDocument').length, 2, 'a fresh try afterwards makes one more meeting, not two');
@@ -2972,6 +2987,10 @@ async function runMeetingDetailsCheck() {
     ${sourceLine('let meetingDetailsRead')}
     ${functionSource('readRows')}
     ${functionSource('readWords')}
+    ${sourceLine('const localZone')}
+    ${sourceLine('const zoneName')}
+    ${functionSource('zoneSpan')}
+    ${functionSource('zoneNote')}
     ${functionSource('meetingDetailsRows')}
     ${functionSource('openMeetingDetails')}
     const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -2979,6 +2998,7 @@ async function runMeetingDetailsCheck() {
       offered: (info, doc = { id: 'tana:event:m', icon: 'meeting' }) => { meetingCtx = { docId: 'tana:event:m', info }; return meetingDetailsRows(doc, 'Current node').map((r) => [r.id, r.label]); },
       noAI: () => { delete tana.readMeetingTime; },
       open: () => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2 } }; openMeetingDetails(); return [page.mode, page.placeholder]; },
+      openKept: (timeZone) => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2, timeZone } }; openMeetingDetails(); },
       rows: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
       press: (typed, i = 0) => { const r = page.rows(typed.toLowerCase(), typed)[i]; if (r && !r.disabled) r.run(); }, // as runRow: ↩ on a note does nothing
       row: (typed, i = 0) => page.rows(typed.toLowerCase(), typed)[i],
@@ -3017,7 +3037,33 @@ async function runMeetingDetailsCheck() {
   assert.equal(api.calls().filter((c) => c[0] === 'edit').length, writes, 'and a reading for one meeting is never written to another');
   api.back();
   assert.deepEqual(plain(api.calls().slice(-1)), [['back']], 'Escape goes back to the commands');
+  const away = Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
+  api.openKept(away);
+  assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true], ['Your time \u00B7 the meeting keeps ' + away.split('/').pop().replace(/_/g, ' ') + ' time', '', true]],
+    'a meeting kept in another zone says the times are yours');
+  api.openKept(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true]], 'and one kept in yours says nothing more');
   console.log('ok  Edit meeting details: one field, read by the AI on \u21A9, shown before it is written, a start and an end only, on a meeting you may change');
+}
+
+// linkTo (renderer/toolbar.js) tells a caller that asks when its write did not land, so "/" Meeting can answer for a meeting
+// that exists without its reference; a caller that does not ask ("@", "/" Task) is left the toast run() shows, as before.
+async function runLinkToFailureCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let refuse = false;
+    const run = (fn) => Promise.resolve().then(fn).catch((e) => calls.push(['toast', e.message]));
+    const tana = { setText: async () => { if (refuse) throw new Error('write refused'); calls.push(['setText']); }, setTitle: async () => {} };
+    const reload = async () => {}, render = () => calls.push(['render']), placeCaret = () => calls.push(['caret']), popMention = () => {}, chatMention = () => {};
+    const splitSegs = (segs, at) => [segs.slice(0, at ? 1 : 0), []], plainOf = (segs) => segs.map((s) => s.text || (s.mention && s.mention.label) || '').join('');
+    ${functionSource('linkTo')}
+    const ctx = () => ({ item: { key: 'doc/b', docId: 'doc', node: { id: 'b', kind: 'block' } }, segs: [], start: 0, end: 0 });
+    ({ link: (fails, withCallback) => { refuse = fails; calls.length = 0; return linkTo(ctx(), { label: 'Retro', uri: 'tana:event:m' }, withCallback ? (e) => calls.push(['failed', e.message]) : undefined).then(() => calls.slice()); } });
+  `, { Promise });
+  assert.deepEqual(plain(await api.link(false, true)), [['setText'], ['render'], ['caret']], 'a write that lands draws the row and puts the caret after the reference, and tells nobody');
+  assert.deepEqual(plain(await api.link(true, true)), [['toast', 'write refused'], ['failed', 'write refused']], 'a write that does not land is told to the caller that asked, and the row is not drawn as if it had');
+  assert.deepEqual(plain(await api.link(true, false)), [['toast', 'write refused'], ['render'], ['caret']], 'a caller that did not ask is left the toast, as before');
+  console.log('ok  linkTo says when its write did not land, to the caller that asks');
 }
 
 // A filter choice must stop covering the list it just filtered: single-choice rows close the menu, multi-select ticks stay.
@@ -8132,7 +8178,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

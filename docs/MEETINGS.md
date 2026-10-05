@@ -149,22 +149,29 @@ meeting starting now for half an hour.
 The work is split so that the model never decides anything. main/ai.js `readMeetingTime` asks it, with a strict JSON
 schema, to transcribe the words: a day (`YYYY-MM-DD`, worked out from today, which it is told with the time now, the time
 zone and the meeting as it is), clock times as written with whether the words fix the hour (am or pm, a 24-hour time such
-as 15:00 or 03:00, noon, midnight), a length, or a question back when the day or time is genuinely open ("next week").
-The schema has no field for people, places, titles or invitations, and the words are data, never an instruction.
-main/meetings.js `resolveTime` then decides what that comes to, in the meeting's own `timezone` (yours for a new
-meeting), the same way every time:
+as 15:00 or 03:00, noon, midnight), a length, a time zone the words name, or a question back when the day or time is
+genuinely open ("next week"). The schema has no field for people, places, titles or invitations, and the words are data,
+never an instruction. main/meetings.js `resolveTime` then decides what that comes to, the same way every time, in your
+time zone (this Mac's) whatever zone the meeting is kept in: someone in Amsterdam who types "tomorrow from 3-5" on a
+meeting kept on New York's clock means 15:00 in Amsterdam, and gets it. So:
 
-- a day left out is today when a time is said, and the meeting's own day when only its length changes;
+- a day left out is your today when a time is said (past midnight where you are, that is the new day), and the
+  meeting's own day when only its length changes;
 - an hour the words leave open is in the day: a bare 1 to 6 is the afternoon, 7 to 11 the morning, 12 noon, so
   "tomorrow from 3-5" is 15:00–17:00 tomorrow; an end left open is the first one after the start ("10-2" is 10:00–14:00);
 - an hour the words fix is kept as said (3am, 03:00, midnight), and "until midnight" is the end of that day;
 - a length left out is the meeting's own (half an hour for a new one); an end said wins over a length said;
+- a zone the words name ("9am New York time") reads their clock times when Intl knows it, and the result says so; one it
+  does not know comes back as a question ("Which time zone is …?"), never dropped and never guessed;
 - refused, with the reason shown: an answer that is not that shape, a day that does not exist or is more than two years
   away, an end not after its start, no length or a day or more, a time the clocks skip that day (summer time starts);
   nothing is ever carried past midnight but "until midnight".
 
 `meeting:read` refuses before asking the model what `meeting:edit` would refuse (someone else's meeting, an all-day one,
 not a meeting). With no ChatGPT sign-in and no API key it says so ("Sign in with ChatGPT or add an OpenAI API key to read
-a time"); nothing is guessed in its place. Checked offline: scripts/sdk-check.js (the transcription request, every rule
-above, Europe/Amsterdam and New York, the summer-time gap, `meeting:read` refusals), scripts/renderer-behavior-check.js
-and the Edit meeting details flow, all on fake answers.
+a time"); nothing is guessed in its place. The review row draws the time on your clock, as every time in the app is; a
+time read in a zone the words named has that zone's clock under it ("Tokyo time: …"), and a meeting kept in another zone
+says so on the page ("Your time · the meeting keeps New York time"; `meeting:info` answers its `timeZone`). Checked
+offline: scripts/sdk-check.js (the transcription request, every rule above, a meeting kept in New York read from
+Amsterdam, the day past midnight, a named and an unknown zone, the summer-time gap, `meeting:read` refusals),
+scripts/renderer-behavior-check.js and the Edit meeting details flow, all on fake answers.

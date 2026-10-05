@@ -16,7 +16,7 @@ const snapshot = async (doc) => {
   const n = readNode(doc);
   return { id: doc.id, title: n.title || '', editable: await canEdit(doc), start: n.startTime, end: n.endTime, allDay: n.allDay === true, location: n.location || '',
     participants: Object.keys(n.participants || {}), attendees: events.attendees(doc).map(({ key, name, email, identityUri, role, cutype }) => ({ key, name, email, identityUri, role, cutype })),
-    syncStatus: n.syncStatus, syncError: n.syncError };
+    syncStatus: n.syncStatus, syncError: n.syncError, timeZone: knownZone(n.timezone) || undefined }; // the zone the meeting keeps, which may not be yours
 };
 function check(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -55,7 +55,9 @@ async function currentMeeting() {
 
 // ---- A time read from words (Edit meeting details, "/" Meeting's when page; docs/MEETINGS.md "Reading a time") ----
 // The AI writes down what the words say (main/ai.js readMeetingTime); what that comes to is decided here, the same way
-// every time, in the meeting's own time zone (yours for a new meeting): a day left out is today; a clock time whose hour
+// every time, in your time zone (this Mac's), whatever zone the meeting is kept in: a day left out is your today, and
+// "tomorrow from 3-5" is 15:00 where you are. A zone the words name ("9am New York time") is used when it is a real one,
+// and asked about when it is not; it is never dropped. Then: a clock time whose hour
 // the words leave open is in the day (a bare 1 to 6 is the afternoon, 7 to 11 the morning, 12 noon), so "tomorrow from
 // 3-5" is 15:00-17:00; an end left open is the first one after the start; a length left out is the meeting's own (half an
 // hour for a new one). A time the words fix (3am, 03:00, midnight) is kept as said. Nothing is carried past midnight but
@@ -77,20 +79,29 @@ function wallTime(timeZone, y, mo, d, h, mi) {
   const p = partsIn(timeZone, t), n = new Date(want);
   return p.y === n.getUTCFullYear() && p.mo === n.getUTCMonth() + 1 && p.d === n.getUTCDate() && p.h === h && p.mi === mi ? t : NaN;
 }
-const zoneOf = (timeZone) => {
-  try { if (typeof timeZone === 'string' && timeZone) { new Intl.DateTimeFormat('en-US', { timeZone }); return timeZone; } } catch { /* not a zone Intl knows */ }
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+// a time zone Intl knows, by its own name for it, or null
+const knownZone = (timeZone) => {
+  if (typeof timeZone !== 'string' || !timeZone.trim()) return null;
+  try { return new Intl.DateTimeFormat('en-US', { timeZone: timeZone.trim() }).resolvedOptions().timeZone; } catch { return null; }
 };
+const zoneOf = (timeZone) => knownZone(timeZone) || Intl.DateTimeFormat().resolvedOptions().timeZone; // this Mac's when none is given
 function clockOf(c) {
   if (c == null) return null;
   if (typeof c !== 'object' || Array.isArray(c) || !Number.isInteger(c.hour) || !Number.isInteger(c.minute) || typeof c.fixed !== 'boolean' || c.hour < 0 || c.hour > 23 || c.minute < 0 || c.minute > 59) throw new Error(UNREAD);
   return { hour: c.hour, minute: c.minute, fixed: c.fixed || c.hour === 0 || c.hour > 12 }; // 0 or 13-23 can only be a 24-hour time
 }
-// the AI's { date, start, end, minutes, question } -> { start, end, timeZone } (epoch ms) or { question }; anything
-// else in the answer is ignored, and an answer that is not a time is refused
+// the AI's { date, start, end, minutes, zone, question } -> { start, end, timeZone } (epoch ms, and the zone the clock
+// times were read in) or { question }; anything else in the answer is ignored, and an answer that is not a time is
+// refused. timeZone: yours, in which a day left out is today; a zone the words named reads their clock times instead.
 function resolveTime(answer, { now, timeZone, start, end }) {
   if (!answer || typeof answer !== 'object' || Array.isArray(answer)) throw new Error(UNREAD);
   if (typeof answer.question === 'string' && answer.question.trim()) return { question: answer.question.trim().slice(0, 200) };
+  let zone = timeZone;
+  if (answer.zone != null) {
+    if (typeof answer.zone !== 'string') throw new Error(UNREAD);
+    zone = knownZone(answer.zone);
+    if (!zone) return { question: 'Which time zone is \u201C' + answer.zone.trim().slice(0, 40) + '\u201D? Say a city, such as New York, or UTC' }; // never dropped: asked
+  }
   const from = clockOf(answer.start), until = clockOf(answer.end), minutes = answer.minutes ?? null;
   if (minutes !== null && !Number.isInteger(minutes)) throw new Error(UNREAD);
   if (minutes !== null && (minutes <= 0 || minutes >= 1440)) throw new Error('A meeting lasts more than no time and less than a day');
@@ -101,22 +112,22 @@ function resolveTime(answer, { now, timeZone, start, end }) {
     day = { y: +m[1], mo: +m[2], d: +m[3] };
   }
   if (!day && !from && !until && minutes === null) throw new Error('No day or time in those words');
-  const today = partsIn(timeZone, now), current = partsIn(timeZone, start);
+  const today = partsIn(timeZone, now), current = partsIn(zone, start); // your today; the meeting's hours on the clock they are read on
   if (day && Math.abs(Date.UTC(day.y, day.mo - 1, day.d) - Date.UTC(today.y, today.mo - 1, today.d)) > 731 * DAY_MS) throw new Error('That day is more than two years away'); // a day named, not one kept
   day = day || (from || until ? today : current); // a time alone is today; a length alone keeps the meeting's day
   const daytime = (h) => (h >= 1 && h <= 6 ? h + 12 : h);
   const s = from ? { h: from.fixed ? from.hour : daytime(from.hour), mi: from.minute } : { h: current.h, mi: current.mi };
-  const begins = wallTime(timeZone, day.y, day.mo, day.d, s.h, s.mi);
+  const begins = wallTime(zone, day.y, day.mo, day.d, s.h, s.mi);
   let ends;
   if (until) {
     const after = s.h * 60 + s.mi, h = until.fixed ? until.hour : [until.hour % 12, until.hour % 12 + 12].find((x) => x * 60 + until.minute > after) ?? until.hour;
-    if (until.fixed && h === 0 && until.minute === 0 && after > 0) { const n = new Date(Date.UTC(day.y, day.mo - 1, day.d + 1)); ends = wallTime(timeZone, n.getUTCFullYear(), n.getUTCMonth() + 1, n.getUTCDate(), 0, 0); } // "until midnight": the end of that day
-    else ends = wallTime(timeZone, day.y, day.mo, day.d, h, until.minute);
+    if (until.fixed && h === 0 && until.minute === 0 && after > 0) { const n = new Date(Date.UTC(day.y, day.mo - 1, day.d + 1)); ends = wallTime(zone, n.getUTCFullYear(), n.getUTCMonth() + 1, n.getUTCDate(), 0, 0); } // "until midnight": the end of that day
+    else ends = wallTime(zone, day.y, day.mo, day.d, h, until.minute);
   } else ends = begins + (minutes !== null ? minutes * 6e4 : end - start);
   if (Number.isNaN(begins) || Number.isNaN(ends)) throw new Error('The clocks skip that time that day');
   if (!(ends > begins)) throw new Error('A meeting ends after it starts');
   if (ends - begins >= DAY_MS) throw new Error('A meeting lasts less than a day');
-  return { start: begins, end: ends, timeZone };
+  return { start: begins, end: ends, timeZone: zone };
 }
 // what the AI is told: today, now, the zone and the meeting as it is, in that zone's own words
 function describe({ start, end, timeZone, fresh }, now) {
@@ -139,7 +150,7 @@ async function readTime(words, id, read = S.readMeetingTime, now = Date.now()) {
       if (!await canEdit(doc)) throw new Error(REFUSED);
       const n = readNode(doc);
       if (n.allDay === true) throw new Error('An all-day meeting is rescheduled in its calendar');
-      return { start: n.startTime, end: n.endTime, timeZone: zoneOf(n.timezone) };
+      return { start: n.startTime, end: n.endTime, timeZone: zoneOf() }; // your zone, not the meeting's: words mean your clock
     });
     if (!Number.isFinite(ctx.start) || !Number.isFinite(ctx.end) || ctx.end <= ctx.start) throw new Error('This meeting has no time to change');
   }
