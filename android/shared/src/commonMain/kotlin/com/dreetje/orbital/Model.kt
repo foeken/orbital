@@ -88,7 +88,7 @@ fun parseTime(s: String): Instant? = runCatching { Instant.parse(s) }.getOrNull(
                                val agents: List<Agent>? = null, val handed: Map<String, String>? = null)
 
 // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, a node's agent and its last Agent status
-// line, a link code with the two servers and the message for your Dot, and what became of the code
+// line, a link code with the two servers and the instructions for your agent, and what became of the code
 @Serializable data class Agent(val id: String, val name: String, val app: String = "", val on: Boolean = false, val isDefault: Boolean = false)
 @Serializable data class HandedTo(val id: String, val name: String, val status: String = "assigned") {
     // as the Mac's badge reads it: Assigned is waiting for the agent to pick it up

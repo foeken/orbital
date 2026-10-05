@@ -155,12 +155,15 @@ fun NodeScreen(
                     }
                     "search", "event" -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                         val rows = engine.shown(current.rows)
-                        // in the sections the search was saved with (Row.group), as the desktop shows it
+                        // in the sections the search was saved with (Row.group), as the desktop shows it: no lines, and the
+                        // rows closer together under headings (the iPhone's Pages.swift)
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = 6.dp + LocalBottomInset.current)) {
                             val key = uniqueKeys()
-                            Lists.sections(rows).forEachIndexed { s, (title, list) ->
+                            val sections = Lists.sections(rows)
+                            val grouped = sections.any { it.first != null }
+                            sections.forEachIndexed { s, (title, list) ->
                                 if (title != null) item("h$s") { Text(title, Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp).semantics { heading() }, style = Type.headline, color = c.secondary) }
-                                list.forEach { row -> item(key("row:" + row.id)) { ListRow(row, engine) { load() } } }
+                                list.forEach { row -> item(key("row:" + row.id)) { ListRow(row, engine, tight = grouped) { load() } } }
                             }
                         }
                         if (current.rows.isEmpty()) Empty(if (current.kind == "event") "No notes yet" else "Nothing found", glyph = Glyphs.of(current.kind))
@@ -186,9 +189,9 @@ fun NodeScreen(
 }
 
 // One node in a list: a task's box or its kind's glyph, then its words and when it last changed, which open it. The box
-// is its own button beside it, so ticking a task never opens it too.
+// is its own button beside it, so ticking a task never opens it too. tight: under a saved search's headings, closer together
 @Composable
-fun ListRow(row: Node, engine: Engine, reload: suspend () -> Unit) {
+fun ListRow(row: Node, engine: Engine, tight: Boolean = false, reload: suspend () -> Unit) {
     val c = Theme.colors
     val zoom = LocalZoom.current
     val hidden = row.sensitive == true && !engine.reveal
@@ -196,7 +199,7 @@ fun ListRow(row: Node, engine: Engine, reload: suspend () -> Unit) {
         if (row.stateType != null) TaskBox(row, engine, onBaseline(4.dp))
         else Glyph(Glyphs.of(row.icon), onBaseline(4.dp, Modifier.size(20.dp)), c.secondary)
         NodeMenu(row.target, engine, Modifier.weight(1f).alignByBaseline(), task = if (row.stateType != null) engine.state(row) else null, assignees = row.assignees, then = reload, onClick = { zoom(row.target) }) {
-            Column(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(Modifier.fillMaxWidth().padding(vertical = if (tight) 7.dp else 9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 val (words, from) = engine.translator.words(row.words, row.sensitive == true)
                 if (row.stateType != null) TaskWords(row, engine, globe = false) else Sensitive(hidden) { Words(words) }
                 // translated, when it changed, who has it: one grey line as the desktop's subtext, a dot between each

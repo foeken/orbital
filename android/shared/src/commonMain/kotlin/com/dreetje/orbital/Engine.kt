@@ -444,7 +444,7 @@ class Engine(
     suspend fun access(id: String): Access? = if (isSample) null else maybe { call<Access>("return await orbital.access(id)", mapOf("id" to id)) }
 
     // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, linking one with a code as the
-    // Mac's Connect to your OpenAI Dot does, and a node handed to one with a request (Assign to <its name> …) or taken back
+    // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
     val agentsOn: List<Agent> get() = agents.filter { it.on }.sortedBy { !it.isDefault } // what Assign to <its name> … offers, the default first
     // the relay asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
     suspend fun loadAgents(): String? {
@@ -458,7 +458,7 @@ class Engine(
     suspend fun linkCode(): LinkCode = if (isSample) throw Failure("The sample saves nothing") else call("return await orbital.linkCode()")
     suspend fun linkStatus(code: String): LinkState = call("return await orbital.linkStatus(code)", mapOf("code" to code))
     suspend fun linkCancel(code: String) { maybe { call<Boolean>("return await orbital.linkCancel(code)", mapOf("code" to code)) } } // gone anyway in fifteen minutes
-    // throws, so the sheet stays open with what went wrong (not listening yet, did not take it, read-only)
+    // throws with what went wrong (not listening yet, did not take it, read-only): handOff says it and keeps the request
     suspend fun hand(id: String, agent: Agent, request: String) {
         if (isSample) throw Failure("The sample saves nothing")
         call<HandedTo?>("return await orbital.handTo(id, agent, request)", mapOf("id" to id, "agent" to agent.id, "request" to request))
@@ -552,6 +552,19 @@ class Engine(
                 }
                 made = processImage(jpeg)
             } catch (e: Failure) { error = e.message } finally { adding-- }
+        }
+    }
+    // Assign to <its name> …: the form closes the moment you press Assign and the request is handed over here while you go
+    // on, the + in the bar turning meanwhile, as for Quick Add. A request the agent did not take (not listening yet, a node
+    // that is read-only) is kept for that node, and the form opens with it again, so nothing written is lost
+    val unhanded = mutableStateMapOf<String, String>()
+    fun handOff(handing: Handing, request: String) {
+        adding++
+        scope.launch {
+            try { hand(handing.id, handing.agent, request); unhanded.remove(handing.id); handing.then() } catch (e: Failure) {
+                unhanded[handing.id] = request
+                error = "${handing.agent.name} did not get it: ${e.message}"
+            } finally { adding-- }
         }
     }
 

@@ -87,8 +87,8 @@ function agents({ hold, settled }) {
       try { await refresh(); } catch (e) { problem = e.message || String(e); }
       return JSON.stringify({ agents: linked(), handed: handed(), problem });
     },
-    // Connect to your OpenAI Dot: a code (your Orbital made the first time, its key kept in the settings document before
-    // the code is shown, so the Mac is the same Orbital), the two servers' URLs and the message for your Dot
+    // Connect your personal agent: a code (your Orbital made the first time, its key kept in the settings document before
+    // the code is shown, so the Mac is the same Orbital), the two servers' URLs and the instructions for your agent
     async linkCode() {
       await settled();
       const out = await relay.linkCode();

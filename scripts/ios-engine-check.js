@@ -37,6 +37,30 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   assert.strictEqual(arrange([{ ...rows[5], id: 'g' }], { groupBy: 'responsibility' }, { ...c, pinned: new Set(['g']) })[0].group, 'Waiting', 'one you are waiting on leaves Pinned for Waiting');
 }
 
+// Every list on the phone keeps your hidden titles and Hide MCP out, as the Mac's lists do (ios/engine/listed.js,
+// main/views.js listFilter): Block and Lunch never reached the phone's Upcoming meetings before. A lookup by id still
+// answers, and listNodesUnhidden is the graph untouched.
+{
+  const { listFilter } = require('../ios/engine/listed.js');
+  const all = [
+    { id: 'tana:event:1', title: 'Block' }, { id: 'tana:event:2', title: 'Block (focus)' }, { id: 'tana:event:3', title: 'lunch' },
+    { id: 'tana:event:4', title: 'Planning' }, { id: 'tana:chat:5', title: 'MCP: export' }, { id: 'tana:text:6', title: 'Orbital settings' },
+    { id: 'tana:text:7', title: 'Gone', deletedAt: 1 },
+  ];
+  const store = { hiddenTitles: ['Block*', 'Lunch'], hideMcp: true };
+  const settings = { get: (k) => store[k], appDocIds: () => ['tana:text:6'] };
+  const graph = { listNodes: async (params) => ({ nodes: params.nodeIds ? all.filter((n) => params.nodeIds.includes(n.id)) : all }) };
+  listFilter(graph, settings);
+  (async () => {
+    const ids = (r) => r.nodes.map((n) => n.id).join(' ');
+    assert.strictEqual(ids(await graph.listNodes({ nodeTypes: ['event'] })), 'tana:event:4', 'hidden titles, MCP chats, the settings document and deleted nodes stay out of a list');
+    assert.strictEqual(ids(await graph.listNodes({ nodeIds: ['tana:event:1', 'tana:text:6'] })), 'tana:event:1 tana:text:6', 'a lookup by id answers past the rules');
+    store.hideMcp = false; store.hiddenTitles = [];
+    assert.strictEqual(ids(await graph.listNodes({ nodeTypes: ['event'] })), 'tana:event:1 tana:event:2 tana:event:3 tana:event:4 tana:chat:5', 'read on every list: a rule taken out shows them again');
+    assert.strictEqual((await graph.listNodesUnhidden({})).nodes.length, all.length, 'listNodesUnhidden is the graph untouched');
+  })().catch((e) => { console.error(e); process.exit(1); });
+}
+
 // The phone's Timeline reads a task in the workspace's Waiting workflow as waiting too (stand-ins graphRow, main/settings.js
 // stateName), which is what keeps it out of Today's Tasks there (main/timeline.js)
 {
@@ -161,7 +185,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
 
     const link = JSON.parse(await api.linkCode());
     assert.strictEqual(link.code, 'ABCD-1234');
-    assert.ok(link.prompt.startsWith('Call Orbital\'s link_orbital tool with the code ABCD-1234'), 'the same message for your Dot as the Mac copies');
+    assert.ok(link.prompt.startsWith('Call Orbital\'s link_orbital tool with the code ABCD-1234'), 'the same instructions as the Mac copies');
     assert.deepStrictEqual([link.url, link.tana], ['https://orbital.md/mcp', 'https://home.tana.inc/mcp'], 'and both servers, as ChatGPT\'s form asks for them');
     assert.match(settings.get('relayKey'), /^[\w-]{43}$/, 'your Orbital made from the phone: its key in the synced settings, so the Mac is the same Orbital');
     const linked = JSON.parse(await api.linkStatus('ABCD-1234'));

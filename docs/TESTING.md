@@ -83,7 +83,8 @@ From fastest to slowest. Each catches what the one before it cannot.
    - Notifications read by bullet and by Mark all as read, a row opening its node; a proposal approved from Cmd+K and
      one rejected with its button;
    - a chat message sent with ↩ shows as yours and Tana's answer follows;
-   - Connect to your OpenAI Dot: both servers named with their URLs, the message carries a one-time code, the agent links while the page waits, the
+   - Connect your personal agent: both plugins named with their URLs, How to add them … and back to the same code, the
+     instructions carry a one-time code, the agent links while the page waits, the
      palette closes on its name, and it is in Choose agents (on, where it runs) with a page to rename or unlink it;
    - panes and tabs (shell.html): ⌘↩ on a search result opens a tab, ⇧↩ a pane beside, ⇧⌘N a new pane, the keys go
      with the page just opened and every page keeps its own place.
@@ -101,7 +102,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    scheduled checks run them on a simulator on main. `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
    build's stand-in for a Tana that never answers) with `-patience 3`, and expects Can't reach Tana in place of a Timeline
    that builds itself for good; Android's `EngineTest` drives the same on virtual time. `scripts/ios-engine-check.js`
-   covers the engine, and the desktop code it bundles, in `npm run check`.
+   covers the engine, and the desktop code it bundles, in `npm run check`, among it every list the phones ask for (ios/engine/listed.js): your hidden titles, Hide MCP and the settings document stay out of it, as main/views.js listFilter keeps them out on the Mac, where the phones once showed Block and Lunch in Upcoming meetings.
 4. **The running app**, only for what the mock cannot reach: main's live subscriptions, real Tana answers, a restart.
    Read-only first (`node scripts/platform-cli.js`), escalated. Say in the PR what was and was not tried there.
 

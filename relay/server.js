@@ -137,7 +137,7 @@ const INSTRUCTIONS = 'Orbital is an outliner over Tana. Its owner hands you Tana
 const SIGNED_IN = [{ type: 'oauth2', scopes: [] }];
 const TOOLS = [
   { name: 'link_orbital', title: 'Link with Orbital',
-    description: 'Link yourself to the Orbital of the person you work for, with the one-time code they gave you (Orbital: Cmd+K, Connect to your OpenAI Dot). '
+    description: 'Link yourself to the Orbital of the person you work for, with the one-time code they gave you (Orbital: Cmd+K, Connect your personal agent). '
       + 'Choose a short name for yourself: it is how you are shown in Orbital. Linking again with a new code moves you to that Orbital. Then subscribe to task.assigned.',
     inputSchema: { type: 'object', properties: { code: { type: 'string', description: 'The link code, like 7KQX-M2PD' }, name: { type: 'string', description: 'A short name for yourself, shown in Orbital' } }, required: ['code', 'name'], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
@@ -527,7 +527,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   }
   async function linkOrbital(install, agent, args) {
     limit('link:' + install.id, LIMITS.links);
-    const code = text(args.code, 20).toUpperCase(), name = text(args.name, LIMITS.name), used = 'That code is unknown, used or expired: ask for a new one (Orbital: Cmd+K, Connect to your OpenAI Dot).';
+    const code = text(args.code, 20).toUpperCase(), name = text(args.name, LIMITS.name), used = 'That code is unknown, used or expired: ask for a new one (Orbital: Cmd+K, Connect your personal agent).';
     if (!CODE.test(code)) throw fail(400, 'bad_code', 'That is not an Orbital link code: it looks like 7KQX-M2PD.');
     if (!name) throw fail(400, 'bad_name', 'Give yourself a short name: it is how you are shown in Orbital.');
     const row = await one('SELECT * FROM codes WHERE code = ?', code);

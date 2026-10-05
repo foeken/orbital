@@ -1286,7 +1286,7 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
   .palette .ricon.thinking svg path:nth-child(5) { animation-delay: calc(var(--dur-loop) * 2 / 3); }
   .palette .ricon.thinking svg path:nth-child(3), .palette .ricon.thinking svg path:nth-child(4) { animation: sparkle-trail calc(var(--dur-loop) * 2) ease-in-out infinite; }
 }
-/* A row waiting on someone else (Connect to your OpenAI Dot: the code, then the agent): a light passes over its words, the
+/* A row waiting on someone else (Connect your personal agent: the code, then the agent): a light passes over its words, the
    sweep over "Thinking…" in a chat, in no colour: the grey words turn darker in the light theme and brighter in the dark
    one as it passes. Plain grey words where motion is not welcome. */
 :root { --sweep-ink: #1a1a1a; }

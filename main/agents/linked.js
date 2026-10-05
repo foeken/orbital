@@ -1,6 +1,6 @@
 'use strict';
 // Agents linked through the relay at orbital.md/mcp (docs/AGENT-RELAY.md; the relay is relay/): any agent that adds
-// that MCP server to itself and links with a code from Cmd+K Connect to your OpenAI Dot … Each is an agent of its own beside Codex
+// that MCP server to itself and links with a code from Cmd+K Connect your personal agent … Each is an agent of its own beside Codex
 // and Claude (main/agent.js), "relay:<its id>", named as it named itself.
 //   - Your Orbital is one random key (relayKey), made the first time you link an agent and kept in the Orbital settings
 //     document, so every device signed into your Tana account has the same agents. The relay keeps only its hash.

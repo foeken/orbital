@@ -89,15 +89,23 @@ struct NodeScreen: View {
                             Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); waitingSince = .now; await load(); return sent.warning }
                         }
                 case "search", "event":
-                    // in the sections the search was saved with (Row.group), as the desktop shows it
-                    List(Array(Self.sections(engine.shown(page.rows)).enumerated()), id: \.offset) { _, section in
+                    // in the sections the search was saved with (Row.group), as the desktop shows it: no lines between the
+                    // rows or around a section, and the rows close together, closer still under headings, as the Timeline's
+                    let sections = Self.sections(engine.shown(page.rows)), grouped = sections.contains { $0.title != nil }
+                    List(Array(sections.enumerated()), id: \.offset) { _, section in
                         Section {
-                            ForEach(section.rows) { ListRow(row: $0, engine: engine, reload: load) }
+                            ForEach(section.rows) {
+                                ListRow(row: $0, engine: engine, reload: load)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: grouped ? 1 : 3, leading: 20, bottom: grouped ? 1 : 3, trailing: 16))
+                            }
                         } header: {
                             if let title = section.title { Text(title).font(.headline).foregroundStyle(.secondary).textCase(nil) }
                         }
+                        .listSectionSeparator(.hidden)
                     }
                         .listStyle(.plain)
+                        .environment(\.defaultMinListRowHeight, 0) // the rows as tall as their words, not the system's 44
                         .refreshable { await load() }
                         .overlay { if page.rows.isEmpty { ContentUnavailableView(page.kind == "event" ? "No notes yet" : "Nothing found", image: "Glyphs/" + Glyph.of(page.kind)) } }
                 default:

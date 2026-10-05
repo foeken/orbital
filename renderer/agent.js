@@ -64,7 +64,7 @@ function openAIKeyRows() {
 }
 // ---- Choose agents, and Set default agent ----
 // Every agent the app knows, in one list: Tana always on, Codex and Claude greyed with what to install until this Mac has
-// them, then your linked Dot (each linked agent has a page of its own: ↩ opens it), with Connect to your OpenAI Dot under
+// them, then your linked agents (each has a page of its own: ↩ opens it), with Connect your personal agent under
 // them (Reset agent link key is in Cmd+K itself). ↩ on a built-in one switches it on or off. The default, the agent Assign to Agent
 // starts on, is picked on a page of its own (Set default agent …). The lists are main's, and each answer is the new
 // list, so the page redraws from what was stored.
@@ -85,7 +85,7 @@ function agentsRows(q) {
     const linked = agentList.filter((a) => a.linked);
     for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
-    rows.push({ group: AGENTS_GROUP, icon: 'chatgpt', label: 'Connect to your OpenAI Dot …', hint: 'Orbital and Tana in ChatGPT, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
+    rows.push({ group: AGENTS_GROUP, icon: 'mcp', label: 'Connect your personal agent …', hint: 'Two plugins, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
   }
   return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
 }
@@ -102,22 +102,24 @@ function openDefaultAgentPalette() {
   loadAgentList().then(() => { if (palMode === 'defaultAgent') renderPalette(); });
   openPage('defaultAgent', 'Set default agent', { rows: defaultAgentRows, back: BACK_TO_COMMANDS });
 }
-// ---- Connect to your OpenAI Dot: orbital.md/mcp and Tana's server added in ChatGPT, then linked with a one-time code ----
-// (main/agents/linked.js) ChatGPT has no link to its own "Create custom MCP server" form and a Dot cannot add a server
-// itself, so the page says where to go and names both servers as that form wants them, a name and a URL (↩ copies the
-// URL). Then one row copies the message for your Dot, which only links. The page asks every two seconds whether that
-// happened; once it has, the palette closes on a toast naming the agent. Leaving the page does not stop the code: a Dot
-// that uses it later shows up in Choose agents all the same.
+// ---- Connect your personal agent: orbital.md/mcp and Tana's server added to your agent, then linked with a one-time code ----
+// (main/agents/linked.js) An agent cannot add a server itself (your OpenAI Dot cannot, and ChatGPT has no link to its own
+// "Create custom MCP server" form), so the page names both plugins as such a form wants them, a name and a URL (↩ copies
+// the URL), and How to add them … opens the steps: your Dot's in ChatGPT, then any other agent's. Then one row copies the
+// instructions, which only link. The page asks every two seconds whether that happened; once it has, the palette closes
+// on a toast naming the agent. Leaving the page does not stop the code: an agent that uses it later shows up in Choose
+// agents all the same.
 const CHATGPT_PLUGINS = 'https://chatgpt.com/plugins';
+const LINK_TITLE = 'Connect your personal agent';
 let relayCtx = null; // { state: asking|waiting|expired|failed, code, prompt, expiresAt, error, back } while the page is up
 let relayTimer = null;
 const unwrapError = (e) => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 function openLinkPalette(back = BACK_TO_COMMANDS) {
   // a code still waiting is the page you left: shown again, rather than another code (the relay holds five at most)
   const open = relayCtx && relayCtx.state === 'waiting' && relayCtx.expiresAt > Date.now() ? relayCtx : null;
-  if (open) { open.back = back; openPage('linkAgent', 'Connect to your OpenAI Dot', { rows: relayRows, back, typed: true }); pollRelay(open); return; }
+  if (open) { open.back = back; openPage('linkAgent', LINK_TITLE, { rows: relayRows, back, typed: true }); pollRelay(open); return; }
   const ctx = relayCtx = { state: 'asking', back };
-  openPage('linkAgent', 'Connect to your OpenAI Dot', { rows: relayRows, back, typed: true });
+  openPage('linkAgent', LINK_TITLE, { rows: relayRows, back, typed: true });
   Promise.resolve(tana.relayLink()).then((r) => { if (relayCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawRelay(); pollRelay(ctx); },
     (e) => { if (relayCtx !== ctx) return; ctx.state = 'failed'; ctx.error = unwrapError(e); drawRelay(); });
 }
@@ -142,26 +144,39 @@ function pollRelay(ctx) {
   }, 2000);
 }
 function relayRows() {
-  const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) }, title = 'Connect to your OpenAI Dot';
+  const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) }, title = LINK_TITLE;
   if (c.state === 'asking') return [{ group: title, label: 'Getting a code…', disabled: true, sweep: true, bare: true, match: [] }];
   if (c.state === 'failed') return [{ group: title, icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: title, label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
-  // first both servers, in ChatGPT: a name and a URL each, as its form asks, the rest left as it is
-  const add = 'Add both in ChatGPT · Add, then Create custom MCP server · the rest as it is';
+  // first both plugins: a custom MCP server each, a name and a URL, and the steps behind How to add them …
+  const add = 'Add both plugins · a custom MCP server each, a name and a URL';
   const server = (icon, label, url) => ({ group: add, icon, label, hint: url + ' · ↩ copies', keepOpen: true, match: [], run: () => run(() => copyText(url, 'Copied ' + label + '\u2019s URL')) });
-  const rows = [{ group: add, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
-    server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana)];
-  // then the message, which only links: what goes through orbital.md is in it too, for the Dot to explain
-  const group = 'Then ask your Dot to link';
-  rows.push({ group, icon: 'prompt', label: 'Copy the message for your Dot', hint: '↩ copies', keepOpen: true, match: [],
-    run: () => run(() => copyText(c.prompt, 'Copied: send it to your Dot')) },
+  const rows = [server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana),
+    { group: add, icon: 'help', label: 'How to add them …', hint: 'Your OpenAI Dot, or any other agent', keepOpen: true, match: [], run: () => openLinkHelp(c) }];
+  // then the instructions, which only link: what goes through orbital.md is in them too, for the agent to explain
+  const group = 'Then ask your agent to link';
+  rows.push({ group, icon: 'prompt', label: 'Copy the instructions', hint: '↩ copies', keepOpen: true, match: [],
+    run: () => run(() => copyText(c.prompt, 'Copied: send them to your agent')) },
   // what crosses orbital.md (main/agents/linked.js send): with each event the node's id, the request and how to handle it, kept nowhere
-  { group, icon: 'lock', label: 'Only the node\'s id and your request go through orbital.md, and it keeps neither: the node\'s words stay in Tana, where your Dot reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
+  { group, icon: 'lock', label: 'Only the node\'s id and your request go through orbital.md, and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
   // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
   if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
   return [...rows,
-    { group, label: 'Waiting for your Dot to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, bare: true, match: [] },
+    { group, label: 'Waiting for your agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, bare: true, match: [] },
     { group, icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { relayCtx = null; run(() => tana.relayLinkCancel(c.code)); (c.back || closePalette)(); } }];
+}
+// How to add them …: ChatGPT's plugins a ↩ away, then the steps in two short paragraphs, your OpenAI Dot's and any other
+// agent's (the phones list them one by one, Agents ConnectHelp). Back goes to the page with its code, still waiting.
+function openLinkHelp(c) {
+  const orbital = String(c.url || 'https://orbital.md/mcp').replace('https://', ''), tanaUrl = String(c.tana || 'https://home.tana.inc/mcp').replace('https://', '');
+  const dot = 'Your OpenAI Dot', other = 'Any other agent';
+  const note = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
+  const rows = [
+    { group: dot, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
+    note(dot, 'help', 'In ChatGPT: Add, then Create custom MCP server, once for Orbital (' + orbital + ') and once for Tana (' + tanaUrl + ', signed in). Then send your Dot the instructions.'),
+    note(other, 'mcp', 'The same two MCP servers, then the instructions. It needs MCP events to hear about the tasks you hand it.'),
+  ];
+  openPage('linkHelp', 'Adding the plugins', { back: () => openLinkPalette(c.back), rows: () => rows });
 }
 // When the relay last heard from an agent, in a few words
 function seenText(at) {

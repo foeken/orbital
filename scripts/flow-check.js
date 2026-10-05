@@ -680,22 +680,31 @@ flow('golden path: read notifications and settle proposals', async (p) => {
   assert.deepEqual(await p.js('__screen()'), before.filter((t) => !/^(Check out the new editor|Studio LT charter)$/.test(t)), 'the others stay');
 });
 
-// Connect to your OpenAI Dot (main/agents/linked.js, docs/AGENT-RELAY.md): ⌘K Connect to your OpenAI Dot names both servers
-// to add in ChatGPT, then copies the message that carries a one-time code; while the page waits the agent links itself
+// Connect your personal agent (main/agents/linked.js, docs/AGENT-RELAY.md): ⌘K Connect your personal agent names both
+// plugins, How to add them … opens the steps for your Dot and any other agent and comes back to the same code, then it
+// copies the instructions that carry a one-time code; while the page waits the agent links itself
 // (the mock's Dot, on the third time the page asks), the palette closes on its name, and from then on it is one of
 // your agents, with a page of its own to rename or unlink it
 flow('golden path: connect your Dot with a code, and it joins your agents', async (p) => {
   await p.start();
-  await command(p, 'connect to your openai dot', 'Connect to your OpenAI Dot \u2026');
-  await p.waitFor('palMode === "linkAgent" && palRows.length === 7', 'the servers, the message and the wait');
-  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => [r.icon, r.label, r.hint])'), [['chatgpt', 'Open ChatGPT plugins', 'chatgpt.com/plugins'], ['orbital', 'Orbital', 'https://orbital.md/mcp · ↩ copies'], ['tana', 'Tana', 'https://home.tana.inc/mcp · ↩ copies']],
-    'first where to go in ChatGPT, then both servers as its form asks for them: a name and a URL');
-  assert.equal(await p.js('palIndex'), 0, '↩ starts at ChatGPT');
-  assert.deepEqual(await p.js('[palRows[3].label, palRows[3].group, !!palRows[3].disabled]'), ['Copy the message for your Dot', 'Then ask your Dot to link', false], 'then the message');
+  await command(p, 'connect your personal agent', 'Connect your personal agent \u2026');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 7', 'the plugins, the instructions and the wait');
+  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => [r.icon, r.label, r.hint])'), [['orbital', 'Orbital', 'https://orbital.md/mcp · ↩ copies'], ['tana', 'Tana', 'https://home.tana.inc/mcp · ↩ copies'], ['help', 'How to add them …', 'Your OpenAI Dot, or any other agent']],
+    'both plugins as a custom MCP server form asks for them, a name and a URL, then the steps');
+  assert.equal(await p.js('palIndex'), 0, '↩ starts at Orbital');
+  await p.js('palRows[2].run()');
+  await p.waitFor('palMode === "linkHelp" && palRows[0].label === "Open ChatGPT plugins"', 'the steps, ChatGPT\u2019s plugins first');
+  assert.deepEqual(await p.js('palRows.map((r) => r.group)'), ['Your OpenAI Dot', 'Your OpenAI Dot', 'Any other agent'], 'one paragraph for your Dot, one for any other agent');
+  assert.match(await p.js('palRows[1].label'), /^In ChatGPT: Add, then Create custom MCP server, once for Orbital \(orbital\.md\/mcp\) and once for Tana/, 'your Dot\u2019s steps in one paragraph');
+  assert.match(await p.js('palRows.at(-1).label'), /needs MCP events/, 'any other agent needs MCP events');
+  assert.equal(await p.js('palRows.some((r) => /link_orbital/.test(r.label))'), false, 'no tool names in the steps');
+  await p.js('backPalette()');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 7 && relayCtx.code === "7KQX-M2PD"', 'back on the page, its code still waiting');
+  assert.deepEqual(await p.js('[palRows[3].label, palRows[3].group, !!palRows[3].disabled]'), ['Copy the instructions', 'Then ask your agent to link', false], 'then the instructions');
   assert.match(await p.js('relayCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned event\. Each time an Orbital event fires, do what its data\.instructions say.*kept nowhere/, 'what it copies: the code, the event that wakes it and carries its instructions, and what goes through orbital.md');
   assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
   assert.match(await p.js('palRows[4].label'), /^Only the node's id and your request go through orbital\.md, and it keeps neither/, 'it says what goes through orbital.md');
-  assert.deepEqual(await p.js('[palRows[5].label, !!palRows[5].icon, palRows[5].group === palRows[3].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your Dot to use the code…', false, true, true],
+  assert.deepEqual(await p.js('[palRows[5].label, !!palRows[5].icon, palRows[5].group === palRows[3].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your agent to use the code…', false, true, true],
     'and waits in the same group, with no glyph, a light passing over its words');
   // where the heading's words start (its box plus its padding), measured once the page has slid in
   const offset = '(() => { const g = document.querySelector("#palette .list .group"); return document.querySelector("#palette .row .label.sweep").getBoundingClientRect().left - g.getBoundingClientRect().left - parseFloat(getComputedStyle(g).paddingLeft); })()';
@@ -704,7 +713,7 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   // left and opened again while its code waits: the same page, no new code (the relay holds five at most)
   await p.js('(() => { const f = tana.relayLink; window.__codes = 0; tana.relayLink = (...a) => { window.__codes++; return f(...a); }; return 1; })()');
   await closePalette(p);
-  await command(p, 'connect to your openai dot', 'Connect to your OpenAI Dot \u2026');
+  await command(p, 'connect your personal agent', 'Connect your personal agent \u2026');
   await p.waitFor('palMode === "linkAgent" && palRows.length === 7', 'the page left, back');
   assert.deepEqual(await p.js('[window.__codes, relayCtx.code]'), [0, '7KQX-M2PD'], 'reopened while its code waits: that code again, no new one');
   await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked Dot · ChatGPT"', 'the palette to close on the agent that linked', 10000);
