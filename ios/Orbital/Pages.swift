@@ -334,6 +334,24 @@ struct NodeDetails: View {
 
     var body: some View {
         if access.task {
+            // Status: Tana's own four, as the desktop's Status pill offers them (renderer/pills.js); set outright (engine.tick)
+            let now = engine.states[id] ?? access.state ?? "open"
+            Menu {
+                ForEach(Self.states, id: \.0) { state in
+                    Button { Task { await engine.tick(id, to: state.0); await reload() } } label: {
+                        if state.0 == now { Label(state.1, systemImage: "checkmark") } else { Text(state.1) }
+                    }
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Text("Status").foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
+                    Text(Self.states.first { $0.0 == now }?.1 ?? "In Progress").foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .modifier(FieldLine())
             field("Assigned to") { engine.assigning = .init(id: id, current: access.assignees.map(\.id), then: reload) } value: {
                 if access.assignees.isEmpty { Text("Unassigned").foregroundStyle(.secondary) } else { Faces(people: access.assignees.persons) }
             }
@@ -370,6 +388,8 @@ struct NodeDetails: View {
             .modifier(FieldLine())
         }
     }
+
+    static let states = [("proposed", "Inbox"), ("open", "In Progress"), ("closed", "Completed"), ("not_now", "Later")]
 
     // a field as the desktop draws one: its name in grey, its value after it, a line under it, the whole row the button
     // that changes it
