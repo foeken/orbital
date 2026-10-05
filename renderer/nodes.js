@@ -233,11 +233,15 @@ function addIcon(el, icon) { const svg = icon ? iconNode(icon) : null; if (svg) 
 // A button that leaves the caret where it is: a press takes no focus, the click still runs. label, when given, is its
 // tooltip and its name for a screen reader (an icon-only button has no other); its words or glyph are the caller's.
 // opts.tabIndex: -1 for a row's own glyph (a meeting link, Join), which the row's keys reach, never Tab.
+// opts.title: a tooltip other than its name (a section heading's Collapse, a disabled Approve saying why).
+// A button that takes focus on purpose (the rail's section heads, Clear filters, the text toolbar) is not quiet and is
+// made as any button is.
 function quietButton(cls, label, onclick, opts) {
   const b = document.createElement('button');
   b.type = 'button'; b.className = cls;
   if (opts && opts.tabIndex != null) b.tabIndex = opts.tabIndex;
   if (label) { b.title = label; b.setAttribute('aria-label', label); }
+  if (opts && opts.title) b.title = opts.title;
   b.onmousedown = (e) => e.preventDefault();
   b.onclick = onclick;
   return b;

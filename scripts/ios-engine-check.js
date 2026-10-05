@@ -292,6 +292,54 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     Object.assign(S, { me: was.me, client: was.client, settingsReadOnly: was.readOnly });
   }
 
+  // A task's box and a zoomed node's fields on the phone (ios/engine/tasks.js), on a task document of its own: an Inbox
+  // task is accepted, an open one completed, a completed one reopened, a state given outright set as given; what is not a
+  // task, a read-only task and a state Tana does not have refused with nothing written; Tana's later refusal (its
+  // write-denied event) said; and access() names the state, the people and who may see it, as Pages.swift draws them
+  {
+    const { EventEmitter } = require('node:events');
+    const { S } = require('../main/state');
+    const { Document } = require('../sdk/document'), { initDocument, readNode, ulid } = require('../sdk/node');
+    const { createTasks } = require('../ios/engine/tasks.js');
+    const was = { me: S.me, client: S.client }, ME = 'tana:user-profile:01mememememememememememem0', SAM = 'tana:user-profile:01samsamsamsamsamsamsamsam';
+    const sync = new EventEmitter();
+    S.me = { userUri: ME, orgId: 'org' };
+    S.client = { sync, graph: { getOwnerChain: async () => ({ owners: [] }), listNodes: async () => ({ nodes: [] }) } };
+    const docs = new Map(), make = (title, config) => { const d = new Document('tana:text:' + ulid()); d.transact((l) => initDocument(l, title, ME, config)); docs.set(d.id, d); return d; };
+    const task = make('Plan the offsite', { kind: 'task' }), note = make('Notes', { kind: 'doc' });
+    const access = async () => ({ sync: { subscribe: async (uri) => docs.get(uri) }, graph: S.client.graph, orgDocUri: 'tana:org:x', orgAdmin: false });
+    const api = createTasks({ hold: async (id) => docs.get(id), access, members: async () => [{ id: SAM, title: 'Sam' }], patience: 20 });
+    const state = () => readNode(task).stateType;
+    assert.strictEqual(state(), 'open', 'a task of your own starts In Progress');
+    assert.strictEqual(JSON.parse(await api.toggle(task.id)), 'closed', 'an open one is completed');
+    assert.strictEqual(JSON.parse(await api.toggle(task.id)), 'open', 'a completed one reopened');
+    assert.strictEqual(JSON.parse(await api.toggle(task.id, 'proposed')), 'proposed', 'a state given is set as given (Move to Inbox)');
+    assert.strictEqual(JSON.parse(await api.toggle(task.id)), 'open', 'an Inbox task is accepted first');
+    assert.strictEqual(JSON.parse(await api.toggle(task.id, 'not_now')), 'not_now');
+    assert.strictEqual(state(), 'not_now', 'and written to the document');
+    await assert.rejects(api.toggle(note.id), /Only a task/, 'a document is no task');
+    await assert.rejects(api.toggle(task.id, 'waiting'), /Only a task/, 'nor is a state Tana does not have');
+    task.writeDenied = true;
+    await assert.rejects(api.toggle(task.id), /read-only/);
+    task.writeDenied = false;
+    assert.strictEqual(state(), 'not_now', 'refused: nothing written');
+    const refusing = api.toggle(task.id);
+    setImmediate(() => sync.emit('write-denied', task.id));
+    await assert.rejects(refusing, /Tana refused the change/, 'Tana saying no after the write is said');
+    assert.strictEqual(sync.listenerCount('write-denied'), 0, 'and nobody is left listening');
+
+    assert.deepStrictEqual(JSON.parse(await api.assign(task.id, [SAM])), [SAM], 'given to Sam, who cannot open it: the app asks to grant access');
+    const shown = JSON.parse(await api.access(task.id));
+    assert.deepStrictEqual([shown.title, shown.task, shown.state, shown.me], ['Plan the offsite', true, 'closed', ME], 'its title, a task, its state (the refused write left for Tana to undo)');
+    assert.deepStrictEqual([shown.assignees, shown.hidden], [[{ id: SAM, name: 'Sam' }], [{ id: SAM, name: 'Sam' }]], 'assigned to Sam and shut out, named from the members');
+    assert.ok(shown.rules.includes('people'), 'with the sharing rules to pick from');
+    assert.strictEqual(JSON.parse(await api.share(task.id, 'people', [SAM], shown.token)), true, 'Grant access');
+    const granted = JSON.parse(await api.access(task.id));
+    assert.deepStrictEqual([granted.hidden, granted.participants], [[], [SAM]], 'Sam can see it now');
+    assert.strictEqual(JSON.parse(await api.access(note.id)).state, null, 'a document has no Status');
+    Object.assign(S, was);
+  }
+
   // The Timeline's read (ios/engine/read.js): the settings and the Timeline side by side, and nothing shown before the
   // settings are read: a part that lands first waits for them and goes marked; a refusal shows nothing; a watch choice
   // the settings moved reads the Timeline again

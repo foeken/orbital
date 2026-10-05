@@ -148,8 +148,9 @@ class EngineTest {
         assertEquals("read it in Dutch", asked.last())
     }
 
-    // Android ended the app with an add, an image and a request on their way: the next launch offers each again, to the
-    // account they were for and no other (Engine.fly)
+    // Android ended the app with an add, an image and a request on their way: the next launch sends the add again by
+    // itself, as the same task (its id), and offers the image and the request, to the account they were for and no other
+    // (Engine.fly)
     @Test fun whatWasOnItsWayWhenOrbitalClosedIsOfferedAgainForItsAccount() = runTest {
         val platform = FakePlatform(chatgpt = object : ChatGPT by FakeChatGPT(signedIn = true) {
             override suspend fun respond(instructions: String, content: List<kotlinx.serialization.json.JsonObject>, model: String, effort: String, schema: kotlinx.serialization.json.JsonObject?): String? = awaitCancellation()
@@ -174,12 +175,28 @@ class EngineTest {
         elsewhere.answer = { body, args -> if ("orbital.account()" in body) text("tana:user-profile:else@org_2") else theirs(body, args) }
         val other = ready(elsewhere, platform)
         assertTrue(other.unsent.isEmpty() && other.unhanded.isEmpty() && other.shared == null)
-        val again = ready(page(), platform)
-        assertEquals("Book the venue", again.unsent.single().title)
-        assertTrue(again.unsent.single().why!!.startsWith("Orbital closed before Tana said it was added"))
+        val sent = first.calls.single { "orbital.createTask" in it.first }.second["id"] as String
+        assertTrue(Regex("tana:text:[0-9a-z]{26}").matches(sent), "an add has its task's id from the start")
+        val host = page()
+        val again = ready(host, platform)
+        runCurrent()
+        assertTrue(again.unsent.isEmpty(), "the add is not offered: it is sent again")
+        assertEquals(listOf(sent), host.calls.filter { "orbital.createTask" in it.first }.map { it.second["id"] }, "once, with the same id")
         assertEquals("Look at this", again.unhanded["tana:text:a"])
         assertTrue(again.shared!!.image!!.contentEquals(byteArrayOf(1, 2, 3)))
-        assertNull(platform.files.get(Engine.PENDING), "offered once")
+        assertNull(platform.files.get(Engine.PENDING), "offered once, and the add landed")
+    }
+
+    // an add kept before adds had ids cannot be told from a second one: it is offered in Quick Add, saying so
+    @Test fun anAddKeptWithoutAnIdIsOfferedAgain() = runTest {
+        val platform = FakePlatform()
+        platform.files.set(Engine.PENDING, """{"1@1":{"account":"$ME","draft":{"title":"Book the venue","type":null,"search":null,"assignee":null,"values":{}}}}""")
+        val host = page()
+        val engine = ready(host, platform)
+        runCurrent()
+        assertEquals("Book the venue", engine.unsent.single().title)
+        assertTrue(engine.unsent.single().why!!.startsWith("Orbital closed before Tana said it was added"))
+        assertTrue(host.calls.none { "orbital.createTask" in it.first })
     }
 
     // what Tana answered is let go of: an add that landed is not offered again
@@ -190,6 +207,26 @@ class EngineTest {
         runCurrent()
         assertNull(platform.files.get(Engine.PENDING))
         assertTrue(ready(page(), platform).unsent.isEmpty())
+    }
+
+    // a change told while a Timeline read is under way is read after it: one more read, however many came (59a7983b;
+    // Engine.swift refresh the same)
+    @Test fun aChangeToldDuringAReadIsReadAfterIt() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var reads = 0
+        val host = page()
+        val base = host.answer
+        host.answer = { body, args -> if ("orbital.timeline" in body && ++reads == 2) gate.await(); base(body, args) }
+        val engine = ready(host)
+        assertEquals(1, reads)
+        launch { engine.refresh() }
+        runCurrent()
+        repeat(3) { launch { engine.refresh() } } // told meanwhile
+        runCurrent()
+        assertEquals(2, reads, "nothing read while a read is under way")
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals(3, reads, "one more read after it, for all three")
     }
 
     // a zoomed node's Pin to Today (and the long press's): pinned on screen at once, and back as it was if Tana says no

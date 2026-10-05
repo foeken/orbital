@@ -98,7 +98,7 @@
 			buildPhases = (A10000000000000000000043 /* Sources */, A10000000000000000000044 /* Frameworks */, A10000000000000000000045 /* Resources */);
 			buildRules = ();
 			dependencies = (A1000000000000000000004A /* PBXTargetDependency */);
-			fileSystemSynchronizedGroups = (A10000000000000000000041 /* OrbitalUITests */);
+			fileSystemSynchronizedGroups = (A10000000000000000000041 /* OrbitalUITests */, A100000000000000000000C1 /* Common */);
 			name = OrbitalUITests;
 			productName = OrbitalUITests;
 			productReference = A10000000000000000000040 /* OrbitalUITests.xctest */;

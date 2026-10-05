@@ -20,6 +20,13 @@ function parseDateUri(uri) {
   return m ? { type: 'zoneddate', date: m[1], ...(m[2] ? { time: m[2] } : {}), timezone: zone[1] } : undefined;
 }
 const isDateUri = (uri) => parseDateUri(uri) !== undefined;
+// A calendar event that takes whole days: Tana says so now (calendarEvent.allDay); older events only by starting at
+// midnight (UTC or local) and spanning whole days. main/rows.js words it, main/timeline.js leaves it off the rail.
+function isAllDay(start, end, allDayFlag) {
+  const s = new Date(start), e = end ? new Date(end) : null;
+  const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
+  return allDayFlag === true || !!(e && midnight && (e - s) % 864e5 === 0);
+}
 function dateUri(date) {
   if (!DAY.test(date)) throw new Error('not a YYYY-MM-DD date: ' + date);
   return PLAIN + date;
@@ -54,4 +61,4 @@ function wallTime(timeZone, y, mo, d, h, mi) {
   return p.y === n.getUTCFullYear() && p.mo === n.getUTCMonth() + 1 && p.d === n.getUTCDate() && p.h === h && p.mi === mi ? t : NaN;
 }
 
-module.exports = { parseDateUri, isDateUri, dateUri, dateLabel, partsIn, wallTime };
+module.exports = { parseDateUri, isDateUri, dateUri, dateLabel, partsIn, wallTime, isAllDay };

@@ -1,5 +1,6 @@
 'use strict';
 const { editable, readNode, STATE_TYPES } = require('../sdk/node');
+const { isAllDay } = require('../sdk/dates');
 const { hm } = require('../sdk/chat'); // the same H:MM a chat message is stamped with; it takes a Date too
 const { typeIconName } = require('./icons');
 const settings = require('./settings');
@@ -75,12 +76,6 @@ const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // "Mon 9:00–9:30" in local time; all-day events come as UTC (or local) midnight with a whole-day span: "Mon, all day".
 // withDate (search results, any week or year): "Fri 11 Sep 9:00–10:00", with the year added outside the current one.
-// Tana now says so (calendarEvent.allDay); older events only by starting at midnight and spanning whole days
-function isAllDay(start, end, allDayFlag) {
-  const s = new Date(start), e = end ? new Date(end) : null;
-  const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
-  return allDayFlag === true || !!(e && midnight && (e - s) % 864e5 === 0);
-}
 function eventMeta(start, end, withDate, allDayFlag) {
   if (!start) return undefined;
   const s = new Date(start), e = end ? new Date(end) : null;
@@ -218,4 +213,4 @@ const ipc = {
   'members': () => members(),
 };
 
-module.exports = { rememberMeta, rememberType, ownHue, hueOf, typeHue, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, isAllDay, resolveTypes, resolveMeetings, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members, ipc };
+module.exports = { rememberMeta, rememberType, ownHue, hueOf, typeHue, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, resolveTypes, resolveMeetings, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members, ipc };

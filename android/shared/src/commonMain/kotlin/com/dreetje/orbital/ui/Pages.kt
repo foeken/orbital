@@ -79,6 +79,7 @@ import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Failure
 import com.dreetje.orbital.Lists
 import com.dreetje.orbital.Member
+import com.dreetje.orbital.Phrases
 import com.dreetje.orbital.matching
 import com.dreetje.orbital.Row as Node
 import com.dreetje.orbital.Times
@@ -353,9 +354,9 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
             val now = engine.states[id] ?: access.state ?: "open"
             var menu by remember { mutableStateOf(false) }
             Column {
-                Field("Status", { menu = true }) { Text(STATES.firstOrNull { it.first == now }?.second ?: "In Progress", color = c.text) }
+                Field("Status", { menu = true }) { Text(Phrases.state(now), color = c.text) }
                 DropdownMenu(menu, { menu = false }) {
-                    STATES.forEach { (state, word) ->
+                    Phrases.states.forEach { (state, word) ->
                         DropdownMenuItem({ Text(word, color = c.text) }, { menu = false; engine.scope.launch { engine.tick(id, state); reload() } },
                             trailingIcon = if (state == now) ({ Icon(Icons.Outlined.Check, null, tint = c.text) }) else null)
                     }
@@ -399,8 +400,6 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
     }
 }
 
-private val STATES = listOf("proposed" to "Inbox", "open" to "In Progress", "closed" to "Completed", "not_now" to "Later")
-
 // a field as the desktop draws one: its name in grey, its value after it, a line under it, the whole row the button
 // that changes it
 @Composable
@@ -432,13 +431,7 @@ fun Dots(still: Boolean, modifier: Modifier = Modifier) {
 @Composable
 fun AudienceLabel(scope: String, space: String?, glyphs: Boolean = true) {
     val c = Theme.colors
-    val (word, glyph) = when (scope) {
-        "only-me" -> "Only you" to "lock"
-        "people" -> "Selected people" to "userLock"
-        "space" -> (space?.let { "Members of $it" } ?: "Space members") to "houseLock"
-        "everyone" -> "Everyone" to "users"
-        else -> "Unknown" to "hidden"
-    }
+    val (word, glyph) = Phrases.audience(scope, space)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         if (glyphs) Glyph(glyph, Modifier.size(18.dp), c.secondary)
         Text(word, style = Type.body, color = c.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)

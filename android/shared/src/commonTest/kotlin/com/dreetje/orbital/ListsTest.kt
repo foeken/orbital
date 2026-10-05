@@ -23,14 +23,6 @@ class ListsTest {
     private val now = Instant.parse("2026-10-02T12:00:00Z")
     private val utc = TimeZone.UTC
 
-    @Test fun freeTimeCountsDownAndSaysWhenAMeetingIsStillOn() {
-        val ms = now.toEpochMilliseconds().toDouble()
-        assertEquals(Triple("No meetings for ", "44 more min", ""), Lists.free(Row.Free(ms, ms + 44 * 60000), ms))
-        assertEquals(Triple("No meetings for ", "1 h 30 min", " after this one"), Lists.free(Row.Free(ms + 60000, ms + 91 * 60000), ms))
-        assertEquals("2 h", Lists.free(Row.Free(ms, ms + 120 * 60000), ms).second)
-        assertEquals("1 more min", Lists.free(Row.Free(ms, ms + 1), ms).second) // never "0 min"
-    }
-
     // the day the engine put each row under (ios/engine/labels.js), not one the phone works out from its time: d has no
     // time of its own, and was drawn under Today
     @Test fun daysGroupByTheEnginesDayAndLeaveTheBlocksAbove() {

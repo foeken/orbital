@@ -98,6 +98,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Lists
+import com.dreetje.orbital.Phrases
 import com.dreetje.orbital.Row as Node
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -331,7 +332,7 @@ fun FreeLine(free: Node.Free, time: String, bottom: Dp, engine: Engine) {
     val c = Theme.colors
     var now by remember { mutableStateOf(engine.now()) }
     LaunchedEffect(Unit) { while (true) { delay(15_000); now = engine.now() } }
-    val (before, bold, after) = Lists.free(free, now.toEpochMilliseconds().toDouble())
+    val (before, bold, after) = Phrases.free(free.from, free.until, now.toEpochMilliseconds().toDouble())
     RailRow(time, bottom = bottom, marker = { Marker("free", "new", false, engine.platform.reduceMotion) }) {
         Text(buildAnnotatedString { append(before); withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(bold) }; append(after) }, style = Type.body, color = c.secondary)
     }

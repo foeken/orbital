@@ -95,8 +95,7 @@ fun parseTime(s: String): Instant? = runCatching { Instant.parse(s) }.getOrNull(
 // line, a link code with the two servers and the instructions for your agent, and what became of the code
 @Serializable data class Agent(val id: String, val name: String, val app: String = "", val on: Boolean = false, val isDefault: Boolean = false)
 @Serializable data class HandedTo(val id: String, val name: String, val status: String = "assigned") {
-    // as the Mac's badge reads it: Assigned is waiting for the agent to pick it up
-    val word: String get() = mapOf("assigned" to "Assigned", "working" to "Working", "completed" to "Completed", "failed" to "Failed")[status] ?: "Assigned"
+    val word: String get() = Phrases.agent(status)
 }
 @Serializable data class AgentList(val agents: List<Agent> = emptyList(), val handed: Map<String, String> = emptyMap(), val problem: String? = null)
 @Serializable data class LinkCode(val code: String, val expiresAt: Double, val url: String, val tana: String, val prompt: String)

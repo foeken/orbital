@@ -8,7 +8,7 @@
 // Like Notifications the page is not a Tana document and has an id of its own.
 //   watched: a written change summary (the sidebar's Changes, sdk/history.js) somebody other than you had a hand in,
 //            or an edit a banner told of that no summary from around then covers ("Someone edited …")
-//   inbox:   a task assigned to you that someone else, an MCP client or Tana's AI created (views.js inboxFrom)
+//   inbox:   a task assigned to you that someone else, an MCP client or Tana's AI created (state.js inboxFrom)
 //   agent:   a task an MCP client or Tana's AI moved to another state (from the chat it did so in, see below)
 //   meeting: a meeting you are in that has started, at its start time (all-day ones mark a day, not a moment)
 // A row is one event, not a node: a node changed three times is three rows, so a row's id is its own and the node it
@@ -25,11 +25,11 @@
 const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates, todayNode } = require('./pins');
-const { NOT_CONNECTED, S, iso, isMcp, send } = require('./state');
-const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
+const { NOT_CONNECTED, S, inboxFrom, iso, isMcp, send } = require('./state');
+const { isAllDay } = require('../sdk/dates');
+const { graphRow, hm, members, rememberNodeHue, toNode } = require('./rows');
 const { announcedEdits, document, notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { readOutline } = require('../sdk/content');
-const { inboxFrom } = require('./views');
 const { openLiveQuery } = require('../sdk/livequery');
 const { callState, callSessions } = require('../sdk/calls');
 

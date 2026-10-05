@@ -45,7 +45,7 @@ enum TaskStatus: String, AppEnum {
         }
     }
     static func named(_ state: String) -> String {
-        switch state { case "proposed": "Inbox"; case "not_now": "Later"; case "closed": "Completed"; default: "In Progress" }
+        Phrases.state(state)
     }
 }
 

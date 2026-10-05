@@ -204,11 +204,10 @@ function notesSwitchEl(eventId, summary) {
   const el = document.createElement('div');
   el.className = 'notes-switch'; el.setAttribute('role', 'tablist'); el.setAttribute('aria-label', 'Your notes or the meeting’s summary');
   for (const [label, on] of [['Notes', !summary], ['Summary', summary]]) {
-    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: label });
+    // quiet: a click leaves the caret where it is, so Notes can put it back
+    const b = quietButton(on ? 'on' : '', null, () => { if (!on) showSummary(eventId, label === 'Summary'); });
+    b.textContent = label;
     b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(on));
-    if (on) b.className = 'on';
-    b.onmousedown = (e) => e.preventDefault(); // a click leaves the caret where it is, so Notes can put it back
-    b.onclick = () => { if (!on) showSummary(eventId, label === 'Summary'); };
     el.append(b);
   }
   return el;

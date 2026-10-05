@@ -57,8 +57,8 @@ class Engine(
         private set
     var email by mutableStateOf<String?>(null) // the Tana account signed in, for Settings
         private set
-    val states = mutableStateMapOf<String, String>() // task id -> the stateType ticked here, until a read of Tana agrees with it
-    private val ticked = mutableMapOf<String, Instant>() // task id -> when it was ticked here
+    val ticks = Ticks() // the boxes ticked here, until a read of Tana agrees (Ticks.kt)
+    val states get() = ticks.states
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value. A line is added only
     // when it differs from the one before.
     val log = mutableStateListOf<String>()
@@ -361,7 +361,7 @@ class Engine(
         maybe { host.run("await orbital.signOut()") }
         host.forgetCookies()
         forgetTimeline()
-        rows = emptyList(); states.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear(); images.clear()
+        rows = emptyList(); ticks.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear(); images.clear()
         forgetAccount()
         note("signed out")
         start()
@@ -432,7 +432,7 @@ class Engine(
         val list = if (isSample) buildList { fun walk(rows: List<Row>) { for (r in rows) { if (r.id.startsWith("tana:text:") && r.stateType != null) add(r); walk(r.children.orEmpty()) } }; walk(rows) }
             else maybe { call<List<Row>>("return await orbital.tasks()") } ?: return
         tasksRead = now()
-        platform.keepTasks(list.map { r -> (if (r.sensitive == true) r.copy(text = null, title = null, segments = null) else r).copy(stateType = states[r.id] ?: r.stateType) })
+        platform.keepTasks(list.map { r -> (if (r.sensitive == true) r.copy(text = null, title = null, segments = null) else r).copy(stateType = ticks.on(r.id) ?: r.stateType) }, pinned)
     }
 
     fun glimpse(): Glimpse {
@@ -440,7 +440,7 @@ class Engine(
             val words = if (r.sensitive == true) r.copy(text = null, title = null, segments = null, subtext = null, people = null, reference = r.reference?.copy(label = null),
                 timeline = r.timeline?.copy(note = null, change = null, detail = null)) else r
             // a tick made here: on the task, and on an Activity line about it (its uri), which the widget draws as the task
-            words.copy(stateType = states[r.id] ?: r.timeline?.uri?.let { states[it] } ?: r.stateType,
+            words.copy(stateType = ticks.on(r.id, r.timeline?.uri) ?: r.stateType,
                 children = keep(if (r.timeline?.today == true) r.children?.filter { it.id !in unpinned } else r.children))
         }
         return Glimpse(now().toEpochMilliseconds(), keep(rows)!!)
@@ -502,7 +502,7 @@ class Engine(
     // a task's state read here settles a tick made on it as a Timeline read does: a task off the Timeline (its Status set on
     // its own page) kept the tick for good, its Status never showing a change made anywhere else
     suspend fun access(id: String): Access? = if (isSample) pagesSample?.access?.get(id) else
-        maybe { call<Access>("return await orbital.access(id)", mapOf("id" to id)) }?.also { a -> a.state?.let { s -> settle { if (it == id) s else null } } }
+        maybe { call<Access>("return await orbital.access(id)", mapOf("id" to id)) }?.also { a -> a.state?.let { s -> ticks.settle(now()) { if (it == id) s else null } } }
 
     // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, linking one with a code as the
     // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
@@ -563,10 +563,11 @@ class Engine(
 
     // today: Quick Add's Pin to today, the made task pinned as a long press pins one; a task made but not pinned is not
     // made again, it says so
-    suspend fun createTask(title: String, type: String?, search: String? = null, assignee: String? = null, values: Map<String, Value> = emptyMap(), today: Boolean = false): String {
+    // id: the task's own, chosen here (Draft.id), so the same add sent again is one task (ios/engine/index.js create)
+    suspend fun createTask(title: String, type: String?, search: String? = null, assignee: String? = null, values: Map<String, Value> = emptyMap(), today: Boolean = false, id: String? = null): String {
         if (isSample) throw Failure("The sample saves nothing")
-        val id: String = call("return await orbital.createTask(title, type, search, assignee, values)",
-            mapOf("title" to title, "type" to type, "search" to search, "assignee" to assignee, "values" to values.mapValues { it.value.asJson() }))
+        val id: String = call("return await orbital.createTask(title, type, search, assignee, values, id)",
+            mapOf("title" to title, "type" to type, "search" to search, "assignee" to assignee, "values" to values.mapValues { it.value.asJson() }, "id" to id))
         var notPinned: String? = null // said after the refresh below, which clears what was said before it
         if (today) try { call<Boolean>("return await orbital.pin(id, on)", mapOf("id" to id, "on" to true)) } catch (e: Failure) {
             notPinned = "“$title” was added, but not pinned to today: ${e.message}"
@@ -593,17 +594,20 @@ class Engine(
     // Quick Add closes the moment you press Add: what it asked for is made here while you go on, and the + in the bar turns
     // while anything is on its way (Shell), so another can be added meanwhile. A task Tana did not take is kept as unsent,
     // and the next Quick Add opens with it and says why; an image's node opens once it is made, as the desktop opens it.
+    // Each add has its task's id from the start (newTaskId), so one Android ended the app on is sent again at the next
+    // launch by itself (takeFlights): Tana makes it only if it has no task of that id.
     var adding by mutableStateOf(0)
         private set
     val unsent = mutableStateListOf<Draft>()
     var made by mutableStateOf<String?>(null)
     @kotlinx.serialization.Serializable
-    data class Draft(val title: String, val type: String?, val search: String?, val assignee: Member?, val values: Map<String, Value>, val today: Boolean = false, val why: String? = null)
-    fun add(draft: Draft) {
+    data class Draft(val title: String, val type: String?, val search: String?, val assignee: Member?, val values: Map<String, Value>, val today: Boolean = false, val why: String? = null, val id: String? = null)
+    fun add(asked: Draft) {
+        val draft = if (asked.id == null) asked.copy(id = newTaskId(now())) else asked
         adding++
         val key = fly(Flying(account ?: savedFor, draft = draft))
         scope.launch {
-            try { createTask(draft.title, draft.type, draft.search, draft.assignee?.id, draft.values, draft.today); landed(key) } catch (e: Failure) {
+            try { createTask(draft.title, draft.type, draft.search, draft.assignee?.id, draft.values, draft.today, draft.id); landed(key) } catch (e: Failure) {
                 landed(key)
                 unsent.add(draft.copy(why = e.message))
                 error = "“${draft.title}” was not added: ${e.message}"
@@ -646,9 +650,10 @@ class Engine(
 
     // What Quick Add and Assign to <its name> … handed over and Tana has not answered yet, kept on this phone until it has
     // (Platform.files): Android may end the app on the way, where the iPhone's background task (Engine.swift Background)
-    // buys it time. What was on its way then is offered again at the next launch, to the account it was for: a task in
-    // Quick Add, saying so, an image as one shared (read once tapped), a request in its node's form. A cancelled add (the
-    // screen's scope ended) stays kept for the same reason.
+    // buys it time. What was on its way then comes back at the next launch, to the account it was for: a task is sent
+    // again by itself (its id makes a second send the same task), an image is offered as one shared (read once tapped), a
+    // request in its node's form; a task kept before adds had ids is offered in Quick Add, saying so. A cancelled add
+    // (the screen's scope ended) stays kept for the same reason.
     @kotlinx.serialization.Serializable
     data class Flying(val account: String?, val draft: Draft? = null, val image: String? = null, val node: String? = null, val request: String? = null)
 
@@ -669,12 +674,14 @@ class Engine(
     private fun takeFlights() {
         val left = platform.files.get(PENDING)?.let { runCatching { json.decodeFromString<Map<String, Flying>>(it) }.getOrNull() } ?: return
         others.clear()
+        val again = mutableListOf<Draft>()
         for ((key, f) in left) if (key in flying) continue else if (f.account != null && f.account != account) others[key] = f else {
-            f.draft?.let { unsent.add(it.copy(why = "Orbital closed before Tana said it was added. Check your Inbox before adding it again.")) }
+            f.draft?.let { if (it.id != null) again += it else unsent.add(it.copy(why = "Orbital closed before Tana said it was added. Check your Inbox before adding it again.")) }
             f.image?.let { runCatching { Base64.decode(it) }.getOrNull() }?.let { shared = Shared(null, it) }
             if (f.node != null && f.request != null) unhanded[f.node] = f.request
         }
         keepFlights()
+        again.forEach(::add)
     }
 
     // Long press, Delete (orbital.remove): to Tana's trash; the row goes at once and comes back if Tana says no
@@ -711,14 +718,13 @@ class Engine(
     suspend fun toggle(task: Row) {
         if (demo) return // a box does nothing in demo mode, as the desktop's is disabled
         val before = state(task)
-        states[task.id] = if (before == "proposed" || before == "closed") "open" else "closed"
-        ticked[task.id] = now()
+        ticks.tap(task.id, before, now())
         try {
             if (isSample) return // the sample writes nothing
             try {
-                states[task.id] = call<String>("return await orbital.toggle(id)", mapOf("id" to task.id))
+                ticks.answer(task.id, call<String>("return await orbital.toggle(id)", mapOf("id" to task.id)))
             } catch (e: Failure) {
-                states[task.id] = before
+                ticks.refuse(task.id, before)
                 error = e.message
             }
         } finally { keepTimeline() } // the widgets show it ticked too
@@ -726,43 +732,29 @@ class Engine(
 
     // Long press, Move to Inbox: the task back to Tana's Inbox state (proposed), set outright as a widget's box sets it, so
     // the read its own write sets off, Tana's graph still trailing, does not put the old state back
-    suspend fun moveToInbox(id: String) {
-        if (!isSample) tick(id, "proposed")
-    }
+    suspend fun moveToInbox(id: String) = tick(id, "proposed")
 
-    fun state(task: Row): String = states[task.id] ?: task.stateType ?: if (task.done == true) "closed" else "open"
+    fun state(task: Row): String = ticks.state(task.id, task.stateType, task.done)
 
     // A widget's box (Widgets.kt; Engine.swift tick): the task set to what the widget showed it becoming, drawn so at once
     // and written as soon as the engine has connected (a cold start waits for it), put back with the reason if Tana
     // refuses. Set outright, so a second tap on a widget not yet drawn again does not undo the first.
     suspend fun tick(id: String, to: String) {
         if (demo) return
-        val before = states[id]
-        states[id] = to
-        ticked[id] = now()
+        val before = ticks.set(id, to, now())
         try {
             if (isSample) return
             try {
-                states[id] = call<String>("return await orbital.toggle(id, to)", mapOf("id" to id, "to" to to))
+                ticks.answer(id, call<String>("return await orbital.toggle(id, to)", mapOf("id" to id, "to" to to)))
             } catch (e: Failure) {
-                if (before == null) states.remove(id) else states[id] = before
+                ticks.refuse(id, before)
                 error = e.message
             }
         } finally { keepTimeline() } // the widgets drawn again with it
     }
 
-    // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
-    // minute on: the graph can trail a write by seconds, never by that long. One not in the rows read keeps its tick.
-    private fun settle(rows: List<Row>) = settle { stateType(it, rows) }
-
-    private fun settle(read: (String) -> String?) {
-        val at = now()
-        for ((id, state) in states.toMap()) {
-            val was = read(id) ?: continue
-            if (was == state || at - (ticked[id] ?: Instant.DISTANT_PAST) >= 30.seconds) states.remove(id)
-        }
-        ticked.keys.retainAll(states.keys)
-    }
+    // a read of Tana settles the boxes ticked here (Ticks.settle)
+    private fun settle(rows: List<Row>) = ticks.settle(now()) { stateType(it, rows) }
 
     private fun stateType(id: String, rows: List<Row>): String? {
         for (row in rows) {
@@ -835,6 +827,16 @@ class Engine(
 
 // a set value as the engine takes it ({ ref, label } or { text })
 fun Value.asJson(): Map<String, String> = listOfNotNull(ref?.let { "ref" to it }, label?.let { "label" to it }, text?.let { "text" to it }).toMap()
+
+// A new task's id, as Tana makes one (sdk/node.js ulid): its time in ten characters, then sixteen at random, in Tana's
+// lowercase Crockford base32. Quick Add's (Engine.add), so an add can be sent again as the same task.
+private const val B32 = "0123456789abcdefghjkmnpqrstvwxyz"
+fun newTaskId(at: Instant): String {
+    var t = at.toEpochMilliseconds()
+    val time = CharArray(10) { ' ' }
+    for (i in 9 downTo 0) { time[i] = B32[(t % 32).toInt()]; t /= 32 }
+    return "tana:text:" + time.concatToString() + CharArray(16) { B32[kotlin.random.Random.nextInt(32)] }.concatToString()
+}
 
 // The last Timeline read, kept on this phone (Platform.files: never in a backup) and drawn at launch while Tana connects,
 // as the desktop draws its cached rows before its sync client exists; the read that follows takes its place (Engine.swift

@@ -39,7 +39,7 @@ import com.dreetje.orbital.Glimpse
 import com.dreetje.orbital.Platform
 import com.dreetje.orbital.Recorder
 import com.dreetje.orbital.Store
-import com.dreetje.orbital.forShortcuts
+import com.dreetje.orbital.shortcuts
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -148,16 +148,17 @@ class AndroidPlatform(private val context: Context) : Platform {
     override suspend fun keepGlimpse(read: Glimpse?) = Widgets.keep(context, read) // the widgets' Timeline (Engine.keepTimeline)
 
     // The launcher's shortcuts for your tasks (the iPhone's Siri tasks, Intents.swift; Engine.keepTasks): the newest still
-    // to do, beside Quick Add and Today's Tasks (res/xml/shortcuts.xml), each opening its task through Orbital's own way in
-    // (FromOrbital); all of them gone once forgotten. A launcher that refuses (too many updates) keeps the last ones.
-    override suspend fun keepTasks(tasks: List<com.dreetje.orbital.Row>?) {
+    // to do, beside Quick Add and Today's Tasks (res/xml/shortcuts.xml), each opened, checked off and pinned or unpinned
+    // through Orbital's own way in (FromOrbital, Glimpse.kt shortcuts); all of them gone once forgotten. A launcher that
+    // refuses (too many updates) keeps the last ones.
+    override suspend fun keepTasks(tasks: List<com.dreetje.orbital.Row>?, pinned: Set<String>) {
         runCatching {
             if (tasks == null) return ShortcutManagerCompat.removeAllDynamicShortcuts(context)
             val room = (ShortcutManagerCompat.getMaxShortcutCountPerActivity(context) - 2).coerceAtLeast(0)
-            ShortcutManagerCompat.setDynamicShortcuts(context, tasks.forShortcuts(room).mapIndexed { i, t ->
-                ShortcutInfoCompat.Builder(context, t.id).setShortLabel(t.words.take(25)).setLongLabel(t.words.take(80)).setRank(i)
+            ShortcutManagerCompat.setDynamicShortcuts(context, tasks.shortcuts(room, pinned).mapIndexed { i, s ->
+                ShortcutInfoCompat.Builder(context, s.id).setShortLabel(s.label.take(25)).setLongLabel(s.label.take(80)).setRank(i)
                     .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
-                    .setIntent(FromOrbital.open(context, "orbital:" + t.id).setAction(Intent.ACTION_VIEW)).build()
+                    .setIntent(FromOrbital.open(context, s.link).setAction(Intent.ACTION_VIEW)).build()
             })
         }
     }

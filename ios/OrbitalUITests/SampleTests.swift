@@ -37,6 +37,19 @@ class SampleCase: XCTestCase {
         wait(for: [done], timeout: 15)
     }
 
+    // Words typed as a finger types them: the field tapped until it has the keyboard. A fresh simulator first shows the
+    // keyboard's own tip (slide to type) over it, and after a turn of the phone the first tap can land while the field is
+    // still moving: typeText then failed now and then with no keyboard focus (testLandscapeKeepsComposerAndSheetsUsable).
+    fileprivate func type(_ text: String, into field: XCUIElement) {
+        let focused = NSPredicate(format: "hasKeyboardFocus == true")
+        for _ in 0..<3 where !focused.evaluate(with: field) {
+            field.tap()
+            if app.buttons["Continue"].waitForExistence(timeout: 1) { app.buttons["Continue"].tap() } // the keyboard's tip
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: field)], timeout: 5)
+        }
+        XCTAssert(focused.evaluate(with: field), "the field has the keyboard")
+        field.typeText(text)
+    }
 }
 
 // Today's tasks: ticking, Move to Inbox, sensitive rows, a task's Status and Pin
@@ -139,8 +152,7 @@ final class SampleOpeningTests: SampleCase {
     func testAskTanaOpensTheChat() {
         launch()
         let field = app.textFields["Ask Tana"]
-        field.tap()
-        field.typeText("Summarise this week")
+        type("Summarise this week", into: field)
         app.buttons["Ask Tana"].tap()
         XCTAssert(app.navigationBars["Summarise this week’s meetings"].waitForExistence(timeout: 15))
     }
@@ -166,8 +178,7 @@ final class SampleOpeningTests: SampleCase {
         app.buttons["Quick Add Task"].tap()
         let sheet = app.navigationBars["Quick Add"]
         XCTAssert(sheet.waitForExistence(timeout: 15))
-        app.textFields["New task"].tap()
-        app.textFields["New task"].typeText("Call the venue")
+        type("Call the venue", into: app.textFields["New task"])
         sheet.buttons["Add"].tap()
         XCTAssert(sheet.waitForNonExistence(timeout: 15))
         XCTAssert(app.navigationBars["Timeline"].exists)
@@ -186,8 +197,7 @@ final class SampleOpeningTests: SampleCase {
         app.buttons["Quick Add Task"].tap()
         let sheet = app.navigationBars["Quick Add"]
         XCTAssert(sheet.waitForExistence(timeout: 15))
-        app.textFields["New task"].tap()
-        app.textFields["New task"].typeText("Call the venue")
+        type("Call the venue", into: app.textFields["New task"])
         XCTAssert(app.keyboards.firstMatch.exists)
         app.buttons["Task"].firstMatch.tap()
         XCTAssert(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "choosing a type puts the keyboard away")
@@ -273,8 +283,7 @@ final class SampleSettingsTests: SampleCase {
         defer { XCUIDevice.shared.orientation = .portrait }
         XCUIDevice.shared.orientation = .landscapeLeft
         let composer = app.textFields["Ask Tana"]
-        composer.tap()
-        composer.typeText("Prepare the landscape review")
+        type("Prepare the landscape review", into: composer)
         XCTAssert(app.buttons["Ask Tana"].exists)
 
         XCUIDevice.shared.orientation = .landscapeRight
@@ -284,8 +293,7 @@ final class SampleSettingsTests: SampleCase {
         let quickAdd = app.navigationBars["Quick Add"]
         XCTAssert(quickAdd.waitForExistence(timeout: 15))
         let title = app.textFields["New task"]
-        title.tap()
-        title.typeText("Review landscape layout")
+        type("Review landscape layout", into: title)
         XCTAssert(quickAdd.buttons["Add"].isEnabled)
         quickAdd.buttons["Cancel"].tap()
         XCTAssert(quickAdd.waitForNonExistence(timeout: 15))

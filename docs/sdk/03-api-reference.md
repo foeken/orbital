@@ -84,7 +84,7 @@ Events: `connected` `({ heartbeatIntervalMs })`, `disconnected`, `heartbeat`, `c
 
 Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per document, 256 KiB budget (overflow → re-bootstrap). Inbound frames for a stale `sessionId` are dropped. `resync_required` re-bootstraps; `DISCARD_LOCAL` resets the Document first. After a reconnect every document is re-bootstrapped with the same Document object. Per-document resync backoff is 500 ms→5 s, fixed at 30 s after six consecutive resyncs, and the counter is reset by 15 s of healthy live (checked when the next resync starts, so a document nobody edits is counted too).
 
-`derivePeerId(userExternalId)` → decimal u64 string: `(sha256(lowercased id)[0..8] >> 16) << 16 | nonce`, where the nonce is 15 random bits (only the top 48 bits matter: the server records them as `peerUserHash`). New nonce per process; keep `storageId` (a UUID you persist) for a non-ephemeral peer. `userBits(userExternalId)` → those 48 bits as a BigInt, the part of a peer id that names the user (main/meeting-notes.js tells your own machines' writes by it); the phones' engine has an async copy (ios/engine/index.js), a page having no synchronous sha256.
+`derivePeerId(userExternalId)` → decimal u64 string: `(sha256(lowercased id)[0..8] >> 16) << 16 | nonce`, where the nonce is 15 random bits (only the top 48 bits matter: the server records them as `peerUserHash`). New nonce per process; keep `storageId` (a UUID you persist) for a non-ephemeral peer. `userBits(userExternalId)` → those 48 bits as a BigInt, the part of a peer id that names the user (main/meeting-notes.js tells your own machines' writes by it); the phones' engine runs the same two over the synchronous sha256 of ios/engine/stand-ins.js.
 
 ## `sdk/presence.js` — who is in a document, and where
 
@@ -313,6 +313,8 @@ A change Tana's AI suggests from a chat waits for someone to accept it. It lives
 `parseDateUri(uri)` → `{ type: 'plaindate', date }` | `{ type: 'zoneddate', date, time?, timezone }` | undefined; `isDateUri(uri)`; `dateUri('YYYY-MM-DD')` → `tana:plaindate:…` (throws on anything else); `dateLabel(uri)` → the day in the locale's short form, Tana's label for a date mention. The documents mentioning a date: `graph.listEdges({ toNodeIds: [uri], edgeTypes: [LINKS_TO, ATTRIBUTE_LINKS_TO] })` or the same edge live query a page's backlinks use; main/related.js asks both for a day page (a document titled with its date).
 
 A wall clock in a time zone, for a time said in words (main/meetings.js) and a reminder's due time (`inbox.js`): `partsIn(timeZone, t)` → `{ y, mo, d, h, mi, s, weekday }`, the clock in that IANA zone at epoch ms `t`; no zone is this machine's own, read afresh each time; an unknown zone throws, as Intl does. `wallTime(timeZone, y, mo, d, h, mi)` → the epoch ms of that wall-clock time, NaN when the clocks skip it that day (the hour summer time starts), and the later of the two in the hour a clock turns back. `inbox.js` resolves a reminder by Tana's own rule instead (the earlier of the two, a skipped time moved forward), over `partsIn`.
+
+`isAllDay(start, end, allDayFlag)` → whether a calendar event takes whole days: Tana's `calendarEvent.allDay`, or for older events a start at midnight (UTC or local) and a span of whole days (main/rows.js words it, main/timeline.js leaves it off the rail, on the phones too).
 
 ## `sdk/chat.js`
 
