@@ -817,7 +817,7 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   const notesOf = (ev) => p.js('meetingNotes.get(' + J(ev) + ')?.id || null');
   // 1-1 with Sam: a write-up shared with the meeting, and no notes of yours yet
   await open('mockmeeting4');
-  await p.waitFor('document.querySelector(".notes-head .notes-writeup")', 'the line over the notes, with the write-up');
+  await p.waitFor('document.querySelector(".notes-head .notes-switch")', 'the line over the notes, with Notes | Summary');
   assert.match(await p.js('document.querySelector(".notes-head").textContent'), /only you can see them/, 'the notes say who sees them');
   assert.deepEqual([await p.js('zoom.docId'), await p.js('__notes.made')], ['mockmeeting4', 0], 'the meeting is the page, and opening it made nothing');
   // Open in Tana beside the title (option A): there before any notes, the glyph alone until hovered or focused by keyboard,
@@ -854,8 +854,8 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   assert.deepEqual([await p.js('__saved("mockmeeting4")'), await p.js('zoom.docId')], [[], 'mockmeeting4'], 'none in the meeting, which is still the page');
   await p.key('↩'); await p.type('Synthetic second thought'); await p.js('flushAll()'); await settle(p, 500);
   assert.deepEqual(await p.js('__saved(' + J(notes) + ')'), ['Open the meeting in Tana', 'Synthetic first thought', 'Synthetic second thought'], 'Enter makes a row, as anywhere');
-  // the write-up opens on its own, and Back is the meeting with its notes
-  await p.js('document.querySelector(".notes-writeup").click()'); await at(p, 'tana:text:mockwriteup4');
+  // the write-up opened on its own, and Back is the meeting with its notes
+  await p.js('goTo("tana:text:mockwriteup4")'); await at(p, 'tana:text:mockwriteup4');
   await p.key('⌘['); await at(p, 'mockmeeting4'); await settle(p, 500);
   assert.deepEqual(await p.js('__screen()'), ['Synthetic first thought', 'Synthetic second thought'], 'reopened: your words, and no row naming the meeting you are on');
   assert.equal(await p.js('window.__refSeen'), false, 'the meeting’s row never appeared on its page');
@@ -942,6 +942,97 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   await p.waitFor('!(' + T('Synthetic second thought') + ').isContentEditable', 'and the rows read only');
   await p.js('__notes.unshare("mockmeeting4"); 1');
   await p.waitFor('/only you can see them/.test(document.querySelector(".notes-head")?.textContent || "") && (' + T('Synthetic second thought') + ').isContentEditable', 'only you again, and writable');
+});
+
+// 17e. Notes | Summary (#761): a meeting with a write-up switches between your notes and its write-up on the meeting's own
+// page. Notes is the default; Summary shows the write-up's rows and its own audience (three people, not the meeting's
+// two) and makes no notes; what was typed is saved to the document it was typed in; a read-only write-up says so; an
+// answer for a meeting you left draws nothing; a meeting without a write-up has no switch.
+flow('golden path: switch a meeting between your notes and its summary', async (p) => {
+  await p.start();
+  const open = async (id) => { await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 400); };
+  const head = () => p.js('document.querySelector(".notes-head")?.textContent || ""');
+  const tab = (name) => '[...document.querySelectorAll(".notes-switch [role=tab]")].find((b) => b.textContent === ' + J(name) + ')';
+  const selected = () => p.js('document.querySelector(".notes-switch [aria-selected=true]")?.textContent || null');
+  const wu = 'tana:text:mockwriteup4';
+  await open('mockmeeting5');
+  assert.equal(await p.js('!!document.querySelector(".notes-switch")'), false, 'no write-up: no switch');
+  await open('mockmeeting4');
+  await p.waitFor('document.querySelector(".notes-switch")', 'Notes | Summary');
+  assert.deepEqual([await selected(), await p.js('__notes.made')], ['Notes', 0], 'Notes by default, and nothing made');
+  assert.match(await head(), /only you can see them/);
+  // Summary with no notes yet: the write-up's rows and who sees it, from the write-up itself; still no notes
+  await p.js('(' + tab('Summary') + ').click()');
+  await p.waitFor('/visible to/.test(document.querySelector(".notes-head")?.textContent || "")', 'the summary\u2019s own audience');
+  assert.deepEqual(await p.js('__screen()'), ['Agreed to trim the synthetic roadmap to two themes', 'Sam drafts the pilot review by Friday', 'Next check-in in two weeks'], 'the write-up\u2019s rows');
+  assert.deepEqual([await selected(), await p.js('document.querySelectorAll(".notes-head .face").length'), await p.js('!!document.querySelector(".notes-head [aria-label=\\"Visible only to you\\"]")')], ['Summary', 3, false], 'three faces, its own, and no lock');
+  assert.deepEqual([await p.js('zoom.docId'), await p.js('!!document.querySelector("#pagehead .meeting-tana")'), await p.js('__notes.made')], ['mockmeeting4', true, 0], 'the meeting stays the page, its Tana button too, and no notes are made');
+  // typed into the summary: saved to the write-up
+  await p.js('(() => { const el = ' + T('Next check-in in two weeks') + '; el.focus(); placeCaret(keyOfEl(el), el.textContent.length); return 1; })()');
+  await p.type(' or sooner'); await p.js('flushAll()'); await settle(p, 300);
+  assert.equal((await p.js('__saved(' + J(wu) + ')')).at(-1), 'Next check-in in two weeks or sooner', 'saved to the write-up');
+  // back to Notes: the empty notes' draft row; the first words make them, private
+  await p.js('(' + tab('Notes') + ').click()'); await settle(p, 300);
+  assert.equal(await selected(), 'Notes');
+  await p.waitFor('document.querySelector("#outline .node.draft .text")', 'the notes\u2019 draft row');
+  await p.js('(() => { const el = document.querySelector("#outline .node.draft .text"); el.focus(); placeCaret(keyOfEl(el), 0); return 1; })()');
+  // Summary while the notes are still being made by those first words: they are made with them, and Summary stays
+  await p.js('__notes.delay = 600; 1');
+  await p.type('Private thought'); await p.js('(' + tab('Summary') + ').click()');
+  await p.waitFor('__notes.made === 1 && meetingNotes.get("mockmeeting4")?.id', 'the notes made'); await settle(p, 800);
+  const notes = await p.js('meetingNotes.get("mockmeeting4").id');
+  assert.deepEqual([await selected(), (await p.js('__screen()'))[0], (await p.js('__saved(' + J(notes) + ')')).at(-1)], ['Summary', 'Agreed to trim the synthetic roadmap to two themes', 'Private thought'], 'the words in the notes, the summary still shown');
+  await p.js('__notes.delay = 0; (' + tab('Notes') + ').click()'); await settle(p, 300);
+  assert.deepEqual(await p.js('__screen()'), ['Private thought'], 'and in the notes when they are shown');
+  // typed and not yet saved, then Summary: saved to the notes, not the write-up; back to Notes, the caret where it was
+  await p.js('(() => { const el = ' + T('Private thought') + '; el.focus(); placeCaret(keyOfEl(el), el.textContent.length); return 1; })()');
+  await p.type(' kept'); await p.js('(' + tab('Summary') + ').click()'); await settle(p, 500);
+  assert.deepEqual([(await p.js('__saved(' + J(notes) + ')')).at(-1), (await p.js('__saved(' + J(wu) + ')')).includes('Private thought kept')], ['Private thought kept', false], 'switching saved it where it was typed');
+  await p.js('(' + tab('Notes') + ').click()'); await settle(p, 300);
+  assert.deepEqual([await p.js('document.activeElement === ' + T('Private thought kept')), await p.js('__caret().offset')], [true, 'Private thought kept'.length], 'the caret back where it was');
+  await p.js('(' + tab('Summary') + ').click()'); await settle(p, 300);
+  // reopened: the meeting remembers Summary for the session, and Notes still holds your words
+  await open('mockmeeting5'); await open('mockmeeting4');
+  assert.equal(await selected(), 'Summary', 'reopened on what you last chose');
+  await p.js('(' + tab('Notes') + ').click()'); await settle(p, 300);
+  assert.deepEqual(await p.js('__screen()'), ['Private thought kept'], 'your notes, as saved');
+  // who sees the write-up changed in Tana while its first answer was still on its way: the newer answer stands
+  await p.js('(' + tab('Summary') + ').click()'); await settle(p, 300);
+  await p.js('summaryMeta.clear(); let first = true; const own = tana.taskMeta; tana.taskMeta = (id) => { const old = own(id); if (id !== ' + J(wu) + ' || !first) return old; first = false; return new Promise((r) => setTimeout(r, 800)).then(() => old); }; render(true); 1');
+  await settle(p, 100);
+  await p.js('tana.setSharing(' + J(wu) + ', { rule: "me", participants: [] }); 1');
+  await p.waitFor('/only you can see it/.test(document.querySelector(".notes-head")?.textContent || "")', 'the newer answer: only you');
+  await settle(p, 1000);
+  assert.deepEqual([await p.js('/only you can see it/.test(document.querySelector(".notes-head").textContent)'), await p.js('document.querySelectorAll(".notes-head .face").length')], [true, 0], 'the older answer, landing later, did not replace it');
+  // made public while a summary row is being typed in, its answer slow: the line says it is checking at once (no stale
+  // lock under the caret), then anyone with the link; the words and the caret stay where they are
+  await p.js('(() => { const el = ' + T('Sam drafts the pilot review by Friday') + '; el.focus(); placeCaret(keyOfEl(el), el.textContent.length); return 1; })()');
+  await p.type(' or Monday');
+  await p.js('const own2 = tana.taskMeta; tana.taskMeta = (id) => new Promise((r) => setTimeout(r, 800)).then(() => own2(id)); __notes.summaryLink(true); 1'); await settle(p, 100);
+  assert.deepEqual([await p.js('/Checking/.test(document.querySelector(".notes-head").textContent)'), await p.js('!!document.querySelector(' + J('.notes-head [aria-label="Visible only to you"]') + ')')], [true, false], 'checking at once, no lock');
+  await p.waitFor('/anyone with the link/.test(document.querySelector(".notes-head")?.textContent || "")', 'the link said', 3000);
+  assert.deepEqual([await p.js('document.activeElement === ' + T('Sam drafts the pilot review by Friday or Monday')), await p.js('__caret().offset'), await p.js('!!document.querySelector(' + J('.notes-head [aria-label="Visible only to you"]') + ')')], [true, 'Sam drafts the pilot review by Friday or Monday'.length, false], 'the words and the caret kept, and no lock');
+  await p.js('tana.taskMeta = own2; flushAll(); 1'); await settle(p, 300);
+  assert.equal((await p.js('__saved(' + J(wu) + ')'))[1], 'Sam drafts the pilot review by Friday or Monday', 'and saved to the write-up');
+  await p.js('__notes.summaryLink(false); 1');
+  await p.waitFor('/only you can see it/.test(document.querySelector(".notes-head")?.textContent || "")', 'private again');
+  await p.js('__notes.summaryLink(true); 1');
+  await p.waitFor('/anyone with the link/.test(document.querySelector(".notes-head")?.textContent || "")', 'the link said');
+  assert.deepEqual([await p.js('/only you/.test(document.querySelector(".notes-head").textContent)'), await p.js('!!document.querySelector(' + J('.notes-head [aria-label="Visible only to you"]') + ')'), await p.js('!!document.querySelector(' + J('.notes-head [aria-label="Anyone with the link"]') + ')')], [false, false, true], 'the globe, no lock and no only you');
+  await p.js('__notes.summaryLink(false); 1');
+  await p.waitFor('/only you can see it/.test(document.querySelector(".notes-head")?.textContent || "") && !!document.querySelector(' + J('.notes-head [aria-label="Visible only to you"]') + ')', 'only you and the lock again');
+  // the write-up made read-only in Tana: said, and its rows are read-only
+  await p.js('(' + tab('Summary') + ').click()'); await settle(p, 300);
+  await p.js('__notes.summaryReadOnly(); 1');
+  await p.waitFor('/read only/.test(document.querySelector(".notes-head")?.textContent || "")', 'read only said');
+  await p.waitFor('!(' + T('Agreed to trim the synthetic roadmap to two themes') + ').isContentEditable', 'and its rows read-only');
+  // an answer asked before the session changed is dropped: the write-up's audience is held back, the connection drops
+  // (forgetNotes, as renderer/app.js does), and the late answer leaves nothing behind
+  await p.js('(' + tab('Notes') + ').click(); summaryMeta.clear(); const slow = tana.taskMeta; tana.taskMeta = (id) => new Promise((r) => setTimeout(r, 700)).then(() => slow(id)); tana.summaryUri = async () => null; 1'); await settle(p, 200);
+  await p.js('(' + tab('Summary') + ').click()'); await settle(p, 50);
+  assert.equal(await p.js('summaryMeta.get(' + J(wu) + ')'), null, 'asked, not answered yet');
+  await p.js('forgetNotes(false); render(true); 1'); await settle(p, 1000);
+  assert.deepEqual([await p.js('summaryMeta.has(' + J(wu) + ')'), await p.js('document.querySelectorAll(".notes-head .face").length'), await p.js('!!document.querySelector(".notes-switch")')], [false, 0, false], 'the late answer is dropped, and nothing of the write-up stays on screen');
 });
 
 // 18. A view (docs/VIEWS.md): the Library grouped, sorted and filtered from Cmd+K and ⌘F, then saved as a search that

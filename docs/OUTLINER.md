@@ -482,9 +482,12 @@ Cmd+K leads with a Selection group for it (§8).
   no edge into the meeting; found by its id; its first row "Open the meeting in Tana", a link to the meeting's page, so
   the reference shows in Tana too, and is left out of the meeting's own page while it is exactly as written; no pin on the meeting, which its people would see): every row's `docId` is that document, so every edit, Enter, "/" and paste is an edit of it. A
   grey line over the rows says who sees them ("Your notes · only you can see them", the lock of Visible to; once you
-  shared them in Tana, "Shared notes" and the faces, everyone, anyone with the link, or read only), with the meeting's
-  write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js), shared with whoever sees the meeting, as a link on it: the
-  meeting no longer forwards there (`followSummary` stands down wherever `api.meetingNotes` exists). Beside the title, the
+  shared them in Tana, "Shared notes" and the faces, everyone, anyone with the link, or read only). A meeting with a
+  write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js) shows Notes | Summary first on that line (`notesSwitchEl`):
+  Summary shows the write-up's rows in the notes' place, the line then saying who sees the write-up and whether you may
+  edit it from the write-up's own metadata and node (`askSummary`, asked again on a live change, an older answer
+  dropped), never the meeting's attendees; it makes no notes, a switch saves what was typed where it was typed, and
+  Notes puts the caret back. The meeting no longer forwards to its write-up (`followSummary` stands down wherever `api.meetingNotes` exists). Beside the title, the
   Tana glyph opens the meeting in Tana (`meetingTanaButton`, as ⌘K Open in Tana does): the glyph alone, "Open in Tana"
   growing leftwards out of it on hover and keyboard focus so the title never moves, instant with reduced motion; on
   every meeting page, notes or none, always the meeting's own link, and it makes nothing. Opening makes

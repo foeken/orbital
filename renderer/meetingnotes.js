@@ -11,11 +11,17 @@
 // the words stay in the row; typing on, or the page by itself while Tana has not answered, tries again.
 const meetingNotes = new Map(); // event id -> main's answer: { id, node, owner, audience, checking? } | { id: null } | { failed } | null while asked
 const notesDrafts = new Map(); // event id -> the draft row of its empty notes: one object, so the words typed outlive a redraw
-const notesWriteUps = new Map(); // event id -> its write-up's uri (main/related.js summaryUri), or null: the link over the notes
+const notesWriteUps = new Map(); // event id -> its write-up's uri (main/related.js summaryUri), or null: the Summary beside the notes
 let notesAsked = 0; // a generation: an answer asked before a sign-out or a lost connection is not used after it
 const notesSeq = new Map(); // event id -> the newest ask: an older answer landing after it is dropped
 const notesWaitSaid = new Set(); // event ids whose "what you typed is kept" was said: once, not at every retry
 const notesHeld = new Map(); // row key -> { item, segs }: a save main refused while who sees the notes changed, saved once the line says so
+// Notes / Summary: a meeting with a write-up (summaryUri) shows a switch over its rows; Summary shows the write-up's own
+// rows in the notes' place, with its own audience and permissions read from it, never from the meeting or the notes.
+const notesSummaryOn = new Set(); // event ids showing their write-up: Notes is the default, kept per meeting for the session
+const summaryMeta = new Map(); // write-up id -> its own taskMeta (who sees it), null while asked
+const summarySeq = new Map(); // write-up id -> the newest ask: an older answer, landing after a live change asked again, is dropped
+const notesCaret = new Map(); // event id -> { key, offset }: where the caret was in the notes when Summary took their place
 
 // A meeting whose own outline is empty: every Tana event (its content is empty), never a page the mock gives content
 function notesPage(parent) {
@@ -59,7 +65,42 @@ function noteNotesChanged(eventId) {
   if (was && was.id) { meetingNotes.set(eventId, { ...was, checking: true }); patchNotesHead(eventId); }
   askNotes(eventId);
 }
-function forgetNotes(signedOutToo) { notesAsked++; meetingNotes.clear(); notesWriteUps.clear(); notesSeq.clear(); notesHeld.clear(); if (signedOutToo) notesDrafts.clear(); }
+function forgetNotes(signedOutToo) { notesAsked++; meetingNotes.clear(); notesWriteUps.clear(); notesSeq.clear(); notesHeld.clear(); summaryMeta.clear(); if (signedOutToo) { notesDrafts.clear(); notesSummaryOn.clear(); } }
+// The write-up as its own document: its node (title, whether you may edit it) and who sees it, asked of main for it alone.
+// An answer from before a sign-out, or for a write-up the meeting no longer has, is dropped.
+function askSummary(eventId, uri) {
+  const asked = notesAsked, seq = (summarySeq.get(uri) || 0) + 1, current = () => asked === notesAsked && summarySeq.get(uri) === seq && notesWriteUps.get(eventId) === uri;
+  summarySeq.set(uri, seq); summaryMeta.set(uri, null);
+  Promise.all([tana.node(uri), tana.taskMeta ? tana.taskMeta(uri) : null]).then(([n, meta]) => {
+    if (!current()) return;
+    const was = docOf(uri), rows = !was || was.editable !== n.editable; // the rows change only with whether you may edit them
+    extra.set(uri, { ...n, text: n.title || '', hasChildren: true });
+    summaryMeta.set(uri, meta || { audience: 'unknown' });
+    if (rows) renderSoon(); else patchNotesHead(eventId); // the line at once, the words and caret under it left alone
+  }, () => { if (current()) { summaryMeta.set(uri, { audience: 'unknown' }); patchNotesHead(eventId); } });
+}
+// A write-up's metadata changed (renderer/app.js onChanged; info.meta false is its words only): on a meeting showing it,
+// the line says it is checking at once, while a row is being typed in too, and asks again; anywhere else it is asked
+// when next shown. An answer from before the change is dropped (summarySeq).
+function noteSummaryChanged(docId, info) {
+  if (!summaryMeta.has(docId) || (info && info.meta === false)) return;
+  summarySeq.set(docId, (summarySeq.get(docId) || 0) + 1);
+  const shown = [...notesSummaryOn].filter((eventId) => notesWriteUps.get(eventId) === docId);
+  if (!shown.length) { summaryMeta.delete(docId); return; }
+  for (const eventId of shown) { askSummary(eventId, docId); patchNotesHead(eventId); }
+}
+// The meeting's write-up, when it is the one on screen
+const summaryShown = (eventId) => (notesSummaryOn.has(eventId) && notesWriteUps.get(eventId)) || null;
+function showSummary(eventId, on) {
+  const el = document.activeElement, key = el && el.closest && el.closest('#outline .node') && keyOfEl(el);
+  if (on && key) notesCaret.set(eventId, { key, offset: caretOffset(el) }); // the tabs take no focus on a click: the caret is still in the row
+  flushAll(); // what was typed is saved to the document it was typed in, before the other one takes its place
+  if (on) notesSummaryOn.add(eventId); else notesSummaryOn.delete(eventId);
+  render(true);
+  const back = !on && notesCaret.get(eventId);
+  if (back && textEl(back.key)) placeCaret(back.key, back.offset); // back in the notes where you were
+  else outline.querySelector(':scope > .notes-head .notes-switch [aria-selected="true"]')?.focus();
+}
 // A save main refused because who sees the notes changed under it (main/meeting-notes.js AUDIENCE_CHANGED): kept, and
 // saved once the line over them says who sees them now (askNotes). edit.js flush asks; true when it is one of those.
 function holdNotesSave(item, segs, e) {
@@ -73,6 +114,11 @@ function notesBody(parent) {
   if (!notesPage(parent)) return parent;
   const eventId = parent.docId;
   if (!meetingNotes.has(eventId)) askNotes(eventId);
+  const wu = summaryShown(eventId);
+  if (wu) { // its write-up instead: never the notes, and nothing made for them
+    if (!summaryMeta.has(wu)) askSummary(eventId, wu);
+    return mkItem(wu, docOf(wu) || { id: wu, text: '', kind: 'document', hasChildren: true, editable: false }, null);
+  }
   const answer = meetingNotes.get(eventId);
   if (answer && answer.id) return mkItem(answer.id, docOf(answer.id) || asDoc(answer.node), null);
   // none (yet): a stand-in for them, holding the one draft row whose first character makes them
@@ -87,25 +133,33 @@ function notesBody(parent) {
 // the meeting already; the row is for whoever opens the notes on their own, and there it shows. Changed, it is yours.
 function notesRows(parent, list) {
   const ref = (meetingNotes.get(parent.docId) || {}).reference;
-  if (!ref) return list;
+  if (!ref || summaryShown(parent.docId)) return list;
   const exact = JSON.stringify([{ text: ref.text, marks: { link: ref.link } }]);
   return list.filter((n) => !(n.id === ref.id && !n.hasChildren && n.text === ref.text && JSON.stringify(segsOf(n)) === exact));
 }
 // Still asking, or the notes' rows still loading: the page says nothing rather than "No content" meanwhile.
-const notesWaiting = (parent) => { if (!notesPage(parent)) return false; const a = meetingNotes.get(parent.docId); return !a || (!!a.id && !Array.isArray(kids.get(a.id))); };
+const notesWaiting = (parent) => {
+  if (!notesPage(parent)) return false;
+  const wu = summaryShown(parent.docId);
+  if (wu) return !Array.isArray(kids.get(wu));
+  const a = meetingNotes.get(parent.docId); return !a || (!!a.id && !Array.isArray(kids.get(a.id)));
+};
 
 // The line over the rows: who sees them, in the words and glyphs of Visible to (renderer/tasks.js AUDIENCES, facesEls).
 // Private: the lock and "only you". Shared in Tana: "Shared notes" and who — the people's faces, everyone, a space —
 // and "anyone with the link" when a public link is on, with no lock and no "only you" at all.
 function notesHeadEl(parent) { return notesPage(parent) ? notesHeadFor(parent.docId) : null; }
 function notesHeadFor(eventId) {
-  const answer = meetingNotes.get(eventId);
-  if (!answer) return null;
-  const el = document.createElement('div'), a = answer.audience, span = (text) => Object.assign(document.createElement('span'), { textContent: text });
+  const answer = meetingNotes.get(eventId), writeUp = notesWriteUps.get(eventId), wu = summaryShown(eventId);
+  if (!answer && !wu) return null;
+  const el = document.createElement('div'), a = answer && answer.audience, span = (text) => Object.assign(document.createElement('span'), { textContent: text });
   el.className = 'notes-head';
-  if (answer.failed) el.append(iconEl('lock', 'Visible only to you'), span('Your notes could not be checked just now'));
+  if (writeUp) el.append(notesSwitchEl(eventId, !!wu));
+  if (wu) el.append(...summaryAudienceEls(wu, span));
+  else if (!answer) { /* asked: the line says who sees them once main answers */ }
+  else if (answer.failed) el.append(iconEl('lock', 'Visible only to you'), span('Your notes could not be checked just now'));
   else if (answer.checking) el.append(iconEl('pending', null), span('Checking who can see your notes…'));
-  else if (!answer.id || !a || a.private) el.append(iconEl('lock', 'Visible only to you'), span('Your notes · only you can see them'), ...(answer.node && answer.node.editable === false ? [span('· read only')] : []));
+  else if (!answer.id || !a || a.private) el.append(iconEl('lock', 'Visible only to you'), span(writeUp ? 'only you can see them' : 'Your notes · only you can see them'), ...(answer.node && answer.node.editable === false ? [span('· read only')] : []));
   else {
     el.classList.add('shared');
     const scope = AUDIENCES[a.scope] && a.scope !== 'only-me' ? AUDIENCES[a.scope] : null;
@@ -120,14 +174,38 @@ function notesHeadFor(eventId) {
     if (answer.node && answer.node.editable === false) rest += ' · read only';
     el.append(iconEl(a.link ? 'globe' : scope ? scope.icon : 'users', a.link ? 'Anyone with the link' : scope ? scope.label : 'Shared'), span(words), ...faces, ...(rest ? [span(rest.trim())] : []));
   }
-  // the meeting's write-up, shared with whoever sees the meeting, opened from here rather than in the notes' place
-  const writeUp = notesWriteUps.get(eventId);
-  if (writeUp) {
-    const link = Object.assign(document.createElement('a'), { className: 'notes-writeup', textContent: 'Write-up', title: 'The meeting’s write-up, visible to who sees the meeting' });
-    link.onclick = () => goTo(writeUp);
-    el.append(link);
+  return el;
+}
+// Notes | Summary, over the rows of a meeting that has a write-up: two tabs, the one shown pressed
+function notesSwitchEl(eventId, summary) {
+  const el = document.createElement('div');
+  el.className = 'notes-switch'; el.setAttribute('role', 'tablist'); el.setAttribute('aria-label', 'Your notes or the meeting’s summary');
+  for (const [label, on] of [['Notes', !summary], ['Summary', summary]]) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: label });
+    b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(on));
+    if (on) b.className = 'on';
+    b.onmousedown = (e) => e.preventDefault(); // a click leaves the caret where it is, so Notes can put it back
+    b.onclick = () => { if (!on) showSummary(eventId, label === 'Summary'); };
+    el.append(b);
   }
   return el;
+}
+// Who sees the write-up, from its own metadata (main's taskMeta for it), and whether you may edit it, from its own node
+function summaryAudienceEls(uri, span) {
+  const meta = summaryMeta.get(uri), doc = docOf(uri);
+  if (!meta) return [iconEl('pending', null), span('Checking who can see it…')];
+  const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience && meta.audience.scope, info = audienceInfo(meta.audience, meta.audienceSpace);
+  const people = meta.people || [], count = meta.peopleCount || people.length, link = !!meta.linkShared;
+  // a public link is anyone's: never the lock or "only you" then, whoever else is granted
+  if (link && scope === 'only-me') return [iconEl('globe', 'Anyone with the link'), span('anyone with the link')].concat(doc && doc.editable === false ? [span('· read only')] : []);
+  const els = scope === 'only-me' ? [iconEl('lock', 'Visible only to you'), span('only you can see it')]
+    : scope === 'people' && count ? [iconEl('userLock', 'Visible to selected people'), span('visible to'), ...facesEls(people, count)]
+      : scope === 'everyone' ? [iconEl('users', 'Visible to everyone'), span('visible to everyone in your organization')]
+        : scope === 'space' && info ? [iconEl('houseLock', info.label), span(info.label.replace(/^Visible/, 'visible'))]
+          : [iconEl('users', null), span('who can see it could not be checked')];
+  if (link) els[0] = iconEl('globe', 'Anyone with the link');
+  const rest = (link ? ' · anyone with the link' : '') + (doc && doc.editable === false ? ' · read only' : '');
+  return rest ? [...els, span(rest.trim())] : els;
 }
 // The line redrawn in place, the rows under it left alone: who sees the notes changed while you type
 function patchNotesHead(eventId) {

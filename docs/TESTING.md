@@ -85,7 +85,7 @@ From fastest to slowest. Each catches what the one before it cannot.
      makes nothing; the first words make notes only you can see, under a first row linking to the meeting that the
      meeting's page never draws (it shows with the notes on their own, and once changed), and ↩ goes on as anywhere;
      the Tana glyph beside the title is there before any notes, says "Open in Tana" on hover and on keyboard focus
-     without moving the title, opens the meeting's own link and makes no notes; the write-up is a link and
+     without moving the title, opens the meeting's own link and makes no notes; the write-up opened on its own and
      ⌘[ comes back to the notes; notes already there are used; Tana refusing keeps each meeting's words in its own
      row, a "what you typed is kept" answer is retried by the page itself, a late answer for one meeting changes nothing
      on the next; notes shared in Tana stay the editor with "Shared notes" and faces, link, everyone or read only said,
@@ -98,6 +98,12 @@ From fastest to slowest. Each catches what the one before it cannot.
      kept with a write under a stale "only you" refused until told, a public link, unshared, view-only, your grant
      gone, an owner set, older notes without the mark, and another account; the sync checks hold
      subscribe's ifMissing to writing a seed on MISSING only;
+   - Notes | Summary on a meeting with a write-up: Notes first, none without one; Summary shows the write-up's rows and
+     its own audience (three people against the meeting's two), keeps the meeting and its Tana button, and makes no
+     notes; typing in it saves to the write-up; a switch saves what was typed to its own document, a first word's create
+     carries on under Summary, Notes puts the caret back; kept on reopening; a newer answer about who sees it is never
+     replaced by an older one; made public while a row is typed in, the line says "Checking" at once, then anyone with
+     the link, never the lock; read only said; an answer from before the session changed is dropped;
    - "/" Task and "/" Meeting: each named and referenced in its row; the meeting's when page shows the slot it will make
      (now for half an hour, a typed time, or "tomorrow from 3-5" as the mock's AI reads it), words that read as no time
      make nothing, Escape walks back to the row, and a second ↩ while one is made makes nothing more (creates are

@@ -327,7 +327,9 @@ function mockApi() {
   const notesDoc = (id, title) => { created[id] = { id, title, text: title, kind: 'document', icon: 'doc', editable: true, hasChildren: true, tags: [{ label: 'doc', color: 'grey' }] }; };
   content.mockmeeting1 = []; content.mockmeeting3 = []; content.mockmeeting4 = []; content.mockmeeting5 = [];
   // 1-1 with Sam has a write-up, shared as the meeting is (summaryUri below): a link over its notes, never their place
-  notesDoc('tana:text:mockwriteup4', 'The one where the roadmap got shorter'); content['tana:text:mockwriteup4'] = [block('A synthetic summary everyone in the meeting can read.')];
+  notesDoc('tana:text:mockwriteup4', 'The one where the roadmap got shorter'); content['tana:text:mockwriteup4'] = [block('Agreed to trim the synthetic roadmap to two themes'), block('Sam drafts the pilot review by Friday'), block('Next check-in in two weeks')];
+  // the write-up's own audience: three people, not the meeting's two (Summary says who sees it from the write-up itself)
+  taskDetails.set('tana:text:mockwriteup4', { assignees: [], restricted: true, participants: [members[0], members[1], members[2]].map((m, i) => ({ uri: m.id, type: 'user', role: i ? 'editor' : 'admin' })), audience: 'people' });
   notesDoc('tana:text:mocknotes5', 'Private notes · Offsite'); content['tana:text:mocknotes5'] = [block('Bring the synthetic agenda')];
   const notesChanged = (eventId) => setTimeout(() => changed.forEach((cb) => cb(eventId, { notes: true })), 0);
   const notesSet = (eventId, audience, readOnly) => {
@@ -341,6 +343,8 @@ function mockApi() {
     share: (eventId, audience = {}) => notesSet(eventId, { private: false, scope: 'people', people: [myId, members[1].id], peopleCount: 2, link: false, writable: true, ...audience }),
     unshare: (eventId) => notesSet(eventId, null, false),
     release: (eventId) => notesStale.delete(notesOf[eventId]), // what another pane's ask does: main has told a page who sees them
+    summaryLink: (on) => { taskDetails.get('tana:text:mockwriteup4').linkShared = !!on; emit('tana:text:mockwriteup4'); }, // the write-up's public link, on or off in Tana
+    summaryReadOnly: () => { created['tana:text:mockwriteup4'].editable = false; emit('tana:text:mockwriteup4'); }, // your grant on the write-up made view-only in Tana
     readOnly: (eventId) => notesSet(eventId, { ...(notesAudience.get(notesOf[eventId]) || {}), writable: false }, true) };
   // as main writes them (main/meeting-notes.js seed and firstWords): a new note starts with a link to its meeting's page
   const notesRef = {}; // note id -> its seed's first row, as main/meeting-notes.js referenceOf names it

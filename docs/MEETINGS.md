@@ -41,7 +41,7 @@ related() returns it as summaryUri (sdk/events.js `writeUpOf`) using the tagline
 when neither signal is present. A write-up can be moved out of its meeting into a space, and then the meeting owns
 nothing that matches: with a tagline, the document titled exactly that is looked up instead (`writeUpFor`, main/related.js;
 the sketch rule stays with owned documents, since any page can carry one). A zoomed meeting used to forward to that document, since an event has no
-content of its own; it now stays the meeting, its editor your private notes, and the write-up is a link over them (Private notes, below).
+content of its own; it now stays the meeting, its editor your private notes, and its write-up is the other side of a Notes | Summary switch over them (Private notes, below).
 
 ## Private notes: what you type under a meeting (issue #761, verified live 2026-10-05)
 
@@ -54,8 +54,13 @@ Visible to, or — once you shared them in Tana — "Shared notes" and who: the 
 organization, anyone with the link, read only when your grant no longer lets you write; never a lock or "only you"
 then. Beside the meeting's title, the Tana glyph opens the meeting itself in Tana (never the notes), "Open in Tana" shown
 on hover and keyboard focus; it is there before any notes and makes none. A meeting no longer forwards to its write-up:
-the write-up, shared with whoever sees the meeting, is a link on
-that line. The notes' first row, which names the meeting for whoever opens them on their own (in Tana, or in Orbital),
+a meeting that has one shows Notes | Summary on that line, Notes first. Summary puts the write-up's own rows in the notes'
+place on the meeting's page, and the line says who sees the write-up and whether you may edit it, read from the
+write-up itself (its own metadata and node, asked for it alone, again when it changes live; the line says "Checking" at
+once, a row being typed in too, and an older answer never replaces a newer one). It is never inferred from the meeting's
+attendees or the notes, and a public link is never drawn with the lock or "only you". Summary never makes notes; what
+was typed is saved to the document it was typed in before the other takes its place, a first word's create carries on
+under Summary, and Notes puts the caret back where it was. The choice is kept per meeting for the session. The notes' first row, which names the meeting for whoever opens them on their own (in Tana, or in Orbital),
 is left out of the meeting's own page while it is exactly the row the seed wrote — its block id, its words, its one
 link, nothing under it (main/meeting-notes.js `referenceOf`, renderer/meetingnotes.js `notesRows`); changed, it is
 yours and shows.

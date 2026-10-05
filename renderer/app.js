@@ -128,6 +128,7 @@ tana.onChanged((docId, info) => {
     if (!info || info.meta !== false) { notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); if (taskMetaById.has(docId) || taskMetaLoading.has(docId)) loadTaskMeta(docId, true); }
     if (meetingInfos.has(docId)) meetingInfoOf(docId, true); // a meeting's attendees, read again for its page's field
     if (info && info.notes && typeof noteNotesChanged === 'function') noteNotesChanged(docId); // its private notes were made in another pane, or are no longer private
+    if (typeof noteSummaryChanged === 'function') noteSummaryChanged(docId, info); // a meeting's write-up on screen: who sees it and whether you may edit it, asked again
     // and a node linked to an agent task asks what its task is doing: another page may have relinked it to another task
     if (info && info.meta && (agentStates.has(docId) || agentTasks.has(docId))) loadAgentStates();
     // The sidebar is read once per page and left alone while the page is edited: its sections are relations, and
