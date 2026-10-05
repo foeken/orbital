@@ -631,6 +631,50 @@ flow('golden path: write on Today\u2019s page with / blocks, @ links and dates',
     { block: null, done: 0, segments: [{ text: 'Buy cake' }] }], 'a heading, a row linking a task and a day, and a checklist row, saved as they read');
 });
 
+// 17b. "/" Task and Meeting (#602, #755): each named on a page of its own and referenced in the row the "/" was typed in;
+// the meeting's when page shows the exact slot before anything is made, words that read as no time make nothing, Escape
+// walks back to the row, and a second ↩ while one is being made makes nothing more
+flow('golden path: "/" Task and Meeting, named, the meeting\u2019s time reviewed, each referenced in its row', async (p) => {
+  await p.start();
+  await command(p, 'today', 'Today');
+  await p.waitFor('zoom && document.getElementById("title").textContent === localDate()', 'today\u2019s page');
+  const day = await p.js('zoom.docId');
+  await p.js('document.querySelector("#outline .node .text").focus(); placeCaret(keyOfEl(document.querySelector("#outline .node .text")), 0)');
+  // every create counted, and slowed, so a second ↩ lands while the first is still being made
+  await p.js('window.__creates = []; const made = tana.createDocument; tana.createDocument = (title, opts) => { __creates.push([title, opts || null]); return new Promise((r) => setTimeout(r, 400)).then(() => made(title, opts)); }; 1');
+  await p.type('/'); await p.waitFor('palMode === "slash"', 'the / menu'); await p.type('task');
+  await p.waitFor('palRows[palIndex]?.label === "Task"', 'Task offered'); await p.key('↩');
+  await p.waitFor('palMode === "slashTask"', 'the task\u2019s name page'); await p.type('Book the venue'); await p.key('↩'); await p.key('↩');
+  await p.waitFor('palette.hidden && document.activeElement?.closest?.("#outline")', 'the task made and the caret back in its row', 6000);
+  await p.key('↩'); await p.type('/'); await p.waitFor('palMode === "slash"', 'the / menu'); await p.type('meeting');
+  await p.waitFor('palRows[palIndex]?.label === "Meeting"', 'Meeting offered'); await p.key('↩');
+  await p.waitFor('palMode === "slashMeeting"', 'the meeting\u2019s name page'); await p.type('Design review'); await p.key('↩');
+  await p.waitFor('palMode === "slashMeetingWhen"', 'the when page');
+  const slot = await p.js('(() => { const s = Math.ceil(Date.now() / 18e5) * 18e5; return meetingSpan(s, s + 18e5); })()');
+  assert.deepEqual(await p.js('[palRows[palIndex].label, palRows[palIndex].hint]'), [slot, 'Next half hour'], 'with nothing typed the next half hour is offered, as it would be made');
+  await p.type('xyz'); await settle(p, 100);
+  assert.equal(await p.js('palRows.every((r) => r.disabled)'), true, 'words that read as no time leave nothing to press');
+  await p.key('↩'); await settle(p, 500);
+  assert.deepEqual([await p.js('palMode'), await p.js('__creates.length')], ['slashMeetingWhen', 1], 'and \u21A9 makes nothing');
+  await p.key('esc'); await p.waitFor('palMode === "slashMeeting" && palInput.value === "Design review"', 'Escape back to the name, kept');
+  await p.key('esc'); await p.waitFor('palMode === "slash"', 'Escape back to the menu');
+  await p.key('esc'); await p.waitFor('palette.hidden && document.activeElement?.textContent === "/"', 'Escape back to the row, the caret in it');
+  await p.key('⌫'); await p.type('/'); await p.waitFor('palMode === "slash"', 'the / menu again'); await p.type('meeting'); await p.waitFor('palRows[palIndex]?.label === "Meeting"', 'Meeting offered'); await p.key('↩');
+  await p.type('Design review'); await p.key('↩'); await p.waitFor('palMode === "slashMeetingWhen"', 'the when page');
+  await p.type('tomorrow 14:00-15:00'); await settle(p, 100);
+  const start = await p.js('new Date(parseDay("tomorrow") + "T14:00").getTime()');
+  assert.deepEqual(await p.js('[palRows[palIndex].label, palRows[palIndex].hint]'), [await p.js('meetingSpan(' + start + ', ' + (start + 36e5) + ')'), '\u21A9 Create'], 'the slot typed, shown before it is made');
+  await p.key('↩'); await p.key('↩');
+  await p.waitFor('palette.hidden && document.activeElement?.closest?.("#outline")', 'the meeting made and the caret back in its row', 6000);
+  await p.js('flushAll()'); await settle(p, 500);
+  assert.deepEqual(await p.js('__creates'), [['Book the venue', { kind: 'task' }], ['Design review', { kind: 'meeting', start, end: start + 36e5 }]], 'one task and one meeting, the meeting at the time shown and with nobody on it');
+  const saved = await p.js('tana.children(' + J(day) + ').then((rows) => rows.map((n) => n.segments.map((s) => (s.mention ? s.mention.label : s.text))))');
+  assert.deepEqual(saved, [['Book the venue'], ['Design review']], 'each row is the reference to what it made, saved');
+  assert.equal(await p.js('tana.children(' + J(day) + ').then((rows) => rows[1].segments[0].mention.icon)'), 'meeting', 'the meeting’s with its glyph');
+  const meeting = await p.js('tana.children(' + J(day) + ').then((rows) => tana.node(rows[1].segments[0].mention.uri)).then((n) => n.start)');
+  assert.equal(meeting, new Date(start).toISOString(), 'and the meeting starts when it said');
+});
+
 // 18. A view (docs/VIEWS.md): the Library grouped, sorted and filtered from Cmd+K and ⌘F, then saved as a search that
 // opens on the same rows
 flow('golden path: group, sort and filter the Library, then save it as a search', async (p) => {
@@ -811,14 +855,18 @@ flow('golden path: a list row is picked up by its words until it is selected', a
   assert.deepEqual(await p.js('[__caret().key, __caret().editable]'), [key, true], 'it goes into the words instead');
 });
 
-// main.js window:split does. ⌘↩ on a search result opens it in a new tab, ⇧↩ in a pane beside, ⇧⌘N a new pane on the
-// Library; the keys stay with the page just opened, and every page keeps its own place.
+// main.js window:split does. ⌘↩ on a search result opens it in a new tab, ⇧↩ in a pane beside; ⇧⌘N, ⌘N and ⌥⌘N a pane, a
+// tab and a floating pane each on a new note of its own (#756), a held key making one; the keys stay with the page just
+// opened, and every page keeps its own place.
 const TWO_PANES = { schema: 1, root: { kind: 'split', id: 'split-m', axis: 'x', weights: [0.55, 0.45], children: [{ kind: 'panel', id: 'panel-a', views: ['page'], selected: 'page' },
   { kind: 'panel', id: 'panel-b', views: ['page2'], selected: 'page2' }] }, floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2' } } } };
 // On the mock a page has no preload to give it its id, so every page reads the one 'view' and 'place': the page about
 // to open gets them written just before, as manual/scenes/kit.js live() does
 const SHELL_API = 'if (window === top) { let seq = 2; window.shell = { state: () => ({ doc: ' + J(TWO_PANES) + ', theme: "light" }), onCommand: (cb) => { window.shellCmd = cb; }, layout() {} };'
-  + ' window.orbOpen = (where, start, from) => { const id = String(++seq); localStorage.setItem("view", start.view || "library"); localStorage.setItem("place", start.place || "{}"); window.shellCmd("open", { id, where, from, focus: true }); return id; }; }';
+  + ' window.orbOpen = (where, start, from) => { const id = String(++seq); window.lastStart = start; localStorage.setItem("view", start.view || "library"); localStorage.setItem("place", start.place || "{}"); window.shellCmd("open", { id, where, from, focus: true }); return id; }; }';
+// Each page runs a mock of its own, so a note one page made is unknown to the page opened on it; main, which both share
+// in the app, would have it. The new page is handed that one note's node, as main would answer it.
+const NOTE_FROM_OPENER = 'const pl = JSON.parse((parent.lastStart && parent.lastStart.place) || "{}"); if (pl.edit) { const o = tana.node; tana.node = async (id) => (id === pl.docId ? { id, title: pl.title, kind: "document", icon: "doc", editable: true, hasChildren: true } : o(id)); }';
 flow('golden path: open pages in tabs and panes, each keeping its own place', async (p) => {
   await p.beforeLoad(SHELL_API);
   await p.open('shell.html');
@@ -832,7 +880,7 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
       if (signed.has(s)) continue;
       signed.add(s);
       await p.waitFor(frame(s) + '?.contentDocument?.readyState === "complete" && typeof ' + frame(s) + '.contentWindow.goTo === "function"', 'page ' + s + ' to load', 8000);
-      for (let i = 0; ; i++) { try { await p.jsIn(s, 'tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, ' + J(s) + '); document.getElementById("login")?.click(); 1'); break; } catch (e) { if (i > 20) throw e; await p.sleep(50); } }
+      for (let i = 0; ; i++) { try { await p.jsIn(s, 'tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, ' + J(s) + '); ' + NOTE_FROM_OPENER + '; document.getElementById("login")?.click(); 1'); break; } catch (e) { if (i > 20) throw e; await p.sleep(50); } }
       await p.waitFor(frame(s) + '.contentDocument.querySelector("#outline .node, #outline .empty") && ' + frame(s) + '.contentDocument.getElementById("title").textContent', 'page ' + s + ' drawn', 8000);
     }
   };
@@ -854,9 +902,21 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   await pages(4);
   await p.key('⇧⌘N');
   await pages(5);
-  assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['Library']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on the Library');
+  await p.waitFor(frame('5') + '.contentDocument.getElementById("title").textContent === "New note"', 'the new pane on its note');
+  assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['New note']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on a new note');
   assert.equal(await keysIn(), '5', 'the keys went with the new pane');
-  assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'Library' }, 'every page kept its own place');
+  await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret in the new note');
+  assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'New note' }, 'every page kept its own place');
+  await p.key('⌘N', 4, true); // held: the first press and three repeats
+  await pages(6); await p.sleep(800);
+  assert.equal((await sides()).length, 6, 'a held ⌘N opens one tab');
+  assert.deepEqual((await tabs()).at(-1), ['New note', 'New note'], 'beside the page that asked, on a new note');
+  await p.key('⌥⌘N');
+  await pages(7);
+  await p.waitFor(frame('7') + '.contentDocument.getElementById("title").textContent === "New note"', 'the floating pane on its note');
+  const notes = []; for (const s of ['5', '6', '7']) notes.push(await p.jsIn(s, 'zoom && zoom.docId'));
+  assert.equal(new Set(notes).size, 3, 'each key made a note of its own');
+  assert.ok(notes.every((id) => /^tana:text:/.test(id)), 'and opened its page on it');
   for (const s of await sides()) assert.deepEqual(await p.jsIn(s, 'window.__errors'), [], 'page ' + s + ' reported errors');
 });
 
@@ -915,11 +975,12 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
       for (const end = Date.now() + ms; Date.now() < end; await sleep(40)) if (await js('!!(' + expression + ')')) return;
       throw new Error('timed out waiting for ' + (what || expression));
     };
-    const key = async (combo, times = 1) => {
+    // held: the first press and then repeats (e.repeat), as a key held down sends them, with one key-up at the end
+    const key = async (combo, times = 1, held = false) => {
       const k = parseKey(combo), b = { key: k.key, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode, modifiers: k.mods };
       for (let i = 0; i < times; i++) {
-        await send('Input.dispatchKeyEvent', { type: k.text ? 'keyDown' : 'rawKeyDown', ...b, ...(k.text ? { text: k.text, unmodifiedText: k.text } : {}) });
-        await send('Input.dispatchKeyEvent', { type: 'keyUp', ...b });
+        await send('Input.dispatchKeyEvent', { type: k.text ? 'keyDown' : 'rawKeyDown', ...b, ...(k.text ? { text: k.text, unmodifiedText: k.text } : {}), ...(held && i > 0 ? { autoRepeat: true } : {}) });
+        if (!held || i === times - 1) await send('Input.dispatchKeyEvent', { type: 'keyUp', ...b });
       }
       await sleep(60);
     };

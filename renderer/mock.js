@@ -602,11 +602,15 @@ function mockApi() {
       { id: 'tana:type:mockproject', kind: 'custom', typeUri: 'tana:type:mockproject', title: 'Project', icon: 'doc', hue: 268, selectable: true },
     ], complete: true }),
     openCanvas: async () => {}, // main.js canvas:open: a window of Tana's own, which the mock has none of
-    createDocument: async (title, { kind = 'doc', typeUri } = {}) => {
+    createDocument: async (title, { kind = 'doc', typeUri, start, end } = {}) => {
       const nativeKind = kind === 'custom' ? 'doc' : kind;
-      const n = { id: 'mocknew' + (++seq), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };
+      // a meeting's time is checked as main checks it (main/documents.js meetingTime): only a meeting carries one, start before end
+      if ((start !== undefined || end !== undefined) && (kind !== 'meeting' || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start <= 0 || end <= start)) throw new Error(kind !== 'meeting' ? 'Only a meeting carries a time' : 'A meeting needs a start before its end');
+      // a plain document gets an id that reads as Tana's, so a page can open on it as its place (New tab, New pane, #756)
+      const n = { id: (kind === 'doc' ? 'tana:text:mocknew' : 'mocknew') + (++seq) + (kind === 'doc' ? Math.random().toString(36).slice(2, 8) : ''), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };
       if (nativeKind === 'task') { n.done = 0; taskDetails.set(n.id, { assignees: [members[0].id], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); settling.add(n.id); }
-      if (nativeKind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
+      if (nativeKind === 'meeting' && start !== undefined) { const d = new Date(start), at = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); Object.assign(n, { meta: WD[d.getDay()] + ' ' + at, start: d.toISOString(), end: new Date(end).toISOString() }); }
+      else if (nativeKind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
       if (typeUri) n.typeUri = typeUri;
       created[n.id] = n; content[n.id] = []; all.push(n);
       if (nativeKind !== 'doc') unlisted.push(n);

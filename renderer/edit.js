@@ -296,7 +296,7 @@ function toggleReference(node) {
 // ---- one pane per place (#533) ----
 // A place already on screen in another pane of this window is gone to there rather than opened a second time: each page
 // tells the shell where it is (tellPlace) and the shell hands every page the others' places (renderer/app.js 'panes').
-// The Library alone may be open in any number of panes, and New pane (⇧⌘N) opens one.
+// The Library alone may be open in any number of panes. New pane (⇧⌘N) opens one on a new note (#756), which no pane shows yet.
 const placeKey = (docId, nodeId) => (docId ? String(docId) + (nodeId ? '#' + nodeId : '') : null);
 const viewKey = (id) => (id === 'library' ? null : 'view:' + id);
 let otherPanes = {}; // place key -> the pane (the shell's view id) showing it
@@ -513,6 +513,7 @@ async function restorePlace() {
   // a saved search reopened here is listed in Cmd+K at once: one the other half has just made (the Work View's My
   // Tasks) is not in the graph's answer yet
   if (/^tana:search:/.test(saved.docId)) addSearch({ ...extra.get(saved.docId), id: saved.docId });
+  if (saved.edit === true) caretOnOpen = true; // a page opened on a new note (New tab, New pane, New floating pane, #756): the caret waits in its first row
   render(true);
   followSummary(saved.docId);
 }

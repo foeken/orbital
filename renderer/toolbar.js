@@ -311,9 +311,9 @@ function slashRows(q) {
   // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new …" list
   const made = creationChoices.filter((c) => c.kind !== 'canvas'); // a canvas has no page to draft here: ⌘K makes one (#620)
   const choices = made.some((c) => c.kind === 'doc') ? made : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...made];
-  for (const choice of choices) rows.push(choice.kind === 'task' ? { // "/" Task: made here and referenced in the row (taskFromSlash)
-    group: 'Create', icon: choice.icon, label: 'Task', hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
-    run: () => taskFromSlash(choice),
+  for (const choice of choices) rows.push(choice.kind === 'task' || choice.kind === 'meeting' ? { // "/" Task and Meeting: made here and referenced in the row (taskFromSlash, meetingFromSlash)
+    group: 'Create', icon: choice.icon, label: choice.kind === 'task' ? 'Task' : 'Meeting', hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
+    run: () => (choice.kind === 'task' ? taskFromSlash(choice) : meetingFromSlash(choice)),
   } : {
     group: choice.kind === 'custom' ? 'Workspace types' : 'Create', icon: choice.icon,
     label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
@@ -398,4 +398,49 @@ function taskHere(item, title) {
     const segs = readSegs(el), words = plainOf(segs), at = words.trim() === '/' || !words.trim() ? 0 : words.length;
     return linkTo({ item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) });
   }).catch(showError).finally(() => { slashTaskBusy = false; });
+}
+// "/" Meeting (#755): named on a page as "/" Task is, then a second page asks when and shows the exact slot before anything
+// is made, in ⌘K Change time's words (renderer/meeting.js parseMeetingTime). The slot is chosen, never assumed: with nothing
+// typed the next half hour is a row of its own to press, and words that read as no time offer nothing to press. One ↩
+// makes one meeting, in the Library with nobody invited (Tana's server puts it in your own calendar, docs/MEETINGS.md;
+// Add attendee … is where people are invited), and the row the "/" was typed in becomes its reference, as Task's does.
+// Escape goes back a page: when → the name, kept → the menu. A meeting that lands after its page was left (Escape, or
+// the palette closed) leaves the row alone: the toast says it was made and opens it.
+let slashMeetingBusy = false; // one meeting per ↩, whichever of the two pages it is pressed on
+const SLASH_MEETING_LENGTH = 18e5; // the half hour a new meeting starts on and lasts, as Tana's own create (sdk/node.js initDocument)
+function meetingFromSlash(choice) {
+  const item = slashTarget();
+  if (item && item.node.kind === 'block') meetingName(item, choice, '');
+}
+function meetingName(item, choice, name) {
+  openPage('slashMeeting', 'Name the new meeting…', { back: () => togglePalette('slash'), typed: true, rows: (q, typed) => {
+    const title = String(typed || '').trim();
+    return [title ? { group: 'New meeting', icon: choice.icon, label: 'Choose when for “' + title + '”', keepOpen: true, run: () => meetingWhen(item, choice, title) }
+      : { group: 'New meeting', icon: choice.icon, label: 'Type a name', disabled: true, note: true }];
+  } }, name);
+}
+function meetingWhen(item, choice, title) {
+  const slot = Math.ceil(Date.now() / SLASH_MEETING_LENGTH) * SLASH_MEETING_LENGTH, group = 'New meeting · ' + title; // read once: the row offered does not move under the press
+  openPage('slashMeetingWhen', 'When? 14:00, tomorrow 9:30, fri 10:00-11:30', { back: () => meetingName(item, choice, title), typed: true, rows: (q, typed) => {
+    if (slashMeetingBusy) return [{ group, icon: choice.icon, label: 'Creating “' + title + '”…', disabled: true, note: true }];
+    const words = String(typed || '').trim(), when = words ? parseMeetingTime(words, slot, SLASH_MEETING_LENGTH) : { start: slot, end: slot + SLASH_MEETING_LENGTH };
+    return [when ? { group, icon: 'calendar', label: meetingSpan(when.start, when.end), hint: words ? '↩ Create' : 'Next half hour', keepOpen: true, run: () => meetingHere(item, title, when) }
+      : { group, icon: 'calendar', label: 'No time in “' + words + '”', disabled: true },
+      { group, label: 'In your calendar · nobody is invited', disabled: true, note: true }];
+  } });
+}
+function meetingHere(item, title, when) {
+  if (slashMeetingBusy) return;
+  slashMeetingBusy = true;
+  renderPalette();
+  const seq = palSeq; // the When page as it is now: left (Escape, a closed palette), and the answer leaves the row alone
+  return tana.createDocument(title, { kind: 'meeting', start: when.start, end: when.end }).then((n) => {
+    extra.set(n.id, { ...n, text: n.title || '', hasChildren: true });
+    const stayed = seq === palSeq && !palette.hidden && palMode === 'slashMeetingWhen', el = stayed && items.get(item.key) === item && textEl(item.key);
+    if (stayed) closePalette();
+    if (!el) return showNote('“' + (n.title || title) + '” created', false, n.id); // the row or its page went meanwhile: the meeting stays, in the Library
+    dropPending(item.key); // the reference is the row's words now: a save of the "/" still waiting must not land after it
+    const segs = readSegs(el), words = plainOf(segs), at = words.trim() === '/' || !words.trim() ? 0 : words.length;
+    return linkTo({ item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) });
+  }).catch(showError).finally(() => { slashMeetingBusy = false; if (palMode === 'slashMeetingWhen' && !palette.hidden) renderPalette(); });
 }

@@ -109,6 +109,23 @@ creates a calendar event. It also replaced a location written right after creati
 (`tanaMeetingLinkAppliedAt` 2.4 s after `createdAt`), a race only an edit made in the first seconds can hit. After the
 soft delete the document still read `syncStatus: synced`, so whether the Outlook copy is removed was not observed.
 
+## Making a meeting ("/" Meeting, #755)
+
+A meeting made in Orbital is a `tana:event:` laid out as Tana's own create lays one out (sdk/node.js `initDocument`,
+kind `meeting`, `origin: 'tana'`), with nobody on its roster and only its maker as a participant. Tana has no meeting
+that stays out of the calendar: its server writes a Tana-made meeting into the organizer's own calendar and reports how
+that went in `syncStatus`. A read-only survey on 2026-10-05 (counts only, no titles or people) found 3 Tana-made
+meetings among the 150 most recently changed events: two with `externalId`, `calendarSubscriptionUri` and `syncStatus:
+synced`, one with `syncStatus: failed` and no calendar copy. So a meeting made here usually appears in your own calendar
+and may fail to, and the server may add its Tana Meet link to it. Making one invites nobody: invitations follow people
+on the roster, who are only ever added with Add attendee …, which says an invite may go out.
+
+"/" Meeting (docs/OUTLINER.md, Toolbar) asks the name and then the time, shows the exact slot before anything is made,
+and passes it to `api.createDocument(title, { kind: 'meeting', start, end })`. main/documents.js checks the time before
+anything is subscribed (whole epoch ms, a start before an end, on a meeting alone) and writes `startTime`/`endTime` at
+birth in place of the next half hour. The meeting has no write-up until Tana makes one after a call: the row refers to
+the event, and opening it forwards to the write-up once there is one (sdk/events.js `writeUpOf`).
+
 In the app, ⌘K on a meeting offers "Change time …", "Change location …" and "Add attendee …" only when
 `meeting:info` says it is editable (main/meetings.js, renderer/meeting.js), and on its write-up page too: a zoomed
 meeting opens there, and the sidebar's hub (`related().pinHub`) names the meeting. "Change time …" is left out on an

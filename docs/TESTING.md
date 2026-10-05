@@ -78,6 +78,9 @@ From fastest to slowest. Each catches what the one before it cannot.
    - Quick Add Task (task.html): a title, a type with ↓, an assignee with ⇥, and ↩ makes it, hands it over and tells
      the window;
    - writing on Today's page: "/" makes a heading and a checklist row, "@" links a task and a day, saved as they read;
+   - "/" Task and "/" Meeting: each named and referenced in its row; the meeting's when page shows the slot it will make,
+     words that read as no time make nothing, Escape walks back to the row, and a second ↩ while one is made makes
+     nothing more (creates are counted, and slowed so the second ↩ lands in time); no meeting is given anyone;
    - a view: the Library grouped, sorted and filtered with ⌘F, Escape clearing it, then saved as a search that opens
      on the same rows;
    - Notifications read by bullet and by Mark all as read, a row opening its node; a proposal approved from Cmd+K and
@@ -86,8 +89,9 @@ From fastest to slowest. Each catches what the one before it cannot.
    - Connect your personal agent: both plugins named with their URLs, How to add them … and back to the same code, the
      instructions carry a one-time code, the agent links while the page waits, the
      palette closes on its name, and it is in Choose agents (on, where it runs) with a page to rename or unlink it;
-   - panes and tabs (shell.html): ⌘↩ on a search result opens a tab, ⇧↩ a pane beside, ⇧⌘N a new pane, the keys go
-     with the page just opened and every page keeps its own place.
+   - panes and tabs (shell.html): ⌘↩ on a search result opens a tab, ⇧↩ a pane beside; ⇧⌘N, ⌘N and ⌥⌘N a pane, a tab
+     and a floating pane each on a new note of its own with the caret in it, a held ⌘N opening one; the keys go with
+     the page just opened and every page keeps its own place.
 
    A drag is dispatched in the page as Chromium delivers one (`__drag`: dragstart on the row's grip, dragover and drop
    where the pointer is), since the DevTools protocol cannot start a native drag in a headless page.

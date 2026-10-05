@@ -359,7 +359,15 @@ Image (also found by picture, photo, upload), then Doc, Task and the rest of wha
 types under their own heading. Task (`taskFromSlash`, #602) asks the task's name on a page of its own and the row
 becomes a reference to the new task, as Tana's own "/" Task embeds one; Escape goes back to the menu. Choosing one
 of the others opens a page that asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens
-it, Escape goes back to the choices. The “/” menu in a row keeps drafting in place instead.
+it, Escape goes back to the choices. The “/” menu in a row keeps drafting in place instead. Meeting (`meetingFromSlash`,
+#755) is made the way Task is, with a second page: after its name, “When?” takes a day and/or a time in ⌘K Change time's
+words (“14:00”, “tomorrow 9:30”, “fri 10:00-11:30”, `parseMeetingTime`) and shows the exact slot as the row to press
+before anything exists. With nothing typed that row is the next half hour, labelled so; words that read as no time leave
+nothing to press. Enter makes one meeting (a second Enter while it is being made makes nothing more), in the Library
+with nobody on it, at that time (`api.createDocument(title, { kind: 'meeting', start, end })`), and the row becomes its
+reference. Escape walks back a page at a time: when → the name, kept → the menu → the row. A meeting that lands after
+its page was left leaves the row as it is, and the toast that says it was made opens it. Tana's server puts a meeting
+made in Tana into your own calendar ([MEETINGS.md](MEETINGS.md)); people are invited with Add attendee …, never here.
 
 ### @ linking
 
@@ -417,9 +425,10 @@ owned by the page and the block (main/images.js), outside the renderer's write q
   starts open and yours. Unassigned takes you off, My inbox / Waiting / My later / My completed set the state, Pinned pins it to
   today. Agent opens the Assign to Agent prompt once it exists, and Tracking takes you off, watches it and opens the
   assignee picker for who you are waiting on. Assigned by others drafts nothing: only somebody else puts a task there.
-- **`api.createDocument(title, { kind, typeUri? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
+- **`api.createDocument(title, { kind, typeUri?, start?, end? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
   assigned to you, with a workflow type when `typeUri` names one), a `meeting` (a `tana:event:` laid out like a
-  Tana-native event, the next half hour by default, so it shows in Tana's calendar), a `chat`, a `search` (which must
+  Tana-native event, the next half hour by default, so it shows in Tana's calendar; `start` and `end`, epoch ms, give it
+  its time instead, refused unless a start before an end and on a meeting alone, before anything is made), a `chat`, a `search` (which must
   carry a `query`) or an instance of a workspace type (`custom`, with its `typeUri`; a type with a workflow makes an open task of yours, as
   Quick Add Task does, and its draft has a box, issue #534), and answers its Node.
 
@@ -595,7 +604,7 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Reload (the window, every pane) | ⌘R |
 | Go to Home | ⇧⌘H |
 | New window | ⌃⌘N |
-| New tab / New pane (to the right) / New floating pane | ⌘N / ⇧⌘N / ⌥⌘N (the modifiers that open a link there) |
+| New tab / New pane (to the right) / New floating pane, each on a new note | ⌘N / ⇧⌘N / ⌥⌘N (the modifiers that open a link there) |
 | Next / Previous pane | ⌘/ / ⇧⌘/ |
 | Next / Previous tab | ⇧⌘] / ⇧⌘[ |
 | Maximize or restore pane | ⌥⌘↓ |
@@ -1247,9 +1256,14 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **One pane per place** (issue #533):
   a document, a node or a view already shown in another pane of the window is not opened a second time; going there (a
   row, a link, ⌘K, ⌘-click) takes you to that pane instead (renderer/edit.js `inOtherPane`, over the places each page tells
-  the shell). The Library alone may be open in any number of panes. **New pane** (⇧⌘N) opens the Library in a
-  page to the right of yours, **New tab** (⌘N) one in your panel and **New floating pane** (⌥⌘N) a floating one, the
-  same modifiers ⌘-, ⇧- and ⌥-click open a link with: main gives the id
+  the shell). The Library alone may be open in any number of panes. **New pane** (⇧⌘N) opens a page to the right of
+  yours, **New tab** (⌘N) one in your panel and **New floating pane** (⌥⌘N) a floating one, the same modifiers ⌘-, ⇧- and
+  ⌥-click open a link with, and each opens on a note of its own (issue #756, renderer/palette.js `openNoteIn`): a plain
+  document titled “New note” is made in the Library first, and the new page opens zoomed into it with the caret in its
+  first row (its start place carries `edit: true`, renderer/edit.js `restorePlace`). One press makes one note and one
+  page: a press while it is being made is the same one, and the key held down repeats nothing (renderer/events.js
+  `NOTE_PAGES`). A note no page could open on (signed out) stays in the Library and the toast opens it; demo mode, which
+  saves nothing, opens the page on the Library as before. ⌃⌘N (New window) still opens on the place you are. Main gives the id
   (`api.splitWindow(where)` answers it) and tells the shell (`shell:command` 'open'), the page that asked stores its
   view and place under that id, and the new page opens there and takes the keyboard. Panes are docked, tabbed or
   floating and dragged between those by their tabs; the tab's title is the page's (renderer/render.js `tellTitle`

@@ -587,6 +587,30 @@ async function main() {
     assert.equal(created.length,8,'invalid scope/types do not create partial documents'); // 8: a canvas and three legitimate saved searches are created above
     console.log('ok  creation chooser: native chats, actual typed docs/events, home-space validation and unsaved blank drafts');
   }
+  // "/" Meeting (#755): a meeting is made with the time its When page showed, written at birth, and with nobody on it;
+  // a time on anything else, or one that is not a start before an end, is refused before anything is subscribed.
+  {
+    const backend=mainHelpers(), cache=require('../db');cache.open(':memory:');
+    const docs=new Map(), created=[];
+    backend.testRuntime({me:{userUri:ME,orgId:ORG},session:{getAccessToken:async()=> 'x.'+Buffer.from(JSON.stringify({org_id:ORG,role:'member'})).toString('base64url')+'.x'},client:{graph:{listNodes:async()=>({nodes:[],totalCount:0})},sync:{subscribe:async(id,init)=>{if(init){const d=new Document(id);d.transact(init);docs.set(id,d);created.push(d);return d;}if(!docs.has(id))throw new Error('unavailable');return docs.get(id);}}}});
+    const start=Date.UTC(2026,9,6,12,0), end=start+36e5;
+    const made=await backend.createDocument('Design review',{kind:'meeting',start,end});
+    assert.ok(made.id.startsWith('tana:event:'),'a meeting is an event');
+    const n=readNode(docs.get(made.id));
+    assert.deepEqual([n.type,n.origin,n.startTime,n.endTime,n.allDay],['event','tana',start,end,undefined],'its time is the one asked for, written at birth');
+    assert.deepEqual([n.attendees,n.organizer,docs.get(made.id).loro.getMap('attendees').toJSON()],[[],{},{}],'nobody is on it, so the calendar copy invites nobody');
+    assert.deepEqual(Object.keys(n.participants),[ME],'and only its maker can see it');
+    const plain=readNode(docs.get((await backend.createDocument('Standup',{kind:'meeting'})).id));
+    assert.equal(plain.endTime-plain.startTime,18e5,'without a time it keeps Tana\u2019s next half hour');
+    const before=created.length;
+    for(const [opts,why] of [[{kind:'meeting',start,end:start},/start before its end/],[{kind:'meeting',start:end,end:start},/start before its end/],[{kind:'meeting',start},/start before its end/],
+      [{kind:'meeting',start:String(start),end},/start before its end/],[{kind:'meeting',start:NaN,end},/start before its end/],[{kind:'meeting',start:start+0.5,end},/start before its end/],[{kind:'meeting',start:0,end},/start before its end/],
+      [{kind:'doc',start,end},/Only a meeting carries a time/],[{kind:'task',start,end},/Only a meeting carries a time/],[{kind:'chat',end},/Only a meeting carries a time/]])
+      await assert.rejects(backend.createDocument('Refused',opts),why,JSON.stringify(opts));
+    assert.equal(created.length,before,'a refused time creates nothing');
+    assert.equal(await backend.handlers.get('doc:create')(null,'Refused',{kind:'meeting',start:end,end:start}).then(()=>null,(e)=>e.message),'A meeting needs a start before its end','the renderer\u2019s channel refuses it the same way');
+    console.log('ok  "/" Meeting: a meeting made with the time chosen and nobody on it; a bad or misplaced time creates nothing');
+  }
   // Setting a document's type (Cmd+K "Set type"), by Tana's own two rules (their shared bundle, read 2026-09-20):
   // a type applies to documents or to meetings, and a type that lives in a space only goes on a document already in
   // that space — exactly that space, not a sub-space — while a type with no home space goes on anything.

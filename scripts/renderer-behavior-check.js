@@ -2778,6 +2778,148 @@ async function runSlashMenuCheck() {
   assert.deepEqual(plain(create.calls()), [['setText', 'doc', 'block', []], ['startCreation', 'custom', 'Project']],
     'a create choice clears the "/" and starts the ordinary creation flow');
 }
+// "/" Meeting (#755): the menu's Meeting row asks a name, then when, shows the exact slot, and makes one meeting that the
+// "/" row refers to. Nothing is made from an empty name or words that read as no time, and a press while one is being made
+// is the same meeting; a meeting that lands after its page was left leaves the row alone.
+function makeSlashMeetingHarness() {
+  const context = vm.createContext({ setTimeout });
+  vm.runInContext(`
+    Date.now = () => new Date(2026, 9, 5, 9, 10).getTime(); // a fixed clock: the next half hour is 9:30
+    const calls = [], pending = [];
+    const node = { id: 'block', kind: 'block', text: '/', segments: [{ text: '/' }] };
+    const item = { key: 'doc/block', docId: 'doc', node };
+    const items = new Map([['doc/block', item]]);
+    let slashCtx = { key: 'doc/block' }, palSeq = 0, palMode = 'slash', page = null, linkFails = false;
+    const palette = { hidden: false };
+    const openPage = (mode, placeholder, p, value = '') => { palSeq++; palMode = mode; palette.hidden = false; page = { mode, placeholder, value, ...p }; };
+    const togglePalette = (mode) => { palSeq++; palMode = mode; calls.push(['palette', mode]); };
+    const closePalette = () => { palette.hidden = true; calls.push(['close']); };
+    const renderPalette = () => {}, dropPending = () => {}, extra = new Map();
+    const textEl = () => ({}), readSegs = () => node.segments, plainOf = (segs) => segs.map((s) => s.text || '').join('');
+    const linkTo = async (ctx, mention) => { if (linkFails) { calls.push(['error', 'could not write the row']); return; } calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]); };
+    const showNote = (text, error, open) => calls.push(['note', text, open]), showError = (e) => calls.push(['error', String(e.message || e)]);
+    const tana = { createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => pending.push({ resolve, reject })); } };
+    const parseDay = (words) => (words === 'tomorrow' ? '2026-10-06' : null);
+    const meetingSpan = (start, end) => new Date(start).toString().slice(0, 21) + ' for ' + (end - start) / 6e4;
+    ${functionSource('slashTarget')}
+    ${functionSource('parseMeetingTime')}
+    ${sourceLine('let slashMeetingBusy')}
+    ${sourceLine('const SLASH_MEETING_LENGTH')}
+    ${functionSource('meetingFromSlash')}
+    ${functionSource('meetingName')}
+    ${functionSource('meetingWhen')}
+    ${functionSource('meetingHere')}
+    const rowsOf = (typed) => page.rows(String(typed).toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]);
+    const land = (n) => { const p = pending.shift(); p.resolve(n); return new Promise((r) => setTimeout(r, 0)); };
+    const fail = (e) => { const p = pending.shift(); p.reject(e); return new Promise((r) => setTimeout(r, 0)); };
+    Object.assign(globalThis, { start: () => meetingFromSlash({ kind: 'meeting', icon: 'meeting' }), page: () => page, rowsOf, calls: () => calls, land, fail, node, palette, setLinkFails: (v) => { linkFails = v; }, busy: () => slashMeetingBusy });
+  `, context);
+  return context;
+}
+async function runSlashMeetingCheck() {
+  // the "/" menu routes Meeting to its own pages, and leaves Task on its own
+  const menu = makeSlashHarness();
+  vm.runInContext("creationChoices.push({ id: 'meeting', kind: 'meeting', title: 'Meeting', icon: 'meeting', selectable: true }); globalThis.meetingFromSlash = (c) => calls.push(['meetingFromSlash', c.kind]);", menu);
+  assert.deepEqual(plain(menu.rows('meet').map((r) => [r.label, r.hint || ''])), [['Meeting', '']], '"/meet" finds the Meeting row');
+  menu.rows('meet')[0].run();
+  assert.deepEqual(plain(menu.calls()), [['meetingFromSlash', 'meeting']], 'Meeting asks for its name rather than drafting a page in the Library');
+
+  const h = makeSlashMeetingHarness();
+  h.start();
+  assert.deepEqual([h.page().mode, h.page().placeholder], ['slashMeeting', 'Name the new meeting\u2026'], 'Meeting asks for the meeting\u2019s name');
+  assert.deepEqual(plain(h.rowsOf('   ')), [['Type a name', '', true]], 'with no name there is nothing to make');
+  h.page().back();
+  assert.deepEqual(plain(h.calls()), [['palette', 'slash']], 'Escape on the name goes back to the "/" menu');
+  h.start();
+  const [next] = h.page().rows('', ' Design review ');
+  assert.deepEqual([next.label, next.keepOpen], ['Choose when for \u201CDesign review\u201D', true], 'a name moves on to when');
+  next.run();
+  assert.deepEqual([h.page().mode, h.page().placeholder], ['slashMeetingWhen', 'When? 14:00, tomorrow 9:30, fri 10:00-11:30'], 'the second page asks when');
+  assert.deepEqual(plain(h.rowsOf('')), [['Mon Oct 05 2026 09:30 for 30', 'Next half hour', false], ['In your calendar \u00B7 nobody is invited', '', true]],
+    'with nothing typed the next half hour is a row of its own, shown before it is chosen, and the page says nobody is invited');
+  assert.deepEqual(plain(h.rowsOf('tomorrow 14:00-15:00')), [['Tue Oct 06 2026 14:00 for 60', '\u21A9 Create', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'a typed time shows the exact slot');
+  for (const words of ['xyz', 'fri 25:00', '14:00-13:00']) assert.deepEqual(plain(h.rowsOf(words).filter((r) => !r[2])), [], '\u201C' + words + '\u201D reads as no time, so nothing can be pressed');
+  h.page().back();
+  assert.deepEqual([h.page().mode, h.page().value], ['slashMeeting', 'Design review'], 'Escape on when goes back to the name, kept');
+  h.page().rows('', 'Design review')[0].run();
+  const [make] = h.page().rows('', 'tomorrow 14:00-15:00');
+  make.run(); make.run();
+  assert.deepEqual(plain(h.rowsOf('tomorrow 14:00-15:00')), [['Creating \u201CDesign review\u201D\u2026', '', true]], 'the page says so while it is made, with nothing to press');
+  const start = new Date(2026, 9, 6, 14).getTime();
+  assert.deepEqual(plain(h.calls().filter((c) => c[0] === 'createDocument')), [['createDocument', 'Design review', { kind: 'meeting', start, end: start + 36e5 }]],
+    'two presses make one meeting, with the time shown and no one on it');
+  await h.land({ id: 'tana:event:m1', title: 'Design review', icon: 'meeting' });
+  assert.deepEqual(plain(h.calls().slice(-2)), [['close'], ['linkTo', 'doc/block', [], 0, 0, { label: 'Design review', uri: 'tana:event:m1', icon: 'meeting' }]],
+    'once it exists the palette closes and the "/" row becomes its reference');
+  assert.equal(h.busy(), false);
+
+  // a meeting that lands after its page was left: the row is left alone, the toast opens the meeting
+  const left = makeSlashMeetingHarness();
+  left.start(); left.page().rows('', 'Retro')[0].run(); left.page().rows('', '')[0].run();
+  left.page().back();
+  await left.land({ id: 'tana:event:m2', title: 'Retro', icon: 'meeting' });
+  assert.deepEqual(plain(left.calls().slice(-1)), [['note', '\u201CRetro\u201D created', 'tana:event:m2']], 'left before it landed: no reference, no closing what is open now; the toast opens it');
+  left.palette.hidden = true;
+
+  // made, but the row could not take its reference: said, and the next press makes a new meeting, once
+  const linkless = makeSlashMeetingHarness();
+  linkless.setLinkFails(true);
+  linkless.start(); linkless.page().rows('', 'Retro')[0].run(); linkless.page().rows('', '')[0].run();
+  await linkless.land({ id: 'tana:event:m3', title: 'Retro', icon: 'meeting' });
+  assert.deepEqual(plain(linkless.calls().slice(-1)), [['error', 'could not write the row']], 'a failed reference is reported');
+  linkless.setLinkFails(false);
+  linkless.start(); linkless.page().rows('', 'Retro')[0].run(); const again = linkless.page().rows('', '')[0]; again.run(); again.run();
+  assert.equal(linkless.calls().filter((c) => c[0] === 'createDocument').length, 2, 'a fresh try afterwards makes one more meeting, not two');
+
+  // refused by main: said, and the page offers the slot again
+  const refused = makeSlashMeetingHarness();
+  refused.start(); refused.page().rows('', 'Retro')[0].run(); refused.page().rows('', '')[0].run();
+  await refused.fail(new Error('A meeting needs a start before its end'));
+  assert.deepEqual(plain(refused.calls().slice(-1)), [['error', 'A meeting needs a start before its end']], 'a refusal is the red toast');
+  assert.equal(refused.rowsOf('')[0][2], false, 'and the slot can be pressed again');
+  assert.equal(refused.calls().some((c) => c[0] === 'linkTo' || c[0] === 'close'), false, 'nothing is written into the row');
+  console.log('ok  "/" Meeting: a name, then the exact slot to press, one meeting per press, referenced in its row; Back, stale and failed answers handled');
+}
+
+// New tab, New pane and New floating pane (⌘N, ⇧⌘N, ⌥⌘N, #756): each makes one new note and opens its page on it, with the
+// caret in it; a press while it is being made is the same note, and a note no page could open on is kept and offered.
+async function runNoteInPageCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [], pending = [], extra = new Map();
+    let pageAnswer = 'p3', demoMode = false;
+    const run = (fn) => Promise.resolve().then(fn).catch((e) => calls.push(['error', e.message]));
+    const showNote = (text, error, open) => calls.push(['note', text, open]);
+    const tana = {
+      createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => pending.push({ resolve, reject })); },
+      splitWindow: async (where, start) => { calls.push(['splitWindow', where, JSON.parse(start.place), start.view]); return pageAnswer; },
+    };
+    ${sourceLine('let openingNote')}
+    ${functionSource('openNoteIn')}
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+    ({ open: openNoteIn, calls: () => calls, tick: settle, demo: () => { demoMode = true; }, land: async (n) => { pending.shift().resolve(n); await settle(); await settle(); }, fail: async (e) => { pending.shift().reject(e); await settle(); await settle(); }, noPage: () => { pageAnswer = null; } });
+  `, { Promise, setTimeout, JSON });
+  api.open('right'); api.open('right'); api.open('tab');
+  await api.tick();
+  assert.deepEqual(plain(api.calls()), [['createDocument', 'New note', { kind: 'doc' }]], 'presses while it is made are the same note');
+  await api.land({ id: 'tana:text:n1', title: 'New note', icon: 'doc' });
+  assert.deepEqual(plain(api.calls().slice(1)), [['splitWindow', 'right', { docId: 'tana:text:n1', nodeId: null, title: 'New note', icon: 'doc', edit: true }, 'library']],
+    'the new page opens on the note, with the caret in it');
+  for (const where of ['tab', 'float']) { api.open(where); await api.tick(); await api.land({ id: 'tana:text:' + where, title: 'New note', icon: 'doc' }); }
+  assert.deepEqual(plain(api.calls().filter((c) => c[0] === 'splitWindow').map((c) => [c[1], c[2].docId])), [['right', 'tana:text:n1'], ['tab', 'tana:text:tab'], ['float', 'tana:text:float']],
+    'each key keeps its place for the page, each with a note of its own');
+  api.noPage(); api.open('tab'); await api.tick(); await api.land({ id: 'tana:text:n4', title: 'New note', icon: 'doc' });
+  assert.deepEqual(plain(api.calls().slice(-1)), [['note', 'New note created', 'tana:text:n4']], 'no page could open: the note is kept and the toast opens it');
+  api.open('tab'); await api.tick(); await api.fail(new Error('Demo mode is on: nothing is saved to Tana'));
+  assert.deepEqual(plain(api.calls().slice(-1)), [['error', 'Demo mode is on: nothing is saved to Tana']], 'a refused note opens no page');
+  api.open('tab'); await api.tick();
+  assert.equal(api.calls().filter((c) => c[0] === 'createDocument').length, 6, 'and the next press is a fresh try');
+  await api.land({ id: 'tana:text:n6', title: 'New note', icon: 'doc' });
+  api.demo(); api.open('right'); await api.tick(); await api.tick();
+  assert.deepEqual(plain(api.calls().slice(-1)), [['splitWindow', 'right', {}, 'library']], 'demo mode saves nothing: the page opens on the Library, as it did');
+  assert.equal(api.calls().filter((c) => c[0] === 'createDocument').length, 6, 'and no note is asked for');
+  console.log('ok  New tab, New pane and New floating pane each open on a new note of their own, one per press');
+}
+
 
 // A filter choice must stop covering the list it just filtered: single-choice rows close the menu, multi-select ticks stay.
 // ⌘F opens the filter field and puts the caret in it, whatever the caret was doing before. The render that shows the
@@ -7891,7 +8033,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
