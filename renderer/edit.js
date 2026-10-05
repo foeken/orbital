@@ -30,7 +30,11 @@ function flush(key) {
   item.node.text = text; item.node.segments = item.node.kind === 'document' ? undefined : segs;
   run(async () => {
     try { await (item.node.kind === 'document' ? tana.setTitle(item.docId, text, true) : tana.setText(item.docId, item.node.id, saveValue(segs), true)); }
-    catch (e) { if (item.node.kind === 'block') { await reload(item.docId); render(true); } throw e; }
+    catch (e) {
+      if (typeof holdNotesSave === 'function' && holdNotesSave(item, segs, e)) return; // a meeting's notes, shared under you: kept until the page says so
+      if (item.node.kind === 'block') { await reload(item.docId); render(true); }
+      throw e;
+    }
   });
 }
 function insertAtCaret(el, str) {

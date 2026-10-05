@@ -6070,7 +6070,7 @@ async function main() {
 
     // Opening a meeting writes nothing and asks for no document: no note, no change to the meeting itself.
     const evBefore = version(server.get(EV));
-    assert.deepEqual(plain(await call(EV)), { id: null, shared: false }, 'a meeting with no notes says so');
+    assert.deepEqual(plain(await call(EV)), { id: null }, 'a meeting with no notes says so');
     assert.deepEqual([created.length, version(server.get(EV))], [0, evBefore], 'and opening it created nothing');
     await assert.rejects(call('tana:text:' + ulid(), true, 'x'), /Not a meeting/);
 
@@ -6082,9 +6082,11 @@ async function main() {
     assert.match(first.id, /^tana:text:[0-9a-z]{26}$/);
     assert.notEqual(slot(EV, 0), slot(EV, 0, OTHER), 'and differs per person');
     assert.deepEqual([n.ownerUri, n.restricted, Object.keys(n.participants), n.participants[ME].role, notes.markOf(note), n[notes.MARK], n.orbitalPrivateNotesFor, first.owner], [undefined, true, [ME], 'admin', EV, undefined, undefined, ME], 'no owner, you alone, marked in Orbital\u2019s own root (ext:orbital:notes) and nothing added to Tana\u2019s data');
+    assert.deepEqual([plain(first.audience), note.loro.getMap(notes.MARK).get('confirmed')], [{ private: true, writable: true }, ME], 'said to be only yours, and marked confirmed private with its first words');
     assert.deepEqual([n.title, typeof n.createdAt], ['Private notes \u00b7 Synthetic weekly', 'number'], 'named for the meeting once confirmed');
     assert.deepEqual(lines(first.id), [R, 'First synthetic line'], 'the meeting first, then the first words');
     assert.deepEqual(readOutline(note)[0].segments, [{ text: R, marks: { link: linkOf(EV) } }], 'the meeting as a link to its page in Tana: a reference, and no edge into it');
+    assert.deepEqual(plain(first.reference), { id: readOutline(note)[0].id, text: R, link: linkOf(EV) }, 'the page is told that row exactly, to leave it out of the meeting’s own page (renderer/meetingnotes.js notesRows)');
     assert.ok(sent.some(([ch, id, info]) => ch === 'outline:changed' && id === EV && info.notes), 'other pages on the meeting hear of it');
 
     // Asked again, by an open or by more first words (a second pane), it is the same note.
@@ -6126,7 +6128,7 @@ async function main() {
     assert.deepEqual([notesFor(EV3).length, version(server.get(slot(EV3, 0)))], [1, seeded], 'no second note, and the second seed added nothing');
     assert.equal(await notes.resolveNotes(client, EV3, ME, { create: false }), null, 'an open finishes nothing');
     index(server.get(slot(EV3, 0))); indexing = true;
-    assert.equal(await notes.resolveNotes(client, EV3, ME, { create: true, org: ORGDOC, login: LOGIN, ...fast }), slot(EV3, 0), 'confirmed later: the same note');
+    assert.equal((await notes.resolveNotes(client, EV3, ME, { create: true, org: ORGDOC, login: LOGIN, ...fast })).id, slot(EV3, 0), 'confirmed later: the same note');
 
     // A place with no graph row whose document is there and slow to answer, made otherwise (another mark, shared): while
     // its bootstrap is out nothing is seeded into it; once it answers it is judged and left exactly as it was, and the
@@ -6140,7 +6142,7 @@ async function main() {
     await new Promise((r) => setImmediate(r));
     assert.deepEqual([version(odd), JSON.stringify(readNode(odd).participants)], [oddVersion, oddGrants], 'nothing seeded while it is asked');
     answer4();
-    assert.equal(await pending4, slot(EV4, 1), 'answered: not these notes, so the next place');
+    assert.equal((await pending4).id, slot(EV4, 1), 'answered: not these notes, so the next place');
     assert.deepEqual([version(odd), JSON.stringify(readNode(odd).participants), notes.markOf(odd)], [oddVersion, oddGrants, EV], 'and it untouched: version, access, mark');
     // The seed: the same bytes for the same you, meeting, place and organization, whatever the meeting is called or when;
     // its link is the app's own link to the meeting; anything malformed is refused, and without an organization nothing
@@ -6165,7 +6167,7 @@ async function main() {
     denied.add(slot(EV5, 1));
     const taken = [gone, put(slot(EV5, 2), 'Private notes', OTHER, markFor(EV5)), put(slot(EV5, 3), 'Private notes', ME, (l) => { markFor(EV5)(l); grant(OTHER)(l); })];
     const before5 = taken.map(version);
-    assert.deepEqual(plain(await call(EV5)), { id: null, shared: false });
+    assert.deepEqual(plain(await call(EV5)), { id: null });
     await assert.rejects(call(EV5, true, 'no place left'), /cannot make private notes for this meeting/, 'four places taken: refused, nothing made');
     assert.deepEqual(taken.map(version), before5, 'and nothing written to them, the deleted note included');
     const variants = [() => (l) => l.getMap('linkSharing').set('mode', 'view'), () => (l) => l.getMap('data').delete('restricted'), (ev) => (l) => l.getMap('data').set('ownerUri', ev),
@@ -6192,7 +6194,7 @@ async function main() {
     // Your note is there but cannot be checked just now (its owner chain does not answer): an open shows none, and the
     // first words wait instead of starting a second note; once it answers, it is the one used.
     chainDown = true;
-    assert.deepEqual(plain(await call(EV6)), { id: null, shared: false }, 'unverifiable: not used');
+    assert.deepEqual(plain(await call(EV6)), { id: null }, 'unverifiable: not used');
     const countBefore = created.length;
     await assert.rejects(call(EV6, true, 'typed while Tana is slow'), (e) => /could not confirm/.test(e.message), 'and no new note over it');
     assert.equal(created.length, countBefore);
@@ -6207,7 +6209,7 @@ async function main() {
     await assert.rejects(notes.resolveNotes(client, EV7, ME, { create: true, org: ORGDOC, login: LOGIN, ...fast }), (e) => e.lag === true);
     assert.equal(created.length, countPartial, 'nothing new');
     server.set(full.id, full); states.delete(full.id);
-    assert.equal(await notes.resolveNotes(client, EV7, ME, { create: true, org: ORGDOC, login: LOGIN, ...fast }), full.id, 'loaded: the same note');
+    assert.equal((await notes.resolveNotes(client, EV7, ME, { create: true, org: ORGDOC, login: LOGIN, ...fast })).id, full.id, 'loaded: the same note');
 
     // Two Macs, as two independent Loro documents of one id. The seed is the same on both, byte for byte, so it is one
     // seed to Loro: Mac B seeding before its copy has heard of Mac A's note (a bootstrap still out) adds no operation to
@@ -6228,26 +6230,83 @@ async function main() {
     assert.deepEqual([text(a2)[0], text(a2).slice(1).sort()], [R, ['from Mac A', 'from Mac B']], 'at once: one reference row, and both Macs\u2019 first words');
     assert.deepEqual([Object.keys(readNode(a2).participants), readNode(a2).restricted, notes.markOf(a2), readNode(a2).title === readNode(b2).title], [[ME], true, EVR, true], 'still yours alone, and one title');
 
-    // Shared after it was handed out: a participant, a public link, the restriction lifted or an owner set in Tana stops
-    // the next write at once — the live document is asked at every write, not only at the next open — and the page is told.
-    const writes = (id) => backend.handlers.get('block:insertAfter')({}, id, null, 'after sharing', null);
-    const shareIt = [grant(OTHER), (l) => l.getMap('linkSharing').set('mode', 'view'), (l) => l.getMap('data').delete('restricted'), (l) => l.getMap('data').set('ownerUri', EV)];
-    for (const [i, change] of shareIt.entries()) {
-      const evN = 'tana:event:' + ulid(); meeting(evN, 'Synthetic share ' + i);
-      const got = await call(evN, true, 'private words');
-      const d = server.get(got.id);
-      d.transact(change); index(d); // a remote change: Tana's own client shared it
-      sent.length = 0;
-      if (i === 0) for (const fn of listeners) fn(got.id);
-      if (i === 0) assert.ok(sent.some(([ch, id, info]) => ch === 'outline:changed' && id === evN && info.notes), 'the meeting page is told at once');
-      const kept = version(d);
-      await assert.rejects(writes(got.id), /no longer only yours/, 'a write after sharing is refused');
-      assert.match(backend.documents.refusedWrite(got.id) || '', /no longer only yours/, 'and an image is refused before it is uploaded (main/images.js)');
-      assert.equal(version(d), kept, 'and nothing was written');
-      assert.deepEqual(plain(await call(evN)), { id: null, shared: true }, 'the meeting no longer uses it, and says why');
-      const next = await call(evN, true, 'new private words');
-      assert.deepEqual([next.id, version(d)], [slot(evN, 1), kept], 'new words make new private notes at the next place');
-    }
+    // Tana answering a create as already shared (a grant there before it was ever confirmed private): not notes you shared.
+    // Never written to, by this ask or any retry, a restart or an open; the words go to new private notes at the next
+    // place. A createdAt someone else's client stamped on it is no proof either (main/meeting-notes.js confirmed).
+    const EVW = 'tana:event:' + ulid(); meeting(EVW, 'Synthetic widened');
+    indexing = false;
+    await assert.rejects(notes.resolveNotes(client, EVW, ME, { create: true, org: ORGDOC, login: LOGIN, ...fast }), (e) => e.lag === true);
+    const widened = server.get(slot(EVW, 0));
+    widened.transact(grant(OTHER)); widened.transact((l) => l.getMap('data').set('createdAt', 1)); index(widened); indexing = true;
+    const widenedVersion = version(widened);
+    const w1 = await call(EVW, true, 'words after widening');
+    notes.forget();
+    const w2 = await call(EVW, true, 'a retry');
+    assert.deepEqual([w1.id, w2.id, (await call(EVW)).id, plain(w2.audience).private], [slot(EVW, 1), slot(EVW, 1), slot(EVW, 1), true], 'new private notes at the next place, the same on every retry and open');
+    assert.deepEqual([version(widened), lines(widened.id), widened.loro.getMap(notes.MARK).get('confirmed')], [widenedVersion, [R], undefined], 'the widened one untouched: no words, no mark');
+    // Notes made before the confirmed mark existed (createdAt and a write by one of your machines, written with their
+    // first words) and shared since: still yours, still the editor.
+    const EVC = 'tana:event:' + ulid(); meeting(EVC, 'Synthetic legacy');
+    const legacy = new Document(slot(EVC, 0), { peerId: require('../sdk/sync').derivePeerId(LOGIN) });
+    legacy.transact(notes.seed(ME, EVC, 0, ORGDOC, LOGIN)); legacy.transact((l) => l.getMap('data').set('createdAt', 1)); notes.firstWords(legacy, 'older words'); legacy.transact(grant(OTHER));
+    server.set(legacy.id, legacy); creators.set(legacy.id, ME); index(legacy);
+    const old = await call(EVC);
+    assert.deepEqual([old.id, plain(old.audience).private], [legacy.id, false], 'an older note of yours, shared: used, and said to be shared');
+
+    // Shared by you in Tana once confirmed (the user's rule: shared notes stay the editor, and the page says so). The same
+    // document, its words kept; a write the moment it is shared is refused until a page has been told who sees it now —
+    // never a word under a stale "only you" — then writes go on; another Mac finds the same note, and none is made.
+    const writes = (id, words = 'after sharing') => backend.handlers.get('block:insertAfter')({}, id, null, words, null);
+    const EVS = 'tana:event:' + ulid(); meeting(EVS, 'Synthetic shared');
+    const mine = await call(EVS, true, 'private words'), sd = server.get(mine.id), made0 = created.length;
+    sd.transact(grant(OTHER)); index(sd);
+    sent.length = 0; for (const fn of listeners) fn(mine.id);
+    assert.ok(sent.some(([ch, id, info]) => ch === 'outline:changed' && id === EVS && info.notes), 'every page on the meeting is told at once');
+    const sharedVersion = version(sd);
+    await assert.rejects(writes(mine.id), /Who can see these notes just changed/, 'a write under the old "only you" is refused');
+    assert.match(backend.documents.refusedWrite(mine.id) || '', /Who can see these notes just changed/, 'an image too (main/images.js)');
+    assert.equal(version(sd), sharedVersion, 'and nothing was written');
+    const told = await call(EVS);
+    assert.deepEqual([told.id, told.audience.private, told.audience.scope, [...told.audience.people].sort(), told.audience.link], [mine.id, false, 'people', [ME, OTHER].sort(), false], 'the same notes, said to be shared with both of you');
+    await writes(mine.id);
+    assert.deepEqual([lines(mine.id).slice(1), created.length], [['private words', 'after sharing'], made0], 'then written to as before, nothing new made');
+    const mac2 = machine(); runtime(ME, mac2);
+    const there2 = await mac2.backend.handlers.get('meeting:privateNotes')({}, EVS, true, 'from another Mac');
+    assert.deepEqual([there2.id, there2.audience.private, created.length], [mine.id, false, made0], 'another Mac: the same shared notes, no second');
+    runtime(ME);
+    // a public link: said, and still written (already said to be shared)
+    sd.transact((l) => l.getMap('linkSharing').set('mode', 'view')); index(sd); for (const fn of listeners) fn(mine.id);
+    assert.equal((await call(EVS)).audience.link, true, 'anyone with the link, said');
+    // private again: only you once more
+    sd.transact((l) => { l.getMap('data').get('participants').delete(OTHER); l.getMap('linkSharing').delete('mode'); }); index(sd); for (const fn of listeners) fn(mine.id);
+    assert.deepEqual(plain((await call(EVS)).audience), { private: true, writable: true }, 'unshared: only you again');
+    // your own grant made view-only, still you alone: only you, and read only; nothing written
+    sd.transact((l) => l.getMap('data').get('participants').get(ME).set('role', 'viewer')); index(sd); for (const fn of listeners) fn(mine.id);
+    const viewOnly = await call(EVS), roVersion = version(sd);
+    assert.deepEqual([plain(viewOnly.audience), viewOnly.node.editable], [{ private: true, writable: false }, false], 'only you, read only');
+    await assert.rejects(writes(mine.id), /read-only|read these notes/);
+    assert.match(backend.documents.refusedWrite(mine.id) || '', /read these notes/, 'an image refused too');
+    assert.equal(version(sd), roVersion);
+    // your grant gone and someone else's in its place: shared, and not yours to write
+    sd.transact((l) => { l.getMap('data').get('participants').delete(ME); grant(OTHER)(l); }); index(sd); for (const fn of listeners) fn(mine.id);
+    await assert.rejects(writes(mine.id), /Who can see these notes just changed|read these notes/);
+    const lost = await call(EVS);
+    assert.deepEqual([lost.id, lost.audience.private, lost.audience.writable], [mine.id, false, false]);
+    await assert.rejects(writes(mine.id), /read these notes/, 'and refused as read only once said');
+    // a restriction lifted: shared too
+    const EVO = 'tana:event:' + ulid(); meeting(EVO, 'Synthetic opened');
+    const opened = await call(EVO, true, 'private words'), od = server.get(opened.id);
+    od.transact((l) => l.getMap('data').delete('restricted')); index(od); for (const fn of listeners) fn(opened.id);
+    const openedNow = await call(EVO);
+    assert.deepEqual([openedNow.id, openedNow.audience.private], [opened.id, false]);
+    // moved under an owner (the meeting) in Tana: not this meeting's notes any more, never written, and new words make new
+    // private notes at the next place
+    const EVM = 'tana:event:' + ulid(); meeting(EVM, 'Synthetic owned');
+    const owned = await call(EVM, true, 'private words'), md = server.get(owned.id);
+    md.transact((l) => l.getMap('data').set('ownerUri', EVM)); index(md); for (const fn of listeners) fn(owned.id);
+    const ownedVersion = version(md);
+    await assert.rejects(writes(owned.id), /not this meeting/);
+    assert.deepEqual([plain(await call(EVM)), (await call(EVM, true, 'new words')).id, version(md)], [{ id: null }, slot(EVM, 1), ownedVersion]);
 
     // Deleted in Tana after it was handed out: refused at the next write as deleted, not said to be shared, and new words
     // make new notes at the next place.
@@ -6257,13 +6316,13 @@ async function main() {
     for (const fn of listeners) fn(del.id);
     await assert.rejects(writes(del.id), /deleted/, 'a write after the delete is refused');
     assert.match(backend.documents.refusedWrite(del.id) || '', /deleted in Tana/, 'an image too, before it is uploaded');
-    assert.deepEqual(plain(await call(EVDEL)), { id: null, shared: false }, 'not said to be shared');
+    assert.deepEqual(plain(await call(EVDEL)), { id: null }, 'none found');
     assert.equal((await call(EVDEL, true, 'after the delete')).id, slot(EVDEL, 1));
     // Another account: it never sees your notes as its own, never writes to them, and an answer asked for one account
     // is not handed to the next.
     runtime(OTHER);
     assert.equal((await call(EV2)).id, null, 'your notes are not theirs');
-    await assert.rejects(writes(one.id), /no longer only yours/, 'nor written by them');
+    await assert.rejects(writes(one.id), /another account|read-only/, 'nor written by them');
     const theirsMade = await call(EV2, true, 'their own words');
     assert.deepEqual([theirsMade.id, Object.keys(readNode(server.get(theirsMade.id)).participants)], [slot(EV2, 0, OTHER), [OTHER]], 'they get notes of their own');
     runtime(ME);
@@ -6274,7 +6333,7 @@ async function main() {
     open(); gate = null;
     await assert.rejects(asked, /account changed|not connected/i, 'the answer is dropped');
     runtime(ME);
-    console.log('ok  meeting private notes (lazy, unowned and private, one id and one seed per person and meeting, two Macs keep every word, shared refused, per account)');
+    console.log('ok  meeting notes (lazy, made unowned and private, one id and one seed per person and meeting, two Macs keep every word, shared by you kept and said, never-confirmed refused, per account)');
   }
   {
     const backend = mainHelpers(), cache = require('../db');

@@ -1120,7 +1120,8 @@ function releaseOnDemand(held) { // returns the ids it let go of
 // Every document a step can still undo, as one set per sweep: asked once per subscription, a copy of both stacks per
 // question cost 10 ms a refresh at 300 subscriptions and 5,000 steps.
 // Refusals a module adds for writes it owns the rule of, checked on the live document at the moment of each write:
-// main/meeting-notes.js refuses a meeting's private notes once they are not private any more. A reason, or nothing.
+// main/meeting-notes.js refuses a meeting's notes when they are no longer that meeting's, when you can no longer write
+// them, or while a page still says "only you" over notes just shared. A reason, or nothing.
 const writeGuards = [];
 const refusal = (doc) => { for (const guard of writeGuards) { const why = guard(doc); if (why) return why; } return null; };
 // the same, by id, for a write that starts elsewhere (an image is uploaded and made before it is inserted): nothing is

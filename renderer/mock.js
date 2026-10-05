@@ -320,17 +320,31 @@ function mockApi() {
   // has yours already, both with nothing of their own to show (an event's content is empty in Tana). globalThis.__notes is
   // how a flow steers them: fail (that many creates refused), failKept (that many answered "what you typed is kept", as
   // while Tana has not said yet whether they exist, which the page tries again by itself), delay (ms before each
-  // answer), share(eventId) (made shared in Tana: no longer used, and no longer written), asked and made (counts).
-  const myId = members.find((m) => m.me).id, notesOf = { mockmeeting5: 'tana:text:mocknotes5' }, notesShared = new Set();
+  // answer), share(eventId, audience) (you shared them in Tana: still the editor, said to be shared, and their writes refused
+  // until the page has asked who sees them now, as main does), unshare(eventId), readOnly(eventId) (your grant made
+  // view-only in Tana), asked and made (counts).
+  const myId = members.find((m) => m.me).id, notesOf = { mockmeeting5: 'tana:text:mocknotes5' }, notesAudience = new Map(), notesStale = new Set();
   const notesDoc = (id, title) => { created[id] = { id, title, text: title, kind: 'document', icon: 'doc', editable: true, hasChildren: true, tags: [{ label: 'doc', color: 'grey' }] }; };
   content.mockmeeting1 = []; content.mockmeeting3 = []; content.mockmeeting4 = []; content.mockmeeting5 = [];
   // 1-1 with Sam has a write-up, shared as the meeting is (summaryUri below): a link over its notes, never their place
   notesDoc('tana:text:mockwriteup4', 'The one where the roadmap got shorter'); content['tana:text:mockwriteup4'] = [block('A synthetic summary everyone in the meeting can read.')];
   notesDoc('tana:text:mocknotes5', 'Private notes · Offsite'); content['tana:text:mocknotes5'] = [block('Bring the synthetic agenda')];
   const notesChanged = (eventId) => setTimeout(() => changed.forEach((cb) => cb(eventId, { notes: true })), 0);
-  globalThis.__notes = { fail: 0, failKept: 0, delay: 0, asked: 0, made: 0, share: (eventId) => { notesShared.add(notesOf[eventId]); notesChanged(eventId); } };
+  const notesSet = (eventId, audience, readOnly) => {
+    const id = notesOf[eventId];
+    if (audience) notesAudience.set(id, audience); else notesAudience.delete(id);
+    if (audience && !audience.private) notesStale.add(id);
+    if (readOnly !== undefined) created[id].editable = !readOnly;
+    notesChanged(eventId);
+  };
+  globalThis.__notes = { fail: 0, failKept: 0, delay: 0, asked: 0, made: 0,
+    share: (eventId, audience = {}) => notesSet(eventId, { private: false, scope: 'people', people: [myId, members[1].id], peopleCount: 2, link: false, writable: true, ...audience }),
+    unshare: (eventId) => notesSet(eventId, null, false),
+    release: (eventId) => notesStale.delete(notesOf[eventId]), // what another pane's ask does: main has told a page who sees them
+    readOnly: (eventId) => notesSet(eventId, { ...(notesAudience.get(notesOf[eventId]) || {}), writable: false }, true) };
   // as main writes them (main/meeting-notes.js seed and firstWords): a new note starts with a link to its meeting's page
-  const firstWords = (id, text, eventId) => { const rows = content[id], only = rows.length === 1 && !rows[0].text ? rows[0] : null; if (only) { const title = 'Open the meeting in Tana'; Object.assign(only, { text: title, segments: [{ text: title, marks: { link: 'https://home.tana.inc/o/mock/e/' + eventId } }] }); } const n = block(text); rows.push(n); return n.id; };
+  const notesRef = {}; // note id -> its seed's first row, as main/meeting-notes.js referenceOf names it
+  const firstWords = (id, text, eventId) => { const rows = content[id], only = rows.length === 1 && !rows[0].text ? rows[0] : null; if (only) { const title = 'Open the meeting in Tana', link = 'https://home.tana.inc/o/mock/e/' + eventId; Object.assign(only, { text: title, segments: [{ text: title, marks: { link } }] }); notesRef[id] = { id: only.id, text: title, link }; } const n = block(text); rows.push(n); return n.id; };
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
   const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me, ...(d.start ? { start: d.start, end: d.end } : {}), ...(d.meeting ? { meeting: d.meeting } : {}), ...(d.fields ? { fields: d.fields } : {}) });
   // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers).
@@ -345,7 +359,10 @@ function mockApi() {
   };
   const snapshot = () => structuredClone({ docs: Object.fromEntries(all.map((d) => [d.id, { text: d.text, done: d.done }])), content });
   const restore = (s) => { for (const d of all) if (s.docs[d.id]) Object.assign(d, s.docs[d.id]); Object.assign(content, s.content); };
-  const mut = (docId, fn) => { if (notesShared.has(docId)) throw new Error('These notes are no longer only yours, so Orbital stopped writing to them here'); undoStack.push({ docId, snap: snapshot() }); redoStack.length = 0; return fn(); };
+  const mut = (docId, fn) => {
+    if (notesStale.has(docId)) throw new Error('Who can see these notes just changed in Tana: the line over them says who now');
+    if (created[docId] && created[docId].editable === false) throw new Error('You can read these notes in Tana but not change them');
+    undoStack.push({ docId, snap: snapshot() }); redoStack.length = 0; return fn(); };
   const step = (docId, op) => { undoStack.push({ docId, op }); redoStack.length = 0; };
   const history = async (from, to) => {
     const e = from.pop(); if (!e) return null;
@@ -427,8 +444,7 @@ function mockApi() {
       if (!meetingEdits[eventId]) throw new Error('Not a meeting');
       if (globalThis.__notes.delay) await new Promise((r) => setTimeout(r, globalThis.__notes.delay));
       let id = notesOf[eventId];
-      if (id && notesShared.has(id)) { if (!create) return { id: null, shared: true }; id = null; }
-      if (!id && !create) return { id: null, shared: false };
+      if (!id && !create) return { id: null };
       if (!id) {
         if (globalThis.__notes.fail > 0) { globalThis.__notes.fail--; throw new Error('Tana refused these notes (mock)'); }
         if (globalThis.__notes.failKept > 0) { globalThis.__notes.failKept--; throw new Error('Tana has not said yet whether your private notes exist; what you typed is kept'); }
@@ -438,7 +454,8 @@ function mockApi() {
       }
       const blockId = create && first ? firstWords(id, first, eventId) : undefined;
       if (blockId) emit(id);
-      return structuredClone({ id, node: created[id], owner: myId, blockId });
+      notesStale.delete(id); // the page has been told who sees them now
+      return structuredClone({ id, node: created[id], owner: myId, blockId, audience: notesAudience.get(id) || { private: true }, ...(notesRef[id] ? { reference: notesRef[id] } : {}) });
     },
     // a meeting's time, place and people (main/meetings.js): every mock meeting is one the mock user organises
     meetingInfo: async (docId) => {

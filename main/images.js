@@ -61,7 +61,7 @@ async function loadImage(uri) {
 const uploading = new Map(); // uploadId -> AbortController
 async function insertImage(docId, nodeId, { bytes, filename, mimeType }, uploadId) {
   if (!S.session) throw new Error(SIGNED_OUT);
-  const refused = refusedWrite(docId); // a meeting's notes shared since (main/meeting-notes.js): no image is made under them either
+  const refused = refusedWrite(docId); // a meeting's notes refused a write (main/meeting-notes.js writeGuards): no image is made under them either
   if (refused) throw new Error(refused);
   const ownerUri = String(docId).split('|')[0];
   const ctrl = new AbortController();

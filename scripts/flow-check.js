@@ -651,6 +651,8 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   await p.waitFor('document.querySelector(".notes-head .notes-writeup")', 'the line over the notes, with the write-up');
   assert.match(await p.js('document.querySelector(".notes-head").textContent'), /only you can see them/, 'the notes say who sees them');
   assert.deepEqual([await p.js('zoom.docId'), await p.js('__notes.made')], ['mockmeeting4', 0], 'the meeting is the page, and opening it made nothing');
+  // the row the notes start with, naming the meeting, is never drawn on the meeting's own page, not even for a moment
+  await p.js('window.__refSeen = false; new MutationObserver(() => { if ([...document.querySelectorAll("#outline .node .text")].some((e) => e.textContent === "Open the meeting in Tana")) window.__refSeen = true; }).observe(outline, { subtree: true, childList: true, characterData: true }); 1');
   await typeIn('Synthetic first thought');
   await p.waitFor('__notes.made === 1 && meetingNotes.get("mockmeeting4")?.id', 'the notes made');
   await p.js('flushAll()'); await settle(p, 500);
@@ -663,7 +665,18 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   // the write-up opens on its own, and Back is the meeting with its notes
   await p.js('document.querySelector(".notes-writeup").click()'); await at(p, 'tana:text:mockwriteup4');
   await p.key('⌘['); await at(p, 'mockmeeting4'); await settle(p, 500);
-  assert.deepEqual(await p.js('__screen()'), ['Open the meeting in Tana', 'Synthetic first thought', 'Synthetic second thought'], 'reopened: the whole note, its link row too');
+  assert.deepEqual(await p.js('__screen()'), ['Synthetic first thought', 'Synthetic second thought'], 'reopened: your words, and no row naming the meeting you are on');
+  assert.equal(await p.js('window.__refSeen'), false, 'the meeting’s row never appeared on its page');
+  // the notes on their own (as in Tana): the row that names the meeting is there, first
+  await open(notes);
+  assert.deepEqual(await p.js('__screen()'), ['Open the meeting in Tana', 'Synthetic first thought', 'Synthetic second thought'], 'on their own, the notes name their meeting');
+  // that row changed by you is yours: shown on the meeting's page too
+  await p.js('tana.setText(' + J(notes) + ', meetingNotes.get("mockmeeting4").reference.id, [{ text: "Open the meeting in Tana" }])');
+  await open('mockmeeting4');
+  assert.deepEqual(await p.js('__screen()'), ['Open the meeting in Tana', 'Synthetic first thought', 'Synthetic second thought'], 'a row you changed shows');
+  await p.js('tana.setText(' + J(notes) + ', meetingNotes.get("mockmeeting4").reference.id, [{ text: "Open the meeting in Tana", marks: { link: meetingNotes.get("mockmeeting4").reference.link } }])');
+  await open('mockmeeting4');
+  assert.deepEqual(await p.js('__screen()'), ['Synthetic first thought', 'Synthetic second thought'], 'as it was written: hidden again');
   // Offsite: your notes already there are its editor, used as they are
   await open('mockmeeting5');
   await p.waitFor(T('Bring the synthetic agenda'), 'your notes on Offsite');
@@ -692,16 +705,43 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   await typeIn(' too');
   await p.waitFor('meetingNotes.get("mockmeeting3")?.id', 'Platform Guild\u2019s notes, made by the retries', 15000); await p.js('flushAll()'); await settle(p, 500);
   assert.deepEqual([await p.js('__notes.failKept'), await p.js('__saved(' + J(await notesOf('mockmeeting3')) + ')')], [0, ['Open the meeting in Tana', 'Alpha too']]);
-  // shared in Tana: no longer the editor, said so, never written to again; new words start new private notes
+  // Shared by you in Tana: still the editor, the same notes, said so, every word typed meanwhile kept and the caret where it
+  // was. This page's answer comes late, as a second pane's might; the line says it is checking — never "only you" — and
+  // when another page's ask releases the writes (main holds them per process, not per pane), they go on under "Checking".
   await open('mockmeeting4');
-  const before = await p.js('__saved(' + J(notes) + ')');
-  await p.js('__notes.share("mockmeeting4"); 1');
-  await p.waitFor('/shared in Tana/.test(document.querySelector(".notes-head")?.textContent || "")', 'the line says they were shared');
-  assert.ok(!(await p.js('__screen()')).includes('Synthetic first thought'), 'shared notes are not the editor any more');
-  await typeIn('Fresh private words');
-  await p.waitFor('__notes.made === 4', 'new private notes'); await p.js('flushAll()'); await settle(p, 400);
-  assert.deepEqual(await p.js('__saved(' + J(notes) + ')'), before, 'the shared notes were not written to');
-  assert.notEqual(await notesOf('mockmeeting4'), notes);
+  const head = () => p.js('document.querySelector(".notes-head")?.textContent || ""');
+  const typeAtEnd = async (words) => { await p.js('(() => { const el = ' + T('Synthetic second thought') + '; el.focus(); placeCaret(keyOfEl(el), el.textContent.length); return 1; })()'); await p.type(words); };
+  const madeBefore = await p.js('__notes.made');
+  await typeAtEnd(' and more');
+  await p.js('__notes.delay = 1500; __notes.share("mockmeeting4"); 1');
+  await p.waitFor('/Checking/.test(document.querySelector(".notes-head")?.textContent || "")', 'the line checking at once');
+  assert.doesNotMatch(await head(), /only you/, 'no "only you" while it is checked');
+  await p.js('flushAll()'); await settle(p, 200);
+  assert.ok(!(await p.js('__saved(' + J(notes) + ')')).includes('Synthetic second thought and more'), 'held: nothing written under the old line');
+  await p.js('__notes.release("mockmeeting4"); 1'); // another pane was told who sees them
+  await p.type(' still'); await p.js('flushAll()'); await settle(p, 200);
+  assert.match(await head(), /Checking/, 'written while this line says checking, never only you');
+  await p.waitFor('/Shared notes/.test(document.querySelector(".notes-head")?.textContent || "")', 'the line says shared', 5000);
+  await p.js('flushAll()'); await settle(p, 400);
+  assert.match(await head(), /Shared notes\s*· visible to/, 'shared, and with whom');
+  assert.deepEqual([await p.js('document.querySelectorAll(".notes-head .face").length'), await p.js('!!document.querySelector(".notes-head .ticon[aria-label=\\"Visible only to you\\"]")')], [2, false], 'two faces, and no lock');
+  assert.deepEqual([(await p.js('__saved(' + J(notes) + ')')).at(-1), await notesOf('mockmeeting4'), await p.js('__notes.made')], ['Synthetic second thought and more still', notes, madeBefore], 'every word in the same notes, none made');
+  assert.equal(await p.js('document.activeElement === ' + T('Synthetic second thought')), true, 'the caret stayed in the row');
+  await p.js('__notes.delay = 0; 1');
+  // reopened: the same shared notes
+  await open('mockmeeting3'); await open('mockmeeting4');
+  assert.deepEqual([await notesOf('mockmeeting4'), await p.js('__notes.made')], [notes, madeBefore]);
+  assert.match(await head(), /Shared notes/);
+  // a public link, then everyone, then read only, then private again
+  await p.js('__notes.share("mockmeeting4", { link: true }); 1');
+  await p.waitFor('/anyone with the link/.test(document.querySelector(".notes-head")?.textContent || "")', 'the link said');
+  await p.js('__notes.share("mockmeeting4", { scope: "everyone", people: [], peopleCount: 0 }); 1');
+  await p.waitFor('/everyone in your organization/.test(document.querySelector(".notes-head")?.textContent || "")', 'everyone said');
+  await p.js('__notes.readOnly("mockmeeting4"); 1');
+  await p.waitFor('/read only/.test(document.querySelector(".notes-head")?.textContent || "")', 'read only said');
+  await p.waitFor('!(' + T('Synthetic second thought') + ').isContentEditable', 'and the rows read only');
+  await p.js('__notes.unshare("mockmeeting4"); 1');
+  await p.waitFor('/only you can see them/.test(document.querySelector(".notes-head")?.textContent || "") && (' + T('Synthetic second thought') + ').isContentEditable', 'only you again, and writable');
 });
 
 // 18. A view (docs/VIEWS.md): the Library grouped, sorted and filtered from Cmd+K and ⌘F, then saved as a search that

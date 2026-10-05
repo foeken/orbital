@@ -550,7 +550,7 @@ commands.privatenotes = async () => {
     return { owned: owned.length, edges: edges.length, mentionsNotes: owned.some((x) => mine.includes(x.id)) || edges.some((e) => mine.includes(e.fromNodeId) || mine.includes(e.toNodeId)) };
   };
   // as the app does: asked again while Tana has not confirmed
-  const make = async () => { for (const t = Date.now(); ; await sleep(2000)) { try { return await notes.resolveNotes(client, eventId, me.userUri, { create: true, org: me.orgDocUri, login: me.userExternalId }); } catch (e) { if (!e.lag || Date.now() - t > 60000) throw e; } } };
+  const make = async () => { for (const t = Date.now(); ; await sleep(2000)) { try { return (await notes.resolveNotes(client, eventId, me.userUri, { create: true, org: me.orgDocUri, login: me.userExternalId })).id; } catch (e) { if (!e.lag || Date.now() - t > 60000) throw e; } } };
   try {
     await sleep(3000);
     const opened = await notes.resolveNotes(client, eventId, me.userUri, { create: false });
@@ -558,9 +558,9 @@ commands.privatenotes = async () => {
     const t0 = Date.now();
     noteId = await make();
     const confirmedMs = Date.now() - t0;
-    const again = await notes.resolveNotes(client, eventId, me.userUri, { create: true, org: me.orgDocUri, login: me.userExternalId });
+    const again = (await notes.resolveNotes(client, eventId, me.userUri, { create: true, org: me.orgDocUri, login: me.userExternalId })).id;
     const doc = client.sync.getDocument(noteId);
-    notes.settle(doc, 'Orbital scratch meeting (delete me)');
+    notes.settle(doc, 'Orbital scratch meeting (delete me)', eventId, me.userUri);
     const block = notes.firstWords(doc, 'Synthetic private line');
     await client.sync.flushed(noteId);
     const chain = await client.graph.getOwnerChain(noteId);
@@ -583,19 +583,19 @@ commands.privatenotes = async () => {
     const cold = await client.sync.subscribe(noteId);
     const n = readNode(cold), coldPrivate = notes.docPrivate(cold, eventId, me.userUri), coldRows = readOutline(cold);
     const race = await client.sync.subscribe(raceId), raceRows = readOutline(race).map((b) => b.text), racePrivate = notes.docPrivate(race, eventId, me.userUri);
-    const reopened = await notes.resolveNotes(client, eventId, me.userUri, { create: false });
+    const reopened = (await notes.resolveNotes(client, eventId, me.userUri, { create: false, login: me.userExternalId }))?.id ?? null;
     // deleted in Tana, both notes: once Tana's own copy of each says so (read back, at most 30 s), an open finds none
     // and the next words go to place 1, the deleted notes untouched
     for (const id of [noteId, raceId]) await client.sync.softDelete(id);
     const gone = async (id) => readNode(await client.sync.subscribe(id)).deletedAt > 0;
     for (const t = Date.now(); !((await gone(noteId)) && (await gone(raceId))); await sleep(500)) if (Date.now() - t > 30000) throw new Error('Tana did not report the deletes within 30 s');
-    const afterDelete = await notes.resolveNotes(client, eventId, me.userUri, { create: false });
+    const afterDelete = (await notes.resolveNotes(client, eventId, me.userUri, { create: false, login: me.userExternalId }))?.id ?? null;
     nextId = await make();
     const place = (id) => (id ? [0, 1, 2, 3].find((k) => id === notes.slotId(me.userUri, eventId, k)) ?? 'other' : null);
     out({ openedWritesNothing: opened === null && !before.owned, confirmedMs, sameOnSecondAsk: again === noteId, graph,
       chain: (chain.entries || []).slice(0, 3).map((e) => ({ kind: kind(e.uri), restricted: e.restricted, accessible: e.accessible })), effectivelyRestricted: chain.effectivelyRestricted,
       meetingGraph: { before, after },
-      freshRead: { type: n.type, title: n.title, owner: kind(n.ownerUri), marked: notes.markOf(cold) === eventId, dataKeys: Object.keys(n).filter((k) => /orbital/i.test(k)), restricted: n.restricted, grants: Object.keys(n.participants || {}).map((u) => u === me.userUri ? 'me' : 'other'), linkMode: cold.loro.getMap('linkSharing').get('mode') ?? null, docPrivate: coldPrivate, rows: coldRows.map((b) => b.text), referenceLinksToMeeting: coldRows[0]?.segments?.[0]?.marks?.link === link },
+      freshRead: { type: n.type, title: n.title, owner: kind(n.ownerUri), marked: notes.markOf(cold) === eventId, confirmedByMe: cold.loro.getMap(notes.MARK).get('confirmed') === me.userUri, dataKeys: Object.keys(n).filter((k) => /orbital/i.test(k)), restricted: n.restricted, grants: Object.keys(n.participants || {}).map((u) => u === me.userUri ? 'me' : 'other'), linkMode: cold.loro.getMap('linkSharing').get('mode') ?? null, docPrivate: coldPrivate, rows: coldRows.map((b) => b.text), referenceLinksToMeeting: coldRows[0]?.segments?.[0]?.marks?.link === link },
       twoMachines: { rows: raceRows, bothKept: raceRows.includes('Synthetic words from machine A') && raceRows.includes('Synthetic words from machine B'), references: raceRows.filter((t) => t === notes.REFERENCE).length, private: racePrivate },
       atSlot0: noteId === notes.slotId(me.userUri, eventId, 0), foundAfterReconnect: reopened === noteId, afterDeleteOpenPlace: place(afterDelete), nextPlace: place(nextId), block: !!block });
     // every claim the docs make of this run, held here: the command fails when one does not
@@ -606,7 +606,7 @@ commands.privatenotes = async () => {
     assert.deepEqual([graph.owner, graph.restricted, graph.grants.length, graph.grants[0].me, graph.grants[0].role, graph.createdByMe, graph.linkSharing, graph.state], [null, true, 1, true, 'admin', true, null, null], 'Tana\'s row: yours alone, no owner, no link');
     assert.deepEqual([chain.entries?.[0]?.uri, chain.entries?.[0]?.restricted, chain.entries?.length], [noteId, true, 1], 'the note is its own boundary');
     assert.equal(after.mentionsNotes, false, 'no edge of the meeting touches a note');
-    assert.ok(coldPrivate && notes.markOf(cold) === eventId && coldRows[0]?.segments?.[0]?.marks?.link === link, 'read back private, marked, with the reference');
+    assert.ok(coldPrivate && notes.markOf(cold) === eventId && cold.loro.getMap(notes.MARK).get('confirmed') === me.userUri && coldRows[0]?.segments?.[0]?.marks?.link === link, 'read back private, marked and marked confirmed with its first words, with the reference');
     assert.deepEqual([raceRows.includes('Synthetic words from machine A'), raceRows.includes('Synthetic words from machine B'), raceRows.filter((t) => t === notes.REFERENCE).length, racePrivate], [true, true, 1, true], 'two machines at once: every word, one reference row, private');
     assert.equal(reopened, noteId, 'found again by a connection that remembered nothing');
     assert.deepEqual([place(afterDelete), place(nextId)], [null, 1], 'deleted: none found, and the next words at place 1');

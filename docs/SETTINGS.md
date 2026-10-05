@@ -72,7 +72,7 @@ is created and filled from this machine. Restoring the old one from the trash ma
 launch goes back to it.
 
 The same namespace marks Orbital's other documents in Tana: a meeting's private notes carry root `ext:orbital:notes` with
-key `meeting` (main/meeting-notes.js, docs/MEETINGS.md Private notes); their ids are derived from you and the
+key `meeting` and, from their first words, `confirmed` (main/meeting-notes.js, docs/MEETINGS.md Private notes); their ids are derived from you and the
 meeting, so nothing about them is kept in the settings.
 
 Which keys are synced is one list, `SYNCED` in main/settings.js: every `pref:` key and the named ones above. A key

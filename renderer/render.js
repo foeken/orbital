@@ -404,6 +404,7 @@ function renderOutline() {
     const body = parent.node.draft ? parent : notesBody(parent);
     if (body !== parent) ensureLoaded(body);
     list = parent.node.draft ? [] : childrenOf(body) || [];
+    if (body !== parent) list = notesRows(parent, list); // without the row that names the meeting you are on
     // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page
     // filters: an outline's rows are content you are editing, not a result set you are searching through.
     let groups = null, row = (n) => childEl(n, body), searchRest = 0;

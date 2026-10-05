@@ -462,16 +462,18 @@ Cmd+K leads with a Selection group for it (§8).
   Private notes). An event has no content of its own, so a meeting page stays the meeting's — title, Visible to,
   Attendees, sidebar, ⌘K, Back and Forward — and the rows under it are the whole outline of a document only you can see (no owner and
   no edge into the meeting; found by its id; its first row "Open the meeting in Tana", a link to the meeting's page, so
-  the reference shows in Tana too; no pin on the meeting, which its people would see): every row's `docId` is that document, so every edit, Enter, "/" and paste is an edit of it. A
-  grey line over the rows says so ("Your notes · only you can see them", the lock of Visible to), with the meeting's
+  the reference shows in Tana too, and is left out of the meeting's own page while it is exactly as written; no pin on the meeting, which its people would see): every row's `docId` is that document, so every edit, Enter, "/" and paste is an edit of it. A
+  grey line over the rows says who sees them ("Your notes · only you can see them", the lock of Visible to; once you
+  shared them in Tana, "Shared notes" and the faces, everyone, anyone with the link, or read only), with the meeting's
   write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js), shared with whoever sees the meeting, as a link on it: the
   meeting no longer forwards there (`followSummary` stands down wherever `api.meetingNotes` exists). Opening makes
   nothing; an empty page has one draft row, and its first character makes the notes (`materialiseNotes`), with the
   words written once Tana has confirmed them private. Until then, and when that fails, the words stay in that meeting's
   own row (one per meeting, `notesDrafts`), the error is said once, and the page tries again by itself every few
   seconds while the row holds words, as typing on does; an answer landing after you moved on changes only
-  its own meeting. Notes shared in Tana since are not the editor any more and the line says so; new words start new
-  private notes. A meeting that does have content of its own (the mock's) keeps showing it. In demo mode notes are found,
+  its own meeting. Notes you shared in Tana stay the editor and the line says so at once, in every pane ("Checking…"
+  until it knows); words typed as they are shared are kept and saved once it does. Notes Tana answered as shared before
+  they were ever private are not used, and new words start new private notes. A meeting that does have content of its own (the mock's) keeps showing it. In demo mode notes are found,
   never made.
 - **A canvas opens in a window of its own** (issue #611). A canvas is a tldraw board with no outline, and tldraw needs a
   licence Orbital does not have, so `openDoc` and `zoomTo` hand a `tana:canvas:` id to main (`api.openCanvas`,
