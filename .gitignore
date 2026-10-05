@@ -13,3 +13,6 @@ tana-auth.json
 
 # Tana's web client builds, logged by scripts/tana-log.js
 .tana-log/
+
+# the iPhone build output of npm run phones, kept in the checkout so it goes with it
+ios/.derived/

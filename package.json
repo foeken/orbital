@@ -22,7 +22,8 @@
     "package": "electron-packager . 'Orbital' --platform=darwin --arch=arm64 --icon=build/icon.icns --out=dist --overwrite --ignore='^/(dist|docs|build/icon\\.png|\\.git|\\.tana-log|\\.superpowers|\\.agents|AGENTS\\.md|node_modules/loro-crdt/(base64|browser|bundler|web)(/|$)|scripts/(fixtures(/|$)|[^/]*-check\\.js$)|manual(/|$)|ios(/|$)|android(/|$)|relay(/|$))' --app-bundle-id=com.dreetje.orbital --protocol=orbital --protocol-name=Orbital",
     "release": "sh scripts/release.sh",
     "postinstall": "node node_modules/electron/install.js && (sh -c \"plutil -replace CFBundleName -string Orbital node_modules/electron/dist/Electron.app/Contents/Info.plist && plutil -replace CFBundleDisplayName -string Orbital node_modules/electron/dist/Electron.app/Contents/Info.plist && plutil -replace CFBundleIdentifier -string com.dreetje.orbital.dev node_modules/electron/dist/Electron.app/Contents/Info.plist && cp build/icon.icns node_modules/electron/dist/Electron.app/Contents/Resources/electron.icns && codesign --force --deep --sign - node_modules/electron/dist/Electron.app\" || true)",
-    "phones": "sh scripts/phones.sh"
+    "phones": "sh scripts/phones.sh",
+    "done": "sh scripts/done.sh"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.15.0",
