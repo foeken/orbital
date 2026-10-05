@@ -3,8 +3,7 @@
 # cache and the simulator live outside the checkout). Android: the shared module's tests, the screens among them, and,
 # with an Android SDK here, the debug build, its lint and its device tests compiled, and run on a phone or emulator when
 # one is connected (adb devices; without an SDK CI builds it, the tests need none). iPhone: the UI tests on a simulator.
-# The only place the iPhone's tests run (GitHub runs none): before a phone change merges, and in npm run release.
-# The scheduled run on main runs Android's on Linux.
+# The only place the iPhone's tests run (there is no CI): before a phone change merges, and in npm run release.
 set -e
 cd "$(dirname "$0")/.."
 which=${1:-both}

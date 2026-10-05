@@ -2,7 +2,7 @@
 'use strict';
 // Every pull request says, for each place a change can have to land, whether it landed there or why not (AGENTS.md,
 // Every platform): the desktop app, the iPhone app, the Android app and the manual. This holds the description's
-// Platforms lines to the diff, in CI (.github/workflows/platforms.yml) and by hand:
+// Platforms lines to the diff, by hand before pushing:
 //   node scripts/platform-check.js [--base origin/main] [--body-file pr.md]   (PR_BODY in the environment otherwise)
 // It fails on a missing line, on an answer the diff contradicts, and on "not needed" with no reason given. It warns,
 // without failing, where something usually follows: one phone changed and not the other, or a desktop feature the
