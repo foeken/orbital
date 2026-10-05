@@ -75,6 +75,9 @@ final class WidgetTests: XCTestCase {
         XCTAssertFalse(springboard.buttons["Show documents"].exists, "nothing opens in place: a widget does not expand")
         found(springboard.buttons.containing(NSPredicate(format: "label CONTAINS 'Design review'")).firstMatch, "the meeting").tap()
         XCTAssert(app.wait(for: .runningForeground, timeout: 15))
-        XCTAssert(app.staticTexts["Offsite planning"].waitForExistence(timeout: 15), "the meeting open in the app, its documents on its page")
+        // the meeting's own page: written up, it opens on its Summary (Pages.swift), with Notes beside it
+        if !app.navigationBars["Design review"].waitForExistence(timeout: 15) || !app.buttons["Summary"].exists {
+            XCTFail("the meeting open in the app, on its page:\n" + app.debugDescription)
+        }
     }
 }
