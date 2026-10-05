@@ -34,7 +34,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'zoomIn', 'expand', 'collapse',
   'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status',
   'assign', 'assignTo', 'discussWith', 'addToChat',
-  'meetingTime', 'meetingLocation', 'meetingAttendee',
+  'meetingTime', 'meetingDetails', 'meetingLocation', 'meetingAttendee',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
@@ -174,6 +174,7 @@ function paletteRows(q, typed = q) {
     rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date \u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
   }
   rows.push(...meetingRows(palDoc, docGroup)); // Change time / location, Add attendee: on a meeting this user may change (renderer/meeting.js)
+  rows.push(...meetingDetailsRows(palDoc, docGroup)); // Edit meeting details: the same meetings, a time said in your own words and read by the AI (#758)
   // Pin this node onto the meeting I am in, through the event pin the sidebar reads back under Pinned (docs/PINNING.md).
   // The row is listed whenever a real node is on screen, so ⇧⌘K can record
   // a key against it, and says why instead of disappearing when there is no meeting to pin to. Its id is unchanged
@@ -482,7 +483,7 @@ function runAction(id) {
   }
   // The same for Change time, Change location and Add attendee: they are offered once main has said this meeting may be
   // changed, which the closed palette does not ask. Asked for this key only, and the key runs again with the answer (#391).
-  const meeting = palette.hidden && /^meeting(Time|Location|Attendee)$/.test(id) && tana.meetingInfo ? meetingOf(palDoc) : null;
+  const meeting = palette.hidden && /^meeting(Time|Details|Location|Attendee)$/.test(id) && tana.meetingInfo ? meetingOf(palDoc) : null;
   if (meeting && !(meetingCtx && meetingCtx.docId === meeting.id && meetingCtx.info)) {
     const doc = palDoc;
     run(async () => { await loadMeetingCtx(meeting); if (current() && currentDoc()?.id === doc.id) runAction(id); });

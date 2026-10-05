@@ -559,9 +559,11 @@ async function createDocument(title, opts = {}) {
   } else if (opts.query !== undefined) throw new Error('Only a saved search carries a query');
   if (!Object.hasOwn(KINDS, config.kind)) throw new Error('Unsupported creation kind'); // 'constructor' is a truthy lookup, not a kind
   // A meeting may be given its time ("/" Meeting, renderer/toolbar.js meetingHere): epoch ms, checked here before anything
-  // is subscribed, and written at birth in place of initDocument's next half hour, as Tana's reschedule writes it
-  // (sdk/events.js setTime). Nothing else is added: no attendee, so the server's calendar copy invites nobody.
-  const when = meetingTime(config.kind, opts);
+  // is subscribed, and written at birth as Tana's reschedule writes it (sdk/events.js setTime). Given none (Create new …
+  // Meeting, a meeting's draft, a type for meetings), it starts now, to the minute, for half an hour (#755), in place of
+  // initDocument's next half hour, which the phones' engine keeps. Nothing else is added: no attendee, so the server's
+  // calendar copy invites nobody.
+  const when = meetingTime(config.kind, opts) ?? (config.kind === 'meeting' ? nowForHalfAnHour() : null);
   const id = KINDS[config.kind] + ulid();
   const doc = await subscribe(id, loro => { initDocument(loro, title, S.me.userUri, config); if (when) { const data = loro.getMap('data'); data.set('startTime', when.start); data.set('endTime', when.end); } });
   if (!doc) throw new Error(S.status.error || 'could not create ' + id);
@@ -574,6 +576,7 @@ function meetingTime(kind, opts) {
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start <= 0 || end <= start) throw new Error('A meeting needs a start before its end');
   return { start, end };
 }
+const nowForHalfAnHour = (now = Date.now()) => { const start = Math.floor(now / 6e4) * 6e4; return { start, end: start + 18e5 }; };
 
 // A row's field values, read off the document on every change like its title and state: the cached row carries the
 // ones its search saw, which a table cell (renderer/views.js) would otherwise show until the next refresh.

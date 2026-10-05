@@ -408,6 +408,19 @@ function mockApi() {
       if (!meetingEdits[docId]) throw new Error('Not a meeting');
       return structuredClone({ id: docId, editable: true, ...meetingEdits[docId] });
     },
+    // the AI's reading of a meeting's time (main/meetings.js readTime), for the few words the flows and scenes type; no
+    // model is asked here, and anything else reads as no time, as an answer the AI could not make a time of
+    readMeetingTime: async (words, docId) => {
+      const m = docId ? meetingEdits[docId] : null;
+      if (docId && !m) throw new Error('Not a meeting');
+      const start = m ? m.start : Math.floor(Date.now() / 6e4) * 6e4, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const at = (days, h) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, 0, 0, 0); return d.getTime(); };
+      const said = String(words || '').trim().toLowerCase();
+      if (said === 'tomorrow from 3-5') return { start: at(1, 15), end: at(1, 17), timeZone };
+      if (said === 'for 45 minutes') return { start, end: start + 27e5, timeZone };
+      if (said === 'next week') return { question: 'Which day next week?' };
+      throw new Error('No day or time in those words');
+    },
     editMeeting: async (docId, change) => {
       const m = meetingEdits[docId], d = all.find((x) => x.id === docId);
       if (!m) throw new Error('Not a meeting');
@@ -610,7 +623,7 @@ function mockApi() {
       const n = { id: (kind === 'doc' ? 'tana:text:mocknew' : 'mocknew') + (++seq) + (kind === 'doc' ? Math.random().toString(36).slice(2, 8) : ''), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };
       if (nativeKind === 'task') { n.done = 0; taskDetails.set(n.id, { assignees: [members[0].id], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); settling.add(n.id); }
       if (nativeKind === 'meeting' && start !== undefined) { const d = new Date(start), at = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); Object.assign(n, { meta: WD[d.getDay()] + ' ' + at, start: d.toISOString(), end: new Date(end).toISOString() }); }
-      else if (nativeKind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
+      else if (nativeKind === 'meeting') { const s = Math.floor(Date.now() / 6e4) * 6e4, hm = (t) => new Date(t).toTimeString().slice(0, 5); Object.assign(n, { meta: WD[new Date(s).getDay()] + ' ' + hm(s), start: new Date(s).toISOString(), end: new Date(s + 18e5).toISOString() }); } // main/documents.js: now, for half an hour
       if (typeUri) n.typeUri = typeUri;
       created[n.id] = n; content[n.id] = []; all.push(n);
       if (nativeKind !== 'doc') unlisted.push(n);

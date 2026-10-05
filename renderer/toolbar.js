@@ -400,14 +400,17 @@ function taskHere(item, title) {
   }).catch(showError).finally(() => { slashTaskBusy = false; });
 }
 // "/" Meeting (#755): named on a page as "/" Task is, then a second page asks when and shows the exact slot before anything
-// is made, in ⌘K Change time's words (renderer/meeting.js parseMeetingTime). The slot is chosen, never assumed: with nothing
-// typed the next half hour is a row of its own to press, and words that read as no time offer nothing to press. One ↩
+// is made, in ⌘K Change time's words (renderer/meeting.js parseMeetingTime), or, for words those do not read ("tomorrow from
+// 3-5", "for an hour"), as the AI reads them (api.readMeetingTime, main/meetings.js readTime), said so on the row. The slot
+// is chosen, never assumed: with nothing typed, now for half an hour is a row of its own to press, and words that read as
+// no time offer nothing to press until the AI has read them into one. One ↩
 // makes one meeting, in the Library with nobody invited (Tana's server puts it in your own calendar, docs/MEETINGS.md;
 // Add attendee … is where people are invited), and the row the "/" was typed in becomes its reference, as Task's does.
 // Escape goes back a page: when → the name, kept → the menu. A meeting that lands after its page was left (Escape, or
 // the palette closed) leaves the row alone: the toast says it was made and opens it.
 let slashMeetingBusy = false; // one meeting per ↩, whichever of the two pages it is pressed on
-const SLASH_MEETING_LENGTH = 18e5; // the half hour a new meeting starts on and lasts, as Tana's own create (sdk/node.js initDocument)
+const SLASH_MEETING_LENGTH = 18e5; // a new meeting lasts half an hour, as Tana's own create (sdk/node.js initDocument)
+let slashMeetingRead = null; // the AI's reading of the when page's words: { words, busy, answer, error }, one at a time
 function meetingFromSlash(choice) {
   const item = slashTarget();
   if (item && item.node.kind === 'block') meetingName(item, choice, '');
@@ -420,15 +423,36 @@ function meetingName(item, choice, name) {
   } }, name);
 }
 function meetingWhen(item, choice, title) {
-  const slot = Math.ceil(Date.now() / SLASH_MEETING_LENGTH) * SLASH_MEETING_LENGTH, group = 'New meeting · ' + title; // read once: the row offered does not move under the press
+  const slot = Math.floor(Date.now() / 6e4) * 6e4, group = 'New meeting · ' + title; // now, to the minute, read once: the row offered does not move under the press
+  slashMeetingRead = null;
   openPage('slashMeetingWhen', 'When? 14:00, tomorrow 9:30, fri 10:00-11:30', { back: () => meetingName(item, choice, title), typed: true, rows: (q, typed) => {
     if (slashMeetingBusy) return [{ group, icon: choice.icon, label: 'Creating “' + title + '”…', disabled: true, note: true }];
     const words = String(typed || '').trim(), when = words ? parseMeetingTime(words, slot, SLASH_MEETING_LENGTH) : { start: slot, end: slot + SLASH_MEETING_LENGTH };
-    return [when ? { group, icon: 'calendar', label: meetingSpan(when.start, when.end), hint: words ? '↩ Create' : 'Next half hour', keepOpen: true, run: () => meetingHere(item, title, when) }
-      : { group, icon: 'calendar', label: 'No time in “' + words + '”', disabled: true },
-      { group, label: 'In your calendar · nobody is invited', disabled: true, note: true }];
+    const invite = { group, label: 'In your calendar · nobody is invited', disabled: true, note: true };
+    if (when) return [{ group, icon: 'calendar', label: meetingSpan(when.start, when.end), hint: words ? '↩ Create' : 'Now, for 30 minutes', keepOpen: true, run: () => meetingHere(item, title, when) }, invite];
+    return [...readRows(slashMeetingRead, words, group, () => readWhen(words), (t) => ({ group, icon: 'calendar', label: meetingSpan(t.start, t.end), hint: '↩ Create · read by AI', keepOpen: true, run: () => meetingHere(item, title, t) })), invite];
   } });
 }
+// The AI's reading of a when page's words, as rows: a row to ask it, a note while it reads, then the time it read to press,
+// its question back, or why there is none. Shared by "/" Meeting's when page and Edit meeting details (renderer/meeting.js).
+// Only the reading of the words now in the field is shown: words typed since are asked again.
+function readRows(read, words, group, ask, timeRow) {
+  if (read && read.busy) return [{ group, icon: 'sparkle', label: 'Reading “' + read.words + '”…', disabled: true, note: true }];
+  const mine = read && read.words === words ? read : null, again = { group, icon: 'sparkle', label: tana.readMeetingTime ? 'Read “' + words + '” with AI' : 'No time in “' + words + '”', hint: tana.readMeetingTime ? '↩' : '', keepOpen: true, disabled: !tana.readMeetingTime, run: ask };
+  if (mine && mine.answer && mine.answer.question) return [{ group, icon: 'sparkle', label: mine.answer.question, hint: 'Add it to your words', disabled: true, note: true }];
+  if (mine && mine.answer) return [timeRow(mine.answer)];
+  if (mine && mine.error) return [{ group, label: mine.error, disabled: true, note: true }, again];
+  return [again];
+}
+// one reading at a time, of the words given; its answer is drawn only on the page it was asked from
+function readWords(current, set, words, docId, mode) {
+  if (current && current.busy) return;
+  const seq = palSeq, mine = { words, busy: true };
+  set(mine); renderPalette();
+  return tana.readMeetingTime(words, docId).then((answer) => { mine.answer = answer; }, (e) => { mine.error = (e && e.message) || String(e); })
+    .then(() => { mine.busy = false; if (seq === palSeq && palMode === mode && !palette.hidden) renderPalette(); });
+}
+const readWhen = (words) => readWords(slashMeetingRead, (r) => { slashMeetingRead = r; }, words, null, 'slashMeetingWhen');
 function meetingHere(item, title, when) {
   if (slashMeetingBusy) return;
   slashMeetingBusy = true;

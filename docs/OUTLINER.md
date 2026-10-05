@@ -362,8 +362,10 @@ of the others opens a page that asks its name (“Name the new Project Task…�
 it, Escape goes back to the choices. The “/” menu in a row keeps drafting in place instead. Meeting (`meetingFromSlash`,
 #755) is made the way Task is, with a second page: after its name, “When?” takes a day and/or a time in ⌘K Change time's
 words (“14:00”, “tomorrow 9:30”, “fri 10:00-11:30”, `parseMeetingTime`) and shows the exact slot as the row to press
-before anything exists. With nothing typed that row is the next half hour, labelled so; words that read as no time leave
-nothing to press. Enter makes one meeting (a second Enter while it is being made makes nothing more), in the Library
+before anything exists. With nothing typed that row is now, to the minute, for 30 minutes, labelled so. Words those do not
+read (“tomorrow from 3-5”, “for an hour”) offer one row, Read “…” with AI, and ↩ hands them to the AI the way Edit meeting
+details does (below): what it read becomes the row to press, marked “read by AI”, its question comes back as a note, and
+a failure (no AI, no time in the words) says why. Nothing is made from words until a slot is shown and pressed. Enter makes one meeting (a second Enter while it is being made makes nothing more), in the Library
 with nobody on it, at that time (`api.createDocument(title, { kind: 'meeting', start, end })`), and the row becomes its
 reference. Escape walks back a page at a time: when → the name, kept → the menu → the row. A meeting that lands after
 its page was left leaves the row as it is, and the toast that says it was made opens it. Tana's server puts a meeting
@@ -427,7 +429,7 @@ owned by the page and the block (main/images.js), outside the renderer's write q
   assignee picker for who you are waiting on. Assigned by others drafts nothing: only somebody else puts a task there.
 - **`api.createDocument(title, { kind, typeUri?, start?, end? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
   assigned to you, with a workflow type when `typeUri` names one), a `meeting` (a `tana:event:` laid out like a
-  Tana-native event, the next half hour by default, so it shows in Tana's calendar; `start` and `end`, epoch ms, give it
+  Tana-native event, now to the minute for half an hour by default, so it shows in Tana's calendar; `start` and `end`, epoch ms, give it
   its time instead, refused unless a start before an end and on a meeting alone, before anything is made), a `chat`, a `search` (which must
   carry a `query`) or an instance of a workspace type (`custom`, with its `typeUri`; a type with a workflow makes an open task of yours, as
   Quick Add Task does, and its draft has a box, issue #534), and answers its Node.
@@ -532,7 +534,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   whichever file builds them: the focused field's rows; Open node (the row under the caret, or the one selected row, opened as the mouse opens it: zoomed into, a reference's target, what a Timeline row or notification opens; absent on the page you are in and for a selection of several), Expand, Collapse; the task state (Complete/Reopen,
   Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Discuss with …,
   Add to chat …);
-  a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
+  a meeting's Change time / location, Edit meeting details, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Auto-pick type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
   sensitive); the agents (Assign to Agent, Go to <agent> task, Link <agent> task …, Open in <agent>, one of each for every agent that is on); Edit visibility, Add participants … (Edit
@@ -583,7 +585,7 @@ one.
 the last page left behind and takes the new page's rows and back step; Escape (`backPalette`) goes where the page says:
 the command page, or for a page opened from elsewhere, the page that opened it. The pages are described with their features: Set type, Auto-pick type, Set icon, Set colour,
 Discuss with (§11); Edit pins, Pin to date, Pin to meeting (§9); Recently deleted, Archived types (§14); Change time /
-location, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
+location, Edit meeting details, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
 
 ### Built-in keys and the recorder
 

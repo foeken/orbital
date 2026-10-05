@@ -123,7 +123,8 @@ on the roster, who are only ever added with Add attendee …, which says an invi
 "/" Meeting (docs/OUTLINER.md, Toolbar) asks the name and then the time, shows the exact slot before anything is made,
 and passes it to `api.createDocument(title, { kind: 'meeting', start, end })`. main/documents.js checks the time before
 anything is subscribed (whole epoch ms, a start before an end, on a meeting alone) and writes `startTime`/`endTime` at
-birth in place of the next half hour. The meeting has no write-up until Tana makes one after a call: the row refers to
+birth. A meeting made with no time (Create new … Meeting, a meeting's draft) starts now, to the minute, for half an hour,
+in place of initDocument's next half hour, which the phones' engine keeps. The meeting has no write-up until Tana makes one after a call: the row refers to
 the event, and opening it forwards to the write-up once there is one (sdk/events.js `writeUpOf`).
 
 In the app, ⌘K on a meeting offers "Change time …", "Change location …" and "Add attendee …" only when
@@ -134,3 +135,36 @@ words and/or a clock time ("tomorrow 9:30", "fri 10:00-11:30"; a start alone kee
 `GraphService.ListAttendeeSuggestions` first, then org members, leaving out whoever is already on the meeting, and
 takes a typed email address. Tana's web client says new attendees get a calendar invite when the organizer's calendar
 can write, so the page warns that one may go out.
+
+## Reading a time (Edit meeting details, #758)
+
+⌘K **Edit meeting details** sits beside Change time … on the same meetings (one this user may change, not all-day;
+renderer/meeting.js `meetingDetailsRows`). It is one field: the words are read only when ↩ asks
+(`api.readMeetingTime(words, id)`, `meeting:read` in main/meetings.js, the model reached through `S.readMeetingTime`, which main/ai.js sets), what they came to is shown as the row to press beside the
+meeting as it is, marked "read by AI", and only that press writes it, as a start and an end through `meeting:edit`, the
+write Change time makes. Words typed after a reading are read again; a reading that lands after its page was left draws
+nothing. "/" Meeting's when page uses the same reading for words it cannot read itself, with no meeting id: a new
+meeting starting now for half an hour.
+
+The work is split so that the model never decides anything. main/ai.js `readMeetingTime` asks it, with a strict JSON
+schema, to transcribe the words: a day (`YYYY-MM-DD`, worked out from today, which it is told with the time now, the time
+zone and the meeting as it is), clock times as written with whether the words fix the hour (am or pm, a 24-hour time such
+as 15:00 or 03:00, noon, midnight), a length, or a question back when the day or time is genuinely open ("next week").
+The schema has no field for people, places, titles or invitations, and the words are data, never an instruction.
+main/meetings.js `resolveTime` then decides what that comes to, in the meeting's own `timezone` (yours for a new
+meeting), the same way every time:
+
+- a day left out is today when a time is said, and the meeting's own day when only its length changes;
+- an hour the words leave open is in the day: a bare 1 to 6 is the afternoon, 7 to 11 the morning, 12 noon, so
+  "tomorrow from 3-5" is 15:00–17:00 tomorrow; an end left open is the first one after the start ("10-2" is 10:00–14:00);
+- an hour the words fix is kept as said (3am, 03:00, midnight), and "until midnight" is the end of that day;
+- a length left out is the meeting's own (half an hour for a new one); an end said wins over a length said;
+- refused, with the reason shown: an answer that is not that shape, a day that does not exist or is more than two years
+  away, an end not after its start, no length or a day or more, a time the clocks skip that day (summer time starts);
+  nothing is ever carried past midnight but "until midnight".
+
+`meeting:read` refuses before asking the model what `meeting:edit` would refuse (someone else's meeting, an all-day one,
+not a meeting). With no ChatGPT sign-in and no API key it says so ("Sign in with ChatGPT or add an OpenAI API key to read
+a time"); nothing is guessed in its place. Checked offline: scripts/sdk-check.js (the transcription request, every rule
+above, Europe/Amsterdam and New York, the summer-time gap, `meeting:read` refusals), scripts/renderer-behavior-check.js
+and the Edit meeting details flow, all on fake answers.

@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('api', {
   // a meeting's time, place and people (main/meetings.js): { editable, start, end, allDay, location, participants[], attendees[], syncStatus }
   meetingInfo: (docId) => ipcRenderer.invoke('meeting:info', docId),
   editMeeting: (docId, change) => ipcRenderer.invoke('meeting:edit', docId, change), // { start, end } | { location } | { attendees: [{ email?, userUri? }] }
+  readMeetingTime: (words, docId) => ipcRenderer.invoke('meeting:read', words, docId), // words read by the AI, nothing written: { start, end, timeZone } | { question }; docId: a meeting you may change, or none for a new one
   attendeeSuggestions: () => ipcRenderer.invoke('meeting:suggestions'), // [{ email, displayName, eventCount, identityUri }]
   summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
   todayNode: (offset, findOnly) => ipcRenderer.invoke('doc:todayNode', offset, findOnly === true), // the date-titled node pinned to that day (0 today, 1 tomorrow, or 'YYYY-MM-DD'), created if missing unless findOnly (demo mode)

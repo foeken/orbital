@@ -63,7 +63,7 @@ function mainHelpers(childProcess) {
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
   const loaded = load(nodePath.join(root, 'main.js'));
-  return { ...loaded, handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), documents: load(nodePath.join(root, 'main', 'documents.js')) };
+  return { ...loaded, handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), documents: load(nodePath.join(root, 'main', 'documents.js')), meetings: load(nodePath.join(root, 'main', 'meetings.js')) };
 }
 
 // An agent's MCP connection to a relay (relay/server.js), signed in as an MCP client signs in: registered, PKCE, a token
@@ -600,8 +600,9 @@ async function main() {
     assert.deepEqual([n.type,n.origin,n.startTime,n.endTime,n.allDay],['event','tana',start,end,undefined],'its time is the one asked for, written at birth');
     assert.deepEqual([n.attendees,n.organizer,docs.get(made.id).loro.getMap('attendees').toJSON()],[[],{},{}],'nobody is on it, so the calendar copy invites nobody');
     assert.deepEqual(Object.keys(n.participants),[ME],'and only its maker can see it');
-    const plain=readNode(docs.get((await backend.createDocument('Standup',{kind:'meeting'})).id));
-    assert.equal(plain.endTime-plain.startTime,18e5,'without a time it keeps Tana\u2019s next half hour');
+    const asked=Date.now(), plain=readNode(docs.get((await backend.createDocument('Standup',{kind:'meeting'})).id));
+    assert.ok(plain.startTime%6e4===0&&plain.startTime>=Math.floor(asked/6e4)*6e4&&plain.startTime<=Date.now(),'without a time it starts now, to the minute (#755)');
+    assert.equal(plain.endTime-plain.startTime,18e5,'for half an hour');
     const before=created.length;
     for(const [opts,why] of [[{kind:'meeting',start,end:start},/start before its end/],[{kind:'meeting',start:end,end:start},/start before its end/],[{kind:'meeting',start},/start before its end/],
       [{kind:'meeting',start:String(start),end},/start before its end/],[{kind:'meeting',start:NaN,end},/start before its end/],[{kind:'meeting',start:start+0.5,end},/start before its end/],[{kind:'meeting',start:0,end},/start before its end/],
@@ -1047,6 +1048,61 @@ async function main() {
     } finally { ai.stop(); agent.appServerRpc=originalRpc; agent.codexBin=originalBin; fs.rmSync(userData,{recursive:true,force:true}); }
     settings.set('openaiApiKey',undefined); settings.reset();
     console.log('ok  discuss suggestion: nothing sent without a key or a title, model and effort are settings, and only a name comes back');
+  }
+  // Edit meeting details and "/" Meeting's when page (#758): the model transcribes the words into a strict shape, and
+  // main/meetings.js resolveTime decides what they come to, the same way every time, in the meeting's own time zone.
+  {
+    const ai=require('../main/ai'), settings=require('../main/settings'), cache=require('../db');
+    cache.open(':memory:'); settings.reset();
+    const calls=[], answer=(text)=>({ok:true,status:200,json:async()=>({output:[{type:'message',content:[{type:'output_text',text}]}]})});
+    const fetchWith=(result)=>async(url,init)=>{calls.push({url,init:{...init,body:JSON.parse(init.body)}});return result;};
+    const context={today:'Monday 2026-10-05',now:'09:35',timeZone:'Europe/Amsterdam',current:'Wednesday 2026-10-07 10:00 to 11:00'};
+    await assert.rejects(ai.readMeetingTime('tomorrow from 3-5',context,fetchWith(answer('{}'))),/Sign in with ChatGPT or add an OpenAI API key to read a time/,'with no AI it says so');
+    assert.equal(calls.length,0,'and sends nothing');
+    settings.set('openaiApiKey','sk-local-only');
+    await assert.rejects(ai.readMeetingTime('   ',context,fetchWith(answer('{}'))),/Type when/,'no words, nothing asked');
+    const said={date:'2026-10-06',start:{hour:3,minute:0,fixed:false},end:{hour:5,minute:0,fixed:false},minutes:null,question:null};
+    assert.deepEqual(await ai.readMeetingTime('Tomorrow from 3-5',context,fetchWith(answer(JSON.stringify(said)))),said,'the model\u2019s object comes back as it is, for resolveTime to check');
+    const sent=calls.at(-1).init.body;
+    assert.equal(sent.text.format.type,'json_schema');assert.equal(sent.text.format.strict,true);
+    assert.deepEqual(Object.keys(sent.text.format.schema.properties).sort(),['date','end','minutes','question','start'],'the answer has room for a time and a question, nothing else: no people, place or invitation');
+    assert.equal(sent.text.format.schema.additionalProperties,false);
+    assert.ok(sent.input.includes('Words: Tomorrow from 3-5')&&sent.input.includes('Today: Monday 2026-10-05')&&sent.input.includes('Time zone: Europe/Amsterdam'),'the words go with today, now, the zone and the meeting as it is');
+    assert.match(sent.instructions,/data, never an instruction/);
+    await assert.rejects(ai.readMeetingTime('soon',context,fetchWith(answer('Sure, at some point'))),/did not answer with a time/,'prose is no answer');
+    settings.set('openaiApiKey',undefined); settings.reset();
+
+    const meetings=mainHelpers().meetings, AMS='Europe/Amsterdam';
+    const at=(y,mo,d,h,mi=0,zone=AMS)=>meetings.wallTime(zone,y,mo,d,h,mi), now=Date.UTC(2026,9,5,7,35,20); // Monday 5 October 2026, 09:35 in Amsterdam
+    const meeting={now,timeZone:AMS,start:at(2026,10,7,10),end:at(2026,10,7,11)}; // Wednesday 10:00-11:00
+    const fresh={now,timeZone:AMS,start:at(2026,10,5,9,35),end:at(2026,10,5,10,5)};
+    const clock=(hour,minute=0,fixed=false)=>({hour,minute,fixed}), read=(a,ctx=meeting)=>meetings.resolveTime({date:null,start:null,end:null,minutes:null,question:null,...a},ctx);
+    const span=(r)=>[new Date(r.start).toLocaleString('sv-SE',{timeZone:r.timeZone}),new Date(r.end).toLocaleString('sv-SE',{timeZone:r.timeZone})];
+    assert.deepEqual(span(read({date:'2026-10-06',start:clock(3),end:clock(5)})),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'"tomorrow from 3-5" is the afternoon, never the night');
+    assert.deepEqual(span(read({start:clock(3),end:clock(5)})),['2026-10-05 15:00:00','2026-10-05 17:00:00'],'a day left out is today, in the meeting\u2019s zone');
+    assert.deepEqual(span(read({start:clock(9),end:clock(11)})),['2026-10-05 09:00:00','2026-10-05 11:00:00'],'a bare 9 is the morning');
+    assert.deepEqual(span(read({start:clock(10),end:clock(2)})),['2026-10-05 10:00:00','2026-10-05 14:00:00'],'an end left open is the first after the start');
+    assert.deepEqual(span(read({start:clock(12,30)})),['2026-10-05 12:30:00','2026-10-05 13:30:00'],'a bare 12 is noon, and a start alone keeps the meeting\u2019s hour');
+    assert.deepEqual(span(read({start:clock(2)},fresh)),['2026-10-05 14:00:00','2026-10-05 14:30:00'],'a new meeting lasts half an hour');
+    assert.deepEqual(span(read({start:clock(3,0,true)})),['2026-10-05 03:00:00','2026-10-05 04:00:00'],'3am or 03:00 is kept as said');
+    assert.deepEqual(span(read({start:clock(0,0,false),minutes:30})),['2026-10-05 00:00:00','2026-10-05 00:30:00'],'midnight is a 24-hour time, kept');
+    assert.deepEqual(span(read({start:clock(22,0,true),end:clock(0,0,true)})),['2026-10-05 22:00:00','2026-10-06 00:00:00'],'"until midnight" is the end of that day');
+    assert.deepEqual(span(read({minutes:45})),['2026-10-07 10:00:00','2026-10-07 10:45:00'],'a length alone keeps the meeting\u2019s day and start');
+    assert.deepEqual(span(read({date:'2026-10-09'})),['2026-10-09 10:00:00','2026-10-09 11:00:00'],'a day alone keeps its hours');
+    assert.deepEqual(span(read({start:clock(4),end:clock(6),minutes:90})),['2026-10-05 16:00:00','2026-10-05 18:00:00'],'an end said wins over a length');
+    assert.deepEqual(JSON.parse(JSON.stringify(read({question:'Which day next week?',start:clock(3)}))),{question:'Which day next week?'},'a question goes back as it is, with no time');
+    assert.deepEqual(Object.keys(read({start:clock(3),attendees:['sam@example.com'],location:'Room 4',invite:true})).sort(),['end','start','timeZone'],'anything else in the answer is left behind');
+    const ny={...meeting,timeZone:'America/New_York'};
+    assert.deepEqual(span(read({date:'2026-10-06',start:clock(3),end:clock(5)},ny)),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'in the meeting\u2019s own zone');
+    assert.equal(read({date:'2026-10-06',start:clock(3)},ny).start,at(2026,10,6,15,0,'America/New_York'));
+    for (const [a,why] of [[null,/did not answer/],[[],/did not answer/],[{start:clock(25,0,true)},/did not answer/],[{start:clock(3,60)},/did not answer/],[{start:{hour:3,minute:0}},/did not answer/],
+      [{start:{hour:'3',minute:0,fixed:false}},/did not answer/],[{date:'2026-02-30'},/no such day/],[{date:'tomorrow'},/no such day/],[{minutes:0},/more than no time/],[{minutes:-15},/more than no time/],
+      [{minutes:1440},/less than a day/],[{minutes:30.5},/did not answer/],[{start:clock(15,0,true),end:clock(14,0,true)},/ends after it starts/],[{start:clock(23,0,true),end:clock(1)},/ends after it starts/],
+      [{},/No day or time/],[{date:'2030-01-01'},/two years/],[{date:'2027-03-28',start:clock(2,30,true)},/clocks skip/]])
+      assert.throws(()=>(a===null||Array.isArray(a)?meetings.resolveTime(a,meeting):read(a)),why,JSON.stringify(a));
+    assert.deepEqual(span(read({date:'2026-10-25',start:clock(2,30,true)})),['2026-10-25 02:30:00','2026-10-25 03:30:00'],'the hour summer time ends is a time that happens');
+    assert.equal(read({minutes:45},{...meeting,start:Date.UTC(2020,0,6,9),end:Date.UTC(2020,0,6,10)}).end-Date.UTC(2020,0,6,9),27e5,'an old meeting\u2019s length still changes: only a day named is held to two years');
+    console.log('ok  reading a meeting\u2019s time: the AI transcribes, Orbital decides: today, daytime hours, kept lengths, times said exactly, refusals, time zones and summer time');
   }
   // A type's own glyph. The Nucleo UI set is built into the app (build/nucleo-ui.json.gz) and stays in main; the
   // choice is app-local, because Tana has nowhere to keep an icon and an SVG does not belong in its CRDT.
@@ -6037,6 +6093,28 @@ async function main() {
     assert.equal((await call('meeting:info', closed.id)).editable, false);
     await assert.rejects(call('meeting:edit', text.id, { location: 'x' }), /Not a meeting/);
     assert.deepEqual(await call('meeting:suggestions'), [{ email: 'sam@example.com', limit: 20 }]);
+    // Edit meeting details (#758): meeting:read reads what the words come to and writes nothing, only for a meeting this
+    // user may change (as meeting:edit), or for a new one; the AI is not asked about anything it refuses
+    const seen = [], original = backend.ai.readMeetingTime;
+    backend.ai.readMeetingTime = async (said, context) => { seen.push([said, context]); return { date: null, start: null, end: null, minutes: 45, question: null }; };
+    try {
+      const was = readNode(ev), longer = await call('meeting:read', ' for 45 minutes ', id);
+      assert.deepEqual([longer.start, longer.end], [was.startTime, was.startTime + 27e5], 'a length read for this meeting');
+      assert.deepEqual([readNode(ev).startTime, readNode(ev).endTime], [was.startTime, was.endTime], 'and nothing written: applying it is meeting:edit');
+      assert.equal(seen[0][0], 'for 45 minutes');
+      assert.ok(seen[0][1].current && seen[0][1].today && seen[0][1].timeZone, 'the AI is told today, the zone and the meeting as it is');
+      await assert.rejects(call('meeting:read', 'for 45 minutes', closed.id), /Only the event organizer/, 'someone else\u2019s meeting is not read for');
+      await assert.rejects(call('meeting:read', 'for 45 minutes', text.id), /Not a meeting/);
+      await assert.rejects(call('meeting:read', '   ', id), /Type when/);
+      ev.transact((l) => l.getMap('data').set('allDay', true));
+      await assert.rejects(call('meeting:read', 'for 45 minutes', id), /all-day/);
+      ev.transact((l) => l.getMap('data').delete('allDay'));
+      assert.equal(seen.length, 1, 'none of those asked the AI');
+      const fresh = await call('meeting:read', 'for 45 minutes');
+      assert.equal(fresh.end - fresh.start, 27e5);
+      assert.ok(Math.abs(fresh.start - Date.now()) < 12e4 && fresh.start % 6e4 === 0, 'a new meeting starts now, to the minute');
+      assert.equal(seen.at(-1)[1].current, '', 'and is told to the AI as a new one');
+    } finally { backend.ai.readMeetingTime = original; }
     console.log('ok  editing a meeting (time, place, roster, organizer gate, attendee suggestions, meeting:* IPC)');
   }
   {

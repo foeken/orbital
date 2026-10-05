@@ -650,29 +650,59 @@ flow('golden path: "/" Task and Meeting, named, the meeting\u2019s time reviewed
   await p.waitFor('palRows[palIndex]?.label === "Meeting"', 'Meeting offered'); await p.key('↩');
   await p.waitFor('palMode === "slashMeeting"', 'the meeting\u2019s name page'); await p.type('Design review'); await p.key('↩');
   await p.waitFor('palMode === "slashMeetingWhen"', 'the when page');
-  const slot = await p.js('(() => { const s = Math.ceil(Date.now() / 18e5) * 18e5; return meetingSpan(s, s + 18e5); })()');
-  assert.deepEqual(await p.js('[palRows[palIndex].label, palRows[palIndex].hint]'), [slot, 'Next half hour'], 'with nothing typed the next half hour is offered, as it would be made');
+  const slots = await p.js('[0, 1].map((back) => { const s = (Math.floor(Date.now() / 6e4) - back) * 6e4; return meetingSpan(s, s + 18e5); })');
+  const offered = await p.js('[palRows[palIndex].label, palRows[palIndex].hint]');
+  assert.ok(slots.includes(offered[0]) && offered[1] === 'Now, for 30 minutes', 'with nothing typed, now for half an hour is offered, as it would be made: ' + J(offered));
   await p.type('xyz'); await settle(p, 100);
-  assert.equal(await p.js('palRows.every((r) => r.disabled)'), true, 'words that read as no time leave nothing to press');
-  await p.key('↩'); await settle(p, 500);
-  assert.deepEqual([await p.js('palMode'), await p.js('__creates.length')], ['slashMeetingWhen', 1], 'and \u21A9 makes nothing');
+  assert.deepEqual(await p.js('palRows.filter((r) => !r.disabled).map((r) => r.label)'), ['Read \u201Cxyz\u201D with AI'], 'words this page cannot read can only be handed to the AI');
+  await p.key('↩'); await p.waitFor('palRows.some((r) => r.label === "No day or time in those words")', 'the AI\u2019s answer that it is no time');
+  assert.deepEqual([await p.js('palMode'), await p.js('__creates.length')], ['slashMeetingWhen', 1], 'and nothing is made');
   await p.key('esc'); await p.waitFor('palMode === "slashMeeting" && palInput.value === "Design review"', 'Escape back to the name, kept');
   await p.key('esc'); await p.waitFor('palMode === "slash"', 'Escape back to the menu');
   await p.key('esc'); await p.waitFor('palette.hidden && document.activeElement?.textContent === "/"', 'Escape back to the row, the caret in it');
   await p.key('⌫'); await p.type('/'); await p.waitFor('palMode === "slash"', 'the / menu again'); await p.type('meeting'); await p.waitFor('palRows[palIndex]?.label === "Meeting"', 'Meeting offered'); await p.key('↩');
   await p.type('Design review'); await p.key('↩'); await p.waitFor('palMode === "slashMeetingWhen"', 'the when page');
   await p.type('tomorrow 14:00-15:00'); await settle(p, 100);
-  const start = await p.js('new Date(parseDay("tomorrow") + "T14:00").getTime()');
-  assert.deepEqual(await p.js('[palRows[palIndex].label, palRows[palIndex].hint]'), [await p.js('meetingSpan(' + start + ', ' + (start + 36e5) + ')'), '\u21A9 Create'], 'the slot typed, shown before it is made');
+  const typed = await p.js('new Date(parseDay("tomorrow") + "T14:00").getTime()');
+  assert.deepEqual(await p.js('[palRows[palIndex].label, palRows[palIndex].hint]'), [await p.js('meetingSpan(' + typed + ', ' + (typed + 36e5) + ')'), '\u21A9 Create'], 'the slot typed, shown before it is made');
+  await p.js('palInput.value = ""; palInput.dispatchEvent(new Event("input"))'); await p.type('tomorrow from 3-5');
+  await p.key('↩'); await p.waitFor('palRows[palIndex]?.hint === "\u21A9 Create \u00B7 read by AI"', 'the AI\u2019s reading, shown before it is made');
+  const start = await p.js('new Date(parseDay("tomorrow") + "T15:00").getTime()');
+  assert.equal(await p.js('palRows[palIndex].label'), await p.js('meetingSpan(' + start + ', ' + (start + 72e5) + ')'), 'tomorrow from 3-5 is the afternoon');
   await p.key('↩'); await p.key('↩');
   await p.waitFor('palette.hidden && document.activeElement?.closest?.("#outline")', 'the meeting made and the caret back in its row', 6000);
   await p.js('flushAll()'); await settle(p, 500);
-  assert.deepEqual(await p.js('__creates'), [['Book the venue', { kind: 'task' }], ['Design review', { kind: 'meeting', start, end: start + 36e5 }]], 'one task and one meeting, the meeting at the time shown and with nobody on it');
+  assert.deepEqual(await p.js('__creates'), [['Book the venue', { kind: 'task' }], ['Design review', { kind: 'meeting', start, end: start + 72e5 }]], 'one task and one meeting, the meeting at the time shown and with nobody on it');
   const saved = await p.js('tana.children(' + J(day) + ').then((rows) => rows.map((n) => n.segments.map((s) => (s.mention ? s.mention.label : s.text))))');
   assert.deepEqual(saved, [['Book the venue'], ['Design review']], 'each row is the reference to what it made, saved');
   assert.equal(await p.js('tana.children(' + J(day) + ').then((rows) => rows[1].segments[0].mention.icon)'), 'meeting', 'the meeting’s with its glyph');
   const meeting = await p.js('tana.children(' + J(day) + ').then((rows) => tana.node(rows[1].segments[0].mention.uri)).then((n) => n.start)');
   assert.equal(meeting, new Date(start).toISOString(), 'and the meeting starts when it said');
+});
+
+// 17c. Edit meeting details (#758): ⌘K on a meeting you may change, one field, read by the AI only when ↩ asks (the mock
+// stands in for it), its reading shown beside the meeting as it is and written only when pressed; Escape goes back to the
+// commands and the caret comes back
+flow('golden path: Edit meeting details reads "tomorrow from 3-5" and applies it only when pressed', async (p) => {
+  await p.start();
+  await p.js("goTo('mockmeeting2')"); await at(p, 'mockmeeting2');
+  const was = await p.js('tana.meetingInfo("mockmeeting2").then((m) => [m.start, m.end, m.attendees.length])');
+  await command(p, 'edit meeting details', 'Edit meeting details');
+  await p.waitFor('palMode === "meetingDetails"', 'its one field');
+  await p.type('xyz'); await p.key('↩');
+  await p.waitFor('palRows.some((r) => r.label === "No day or time in those words")', 'the AI\u2019s answer that it is no time');
+  await p.key('esc'); await p.waitFor('palMode === "cmd"', 'Escape back to the commands');
+  await p.key('esc'); await p.waitFor('palette.hidden', 'and closed');
+  await command(p, 'edit meeting details', 'Edit meeting details');
+  await p.type('tomorrow from 3-5'); await p.key('↩');
+  await p.waitFor('palRows[palIndex]?.hint === "\u21A9 Apply \u00B7 read by AI"', 'the AI\u2019s reading, to review');
+  const start = await p.js('new Date(parseDay("tomorrow") + "T15:00").getTime()');
+  assert.equal(await p.js('palRows[palIndex].label'), await p.js('meetingSpan(' + start + ', ' + (start + 72e5) + ')'), 'tomorrow from 3-5 is tomorrow afternoon');
+  assert.deepEqual(await p.js('tana.meetingInfo("mockmeeting2").then((m) => [m.start, m.end, m.attendees.length])'), was, 'nothing changes while it is only shown');
+  await p.key('↩');
+  await p.waitFor('palette.hidden', 'the palette closed on the press');
+  await p.waitFor('tana.meetingInfo("mockmeeting2").then((m) => m.start === ' + start + ')', 'the meeting moved');
+  assert.deepEqual(await p.js('tana.meetingInfo("mockmeeting2").then((m) => [m.start, m.end, m.attendees.length])'), [start, start + 72e5, was[2]], 'to the time shown, and nobody added');
 });
 
 // 18. A view (docs/VIEWS.md): the Library grouped, sorted and filtered from Cmd+K and ⌘F, then saved as a search that
