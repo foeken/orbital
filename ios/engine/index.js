@@ -401,6 +401,7 @@ window.orbital = {
     const space = (a) => a && a.title ? demoTitle(a.title, a.boundaryUri || a.uri || 'space') : null;
     return JSON.stringify({
       title: demoTitle(n.title || 'Untitled', id), me: S.me.userUri, task: STATE_TYPES.includes(n.stateType), assignees: direct.assignees.map(person),
+      state: STATE_TYPES.includes(n.stateType) ? n.stateType : null, // the Status field's (Pages.swift NodeDetails)
       audience: meta.audience, space: space(meta.audienceSpace), people: meta.audience === 'everyone' ? [] : (meta.people || []).map(person), // everyone: the org, named by its word
       hidden: (meta.hiddenFrom || []).map(person), restricted: direct.restricted === true, participants: direct.participants.map((p) => p.uri).filter((uri) => uri !== S.me.userUri),
       rules: options.rules, reason: options.reason, inherit: { scope: options.inheritAudience.scope, space: space(options.inheritAudience) }, token: options.sharingToken,

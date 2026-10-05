@@ -604,6 +604,7 @@
    "title": "Interview loop",
    "me": "tana:user-profile:000000000000000000000000me",
    "task": true,
+   "state": "open",
    "assignees": [
     {
      "id": "tana:user-profile:000000000000000000000000p2",

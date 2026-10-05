@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -311,6 +312,20 @@ fun ChatBlock(row: Node, color: androidx.compose.ui.graphics.Color) {
 fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, reload: suspend () -> Unit) {
     val c = Theme.colors
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        // Status: Tana's own four, as the desktop's Status pill offers them (renderer/pills.js); set outright (engine.tick)
+        if (access.task) {
+            val now = engine.states[id] ?: access.state ?: "open"
+            var menu by remember { mutableStateOf(false) }
+            Column {
+                Field("Status", { menu = true }) { Text(STATES.firstOrNull { it.first == now }?.second ?: "In Progress", color = c.text) }
+                DropdownMenu(menu, { menu = false }) {
+                    STATES.forEach { (state, word) ->
+                        DropdownMenuItem({ Text(word, color = c.text) }, { menu = false; engine.scope.launch { engine.tick(id, state); reload() } },
+                            trailingIcon = if (state == now) ({ Icon(Icons.Outlined.Check, null, tint = c.text) }) else null)
+                    }
+                }
+            }
+        }
         if (access.task) Field("Assigned to", { engine.assigning = Engine.Assigning(id, access.assignees.map { it.id }, reload) }) {
             if (access.assignees.isEmpty()) Text("Unassigned", color = c.secondary) else Faces(access.assignees.persons)
         }
@@ -338,6 +353,8 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
         }
     }
 }
+
+private val STATES = listOf("proposed" to "Inbox", "open" to "In Progress", "closed" to "Completed", "not_now" to "Later")
 
 // a field as the desktop draws one: its name in grey, its value after it, a line under it, the whole row the button
 // that changes it

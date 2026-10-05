@@ -122,6 +122,7 @@ data class Access(
     val inherit: Audience = Audience("inherit"),
     val token: String? = null,
     val agent: HandedTo? = null, // the linked agent it is handed to (ui/Agents.kt)
+    val state: String? = null, // a task's stateType, for the Status field
 ) {
     // Grant access is the pill's write (renderer/access.js hiddenFromFix): only where the node's own list is its audience
     val grants: Boolean get() = restricted && "people" in rules

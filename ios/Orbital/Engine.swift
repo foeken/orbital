@@ -435,6 +435,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     struct Audience: Decodable { let scope: String; let space: String? }
     struct Access: Decodable {
         let title: String, me: String, task: Bool, assignees: [Member]
+        var state: String? // a task's stateType, for the Status field
         let audience: String, space: String?, people: [Member], hidden: [Member]
         let restricted: Bool, participants: [String], rules: [String], reason: String?, inherit: Audience, token: String?
         let agent: HandedTo? // the linked agent it is handed to (Agents.swift)
