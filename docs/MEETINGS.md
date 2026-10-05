@@ -54,8 +54,9 @@ Visible to, or — once you shared them in Tana — "Shared notes" and who: the 
 organization, anyone with the link, read only when your grant no longer lets you write; never a lock or "only you"
 then. Beside the meeting's title, the Tana glyph opens the meeting itself in Tana (never the notes), "Open in Tana" shown
 on hover and keyboard focus; it is there before any notes and makes none. A meeting no longer forwards to its write-up:
-a meeting that has one opens on Summary, with Notes | Summary on that line (nothing is drawn until main has said whether
-there is one, so the notes never flash first). Summary puts the write-up's own rows in the notes'
+a meeting that has one opens on Summary, with Notes | Summary on that line when you have notes for it (or are typing
+their first words), and the summary alone when you have none (nothing is drawn until main has said whether there is a
+write-up and whether there are notes, so neither the notes nor the switch flash first). Summary puts the write-up's own rows in the notes'
 place on the meeting's page, and the line says who sees the write-up and whether you may edit it, read from the
 write-up itself (its own metadata and node, asked for it alone, again when it changes live; the line says "Checking" at
 once, a row being typed in too, and an older answer never replaces a newer one). It is never inferred from the meeting's

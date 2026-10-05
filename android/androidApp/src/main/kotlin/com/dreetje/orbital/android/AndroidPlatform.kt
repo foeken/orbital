@@ -44,6 +44,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 
 // What only Android can do, for the shared screens (com.dreetje.orbital.Platform)
 class AndroidPlatform(private val context: Context) : Platform {
@@ -90,6 +93,40 @@ class AndroidPlatform(private val context: Context) : Platform {
     }
 
     override fun decode(image: ByteArray): ImageBitmap? = BitmapFactory.decodeByteArray(image, 0, image.size)?.asImageBitmap()
+
+    // A picture in an outline, fetched as sdk/assets.js fetchImage does: by-uri with the bearer token answers 302 to
+    // the image on Tana's CDN and the cookie the CDN wants; a 401 asks for a fresh token once
+    // ponytail: no 64 MB guard as the SDK's while reading; add one if a picture that big ever turns up
+    override suspend fun image(uri: String, token: suspend (refresh: Boolean) -> String): ByteArray? {
+        if (!Regex("tana:image:[0-9a-z]{26}").matches(uri)) return null
+        val at = URL("https://home.tana.inc/api/general/images/by-uri/" + URLEncoder.encode(uri, "UTF-8"))
+        suspend fun locate(refresh: Boolean): HttpURLConnection {
+            val bearer = token(refresh)
+            return withContext(Dispatchers.IO) {
+                (at.openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = false; connectTimeout = 15_000; readTimeout = 30_000
+                    setRequestProperty("Authorization", "Bearer " + bearer)
+                    responseCode
+                }
+            }
+        }
+        var found = locate(false)
+        if (found.responseCode == 401) { found.disconnect(); found = locate(true) }
+        try {
+            if (found.responseCode != 302) return null
+            val location = found.getHeaderField("Location") ?: return null
+            val cookie = found.headerFields.filterKeys { it.equals("Set-Cookie", ignoreCase = true) }.values.flatten().joinToString("; ") { it.substringBefore(';') }
+            return withContext(Dispatchers.IO) {
+                val c = (URL(at, location).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 15_000; readTimeout = 30_000
+                    if (cookie.isNotEmpty()) setRequestProperty("Cookie", cookie)
+                }
+                try { if (c.responseCode in 200..299) c.inputStream.use { it.readBytes() } else null } finally { c.disconnect() }
+            }
+        } finally {
+            found.disconnect()
+        }
+    }
 
     override fun share(text: String) {
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)

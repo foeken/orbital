@@ -15,6 +15,7 @@ const masked = (r) => ({
   ...(r.people ? { people: r.people.map((p) => ({ ...p, name: person(p.name) })) } : {}),
   ...(r.timeline ? { timeline: { ...r.timeline, change: r.timeline.change && demoText(r.timeline.change, r.timeline.uri), detail: r.timeline.detail && demoText(r.timeline.detail, r.timeline.uri) } } : {}),
   ...(r.children ? { children: r.children.map(masked) } : {}),
+  image: undefined, // an image's pixels are never shown: the row says Image, as the desktop draws its place (demoImageEl)
 });
 const demo = (rows) => (on ? rows.map(masked) : rows);
 const demoTitle = (title, id) => (on ? demoText(title, id) : title);
