@@ -123,7 +123,8 @@ on the roster, who are only ever added with Add attendee …, which says an invi
 "/" Meeting (docs/OUTLINER.md, Toolbar) asks the name and then the time, shows the exact slot before anything is made,
 and passes it to `api.createDocument(title, { kind: 'meeting', start, end })`. main/documents.js checks the time before
 anything is subscribed (whole epoch ms, a start before an end, on a meeting alone) and writes `startTime`/`endTime` at
-birth. A meeting made with no time (Create new … Meeting, a meeting's draft) starts now, to the minute, for half an hour,
+birth. ⌘K Create new … Meeting asks its time on the same When page as “/” Meeting (#765). A meeting made with no time (a
+meeting's draft, a type for meetings) starts now, to the minute, for half an hour,
 in place of initDocument's next half hour, which the phones' engine keeps. The meeting has no write-up until Tana makes one after a call: the row refers to
 the event, and opening it forwards to the write-up once there is one (sdk/events.js `writeUpOf`).
 

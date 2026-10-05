@@ -410,6 +410,8 @@ function taskHere(item, title) {
 // Add attendee … is where people are invited), and the row the "/" was typed in becomes its reference, as Task's does.
 // Escape goes back a page: when → the name, kept → the menu. A meeting that lands after its page was left (Escape, or
 // the palette closed) leaves the row alone: the toast says it was made and opens it.
+// ⌘K Create new → Meeting (#765) comes to the same When page with no row (item null): the meeting is opened once made, as
+// everything Create new makes is, and Escape goes back to its name page (renderer/palette.js openNamePage).
 let slashMeetingBusy = false; // one meeting per ↩, whichever of the two pages it is pressed on
 const SLASH_MEETING_LENGTH = 18e5; // a new meeting lasts half an hour, as Tana's own create (sdk/node.js initDocument)
 let slashMeetingRead = null; // the AI's reading of the when page's words: { words, busy, answer, error }, one at a time
@@ -427,7 +429,7 @@ function meetingName(item, choice, name) {
 function meetingWhen(item, choice, title) {
   const slot = Math.floor(Date.now() / 6e4) * 6e4, group = 'New meeting · ' + title; // now, to the minute, read once: the row offered does not move under the press
   slashMeetingRead = null;
-  openPage('slashMeetingWhen', 'When? 14:00, tomorrow 9:30, fri 10:00-11:30', { back: () => meetingName(item, choice, title), typed: true, rows: (q, typed) => {
+  openPage('slashMeetingWhen', 'When? 14:00, tomorrow 9:30, fri 10:00-11:30', { back: () => (item ? meetingName(item, choice, title) : openNamePage(choice, title)), typed: true, rows: (q, typed) => {
     if (slashMeetingBusy) return [{ group, icon: choice.icon, label: 'Creating “' + title + '”…', disabled: true, note: true }];
     const words = String(typed || '').trim(), when = words ? parseMeetingTime(words, slot, SLASH_MEETING_LENGTH) : { start: slot, end: slot + SLASH_MEETING_LENGTH };
     const invite = { group, label: 'In your calendar · nobody is invited', disabled: true, note: true };
@@ -474,8 +476,9 @@ function meetingHere(item, title, when) {
   const seq = palSeq; // the When page as it is now: left (Escape, a closed palette), and the answer leaves the row alone
   return tana.createDocument(title, { kind: 'meeting', start: when.start, end: when.end }).then((n) => {
     extra.set(n.id, { ...n, text: n.title || '', hasChildren: true });
-    const stayed = seq === palSeq && !palette.hidden && palMode === 'slashMeetingWhen', el = stayed && items.get(item.key) === item && textEl(item.key);
+    const stayed = seq === palSeq && !palette.hidden && palMode === 'slashMeetingWhen', el = stayed && item && items.get(item.key) === item && textEl(item.key);
     if (stayed) closePalette();
+    if (!item && stayed) return openDoc(n.id); // from ⌘K Create new: no row to refer to it, so the meeting itself opens
     if (!el) return showNote('“' + (n.title || title) + '” created', false, n.id); // the row or its page went meanwhile: the meeting stays, in the Library
     dropPending(item.key); // the reference is the row's words now: a save of the "/" still waiting must not land after it
     const segs = readSegs(el), words = plainOf(segs), at = words.trim() === '/' || !words.trim() ? 0 : words.length;

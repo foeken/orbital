@@ -2851,6 +2851,7 @@ function makeSlashMeetingHarness() {
       return failed(new Error('could not write the row'), linked);
     };
     const render = () => calls.push(['render']), pending = new Map();
+    const openNamePage = (choice, name) => { palSeq++; palMode = 'createName'; page = { mode: 'createName', value: name }; }, openDoc = (id) => calls.push(['open', id]); // renderer/palette.js, ⌘K Create new's name page
     const showNote = (text, error, open) => calls.push(['note', text, open]), showError = (e) => calls.push(['error', String(e.message || e)]);
     const tana = { createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => creates.push({ resolve, reject })); },
       readMeetingTime: (words, docId) => { calls.push(['readMeetingTime', words, docId]); return new Promise((resolve, reject) => reads.push({ resolve, reject })); } };
@@ -2877,7 +2878,7 @@ function makeSlashMeetingHarness() {
     const fail = (e) => { const p = creates.shift(); p.reject(e); return new Promise((r) => setTimeout(r, 0)); };
     const answer = (a) => { reads.shift().resolve(a); return new Promise((r) => setTimeout(r, 0)); };
     const refuse = (e) => { reads.shift().reject(e); return new Promise((r) => setTimeout(r, 0)); };
-    Object.assign(globalThis, { start: () => meetingFromSlash({ kind: 'meeting', icon: 'meeting' }), page: () => page, rowsOf, calls: () => calls, land, fail, answer, refuse, node, palette, items, pending,
+    Object.assign(globalThis, { start: () => meetingFromSlash({ kind: 'meeting', icon: 'meeting' }), fromCmdK: (title) => meetingWhen(null, { kind: 'meeting', icon: 'meeting' }, title), page: () => page, rowsOf, calls: () => calls, land, fail, answer, refuse, node, palette, items, pending,
       setLinkFails: (v) => { linkFails = v; }, release: () => { release(); return new Promise((r) => setTimeout(r, 0)); }, busy: () => slashMeetingBusy });
   `, context);
   return context;
@@ -3008,6 +3009,24 @@ async function runSlashMeetingCheck() {
   assert.equal(refused.rowsOf('')[0][2], false, 'and the slot can be pressed again');
   assert.equal(refused.calls().some((c) => c[0] === 'linkTo' || c[0] === 'close'), false, 'nothing is written into the row');
   console.log('ok  "/" Meeting: a name, then the exact slot to press, one meeting per press, referenced in its row; Back, stale and failed answers handled');
+
+  // ⌘K Create new → Meeting (#765): the same When page, with no row; one meeting per press, then it opens
+  const k = makeSlashMeetingHarness();
+  k.fromCmdK('Retro');
+  assert.deepEqual(plain(k.rowsOf('')[0]), ['Mon Oct 05 2026 09:10 for 30', 'Now, for 30 minutes', false], '\u2318K\u2019s meeting shows its slot before anything is made');
+  k.page().back();
+  assert.deepEqual(plain([k.page().mode, k.page().value]), ['createName', 'Retro'], 'Escape goes back to its name page, the name kept');
+  k.fromCmdK('Retro');
+  const slot = k.page().rows('', '')[0]; slot.run(); slot.run();
+  const at = new Date(2026, 9, 5, 9, 10).getTime();
+  assert.deepEqual(plain(k.calls().filter((c) => c[0] === 'createDocument')), [['createDocument', 'Retro', { kind: 'meeting', start: at, end: at + 18e5 }]], 'two presses make one meeting, at the slot shown');
+  await k.land({ id: 'tana:event:k1', title: 'Retro', icon: 'meeting' });
+  assert.deepEqual(plain(k.calls().slice(-2)), [['close'], ['open', 'tana:event:k1']], 'and it opens, with nothing written into any row');
+  const gone2 = makeSlashMeetingHarness();
+  gone2.fromCmdK('Retro'); gone2.page().rows('', '')[0].run(); gone2.palette.hidden = true;
+  await gone2.land({ id: 'tana:event:k2', title: 'Retro', icon: 'meeting' });
+  assert.deepEqual(plain(gone2.calls().slice(-1)), [['note', '\u201CRetro\u201D created', 'tana:event:k2']], 'closed meanwhile: nothing opens over where you went, the toast opens it');
+  console.log('ok  \u2318K Create new \u2192 Meeting: the same When page, one meeting per press, opened once made; Back keeps the name');
 }
 
 // New tab, New pane and New floating pane (⌘N, ⇧⌘N, ⌥⌘N, #756): each makes one new note and opens its page on it, with the
@@ -10297,13 +10316,14 @@ checks.push(function runSearchDraftTaskCheck() {
 // choice's options and opens it, once however often Enter is pressed.
 checks.push(async function runNamePageCheck() {
   const api = vm.runInNewContext(`
-    let page = null, opened = [], closed = 0; const made = [], extra = new Map();
-    const openPage = (mode, placeholder, p) => { page = { mode, placeholder, ...p }; }, openCreationPalette = () => {};
+    let page = null, opened = [], closed = 0; const made = [], extra = new Map(), whens = [];
+    const openPage = (mode, placeholder, p, value) => { page = { mode, placeholder, value, ...p }; }, openCreationPalette = () => {};
+    const meetingWhen = (item, choice, title) => whens.push([item, choice.kind, title]); // renderer/toolbar.js, "/" Meeting's When page
     const closePalette = () => { closed++; }, openDoc = (id) => opened.push(id), addSearch = () => {};
     const run = (fn) => Promise.resolve().then(fn);
     const tana = { createDocument: async (title, opts) => { made.push([title, opts]); return { id: 'tana:text:new' + made.length, title }; } };
     ${sourceBetween('let creatingNamed', '// search result / pin')}
-    ({ open: (c) => openNamePage(c), page: () => page, rows: (typed) => page.rows(typed.toLowerCase(), typed), state: () => ({ made, opened, closed }) });
+    ({ open: (c, name) => openNamePage(c, name), page: () => page, rows: (typed) => page.rows(typed.toLowerCase(), typed), state: () => ({ made, opened, closed }), whens });
   `);
   api.open({ kind: 'custom', title: 'Project Task', icon: 'task', typeUri: 'tana:type:pt' });
   assert.equal(api.page().placeholder, 'Name the new Project Task…', 'the page asks for the name of what was chosen');
@@ -10312,6 +10332,12 @@ checks.push(async function runNamePageCheck() {
   assert.equal(row.label, 'Create “Ship the release”', 'a typed name is the one row');
   const first = row.run(); row.run(); await first;
   assert.deepEqual(plain(api.state()), { made: [['Ship the release', { kind: 'custom', typeUri: 'tana:type:pt' }]], opened: ['tana:text:new1'], closed: 1 }, 'Enter makes it once, with the type, closes the palette and opens it');
+  api.open({ kind: 'meeting', title: 'Meeting', icon: 'meeting' }, 'Retro');
+  assert.equal(api.page().value, 'Retro', 'back from the When page, the name is kept');
+  const [when] = api.rows('Retro');
+  assert.deepEqual(plain([when.label, when.keepOpen]), ['Choose when for \u201CRetro\u201D', true], 'a meeting is not made on Enter: its time comes next (#765)');
+  when.run();
+  assert.deepEqual(plain([api.whens, api.state().made.length]), [[[null, 'meeting', 'Retro']], 1], 'on "/" Meeting\u2019s When page, with no row, and nothing made yet');
   console.log('ok  Create new names the node in Cmd+K, then opens it');
 });
 

@@ -44,12 +44,13 @@ module.exports = [
   { name: 'start-create', video: true, setup: [{ wait: 800 }], steps: [
     { move: [900, 500] }, { hover: '#create', page: 'shell' }, { wait: 1200 }, { click: '#create', page: 'shell' }, { wait: 1600 },
   ], clip: [300, 40, 980, 760] },
+  // Create new → Meeting (#765): named, then the When page, now for half an hour offered before anything is made
+  { name: 'start-create-meeting', setup: [{ wait: 900 }, { key: '⌘K' }, { type: 'create new' }, { wait: 400 }, { key: '↩' }, { wait: 700 }, { type: 'meeting' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'Retro' }, { wait: 300 }, { key: '↩' }, { wait: 600 }, bare], clip: { sel: '#palette .card', pad: 28 } },
   { name: 'start-drop', video: true, setup: [{ wait: 800 }], steps: [
     { move: [1000, 560] }, { hover: '#create', page: 'shell' }, drag('dragover'), { wait: 1400 }, drag('drop'), { wait: 2400 },
   ] },
   { name: 'start-logout', setup: [library, { wait: 800 }, { key: '⌘K' }, { type: 'log out' }, { key: '↩' }, { wait: 500 }, bare], clip: { sel: '#palette .card', pad: 28 } },
 ];
-
 
 
 
