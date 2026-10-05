@@ -1422,6 +1422,7 @@ const ipc = {
   // The same place, with a link landing in it instead of the row itself (main/documents.js referenceIn).
   'block:insertMention': (_e, toId, uri, label, parentId, afterId) => referenceIn(toId, uri, label, parentId, afterId),
   'block:toggleCheckbox': (_e, id, nodeId) => mut(id, (doc) => { content.toggleCheckbox(doc, nodeId); }),
+  'block:cycleCheckboxes': (_e, id, nodeIds) => mut(id, (doc) => content.cycleCheckboxes(doc, nodeIds)),
   'sensitive:list': () => sensitiveIds(), // the synced setting sensitive:set writes; db's table is only its migration source
   // "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
   'doc:discussWith': (_e, id, who) => discussWith(id, who),

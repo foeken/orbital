@@ -730,6 +730,13 @@ function mockApi() {
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
     toggleCheckbox: async (docId, id) => mut(docId, () => { const n = locate(content[docId], id).node; n.done = n.done == null ? 0 : n.done ? 0 : 1; emit(docId); }),
+    cycleCheckboxes: async (docId, ids) => mut(docId, () => { // sdk/content.js cycleCheckboxes on the plain rows
+      const ns = ids.map((id) => locate(content[docId], id).node).filter((n) => !n.image && !n.table && n.block !== 'code' && n.block !== 'divider');
+      const step = ns.some((n) => n.done == null) ? 'unchecked' : ns.some((n) => !n.done) ? 'checked' : 'plain';
+      for (const n of ns) { if (step === 'plain') delete n.done; else if (step === 'checked') n.done = 1; else if (n.done == null) n.done = 0; }
+      emit(docId);
+      return ns.length ? step : null;
+    }),
     setText: async (docId, id, text) => mut(docId, () => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); }),
     setCell: async (docId, cellId, text) => mut(docId, () => { const cells = (l) => l.flatMap((n) => [...(n.table ? n.table.rows.flat() : []), ...cells(n.children || [])]); const c = cells(content[docId]).find((x) => x.id === cellId); if (!c) throw new Error('no table cell ' + cellId); c.segments = segsOf(text); c.text = plainOf(text); emit(docId); }),
     // the same operations as sdk/content.js tableOp, on the plain grid (no header or last-row guards: main is the rule)

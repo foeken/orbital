@@ -316,7 +316,7 @@ debounce flushes it. Read-only rows ignore every edit key.
 | ⌘↑ / ⌘↓ | Collapse / expand (built-in keys, §8). |
 | ⇧⌘↑ / ⇧⌘↓ | Move the row, or the selection, one step among its siblings. |
 | ⇧⌘⌫ | Remove the current block with its children, wherever the caret is; the caret goes to the row before (or after). Document rows ignore it. |
-| ⌘↩ | Toggle done on a task, or a checkbox; a plain block becomes an unchecked checkbox in Tana's native structure, drawn with its bullet. |
+| ⌘↩ | Toggle done on a task. On a block it cycles the checkbox: no box → an empty box (Tana's native structure, drawn with its bullet) → ticked → no box (the row stays a bullet). On a selection of blocks every row takes the same step in one write and one undo; a mix takes the first step any of them still needs (rows without a box get one, then all are ticked, then all lose it), and rows that cannot hold a box are passed over. Only the tick plays the pop. |
 | Space on a read-only row | Zoom into it; on a reference row, open what it points at. With exactly one row selected and nothing focused, the same. Editable rows keep Space for typing. |
 | Escape | Blur. |
 

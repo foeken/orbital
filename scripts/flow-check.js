@@ -207,6 +207,36 @@ flow('editing keeps the screen and the saved outline the same', async (p) => {
   assert.deepEqual(await same('⌘Z after the delete'), ['alpha', 'beta', '  gamma', 'delta']);
 });
 
+// ⌘↩ cycles a row's checkbox, no box → empty → ticked → no box, and on a selection every row takes the same step
+// (renderer/edit.js cycleCheckboxes), the boxes drawn as saved and one ⌘Z putting a whole step back
+flow('⌘↩ cycles a checkbox on a row and on a selection of rows', async (p) => {
+  await p.start();
+  const id = await p.js("tana.createDocument('Checkbox test').then((n) => { goTo(n.id); return n.id; })");
+  await p.waitFor('document.activeElement && document.activeElement.isContentEditable', 'the caret in the new page');
+  await p.type('one'); await p.key('↩'); await p.type('two'); await p.key('↩'); await p.type('three');
+  const boxes = async (step) => {
+    await p.js('flushAll()'); await settle(p, 450);
+    const saved = await p.js('tana.children(' + J(id) + ').then((rows) => rows.map((r) => r.done ?? null))');
+    const screen = await p.js('[...document.querySelectorAll("#outline .node")].filter((n) => n.querySelector(".text")).map((n) => { const c = n.querySelector(":scope > .line .check"); return c ? (c.checked ? 1 : 0) : null; })');
+    assert.deepEqual(screen, saved, 'the boxes drawn differ from the saved ones after ' + step);
+    return saved;
+  };
+  await p.js('placeCaret(keyOfEl(' + T('two') + '), 1)');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('one ⌘↩'), [null, 0, null], 'an empty box first');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('a second ⌘↩'), [null, 1, null], 'then ticked');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('a third ⌘↩'), [null, null, null], 'then no box');
+  await p.key('⌘↩'); await p.key('⌘↩'); assert.deepEqual(await boxes('two more'), [null, 1, null]);
+  await p.key('⌘a'); await p.key('⌘a'); // the words, then every row
+  await p.waitFor('sel && sel.keys.size === 3', 'the three rows selected');
+  assert.equal(await p.js('document.getElementById("toolbar").hidden'), true, 'the toolbar the first ⌘A raised over the words is gone once the rows are selected');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('⌘↩ on the selection'), [0, 1, 0], 'the rows without a box get one, the ticked one stays ticked');
+  assert.equal(await p.js('sel && sel.keys.size'), 3, 'and the rows stay selected');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('a second ⌘↩ on the selection'), [1, 1, 1], 'then all ticked');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('a third ⌘↩ on the selection'), [null, null, null], 'then no boxes');
+  await p.key('⌘z'); await settle(p, 300);
+  assert.deepEqual(await boxes('⌘Z'), [1, 1, 1], 'one ⌘Z puts the whole step back');
+});
+
 // 5. Focus (#200, #377, #463, #603): the palette and the menus over a row give the caret back where it was
 flow('Cmd+K, / and Escape give the caret back', async (p) => {
   await p.start();
