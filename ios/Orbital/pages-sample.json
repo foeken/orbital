@@ -515,6 +515,29 @@
      ]
     }
    ]
+  },
+  "tana:search:0000000000000000000000000s5": {
+   "id": "tana:search:0000000000000000000000000s5",
+   "title": "Risks",
+   "kind": "search",
+   "rows": [
+    {
+     "id": "tana:text:0000000000000000000000000b",
+     "title": "Send the offsite agenda",
+     "icon": "text",
+     "stateType": "open",
+     "createdAt": "2026-09-29T10:00:00Z",
+     "sensitive": true,
+     "people": [
+      {
+       "name": "Priya Shah"
+      }
+     ],
+     "assignees": [
+      "tana:user-profile:000000000000000000000000p1"
+     ]
+    }
+   ]
   }
  },
  "access": {

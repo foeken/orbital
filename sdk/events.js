@@ -7,12 +7,18 @@
 const { LoroMap } = require('loro-crdt');
 const { ulid } = require('./node');
 const { deterministicId } = require('./chat');
+const { TEXT_URI } = require('./ids');
 
 // Where one person's private notes on a meeting live (main/meeting-notes.js): ids derived from the two, in a few places.
 // Here so main/related.js can keep them out of the meeting's References, where the meeting's editor already is.
 const NOTES_SLOTS = 4;
 const notesSlotName = (me, eventId, k) => 'orbital:meeting-notes:' + me + ':' + eventId + ':' + k;
 const notesSlotId = (me, eventId, k) => 'tana:text:' + deterministicId(notesSlotName(me, eventId, k));
+// ... and whether a graph row at one of them is your notes on it (main/meeting-notes.js, the phones' ios/engine/index.js
+// meeting): a document you made, owned by this meeting or by nothing (made before notes were owned), not a task, not
+// archived. undefined when it has no row yet.
+const notesOwnerOk = (owner, eventId) => !owner || owner === eventId;
+const notesOurs = (n, me, eventId) => (n ? TEXT_URI.test(n.id || '') && notesOwnerOk(n.ownerUri, eventId) && n.createdBy === me && !(n.state && n.state.type) && !n.archivedAt : undefined);
 
 const PROFILE = /^tana:(?:user-profile|contact):[0-9a-z]{26}$/;
 // A roster line is keyed by its email, or 'tana:<ulid>' for a person without one. Tana's Yl/xl trims ASCII whitespace
@@ -107,4 +113,4 @@ function callOf(ev) {
   } catch { return undefined; }
 }
 
-module.exports = { setTime, setTimezone, setLocation, setDescription, addAttendees, attendees, lineKey, writeUpOf, callOf, NOTES_SLOTS, notesSlotName, notesSlotId };
+module.exports = { setTime, setTimezone, setLocation, setDescription, addAttendees, attendees, lineKey, writeUpOf, callOf, NOTES_SLOTS, notesSlotName, notesSlotId, notesOwnerOk, notesOurs };

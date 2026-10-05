@@ -69,6 +69,13 @@ function noteNotesChanged(eventId) {
   askNotes(eventId);
 }
 function forgetNotes(signedOutToo) { notesAsked++; meetingNotes.clear(); notesWriteUps.clear(); notesSeq.clear(); notesHeld.clear(); summaryMeta.clear(); if (signedOutToo) { notesDrafts.clear(); notesOn.clear(); } }
+// Arriving at a meeting whose notes could not be checked asks again (renderer/edit.js noteNavigation, on every arrival).
+// Never from the failure itself: a lookup that keeps failing would then ask, fail and draw in a loop.
+function notesArrived(eventId) {
+  if (!(meetingNotes.get(eventId) || {}).failed) return;
+  meetingNotes.delete(eventId);
+  renderSoon();
+}
 // The write-up as its own document: its node (title, whether you may edit it) and who sees it, asked of main for it alone.
 // An answer from before a sign-out, or for a write-up the meeting no longer has, is dropped.
 function askSummary(eventId, uri) {
@@ -242,13 +249,10 @@ function meetingTanaButton(parent) {
   const show = !!id && !LINKS && !(zoom && zoom.nodeId) && !parent.node.draft && (String(id).startsWith('tana:event:') || parent.node.icon === 'meeting') && !!tana.nodeLink && !!tana.openExternal;
   if (!show) { if (old) old.remove(); return; }
   if (old && old.dataset.doc === id) return;
-  const slot = document.createElement('span'), b = document.createElement('button'), label = document.createElement('span');
+  const slot = document.createElement('span'), b = quietButton('meeting-tana', 'Open in Tana', () => openInTana(id)), label = document.createElement('span'); // quiet: a click leaves the caret where it was
   slot.className = 'meeting-tana-slot'; slot.dataset.doc = id; // holds the glyph's width: the words grow over the title's end, which never moves
-  b.type = 'button'; b.className = 'meeting-tana'; b.title = 'Open in Tana'; b.setAttribute('aria-label', 'Open in Tana');
   label.className = 'meeting-tana-label'; label.textContent = 'Open in Tana'; label.setAttribute('aria-hidden', 'true');
   b.append(iconEl('tana', null), label);
-  b.onmousedown = (e) => e.preventDefault(); // a click leaves the caret where it was
-  b.onclick = () => run(async () => tana.openExternal(await tana.nodeLink(id)));
   slot.append(b);
   if (old) old.replaceWith(slot); else head.append(slot);
 }

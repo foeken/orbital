@@ -44,7 +44,7 @@ class WidgetJourneyTest {
     @Test fun aMeetingOnTheTodayWidgetOpensInTheApp() {
         pinned(AheadWidgetReceiver::class.java)
         device.wait(Until.findObject(By.text("Design review")), 20_000).also { shot("today") }.click()
-        check(device.wait(Until.hasObject(By.text("Offsite planning")), 15_000)) { "the meeting opens in the app, its documents on its page" }
+        check(device.wait(Until.hasObject(By.text("Ship the new onboarding in two steps")), 15_000)) { "the meeting opens in the app, its summary on its page" }
         shot("meeting-in-the-app")
     }
 

@@ -781,12 +781,9 @@ let searchMoreNext = null;
 const searchEnd = typeof IntersectionObserver === 'function'
   ? new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting) && searchMoreNext) searchMoreNext(); }, { root: outline.parentElement, rootMargin: '0px 0px 100% 0px' }) : null;
 function searchMoreEl(id, rest) {
-  const el = document.createElement('button');
-  el.type = 'button'; el.className = 'gmore search-more';
-  el.textContent = 'Show ' + Math.min(rest, SEARCH_STEP) + ' more';
-  el.onmousedown = (e) => e.preventDefault();
   const more = () => { searchMoreNext = null; searchShown.set(id, (searchShown.get(id) || SEARCH_STEP) + SEARCH_STEP); renderSoon(true); };
-  el.onclick = more;
+  const el = quietButton('gmore search-more', null, more);
+  el.textContent = 'Show ' + Math.min(rest, SEARCH_STEP) + ' more';
   if (searchEnd) { searchEnd.disconnect(); searchMoreNext = more; searchEnd.observe(el); }
   return el;
 }
@@ -794,10 +791,7 @@ function searchMoreEl(id, rest) {
 // nodeEls() passes it by, so it is not somewhere the keyboard can land; mousedown is swallowed the same way, so
 // clicking it cannot take a selection away.
 function groupMoreEl(g) {
-  const el = document.createElement('button');
-  el.type = 'button'; el.className = 'gmore';
+  const el = quietButton('gmore', null, () => showAllTracking(g.id));
   el.textContent = 'Show ' + g.more + ' more task' + (g.more === 1 ? '' : 's');
-  el.onmousedown = (e) => e.preventDefault();
-  el.onclick = () => showAllTracking(g.id);
   return el;
 }

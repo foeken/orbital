@@ -126,7 +126,11 @@ jobs:
   # main's result as one issue: opened (or added to) when a job fails, closed when a later run passes them all
   report:
     needs: [moved, desktop, android, ios]
-    if: always() && needs.moved.outputs.run == 'true' && github.ref == 'refs/heads/main'
+    # !cancelled(), not always(): a run cancelled as a whole (a newer one in its concurrency group, or by hand) reports
+    # nothing. always() kept this job running through the cancel (GitHub re-evaluates if: on cancelling, and always()
+    # stays true), and BLOCKING below read the cancelled jobs as main failing. A job that times out ends only itself, so
+    # it is still reported here, and blocks as before.
+    if: ${{ !cancelled() && needs.moved.outputs.run == 'true' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

@@ -3,7 +3,7 @@
 // <POLARIS_SERVICE_API_URL>/images/by-uri/<uri>[?w=&h=&format=&quality=&fit=] with the bearer token answers 302 to a
 // signed imgproxy URL on images.tana.inc plus a Cloud-CDN-Cookie; the signed URL is 403 without that cookie.
 // (/images/<cid> and /files/<cid>/download exist too; by-uri saves reading the image document for its cid.)
-const IMAGE_URI = /^tana:image:[0-9a-z]{26}$/;
+const { IMAGE_URI } = require('./ids');
 // The most an image may be, read as it arrives: Tana takes uploads of up to 50 MB (UPLOAD_LIMIT below), so a picture
 // past this is no picture of Tana's, and a collaborator's huge one cannot fill memory before anything looks at it.
 const IMAGE_LIMIT = 64 * 1024 * 1024;

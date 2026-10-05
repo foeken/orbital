@@ -93,13 +93,12 @@ function assigneeParams(assignee, me) {
 // false, which includes whatever a restricted space or meeting holds), so that is the query and access.js
 // everyoneOnly narrows the answer, the way completedWithin is applied after the query.
 const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin', 'fields', 'audience', 'limit']);
-const USER = /^tana:user-profile:[0-9a-z]{26}$/;
+const { USER_URI: USER, TYPE_URI } = require('./ids');
 // A filter's types may also name the workspace's own types (`tana:type:` uris, #139): every Risk, say. They are sent as
 // entityTypes, which the graph ORs among themselves and ANDs with the kinds (verified live 2026-09-25: Risk 18 +
 // Project 5 = 23 together). Only types chosen means what they are, whatever kind, so the task-only filters stay off:
 // a risk has no state, and the Library's "every state" would otherwise have emptied the list.
 // Unless every type chosen has a workflow (`workflows`, the uris main read a workflowUri on): their nodes are tasks.
-const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
 const splitTypes = (types) => { const all = Array.isArray(types) ? types : []; return { kinds: all.filter((t) => !TYPE_URI.test(t)), typeUris: all.filter((t) => TYPE_URI.test(t)) }; };
 const tasksInScope = (types, workflows = new Set()) => { const { kinds, typeUris } = splitTypes(types); return kinds.length ? kinds.includes('tasks') : typeUris.every((u) => workflows.has(u)); };
 // When meetings take place (#492): Tana's four presets (timeRange), offered by the When pill while meetings are the only

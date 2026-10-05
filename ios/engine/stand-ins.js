@@ -81,7 +81,8 @@ module.exports = {
   },
   toNode: (row) => row,
   rememberNodeHue() {},
-  hm: (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }, // sdk/chat.js hm
+  // sdk/chat.js hm, required when first asked: sdk/chat requires crypto, which the bundle makes this file (build.js)
+  hm: (ms) => require('../../sdk/chat').hm(ms),
   isAllDay(start, end, allDayFlag) { // main/rows.js isAllDay
     const s = new Date(start), e = end ? new Date(end) : null;
     const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;

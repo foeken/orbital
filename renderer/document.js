@@ -58,7 +58,7 @@ function loadPins() {
     if (!palette.hidden && (palMode === 'cmd' || palMode === 'pins')) renderPalette();
   }, (e) => {
     if (mine !== pinRead) return;
-    pinFailed = { docId: doc.id, message: (e && e.message) || String(e) };
+    pinFailed = { docId: doc.id, message: errorText(e) };
     if (pinInfo && pinInfo.docId === doc.id) pinInfo = null; // what it said before is no longer known to hold: the page shows the failure
     showError(e);
     if (!palette.hidden && palMode === 'pins') renderPalette();
@@ -142,7 +142,6 @@ function openPinsPalette(doc) {
 // without a year is the next time it comes round, and numbers are read day first (12/10 is 12 October).
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-const isoDay = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const namedIn = (list, word) => (word && word.length >= 3 ? list.findIndex((name) => name.startsWith(word)) : -1);
 function parseDay(text, now = new Date()) {
   const s = String(text || '').trim().toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ');

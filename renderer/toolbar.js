@@ -380,12 +380,9 @@ let slashTaskBusy = false; // one task per Enter
 function taskFromSlash(choice) {
   const item = slashTarget();
   if (!item || item.node.kind !== 'block') return;
-  openPage('slashTask', 'Name the new task…', { back: () => togglePalette('slash'), typed: true, rows: (q, typed) => {
-    const title = String(typed || '').trim();
-    if (slashTaskBusy) return [{ group: 'New task', icon: choice.icon, label: 'Creating “' + title + '”…', disabled: true, note: true }];
-    return [title ? { group: 'New task', icon: choice.icon, label: 'Create “' + title + '”', keepOpen: true, run: () => taskHere(item, title) }
-      : { group: 'New task', icon: choice.icon, label: 'Type a name', disabled: true, note: true }];
-  } });
+  namePage('slashTask', 'Name the new task…', { group: 'New task', icon: choice.icon, back: () => togglePalette('slash') }, (title) => (slashTaskBusy
+    ? { label: 'Creating “' + title + '”…', disabled: true, note: true }
+    : { label: 'Create “' + title + '”', keepOpen: true, run: () => taskHere(item, title) }));
 }
 function taskHere(item, title) {
   if (slashTaskBusy) return;
@@ -420,11 +417,8 @@ function meetingFromSlash(choice) {
   if (item && item.node.kind === 'block') meetingName(item, choice, '');
 }
 function meetingName(item, choice, name) {
-  openPage('slashMeeting', 'Name the new meeting…', { back: () => togglePalette('slash'), typed: true, rows: (q, typed) => {
-    const title = String(typed || '').trim();
-    return [title ? { group: 'New meeting', icon: choice.icon, label: 'Choose when for “' + title + '”', keepOpen: true, run: () => meetingWhen(item, choice, title) }
-      : { group: 'New meeting', icon: choice.icon, label: 'Type a name', disabled: true, note: true }];
-  } }, name);
+  namePage('slashMeeting', 'Name the new meeting…', { group: 'New meeting', icon: choice.icon, back: () => togglePalette('slash') },
+    (title) => ({ label: 'Choose when for “' + title + '”', keepOpen: true, run: () => meetingWhen(item, choice, title) }), name);
 }
 function meetingWhen(item, choice, title) {
   const slot = Math.floor(Date.now() / 6e4) * 6e4, group = 'New meeting · ' + title; // now, to the minute, read once: the row offered does not move under the press
@@ -454,7 +448,8 @@ const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const zoneName = (timeZone) => String(timeZone).split('/').pop().replace(/_/g, ' ');
 function zoneSpan(timeZone, start, end) {
   const f = (o) => new Intl.DateTimeFormat('en-GB', { timeZone, ...o }), at = f({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-  return f({ weekday: 'short', day: 'numeric', month: 'short' }).format(start) + ' ' + at.format(start) + '\u2013' + at.format(end);
+  // the month in three letters, as meetingSpan writes it above it: ICU's en-GB has started writing "Sept"
+  return f({ weekday: 'short', day: 'numeric' }).format(start) + ' ' + f({ month: 'short' }).format(start).slice(0, 3) + ' ' + at.format(start) + '\u2013' + at.format(end);
 }
 function zoneNote(answer, group) {
   if (!answer.timeZone || answer.timeZone === localZone()) return [];
@@ -465,7 +460,7 @@ function readWords(current, set, words, docId, mode) {
   if (current && current.busy) return;
   const seq = palSeq, mine = { words, busy: true };
   set(mine); renderPalette();
-  return tana.readMeetingTime(words, docId).then((answer) => { mine.answer = answer; }, (e) => { mine.error = (e && e.message) || String(e); })
+  return tana.readMeetingTime(words, docId).then((answer) => { mine.answer = answer; }, (e) => { mine.error = errorText(e); })
     .then(() => { mine.busy = false; if (seq === palSeq && palMode === mode && !palette.hidden) renderPalette(); });
 }
 const readWhen = (words) => readWords(slashMeetingRead, (r) => { slashMeetingRead = r; }, words, null, 'slashMeetingWhen');
@@ -489,7 +484,7 @@ function meetingHere(item, title, when) {
       // typed since the link went in, or a row or page that has gone, are left exactly as they are; the toast says it all.
       const el = items.get(item.key) === item && textEl(item.key);
       if (el && !pending.has(item.key) && plainOf(readSegs(el)) === plainOf(linked)) { item.node.text = words; item.node.segments = segs; render(true); }
-      showNote('\u201C' + (n.title || title) + '\u201D was made, but its link could not be written here (' + ((e && e.message) || e) + '). Click to open it', true, n.id);
+      showNote('\u201C' + (n.title || title) + '\u201D was made, but its link could not be written here (' + errorText(e) + '). Click to open it', true, n.id);
     });
   }).catch(showError).finally(() => { slashMeetingBusy = false; if (palMode === 'slashMeetingWhen' && !palette.hidden) renderPalette(); });
 }

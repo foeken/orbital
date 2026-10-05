@@ -63,7 +63,7 @@ function mainHelpers(childProcess) {
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
   const loaded = load(nodePath.join(root, 'main.js'));
-  return { ...loaded, handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), documents: load(nodePath.join(root, 'main', 'documents.js')), meetings: load(nodePath.join(root, 'main', 'meetings.js')), meetingNotes: load(nodePath.join(root, 'main', 'meeting-notes.js')) };
+  return { ...loaded, handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), relay: load(nodePath.join(root, 'main', 'relay.js')), documents: load(nodePath.join(root, 'main', 'documents.js')), meetings: load(nodePath.join(root, 'main', 'meetings.js')), meetingNotes: load(nodePath.join(root, 'main', 'meeting-notes.js')) };
 }
 
 // An agent's MCP connection to a relay (relay/server.js), signed in as an MCP client signs in: registered, PKCE, a token
@@ -89,6 +89,19 @@ async function main() {
     assert.deepEqual(called.filter((c) => !backend.handlers.has(c)).sort(), [], 'preload.js calls channels main does not answer');
     assert.deepEqual([...backend.handlers.keys()].filter((c) => !called.includes(c)).sort(), [], 'main answers channels preload.js never calls');
     console.log('ok  ipc: every preload channel has one handler in main, and every handler a caller');
+  }
+  {
+    // orbital:<id> links (main.js heardLink): only a node id opens, nothing else in the link; one heard before a window
+    // can open it (the link that launched the app) waits and opens once it can, and later ones open at once
+    const backend = mainHelpers(), opened = [], node = 'tana:text:' + ulid(), other = 'tana:event:' + ulid(), stray = 'tana:text:' + ulid();
+    backend.heardLink('orbital:' + node);
+    for (const url of ['https://example.com', 'orbital:' + stray + '?x=1', 'orbital:tana:text:short', 'orbital://' + stray, stray]) backend.heardLink(url);
+    assert.deepEqual(opened, [], 'nothing opens before a window can');
+    backend.linksReady((id) => opened.push(id));
+    assert.deepEqual(opened, [node], 'the waiting link opens once, and only the one that names a node');
+    backend.heardLink('orbital:' + other); backend.heardLink('orbital:javascript:alert(1)');
+    assert.deepEqual(opened, [node, other], 'a link after that opens at once');
+    console.log('ok  orbital: links open a node and nothing else, the one that launched the app once a window can');
   }
   {
     // A created saved search must match a real one, byte shape for byte shape. The reference is a raw container
@@ -1080,7 +1093,7 @@ async function main() {
     settings.set('openaiApiKey',undefined); settings.reset();
 
     const meetings=mainHelpers().meetings, AMS='Europe/Amsterdam';
-    const at=(y,mo,d,h,mi=0,zone=AMS)=>meetings.wallTime(zone,y,mo,d,h,mi), now=Date.UTC(2026,9,5,7,35,20); // Monday 5 October 2026, 09:35 in Amsterdam
+    const dates=require('../sdk/dates'), at=(y,mo,d,h,mi=0,zone=AMS)=>dates.wallTime(zone,y,mo,d,h,mi), now=Date.UTC(2026,9,5,7,35,20); // Monday 5 October 2026, 09:35 in Amsterdam
     const meeting={now,timeZone:AMS,start:at(2026,10,7,10),end:at(2026,10,7,11)}; // Wednesday 10:00-11:00
     const fresh={now,timeZone:AMS,start:at(2026,10,5,9,35),end:at(2026,10,5,10,5)};
     const clock=(hour,minute=0,fixed=false)=>({hour,minute,fixed}), read=(a,ctx=meeting)=>meetings.resolveTime({date:null,start:null,end:null,minutes:null,zone:null,question:null,...a},ctx);
@@ -1121,6 +1134,10 @@ async function main() {
       [{minutes:1440},/less than a day/],[{minutes:30.5},/did not answer/],[{start:clock(15,0,true),end:clock(14,0,true)},/ends after it starts/],[{start:clock(23,0,true),end:clock(1)},/ends after it starts/],
       [{},/No day or time/],[{date:'2030-01-01'},/two years/],[{date:'2027-03-28',start:clock(2,30,true)},/clocks skip/]])
       assert.throws(()=>(a===null||Array.isArray(a)?meetings.resolveTime(a,meeting):read(a)),why,JSON.stringify(a));
+    // the zone's own wall clock (sdk/dates.js), which the inbox's reminders read too: the hour summer time starts is not there,
+    // the hour it ends happens twice and is taken the second time, and a summer and a winter hour keep their offsets
+    assert.deepEqual([at(2027,3,28,2,30),at(2026,10,25,2,30),at(2026,7,1,12),at(2026,12,1,12)],[NaN,Date.UTC(2026,9,25,1,30),Date.UTC(2026,6,1,10),Date.UTC(2026,11,1,11)],'wall times across both summer-time boundaries');
+    assert.deepEqual(dates.partsIn(AMS,Date.UTC(2026,9,25,0,59,59)),{y:2026,mo:10,d:25,h:2,mi:59,s:59,weekday:'Sunday'},'the last second of summer time');
     assert.deepEqual(span(read({date:'2026-10-25',start:clock(2,30,true)})),['2026-10-25 02:30:00','2026-10-25 03:30:00'],'the hour summer time ends is a time that happens');
     assert.equal(read({minutes:45},{...meeting,start:Date.UTC(2020,0,6,9),end:Date.UTC(2020,0,6,10)}).end-Date.UTC(2020,0,6,9),27e5,'an old meeting\u2019s length still changes: only a day named is held to two years');
     console.log('ok  reading a meeting\u2019s time: the AI transcribes, Orbital decides: today, daytime hours, kept lengths, times said exactly, refusals, time zones and summer time');
@@ -1911,6 +1928,9 @@ async function main() {
   const Req = message('sync', 'ServerSyncRequest'), Cmd = message('sync', 'ServerSyncCommandRequest');
   const peerId = derivePeerId('01examplei0000000000000000');
   assert.equal(BigInt(peerId) >> 16n, 265604616632439n, 'peerId user hash');
+  assert.equal(require('../sdk/sync').userBits(' 01EXAMPLEI0000000000000000 '), 265604616632439n, 'userBits: the same hash, trimmed and in lower case (main/meeting-notes.js reads peers by it)');
+  { const { isId } = require('../sdk/ids'), U = 'tana:user-profile:01examplei0000000000000000';
+    assert.deepEqual([isId(U), isId(U, 'user-profile'), isId(U, 'user'), isId(U, 'profile'), isId(U + 'x'), isId('tana:text:01EXAMPLEI0000000000000000'), isId(undefined), isId({ toString: () => U })], [true, true, false, false, false, false, false, false], 'isId: any kind or the one named, whole ids only'); }
   const req = create(Req, { orgId: ORG, peer: { peerId, ephemeral: true, storageId: '' } });
   assert.deepEqual(toJson(Req, fromBinary(Req, toBinary(Req, req))), { orgId: ORG, peer: { peerId, ephemeral: true, storageId: '' } });
   const vvBytes = new Uint8Array([1, 2, 3]);
@@ -3903,13 +3923,13 @@ async function main() {
     assert.deepEqual(context()[0].children.map((n) => n.text), ['One line only', 'and a third'],
       'its children are replaced by the new prompt, and a blank line is not an empty row');
     // The block stays the last of the node: an agent writes above it, and the status is its last line, one line, replaced
-    const docs = backend.documents, last = () => outline.readOutline(task).at(-1).text;
-    await docs.writeAgentStatus(task.id, 'Assigned');
+    const docs = backend.documents, last = () => outline.readOutline(task).at(-1).text, status = (s) => docs.mut(task.id, (doc) => backend.relay.writeStatus(doc, s));
+    await status('Assigned');
     await docs.mut(task.id, (doc) => outline.insertAfter(doc, null, 'What the agent wrote'));
     assert.equal(last(), 'What the agent wrote', 'something written after the block');
     await set(task.id, true, 'Again');
     assert.equal(last(), 'Agent context', 'puts the block back at the end on the next handoff');
-    await docs.writeAgentStatus(task.id, 'Assigned'); await docs.writeAgentStatus(task.id, 'Working');
+    await status('Assigned'); await status('Working');
     assert.equal(context().length, 0, 'handing it to an agent linked through orbital.md takes the request block out: that agent is handed the request in its event, and the node is content');
     assert.deepEqual([last(), outline.readOutline(task).filter((n) => /^Agent status:/.test(n.text || '')).length], ['Agent status: Working', 1], 'the status is the node\'s last line, and one line: a new one replaces it');
     await docs.setAgentMark(task.id, true, 'Via the event', false);
@@ -3995,6 +4015,8 @@ async function main() {
     assert.equal(agent.defaultAgent(), 'tana', 'switching the default off forgets it: switched on again it does not come back as the default unannounced');
     agent.setEnabled('claude', false); agent.setEnabled('codex', false);
     assert.deepEqual([...agent.enabledIds()], ['tana'], 'with everything else off, Tana is left');
+    settings.set('agents', ['relay:' + THREAD, 'codex']); agent.setEnabled('claude', true);
+    assert.deepEqual(settings.get('agents'), ['relay:' + THREAD, 'codex', 'claude'], 'an agent this Mac does not know yet (a Dot linked on the phone) stays on when another is switched');
     settings.set('agents', undefined); settings.set('defaultAgent', undefined);
     // A link names its agent; the shapes older builds wrote are Codex tasks.
     assert.equal(agent.setTask(NODE, 'codex', THREAD).taskId, THREAD);
@@ -4109,20 +4131,31 @@ async function main() {
     const entry = () => agent.list().find((a) => a.id === id);
     assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled, entry().isDefault], ['GrokBot', true, true, true, true], 'and is an agent like any other, on from the start and the default: linking it is choosing it');
     // a node handed over: the event task.assigned with the node's id, nothing else; the words stay in Tana
-    const NODE = 'tana:text:' + ulid(), realMut = docs.mut, realOp = docs.op, realWrite = docs.writeAgentStatus, realStatus = docs.agentStatus, wrote = [];
-    docs.op = docs.mut = async () => { throw new Error('a linked agent reads the node with its own Tana tools: Orbital sends no words'); };
-    const handOver = (prompt = 'Draft the brief') => agent.get(id).start({ nodeUri: NODE, title: 'Pilot brief', prompt });
-    docs.writeAgentStatus = async (nodeId, status) => { wrote.push([nodeId, status]); };
+    // the node is a page of its own here: Orbital writes its status line into it (mut) and reads nothing of it (op)
+    const NODE = 'tana:text:' + ulid(), realMut = docs.mut, realOp = docs.op, realStatus = docs.agentStatus, wrote = [];
+    const newPage = () => { const d = new Document(NODE); d.transact((l) => initDocument(l, 'Pilot brief', ME)); return d; };
+    let page = newPage();
+    const lines = () => contentText(page).split('\n').filter(Boolean); // every line, nested ones too; a new note's empty first line left out
+    docs.op = async () => { throw new Error('a linked agent reads the node with its own Tana tools: Orbital sends no words'); };
+    docs.mut = async (nodeId, fn) => { assert.equal(nodeId, NODE); const out = fn(page); wrote.push(lines()); return out; };
+    const handOver = (prompt = 'Draft the brief', was) => agent.get(id).start({ nodeUri: NODE, title: 'Pilot brief', prompt, was });
     await assert.rejects(handOver('  '), /Say what GrokBot should do/, 'a request is what the event carries: none, no handoff');
+    assert.deepEqual(wrote, [], 'and nothing is written');
     await assert.rejects(handOver(), /GrokBot is not listening yet: ask it to subscribe to Orbital's task\.assigned event/, 'an agent that has not subscribed would never hear of it: it is told to, and nothing is handed over');
+    assert.deepEqual(wrote, [['Agent status: Assigned'], []], 'the line it was handed with is taken out again (main/relay.js handOver)');
     const sub = await grok.rpc('events/subscribe', { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: 'https://agents.example/events', secret: 'whsec_' + require('node:crypto').randomBytes(32).toString('base64') } });
     assert.match(sub.result.id, /^sub_/, 'subscribed');
     dropping = true;
     await assert.rejects(handOver(), /GrokBot did not take it: assign it again in a moment/, 'an event its receiver fails is said to have gone nowhere: orbital.md tries once and keeps nothing to try again');
+    await assert.rejects(handOver('Draft the brief', { linked: true, status: 'completed' }), /did not take it/);
+    assert.deepEqual(lines(), ['Agent status: Completed'], 'a node an agent had finished before ends with its line again');
+    await assert.rejects(handOver('Draft the brief', { linked: false, prompt: 'Summarise it' }), /did not take it/);
+    assert.deepEqual(lines(), ['Agent context', 'Summarise it'], 'and one handed to Codex before gets its request back');
     dropping = false;
+    page = newPage();
     wrote.length = 0;
     const taskId = await handOver();
-    assert.deepEqual(wrote, [[NODE, 'Assigned']], 'the handoff ends the node with Agent status: Assigned, so an old status line no longer counts, and leaves Working for the agent to write');
+    assert.deepEqual(wrote, [['Agent status: Assigned']], 'the handoff ends the node with Agent status: Assigned, so an old status line no longer counts, and leaves Working for the agent to write');
     agent.setTask(NODE, id, taskId);
     const event = posted.at(-1);
     assert.deepEqual([event.name, event.eventId, Object.keys(event.data), event.data.node, event.data.request], ['task.assigned', 'evt_' + taskId, ['node', 'request', 'instructions'], NODE, 'Draft the brief'],
@@ -4140,7 +4173,7 @@ async function main() {
     assert.equal(docs.lastAgentStatus('Agent status: Assigned\nagent status: working'), 'working', 'until the agent says it started');
     assert.equal(docs.lastAgentStatus('The agent status: Failed was a guess\nAgent status: maybe'), null, 'and only a line that starts with it and names one of the three counts');
     assert.equal(docs.lastAgentStatus('Agent status: Completed\nAgent status: Working with finance'), 'completed', 'and only the whole line: a sentence that starts the same way is somebody\'s words');
-    docs.writeAgentStatus = realWrite; docs.agentStatus = realStatus;
+    docs.agentStatus = realStatus;
     // an older build's Dot, and an agent the relay no longer lists, let go of their nodes: the mark and the link, the node not written
     const OLD = 'tana:text:' + ulid(), GONE = 'tana:text:' + ulid();
     settings.set('codexTask', { ...settings.get('codexTask'), [OLD]: { agent: 'dot', taskId: 'old-chat' }, [GONE]: { agent: 'relay:' + require('node:crypto').randomUUID(), taskId: 'gone' } });
@@ -6163,10 +6196,10 @@ async function main() {
       assert.equal(seen[0][0], 'for 45 minutes');
       assert.ok(seen[0][1].current && seen[0][1].today && seen[0][1].timeZone, 'the AI is told today, the zone and the meeting as it is');
       assert.equal(seen[0][1].timeZone, mine, 'in your zone, not the one the meeting keeps');
-      const p = backend.meetings.partsIn(mine, Date.now()), t = new Date(Date.UTC(p.y, p.mo - 1, p.d + 1)), pad = (n) => String(n).padStart(2, '0');
+      const { partsIn, wallTime } = require('../sdk/dates'), p = partsIn(mine, Date.now()), t = new Date(Date.UTC(p.y, p.mo - 1, p.d + 1)), pad = (n) => String(n).padStart(2, '0');
       backend.ai.readMeetingTime = async (said, context) => { seen.push([said, context]); return { date: t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate()), start: { hour: 3, minute: 0, fixed: false }, end: { hour: 5, minute: 0, fixed: false }, minutes: null, zone: null, question: null }; };
       const afternoon = await call('meeting:read', 'tomorrow from 3-5', id);
-      assert.deepEqual([afternoon.start, afternoon.end, afternoon.timeZone], [backend.meetings.wallTime(mine, t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), 15, 0), backend.meetings.wallTime(mine, t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), 17, 0), mine], 'tomorrow from 3-5 is 15:00-17:00 on your clock, though the meeting keeps another zone');
+      assert.deepEqual([afternoon.start, afternoon.end, afternoon.timeZone], [wallTime(mine, t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), 15, 0), wallTime(mine, t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), 17, 0), mine], 'tomorrow from 3-5 is 15:00-17:00 on your clock, though the meeting keeps another zone');
       backend.ai.readMeetingTime = async (said, context) => { seen.push([said, context]); return { date: null, start: null, end: null, minutes: 45, question: null }; };
       ev.transact((l) => l.getMap('data').delete('timezone'));
       const asked = seen.length;
@@ -7063,6 +7096,31 @@ async function main() {
   // Sending through main (chat:send): the chat's own agent is asked to answer, and a reply that cannot be asked for comes
   // back beside the saved message instead of failing the send, which the renderer would offer to send again (#447).
   {
+    // A node handed to Tana (main/agents/tana.js start) is a new chat on it. When its message cannot be written, or Tana
+    // cannot be asked to answer, that chat is removed again, so no unanswered chat is left on the node, one per retry (#671)
+    const backend = mainHelpers(), docs = new Map(), deleted = [], NODE = 'tana:text:' + ulid();
+    let denied = false;
+    backend.testRuntime({ me: { userUri: ME, orgId: ORG }, session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: ORG, role: 'member' })).toString('base64url') + '.x' },
+      client: { graph: { listNodes: async () => ({ nodes: [], totalCount: 0 }) }, sync: {
+        subscribe: async (id, init) => { if (init && !docs.has(id)) { const d = new Document(id); d.transact(init); d.writeDenied = denied; docs.set(id, d); } if (!docs.has(id)) throw new Error('unavailable'); return docs.get(id); },
+        getDocument: (id) => docs.get(id), softDelete: async (id) => { deleted.push(id); } } } });
+    const realFetch = globalThis.fetch, tana = backend.agent.get('tana'), chats = () => [...docs.keys()].filter((id) => id.startsWith('tana:chat:'));
+    let answer = { status: 429, body: { success: false, error: 'ai_cap_exceeded' } };
+    globalThis.fetch = async () => ({ status: answer.status, ok: answer.status === 200, json: async () => answer.body });
+    try {
+      const handOver = () => tana.start({ nodeUri: NODE, title: 'Pilot brief', prompt: 'Draft it' });
+      await assert.rejects(handOver(), /AI limit/);
+      assert.deepEqual(deleted, chats(), 'Tana not asked: the one chat made for it is removed');
+      denied = true;
+      await assert.rejects(handOver(), /not write in it/);
+      assert.deepEqual([chats().length, deleted], [2, chats()], 'the message refused: that chat is removed too');
+      denied = false; answer = { status: 200, body: { success: true, messageId: 'ai000001' } };
+      const kept = await handOver();
+      assert.deepEqual([chats().includes(kept), deleted.includes(kept), deleted.length], [true, false, 2], 'answered: the chat stays');
+    } finally { globalThis.fetch = realFetch; }
+    console.log('ok  the Tana agent removes the chat it made when its message is refused or Tana cannot be asked, and keeps an answered one');
+  }
+  {
     const backend = mainHelpers();
     const agent = 'tana:agent:' + ulid(), chatDoc = new Document('tana:chat:' + ulid());
     chatDoc.transact((l) => { initDocument(l, 'Agent chat', ME, { kind: 'chat' }); l.getMap('data').set('agentId', agent); });
@@ -7664,7 +7722,7 @@ async function main() {
   // local -> server, batched into one liveDocumentUpdate
   setTitle(d, 'Review the sample agreement');
   setState(d, 'closed', ME);
-  await new Promise((r) => setTimeout(r, 30));
+  await until(() => server.commands.length > 2 && readNode(server.serverDoc).stateType === 'closed', 'the batched live update');
   assert.deepEqual(server.commands.slice(2), ['liveDocumentUpdate']);
   assert.equal(readNode(server.serverDoc).stateType, 'closed');
   // server -> local
@@ -7672,7 +7730,7 @@ async function main() {
   server.serverDoc.on('local-update', (u) => remote.push(u));
   server.serverDoc.transact((l) => l.getMap('data').set('title', 'renamed by server'));
   push({ liveDocumentUpdate: { documentId: DOC, sessionId: 's1', updates: remote.map(b64) } });
-  await new Promise((r) => setTimeout(r, 60));
+  await until(() => readNode(d).title === 'renamed by server', 'the server\'s rename');
   assert.equal(readNode(d).title, 'renamed by server');
   // frames for another session are dropped: an update only this stray peer has must not reach the document
   const stray = new Document(DOC, { peerId: '4343' }), strayUpdates = [];
@@ -7727,7 +7785,7 @@ async function main() {
   assert.deepEqual(readNode(server.created.get(NEW)).participants, { [ME]: { type: 'user', role: 'admin' } });
   assert.equal(server.created.get(NEW).content.get('nodeName'), 'doc');
   outline.setText(created, outline.readOutline(created)[0].id, 'hello');
-  await new Promise((r) => setTimeout(r, 30));
+  await until(() => contentText(server.created.get(NEW)) === 'hello', 'the outline edit on the server');
   assert.equal(contentText(server.created.get(NEW)), 'hello');
   assert.equal((await sync.softDelete(NEW)).responseUnion.case, 'documentActionResponse');
   assert.equal(server.commands.at(-1), 'documentAction');

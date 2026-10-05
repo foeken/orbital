@@ -53,7 +53,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
     var connecting by remember { mutableStateOf(false) } // Connect your personal agent (Agents.kt)
     LaunchedEffect(account) {
         models = if (account == null) emptyList() else maybe { ai.models() } ?: emptyList()
-        if (models.isNotEmpty()) engine.translator.catalogue = models // the choices shown are the ones asked
+        if (models.isNotEmpty()) { engine.translator.catalogue = models; engine.loadPrompts() } // the choices shown are the ones asked, named as the Mac names them
     }
     Sheet(onDismiss) { close ->
         if (signingIn) {
@@ -81,7 +81,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                         GroupRow(last = models.isEmpty()) { Label("chatgpt", "Account"); Text(a.email ?: "ChatGPT", color = c.secondary) }
                         if (models.isNotEmpty()) GroupRow(last = true, onClick = { showModels = true }) {
                             Label("brain", "Models")
-                            Text(listOf("quickModel", "model").joinToString(", ") { ChatGPT.label(engine.translator.ai[it] ?: "") }, color = c.secondary, maxLines = 1)
+                            Text(listOf("quickModel", "model").joinToString(", ") { engine.translator.label(engine.translator.ai[it] ?: "") }, color = c.secondary, maxLines = 1)
                         }
                     }
                 }
@@ -177,7 +177,7 @@ fun Models(engine: Engine, models: List<ChatGPT.Model>, back: () -> Unit) {
                             val next = m.levels
                             if (next.isNotEmpty() && engine.translator.ai[effortKey] !in next) engine.aiChoice(effortKey, if ("low" in next) "low" else next[0])
                         }
-                    }) { Text(ChatGPT.label(m.id), Modifier.weight(1f), color = c.text); RadioButton(m.id == model, null) }
+                    }) { Text(engine.translator.label(m.id), Modifier.weight(1f), color = c.text); RadioButton(m.id == model, null) }
                 }
             }
         }
@@ -186,7 +186,7 @@ fun Models(engine: Engine, models: List<ChatGPT.Model>, back: () -> Unit) {
                 efforts.forEachIndexed { i, e ->
                     val on = (engine.translator.ai[effortKey] ?: "low") == e
                     GroupRow(last = i == efforts.size - 1, selected = on, onClick = { engine.scope.launch { engine.aiChoice(effortKey, e) } }) {
-                        Text(ChatGPT.effortLabel(e), Modifier.weight(1f), color = c.text); RadioButton(on, null)
+                        Text(engine.translator.effortLabel(e), Modifier.weight(1f), color = c.text); RadioButton(on, null)
                     }
                 }
             }

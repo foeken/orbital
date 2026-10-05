@@ -40,31 +40,32 @@ class MainActivity : ComponentActivity() {
             engine.reveal = !engine.reveal
             window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         }
-        val start = if (savedInstanceState == null) Start(zoom(intent), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false), intent.getBooleanExtra("menu", false)) else Start()
-        if (savedInstanceState == null) tick(intent)
+        // the launch extras (design shots, the device tests, adb) only on a debug build: another app gets a release as it is
+        val start = if (savedInstanceState == null && tooling(this)) Start(intent.getStringExtra("zoom"), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false), intent.getBooleanExtra("menu", false)) else Start()
+        link(if (savedInstanceState == null) intent else null)
         setContent { OrbitalApp(engine, start) }
     }
 
-    // brought forward by ShareActivity (what it left is taken in onResume, which follows), or by a widget's tap: the
-    // node it opens, Quick Add, or the Timeline: its title, or a task's box (the Timeline in front, the task ticked)
+    // brought forward by ShareActivity (what it left is taken in onResume, which follows), or by an orbital: link
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        holder.engine.widget = zoom(intent) ?: "add".takeIf { intent.getBooleanExtra("add", false) }
-            ?: "timeline".takeIf { intent.hasExtra("tick") || intent.data?.schemeSpecificPart == "timeline" }
-        tick(intent)
+        link(intent)
     }
 
-    // the node to open: a widget's zoom, or an orbital:<id> link from anywhere (only a node id, as Shell.swift takes it)
-    private fun zoom(intent: Intent) = intent.getStringExtra("zoom")
-        ?: intent.data?.takeIf { it.scheme == "orbital" }?.schemeSpecificPart?.takeIf { Regex("tana:[a-z-]+:[0-9a-z]{26}").matches(it) }
+    // An orbital: link, the iPhone's: a widget's tap, a launcher shortcut (res/xml/shortcuts.xml) or the Quick Settings tile
+    // (QuickAddTile), all through Orbital's own way in (FromOrbital), whose link waits in the app's memory; or Assistant or
+    // any other app, in this exported screen's intent, whose writes the Shell turns into asking (ui/Shell.kt Link.parse). A
+    // write waits for Tana on a cold start.
+    private fun link(intent: Intent?) {
+        val own = FromOrbital.take()
+        val link = own ?: intent?.dataString?.takeIf { intent.data?.scheme == "orbital" } ?: return
+        holder.engine.link = Engine.Opened(link, own != null)
+    }
 
-    // a widget's task box (Widgets.kt Tick): the task set as the widget asked and written to Tana at once, the engine
-    // waiting for Tana on a cold start
-    private fun tick(intent: Intent) {
-        val id = intent.getStringExtra("tick") ?: return
-        val to = intent.getStringExtra("to") ?: "closed"
-        holder.viewModelScope.launch { holder.engine.tick(id, to) }
+    companion object {
+        // the launch extras (sample, demoMode, zoom, …): a debug build's, for design shots, the device tests and adb (README.md)
+        fun tooling(context: android.content.Context) = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
     }
 
     override fun onResume() {
@@ -92,14 +93,15 @@ class MainActivity : ComponentActivity() {
 
     // What lives as long as the screen does, a remake included: the platform, the engine's web view and the Engine
     class Holder(activity: MainActivity) : ViewModel() {
-        private val sample = activity.intent.getBooleanExtra("sample", false)
+        private val own = tooling(activity) // the sample and demo mode only on a debug build
+        private val sample = own && activity.intent.getBooleanExtra("sample", false)
         val platform = AndroidPlatform(activity.applicationContext)
         val web = if (sample) null else EngineWeb(activity.applicationContext, activity.assets.open("engine.js").bufferedReader().use { it.readText() }, screen = activity)
         val engine = Engine(
             host = web, platform = platform.also { it.web = web }, scope = viewModelScope,
             sample = if (sample) activity.assets.let { a -> a.open("timeline-sample.json").bufferedReader().use { it.readText() } to a.open("pages-sample.json").bufferedReader().use { it.readText() } } else null,
-            history = activity.intent.getBooleanExtra("history", false),
-            demoMode = if (activity.intent.hasExtra("demoMode")) activity.intent.getBooleanExtra("demoMode", false) else null,
+            history = own && activity.intent.getBooleanExtra("history", false),
+            demoMode = if (own && activity.intent.hasExtra("demoMode")) activity.intent.getBooleanExtra("demoMode", false) else null,
         )
 
         init {
@@ -115,5 +117,23 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = Holder(activity) as T
         }
+    }
+}
+
+// Orbital's own way in (AndroidManifest.xml): not exported, so Android starts it for Orbital alone: its widgets' and its
+// tile's pending intents and its launcher shortcuts. It leaves their link in the app's memory, where no other app can put
+// one, and brings MainActivity forward, which takes it as Orbital's own: its writes are made at once. No screen of its own.
+class FromOrbital : android.app.Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        pending = intent.dataString?.takeIf { intent.data?.scheme == "orbital" }
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        finish()
+    }
+
+    companion object {
+        private var pending: String? = null // on the main thread only
+        fun take(): String? = pending.also { pending = null }
+        fun open(context: android.content.Context, link: String): Intent = Intent(context, FromOrbital::class.java).setData(android.net.Uri.parse(link))
     }
 }

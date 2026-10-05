@@ -6,7 +6,7 @@ const { createTanaClient, takeCalls } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, addMeetingChats } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView, rowLimit } = require('../sdk/node');
-const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { agentIds, createDocument, creatorOf, document, forgetOwners, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe, workflowTypes } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
@@ -134,7 +134,7 @@ async function search(query, scope) {
   ]);
   const seen = new Set(found.map((n) => n.id)), nodes = [...found, ...people.filter((n) => !seen.has(n.id))];
   nodes.forEach((n) => seen.add(n.id));
-  const ids = [...new Set(semantic.map((r) => r.documentId))].filter((id) => /^tana:[a-z-]+:[0-9a-z]{26}$/.test(id) && !seen.has(id));
+  const ids = [...new Set(semantic.map((r) => r.documentId))].filter((id) => DOC_URI.test(id) && !seen.has(id));
   let related = [];
   if (ids.length) {
     // by id, but under the search's own filters, so "#task budget" relates only tasks; no text left to rank by

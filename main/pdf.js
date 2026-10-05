@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs/promises');
 const { readNode } = require('../sdk/node');
+const { isId } = require('../sdk/ids');
 const { readOutline } = require('../sdk/content');
 const { op, resolveReferences } = require('./documents');
 const { image } = require('./images');
@@ -54,7 +55,7 @@ hr { border: 0; border-top: 1px solid #dce0e5; margin: 6mm 0; }
 </style></head><body><h1>${escape(title)}</h1>${await blocks(nodes)}</body></html>`;
 }
 async function exportPdf(id, parent) {
-  if (typeof id !== 'string' || !/^tana:text:[a-z0-9]{26}$/.test(id)) throw new Error('Choose a document to export');
+  if (!isId(id, 'text')) throw new Error('Choose a document to export');
   const { BrowserWindow, dialog } = require('electron');
   const title = await op(id, doc => readNode(doc).title || 'Untitled');
   const { canceled, filePath } = await dialog.showSaveDialog(parent, { title: 'Export to PDF', defaultPath: title.replace(/[\\/:*?"<>|\x00-\x1f]/g, '-').slice(0, 160) + '.pdf', filters: [{ name: 'PDF document', extensions: ['pdf'] }] });

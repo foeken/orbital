@@ -6,6 +6,14 @@ import kotlin.time.Instant
 
 // The Activity widget's lines (Glimpse.activity): each task once, at the latest thing that happened to it
 class GlimpseTest {
+    // the launcher's shortcuts: the first still to do, never one done or hidden, as many as there is room for
+    @Test fun theLaunchersTasksAreTheFirstStillToDo() {
+        val tasks = listOf(Row("a", title = "Done", stateType = "closed"), Row("b", title = "Secret", stateType = "open", sensitive = true),
+            Row("c", title = "Book the venue", stateType = "open"), Row("d", title = "Inbox one", stateType = "proposed"), Row("e", title = "Later", stateType = "not_now"))
+        assertEquals(listOf("c", "d"), tasks.forShortcuts(2).map { it.id })
+        assertEquals(emptyList(), tasks.forShortcuts(0))
+    }
+
     private fun entry(id: String, uri: String?, day: String, vararg added: String) =
         Row(id, timeline = Row.Info(uri = uri, day = day, time = "12:00"), children = added.map { Row(it, title = it) }.ifEmpty { null })
 

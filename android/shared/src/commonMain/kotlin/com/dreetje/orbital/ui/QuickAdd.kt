@@ -56,6 +56,7 @@ import com.dreetje.orbital.Preset
 import com.dreetje.orbital.TaskType
 import com.dreetje.orbital.Times
 import com.dreetje.orbital.Value
+import com.dreetje.orbital.matching
 import kotlin.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -82,7 +83,6 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
     var values by remember { mutableStateOf(mapOf<String, Value>()) } // field key -> what is set in it
     var assignee by remember { mutableStateOf<Member?>(null) } // whom a task is for; null: you
     var today by rememberSaveable { mutableStateOf(false) } // Pin to today, off until you turn it on
-    var settling by remember { mutableStateOf(false) } // Add pressed while dictating: the words are waited for (Dictate shows it)
     var failure by remember { mutableStateOf<String?>(null) }
     var kept by remember { mutableStateOf<Engine.Draft?>(null) } // a task Tana did not take, opened again (Engine.unsent)
     var picking by remember { mutableStateOf<Field?>(null) } // a person or link field's list open; assignee when key is ""
@@ -96,17 +96,12 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
     val isTask = type?.let { t -> types.firstOrNull { it.uri == t } }?.task != false
 
     Sheet({ dictation.cancel(); onDismiss() }, swipe = false) { close ->
-        fun append(said: String) { title = if (title.isEmpty()) said else "$title $said" }
+        fun append(said: String) { title = Dictation.join(title, said) }
 
         // Add while listening or still transcribing: the words are waited for, then the task is made; one whose words did
         // not come is not made, so nothing said is lost without a word
         suspend fun add() {
-            if (settling) return
-            if (dictation.recording || dictation.transcribing) {
-                settling = true
-                val heard = try { dictation.settle(::append) } finally { settling = false }
-                if (!heard) return
-            }
+            if (dictation.settling || !dictation.settled(::append)) return
             val words = title.trim()
             if (words.isEmpty()) return
             engine.add(Engine.Draft(words, type, if (kept != null) kept?.search else search, assignee, values, today))
@@ -143,7 +138,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
 
         val open = picking
         if (open != null) {
-            if (open.key.isEmpty()) Choices("Assign to", "You", { q -> engine.members().sortedBy { it.name.lowercase() }.filter { q.isEmpty() || it.name.contains(q, ignoreCase = true) } },
+            if (open.key.isEmpty()) Choices("Assign to", "You", { q -> engine.members().sortedBy { it.name.lowercase() }.matching(q) },
                 current = { it == assignee?.id }, back = { picking = null }) { assignee = it; picking = null }
             else Choices(open.title, "None", { q -> engine.fieldChoices(open.key, q) }, current = { it == values[open.key]?.ref }, back = { picking = null }) { m ->
                 values = if (m == null) values - open.key else values + (open.key to Value(ref = m.id, label = m.name)); picking = null
@@ -151,7 +146,7 @@ fun QuickAdd(engine: Engine, shared: Engine.Shared? = null, search: String? = nu
             return@Sheet
         }
 
-        val canAdd = (title.isNotBlank() || dictation.recording || dictation.transcribing) && !settling
+        val canAdd = (title.isNotBlank() || dictation.busy) && !dictation.settling
         SheetBar("Quick Add", cancel = close, action = "Add", enabled = canAdd) { engine.scope.launch { add() } }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(Modifier.fillMaxSize()) {
@@ -298,10 +293,11 @@ fun Choices(title: String, none: String, load: suspend (String) -> List<Member>,
 fun AssignSheet(engine: Engine, task: Engine.Assigning, onDismiss: () -> Unit) {
     val c = Theme.colors
     var people by remember { mutableStateOf(listOf<Member>()) }
+    var loaded by remember { mutableStateOf(!task.people) } // the people read (a note lists only your agents)
     var query by remember { mutableStateOf("") }
     var asking by remember { mutableStateOf<Agent?>(null) } // your Dot picked: what it should do, in this same sheet
     var held by remember { mutableStateOf(false) } // a request written or on its way: no swipe throws it away
-    LaunchedEffect(Unit) { if (task.people) people = engine.members().sortedBy { it.name.lowercase() } }
+    LaunchedEffect(Unit) { if (task.people) { people = engine.members().sortedBy { it.name.lowercase() }; loaded = true } }
     Sheet(onDismiss, swipe = !held) { close ->
         val a = asking
         if (a != null) HandForm(engine, Engine.Handing(task.id, a, task.then), back = { asking = null; held = false }, done = close) { held = it }
@@ -315,9 +311,11 @@ fun AssignSheet(engine: Engine, task: Engine.Assigning, onDismiss: () -> Unit) {
                 }
             }
             val agents = engine.agentsOn.filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
-            val shown = people.filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
+            val shown = people.matching(query)
             SheetBar("Assign to", cancel = close)
             SearchField(query, { query = it })
+            // nothing found, as Choices says it
+            if (loaded && query.isNotEmpty() && agents.isEmpty() && shown.isEmpty()) { Empty("No results", "Nothing matches “$query”.", icon = Icons.Outlined.Search); return@Sheet }
             LazyColumn(Modifier.fillMaxWidth()) {
                 item { Spacer(Modifier.padding(top = 4.dp)) }
                 if (agents.isNotEmpty()) item("agents") {

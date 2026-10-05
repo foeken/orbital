@@ -43,12 +43,64 @@ final class SampleTests: XCTestCase {
         wait(draft, value: "Not completed")
     }
 
+    // Long press, Move to Inbox: the box drawn in the Inbox at once, a tick like the box's own (Engine.moveToInbox)
+    func testMoveToInboxShowsAtOnce() {
+        let draft = box("Draft the Q4 hiring plan")
+        draft.press(forDuration: 1.2)
+        let move = app.buttons["Move to Inbox"]
+        XCTAssert(move.waitForExistence(timeout: 15))
+        move.tap()
+        wait(draft, value: "In your Inbox")
+    }
+
     // what VoiceOver reads is the buttons: the words still sit in the tree as a Text inside the hidden one (Blur), where
     // only a test, never VoiceOver, reaches them
     func testSensitiveTaskShowsNoWords() {
         XCTAssert(box("Sensitive task").exists)
         XCTAssert(app.buttons["Sensitive, shake or use Settings to show"].exists)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'offsite agenda'")).firstMatch.exists)
+    }
+
+    // A sensitive row in a saved search hides its grey line too, who has it among it, as the desktop bars its meta
+    // (Pages.swift ListRow): the Risks search of pages-sample.json, its one task Priya Shah's. As VoiceOver reads it: the
+    // row's buttons (a hidden Text still sits in the tree under Blur, where only a test reaches it)
+    func testSensitiveRowHidesItsGreyLine() {
+        app.terminate()
+        app.launchArguments = ["-sample", "-demoMode", "NO", "-zoom", "tana:search:0000000000000000000000000s5"]
+        app.launch()
+        XCTAssert(box("Sensitive task").waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'offsite agenda'")).firstMatch.exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Priya Shah'")).firstMatch.exists, "the faces on its grey line, barred")
+    }
+
+    // A zoomed task's Status (Pages.swift NodeDetails): Tana's four, the one picked shown at once (Engine.tick)
+    func testStatusFieldSetsATask() {
+        app.terminate()
+        app.launchArguments = ["-sample", "-demoMode", "NO", "-zoom", "tana:text:000000000000000000000000v6"]
+        app.launch()
+        let status = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Status'")).firstMatch
+        XCTAssert(status.waitForExistence(timeout: 15))
+        XCTAssert(status.label.contains("In Progress"), status.label)
+        status.tap()
+        let completed = app.buttons["Completed"]
+        XCTAssert(completed.waitForExistence(timeout: 15))
+        completed.tap()
+        let done = expectation(for: NSPredicate(format: "label CONTAINS 'Completed'"), evaluatedWith: status)
+        wait(for: [done], timeout: 15)
+    }
+
+    // A zoomed node's Pin to Today, and Remove Pin once it is (Pages.swift NodeDetails, Engine.pin)
+    func testPinToTodayOnAZoomedNode() {
+        app.terminate()
+        app.launchArguments = ["-sample", "-demoMode", "NO", "-zoom", "tana:text:000000000000000000000000v6"]
+        app.launch()
+        let pin = app.buttons["Pin to Today"]
+        XCTAssert(pin.waitForExistence(timeout: 15))
+        pin.tap()
+        let unpin = app.buttons["Remove Pin"]
+        XCTAssert(unpin.waitForExistence(timeout: 15))
+        unpin.tap()
+        XCTAssert(app.buttons["Pin to Today"].waitForExistence(timeout: 15))
     }
 
     func testMenuOpensASavedSearch() {
@@ -109,22 +161,32 @@ final class SampleTests: XCTestCase {
         sheet.buttons["Cancel"].tap()
     }
 
-    // Siri and Shortcuts' Add Task (Intents.swift) opens orbital:new, and the app makes the task at once; one Tana did not
-    // take (the sample saves nothing) is back in the next Quick Add as it was asked for, pinned to today included. The link
-    // comes in as -open: one opened from outside the app asks first whether to open Orbital, which the test would wait on.
-    func testAddTaskFromSiriIsMadeAsAskedPinnedToToday() {
+    // An orbital:new link from anywhere (another app, a web page) makes nothing: Quick Add opens with its title, added only
+    // when you press Add, and not pinned whatever the link asks (Shell.swift open; Siri's Add Task runs in the app,
+    // Intents.swift). The link comes in as -open: one opened from outside asks first whether to open Orbital.
+    func testAnOutsideNewLinkOnlyFillsQuickAdd() {
         app.terminate()
         app.launchArguments = ["-sample", "-demoMode", "NO", "-open", "orbital:new?title=Book%20the%20train&today=1"]
         app.launch()
-        XCTAssert(app.navigationBars["Timeline"].waitForExistence(timeout: 15))
-        sleep(1) // the task is made behind the Timeline, and refused by the sample, a moment after the link opens
-        app.buttons["Quick Add Task"].tap()
         let sheet = app.navigationBars["Quick Add"]
         XCTAssert(sheet.waitForExistence(timeout: 15))
-        XCTAssert(app.staticTexts["Not added: The sample saves nothing"].waitForExistence(timeout: 15), "the task was made, and the sample refused it")
         XCTAssert(app.descendants(matching: .any).matching(NSPredicate(format: "value == %@", "Book the train")).firstMatch.exists)
-        XCTAssertEqual(app.switches["Pin to today"].value as? String, "1", "pinned to today, as Siri was asked")
+        XCTAssertEqual(app.switches["Pin to today"].value as? String, "0", "not pinned: that is yours to choose")
+        XCTAssertFalse(app.staticTexts["Not added: The sample saves nothing"].exists, "nothing was made")
         sheet.buttons["Cancel"].tap()
+        XCTAssertFalse(app.staticTexts["The sample saves nothing"].exists)
+    }
+
+    // An orbital:check link from anywhere ticks nothing: its task opens, where you tick it yourself (Shell.swift open;
+    // Orbital's own widgets tick through TickTaskIntent)
+    func testAnOutsideCheckLinkOnlyOpensTheTask() {
+        app.terminate()
+        app.launchArguments = ["-sample", "-demoMode", "NO", "-open", "orbital:check:tana:text:000000000000000000000000v6"]
+        app.launch()
+        let status = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Status'")).firstMatch
+        XCTAssert(status.waitForExistence(timeout: 15), "the task open")
+        sleep(1)
+        XCTAssert(status.label.contains("In Progress"), "not ticked: " + status.label)
     }
 
     func testSettingsOpenFromTheMenu() {

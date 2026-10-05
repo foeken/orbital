@@ -265,8 +265,9 @@ function checkboxStep(nodes) {
   return nodes.some((n) => n.done == null) ? 'unchecked' : nodes.some((n) => !n.done) ? 'checked' : 'plain';
 }
 function cycleCheckboxes(its) {
+  its = its.filter(checkable);
   const docId = its[0]?.docId;
-  its = its.filter((it) => checkable(it) && it.docId === docId); // one document's rows: one write, one undo step
+  its = its.filter((it) => it.docId === docId); // one document's rows: one write, one undo step, the first row that can hold a box deciding which
   if (!its.length || !tana.cycleCheckboxes) return;
   if (checkboxStep(its.map((it) => it.node)) === 'checked') popSound();
   return run(async () => { await tana.cycleCheckboxes(docId, its.map((it) => it.node.id)); await reload(docId); });
@@ -411,6 +412,7 @@ function noteNavigation() {
   const id = here.zoom?.docId;
   navHere = here;
   rememberPlace();
+  if (id !== previousDoc) notesArrived(id); // a meeting's notes that could not be checked are asked again (renderer/meetingnotes.js)
   if (previousDoc === INBOX_PAGE && id !== INBOX_PAGE) markAllNotificationsRead();
   // Proposals are read afresh on every arrival: nothing pushes them, and one approved in Tana should not linger here.
   if (id === PROPOSALS_PAGE && previousDoc !== id && kids.get(id)) run(async () => { await reload(id); renderSoon(true); });

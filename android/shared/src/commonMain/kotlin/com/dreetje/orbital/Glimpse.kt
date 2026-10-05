@@ -40,6 +40,10 @@ data class Glimpse(val read: Long, val rows: List<Row>) {
 // and its title. Null for any other line: an edit, a meeting.
 // The iPhone's ios/Widgets Row.asTask is the same.
 private val stateOfIcon = mapOf("apply" to "closed", "tlAccepted" to "open", "tlLater" to "not_now", "tlInbox" to "proposed")
+
+// The tasks the launcher offers as shortcuts (androidApp Shortcuts.kt): the first n still to do, newest first as
+// orbital.tasks answers them, never one whose words are hidden
+fun List<Row>.forShortcuts(n: Int): List<Row> = filter { it.sensitive != true && it.stateType != "closed" && it.words.isNotBlank() }.take(n)
 fun Row.asTask(): Row? {
     val uri = timeline?.uri ?: return null
     val state = stateOfIcon[icon] ?: return null

@@ -11,6 +11,7 @@ const settings = require('./settings');
 const { members } = require('./rows');
 const { op } = require('./documents');
 const { S } = require('./state');
+const { isId } = require('../sdk/ids');
 
 const KEY = 'chatAsks'; // chatId -> [{ id, question, agent, taskId, at, state?, text? }], a finished answer kept so it is read once
 const GIVE_UP = 15 * 60 * 1000; // a task quiet for longer is not coming back (main/agents/codex.js createTask's own cap)
@@ -93,7 +94,7 @@ async function open(chatId, id) {
   return true;
 }
 
-const isChat = (id) => typeof id === 'string' && /^tana:chat:[0-9a-z]{26}$/.test(id);
+const isChat = (id) => isId(id, 'chat');
 const ipc = {
   'chatAgent:list': () => list(),
   'chatAgent:ask': (_e, chatId, agentId, text) => { if (!isChat(chatId)) throw new Error('Not a chat'); return ask(chatId, agentId, text); },
