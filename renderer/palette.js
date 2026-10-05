@@ -211,11 +211,18 @@ function paletteRows(q, typed = q) {
   // the node's web link, for pasting into Slack or a doc; on a Timeline row, the link of the node it is about
   const tlUri = timelineUriAt(), linkId = tlUri || (palDoc && isRealId(palDoc.id) ? palDoc.id : null);
   if (linkId && tana.nodeLink) {
-    const group = tlUri && selKeys().length ? 'Selection' : docGroup;
-    // on a meeting, with ⌘K open: its notes and its summary too (meetingLinkRows); a key with it closed copies the meeting
-    const meeting = !palette.hidden && tana.meetingNotes && tana.summaryUri && tana.meetingInfo && (/^tana:event:/.test(linkId) || (palDoc && palDoc.id === linkId && palDoc.icon === 'meeting'));
-    rows.push({ id: 'copyLink', group, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(linkId), 'Link copied')) });
-    if (meeting) rows.push(...meetingLinkRows(loadMeetingLinks(linkId), group));
+    const group = tlUri && selKeys().length ? 'Selection' : docGroup, copy = (uri) => () => run(async () => copyText(await tana.nodeLink(uri), 'Link copied'));
+    const isMeeting = /^tana:event:/.test(linkId) || (palDoc && palDoc.id === linkId && palDoc.icon === 'meeting');
+    // On a meeting's page ⌘C copies what the page shows: its summary, or your notes (renderer/meetingnotes.js), read
+    // from the page itself so a key with ⌘K closed does the same; with neither on screen, the meeting.
+    const summary = isMeeting && !tlUri && zoom && zoom.docId === linkId ? summaryShown(linkId) : null;
+    const seen = summary || (isMeeting && !tlUri && zoom && zoom.docId === linkId && (meetingNotes.get(linkId) || {}).id) || null;
+    // with ⌘K open the meeting's other links are offered too (meetingLinkRows), each named after what it copies
+    const more = isMeeting && !palette.hidden && tana.meetingNotes && tana.summaryUri && tana.meetingInfo;
+    const label = seen ? (summary ? 'Copy link to summary' : 'Copy link to notes') : more ? 'Copy link to meeting' : 'Copy link';
+    rows.push({ id: 'copyLink', group, icon: 'link', label, run: copy(seen || linkId) });
+    if (more) rows.push(...(seen ? [{ rank: 'copyLink', group, icon: 'link', label: 'Copy link to meeting', run: copy(linkId) }] : []),
+      ...meetingLinkRows(loadMeetingLinks(linkId), group).filter((r) => r.label !== label));
   }
   // the node in Tana's own web app (what Show in Tana in the Graph pane's Details did)
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ id: 'openInTana', group: docGroup, icon: 'tana', label: 'Open in Tana', run: () => run(async () => tana.openExternal(await tana.nodeLink(doc.id))) }); }

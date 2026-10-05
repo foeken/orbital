@@ -1082,8 +1082,11 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   On a Timeline row (under the caret, right-clicked, or the one selected) it is the link of the node the row is
   about — the meeting, the task someone completed — since the row is the Timeline's own (renderer/timeline.js
   `timelineUriAt`).
-  On a meeting, with Cmd+K open, **Copy link to notes** and **Copy link to summary** follow it (`meetingLinkRows`,
-  rank `copyLink`, no id of their own): your private notes (`meetingNotes`, found and never made) and the write-up
+  On a meeting's page `copyLink` (⌘C) copies what the page shows: the write-up when Summary is on screen
+  (`summaryShown`), else your notes once they exist (`meetingNotes`), else the meeting; read from the page, so the
+  key does the same with Cmd+K closed, and named after it ("Copy link to summary"). On a meeting, with Cmd+K open,
+  the other two of **Copy link to meeting**, **Copy link to notes** and **Copy link to summary** follow it
+  (`meetingLinkRows`, rank `copyLink`, no id of their own): your private notes (found and never made) and the write-up
   (`summaryUri`), asked once per open (`loadMeetingLinks`) with the meeting's time. The notes row is left out once the
   meeting has finished with no notes, the summary row while it has not started and has no write-up; a row whose
   document does not exist yet is greyed with why, and both say Checking… until Tana has answered.
