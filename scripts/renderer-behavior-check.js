@@ -4,8 +4,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const { source } = require('./renderer-source');
+const { source, functionSource: rendererFunction } = require('./renderer-source');
 const plain = (value) => JSON.parse(JSON.stringify(value));
+// This machine's zone: a time read "in your zone" is in this one, wherever the checks run (Amsterdam here, UTC on CI, #776)
+const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 // Enough DOM for the inline renderer: elements with children, classes, dataset and textContent, plus text nodes.
 const FAKE_DOM = `
   const textNode = (data) => ({ nodeType: 3, nodeName: '#text', data, get textContent() { return this.data; } });
@@ -14,7 +16,7 @@ const FAKE_DOM = `
     return {
       nodeType: 1, tagName, nodeName: tagName.toUpperCase(), childNodes: [], dataset: {}, style: { setProperty() {} },
       attributes: {}, setAttribute(name, value) { this.attributes[name] = String(value); }, getAttribute(name) { return this.attributes[name] ?? null; },
-      classList: { add: (...names) => names.forEach((name) => classes.add(name)), contains: (name) => classes.has(name), toggle() {} },
+      classList: { add: (...names) => names.forEach((name) => classes.add(name)), remove: (...names) => names.forEach((name) => classes.delete(name)), contains: (name) => classes.has(name), toggle() {} },
       get className() { return [...classes].join(' '); },
       set className(value) { classes.clear(); for (const name of String(value).split(' ')) if (name) classes.add(name); },
       // A string appended to a real element becomes a text node, and crumbs and rows append their labels that way:
@@ -100,6 +102,20 @@ const withShims = (src) => {
   // a document's outlines: its page and its fields, which in a harness with no fields is whatever kids holds for it
   if (/\boutlinesOf\(/.test(src) && !/const outlinesOf =/.test(src)) src = 'globalThis.outlinesOf ??= (docId) => (kids.has(docId) ? [docId] : []);\n' + src;
   if (/\bfuzzyMatch\b/.test(src) && !/function fuzzyMatch\(/.test(src)) src = functionSource('fuzzyMatch') + '\n' + src; // the real matcher: a harness that lists palette rows filters through it
+  if (/\bmatchRows\(/.test(src) && !/const matchRows =/.test(src)) src = sourceLine('const matchRows').replace('const matchRows =', 'globalThis.matchRows ??=') + '\n' + src; // and a fixed page's rows through it
+  // a Date's local YYYY-MM-DD (renderer/segments.js): the real one, behind localDate and every day parseDay works out
+  if (/\bisoDay\(/.test(src) && !/const isoDay =/.test(src)) src = sourceLine('const isoDay').replace('const isoDay =', 'globalThis.isoDay ??=') + '\n' + src;
+  // a button that keeps the caret where it is (renderer/nodes.js): the real one, over the harness's DOM
+  if (/\bquietButton\(/.test(src) && !/function quietButton\(/.test(src)) src = functionSource('quietButton').replace('function quietButton', 'globalThis.quietButton ??= function quietButton') + ';\n' + src;
+  // a page that asks for a name (renderer/palette.js): the real one, over the harness's own openPage
+  if (/\bnamePage\(/.test(src) && !/function namePage\(/.test(src)) src = functionSource('namePage').replace('function namePage', 'globalThis.namePage ??= function namePage') + ';\n' + src;
+  // a meeting whose notes could not be checked, asked again on arrival (renderer/meetingnotes.js): no meeting in a harness without it
+  if (/\bnotesArrived\(/.test(src) && !/function notesArrived\(/.test(src)) src = 'globalThis.notesArrived ??= () => {};\n' + src;
+  // a node's link opened in Tana or copied (renderer/nodes.js), over the harness's own run, tana and copyText
+  if (/\bopenInTana\(/.test(src) && !/const openInTana =/.test(src)) src = sourceLine('const openInTana').replace('const openInTana =', 'globalThis.openInTana ??=') + '\n' + src;
+  if (/\bcopyNodeLink\(/.test(src) && !/const copyNodeLink =/.test(src)) src = sourceLine('const copyNodeLink').replace('const copyNodeLink =', 'globalThis.copyNodeLink ??=') + '\n' + src;
+  // what a failure says, without Electron's IPC wrapper (renderer/nodes.js): the real one
+  if (/\berrorText\(/.test(src) && !/const errorText =/.test(src)) src = sourceLine('const errorText').replace('const errorText =', 'globalThis.errorText ??=') + '\n' + src;
   if (/\bchipOnly\(/.test(src) && !/const chipOnly =/.test(src)) src = 'globalThis.chipOnly ??= (el) => { const kids = [...(el.childNodes || [])].filter((n) => n.nodeType !== 3 || unanchored(n.data)); return kids.length === 1 && kids[0].nodeType === 1 && !!kids[0].classList?.contains(\'mention\'); };\n' + src; // a harness that renders rows marks the chip-only ones too (the real one is asserted in runSelectionChecks)
   // where a row's grey facts sit is decided from real layout, which no fake DOM has; the harnesses that test it
   // slice the real function in themselves, and the rest are only calling it because render() does
@@ -107,9 +123,6 @@ const withShims = (src) => {
   // "this page has pills" (renderer/pills.js), which a folded row no longer answers for: a harness that is not about
   // folding gets the page it always had, so the calls guarded by it still run.
   if (/\bpillsDrawn\b/.test(src) && !/let pillsDrawn =/.test(src)) src = 'globalThis.pillsDrawn ??= true;\n' + src;
-  // how a type is drawn in a list (renderer/nodes.js): the glyph it was given, else the generic one. Added before the
-  // typeGlyphs line below, which then supplies the map to a harness that does not declare its own.
-  if (/\btypeGlyph\(/.test(src) && !/const typeGlyph =/.test(src)) src = "globalThis.typeGlyph ??= (uri) => typeGlyphs.get(uri) || 'type';\n" + src;
   // the glyphs types were given (renderer/nodes.js): a harness that is not about type icons draws every task with its box
   if (/\btypeGlyphs\b/.test(src) && !/const typeGlyphs =/.test(src)) src = 'globalThis.typeGlyphs ??= new Map();\n' + src;
   // what has a page of its own (renderer/nodes.js): a harness that is not about members or types keeps every document zoomable
@@ -220,15 +233,7 @@ const MOTION_SHIM = 'globalThis.turnPage ??= (dir, update) => update(); globalTh
   + 'globalThis.popRead ??= () => {}; globalThis.popMention ??= () => {}; globalThis.popSound ??= () => {}; globalThis.swapPanel ??= () => {}; globalThis.menuMotion ??= () => {}; globalThis.growFrom ??= async () => {}; globalThis.play ??= async () => {}; '
   + 'globalThis.settling ??= () => 0; globalThis.MOTION ??= {}; globalThis.motionOK ??= () => false; globalThis.stillPreferred ??= () => true;\n';
 function functionSource(name) {
-  const asyncStart = source.indexOf('async function ' + name + '(');
-  const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
-  assert.notEqual(start, -1, 'renderer function ' + name + ' is present');
-  let depth = 0, end = start;
-  for (; end < source.length; end++) {
-    if (source[end] === '{') depth++;
-    if (source[end] === '}' && --depth === 0) return withShims(source.slice(start, end + 1));
-  }
-  assert.fail('renderer function ' + name + ' is complete');
+  return withShims(rendererFunction(name));
 }
 
 function sourceBetween(start, end) {
@@ -1056,7 +1061,7 @@ async function runCheckboxCheck() {
       { id: 'a', kind: 'block' }, { id: 'b', kind: 'block', done: 1 }, { id: 'img', kind: 'block', image: {} },
       { id: 'code', kind: 'block', block: 'code' }, { id: 'ro', kind: 'block', editable: false },
     ];
-    const its = nodes.map((node) => ({ docId: 'doc', node }));
+    const its = [...nodes.map((node) => ({ docId: 'doc', node })), { docId: 'other', node: { id: 'pic', kind: 'block', image: {} } }];
     const calls = []; let pops = 0;
     const popSound = () => { pops++; };
     const tana = { cycleCheckboxes: async (docId, ids) => {
@@ -1084,6 +1089,8 @@ async function runCheckboxCheck() {
   assert.equal(cycle.pops(), 1, 'silently');
   await cycle.press([2, 3, 4]);
   assert.equal(cycle.calls().length, 3, 'rows none of which can hold a box make no call');
+  await cycle.press([5, 0]);
+  assert.deepEqual(plain(cycle.calls().at(-1)), ['doc', ['a']], 'a first row of another document that cannot hold a box does not decide the document: the rows that can are still cycled');
 }
 
 async function runCheckboxInheritanceCheck() {
@@ -2444,7 +2451,10 @@ function runInlineFieldsCheck() {
 }
 
 async function runTaskMetaRetryCheck() {
-  const context = vm.createContext({ setTimeout, clearTimeout, Date, Promise });
+  // the backoff on a clock that stands still: on a busy machine the wall clock can pass the whole backoff between two
+  // lines of this check, and the second start below was then a fair retry rather than the hammering it asks about.
+  // The timer still runs on the real clock, and it alone opens the gate again (renderer/tasks.js).
+  const context = vm.createContext({ setTimeout, clearTimeout, Date: { now: () => 0 }, Promise });
   vm.runInContext(`
     const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaAgain = new Set(), taskMetaFailed = new Map();
     ${source.match(/const META_RETRY_MS = \d+, META_RETRY_MAX = \d+;/)[0]}
@@ -2930,7 +2940,7 @@ async function runSlashMeetingCheck() {
   assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-5')), [['Reading \u201Ctomorrow from 3-5\u201D\u2026', '', true], ['In your calendar \u00B7 nobody is invited', '', true]], 'the page says it is reading, with nothing to press');
   assert.equal(ai.page().rows('', 'tomorrow from 3-5')[0].spin, true, 'its glyph is the palette\u2019s thinking one, as every row waiting on the AI');
   const from = new Date(2026, 9, 6, 15).getTime();
-  await ai.answer({ start: from, end: from + 72e5, timeZone: 'Europe/Amsterdam' });
+  await ai.answer({ start: from, end: from + 72e5, timeZone: LOCAL_ZONE });
   assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-5')), [['Tue Oct 06 2026 15:00 for 120', '\u21A9 Create \u00B7 read by AI', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'what it read is shown, and said to be the AI\u2019s');
   assert.equal(ai.page().rows('', 'tomorrow from 3-5').some((r) => r.spin), false, 'and nothing thinks once it has answered');
   assert.equal(ai.calls().some((c) => c[0] === 'createDocument'), false, 'and nothing is made until it is pressed');
@@ -2938,7 +2948,7 @@ async function runSlashMeetingCheck() {
   ai.page().rows('', 'tomorrow from 3-5')[0].run();
   assert.deepEqual(plain(ai.calls().slice(-1)), [['createDocument', 'Design review', { kind: 'meeting', start: from, end: from + 72e5 }]], 'the press makes the meeting it showed');
   // a zone the words named: the time is drawn on your clock, and the same time on the clock it was said in goes under it
-  const zoned = makeSlashMeetingHarness(), away = Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
+  const zoned = makeSlashMeetingHarness(), away = LOCAL_ZONE === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
   zoned.start(); zoned.page().rows('', 'Call')[0].run(); zoned.page().rows('', '9am tokyo time')[0].run();
   await zoned.answer({ start: from, end: from + 36e5, timeZone: away });
   const told = plain(zoned.rowsOf('9am tokyo time'));
@@ -2952,7 +2962,7 @@ async function runSlashMeetingCheck() {
   await asks.refuse(new Error('Sign in with ChatGPT or add an OpenAI API key to read a time'));
   assert.deepEqual(plain(asks.rowsOf('next tuesday')), [['Sign in with ChatGPT or add an OpenAI API key to read a time', '', true], ['Read \u201Cnext tuesday\u201D with AI', '\u21A9', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'no AI: said so, and it can be asked again');
   asks.page().rows('', 'friday 10')[0].run(); asks.page().back();
-  await asks.answer({ start: from, end: from + 18e5, timeZone: 'Europe/Amsterdam' });
+  await asks.answer({ start: from, end: from + 18e5, timeZone: LOCAL_ZONE });
   assert.equal(asks.page().mode, 'slashMeeting', 'a reading that lands after its page was left stays there');
   assert.equal(asks.calls().some((c) => c[0] === 'createDocument'), false, 'and nothing was made from any of it');
 
@@ -3118,7 +3128,7 @@ async function runMeetingDetailsCheck() {
   assert.deepEqual(plain(api.calls()), [['read', 'tomorrow from 3-5', 'tana:event:m']], 'one press, one reading, for this meeting');
   assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['Reading \u201Ctomorrow from 3-5\u201D\u2026', '', true], ['1-2', 'Now', true]], 'it says it is reading, with nothing to press');
   assert.deepEqual(plain(api.spins('tomorrow from 3-5')), [true, false], 'the reading row thinks, as the palette\u2019s AI rows do');
-  await api.answer({ start: 100, end: 200, timeZone: 'Europe/Amsterdam' });
+  await api.answer({ start: 100, end: 200, timeZone: LOCAL_ZONE });
   assert.equal(api.spins('tomorrow from 3-5').some(Boolean), false, 'and stops once it has answered');
   assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['100-200', '\u21A9 Apply \u00B7 read by AI', false], ['1-2', 'Now', true]], 'what it read is shown beside what is, said to be the AI\u2019s');
   assert.equal(api.calls().some((c) => c[0] === 'edit'), false, 'and nothing is written until it is pressed');
@@ -3129,7 +3139,7 @@ async function runMeetingDetailsCheck() {
   assert.deepEqual(plain(api.rows('next week')), [['Which day next week?', 'Add it to your words', true], ['1-2', 'Now', true]], 'a question comes back in the same field');
   api.press('friday at 3'); await api.refuse(new Error('Sign in with ChatGPT or add an OpenAI API key to read a time'));
   assert.deepEqual(plain(api.rows('friday at 3')).slice(0, 2), [['Sign in with ChatGPT or add an OpenAI API key to read a time', '', true], ['Read \u201Cfriday at 3\u201D with AI', '\u21A9', false]], 'no AI: said so, never a time made up');
-  api.press('friday at 4'); await api.answer({ start: 300, end: 400, timeZone: 'Europe/Amsterdam' });
+  api.press('friday at 4'); await api.answer({ start: 300, end: 400, timeZone: LOCAL_ZONE });
   const writes = api.calls().filter((c) => c[0] === 'edit').length;
   const held = api.row('friday at 4');
   api.elsewhere();
@@ -3138,11 +3148,11 @@ async function runMeetingDetailsCheck() {
   assert.equal(api.calls().filter((c) => c[0] === 'edit').length, writes, 'and a reading for one meeting is never written to another');
   api.back();
   assert.deepEqual(plain(api.calls().slice(-1)), [['back']], 'Escape goes back to the commands');
-  const away = Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
+  const away = LOCAL_ZONE === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
   api.openKept(away);
   assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true], ['Your time \u00B7 the meeting keeps ' + away.split('/').pop().replace(/_/g, ' ') + ' time', '', true]],
     'a meeting kept in another zone says the times are yours');
-  api.openKept(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  api.openKept(LOCAL_ZONE);
   assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true]], 'and one kept in yours says nothing more');
   console.log('ok  Edit meeting details: one field, read by the AI on \u21A9, shown before it is written, a start and an end only, on a meeting you may change');
 }
@@ -8345,7 +8355,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -10554,6 +10564,58 @@ checks.push(function runTableFoldCheck() {
   assert.deepEqual(calls, ['size', 'fit'], 'a table\u2019s rows fitted again measure Visible to and refit the fold, without motion');
   console.log('ok  a table folds its first columns onto the title\u2019s line as the page narrows, the last column last');
 });
+// Visible to in a table (renderer/views.js tableHeadEl, renderer/tasks.js peopleEl): its own column, headed while it is
+// shown and not folded; someone assigned who cannot see the row is a rose warning glyph there, the words in its tooltip,
+// where a list says them after who can
+checks.push(function runTableVisibleToCheck() {
+  const api = vm.runInNewContext(`
+    ${FAKE_DOM}
+    let table = false, tableFold = 0, shown = ['status', 'visibility'];
+    const tableView = () => table, displayOn = (id) => shown.includes(id), displayList = () => [['status', 'Status']], tableKeys = () => ['status'];
+    const undockTitle = () => 0, TITLE_MIN = 0, resizeColumn = () => {}, setColumnWidth = () => {};
+    ${sourceBetween('function clickable(', '// node: the row')}
+    ${functionSource('tableHeadEl')}
+    const cut = (el) => ({ text: el.textContent, glyph: el.childNodes.filter((k) => k.classList?.contains('hiddenfrom') && k.getAttribute('role') === 'img').map((k) => k.getAttribute('aria-label')) });
+    ({ row: (asTable) => { table = asTable; return cut(peopleEl({ audience: { icon: 'users', label: 'Visible to everyone', word: 'Everyone' }, people: ['tana:user-profile:u1'], hiddenFrom: 'Sam' }, null)); },
+       head: (fold, columns) => { tableFold = fold; shown = columns; const cells = tableHeadEl().childNodes; return cells[cells.length - 1].textContent; } });
+  `);
+  assert.deepEqual(plain(api.row(false)), { text: 'EveryoneNot visible to Sam', glyph: [] }, 'in a list, who cannot see it is said in words');
+  assert.deepEqual(plain(api.row(true)), { text: 'Everyone', glyph: ['Not visible to Sam'] }, 'in a table, a warning glyph says it, its words in the tooltip');
+  assert.deepEqual([api.head(0, ['status', 'visibility']), api.head(1, ['status', 'visibility']), api.head(0, ['status'])], ['Visible to', '', ''],
+    'the last column is headed Visible to while it is shown and nothing is folded');
+  console.log('ok  a table heads Visible to as a column, and someone assigned who cannot see a row is a warning glyph there');
+});
+// Cmd+K Choose models (renderer/settings.js): the Quick AI's segment first, ⇥ alone switches to the Regular AI's and back,
+// each segment ticks and stores its own model and thinking, and a reading from a palette since closed is dropped
+checks.push(async function runChooseModelsCheck() {
+  const AI = { models: ['gpt-6-luna', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'high'], model: 'gpt-5.6-terra', effort: 'high', efforts: ['low', 'medium', 'high'] };
+  const api = vm.runInNewContext(`
+    let page = null, palSeq = 0, palIndex = 3, answer = null; const palInput = { placeholder: '' }, stored = [];
+    const openPage = (id, placeholder, opts) => { palInput.placeholder = placeholder; page = opts; }, renderPalette = () => {}, BACK_TO_COMMANDS = () => {};
+    const matchRows = (rows) => rows, errorText = (e) => e.message, run = (fn) => fn();
+    const tana = { aiOptions: () => new Promise((r) => { answer = r; }), setAiOption: async (key, value) => { stored.push([key, value]); return AI; } };
+    ${sourceBetween('const aiModelLabel =', '// ---- Choose models')}
+    ${sourceBetween('let modelsOptions = null', 'function openModelsPalette')}
+    ${functionSource('openModelsPalette')}
+    ({ open: () => openModelsPalette(), answer: (a) => answer(a), close: () => { palSeq++; }, key: (e) => page.keys(e), index: () => palIndex, stored,
+       placeholder: () => palInput.placeholder, rows: () => page.rows('').map((r) => [r.group, r.label, r.hint]), press: (label) => page.rows('').find((r) => r.label === label).run() });
+  `, { AI });
+  api.open();
+  assert.deepEqual(plain(api.rows()), [['Models', 'Loading…', null]], 'the page says it is reading the choices');
+  await api.answer(AI); await new Promise((r) => setImmediate(r));
+  assert.equal(api.placeholder(), 'Quick AI \u00B7 \u21E5 Regular AI', 'the Quick AI first, ⇥ named');
+  assert.deepEqual(plain(api.rows()), [['Model \u00B7 for translating, Discuss with, types and icons', 'Luna 6', '\u2713'], ['Model \u00B7 for translating, Discuss with, types and icons', 'Terra 5.6', ''], ['Thinking', 'Low', '\u2713'], ['Thinking', 'High', '']], 'the Quick AI\u2019s model and thinking ticked');
+  assert.equal(api.key({ key: 'Tab', metaKey: true }), false, '⌘⇥ is not the switch');
+  assert.equal(api.key({ key: 'Tab' }), true);
+  assert.deepEqual([api.placeholder(), api.index()], ['Regular AI \u00B7 \u21E5 Quick AI', 0], '⇥ switches to the Regular AI, from its first row');
+  assert.deepEqual(plain(api.rows()).map((r) => r[1] + r[2]), ['Luna 6', 'Terra 5.6\u2713', 'Low', 'Medium', 'High\u2713'], 'the Regular AI\u2019s own model, levels and ticks');
+  api.press('Luna 6'); api.key({ key: 'Tab' }); api.press('High');
+  assert.deepEqual(plain(api.stored), [['model', 'gpt-6-luna'], ['quickEffort', 'high']], 'each segment stores its own choice');
+  await new Promise((r) => setImmediate(r)); // the stored choices' answers land first
+  api.open(); api.close(); await api.answer(AI); await new Promise((r) => setImmediate(r));
+  assert.deepEqual(plain(api.rows()), [['Models', 'Loading…', null]], 'a reading for a palette since closed is dropped');
+  console.log('ok  Cmd+K Choose models: the Quick AI first, ⇥ switches to the Regular AI, each ticking and storing its own');
+});
 // New tab, New pane and New floating pane default to ⌘N with the modifier that opens a link there (⌘-, ⇧-, ⌥-click).
 checks.push(function runNewPageKeysCheck() {
   const keys = vm.runInNewContext('(' + DEFAULT_HOTKEYS_SRC + ')'), elsewhere = vm.runInNewContext(sourceLine('const elsewhere =') + '; elsewhere');
@@ -10582,6 +10644,95 @@ async function runTimelineCopyLinkCheck() {
   assert.equal(api.at([], 'tl:inbox'), null, 'a line about nothing has none');
   assert.equal(api.at([], 'task'), null, 'any other row leaves Copy link to the current node');
   console.log('ok  Cmd+K Copy link on a Timeline row copies the link of the node it is about');
+}
+// Copy link on a meeting: the notes until it has finished or once there are some, the summary once it has started or
+// once there is one; a row whose document does not exist yet is shown greyed with why
+function runMeetingLinksCheck() {
+  const api = vm.runInNewContext(`
+    const run = () => {}, copyText = () => {}, tana = {};
+    ${functionSource('meetingLinkRows')}
+    ({ rows: (m, now) => meetingLinkRows(m, 'Current node', now).map((r) => r.label.replace('Copy link to ', '') + (r.disabled ? ' (' + r.hint + ')' : '')) });
+  `);
+  const start = Date.parse('2026-10-05T10:00:00Z'), end = start + 36e5, before = start - 1, during = start + 1, after = end + 1;
+  const m = (notes, summary) => ({ pending: false, notes, summary, start, end });
+  assert.deepEqual(plain(api.rows({ pending: true }, during)), ['notes (Checking\u2026)', 'summary (Checking\u2026)'], 'asked: both say so');
+  assert.deepEqual(plain(api.rows(m(null, null), before)), ['notes (No notes yet)'], 'not started, nothing written: notes to come, no summary');
+  assert.deepEqual(plain(api.rows(m(null, null), during)), ['notes (No notes yet)', 'summary (No summary yet)'], 'under way: both may come');
+  assert.deepEqual(plain(api.rows(m(null, null), after)), ['summary (No summary yet)'], 'finished without notes: no notes row');
+  assert.deepEqual(plain(api.rows(m('tana:text:n', 'tana:text:s'), before)), ['notes', 'summary'], 'what exists is always offered');
+  assert.deepEqual(plain(api.rows(m('tana:text:n', null), after)), ['notes', 'summary (No summary yet)'], 'finished with notes');
+  console.log('ok  Copy link on a meeting offers its notes and its summary when they exist or may still come');
+}
+// A meeting's day is written one way everywhere: the palette's time, the time in the zone it was said in under it, and
+// the "From …" a task or a page names its meeting with. ICU's en-GB writes "Sept", which none of them may show.
+function runMeetingDayCheck() {
+  const api = vm.runInNewContext(`
+    ${sourceLine('const WD')}
+    ${sourceLine('const MONTHS')}
+    ${sourceLine('const clock')}
+    ${sourceLine('const meetingDay')}
+    ${sourceLine('const meetingSpan')}
+    ${sourceLine('const fromMeetingLabel')}
+    ${functionSource('zoneSpan')}
+    ({ meetingSpan, zoneSpan, fromMeetingLabel });
+  `);
+  const start = new Date(2026, 8, 22, 10, 0).getTime(), end = start + 18e5;
+  assert.equal(api.meetingSpan(start, end), 'Tue 22 Sep 10:00\u201310:30', 'on your clock');
+  assert.equal(api.zoneSpan('UTC', Date.UTC(2026, 8, 22, 10), Date.UTC(2026, 8, 22, 10, 30)), 'Tue 22 Sep 10:00\u201310:30', 'on another zone\u2019s clock, in the same words');
+  assert.equal(api.fromMeetingLabel({ id: 'tana:event:m', title: 'Standup', start }), 'From Standup \u00B7 Tue 22 Sep', 'the meeting a task came from');
+  assert.equal(api.fromMeetingLabel({ id: 'tana:event:m' }), 'From a meeting', 'with no name or day, still a meeting');
+  console.log('ok  a meeting\u2019s day reads the same in the palette, in another zone and on the way back to it');
+}
+// A meeting whose private notes could not be checked is asked again when its page is arrived at, once per arrival, and
+// never by the failure itself (renderer/meetingnotes.js notesArrived, from renderer/edit.js noteNavigation).
+async function runNotesRetryCheck() {
+  const api = vm.runInNewContext(`
+    const SIDE = '', LINKS = false, demoMode = false;
+    let view = 'library', zoom = null, connected = true, asks = 0, fail = true;
+    const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', TIMELINE_PAGE = 'orbital:timeline';
+    const markAllNotificationsRead = () => {}, localStorage = { setItem() {}, removeItem() {} };
+    ${sourceBetween('const isRealId =', '\n')}
+    const kids = new Map(), extra = new Map(), pending = new Map(), searchRows = new Map();
+    const isSearchDoc = () => false, isTypeDoc = () => false, releaseHeld = () => {}, previewRows = () => {}, run = (fn) => fn(), reload = async () => {};
+    const me = () => ({ id: 'tana:user-profile:me' }), asDoc = (n) => n, docOf = () => null, mkItem = (id, node) => ({ docId: id, node });
+    const patchNotesHead = () => {}, textEl = () => null, readSegs = () => [], scheduleSave = () => {}, renderSoon = () => {};
+    const tana = { meetingNotes: () => { asks++; return fail ? Promise.reject(new Error('offline')) : Promise.resolve({ id: null }); } };
+    ${sourceBetween('const meetingNotes = new Map()', "// The notes' rows as the meeting")}
+    ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation')}
+    ${functionSource('noteNavigation')}
+    const M = 'tana:event:m', meeting = { docId: M, node: { kind: 'document', icon: 'meeting' } };
+    kids.set(M, []);
+    // what renderOutline does: the page's rows (a meeting's are its notes'), then the place it drew
+    const draw = () => { if (zoom && zoom.docId === M) notesBody(meeting); noteNavigation(); };
+    ({ open: (id) => { zoom = id ? { docId: id, nodeId: null } : null; draw(); }, draw, asks: () => asks, works: () => { fail = false; },
+      failed: () => !!(meetingNotes.get(M) || {}).failed });
+  `);
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  api.open('tana:event:m'); await tick();
+  assert.deepEqual([api.asks(), api.failed()], [1, true], 'the first lookup failed');
+  api.draw(); api.draw(); await tick();
+  assert.equal(api.asks(), 1, 'drawn again on the same page, nothing is asked: a failure never asks again by itself');
+  api.open('tana:text:other'); api.works(); api.open('tana:event:m'); api.draw(); await tick();
+  assert.deepEqual([api.asks(), api.failed()], [2, false], 'arriving at the meeting again asks again, and the answer replaces the failure');
+  api.draw(); await tick();
+  assert.equal(api.asks(), 2, 'once per arrival');
+  console.log('ok  a meeting whose notes could not be checked asks again when you come back to it, never in a loop');
+}
+// The Timeline's New meeting and Plan one open Create new's name page for a meeting, and Create new itself when a meeting
+// cannot be made here, where its row is greyed with the reason.
+async function runNewMeetingChoiceCheck() {
+  const api = vm.runInNewContext(`
+    const went = [];
+    let creationChoices = [];
+    const run = (fn) => fn(), tana = { creationOptions: async () => ({ options: [] }) };
+    const openNamePage = (c) => went.push('name:' + c.kind), openCreationPalette = () => went.push('create new');
+    ${functionSource('openNewMeeting')}
+    ({ press: async (choices) => { creationChoices = choices; went.length = 0; await openNewMeeting(); return went.join(); } });
+  `);
+  assert.equal(await api.press([{ kind: 'meeting', selectable: true }]), 'name:meeting', 'a meeting that can be made is named');
+  assert.equal(await api.press([{ kind: 'meeting', selectable: false, reason: 'No calendar' }]), 'create new', 'one that cannot goes to Create new, which says why');
+  assert.equal(await api.press([{ kind: 'doc', selectable: true }]), 'create new', 'and so does none at all');
+  console.log('ok  New meeting on the Timeline goes where Create new goes when no meeting can be made');
 }
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

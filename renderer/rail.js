@@ -307,8 +307,7 @@ function drawMeetingBtn(docId) {
   const m = docId && isRealId(docId) ? (relatedBy.get(docId) || {}).meeting : null;
   meetingBtn.hidden = !m;
   if (!m) return;
-  const day = m.start ? new Date(m.start).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '';
-  const label = 'From ' + (m.title ? demoText(m.title, m.id) : 'a meeting') + (day ? ' · ' + day : '');
+  const label = fromMeetingLabel(m); // renderer/meeting.js
   meetingBtn.title = label; meetingBtn.setAttribute('aria-label', label); // icon only, so the name comes from here
   meetingBtn.dataset.meeting = m.id;
   if (!meetingBtn.childNodes.length) addIcon(meetingBtn, 'meeting');

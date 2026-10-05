@@ -44,4 +44,18 @@ class DictationTest {
         assertEquals("Too short to write down. Try again.", dictation.problem)
         assertFalse(dictation.recording)
     }
+
+    // Add, Send and Assign (Dictation.settled, as the iPhone's): at once with nothing dictated; while dictating, the words waited for, and a
+    // recording too short to keep sends nothing; dictated words after what is typed
+    @Test fun readyAtOnceWithNothingDictatedAndWaitsWhileItIs() = runTest {
+        val dictation = Dictation(FakePlatform(chatgpt = FakeChatGPT(signedIn = true), recorder = FakeRecorder(), allowed = { true }), backgroundScope)
+        assertTrue(dictation.settled {})
+        dictation.listen()
+        assertTrue(dictation.busy)
+        assertFalse(dictation.settled {})
+        assertFalse(dictation.settling)
+        assertEquals("Too short to write down. Try again.", dictation.problem)
+        assertEquals("Call Priya about", Dictation.join("Call Priya", "about"))
+        assertEquals("about", Dictation.join("", "about"))
+    }
 }

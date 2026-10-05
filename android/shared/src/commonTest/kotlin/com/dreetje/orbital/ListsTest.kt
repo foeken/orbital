@@ -13,6 +13,13 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 class ListsTest {
+    // a search field over people (Assign to, Quick Add's assignee, Visibility's people): all while empty, any case
+    @Test fun peopleMatchingWhatWasTyped() {
+        val people = listOf(Member("1", "Priya Shah"), Member("2", "Stan"))
+        assertEquals(people, people.matching(""))
+        assertEquals(listOf("Priya Shah"), people.matching("pri").map { it.name })
+    }
+
     private val now = Instant.parse("2026-10-02T12:00:00Z")
     private val utc = TimeZone.UTC
 
@@ -92,15 +99,6 @@ class ListsTest {
         assertEquals("tana:plaindate:2026-03-04", Lists.plainDate(2026, 3, 4))
         assertEquals(Triple(2026, 3, 4), Lists.parsePlainDate("tana:plaindate:2026-03-04"))
         assertNull(Lists.parsePlainDate("tana:zoneddate:2026-03-04"))
-    }
-
-    @Test fun modelsAreNamedAsTheMacNamesThem() {
-        assertEquals("Sol 6", ChatGPT.label("gpt-6-sol"))
-        assertEquals("Terra 5.6", ChatGPT.label("gpt-5.6-terra"))
-        assertEquals("GPT-5.5", ChatGPT.label("gpt-5.5"))
-        assertEquals("gpt-oss-120b", ChatGPT.label("gpt-oss-120b")) // not a version and a name: as it is, as on the Mac
-        assertEquals("o3", ChatGPT.label("o3"))
-        assertEquals("Extra high", ChatGPT.effortLabel("xhigh"))
     }
 
     @Test fun accessNamesItsRuleAndWhetherItGrants() {

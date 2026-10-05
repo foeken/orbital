@@ -188,7 +188,6 @@ struct HandForm: View {
     let handing: Engine.Handing
     let done: () -> Void
     @State private var request = ""
-    @State private var settling = false // Assign pressed while dictating: the words are waited for (Dictate shows it)
     @State private var dictation = Dictation()
     @FocusState private var focused: Bool
 
@@ -199,7 +198,7 @@ struct HandForm: View {
                 // away and ■ stops it, its words then added to the request
                 HStack(alignment: .top, spacing: 10) {
                     if !dictation.recording { TextField("What should \(handing.agent.name) do?", text: $request, axis: .vertical).lineLimit(4...12).focused($focused) }
-                    Dictate(dictation: dictation, into: append)
+                    Dictate(dictation: dictation, into: $request)
                 }
             } footer: {
                 Text([dictation.problem, "\(handing.agent.name) reads the node in Tana. Only what you write here tells it what to do."].compactMap { $0 }.joined(separator: "\n\n"))
@@ -210,7 +209,7 @@ struct HandForm: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Assign") { Task { await send() } }
-                    .disabled((request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !dictation.recording && !dictation.transcribing) || settling)
+                    .disabled((request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !dictation.busy) || dictation.settling)
             }
         }
         .onAppear {
@@ -218,21 +217,13 @@ struct HandForm: View {
             focused = true
         }
         .onDisappear { dictation.cancel() } // closed while listening: nothing kept
-        .interactiveDismissDisabled(!request.isEmpty || dictation.recording || dictation.transcribing)
+        .interactiveDismissDisabled(!request.isEmpty || dictation.busy)
     }
-
-    // dictated words land after what the request already says
-    private func append(_ said: String) { request = request.isEmpty ? said : request + " " + said }
 
     // Assign while listening or still transcribing: listening stops and the words are waited for, then it goes; one whose
     // words did not come is not sent, so nothing said is lost without a word
     private func send() async {
-        guard !settling else { return }
-        if dictation.recording || dictation.transcribing {
-            settling = true
-            defer { settling = false }
-            guard await dictation.settle(into: append) else { return }
-        }
+        guard !dictation.settling, await dictation.settled(into: $request) else { return }
         let words = request.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { return }
         engine.handOff(handing, words)

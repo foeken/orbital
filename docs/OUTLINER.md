@@ -1083,6 +1083,14 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   On a Timeline row (under the caret, right-clicked, or the one selected) it is the link of the node the row is
   about — the meeting, the task someone completed — since the row is the Timeline's own (renderer/timeline.js
   `timelineUriAt`).
+  On a meeting's page `copyLink` (⌘C) copies what the page shows: the write-up when Summary is on screen
+  (`summaryShown`), else your notes once they exist (`meetingNotes`), else the meeting; read from the page, so the
+  key does the same with Cmd+K closed, and named after it ("Copy link to summary"). On a meeting, with Cmd+K open,
+  the other two of **Copy link to meeting**, **Copy link to notes** and **Copy link to summary** follow it
+  (`meetingLinkRows`, rank `copyLink`, no id of their own): your private notes (found and never made) and the write-up
+  (`summaryUri`), asked once per open (`loadMeetingLinks`) with the meeting's time. The notes row is left out once the
+  meeting has finished with no notes, the summary row while it has not started and has no write-up; a row whose
+  document does not exist yet is greyed with why, and both say Checking… until Tana has answered.
   **Open in Tana** (`openInTana`, the Tana glyph) opens that url in Tana's web app, and on a meeting or its write-up
   **Join call** (`joinCall`, `callRow`) opens its call link, the readable link as the row's hint.
 
@@ -1313,7 +1321,7 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   (its query asked again, the rows kept in place let go: renderer/pills.js `offerRefresh` tells the shell with the title,
   `{ refresh }`, and the menu posts `{ orbital: 'refresh' }`; not while pills stage an unsaved filter), **Save as new search** on a view with pills such as the Library
   (the Cmd+K row, run in that page; issue #538), **Copy link** on a page showing a node of Tana's (that node's link, not
-  the row with the caret; issue #542), **Delete** on a saved search (the page's ⇧⌘⌫: Tana decides, ⌘Z restores; `{ remove }`, issue #615) and **Rename** when the page's title
+  the row with the caret; issue #542; on a meeting what its page shows, as ⌘C: `meetingShown`), **Delete** on a saved search (the page's ⇧⌘⌫: Tana decides, ⌘Z restores; `{ remove }`, issue #615) and **Rename** when the page's title
   can be typed in (a chat's, agent's or skill's too, where you are its admin or editor, and a type's: their bodies stay
   read-only, only the title is written; a meeting's title stays calendar protected; sdk/node.js `editable(n, me, true)`, issue #540): the shell posts `{ orbital: 'rename' }` and the page shows its heading (`html.renaming`) with its
   words selected until it loses the focus (renderer/document.js `renameTitle`); Cmd+K **Rename** under Current node does the same, with or

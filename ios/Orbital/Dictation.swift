@@ -11,6 +11,8 @@ final class Dictation {
     private(set) var recording = false
     private(set) var transcribing = false
     private(set) var problem: String? // why listening or writing down did not work, to show under the box
+    private(set) var settling = false // Add, send or Assign pressed while dictating: the words are being waited for
+    var busy: Bool { recording || transcribing } // listening, or writing down what was said
     @ObservationIgnored private var heard: Task<Bool, Never>?
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private var meter: Timer?
@@ -24,9 +26,9 @@ final class Dictation {
         do { try start() } catch { problem = error.localizedDescription }
     }
 
-    // ■: listening stops and the recording is written down, its words handed to into once they come
+    // ■: listening stops and the recording is written down, its words added after what field says once they come
     // false when there was nothing to write down: a recording too short to keep, which it says
-    @discardableResult func finish(into: @escaping (String) -> Void) -> Bool {
+    @discardableResult func finish(into field: Binding<String>) -> Bool {
         guard let audio = stop() else { problem = "Too short to write down. Try again."; return false }
         transcribing = true
         heard = Task {
@@ -34,17 +36,20 @@ final class Dictation {
             do {
                 guard let text = try await ChatGPT.transcribe(audio) else { problem = "Sign in with ChatGPT in Settings to dictate"; return false }
                 let said = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !said.isEmpty { into(said) }
+                if !said.isEmpty { field.wrappedValue = field.wrappedValue.isEmpty ? said : field.wrappedValue + " " + said }
                 return true
             } catch { problem = "Dictation: " + error.localizedDescription; return false }
         }
         return true
     }
 
-    // Add or send while listening or writing down: listening stops and the words are waited for; false when they did not
-    // come, so what was said is never lost without a word
-    func settle(into: @escaping (String) -> Void) async -> Bool {
-        if recording, !finish(into: into) { return false }
+    // Add, send or Assign (Composer, QuickAdd, HandForm): while listening or writing down, listening stops and the words
+    // are waited for, into field; false when they did not come, so what was said is never lost without a word
+    func settled(into field: Binding<String>) async -> Bool {
+        guard busy else { return true }
+        settling = true
+        defer { settling = false }
+        if recording, !finish(into: field) { return false }
         return await heard?.value ?? true
     }
 
@@ -110,7 +115,7 @@ struct Listening: View {
 // (Codex's own dictation bar); a spinner while the words are being written down
 struct Dictate: View {
     let dictation: Dictation
-    let into: (String) -> Void
+    let into: Binding<String> // dictated words land after what it says
     var body: some View {
         if dictation.recording {
             Round(symbol: "xmark", label: "Cancel dictation") { dictation.cancel() }

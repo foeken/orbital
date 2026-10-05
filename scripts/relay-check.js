@@ -300,6 +300,15 @@ const server = http.createServer(relay.handle);
   for (let i = 0; i < LIMITS.newOrbitals; i++) { strays.push(newKey()); assert.equal((await newOrbital(strays.at(-1))).status, 201); }
   assert.equal((await newOrbital(newKey())).status, 429, 'new keys from one address make a few Orbitals a minute, no more');
   assert.notEqual((await newOrbital(strays[0])).json.error, 'rate_limited', 'while an Orbital that exists is not held back by it');
+  // keys nobody holds are counted by the address trying them, so guessing costs a minute after a few; an Orbital that
+  // exists, asking from that same address, is counted by its own key and goes on
+  const perMinute = LIMITS.perMinute; LIMITS.perMinute = 3; clock += 61e3;
+  const guess = (from, key = newKey()) => call('GET', '/mcp/orbital/agents', { auth: 'Orbital ' + key, forwarded: from });
+  for (let i = 0; i < 3; i++) assert.equal((await guess('198.51.100.11')).status, 401);
+  assert.equal((await guess('198.51.100.11')).status, 429, 'unknown keys from one address are held to a rate');
+  assert.equal((await guess('198.51.100.12')).status, 401, 'another address has its own');
+  assert.equal((await guess('198.51.100.11', strays[1])).status, 200, 'and a real Orbital at the guessing address is not held back');
+  LIMITS.perMinute = perMinute; clock += 61e3;
   // twin requests for codes cannot pass the cap together: the count and the insert are one step per Orbital (finding 8)
   const racer = { key: newKey() };
   assert.equal((await call('POST', '/mcp/orbital/codes', { auth: as(racer), forwarded: '198.51.100.10' })).status, 201);
@@ -341,23 +350,36 @@ const server = http.createServer(relay.handle);
   const rows = await relay.dump();
   for (const secret of [firstKey, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
 
-  // ---- what anyone can make without an account has a ceiling a day, in all, kept in the database (finding 8) ----
+  // ---- what anyone can make without an account has a ceiling a day per network, kept in the database (finding 8) ----
   clock += 2 * 24 * 3600e3; await relay.sweep();
   const daily = { orbitals: LIMITS.orbitalsPerDay, installs: LIMITS.installsPerDay, clients: LIMITS.clientsPerDay };
   LIMITS.orbitalsPerDay = 2;
-  const newcomer = (n) => call('POST', '/mcp/orbital/codes', { auth: 'Orbital ' + newKey(), forwarded: '198.51.100.' + (20 + n) });
-  assert.deepEqual([(await newcomer(1)).status, (await newcomer(2)).status], [201, 201]);
-  const third = await newcomer(3);
-  assert.deepEqual([third.status, third.json.error], [429, 'busy'], 'a third new Orbital that day is refused, from whatever address');
+  const newcomer = (from) => call('POST', '/mcp/orbital/codes', { auth: 'Orbital ' + newKey(), forwarded: from });
+  assert.deepEqual([(await newcomer('198.51.100.21')).status, (await newcomer('198.51.100.21')).status], [201, 201]);
+  const third = await newcomer('198.51.100.21');
+  assert.deepEqual([third.status, third.json.error], [429, 'busy'], 'a third new Orbital that day from one network is refused');
+  assert.equal((await newcomer('198.51.100.22')).status, 201, 'while another network makes its own: one cannot use up the day for everyone');
   LIMITS.installsPerDay = 1;
   await signIn('Quota');
   const late2 = 'https://agents.example/late/callback', lateClient = (await call('POST', '/mcp/oauth/register', { body: { redirect_uris: [late2] } })).json.client_id;
   const lateVerifier = crypto.randomBytes(32).toString('base64url'), lateChallenge = crypto.createHash('sha256').update(lateVerifier).digest('base64url');
   const lateCode = new URL((await call('GET', '/mcp/oauth/authorize?' + new URLSearchParams({ response_type: 'code', client_id: lateClient, redirect_uri: late2, code_challenge: lateChallenge, code_challenge_method: 'S256' }))).headers.get('location')).searchParams.get('code');
   const lateToken = await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'authorization_code', code: lateCode, client_id: lateClient, redirect_uri: late2, code_verifier: lateVerifier } });
-  assert.deepEqual([lateToken.status, lateToken.json.error], [429, 'busy'], 'and a second new connection that day, once the ceiling is one');
+  assert.deepEqual([lateToken.status, lateToken.json.error], [429, 'busy'], 'and a second new connection that day from that network, once the ceiling is one');
+  const elsewhere = 'https://agents.example/elsewhere/callback', otherClient = (await call('POST', '/mcp/oauth/register', { forwarded: '198.51.100.42', body: { redirect_uris: [elsewhere] } })).json.client_id;
+  const otherCode = new URL((await call('GET', '/mcp/oauth/authorize?' + new URLSearchParams({ response_type: 'code', client_id: otherClient, redirect_uri: elsewhere, code_challenge: lateChallenge, code_challenge_method: 'S256' }), { forwarded: '198.51.100.42' })).headers.get('location')).searchParams.get('code');
+  const otherToken = await call('POST', '/mcp/oauth/token', { form: true, forwarded: '198.51.100.42', body: { grant_type: 'authorization_code', code: otherCode, client_id: otherClient, redirect_uri: elsewhere, code_verifier: lateVerifier } });
+  assert.equal(otherToken.status, 200, 'while a connection from another network signs in as before');
   LIMITS.clientsPerDay = 2;
   assert.equal((await call('POST', '/mcp/oauth/register', { body: { redirect_uris: [late2] } })).json.error, 'busy', 'as is a third registration');
+  // registrations are counted per network: one that uses up its day leaves everybody else theirs
+  const from = (addr) => call('POST', '/mcp/oauth/register', { forwarded: addr, body: { redirect_uris: [late2] } });
+  assert.deepEqual([(await from('198.51.100.40')).status, (await from('198.51.100.40')).status], [201, 201], 'while another address registers as before: one network cannot use up the day for everyone');
+  assert.equal((await from('198.51.100.40')).json.error, 'busy', 'until it has used up its own');
+  assert.deepEqual([(await from('2001:db8:5:6::1')).status, (await from('2001:db8:5:6::2')).status, (await from('2001:db8:5:6:ffff::3')).json.error, (await from('2001:db8:5:7::1')).status], [201, 201, 'busy', 201],
+    'an IPv6 /64 is one network, so new addresses inside it buy nothing; the next /64 is another');
+  clock += 24 * 3600e3 + 1; await relay.sweep();
+  assert.equal((await from('198.51.100.40')).status, 201, 'and a day later it registers again');
   Object.assign(LIMITS, { orbitalsPerDay: daily.orbitals, installsPerDay: daily.installs, clientsPerDay: daily.clients });
   // a connection that never linked loses its tokens after a week; an agent not heard from in ninety days is let go
   clock += TTL.unlinked + 1; await relay.sweep();

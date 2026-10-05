@@ -258,23 +258,18 @@ fun HandForm(engine: Engine, handing: Engine.Handing, cancel: (() -> Unit)? = nu
     val c = Theme.colors
     val name = handing.agent.name
     var request by remember { mutableStateOf(engine.unhanded[handing.id] ?: "") } // not taken last time: written again
-    var settling by remember { mutableStateOf(false) } // Assign pressed while dictating: the words are waited for (Dictate shows it)
     val dictation = remember { Dictation(engine.platform, engine.scope) }
     DisposableEffect(Unit) { onDispose { dictation.cancel() } } // closed while listening: the microphone stops
-    val busy = dictation.recording || dictation.transcribing
+    val busy = dictation.busy
     val focus = remember { FocusRequester() }
     LaunchedEffect(busy, request.isEmpty()) { held(busy || request.isNotEmpty()) }
     // dictated words land after what the request already says
-    fun append(said: String) { request = if (request.isEmpty()) said else "$request $said" }
+    fun append(said: String) { request = Dictation.join(request, said) }
     // Assign closes the form at once and the handoff goes on behind it (Engine.handOff); pressed while dictating, the words
     // are waited for first, and one whose words did not come is not sent
-    SheetBar("Assign to $name", cancel = cancel, back = back, action = "Assign", enabled = !settling && (request.isNotBlank() || busy)) {
+    SheetBar("Assign to $name", cancel = cancel, back = back, action = "Assign", enabled = !dictation.settling && (request.isNotBlank() || busy)) {
         engine.scope.launch {
-            if (busy) {
-                settling = true
-                val heard = try { dictation.settle(::append) } finally { settling = false }
-                if (!heard) return@launch
-            }
+            if (!dictation.settled(::append)) return@launch
             val words = request.trim()
             if (words.isEmpty()) return@launch
             engine.handOff(handing, words)

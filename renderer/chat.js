@@ -201,8 +201,7 @@ function chatContextEl(parent) {
   // who can see it, and beside it the way to add someone: ⌘K Add participants … (renderer/access.js), for who may share it
   loadAccess(node.id);
   if (el.childNodes.length && accessById.get(node.id)?.sharing) {
-    const add = document.createElement('button'); add.type = 'button'; add.className = 'chat-add'; add.textContent = 'Add participants';
-    add.onmousedown = (e) => e.preventDefault(); add.onclick = () => addParticipants(node);
+    const add = quietButton('chat-add', null, () => addParticipants(node)); add.textContent = 'Add participants';
     el.append(' · ', add);
   }
   if (meeting) {

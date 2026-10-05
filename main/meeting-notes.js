@@ -23,13 +23,15 @@ const { createHash } = require('node:crypto');
 const { LoroDoc, LoroList, LoroMap } = require('loro-crdt');
 const { readNode, audienceMetadata } = require('../sdk/node');
 const { deterministicId } = require('../sdk/chat');
-const { NOTES_SLOTS: SLOTS, notesSlotName: slotName, notesSlotId: slotId } = require('../sdk/events');
+const { userBits } = require('../sdk/sync'); // your login's hash, as Tana reads it in a peer id
+const { EVENT_URI: EVENT, USER_URI: USER, ORG_URI: ORG } = require('../sdk/ids');
+const { NOTES_SLOTS: SLOTS, notesSlotName: slotName, notesSlotId: slotId, notesOwnerOk: ownedOk, notesOurs: graphOurs } = require('../sdk/events');
 const { NOT_CONNECTED, S, sendChanged } = require('./state');
 const { readOutline, insertAfter, inlineGroups, styleDoc, writeInline } = require('../sdk/content');
-const { info, mut, op, writeGuards } = require('./documents');
+const { WRITERS } = require('../sdk/access'); // canWrite's roles
+const { info, mut, op, webLink, writeGuards } = require('./documents');
 const { nodePin } = require('./pins');
 
-const EVENT = /^tana:event:[0-9a-z]{26}$/, USER = /^tana:user-profile:[0-9a-z]{26}$/, TEXT = /^tana:text:[0-9a-z]{26}$/;
 // The link to the meeting, in a root container of Orbital's own, as the settings document carries its mark
 // (main/settings.js ext:orbital:doc, docs/SETTINGS.md): never one of Tana's keys, and never in the graph.
 const MARK = 'ext:orbital:notes';
@@ -37,7 +39,6 @@ const markOf = (doc) => doc.loro.getMap(MARK).get('meeting');
 const CONFIRM_MS = 20000, POLL_MS = 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const within = (p, ms) => Promise.race([p, sleep(ms).then(() => { throw Object.assign(new Error('Tana has not answered yet'), { lag: true }); })]);
-const WRITERS = new Set(['admin', 'editor', 'attendee']); // sdk/access.js canWrite's roles
 const notesTitle = (meeting) => 'Private notes' + ((meeting || '').trim() ? ' · ' + meeting.trim() : ''); // found in Tana's search by its meeting
 
 // Seen by you alone: one grant, yours, whatever its role. Any other key — a person, a group, an owner's uri — is not.
@@ -47,13 +48,7 @@ function alone(participants, me) {
 }
 // The one grant a new note is made with and must be confirmed with: you, as admin.
 const onlyMe = (participants, me) => alone(participants, me) && participants[me].role === 'admin';
-// The graph's row: Tana's own record of the note, who made it. undefined when it has no row yet. Owned by this meeting,
-// or by nothing (made before notes were owned): a note under anything else is not one of these.
-const ownedOk = (owner, eventId) => !owner || owner === eventId;
-function graphOurs(n, me, eventId) {
-  if (!n) return undefined;
-  return TEXT.test(n.id || '') && ownedOk(n.ownerUri, eventId) && n.createdBy === me && !(n.state && n.state.type) && !n.archivedAt;
-}
+// The graph's row: Tana's own record of the note, who made it (sdk/events.js notesOurs, the phones' rule too)
 // ... and who it is for: you alone, with no public link (graphPrivate: as admin, the proof a new note needs)
 const graphAlone = (n, me, eventId) => (n ? graphOurs(n, me, eventId) && n.restricted === true && alone(n.participants, me) && !(n.linkSharing && n.linkSharing.mode) : undefined);
 const graphPrivate = (n, me, eventId) => (n ? graphAlone(n, me, eventId) && onlyMe(n.participants, me) : undefined);
@@ -84,7 +79,6 @@ function docPrivate(doc, eventId, me) {
 // made before that mark existed carries createdAt, which was written only with the first words after the confirmation,
 // and a write by one of your machines (sdk/sync.js derivePeerId: your login's hash above, 0-32767 below; the seed's peer
 // has 32768-65535 there). A seed Tana answered as already shared has neither, so it is never taken for a note you shared.
-const userBits = (login) => createHash('sha256').update(String(login).trim().toLowerCase()).digest().readBigUInt64BE(0) >> 16n;
 function confirmed(doc, me, login) {
   const mark = doc.loro.getMap(MARK).get('confirmed');
   if (mark !== undefined) return mark === me;
@@ -137,14 +131,12 @@ const REFERENCE = 'Open the meeting in Tana';
 // Its peer is yours as Tana reads peers (sdk/sync.js derivePeerId: your login's hash above, 16 bits below), so the
 // note is attributed to you; the 16 bits come from the place and lie in 32768-65535, which derivePeerId's random part
 // (0-32767) never uses, so the seed's peer is never one of your machines'.
-const ORG = /^tana:org:[0-9a-z]{26}$/;
 const LOGIN = /^[0-9A-Za-z_]{10,64}$/;
 function seedBytes(me, eventId, k, orgDocUri, login) {
   if (!USER.test(me) || !EVENT.test(eventId) || !(k >= 0 && k < SLOTS) || !ORG.test(orgDocUri || '') || !LOGIN.test(login || '')) throw new Error('Private notes need you, the meeting and your organization');
   const name = slotName(me, eventId, k), h = createHash('sha256').update(name).digest(), { id: refId, link } = referenceOf(me, eventId, k, orgDocUri);
   const loro = new LoroDoc();
-  const user = createHash('sha256').update(login.trim().toLowerCase()).digest().readBigUInt64BE(0) >> 16n;
-  loro.setPeerId(((user << 16n) | 32768n | BigInt(h.readUInt16BE(0) & 32767)).toString(10)); // used for this seed alone
+  loro.setPeerId(((userBits(login) << 16n) | 32768n | BigInt(h.readUInt16BE(0) & 32767)).toString(10)); // used for this seed alone
   const data = loro.getMap('data');
   data.set('type', 'text');
   data.set('title', 'Private notes');
@@ -174,7 +166,7 @@ function seedBytes(me, eventId, k, orgDocUri, login) {
 // still exactly this (renderer/meetingnotes.js notesRows): there you are on the meeting already, and the row is for
 // whoever opens the notes on their own, in Tana or Orbital. One you changed is yours, and shows.
 function referenceOf(me, eventId, k, orgDocUri) {
-  return { id: deterministicId(slotName(me, eventId, k) + ':reference').slice(-8), text: REFERENCE, link: 'https://home.tana.inc/o/' + orgDocUri.split(':')[2] + '/e/' + encodeURIComponent(eventId) }; // documents.webLink's, for an event
+  return { id: deterministicId(slotName(me, eventId, k) + ':reference').slice(-8), text: REFERENCE, link: webLink(eventId, orgDocUri) };
 }
 const seed = (me, eventId, k, orgDocUri, login) => { const bytes = seedBytes(me, eventId, k, orgDocUri, login); return (loro) => loro.import(bytes); };
 // Ask Tana until it confirms the note, or the time is up ('lag'), or it answers otherwise.

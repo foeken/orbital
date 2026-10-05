@@ -12,6 +12,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 | Discovery / queries | `graph.js` | `tana.graph.v1alpha1.GraphService`: ListNodes, ListEdges, GetEdge, GetOwnerChain, Traverse. Protobuf JSON in and out. |
 | Live documents | `sync.js` | One `ServerSync` stream per client; per-document bootstrap → live; outbound batching; reconnect; resync; create (subscribe with init); soft delete. |
 | A document | `document.js` | LoroDoc wrapper: `data`/`content` maps, `transact`, undo/redo, export/import, change events. |
+| Ids | `ids.js` | `tana:<kind>:<ulid>` ids: one pattern for any kind, one per kind the code checks, and `isId(uri, kind?)`. |
 | Data-map helpers | `node.js` | `readNode`, `setTitle`, `setState` (plain or workflow state), `workflowStates`, `contentText`, `ulid`, `initDocument` (new doc/task/meeting layout). |
 | Access checks | `access.js` | Verified write, sharing, move-preview, delete, audience and confirmation-token checks used by the app boundary. |
 | Outline editing | `content.js` | Read/write the loro-prosemirror content tree as an outline: segments, insert/remove/indent/outdent/move, images. |
@@ -25,7 +26,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 | Change history | `history.js` | `ChangeSummaryService.ListChanges`: the change summaries Tana's Changes panel shows. Read-only. |
 | Semantic search | `search.js` | `SearchService.SemanticSearch`: the related results beside a text search. |
 | Chats | `chat.js` | A chat's `data.messages` as read-only outline rows. |
-| Dates | `dates.js` | `tana:plaindate:` / `tana:zoneddate:` mention uris: parse, make, label. |
+| Dates | `dates.js` | `tana:plaindate:` / `tana:zoneddate:` mention uris: parse, make, label; a time zone's wall clock both ways (`partsIn`, `wallTime`). |
 | Notifications | `inbox.js` | The `tana:user-inbox:` document: items, unread count, read/unread writes, comment reminders. |
 | AI proposals | `proposals.js` | Pending proposals from the chat graph; approve a proposed new document, reject any proposal. |
 | Assets | `assets.js` | Image bytes for a `tana:image:` uri (two-hop CDN fetch); upload a file and seed the `tana:image:` document for it. |

@@ -13,7 +13,9 @@ concurrency:
 
 jobs:
   platforms:
-    if: github.event.pull_request.user.type != 'Bot'
+    # Dependabot writes no Platforms section; every other author does, the dreetje-echo App that opens Orbital's own
+    # pull requests included (a check on user.type skipped all of those)
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

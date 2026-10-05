@@ -42,7 +42,24 @@ class SampleTest {
         assertFalse("offsite agenda" in json.encodeToString(glimpse))
     }
 
+    // The sample on the Activity's immediate Main dispatcher: init keeps the Timeline at once, the launcher's tasks with
+    // it, before anything declared later in Engine (found on a device: every sample launch crashed in keepTasks)
+    @Test fun theSampleStartsOnAnImmediateDispatcher() {
+        val platform = FakePlatform()
+        Engine(null, platform, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined), sample = sampleFile("timeline-sample.json") to sampleFile("pages-sample.json"), demoMode = false)
+        assertTrue(platform.tasks.single()!!.any { it.words == "Draft the Q4 hiring plan" })
+    }
+
     // drawn later than it was read: a meeting that has started is no longer to come, and free time that ended is gone
+    // The sample has no engine and so no prompts (the iPhone's -sample the same): nothing is translated, and a model goes by its id
+    @Test fun theSampleTranslatesNothingAndNamesModelsByTheirIds() = runTest {
+        val engine = Engine(null, FakePlatform(chatgpt = FakeChatGPT(signedIn = true)), backgroundScope, sample = sampleFile("timeline-sample.json") to sampleFile("pages-sample.json"), demoMode = false)
+        engine.translate("Dutch")
+        assertNull(engine.translator.prompts)
+        assertEquals("gpt-6-sol", engine.translator.label("gpt-6-sol"))
+        assertEquals("Draft the Q4 hiring plan" to null, engine.translator.words("Draft the Q4 hiring plan"))
+    }
+
     @Test fun aGlimpseDrawnLaterDropsWhatHasStartedOrEnded() {
         val now = Instant.parse("2026-10-02T12:00:00Z")
         val glimpse = Glimpse(now.toEpochMilliseconds(), Engine.sampleRows(sampleFile("timeline-sample.json"), now))

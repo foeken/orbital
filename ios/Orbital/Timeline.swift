@@ -60,10 +60,6 @@ struct Row: Codable, Identifiable {
 
     // above the days: Today's Tasks, the free time and Upcoming meetings (main/timeline.js pageOf)
     var top: Bool { timeline?.today == true || timeline?.upcoming == true || timeline?.free != nil }
-    // Tana's times, with or without fractional seconds ("2026-09-30T13:00:00Z", "…:00.000Z")
-    static func parse(_ s: String) -> Date? {
-        (try? Date(s, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true))) ?? (try? Date(s, strategy: .iso8601))
-    }
     var words: String { [title, text, reference?.label].compactMap { $0 }.first { !$0.isEmpty } ?? "" }
     var tone: String? { timeline?.tone }
     // the node a tap on this row zooms into: what it refers to, or the row itself when it is a node (an outline block's
@@ -246,26 +242,10 @@ struct TimelineScreen: View {
     private var upcoming: [Row] { engine.shown(engine.rows.first { $0.timeline?.upcoming == true }?.children) }
     private var free: Row.Free? { engine.rows.first { $0.timeline?.free != nil }?.timeline?.free }
 
-    // Today, Yesterday and each day before, by the day the engine put each row under (renderer/timeline.js
-    // timelineGroups, ios/engine/labels.js)
+    // Today, Yesterday and each day before, by the day the engine put each row under (Day.sections)
     private var days: [(String, [Row])] {
-        var out: [(key: String, title: String, rows: [Row])] = []
-        for row in engine.shown(engine.rows) where !row.top {
-            let key = row.timeline?.day ?? ""
-            if out.last?.key == key { out[out.count - 1].rows.append(row) } else { out.append((key, Self.day(key, row.timeline?.dayTitle), [row])) }
-        }
-        return out.map { ($0.title, $0.rows) }
+        Day.sections(engine.shown(engine.rows).filter { !$0.top }, key: { $0.timeline?.day }, title: { $0.timeline?.dayTitle }).map { ($0.title, $0.rows) }
     }
-
-    // A day's heading (renderer/timeline.js timelineDay): Today and Yesterday said here against this phone's date, so they
-    // are right past midnight before the next read; any other day in the engine's words for it (Times.kt day)
-    private static func day(_ key: String, _ title: String?) -> String {
-        if key == Self.key(.now) { return "Today" }
-        if let before = Calendar.current.date(byAdding: .day, value: -1, to: .now), key == Self.key(before) { return "Yesterday" }
-        return title ?? key
-    }
-    // a day as the engine keys it: YYYY-MM-DD in this phone's time zone
-    static func key(_ d: Date) -> String { d.formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day()) }
 }
 
 // A section's heading: a row of its own between two stretches of rail, its words in the middle of the gap. Not a
@@ -546,16 +526,6 @@ struct Faces: View {
     }
 }
 
-// Orbital's green for finished work (styles.css .tl-done), the same on every task box
-extension Color {
-    static let done = Color(red: 0x5a / 255, green: 0x96 / 255, blue: 0x70 / 255)
-    // one of the desktop's light colours and its dark twin (styles.css and its [data-theme="dark"] rules)
-    static func pair(_ light: UInt32, _ dark: UInt32) -> Color {
-        let rgb = { (v: UInt32) in UIColor(red: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1) }
-        return Color(UIColor { $0.userInterfaceStyle == .dark ? rgb(dark) : rgb(light) })
-    }
-}
-
 // The marker in the gutter, as the desktop's rail draws it (main/timeline.js ICON, styles.css .tl-*): the Nucleo glyphs
 // of icons.js (scripts/build-ios-glyphs.js) in one grey (#217). Finished work is a green disc with a white check, a new
 // task and a meeting with no write-up are quieter, and a meeting under way is blue.
@@ -570,7 +540,7 @@ struct Marker: View {
                 Image("Glyphs/applyDone").resizable().frame(width: 12, height: 12).foregroundStyle(.white)
                     .frame(width: 20, height: 20).background(Circle().fill(Color.done))
             } else {
-                Image("Glyphs/" + glyph).resizable().frame(width: 20, height: 20)
+                Image("Glyphs/" + Glyph.marker(icon)).resizable().frame(width: 20, height: 20)
                     .foregroundStyle(now ? AnyShapeStyle(.blue) : tone == "new" || tone == "faint" ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary))
                     // the rail passes behind the glyph, as on the desktop; a recording meeting's ring pulses out between the two
                     .background { ZStack { Circle().fill(Color(.systemBackground)).padding(-2); if now { Pulse() } } }
@@ -579,13 +549,6 @@ struct Marker: View {
         .frame(width: 22)
         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 } // centred on the first line's lower-case letters
         .accessibilityHidden(true)
-    }
-
-    private var glyph: String {
-        switch icon {
-        case "tlAccepted", "tlLater", "tlInbox", "tlNew", "updated", "robot", "tana", "free", "todayTasks", "pinRoute": icon!
-        default: "calendar" // a meeting (the desktop draws its type's glyph, calendar)
-        }
     }
 }
 

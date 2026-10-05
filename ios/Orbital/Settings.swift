@@ -22,7 +22,7 @@ struct SettingsView: View {
                         LabeledContent { Text(chatgpt.email ?? "ChatGPT") } label: { Row(glyph: "chatgpt", title: "Account") }
                         if !models.isEmpty {
                             NavigationLink { Models(engine: engine, models: models) } label: {
-                                LabeledContent { Text(["quickModel", "model"].map { ChatGPT.label(engine.translator.ai[$0] ?? "") }.joined(separator: ", ")) } label: { Row(glyph: "brain", title: "Models") }
+                                LabeledContent { Text(["quickModel", "model"].map { engine.translator.label(engine.translator.ai[$0] ?? "") }.joined(separator: ", ")) } label: { Row(glyph: "brain", title: "Models") }
                             }
                         }
                     } else {
@@ -60,7 +60,7 @@ struct SettingsView: View {
             .tint(.primary) // the rows in the text colour, not the accent blue, as the ChatGPT app has them
             .task(id: chatgpt?.accessToken) {
                 models = chatgpt == nil ? [] : (try? await ChatGPT.models()) ?? []
-                if !models.isEmpty { engine.translator.catalogue = models } // the choices shown are the ones asked
+                if !models.isEmpty { engine.translator.catalogue = models; await engine.loadPrompts() } // the choices shown are the ones asked, named as the Mac names them
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -95,7 +95,7 @@ struct SettingsView: View {
                         let next = models.first { $0.id == id }?.levels ?? []
                         if !next.isEmpty, !next.contains(engine.translator.ai[effortKey] ?? "") { await engine.aiChoice(effortKey, next.contains("low") ? "low" : next[0]) }
                     } }) {
-                        ForEach(models) { Text(ChatGPT.label($0.id)).tag($0.id) }
+                        ForEach(models) { Text(engine.translator.label($0.id)).tag($0.id) }
                     }
                     .pickerStyle(.inline).labelsHidden()
                 } header: { Header("Model") } footer: {
@@ -103,7 +103,7 @@ struct SettingsView: View {
                 }
                 Section {
                     Picker("Thinking", selection: Binding { engine.translator.ai[effortKey] ?? "low" } set: { x in Task { await engine.aiChoice(effortKey, x) } }) {
-                        ForEach(efforts, id: \.self) { Text(ChatGPT.effortLabel($0)).tag($0) }
+                        ForEach(efforts, id: \.self) { Text(engine.translator.effortLabel($0)).tag($0) }
                     }
                     .pickerStyle(.inline).labelsHidden()
                 } header: { Header("Thinking") } footer: { Text("The same on your Mac.") }

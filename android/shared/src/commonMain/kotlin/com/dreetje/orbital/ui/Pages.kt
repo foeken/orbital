@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
@@ -78,6 +79,7 @@ import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Failure
 import com.dreetje.orbital.Lists
 import com.dreetje.orbital.Member
+import com.dreetje.orbital.matching
 import com.dreetje.orbital.Row as Node
 import com.dreetje.orbital.Times
 import com.dreetje.orbital.kindOf
@@ -144,7 +146,10 @@ fun NodeScreen(
         delay((since + 120.seconds - engine.now()).coerceAtLeast(Duration.ZERO))
         waitOver = true
     }
-    LaunchedEffect(engine.sensitiveIds) { if (page != null) load() } // marked or unmarked on another device: drawn again
+    // marked or unmarked on another device: drawn again; only on a change, as the iPhone's onChange, or a page opened from
+    // its last read was read twice over
+    var readSensitive by remember(id) { mutableStateOf(engine.sensitiveIds) }
+    LaunchedEffect(engine.sensitiveIds) { if (engine.sensitiveIds != readSensitive) { readSensitive = engine.sensitiveIds; if (page != null) load() } }
     // Demo mode turned on or off with this page open: read again, and none of the words read before it shown meanwhile
     var readInDemo by remember(id) { mutableStateOf(engine.demo) }
     LaunchedEffect(engine.demo) { if (engine.demo != readInDemo) { readInDemo = engine.demo; page = null; load() } }
@@ -363,6 +368,15 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
         Field("Visible to", open) {
             if (access.audience == "people" && access.people.isNotEmpty()) Faces(access.people.persons) else AudienceLabel(access.audience, access.space)
         }
+        // pinned to today, or the pin taken off whatever day it is on, as the long press does it (Engine.pin): an outside
+        // orbital:pin: link opens the node here (ui/Shell.kt Link), so the pin is made where you see it
+        val pinned = id in engine.pinned
+        Row(Modifier.fillMaxWidth().clickable { engine.scope.launch { engine.pin(id, !pinned) } }.semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Outlined.PushPin, null, Modifier.size(18.dp), c.text)
+            Text(if (pinned) "Remove Pin" else "Pin to Today", color = c.text)
+        }
+        HorizontalDivider(color = c.separator)
         // handed to your Dot (Agents.kt): its name and its last Agent status line; a tap asks it again or takes it back
         access.agent?.let { held ->
             var menu by remember { mutableStateOf(false) }
@@ -478,7 +492,7 @@ fun PeoplePicker(access: Access, engine: Engine, back: () -> Unit, apply: (List<
     }
     SheetBar("Select people", back = back, action = "Apply", enabled = picked.isNotEmpty()) { apply(picked.toList()) }
     SearchField(query, { query = it })
-    val shown = people.filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
+    val shown = people.matching(query)
     LazyColumn {
         item {
             if (shown.isNotEmpty()) Group {

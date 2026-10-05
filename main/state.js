@@ -8,7 +8,7 @@ const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:', search: 'tana:search:', type: 'tana:type:', canvas: 'tana:canvas:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type', 'search']); // tana:<kind>: ids listed read-only: kind icon + kind tag
 const PIN_HUBS = new Set(['event', 'space']); // the only schemas with a pinnedItems container (docs/PINNING.md section 4)
-const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer draft keeps a local id until it materialises (#112)
+const { DOC_URI } = require('../sdk/ids'); // a real document id (any kind; sdk/ids.js); a renderer draft keeps a local id until it materialises (#112)
 // How many rows of a list are kept live. A subscription is a bootstrap RPC and a LoroDoc of its own, and every
 // bootstrap lands as a change the renderer redraws on, so subscribing a whole list (the Library lists hundreds)
 // flooded the one sync connection and the outline with it: the page lagged and the read for whatever you opened

@@ -6,6 +6,7 @@ const chat = require('../sdk/chat');
 const proposals = require('../sdk/proposals');
 const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES, setTitle, setState, taskMeta, audienceMetadata, setAssignees } = require('../sdk/node');
 const fields = require('../sdk/fields');
+const { TYPE_URI, isId } = require('../sdk/ids');
 const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pageOf, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
@@ -223,7 +224,7 @@ async function deleteChatMessage(id, messageId) {
 // be narrowed to these people, so it is shared where it lives instead.
 async function inviteToChat(id, userUri) {
   if (!isChatId(id)) throw new Error('Not a chat');
-  if (typeof userUri !== 'string' || !/^tana:user-profile:[0-9a-z]{26}$/.test(userUri)) throw new Error('Invite a workspace member');
+  if (!isId(userUri, 'user-profile')) throw new Error('Invite a workspace member');
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   // a member of this workspace, known by name, or nobody: the call is refused before the chat's access is touched
   const member = (await members()).find((m) => m.id === userUri && !m.me);
@@ -264,13 +265,13 @@ async function newChat(ownerUri) {
 
 // New document ('doc' | 'task' | 'meeting'): seeded locally, created on the server by the bootstrap (sdk/sync.js subscribe with init).
 async function customCreation(typeUri) {
-  if (typeof typeUri !== 'string' || !/^tana:type:[0-9a-z]{26}$/.test(typeUri)) throw new Error('Select a workspace type');
+  if (!isId(typeUri, 'type')) throw new Error('Select a workspace type');
   const type = readNode(await document(typeUri));
   if (type.type !== 'type' || isDeleted(type)) throw new Error('Type is unavailable');
   const appliesTo = type.appliesTo ?? 'docs';
   if (!['docs','events'].includes(appliesTo)) throw new Error('Unsupported type target');
   if (type.ownerUri) {
-    if (!/^tana:space:[0-9a-z]{26}$/.test(type.ownerUri)) throw new Error('Unsupported type scope');
+    if (!isId(type.ownerUri, 'space')) throw new Error('Unsupported type scope');
     if (!await access.canWrite(readNode(await document(type.ownerUri)), S.me.userUri, await accessContext())) throw new Error('Type home space write permission is unknown or unavailable');
   }
   // A type with a workflow (data.workflowUri) is one whose documents are tasks: made from Create new … it has to be one,
@@ -325,7 +326,6 @@ async function taskTypes() {
 // A type that is out of scope is listed and disabled with the space it belongs to, the way the creation chooser
 // lists a type it cannot use: hiding it answers "why is my type not there?" with nothing.
 const TYPED_KINDS = new Set(['text', 'event']); // only a document or a meeting carries a type; blocks and the rest do not
-const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
 const typeContext = (id) => (idKind(id) === 'event' ? 'events' : 'docs');
 async function typeChoices(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -747,8 +747,7 @@ const { lastAgentStatus } = relay;
 // the block itself is written in main/relay.js writeContext, where the phones write it too
 const writeAgentContext = (id, prompt) => (String(prompt || '').trim() ? mut(id, (doc) => relay.writeContext(doc, prompt)) : Promise.resolve(null));
 // How a handed-over node is going: its last "Agent status: …" line (main/relay.js, where the rule is, shared with the
-// phones), written as the node's one last line for an agent linked through orbital.md, replacing what was there.
-const writeAgentStatus = (id, status) => mut(id, (doc) => relay.writeStatus(doc, status));
+// phones; written there too, by handOver)
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
 const agentPrompt = (id) => codexPrompts()[id]; // what the node's agent was last asked, for a reassignment that fails to put back
 // The local mark alone, for an agent that is gone (an old build's Dot, one the relay no longer lists): the node is not
@@ -1013,7 +1012,7 @@ function onChange(docId, info) {
     // an owner an inherited audience was read through: the rows that read it read their metadata again, which lists them again
     const readers = audienceReaders.get(docId), osig = readers && ownerSig(docId, n);
     if (readers && ownerSigs.get(docId) !== osig) {
-      ownerSigs.set(docId, osig); audienceReaders.delete(docId);
+      ownerSigs.delete(docId); audienceReaders.delete(docId); // every reader is let go: none is left to compare for
       for (const id of readers) { rowOwners.get(id)?.delete(docId); if (S.client.sync.getDocument(id)) sendChanged(id, { meta: true }); } // a row let go reads it when it is read again
     }
     if (pinsChanged || restored) send('outline:changed', null);
@@ -1318,7 +1317,7 @@ async function accessContext() {
 const canWriteDoc = async (doc) => access.canWrite(readNode(doc), S.me.userUri, await accessContext());
 async function moveTarget(spaceId) {
   if (spaceId === 'library') return access.LIBRARY;
-  if (typeof spaceId !== 'string' || !/^tana:space:[0-9a-z]{26}$/.test(spaceId)) throw new Error('Select a space');
+  if (!isId(spaceId, 'space')) throw new Error('Select a space');
   return document(spaceId);
 }
 
@@ -1331,11 +1330,12 @@ const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = 
 // per kind (its link resolver beside JP.type.url, shared bundle of 2026-09-23): a type, a person, a meeting and a space
 // have pages of their own, and /l/ — every other document — shows a type as raw JSON (issue #88).
 const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
-function webLink(id) {
+// orgDocUri: whose workspace the link opens in, yours unless given (a note's seed names it, main/meeting-notes.js referenceOf)
+function webLink(id, orgDocUri = S.me && S.me.orgDocUri) {
   // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
-  const org = (S.me && S.me.orgDocUri || '').split(':').pop();
+  const org = (orgDocUri || '').split(':').pop();
   if (!org) throw new Error(NOT_CONNECTED);
-  if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
+  if (!DOC_URI.test(id)) throw new Error('Not a Tana document id');
   return 'https://home.tana.inc/o/' + org + '/' + (LINK_ROUTES[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id);
 }
 // What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
@@ -1453,4 +1453,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { writeGuards, refusedWrite, agentPrompt, dropAgentMark, forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { writeGuards, refusedWrite, agentPrompt, dropAgentMark, forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

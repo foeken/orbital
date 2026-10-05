@@ -17,7 +17,6 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -37,7 +36,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun RowScope.Dictate(dictation: Dictation, engine: Engine, into: (String) -> Unit) {
     val c = Theme.colors
-    val scope = rememberCoroutineScope()
     when {
         dictation.recording -> {
             Round(Icons.Filled.Close, "Cancel dictation") { dictation.cancel() }

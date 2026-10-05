@@ -96,7 +96,7 @@ function optionLabels(labels) {
   }).map((label) => label.trim());
 }
 // Link targets are types: uri strings or { uri, title? }, one entry per type (Tana's addLinkTarget skips a repeat).
-const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
+const { TYPE_URI } = require('./ids');
 function linkTargets(targets) {
   if (!Array.isArray(targets)) throw new Error('link targets must be a list of type uris');
   const out = [];

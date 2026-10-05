@@ -15,6 +15,7 @@
 // write to Tana and reads the due time itself, which shows the same list.
 // Live: subscribe the document and listen for its 'change' events; every write lands there, from anywhere.
 const { LoroMap } = require('loro-crdt');
+const { partsIn } = require('./dates');
 
 // gy(): Ui('user-inbox', <the user-profile's ULID>)
 const inboxUri = (userUri) => 'tana:user-inbox:' + String(userUri).split(':').pop();
@@ -32,8 +33,8 @@ function dueAt(n) {
   const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d))?$/.exec(n.due && n.due.datetime);
   if (!m) return NaN;
   try {
-    const f = new Intl.DateTimeFormat('en-US', { timeZone: n.due.type === 'zoned' ? n.due.timezone : undefined, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' });
-    const offset = (t) => { const p = Object.fromEntries(f.formatToParts(t).map((x) => [x.type, +x.value])); return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - t; };
+    const zone = n.due.type === 'zoned' ? n.due.timezone : undefined;
+    const offset = (t) => { const p = partsIn(zone, t); return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - t; };
     const wall = Date.UTC(m[1], m[2] - 1, m[3], m[4], m[5], m[6] || 0), before = offset(wall - 864e5);
     const fits = [before, offset(wall + 864e5)].map((o) => wall - o).filter((t) => offset(t) === wall - t);
     return fits.length ? Math.min(...fits) : wall - before; // a skipped time keeps the offset from before the jump

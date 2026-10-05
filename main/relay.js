@@ -164,9 +164,30 @@ function writeContext(doc, prompt) {
   for (const line of lines.slice(1)) prev = content.insertAfter(doc, prev, line);
   return headId;
 }
+// ---- handing a node over, and putting it back ----
+// The node as an earlier handoff left it, when the agent does not take the new one. was: { linked, status, prompt }, the
+// earlier handoff's (to an agent linked through orbital.md: its last status line; to Codex or Claude: its request), or
+// null, for a node handed to nobody before.
+function putBack(doc, was) {
+  if (was && was.linked && was.status) writeStatus(doc, was.status[0].toUpperCase() + was.status.slice(1));
+  else if (was && !was.linked && was.prompt) { clearStatus(doc); writeContext(doc, was.prompt); }
+  else clearStatus(doc);
+}
+// A node handed to an agent linked through orbital.md, by the Mac (main/agents/linked.js) and the phones
+// (ios/engine/agents.js) alike: the request checked, the node ending with "Agent status: Assigned", then the event. A node
+// that will not take the line is handed to nobody; an event nobody took puts the node back (putBack). write(fn) applies
+// fn to the node and has Tana take it, each side its own way. Answers the event's id, the task the node is linked to.
+async function handOver(a, nodeUri, prompt, write, was = null) {
+  const text = request(a, prompt);
+  await write((doc) => writeStatus(doc, 'Assigned'));
+  try { return await deliver(a, nodeUri, text); } catch (e) {
+    await write((doc) => putBack(doc, was)).catch(() => {}); // not put back: the line says Assigned, and the badge waits
+    throw e;
+  }
+}
 // The badge a status line is drawn as: Assigned (or none) is waiting for the agent, Working, Completed and Failed are
 // working, done and broken
 const BADGE = { assigned: 'pending', working: 'working', completed: 'done', failed: 'broken' };
 
-module.exports = { relay, where, ID, CODE, UUID, TANA_MCP, orbitalKey, newKey, call, cached, remember, agentsAt, linkCode, codeStatus, cancelCode, HOW, REQUEST_MAX, request, deliver,
+module.exports = { relay, where, ID, CODE, UUID, TANA_MCP, orbitalKey, newKey, call, cached, remember, agentsAt, linkCode, codeStatus, cancelCode, HOW, REQUEST_MAX, request, deliver, putBack, handOver,
   AGENT_HEADING, AGENT_STATUS, lastAgentStatus, clearStatus, writeStatus, writeContext, BADGE };

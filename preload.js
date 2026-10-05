@@ -40,7 +40,13 @@ try {
   }
 } catch { /* no storage: the page opens where it last was, and still gets window.api below */ }
 
-contextBridge.exposeInMainWorld('api', {
+// What main threw, as main said it: Electron wraps every refused invoke as "Error invoking remote method '<channel>':
+// Error: <message>", and every page showed that whole line. Unwrapped here, once, for every call that answers later.
+const IPC_WRAP = /^Error invoking remote method '[^']+': (?:Error: )?/;
+const unwrap = (e) => { throw e instanceof Error && IPC_WRAP.test(e.message) ? new Error(e.message.replace(IPC_WRAP, '')) : e; };
+const unwrapped = (api) => Object.fromEntries(Object.entries(api).map(([key, value]) => [key, typeof value !== 'function' ? value
+  : (...args) => { const answer = value(...args); return answer && typeof answer.then === 'function' ? answer.catch(unwrap) : answer; }]));
+contextBridge.exposeInMainWorld('api', unwrapped({
   side: pane.side, // this page's id, fixed for its life: '' the first page, then '2', '3', ... (renderer/state.js SIDE)
   savedAs: pane.start && pane.start.as, // the id it has in the saved view it opened in, when another window had that one (renderer/nodes.js)
   rememberPlace: (view, place) => ipcRenderer.send('page:place', view, place), // main's copy of this page's view and place (#636)
@@ -281,4 +287,4 @@ contextBridge.exposeInMainWorld('api', {
   onChanged: (cb) => ipcRenderer.on('outline:changed', (_e, docId, info) => cb(docId, info)), // info: { meta } for one document; null docId = global
   onStatus: (cb) => ipcRenderer.on('sync:status', (_e, status) => cb(status)),
   onNotifyOpen: (cb) => ipcRenderer.on('notify:open', (_e, docId) => cb(docId)), // a notification was clicked: open that node
-});
+}));

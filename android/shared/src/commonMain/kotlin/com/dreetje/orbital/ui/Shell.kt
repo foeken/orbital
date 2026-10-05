@@ -192,14 +192,24 @@ fun Shell(engine: Engine, start: Start = Start()) {
     LaunchedEffect(engine.shared) { if (engine.shared != null) { adding = false; settings = false } }
     // an image's node, made: opened, as the desktop opens it
     LaunchedEffect(engine.made) { engine.made?.let { engine.made = null; push(it); show(false) } }
-    // a widget's tap with the app already open (Widgets.kt): Quick Add, that node over the Timeline, or the Timeline
-    // itself (a task's box, ticked by MainActivity)
-    LaunchedEffect(engine.widget) {
-        val tapped = engine.widget ?: return@LaunchedEffect
-        engine.widget = null
-        settings = false
-        if (tapped == "add") adding = true else { adding = false; page = Menu.Timeline; path.clear(); if (tapped != "timeline") push(tapped) }
-        show(false)
+    // an orbital: link (MainActivity: a widget's tap, a launcher shortcut, the Quick Settings tile, Assistant, any app), as
+    // Shell.swift open has it: Quick Add, a node over the Timeline, the Timeline, a task ticked with the Timeline in front,
+    // a pin put on or taken off, or a task added; whatever it is, Settings and Quick Add close first. A write from another
+    // app asks instead (Link.parse): its node opened, or Quick Add with its title
+    LaunchedEffect(engine.link) {
+        val opened = engine.link ?: return@LaunchedEffect
+        engine.link = null
+        val asked = Link.parse(opened.link, opened.own)
+        settings = false; adding = asked == Link.Add; show(false)
+        when (asked) {
+            is Link.Open -> { page = Menu.Timeline; path.clear(); push(asked.id) }
+            Link.Timeline -> { page = Menu.Timeline; path.clear() }
+            is Link.Tick -> { page = Menu.Timeline; path.clear(); engine.scope.launch { engine.tick(asked.id, asked.to) } }
+            is Link.Pin -> engine.scope.launch { engine.pin(asked.id, asked.on) }
+            is Link.New -> engine.add(Engine.Draft(asked.title, null, null, null, emptyMap(), asked.today))
+            is Link.Fill -> engine.shared = Engine.Shared(asked.title, null) // Quick Add as a share opens it: nothing added until Add
+            Link.Add, null -> {}
+        }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(c.page)) {
@@ -338,6 +348,48 @@ sealed interface Menu {
     val key: String
     data object Timeline : Menu { override val title = "Timeline"; override val key = "timeline" }
     data class Search(val id: String, override val title: String) : Menu { override val key get() = id }
+}
+
+// What an orbital: link asks for (Shell.swift open): orbital:add, orbital:timeline, orbital:<id>, orbital:check:<id> and
+// orbital:uncheck:<id>, orbital:pin:<id> and orbital:unpin:<id>, orbital:new?title=…&today=1. Null for anything else; an
+// id only a node's whole id, its words percent-decoded.
+// own: it came through Orbital's own way in (MainActivity own). From anyone else a write is not made: a tick or a pin
+// opens its node, where you can do it, and a new task opens Quick Add with its title (Fill); what only opens stays.
+sealed interface Link {
+    data object Add : Link
+    data object Timeline : Link
+    data class Open(val id: String) : Link
+    data class Tick(val id: String, val to: String) : Link
+    data class Pin(val id: String, val on: Boolean) : Link
+    data class New(val title: String, val today: Boolean) : Link
+    data class Fill(val title: String) : Link
+
+    companion object {
+        private val NODE = Regex("tana:[a-z-]+:[0-9a-z]{26}")
+        // each run of %XX as the UTF-8 bytes it is
+        private fun String.decoded() = Regex("(%[0-9A-Fa-f]{2})+").replace(this) { m -> m.value.split('%').drop(1).map { it.toInt(16).toByte() }.toByteArray().decodeToString() }
+
+        fun parse(link: String, own: Boolean = false): Link? {
+            if (!link.startsWith("orbital:")) return null
+            val rest = link.removePrefix("orbital:")
+            val what = rest.substringBefore('?').decoded()
+            val items = rest.substringAfter('?', "").split('&').filter { it.isNotEmpty() }.map { it.substringBefore('=').decoded() to it.substringAfter('=', "").decoded() }
+            fun id(prefix: String) = what.removePrefix(prefix).takeIf { what.startsWith(prefix) && NODE.matches(it) }
+            val asked = when (what) {
+                "add" -> Add
+                "timeline" -> Timeline
+                "new" -> items.firstOrNull { it.first == "title" }?.second?.trim()?.takeIf { it.isNotEmpty() }?.let { New(it, items.any { it.first == "today" }) }
+                else -> id("check:")?.let { Tick(it, "closed") } ?: id("uncheck:")?.let { Tick(it, "open") }
+                    ?: id("pin:")?.let { Pin(it, true) } ?: id("unpin:")?.let { Pin(it, false) } ?: id("")?.let(::Open)
+            }
+            return if (own) asked else when (asked) {
+                is Tick -> Open(asked.id)
+                is Pin -> Open(asked.id)
+                is New -> Fill(asked.title)
+                else -> asked
+            }
+        }
+    }
 }
 
 // The order you moved the searches into, kept on this phone; one you never moved keeps its place after them, in the
@@ -484,20 +536,15 @@ fun Composer(engine: Engine, prompt: String = "Ask Tana", note: String? = null, 
     val dictation = remember { Dictation(engine.platform, engine.scope) }
     DisposableEffect(Unit) { onDispose { dictation.cancel() } } // the page left while listening: nothing kept
     val empty = text.isBlank()
-    val busy = dictation.recording || dictation.transcribing // listening, or writing down what was said
+    val busy = dictation.busy
     val open = focused || !empty || busy
     val side by animateDpAsState(if (open) 14.dp else 36.dp, if (still) snap() else snappy())
     val shape = RoundedCornerShape(23.dp)
-    fun append(said: String) { text = if (text.isEmpty()) said else "$text $said" } // dictated words land after what is typed
+    fun append(said: String) { text = Dictation.join(text, said) }
 
     // Send while listening or writing down too: listening stops and the words are waited for first
     suspend fun submit() {
-        if (busy) {
-            sending = true
-            val heard = dictation.settle(::append)
-            sending = false
-            if (!heard) return
-        }
+        if (!dictation.settled(::append)) return
         val words = text.trim()
         if (words.isEmpty()) return
         text = ""; focus.clearFocus(); sending = true
@@ -529,7 +576,7 @@ fun Composer(engine: Engine, prompt: String = "Ask Tana", note: String? = null, 
             Row(Modifier.align(Alignment.BottomEnd).then(if (dictation.recording) Modifier.fillMaxWidth() else Modifier).padding(if (open) 10.dp else 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (focused || busy) Dictate(dictation, engine) { append(it) }
-                Send(enabled = (!empty || busy) && !sending, label = prompt) { scope.launch { submit() } }
+                Send(enabled = (!empty || busy) && !sending && !dictation.settling, label = prompt) { scope.launch { submit() } }
             }
         }
     }

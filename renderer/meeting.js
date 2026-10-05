@@ -22,7 +22,10 @@ function loadMeetingCtx(doc) {
 }
 // "Tue 22 Sep 10:00–10:30", spelled out rather than toLocale*: ICU's en-GB has started writing "Sept"
 const clock = (t) => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
-const meetingSpan = (start, end) => { const d = new Date(start), mon = MONTHS[d.getMonth()]; return WD[d.getDay()] + ' ' + d.getDate() + ' ' + mon[0].toUpperCase() + mon.slice(1, 3) + ' ' + clock(start) + '\u2013' + clock(end); };
+const meetingDay = (t) => { const d = new Date(t), mon = MONTHS[d.getMonth()]; return WD[d.getDay()] + ' ' + d.getDate() + ' ' + mon[0].toUpperCase() + mon.slice(1, 3); };
+const meetingSpan = (start, end) => meetingDay(start) + ' ' + clock(start) + '\u2013' + clock(end);
+// "From Standup · Tue 22 Sep": the meeting a task (meetingLinkEl) or a page (renderer/rail.js drawMeetingBtn) came from
+const fromMeetingLabel = (m) => 'From ' + (m.title ? demoText(m.title, m.id) : 'a meeting') + (m.start ? ' · ' + meetingDay(m.start) : '');
 // The meeting a page stands for: the event itself, or the event a write-up lives in — a zoomed meeting opens at its
 // write-up (edit.js), and the sidebar already shows that meeting's hub, whose pinHub says this user may write it.
 function meetingOf(doc) {
@@ -122,15 +125,8 @@ function openMeetingPage(mode, placeholder) {
 // the row is hovered or has the caret (styles.css .meeting-link), its tooltip naming the meeting and its day. A click
 // opens the meeting, which forwards to its write-up (renderer/edit.js); the caret stays in the row.
 function meetingLinkEl(meeting, fact = false) { // fact: one of the row's fact icons (.ticon), the size of Pinned beside it
-  const b = document.createElement('button');
-  b.type = 'button'; b.className = fact ? 'ticon meeting-link' : 'meeting-link'; b.tabIndex = -1;
-  const day = meeting.start ? new Date(meeting.start).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '';
-  const label = 'From ' + (meeting.title ? demoText(meeting.title, meeting.id) : 'a meeting') + (day ? ' · ' + day : '');
-  b.title = label; b.setAttribute('aria-label', label); // icon only, so the name comes from here
-  addIcon(b, 'meeting');
-  b.onmousedown = (e) => e.preventDefault();
-  b.onclick = (e) => { e.stopPropagation(); run(() => goTo(meeting.id)); };
-  return b;
+  // icon only, so its name comes from the label
+  return addIcon(quietButton(fact ? 'ticon meeting-link' : 'meeting-link', fromMeetingLabel(meeting), (e) => { e.stopPropagation(); run(() => goTo(meeting.id)); }, { tabIndex: -1 }), 'meeting');
 }
 // ---- Edit meeting details (#758): one field, the words read by the AI into a day, a start and an end ----
 // Offered where Change time is (a meeting this user may change, not all-day). The words are read only when ↩ asks
