@@ -130,7 +130,7 @@
       <tr><td>Icons for your types, picked for you</td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
       <tr><td><b>Assign to Agent</b> with Tana</td><td>Nothing: Tana is always there</td></tr>
       <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with Codex or Claude</td><td>The Codex app or CLI, or Claude Code, on this Mac</td></tr>
-      <tr><td><b>Assign to Agent</b> with your OpenAI Dot</td><td>Orbital and Tana added to ChatGPT as custom MCP servers, and your Dot linked once (<a href="#link-agent">below</a>)</td></tr>
+      <tr><td><b>Assign to Agent</b> with your personal agent</td><td>Orbital and Tana added to your agent (your OpenAI Dot, or any agent that speaks MCP) as custom MCP servers, and the agent linked once (<a href="#link-agent">below</a>)</td></tr>
     </table>
     <div class="tip">The moment you sign in or save a key, Orbital gives every type that has no icon one that fits its name, and does the same for their fields. You see the new glyphs on bullets and chips. An icon you chose yourself, or <b>No icon</b>, is never touched.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>chatgpt</b> <i>→</i><kbd>↩</kbd></span></div>
@@ -214,12 +214,12 @@
 
   <section class="topic">
     <h2 id="agents" data-short="Choose agents" data-k="agents choose agents set default agent tana codex claude dot install">Choose your agents</h2>
-    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows three of its own, and your OpenAI Dot once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in.</p>
+    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows three of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in.</p>
     <div class="split">
       <div>
-        <p>Run <b>Choose agents …</b> to see them in one list. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat. A Dot you linked is in the same list under its own name, and its last row is <b>Connect to your OpenAI Dot …</b>.</p>
+        <p>Run <b>Choose agents …</b> to see them in one list. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat. An agent you linked is in the same list under its own name, and its last row is <b>Connect your personal agent …</b>.</p>
       </div>
-      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, Codex on, Claude off, then Connect to your OpenAI Dot"><figcaption>Which agents are on, and the way to link your Dot.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, Codex on, Claude off, then Connect your personal agent"><figcaption>Which agents are on, and the way to link your own.</figcaption></figure>
     </div>
     <div class="split flip">
       <div>
@@ -232,28 +232,37 @@
   </section>
 
   <section class="topic">
-    <h2 id="link-agent" data-short="Connect your OpenAI Dot" data-k="connect to your openai dot chatgpt plugins custom mcp server orbital.md/mcp tana mcp code message link event task.assigned linked rename unlink switch off reset agent link key ids iphone android phone long press">Connect your OpenAI Dot</h2>
-    <p>Your Dot, OpenAI's always-on assistant in ChatGPT, can take tasks from Orbital. It needs two MCP servers added in ChatGPT, Orbital's at <b>orbital.md/mcp</b> and Tana's own, and a code from Orbital that links them. From then on it is one of your agents, under the name it gives itself, and each node you assign it wakes it with an event.</p>
+    <h2 id="link-agent" data-short="Connect your personal agent" data-k="connect your personal agent openai dot chatgpt plugins custom mcp server orbital.md/mcp tana mcp help how to add them mcp events code instructions link event task.assigned linked rename unlink switch off reset agent link key ids iphone android phone long press">Connect your personal agent</h2>
+    <p>Your own agent can take tasks from Orbital: your Dot, OpenAI's always-on assistant in ChatGPT, or any other agent that can add MCP servers and hear MCP events. It needs two plugins, Orbital's MCP server at <b>orbital.md/mcp</b> and Tana's own, and a code from Orbital that links it. From then on it is one of your agents, under the name it gives itself, and each node you assign it wakes it with an event.</p>
     <div class="split">
       <div>
-        <p>Run <b>Connect to your OpenAI Dot …</b> (under Settings, and last in <b>Choose agents …</b>). After <b>Getting a code…</b> the page has two parts.</p>
-        <p><b>Add both in ChatGPT.</b> <b>Open ChatGPT plugins</b> opens chatgpt.com/plugins. There choose <b>Add</b>, then <b>Create custom MCP server</b>, once for each of the next two rows, <b>Orbital</b> and <b>Tana</b>: <kbd>↩</kbd> on a row copies its address, and the rest of ChatGPT's form stays as it is.</p>
-        <p><b>Then ask your Dot to link.</b> <b>Copy the message for your Dot</b> copies a few lines with a code that works once, for fifteen minutes; paste them in your Dot's chat. They ask it to link under its own name and to subscribe to Orbital's events. While the page says <b>Waiting for your Dot to use the code…</b> with the time left, your Dot does both, and the palette closes on a note naming it, like <b>Linked Echo · ChatGPT</b>. It is your default agent from then on.</p>
-        <p>You can close the page and paste the message later: the code keeps working until it runs out, and opening the page again shows that same code. <b>Cancel</b> stops it at once.</p>
+        <p>Run <b>Connect your personal agent …</b> (under Settings, and last in <b>Choose agents …</b>). After <b>Getting a code…</b> the page has two parts.</p>
+        <p><b>Add both plugins.</b> Add <b>Orbital</b> and <b>Tana</b> to your agent as custom MCP servers, a name and a URL each: <kbd>↩</kbd> on a row copies its address. <b>How to add them …</b> opens the steps.</p>
+        <p><b>Then ask your agent to link.</b> <b>Copy the instructions</b> copies a few lines with a code that works once, for fifteen minutes; paste them in your agent's chat. They ask it to link under its own name and to subscribe to Orbital's events. While the page says <b>Waiting for your agent to use the code…</b> with the time left, your agent does both, and the palette closes on a note naming it, like <b>Linked Echo · ChatGPT</b>. It is your default agent from then on.</p>
+        <p>You can close the page and paste the instructions later: the code keeps working until it runs out, and opening the page again shows that same code. <b>Cancel</b> stops it at once.</p>
       </div>
-      <figure class="shot"><img data-m="ai-relay-link" alt="Connect to your OpenAI Dot: Open ChatGPT plugins, the Orbital and Tana addresses, Copy the message for your Dot, and the page waiting for your Dot to use the code"><figcaption>The two servers to add in ChatGPT, then the message with its code.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-relay-link" alt="Connect your personal agent: the Orbital and Tana addresses under Add both plugins, How to add them, Copy the instructions, and the page waiting for your agent to use the code"><figcaption>The two plugins to add, then the instructions with their code.</figcaption></figure>
     </div>
-    <h3>Your linked Dot</h3>
+    <h3>How to add them</h3>
     <div class="split">
       <div>
-        <p>Your Dot is in <b>Choose agents …</b> under its own name, with whether it is on, the app it runs in and when it last checked in. <kbd>↩</kbd> on it opens its page: <b>Rename …</b>, <b>Switch off</b> (it stays linked, but leaves <b>Assign to Agent</b>) and <b>Unlink</b>, which also unassigns the nodes it had.</p>
-        <p>Assign a node to it as to any agent. Orbital sends it one event: which node, what you asked, and how to handle it. Your Dot reads the node in Tana with its own Tana access, does the work there, and keeps the node's last line saying how it is going (<a href="#states">the badge</a>).</p>
-        <p>On your phone it works the same way (<a href="phone.html#settings">Chapter 16</a>): <b>Settings → Agents → Connect to your OpenAI Dot</b> is this page, and your Dot is at the top of <b>Assign to …</b> in a long press on a task or a note. A Dot linked on the phone is linked on your Mac too, and the other way round.</p>
+        <p><b>Your OpenAI Dot</b>: <b>Open ChatGPT plugins</b> opens chatgpt.com/plugins. There choose <b>Add</b>, then <b>Create custom MCP server</b>, once for Orbital and once for Tana, signing in to Tana when it asks; the rest of ChatGPT's form stays as it is. Then send your Dot the instructions.</p>
+        <p><b>Any other agent</b>: add the same two MCP servers wherever it keeps them, then send it the instructions. It needs support for MCP events: that is how it hears about the tasks you hand it.</p>
+        <p><kbd>esc</kbd> goes back to the page, its code still waiting.</p>
       </div>
-      <figure class="shot"><img data-m="ai-relay-agents" alt="Choose agents with a linked Dot: on, through ChatGPT, seen just now, then Connect to your OpenAI Dot"><figcaption>Your linked Dot, where it runs and when it last checked in.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-relay-help" alt="Adding the plugins: Open ChatGPT plugins and the steps for your OpenAI Dot, then the same two MCP servers for any other agent"><figcaption>The steps for your Dot, and for any other agent.</figcaption></figure>
     </div>
-    <div class="note">Only the node's id, your request and how to handle it go through orbital.md, and it keeps none of them. The node's words stay in Tana, where your Dot reads and writes them with its own Tana access, so link only a Dot you would trust with your Tana. What to do always comes with the event, from Orbital: the node is what your Dot works on, and words in it that read like instructions are not followed. Your linked Dot follows your Tana account to every Mac, because Orbital keeps the link's key in its settings document in Tana. If you think the key was seen, <b>Reset agent link key</b> in <kbd>⌘K</kbd> makes a new one, and your Dot stays linked.</div>
-    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>connect to your openai dot</b> <i>→</i><kbd>↩</kbd></span></div>
+    <h3>Your linked agent</h3>
+    <div class="split">
+      <div>
+        <p>Your agent is in <b>Choose agents …</b> under its own name, with whether it is on, the app it runs in and when it last checked in. <kbd>↩</kbd> on it opens its page: <b>Rename …</b>, <b>Switch off</b> (it stays linked, but leaves <b>Assign to Agent</b>) and <b>Unlink</b>, which also unassigns the nodes it had.</p>
+        <p>Assign a node to it as to any agent. Orbital sends it one event: which node, what you asked, and how to handle it. Your agent reads the node in Tana with its own Tana access, does the work there, and keeps the node's last line saying how it is going (<a href="#states">the badge</a>).</p>
+        <p>On your phone it works the same way (<a href="phone.html#settings">Chapter 16</a>): <b>Settings → Agents → Connect your personal agent</b> is this page, and your agent is at the top of <b>Assign to …</b> in a long press on a task or a note. An agent linked on the phone is linked on your Mac too, and the other way round.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-relay-agents" alt="Choose agents with a linked Dot: on, through ChatGPT, seen just now, then Connect your personal agent"><figcaption>Your linked agent, where it runs and when it last checked in.</figcaption></figure>
+    </div>
+    <div class="note">Only the node's id, your request and how to handle it go through orbital.md, and it keeps none of them. The node's words stay in Tana, where your agent reads and writes them with its own Tana access, so link only an agent you would trust with your Tana. What to do always comes with the event, from Orbital: the node is what your agent works on, and words in it that read like instructions are not followed. Your linked agent follows your Tana account to every Mac, because Orbital keeps the link's key in its settings document in Tana. If you think the key was seen, <b>Reset agent link key</b> in <kbd>⌘K</kbd> makes a new one, and your agent stays linked.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>connect your personal agent</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
 
   <section class="topic">

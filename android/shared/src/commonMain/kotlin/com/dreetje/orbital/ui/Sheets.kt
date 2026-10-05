@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.HorizontalDivider
@@ -72,19 +73,25 @@ fun SheetBar(title: String, cancel: (() -> Unit)? = null, back: (() -> Unit)? = 
             if (back != null) IconButton(back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = c.text) }
             else if (cancel != null) TextButton(cancel) { Text("Cancel", color = c.text) }
         }
-        Text(title, Modifier.align(Alignment.Center).padding(horizontal = 96.dp).semantics { heading() }, style = Type.headline, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        // room for the buttons either side: a text action (Save, Add) needs more than the back arrow, so a bar without one
+        // gives the title that room (Connect your personal agent fits on a phone)
+        Text(title, Modifier.align(Alignment.Center).padding(horizontal = if (action != null || (back == null && cancel != null)) 96.dp else 56.dp).semantics { heading() }, style = Type.headline, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         if (action != null) TextButton(onAction, Modifier.align(Alignment.CenterEnd), enabled = enabled) {
             Text(action, fontWeight = FontWeight.SemiBold, color = if (enabled) c.text else c.tertiary)
         }
     }
 }
 
-// Rows in a rounded group under a grey heading, a line under the group's words, as the iPhone's Form sections
+// Rows in a rounded group under a grey heading, a line under the group's words, as the iPhone's Form sections; help puts a
+// ? at the right of the heading (Connect your personal agent's Add both plugins, Agents.kt)
 @Composable
-fun Group(header: String? = null, footer: String? = null, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun Group(header: String? = null, footer: String? = null, modifier: Modifier = Modifier, help: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val c = Theme.colors
     Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        if (header != null) Text(header, Modifier.padding(start = 16.dp, bottom = 6.dp).semantics { heading() }, style = Type.headline, color = c.secondary)
+        if (header != null) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(header, Modifier.weight(1f).padding(start = 16.dp, bottom = 6.dp).semantics { heading() }, style = Type.headline, color = c.secondary)
+            if (help != null) IconButton(help, Modifier.size(32.dp).padding(bottom = 6.dp)) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, "Help", tint = c.secondary) }
+        }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.card), content = content)
         if (footer != null) Text(footer, Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp), style = Type.footnote, color = c.secondary)
     }

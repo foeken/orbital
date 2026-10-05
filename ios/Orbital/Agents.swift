@@ -1,12 +1,13 @@
 import SwiftUI
 
-// Your Dot on the iPhone, as the Mac's Cmd+K has it (renderer/agent.js, main/agents/linked.js, ios/engine/agents.js):
-// Settings' Agents, Connect to your OpenAI Dot with a one-time code, and Assign to <its name> … from a long press, with the
+// Your personal agent on the iPhone (your OpenAI Dot, or any agent that speaks MCP), as the Mac's Cmd+K has it
+// (renderer/agent.js, main/agents/linked.js, ios/engine/agents.js): Settings' Agents, Connect your personal agent with a
+// one-time code, and Assign to <its name> … from a long press, with the
 // request written here and the node's own words left in Tana. What is linked and handed over is in your settings
 // document, so the Mac sees it too.
 
 // Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped right to make it the default
-// and left to unlink it, then Connect to your OpenAI Dot
+// and left to unlink it, then Connect your personal agent
 struct AgentsSection: View {
     let engine: Engine
     @State private var problem: String?
@@ -25,19 +26,20 @@ struct AgentsSection: View {
                     if !a.isDefault { Button("Make Default") { Task { await engine.makeDefault(a) } }.tint(.blue) }
                 }
             }
-            NavigationLink { ConnectDot(engine: engine) } label: { SettingsView.Row(glyph: "chatgpt", title: "Connect to your OpenAI Dot") }
+            NavigationLink { ConnectAgent(engine: engine) } label: { SettingsView.Row(glyph: "mcp", title: "Connect your personal agent") }
         } header: { SettingsView.Header("Agents") } footer: {
             if let problem { Text(problem) }
-            if engine.agents.isEmpty { Text("Link your Dot, OpenAI's agent in ChatGPT, and hand it a task or a note with a long press. It reads the node in Tana itself.") }
+            if engine.agents.isEmpty { Text("Link your personal agent, like your OpenAI Dot, and hand it a task or a note with a long press. It reads the node in Tana itself.") }
         }
         .task { problem = await engine.loadAgents() }
     }
 }
 
-// Connect to your OpenAI Dot: both servers added in ChatGPT, then the message with a one-time code sent to your Dot. The page
-// asks every two seconds whether the code was used and goes back once it was. Leaving it does not stop the code: a Dot that
-// uses it later shows up all the same, as on the Mac.
-struct ConnectDot: View {
+// Connect your personal agent: both plugins (MCP servers) added to your agent, then the instructions with a one-time code
+// sent to it. The ? beside the plugins opens ConnectHelp: your OpenAI Dot step by step, then any other agent. The page
+// asks every two seconds whether the code was used and goes back once it was. Leaving it does not stop the code: an agent
+// that uses it later shows up all the same, as on the Mac.
+struct ConnectAgent: View {
     let engine: Engine
     @Environment(\.dismiss) private var dismiss
     @State private var link: Engine.LinkCode?
@@ -45,18 +47,24 @@ struct ConnectDot: View {
     @State private var failure: String?
     @State private var linked: String? // "Echo · ChatGPT", once it is
     @State private var copied: String? // what was copied last, said on its row for a moment
-    static let plugins = URL(string: "https://chatgpt.com/plugins")!
+    @State private var help = false
 
     var body: some View {
         Form {
             Section {
-                Link(destination: Self.plugins) { SettingsView.Row(glyph: "chatgpt", title: "Open ChatGPT plugins") }
                 if let link {
                     copy("Orbital", link.url, glyph: "robot")
                     copy("Tana", link.tana, glyph: "tana")
                 }
-            } header: { SettingsView.Header("Add both in ChatGPT") } footer: {
-                Text("Add, then Create custom MCP server: a name and a URL each, the rest as it is.")
+            } header: {
+                HStack {
+                    SettingsView.Header("Add both plugins")
+                    Spacer()
+                    Button { help = true } label: { Image(systemName: "questionmark.circle").font(.headline) }
+                        .accessibilityLabel("Help")
+                }
+            } footer: {
+                Text("Add each to your agent as a custom MCP server, a name and a URL. A tap copies the URL.")
             }
             Section {
                 switch state {
@@ -64,11 +72,11 @@ struct ConnectDot: View {
                 case "failed":
                     Text(failure ?? "No code").foregroundStyle(.secondary)
                     Button("Try again") { Task { await ask() } }
-                case "linked": Label("Linked " + (linked ?? "your Dot"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                case "linked": Label("Linked " + (linked ?? "your agent"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 default:
                     if let link {
                         Button { UIPasteboard.general.string = link.prompt; said("message") } label: {
-                            LabeledContent { Text(copied == "message" ? "Copied" : "") } label: { Label("Copy the message for your Dot", systemImage: "doc.on.doc") }
+                            LabeledContent { Text(copied == "message" ? "Copied" : "") } label: { Label("Copy the instructions", systemImage: "doc.on.doc") }
                         }
                         if state == "expired" || link.expiresAt <= Date.now.timeIntervalSince1970 * 1000 {
                             Text("The code expired. Nobody used it.").foregroundStyle(.secondary)
@@ -77,7 +85,7 @@ struct ConnectDot: View {
                             TimelineView(.periodic(from: .now, by: 1)) { _ in
                                 // a glyph's column, as the rows above, so the words line up
                                 HStack {
-                                    Label { Text("Waiting for your Dot to use the code…").foregroundStyle(.secondary) } icon: { ProgressView() }
+                                    Label { Text("Waiting for your agent to use the code…").foregroundStyle(.secondary) } icon: { ProgressView() }
                                     Spacer()
                                     Text(Self.left(link.expiresAt)).monospacedDigit().foregroundStyle(.secondary)
                                 }
@@ -88,13 +96,14 @@ struct ConnectDot: View {
                         }
                     }
                 }
-            } header: { SettingsView.Header("Then ask your Dot to link") } footer: {
-                Text("Send the message to your Dot in ChatGPT. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through orbital.md, and it keeps neither: the node's words stay in Tana, where your Dot reads them with its own Tana access.")
+            } header: { SettingsView.Header("Then ask your agent to link") } footer: {
+                Text("Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through orbital.md, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.")
             }
         }
         .tint(.primary)
-        .navigationTitle("Connect to your OpenAI Dot")
+        .navigationTitle("Connect your personal agent")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $help) { ConnectHelp(link: link) }
         .task { await ask() }
         .task(id: link?.code) { await poll() }
     }
@@ -133,46 +142,101 @@ struct ConnectDot: View {
     }
 }
 
-// Your Dot picked in Assign to …, or asked again from a node's Agent field: what it should do with the node, written here
-// and sent with the handoff; the node itself is only read, as content. Assign stays until the agent took it, and says why
-// not when it did not (not listening yet, read-only). done closes whatever it was opened in.
+// The ? beside Add both plugins: your OpenAI Dot step by step, with ChatGPT's plugins a tap away, then the same for any
+// other agent that can add MCP servers and hear MCP events
+struct ConnectHelp: View {
+    let link: Engine.LinkCode?
+    static let plugins = URL(string: "https://chatgpt.com/plugins")!
+    private var orbital: String { (link?.url ?? "https://orbital.md/mcp").replacingOccurrences(of: "https://", with: "") }
+    private var tana: String { (link?.tana ?? "https://home.tana.inc/mcp").replacingOccurrences(of: "https://", with: "") }
+
+    var body: some View {
+        Form {
+            Section {
+                Link(destination: Self.plugins) { SettingsView.Row(glyph: "chatgpt", title: "Open ChatGPT plugins") }
+                step(1, "Open ChatGPT plugins, tap **Add**, then **Create custom MCP server**.")
+                step(2, "Name it **Orbital**, with the URL \(orbital). Leave the rest as it is: ChatGPT signs in to Orbital by itself.")
+                step(3, "Add a second one named **Tana**, with the URL \(tana), and sign in with your Tana account when it asks.")
+                step(4, "Come back, tap **Copy the instructions** and send them to your Dot in ChatGPT.")
+            } header: { SettingsView.Header("Your OpenAI Dot") } footer: {
+                Text("Your Dot links itself with the code, and the page says Linked. The code works once, for fifteen minutes.")
+            }
+            Section {
+                step(1, "Add **Orbital** to your agent as an MCP server, with the URL \(orbital).")
+                step(2, "Add **Tana** as an MCP server too, with the URL \(tana), signed in with your Tana account.")
+                step(3, "Tap **Copy the instructions** and send them to your agent.")
+            } header: { SettingsView.Header("Any other agent") } footer: {
+                Text("Your agent needs support for MCP events: that is how it hears about the tasks you hand it.")
+            }
+        }
+        .tint(.primary)
+        .navigationTitle("Adding the plugins")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func step(_ n: Int, _ words: String) -> some View {
+        Label { Text(LocalizedStringKey(words)) } icon: { Image(systemName: "\(n).circle") }
+    }
+}
+
+// Your agent picked in Assign to …, or asked again from a node's Agent field: what it should do with the node, written or
+// dictated here (as Quick Add's title is) and sent with the handoff; the node itself is only read, as content. Assign
+// closes it at once and the handoff goes on behind it, the + turning meanwhile (Engine.handOff); a request the agent did
+// not take is said and kept, and opens here again. done closes whatever it was opened in.
 struct HandForm: View {
     let engine: Engine
     let handing: Engine.Handing
     let done: () -> Void
     @State private var request = ""
-    @State private var sending = false
-    @State private var failure: String?
+    @State private var settling = false // Assign pressed while dictating: the words are waited for (Dictate shows it)
+    @State private var dictation = Dictation()
     @FocusState private var focused: Bool
 
     var body: some View {
         Form {
             Section {
-                TextField("What should \(handing.agent.name) do?", text: $request, axis: .vertical).lineLimit(4...12).focused($focused)
+                // the request, and dictating it: the microphone starts listening; while it listens, ✕ throws the recording
+                // away and ■ stops it, its words then added to the request
+                HStack(alignment: .top, spacing: 10) {
+                    if !dictation.recording { TextField("What should \(handing.agent.name) do?", text: $request, axis: .vertical).lineLimit(4...12).focused($focused) }
+                    Dictate(dictation: dictation, into: append)
+                }
             } footer: {
-                Text("\(handing.agent.name) reads the node in Tana. Only what you write here tells it what to do.")
+                Text([dictation.problem, "\(handing.agent.name) reads the node in Tana. Only what you write here tells it what to do."].compactMap { $0 }.joined(separator: "\n\n"))
             }
-            if let failure { Section { Text(failure).foregroundStyle(.red) } }
         }
         .navigationTitle("Assign to " + handing.agent.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                if sending { ProgressView() } else { Button("Assign") { Task { await send() } }.disabled(request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                Button("Assign") { Task { await send() } }
+                    .disabled((request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !dictation.recording && !dictation.transcribing) || settling)
             }
         }
-        .onAppear { focused = true }
-        .interactiveDismissDisabled(sending || !request.isEmpty)
+        .onAppear {
+            if request.isEmpty, let kept = engine.unhanded[handing.id] { request = kept } // not taken last time: written again
+            focused = true
+        }
+        .onDisappear { dictation.cancel() } // closed while listening: nothing kept
+        .interactiveDismissDisabled(!request.isEmpty || dictation.recording || dictation.transcribing)
     }
 
+    // dictated words land after what the request already says
+    private func append(_ said: String) { request = request.isEmpty ? said : request + " " + said }
+
+    // Assign while listening or still transcribing: listening stops and the words are waited for, then it goes; one whose
+    // words did not come is not sent, so nothing said is lost without a word
     private func send() async {
-        sending = true; failure = nil
-        defer { sending = false }
-        do {
-            try await engine.hand(handing.id, to: handing.agent, request)
-            done()
-            await handing.then()
-        } catch { failure = error.localizedDescription }
+        guard !settling else { return }
+        if dictation.recording || dictation.transcribing {
+            settling = true
+            defer { settling = false }
+            guard await dictation.settle(into: append) else { return }
+        }
+        let words = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        engine.handOff(handing, words)
+        done()
     }
 }
 

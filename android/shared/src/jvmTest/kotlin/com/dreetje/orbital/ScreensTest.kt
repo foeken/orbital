@@ -153,13 +153,16 @@ class ScreensTest {
         assertTrue(onAllWithText("Pin to Today").isEmpty(), "no actions on an entry")
     }
 
-    // Settings' Agents has Connect to your OpenAI Dot (Agents.kt): ChatGPT's plugins named first, and the sample, which
-    // saves nothing, asks the relay for no code and says so, with Try again
+    // Settings' Agents has Connect your personal agent (Agents.kt): the ? beside Add both plugins opens the help with
+    // ChatGPT's plugins, and the sample, which saves nothing, asks the relay for no code and says so, with Try again
     @Test fun connectToYourDotFromSettings() = sample(start = com.dreetje.orbital.ui.Start(settings = true)) {
-        waitUntil(timeoutMillis = 3000) { onAllWithText("Connect to your OpenAI Dot").isNotEmpty() }
-        onNodeWithText("Connect to your OpenAI Dot").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Connect your personal agent").isNotEmpty() }
+        onNodeWithText("Connect your personal agent").performClick()
         waitUntil(timeoutMillis = 3000) { onAllWithText("The sample saves nothing").isNotEmpty() }
-        listOf("Open ChatGPT plugins", "Try again").forEach { onNodeWithText(it).assertExists() }
+        onNodeWithText("Try again").assertExists()
+        onNode(hasContentDescription("Help")).performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Open ChatGPT plugins").isNotEmpty() }
+        onNodeWithText("Any other agent").assertExists()
     }
 
     @Test fun aWideWindowKeepsTheMenuBesideThePage() = sample(1280, 800) {

@@ -15,6 +15,7 @@ const WANT = { task: 'list-checkbox.svg', calendar: 'calendar.svg', sync: path.j
 // Ours rather than Nucleo's: the Tana prism from build/tana-symbol.svg (Tana's own symbol), traced as a
 // single-stroke glyph on the same 18x18 grid. Appended so the generated key order stays stable.
 WANT.tana = path.join(__dirname, '..', 'build', 'icons', 'tana.svg');
+WANT.mcp = path.join(__dirname, '..', 'build', 'icons', 'mcp-server.svg'); // Connect your personal agent: the MCP logo, Hugeicons mcp-server (stroke rounded), its stroke thinned to the Nucleo 18px weight
 WANT.trash = path.join(__dirname, '..', 'build', 'icons', 'trash-2.svg');
 WANT.addTo = path.join(__dirname, '..', 'build', 'icons', 'folder-plus.svg');
 WANT.today = path.join(__dirname, '..', 'build', 'icons', 'calendar-event.svg');
@@ -87,7 +88,7 @@ WANT.language = path.join(__dirname, '..', 'build', 'icons', 'language.svg'); //
 WANT.checklist = path.join(__dirname, '..', 'build', 'icons', 'checkbox-checked.svg'); // the "/" menu's Checklist row (#602), Nucleo UI 18px outline
 WANT.filterPlus = path.join(__dirname, '..', 'build', 'icons', 'filter-2-plus.svg'); // the field pills' "Add filter" (renderer/pills.js foldFields, #624): the filter glyph with a plus, Nucleo UI 18px outline
 WANT.demo = path.join(__dirname, '..', 'build', 'icons', 'pinwheel.svg'); // Demo mode, on the desktop's Cmd+K row and in both phones' Settings: a toy, playing with made-up words. Nucleo UI 18px outline
-WANT.prompt = path.join(__dirname, '..', 'build', 'icons', 'chat-task.svg'); // Connect to your OpenAI Dot's "Copy the message for your Dot": a chat bubble holding a prompt. Nucleo UI 18px outline
+WANT.prompt = path.join(__dirname, '..', 'build', 'icons', 'chat-task.svg'); // Connect your personal agent's "Copy the instructions": a chat bubble holding a prompt. Nucleo UI 18px outline
 WANT.orbital = path.join(__dirname, '..', 'build', 'icons', 'orbital.svg'); // Orbital's own planet (build/orbital-symbol.svg), on the row with its MCP server's URL. Nucleo UI 18px outline
 WANT.linkReset = path.join(__dirname, '..', 'build', 'icons', 'link-slash.svg'); // Cmd+K Reset agent link key: the old link cut. Nucleo UI 18px outline
 WANT.mobile = path.join(__dirname, '..', 'build', 'icons', 'mobile.svg'); // Cmd+K Install mobile app: a phone. Nucleo UI 18px outline

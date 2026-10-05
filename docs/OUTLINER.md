@@ -547,7 +547,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
-  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect to your OpenAI Dot …, ChatGPT sign-in, Set OpenAI API
+  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect your personal agent …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android with Obtainium" once the latest release has the APK, "…, Android coming soon" before: the Help tour opened on its last page, the
   choice of phone: the one place the phone apps are installed from), Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
@@ -804,9 +804,10 @@ wrong twenty.
   Claude are offered only once this Mac has them. **Choose agents …** (Settings) lists them, greyed with what to install
   when missing: ↩ switches one on or off; **Set default agent …** picks the **default agent** on a page of its own. Both
   follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
-  **Connect to your OpenAI Dot …** (Settings, and under the linked agents in Choose agents) links your Dot through the MCP
-  server orbital.md/mcp: where to add it and Tana's in ChatGPT (Open ChatGPT plugins, then each server's name with its
-  URL, ↩ copies it), then a message carrying a one-time code that links it by its own name (Dot if it has none), makes it the default
+  **Connect your personal agent …** (Settings, and under the linked agents in Choose agents) links your own agent (your
+  Dot, or any agent that speaks MCP) through the MCP server orbital.md/mcp: both plugins, each server's name with its URL
+  (↩ copies it), and How to add them …, a page of the steps (Open ChatGPT plugins and one paragraph for your Dot, one for
+  any other agent, which needs MCP events), then the instructions carrying a one-time code that links it by its own name (Dot if it has none), makes it the default
   agent, and subscribes it to the task.assigned
   event (a node handed to it is that event: the node's id, the request and how to handle it, nothing of the request
   written into the node, which the Dot reads as content; its badge follows the node's last line, "Agent status: Assigned |

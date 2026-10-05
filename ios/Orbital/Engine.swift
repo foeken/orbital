@@ -338,7 +338,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     struct Setup: Decodable { let to: String?; let ai: [String: String]; let sensitive: [String]; let pinned: [String]; let agents: [Agent]?; let handed: [String: String]? }
 
     // Your Dot (ios/engine/agents.js, Agents.swift): the agents linked through orbital.md, linking one with a code as the
-    // Mac's Connect to your OpenAI Dot does, and a node handed to one with a request (Assign to <its name> …) or taken back
+    // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
     struct Agent: Decodable, Identifiable, Hashable { let id: String; let name: String; let app: String; let on: Bool; let isDefault: Bool }
     struct HandedTo: Decodable { let id: String; let name: String; let status: String } // a node's agent, and its last Agent status line
     struct AgentList: Decodable { let agents: [Agent]; let handed: [String: String]; let problem: String? }
@@ -363,7 +363,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
     func linkStatus(_ code: String) async throws -> LinkState { try await call("return await orbital.linkStatus(code)", ["code": code]) }
     func linkCancel(_ code: String) async { do { let _: Bool = try await call("return await orbital.linkCancel(code)", ["code": code]) } catch {} } // gone anyway in fifteen minutes
-    // throws, so the sheet stays open with what went wrong (not listening yet, did not take it, read-only)
+    // throws with what went wrong (not listening yet, did not take it, read-only): handOff says it and keeps the request
     func hand(_ id: String, to agent: Agent, _ request: String) async throws {
         guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
         let _: HandedTo? = try await call("return await orbital.handTo(id, agent, request)", ["id": id, "agent": agent.id, "request": request])
@@ -533,6 +533,24 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 }
                 made = try await processImage(image)
             } } catch { self.error = error.localizedDescription }
+        }
+    }
+    // Assign to <its name> …: the form closes the moment you press Assign and the request is handed over here while you go
+    // on, the + in the bar turning meanwhile, as for Quick Add. A request the agent did not take (not listening yet, a node
+    // that is read-only) is kept for that node, and the form opens with it again, so nothing written is lost
+    var unhanded: [String: String] = [:]
+    func handOff(_ handing: Handing, _ request: String) {
+        adding += 1
+        Task {
+            defer { adding -= 1 }
+            do {
+                try await awake("Assign") { try await hand(handing.id, to: handing.agent, request) }
+                unhanded[handing.id] = nil
+                await handing.then()
+            } catch {
+                unhanded[handing.id] = request
+                self.error = handing.agent.name + " did not get it: " + error.localizedDescription
+            }
         }
     }
     // Left right after Add, the app asks iOS to keep it running until Tana has the task (orbital.createTask answers only

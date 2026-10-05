@@ -10,12 +10,13 @@ import { insertAfter, insertImage, readOutline } from '../../sdk/content';
 import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
-import { addMeetingChats, completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
+import { completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { dateLabel, isDateUri } from '../../sdk/dates';
 import { canDelete, canWrite, capabilities, everyoneOnly, setSharing } from '../../sdk/access';
 import { arrange } from './arrange';
-import { S, isSpace, iso, today, visibleGraphNodes } from '../../main/state';
+import { listFilter } from './listed';
+import { S, isSpace, iso, today } from '../../main/state';
 import timeline from '../../main/timeline';
 import settings from '../../main/settings';
 import { forget, issues, members, within } from './stand-ins';
@@ -332,13 +333,8 @@ window.orbital = {
     if (!S.client) {
       // the whole client, sync stream included: a same-origin fetch stream here, as Tana's own client runs it
       S.client = createTanaClient({ getAccessToken, orgId: S.me.orgId, peerId: await peerId(user), storageId: storageId(), clientName: 'orbital-ios' });
-      // every list as the desktop's (main/views.js listFilter): no deleted nodes, not the Orbital settings document, and
-      // meeting chats in any list of chats (sdk/query.js addMeetingChats); a lookup by id answers as it is
-      const list = S.client.graph.listNodes.bind(S.client.graph);
-      S.client.graph.listNodes = addMeetingChats(async (params) => {
-        const result = await list(params), app = new Set(settings.appDocIds());
-        return { ...result, nodes: visibleGraphNodes(result.nodes).filter((n) => params.nodeIds || !app.has(n.id)) };
-      });
+      // every list as the desktop's (listed.js): your hidden titles and Hide MCP applied, as main/views.js listFilter does
+      listFilter(S.client.graph, settings);
       // what another device writes to the settings document (a mark made sensitive on the Mac) read in as it arrives, as
       // main/documents.js does, and the app told to read again (S.win below), so nothing stays unblurred until a pull
       S.client.sync.on('change', (id) => {
@@ -598,7 +594,7 @@ window.orbital = {
     return JSON.stringify(id);
   },
   issues: () => { const e = S.status && S.status.error; if (e) { issues.push(e); S.status.error = null; } return issues.splice(0); }, // main/state.js report's too // what went wrong since last asked (a part of the page that could not be read), for the log
-  // Your Dot (agents.js): Settings' Connect to your OpenAI Dot, and the long press's Assign to <its name> … and Unassign
+  // Your Dot (agents.js): Settings' Connect your personal agent, and the long press's Assign to <its name> … and Unassign
   ...agents({ hold, settled }),
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks

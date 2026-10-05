@@ -32,7 +32,7 @@ function orbitalKey(create) {
   return made;
 }
 async function call(method, path, body, key = orbitalKey(false)) {
-  if (!key) throw new Error('No agent is linked yet: Connect to your OpenAI Dot first');
+  if (!key) throw new Error('No agent is linked yet: Connect your personal agent first');
   let res;
   try {
     res = await relay.fetch(relay.base + path, { method, body: body === undefined ? undefined : JSON.stringify(body),
@@ -65,7 +65,7 @@ function remember(list) {
 const agentsAt = async () => (await call('GET', '/orbital/agents')).agents;
 
 // ---- linking: a one-time code, and the message your Dot is sent ----
-// ChatGPT has no way for a Dot to add a server itself: you add both in ChatGPT (the pages name them and their URLs).
+// An agent has no way to add a server itself (a Dot in ChatGPT neither): you add both (the pages name them and their URLs).
 // The message links and subscribes the Dot to task.assigned (relay/server.js EVENTS), and says no more about handling
 // an event than to follow the instructions each one carries (HOW below): changing them is a release of Orbital, not a
 // message to paste again. It also says what goes through orbital.md, so the Dot can explain it.
