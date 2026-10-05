@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.MoveToInbox
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Schedule
@@ -184,7 +185,11 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
         AnimatedVisibility(building, enter = fadeIn(tween(0)), exit = fadeOut(tween(if (still) 0 else 150))) { Building(still) }
         if (!building && rows.isEmpty()) {
             val error = engine.error
-            if (error != null) Empty("Timeline didn't load", error, icon = Icons.Outlined.ErrorOutline)
+            // this account never used Orbital on a Mac, which makes its settings document (#751)
+            if (error == Engine.MAC_FIRST) Empty("Set up Orbital on a Mac first", error, icon = Icons.Outlined.Laptop) {
+                TextButton({ engine.scope.launch { engine.refresh() } }) { Text("Check again") }
+            }
+            else if (error != null) Empty("Timeline didn't load", error, icon = Icons.Outlined.ErrorOutline)
             else Empty("Nothing yet", "Changes to your tasks, new Inbox tasks and your meetings show up here.", icon = Icons.Outlined.Schedule)
         }
         val error = engine.error

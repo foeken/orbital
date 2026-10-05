@@ -10,6 +10,8 @@ import WidgetKit
 @MainActor @Observable
 final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     enum Phase: Equatable { case starting, signedOut, ready, failed(String) }
+    // the engine's words when this account has no settings document yet (ios/engine/index.js MAC_FIRST, word for word)
+    static let macFirst = "Open Orbital on your Mac once to set it up for this account, then check again here."
 
     var phase = Phase.starting
     var rows: [Row] = []
