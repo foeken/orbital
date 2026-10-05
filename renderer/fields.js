@@ -142,7 +142,7 @@ function visibilityFieldEl(parent) {
 }
 // A meeting's attendees, drawn under Visible to (renderer/render.js renderFields), on the event and on its write-up:
 // one per line, a member (by the calendar's profile id, else by address) as a mention the way Assigned to draws one,
-// anyone else by the calendar's name or address,
+// anyone else by the calendar's name or address, with the same glyph in grey and no link: not in Tana,
 // rooms left out. Past five lines "And n more" shows the rest (attendeesOpen, for as long as the page is open).
 const ATTENDEES_SHOWN = 5;
 const attendeesOpen = new Set(); // meetings whose whole list is shown
@@ -161,7 +161,11 @@ function attendeesFieldEl(parent) {
     const uri = a.identityUri || memberByEmail(a.email)?.id || '', known = // a calendar attendee often has only an address: the member it belongs to
       uri.startsWith('tana:user-profile:') && !memberName(uri).startsWith('tana:');
     if (known) renderSegs(line, [{ mention: { uri, label: memberName(uri), icon: 'member' } }]);
-    else line.textContent = demoText(a.name || a.email || (isGuest(uri) ? 'Guest' : 'Unknown person'), a.key);
+    else {
+      line.classList.add('foutside'); line.title = 'Not in Tana';
+      const glyph = iconNode('member'); if (glyph) line.append(glyph);
+      line.append(demoText(a.name || a.email || (isGuest(uri) ? 'Guest' : 'Unknown person'), a.key));
+    }
     values.append(line);
   }
   if (!all) {

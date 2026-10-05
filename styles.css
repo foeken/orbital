@@ -186,7 +186,10 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .fields .fchip { padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); line-height: 20px; }
 .fields .fchip.fref { padding: 0; background: none; } /* a link field's value is a reference, drawn as every reference is */
 .fields .fchip.fref + .fchip.fref { margin-left: 8px; }
-.fields .fattendees > .fvalue { margin-left: 16px; } /* in line with the values of the fields around it (.fchoice's margin) */
+.fields .fattendees > .fvalue { margin-left: 16px; line-height: 26px; } /* in line with the values of the fields around it (.fchoice's margin); a list of names reads easier a little apart */
+.fields .fattendees > .fvalue:first-child { margin-top: -2px; } /* the extra leading above the first name: it stays on the label's line, the divider where it was */
+.fields .fattendees > .fvalue.foutside { color: var(--muted); } /* someone not in Tana: the member glyph, greyed, no link; above the dark theme's .fields .fvalue */
+.fields .fattendees > .fvalue.foutside svg { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 3px; } /* as a mention's */
 .fields .fchip.gone { color: var(--muted); text-decoration: line-through; }
 .fields .fchip.wrong::after { content: ' ⚠'; color: #c8841c; }
 .fields .fhint, .fields .fkind { color: var(--muted); line-height: 22px; }

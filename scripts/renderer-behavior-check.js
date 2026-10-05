@@ -9897,6 +9897,7 @@ async function runPeopleFieldsCheck() {
     const me = () => members.find((m) => m.me), memberName = (uri) => (members.find((m) => m.id === uri) || {}).title || uri, loadMembers = () => {};
     const renderSegs = (el, segs) => el.append(...segs.map((s) => (s.mention ? '@' + s.mention.label : s.text)));
     const addIcon = () => {}, facesEls = () => [], sensitiveHidden = () => false, isGuest = (uri) => uri.startsWith('tana:guest-profile:'), demoText = (v) => v;
+    const iconNode = (name) => Object.assign(document.createElement('svg'), { dataset: { icon: name } });
     const relatedBy = new Map(), tana = { accessOptions: null }, openVisibility = () => {}, moveTo = () => {};
     let renders = 0; const render = () => { renders++; };
     let summary = null; const taskSummary = () => summary, documentSummary = () => null;
@@ -9913,6 +9914,7 @@ async function runPeopleFieldsCheck() {
       attendees: (list) => { info = list && { attendees: list }; return lines(attendeesFieldEl(page)); },
       more: () => { attendeesFieldEl(page).childNodes[2].childNodes.at(-1).onclick(); return [renders, lines(attendeesFieldEl(page)).length]; },
       notMeeting: () => attendeesFieldEl({ node: { id: 'tana:text:a' } }),
+      looks: (list) => { info = { attendees: list }; return attendeesFieldEl(page).childNodes[2].childNodes.map((l) => [l.classList.contains('foutside'), l.title || '', l.childNodes.filter((c) => c.tagName && c.tagName.toLowerCase() === 'svg').length]); },
     });
   `, {});
   assert.equal(api.visible('only-me', 'Private'), '@Robin Vega', 'Private names you, as a mention');
@@ -9924,6 +9926,7 @@ async function runPeopleFieldsCheck() {
   assert.deepEqual(plain(api.attendees(people)), ['@Sam', 'A', 'B', 'C', 'D', 'And 2 more'], 'past five, the rest are counted');
   assert.deepEqual(plain(api.more()), [1, 7], 'a click shows them all');
   assert.deepEqual(plain(api.attendees([{ name: 'Sam Smith', email: 'Sam@X.nl' }, { name: '+Room 5', email: 'room5@x.nl' }])), ['@Sam', '+Room 5'], 'an attendee with only an address that is a member\'s is that member, as a mention; an unknown address stays its name');
+  assert.deepEqual(plain(api.looks([{ identityUri: 'tana:user-profile:sam' }, { name: 'Leon', email: 'leon@x.nl' }])), [[false, '', 0], [true, 'Not in Tana', 1]], 'someone not in Tana: the member glyph, greyed, said on hover; a member stays a mention');
   console.log('ok  people fields: Private names you, Attendees shows five and And n more until clicked, without rooms');
 }
 checks.push(runPeopleFieldsCheck);
