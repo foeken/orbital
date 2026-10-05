@@ -513,9 +513,22 @@ async function restorePlace() {
   // a saved search reopened here is listed in Cmd+K at once: one the other half has just made (the Work View's My
   // Tasks) is not in the graph's answer yet
   if (/^tana:search:/.test(saved.docId)) addSearch({ ...extra.get(saved.docId), id: saved.docId });
-  if (saved.edit === true) caretOnOpen = true; // a page opened on a new note (New tab, New pane, New floating pane, #756): the caret waits in its first row
+  if (saved.edit === true) { caretOnOpen = true; caretOwed = saved.docId; } // a page opened on a new note (New tab, New pane, New floating pane, #756): the caret waits in its first row
   render(true);
   followSummary(saved.docId);
+}
+// A page opened on a new note owes its caret until it is used (#756). The shell lays a new pane out and focuses it as its
+// frame loads, and that can blur the page's window and focus it again just after the open has put the caret in the note
+// (traced: caret placed at 2 ms, the window blurred and focused again at 5 ms, then nothing focused and the caret gone).
+// So until a key, a press or another place, focus coming back to this page with nothing focused puts the caret back.
+let caretOwed = null; // the note this page opened on and still owes the caret
+function caretBack() {
+  if (!caretOwed || !zoom || zoom.docId !== caretOwed) { caretOwed = null; return; }
+  if (palette.hidden && (!document.activeElement || document.activeElement === document.body)) { caretOnOpen = true; render(true); }
+}
+if (typeof addEventListener === 'function') {
+  addEventListener('focus', caretBack);
+  for (const used of ['keydown', 'mousedown']) addEventListener(used, () => { caretOwed = null; }, true);
 }
 // Up past the first node: the editable page title (zoomed), else the last filter pill
 function focusAbove(el) {

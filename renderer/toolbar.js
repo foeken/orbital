@@ -20,7 +20,7 @@ function startLink(item, el, [start, end]) {
   const box = el.getBoundingClientRect(), rect = rects.length ? { left: rects[0].left, top: rects[0].top, bottom: rects[rects.length - 1].bottom } : box;
   togglePalette('search', { item, segs, start, end, at, text: at ? '' : plainOf(segs).slice(start, end), rect });
 }
-async function linkTo(ctx, mention, failed) { // failed(error): the write did not land, told to a caller that has to answer for it ("/" Meeting)
+async function linkTo(ctx, mention, failed) { // failed(error, linked): the write of linked did not land, told to a caller that has to answer for it ("/" Meeting)
   if (ctx.composer) return chatMention(mention); // "@" in a chat's composer (renderer/chat.js)
   const { item, segs, start, end } = ctx;
   const isDoc = item.node.kind === 'document';
@@ -28,7 +28,7 @@ async function linkTo(ctx, mention, failed) { // failed(error): the write did no
   item.node.text = plainOf(next); item.node.segments = isDoc ? undefined : next;
   let error = null;
   await run(async () => { try { if (isDoc) await tana.setTitle(item.docId, item.node.text); else { await tana.setText(item.docId, item.node.id, next); await reload(item.docId); } } catch (e) { error = e; throw e; } });
-  if (error && failed) return failed(error);
+  if (error && failed) return failed(error, next);
   render(true); // the caret is back in the row by now, and a plain render would wait for it to leave
   placeCaret(item.key, start + mention.label.length);
   popMention(item.key, mention.uri); // the chip just made lights up
@@ -481,8 +481,11 @@ function meetingHere(item, title, when) {
     const segs = readSegs(el), words = plainOf(segs), at = words.trim() === '/' || !words.trim() ? 0 : words.length;
     // The meeting exists either way: a reference that could not be written puts the row back as it was and says so, with
     // the meeting a click away. Nothing offers to make it again; a new "/" Meeting is a new meeting, asked for again.
-    return linkTo({ item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }, (e) => {
-      item.node.text = words; item.node.segments = segs; render(true);
+    return linkTo({ item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }, (e, linked) => {
+      // Put back only a row that still shows just that link, on this page, with nothing typed waiting to be saved: words
+      // typed since the link went in, or a row or page that has gone, are left exactly as they are; the toast says it all.
+      const el = items.get(item.key) === item && textEl(item.key);
+      if (el && !pending.has(item.key) && plainOf(readSegs(el)) === plainOf(linked)) { item.node.text = words; item.node.segments = segs; render(true); }
       showNote('\u201C' + (n.title || title) + '\u201D was made, but its link could not be written here (' + ((e && e.message) || e) + '). Click to open it', true, n.id);
     });
   }).catch(showError).finally(() => { slashMeetingBusy = false; if (palMode === 'slashMeetingWhen' && !palette.hidden) renderPalette(); });

@@ -2786,7 +2786,7 @@ function makeSlashMeetingHarness() {
   const context = vm.createContext({ setTimeout });
   vm.runInContext(`
     Date.now = () => new Date(2026, 9, 5, 9, 10, 25).getTime(); // a fixed clock: now, to the minute, is 9:10
-    const calls = [], pending = [], reads = [];
+    const calls = [], creates = [], reads = [];
     const node = { id: 'block', kind: 'block', text: '/', segments: [{ text: '/' }] };
     const item = { key: 'doc/block', docId: 'doc', node };
     const items = new Map([['doc/block', item]]);
@@ -2796,11 +2796,19 @@ function makeSlashMeetingHarness() {
     const togglePalette = (mode) => { palSeq++; palMode = mode; calls.push(['palette', mode]); };
     const closePalette = () => { palette.hidden = true; calls.push(['close']); };
     const renderPalette = () => {}, dropPending = () => {}, extra = new Map();
-    const textEl = () => ({}), readSegs = () => node.segments, plainOf = (segs) => segs.map((s) => s.text || '').join('');
-    const linkTo = async (ctx, mention, failed) => { if (linkFails) return failed(new Error('could not write the row')); calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]); }; // as renderer/toolbar.js linkTo: a failed write is the caller's to answer
-    const render = () => {};
+    const textEl = () => ({}), readSegs = () => node.segments, plainOf = (segs) => segs.map((s) => ('text' in s ? s.text : s.mention.label)).join('');
+    // as renderer/toolbar.js linkTo: the row shows the link at once, and a write that does not land is the caller's to
+    // answer, with what it tried to write; 'later' holds that answer until release(), as a slow refusal comes back
+    let release = null;
+    const linkTo = async (ctx, mention, failed) => {
+      if (!linkFails) return calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]);
+      const linked = [{ mention }]; ctx.item.node.segments = linked; ctx.item.node.text = mention.label;
+      if (linkFails === 'later') await new Promise((r) => { release = r; });
+      return failed(new Error('could not write the row'), linked);
+    };
+    const render = () => calls.push(['render']), pending = new Map();
     const showNote = (text, error, open) => calls.push(['note', text, open]), showError = (e) => calls.push(['error', String(e.message || e)]);
-    const tana = { createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => pending.push({ resolve, reject })); },
+    const tana = { createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => creates.push({ resolve, reject })); },
       readMeetingTime: (words, docId) => { calls.push(['readMeetingTime', words, docId]); return new Promise((resolve, reject) => reads.push({ resolve, reject })); } };
     const parseDay = (words) => (words === 'tomorrow' ? '2026-10-06' : null);
     const meetingSpan = (start, end) => new Date(start).toString().slice(0, 21) + ' for ' + (end - start) / 6e4;
@@ -2821,11 +2829,12 @@ function makeSlashMeetingHarness() {
     ${functionSource('meetingWhen')}
     ${functionSource('meetingHere')}
     const rowsOf = (typed) => page.rows(String(typed).toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]);
-    const land = (n) => { const p = pending.shift(); p.resolve(n); return new Promise((r) => setTimeout(r, 0)); };
-    const fail = (e) => { const p = pending.shift(); p.reject(e); return new Promise((r) => setTimeout(r, 0)); };
+    const land = (n) => { const p = creates.shift(); p.resolve(n); return new Promise((r) => setTimeout(r, 0)); };
+    const fail = (e) => { const p = creates.shift(); p.reject(e); return new Promise((r) => setTimeout(r, 0)); };
     const answer = (a) => { reads.shift().resolve(a); return new Promise((r) => setTimeout(r, 0)); };
     const refuse = (e) => { reads.shift().reject(e); return new Promise((r) => setTimeout(r, 0)); };
-    Object.assign(globalThis, { start: () => meetingFromSlash({ kind: 'meeting', icon: 'meeting' }), page: () => page, rowsOf, calls: () => calls, land, fail, answer, refuse, node, palette, setLinkFails: (v) => { linkFails = v; }, busy: () => slashMeetingBusy });
+    Object.assign(globalThis, { start: () => meetingFromSlash({ kind: 'meeting', icon: 'meeting' }), page: () => page, rowsOf, calls: () => calls, land, fail, answer, refuse, node, palette, items, pending,
+      setLinkFails: (v) => { linkFails = v; }, release: () => { release(); return new Promise((r) => setTimeout(r, 0)); }, busy: () => slashMeetingBusy });
   `, context);
   return context;
 }
@@ -2913,10 +2922,34 @@ async function runSlashMeetingCheck() {
   linkless.setLinkFails(true);
   linkless.start(); linkless.page().rows('', 'Retro')[0].run(); linkless.page().rows('', '')[0].run();
   await linkless.land({ id: 'tana:event:m3', title: 'Retro', icon: 'meeting' });
-  assert.deepEqual(plain(linkless.calls().slice(-2)), [['close'], ['note', '\u201CRetro\u201D was made, but its link could not be written here (could not write the row). Click to open it', 'tana:event:m3']],
+  assert.deepEqual(plain(linkless.calls().slice(-3)), [['close'], ['render'], ['note', '\u201CRetro\u201D was made, but its link could not be written here (could not write the row). Click to open it', 'tana:event:m3']],
     'made, but the row could not take its reference: said so, with the meeting a click away');
   assert.deepEqual(plain([linkless.node.text, linkless.node.segments]), ['/', [{ text: '/' }]], 'the row is put back as it was, showing no link that was never saved');
   assert.equal(linkless.calls().filter((c) => c[0] === 'createDocument').length, 1, 'and nothing offers to make it again');
+  // a refusal that comes back late finds the row as it is then: words typed since stay, and a row gone is left alone
+  const typedOn = makeSlashMeetingHarness();
+  typedOn.setLinkFails('later');
+  typedOn.start(); typedOn.page().rows('', 'Retro')[0].run(); typedOn.page().rows('', '')[0].run();
+  await typedOn.land({ id: 'tana:event:m4', title: 'Retro', icon: 'meeting' });
+  typedOn.node.segments = [{ mention: { label: 'Retro', uri: 'tana:event:m4' } }, { text: ' agenda' }]; // typed after the link went in
+  await typedOn.release();
+  assert.deepEqual(plain(typedOn.node.segments), [{ mention: { label: 'Retro', uri: 'tana:event:m4' } }, { text: ' agenda' }], 'words typed since the link are kept');
+  assert.deepEqual(plain(typedOn.calls().slice(-1)), [['note', '\u201CRetro\u201D was made, but its link could not be written here (could not write the row). Click to open it', 'tana:event:m4']], 'the toast still says so, with the meeting to open');
+  assert.equal(typedOn.calls().some((c) => c[0] === 'render'), false, 'and the row is not redrawn under the typing');
+  const waiting = makeSlashMeetingHarness();
+  waiting.setLinkFails('later');
+  waiting.start(); waiting.page().rows('', 'Retro')[0].run(); waiting.page().rows('', '')[0].run();
+  await waiting.land({ id: 'tana:event:m5', title: 'Retro', icon: 'meeting' });
+  waiting.pending.set('doc/block', {}); // typing not yet saved
+  await waiting.release();
+  assert.deepEqual(plain(waiting.node.segments), [{ mention: { label: 'Retro', uri: 'tana:event:m5', icon: 'meeting' } }], 'a row with typing still to save is not put back');
+  const gone = makeSlashMeetingHarness();
+  gone.setLinkFails('later');
+  gone.start(); gone.page().rows('', 'Retro')[0].run(); gone.page().rows('', '')[0].run();
+  await gone.land({ id: 'tana:event:m6', title: 'Retro', icon: 'meeting' });
+  gone.items.delete('doc/block'); // another page now, or the row deleted
+  await gone.release();
+  assert.deepEqual([gone.calls().some((c) => c[0] === 'render'), gone.calls().at(-1)[2]], [false, 'tana:event:m6'], 'a row no longer on screen is left alone, and the toast opens the meeting');
   linkless.setLinkFails(false);
   linkless.start(); linkless.page().rows('', 'Retro')[0].run(); const again = linkless.page().rows('', '')[0]; again.run(); again.run();
   assert.equal(linkless.calls().filter((c) => c[0] === 'createDocument').length, 2, 'a fresh try afterwards makes one more meeting, not two');

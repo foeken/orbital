@@ -369,8 +369,9 @@ a failure (no AI, no time in the words) says why. Nothing is made from words unt
 with nobody on it, at that time (`api.createDocument(title, { kind: 'meeting', start, end })`), and the row becomes its
 reference. Escape walks back a page at a time: when → the name, kept → the menu → the row. A meeting that lands after
 its page was left leaves the row as it is, and the toast that says it was made opens it. One made whose reference could
-not be written into the row (`linkTo`'s failure callback) puts the row back as it was and says so in a red toast that
-opens the meeting; nothing offers to make it again. Tana's server puts a meeting
+not be written into the row (`linkTo`'s failure callback) puts the row back as it was, but only while it still shows just
+that link on this page with nothing typed waiting (words typed since, or a row that has gone, are left alone), and says so
+in a red toast that opens the meeting; nothing offers to make it again. Tana's server puts a meeting
 made in Tana into your own calendar ([MEETINGS.md](MEETINGS.md)); people are invited with Add attendee …, never here.
 
 ### @ linking
@@ -1264,7 +1265,9 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   yours, **New tab** (⌘N) one in your panel and **New floating pane** (⌥⌘N) a floating one, the same modifiers ⌘-, ⇧- and
   ⌥-click open a link with, and each opens on a note of its own (issue #756, renderer/palette.js `openNoteIn`): a plain
   document titled “New note” is made in the Library first, and the new page opens zoomed into it with the caret in its
-  first row (its start place carries `edit: true`, renderer/edit.js `restorePlace`). One press makes one note and one
+  first row (its start place carries `edit: true`, renderer/edit.js `restorePlace`), which it owes until the page is used:
+  the shell can blur a new pane's window and focus it again as it lays it out, and focus coming back with nothing focused,
+  before a key, a press or another place, puts the caret back in the note (`caretBack`). One press makes one note and one
   page: a press while it is being made is the same one, and the key held down repeats nothing (renderer/events.js
   `NOTE_PAGES`). A note no page could open on (signed out) stays in the Library and the toast opens it; demo mode, which
   saves nothing, opens the page on the Library as before. ⌃⌘N (New window) still opens on the place you are. Main gives the id

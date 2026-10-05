@@ -934,8 +934,13 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   await pages(5);
   await p.waitFor(frame('5') + '.contentDocument.getElementById("title").textContent === "New note"', 'the new pane on its note');
   assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['New note']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on a new note');
-  assert.equal(await keysIn(), '5', 'the keys went with the new pane');
-  await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret in the new note', 8000);
+  // the shell gives a new pane the keys once its frame has loaded (shell.js open), a moment after it is drawn
+  await p.waitFor('new URL(document.activeElement.src).searchParams.get("side") === "5"', 'the keys to go with the new pane');
+  await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret in the new note');
+  // the window can lose and regain focus as the shell lays the pane out: coming back with nothing focused, the note
+  // it opened on gets the caret back (renderer/edit.js caretBack)
+  await p.jsIn('5', 'document.activeElement.blur(); dispatchEvent(new FocusEvent("focus")); 1');
+  await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret back in the new note');
   assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'New note' }, 'every page kept its own place');
   await p.key('⌘N', 4, true); // held: the first press and three repeats
   await pages(6); await p.sleep(800);
