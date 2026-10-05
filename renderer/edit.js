@@ -311,7 +311,7 @@ function toggleReference(node) {
 // ---- one pane per place (#533) ----
 // A place already on screen in another pane of this window is gone to there rather than opened a second time: each page
 // tells the shell where it is (tellPlace) and the shell hands every page the others' places (renderer/app.js 'panes').
-// The Library alone may be open in any number of panes, and New pane (⇧⌘N) opens one.
+// The Library alone may be open in any number of panes. New pane (⇧⌘N) opens one on a new note (#756), which no pane shows yet.
 const placeKey = (docId, nodeId) => (docId ? String(docId) + (nodeId ? '#' + nodeId : '') : null);
 const viewKey = (id) => (id === 'library' ? null : 'view:' + id);
 let otherPanes = {}; // place key -> the pane (the shell's view id) showing it
@@ -528,15 +528,31 @@ async function restorePlace() {
   // a saved search reopened here is listed in Cmd+K at once: one the other half has just made (the Work View's My
   // Tasks) is not in the graph's answer yet
   if (/^tana:search:/.test(saved.docId)) addSearch({ ...extra.get(saved.docId), id: saved.docId });
+  if (saved.edit === true) { caretOnOpen = true; caretOwed = saved.docId; } // a page opened on a new note (New tab, New pane, New floating pane, #756): the caret waits in its first row
   render(true);
   followSummary(saved.docId);
 }
-// Up past the first node: the editable page title (zoomed), else the last filter pill
+// A page opened on a new note owes its caret until it is used (#756). The shell lays a new pane out and focuses it as its
+// frame loads, and that can blur the page's window and focus it again just after the open has put the caret in the note
+// (traced: caret placed at 2 ms, the window blurred and focused again at 5 ms, then nothing focused and the caret gone).
+// So until a key, a press or another place, focus coming back to this page with nothing focused puts the caret back.
+let caretOwed = null; // the note this page opened on and still owes the caret
+function caretBack() {
+  if (!caretOwed || !zoom || zoom.docId !== caretOwed) { caretOwed = null; return; }
+  if (palette.hidden && (!document.activeElement || document.activeElement === document.body)) { caretOnOpen = true; render(true); }
+}
+if (typeof addEventListener === 'function') {
+  addEventListener('focus', caretBack);
+  for (const used of ['keydown', 'mousedown']) addEventListener(used, () => { caretOwed = null; }, true);
+}
+// Up past the first node: the last field value (the fields sit between the outline and the title), unless up came from
+// the fields themselves; then the page title, typed in when it can be (shown again as Rename shows it when a tab bar
+// hides it), else the last filter pill, else a read-only title focused as a stop ↓, ↩ and ⌘K work from (#764)
 function focusAbove(el) {
   if (el) flush(keyOfEl(el));
-  const p = $('pills').lastElementChild;
-  const field = fieldValues().at(-1); // the last field value sits between the outline and the title
+  const p = $('pills').lastElementChild, field = !(el && el.closest && el.closest('#fields')) && fieldValues().at(-1);
   if (field) setCaret(field, field.textContent.length);
-  else if (titleEl.isContentEditable) setCaret(titleEl, titleEl.textContent.length);
+  else if (titleEl.dataset.key) { revealTitle(); setCaret(titleEl, titleEl.textContent.length); }
   else if (p && !$('pills').hidden) { if (el) el.blur(); p.focus(); }
+  else if (zoom && titleEl.getClientRects().length) { if (el) el.blur(); titleEl.tabIndex = -1; titleEl.focus(); }
 }

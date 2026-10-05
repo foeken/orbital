@@ -66,6 +66,7 @@ const withShims = (src) => {
   if (/\brelatedBy\b/.test(src) && !/(const|let) relatedBy\b/.test(src)) src = 'globalThis.relatedBy ??= new Map();\n' + src;
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
   if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
+  if (/\bmeetingDetailsRows\(/.test(src) && !/function meetingDetailsRows\(/.test(src)) src = 'globalThis.meetingDetailsRows ??= () => [];\n' + src;
   // the shell's word on this page's window (renderer/state.js): one page, unless the harness says otherwise
   if (/\bwindowPanes\b/.test(src) && !/let windowPanes =/.test(src)) src = 'globalThis.windowPanes ??= { pages: 1 };\n' + src;
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
@@ -2821,6 +2822,396 @@ async function runSlashMenuCheck() {
   create.rows('').find((row) => row.label === 'Project').run();
   assert.deepEqual(plain(create.calls()), [['setText', 'doc', 'block', []], ['startCreation', 'custom', 'Project']],
     'a create choice clears the "/" and starts the ordinary creation flow');
+}
+// "/" Meeting (#755): the menu's Meeting row asks a name, then when, shows the exact slot, and makes one meeting that the
+// "/" row refers to. Nothing is made from an empty name or words that read as no time, and a press while one is being made
+// is the same meeting; a meeting that lands after its page was left leaves the row alone.
+function makeSlashMeetingHarness() {
+  const context = vm.createContext({ setTimeout });
+  vm.runInContext(`
+    Date.now = () => new Date(2026, 9, 5, 9, 10, 25).getTime(); // a fixed clock: now, to the minute, is 9:10
+    const calls = [], creates = [], reads = [];
+    const node = { id: 'block', kind: 'block', text: '/', segments: [{ text: '/' }] };
+    const item = { key: 'doc/block', docId: 'doc', node };
+    const items = new Map([['doc/block', item]]);
+    let slashCtx = { key: 'doc/block' }, palSeq = 0, palMode = 'slash', page = null, linkFails = false;
+    const palette = { hidden: false };
+    const openPage = (mode, placeholder, p, value = '') => { palSeq++; palMode = mode; palette.hidden = false; page = { mode, placeholder, value, ...p }; };
+    const togglePalette = (mode) => { palSeq++; palMode = mode; calls.push(['palette', mode]); };
+    const closePalette = () => { palette.hidden = true; calls.push(['close']); };
+    const renderPalette = () => {}, dropPending = () => {}, extra = new Map();
+    const textEl = () => ({}), readSegs = () => node.segments, plainOf = (segs) => segs.map((s) => ('text' in s ? s.text : s.mention.label)).join('');
+    // as renderer/toolbar.js linkTo: the row shows the link at once, and a write that does not land is the caller's to
+    // answer, with what it tried to write; 'later' holds that answer until release(), as a slow refusal comes back
+    let release = null;
+    const linkTo = async (ctx, mention, failed) => {
+      if (!linkFails) return calls.push(['linkTo', ctx.item.key, ctx.segs, ctx.start, ctx.end, mention]);
+      const linked = [{ mention }]; ctx.item.node.segments = linked; ctx.item.node.text = mention.label;
+      if (linkFails === 'later') await new Promise((r) => { release = r; });
+      return failed(new Error('could not write the row'), linked);
+    };
+    const render = () => calls.push(['render']), pending = new Map();
+    const showNote = (text, error, open) => calls.push(['note', text, open]), showError = (e) => calls.push(['error', String(e.message || e)]);
+    const tana = { createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => creates.push({ resolve, reject })); },
+      readMeetingTime: (words, docId) => { calls.push(['readMeetingTime', words, docId]); return new Promise((resolve, reject) => reads.push({ resolve, reject })); } };
+    const parseDay = (words) => (words === 'tomorrow' ? '2026-10-06' : null);
+    const meetingSpan = (start, end) => new Date(start).toString().slice(0, 21) + ' for ' + (end - start) / 6e4;
+    ${functionSource('slashTarget')}
+    ${functionSource('parseMeetingTime')}
+    ${sourceLine('let slashMeetingBusy')}
+    ${sourceLine('const SLASH_MEETING_LENGTH')}
+    ${sourceLine('let slashMeetingRead')}
+    ${functionSource('readRows')}
+    ${functionSource('readWords')}
+    ${sourceLine('const readWhen')}
+    ${sourceLine('const localZone')}
+    ${sourceLine('const zoneName')}
+    ${functionSource('zoneSpan')}
+    ${functionSource('zoneNote')}
+    ${functionSource('meetingFromSlash')}
+    ${functionSource('meetingName')}
+    ${functionSource('meetingWhen')}
+    ${functionSource('meetingHere')}
+    const rowsOf = (typed) => page.rows(String(typed).toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]);
+    const land = (n) => { const p = creates.shift(); p.resolve(n); return new Promise((r) => setTimeout(r, 0)); };
+    const fail = (e) => { const p = creates.shift(); p.reject(e); return new Promise((r) => setTimeout(r, 0)); };
+    const answer = (a) => { reads.shift().resolve(a); return new Promise((r) => setTimeout(r, 0)); };
+    const refuse = (e) => { reads.shift().reject(e); return new Promise((r) => setTimeout(r, 0)); };
+    Object.assign(globalThis, { start: () => meetingFromSlash({ kind: 'meeting', icon: 'meeting' }), page: () => page, rowsOf, calls: () => calls, land, fail, answer, refuse, node, palette, items, pending,
+      setLinkFails: (v) => { linkFails = v; }, release: () => { release(); return new Promise((r) => setTimeout(r, 0)); }, busy: () => slashMeetingBusy });
+  `, context);
+  return context;
+}
+async function runSlashMeetingCheck() {
+  // the "/" menu routes Meeting to its own pages, and leaves Task on its own
+  const menu = makeSlashHarness();
+  vm.runInContext("creationChoices.push({ id: 'meeting', kind: 'meeting', title: 'Meeting', icon: 'meeting', selectable: true }); globalThis.meetingFromSlash = (c) => calls.push(['meetingFromSlash', c.kind]);", menu);
+  assert.deepEqual(plain(menu.rows('meet').map((r) => [r.label, r.hint || ''])), [['Meeting', '']], '"/meet" finds the Meeting row');
+  menu.rows('meet')[0].run();
+  assert.deepEqual(plain(menu.calls()), [['meetingFromSlash', 'meeting']], 'Meeting asks for its name rather than drafting a page in the Library');
+
+  const h = makeSlashMeetingHarness();
+  h.start();
+  assert.deepEqual([h.page().mode, h.page().placeholder], ['slashMeeting', 'Name the new meeting\u2026'], 'Meeting asks for the meeting\u2019s name');
+  assert.deepEqual(plain(h.rowsOf('   ')), [['Type a name', '', true]], 'with no name there is nothing to make');
+  h.page().back();
+  assert.deepEqual(plain(h.calls()), [['palette', 'slash']], 'Escape on the name goes back to the "/" menu');
+  h.start();
+  const [next] = h.page().rows('', ' Design review ');
+  assert.deepEqual([next.label, next.keepOpen], ['Choose when for \u201CDesign review\u201D', true], 'a name moves on to when');
+  next.run();
+  assert.deepEqual([h.page().mode, h.page().placeholder], ['slashMeetingWhen', 'When? 14:00, tomorrow 9:30, fri 10:00-11:30'], 'the second page asks when');
+  assert.deepEqual(plain(h.rowsOf('')), [['Mon Oct 05 2026 09:10 for 30', 'Now, for 30 minutes', false], ['In your calendar \u00B7 nobody is invited', '', true]],
+    'with nothing typed, now for half an hour is a row of its own, shown before it is chosen, and the page says nobody is invited');
+  assert.deepEqual(plain(h.rowsOf('tomorrow 14:00-15:00')), [['Tue Oct 06 2026 14:00 for 60', '\u21A9 Create', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'a typed time shows the exact slot');
+  for (const words of ['xyz', 'fri 25:00', '14:00-13:00']) assert.deepEqual(plain(h.rowsOf(words).filter((r) => !r[2])), [['Read \u201C' + words + '\u201D with AI', '\u21A9', false]], '\u201C' + words + '\u201D reads as no time here, so the only press asks the AI, and makes nothing');
+  h.page().back();
+  assert.deepEqual([h.page().mode, h.page().value], ['slashMeeting', 'Design review'], 'Escape on when goes back to the name, kept');
+  h.page().rows('', 'Design review')[0].run();
+  const [make] = h.page().rows('', 'tomorrow 14:00-15:00');
+  make.run(); make.run();
+  assert.deepEqual(plain(h.rowsOf('tomorrow 14:00-15:00')), [['Creating \u201CDesign review\u201D\u2026', '', true]], 'the page says so while it is made, with nothing to press');
+  const start = new Date(2026, 9, 6, 14).getTime();
+  assert.deepEqual(plain(h.calls().filter((c) => c[0] === 'createDocument')), [['createDocument', 'Design review', { kind: 'meeting', start, end: start + 36e5 }]],
+    'two presses make one meeting, with the time shown and no one on it');
+  await h.land({ id: 'tana:event:m1', title: 'Design review', icon: 'meeting' });
+  assert.deepEqual(plain(h.calls().slice(-2)), [['close'], ['linkTo', 'doc/block', [], 0, 0, { label: 'Design review', uri: 'tana:event:m1', icon: 'meeting' }]],
+    'once it exists the palette closes and the "/" row becomes its reference');
+  assert.equal(h.busy(), false);
+
+  // words this page does not read go to the AI on ↩, once; what it read is shown, said to be its reading, and only the
+  // next ↩ makes the meeting. A question comes back as a note; a failure says why; words typed since are read again.
+  const ai = makeSlashMeetingHarness();
+  ai.start(); ai.page().rows('', 'Design review')[0].run();
+  const [ask] = ai.page().rows('', 'tomorrow from 3-5');
+  ask.run(); ask.run();
+  assert.deepEqual(plain(ai.calls()), [['readMeetingTime', 'tomorrow from 3-5', null]], 'one press, one reading, for a new meeting');
+  assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-5')), [['Reading \u201Ctomorrow from 3-5\u201D\u2026', '', true], ['In your calendar \u00B7 nobody is invited', '', true]], 'the page says it is reading, with nothing to press');
+  assert.equal(ai.page().rows('', 'tomorrow from 3-5')[0].spin, true, 'its glyph is the palette\u2019s thinking one, as every row waiting on the AI');
+  const from = new Date(2026, 9, 6, 15).getTime();
+  await ai.answer({ start: from, end: from + 72e5, timeZone: 'Europe/Amsterdam' });
+  assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-5')), [['Tue Oct 06 2026 15:00 for 120', '\u21A9 Create \u00B7 read by AI', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'what it read is shown, and said to be the AI\u2019s');
+  assert.equal(ai.page().rows('', 'tomorrow from 3-5').some((r) => r.spin), false, 'and nothing thinks once it has answered');
+  assert.equal(ai.calls().some((c) => c[0] === 'createDocument'), false, 'and nothing is made until it is pressed');
+  assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-6')), [['Read \u201Ctomorrow from 3-6\u201D with AI', '\u21A9', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'words typed since are not the ones it read');
+  ai.page().rows('', 'tomorrow from 3-5')[0].run();
+  assert.deepEqual(plain(ai.calls().slice(-1)), [['createDocument', 'Design review', { kind: 'meeting', start: from, end: from + 72e5 }]], 'the press makes the meeting it showed');
+  // a zone the words named: the time is drawn on your clock, and the same time on the clock it was said in goes under it
+  const zoned = makeSlashMeetingHarness(), away = Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
+  zoned.start(); zoned.page().rows('', 'Call')[0].run(); zoned.page().rows('', '9am tokyo time')[0].run();
+  await zoned.answer({ start: from, end: from + 36e5, timeZone: away });
+  const told = plain(zoned.rowsOf('9am tokyo time'));
+  assert.deepEqual([told.length, told[1][1], told[1][2]], [3, 'As you said it', true], 'a note under the time, nothing to press');
+  assert.ok(told[1][0].startsWith(away.split('/').pop().replace(/_/g, ' ') + ' time: '), 'naming the zone it was said in: ' + told[1][0]);
+  const asks = makeSlashMeetingHarness();
+  asks.start(); asks.page().rows('', 'Retro')[0].run(); asks.page().rows('', 'next week')[0].run();
+  await asks.answer({ question: 'Which day next week?' });
+  assert.deepEqual(plain(asks.rowsOf('next week')), [['Which day next week?', 'Add it to your words', true], ['In your calendar \u00B7 nobody is invited', '', true]], 'a question comes back as a note, with nothing to press');
+  asks.page().rows('', 'next tuesday')[0].run();
+  await asks.refuse(new Error('Sign in with ChatGPT or add an OpenAI API key to read a time'));
+  assert.deepEqual(plain(asks.rowsOf('next tuesday')), [['Sign in with ChatGPT or add an OpenAI API key to read a time', '', true], ['Read \u201Cnext tuesday\u201D with AI', '\u21A9', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'no AI: said so, and it can be asked again');
+  asks.page().rows('', 'friday 10')[0].run(); asks.page().back();
+  await asks.answer({ start: from, end: from + 18e5, timeZone: 'Europe/Amsterdam' });
+  assert.equal(asks.page().mode, 'slashMeeting', 'a reading that lands after its page was left stays there');
+  assert.equal(asks.calls().some((c) => c[0] === 'createDocument'), false, 'and nothing was made from any of it');
+
+  // a meeting that lands after its page was left: the row is left alone, the toast opens the meeting
+  const left = makeSlashMeetingHarness();
+  left.start(); left.page().rows('', 'Retro')[0].run(); left.page().rows('', '')[0].run();
+  left.page().back();
+  await left.land({ id: 'tana:event:m2', title: 'Retro', icon: 'meeting' });
+  assert.deepEqual(plain(left.calls().slice(-1)), [['note', '\u201CRetro\u201D created', 'tana:event:m2']], 'left before it landed: no reference, no closing what is open now; the toast opens it');
+  left.palette.hidden = true;
+
+  // made, but the row could not take its reference: said, and the next press makes a new meeting, once
+  const linkless = makeSlashMeetingHarness();
+  linkless.setLinkFails(true);
+  linkless.start(); linkless.page().rows('', 'Retro')[0].run(); linkless.page().rows('', '')[0].run();
+  await linkless.land({ id: 'tana:event:m3', title: 'Retro', icon: 'meeting' });
+  assert.deepEqual(plain(linkless.calls().slice(-3)), [['close'], ['render'], ['note', '\u201CRetro\u201D was made, but its link could not be written here (could not write the row). Click to open it', 'tana:event:m3']],
+    'made, but the row could not take its reference: said so, with the meeting a click away');
+  assert.deepEqual(plain([linkless.node.text, linkless.node.segments]), ['/', [{ text: '/' }]], 'the row is put back as it was, showing no link that was never saved');
+  assert.equal(linkless.calls().filter((c) => c[0] === 'createDocument').length, 1, 'and nothing offers to make it again');
+  // a refusal that comes back late finds the row as it is then: words typed since stay, and a row gone is left alone
+  const typedOn = makeSlashMeetingHarness();
+  typedOn.setLinkFails('later');
+  typedOn.start(); typedOn.page().rows('', 'Retro')[0].run(); typedOn.page().rows('', '')[0].run();
+  await typedOn.land({ id: 'tana:event:m4', title: 'Retro', icon: 'meeting' });
+  typedOn.node.segments = [{ mention: { label: 'Retro', uri: 'tana:event:m4' } }, { text: ' agenda' }]; // typed after the link went in
+  await typedOn.release();
+  assert.deepEqual(plain(typedOn.node.segments), [{ mention: { label: 'Retro', uri: 'tana:event:m4' } }, { text: ' agenda' }], 'words typed since the link are kept');
+  assert.deepEqual(plain(typedOn.calls().slice(-1)), [['note', '\u201CRetro\u201D was made, but its link could not be written here (could not write the row). Click to open it', 'tana:event:m4']], 'the toast still says so, with the meeting to open');
+  assert.equal(typedOn.calls().some((c) => c[0] === 'render'), false, 'and the row is not redrawn under the typing');
+  const waiting = makeSlashMeetingHarness();
+  waiting.setLinkFails('later');
+  waiting.start(); waiting.page().rows('', 'Retro')[0].run(); waiting.page().rows('', '')[0].run();
+  await waiting.land({ id: 'tana:event:m5', title: 'Retro', icon: 'meeting' });
+  waiting.pending.set('doc/block', {}); // typing not yet saved
+  await waiting.release();
+  assert.deepEqual(plain(waiting.node.segments), [{ mention: { label: 'Retro', uri: 'tana:event:m5', icon: 'meeting' } }], 'a row with typing still to save is not put back');
+  const gone = makeSlashMeetingHarness();
+  gone.setLinkFails('later');
+  gone.start(); gone.page().rows('', 'Retro')[0].run(); gone.page().rows('', '')[0].run();
+  await gone.land({ id: 'tana:event:m6', title: 'Retro', icon: 'meeting' });
+  gone.items.delete('doc/block'); // another page now, or the row deleted
+  await gone.release();
+  assert.deepEqual([gone.calls().some((c) => c[0] === 'render'), gone.calls().at(-1)[2]], [false, 'tana:event:m6'], 'a row no longer on screen is left alone, and the toast opens the meeting');
+  linkless.setLinkFails(false);
+  linkless.start(); linkless.page().rows('', 'Retro')[0].run(); const again = linkless.page().rows('', '')[0]; again.run(); again.run();
+  assert.equal(linkless.calls().filter((c) => c[0] === 'createDocument').length, 2, 'a fresh try afterwards makes one more meeting, not two');
+
+  // refused by main: said, and the page offers the slot again
+  const refused = makeSlashMeetingHarness();
+  refused.start(); refused.page().rows('', 'Retro')[0].run(); refused.page().rows('', '')[0].run();
+  await refused.fail(new Error('A meeting needs a start before its end'));
+  assert.deepEqual(plain(refused.calls().slice(-1)), [['error', 'A meeting needs a start before its end']], 'a refusal is the red toast');
+  assert.equal(refused.rowsOf('')[0][2], false, 'and the slot can be pressed again');
+  assert.equal(refused.calls().some((c) => c[0] === 'linkTo' || c[0] === 'close'), false, 'nothing is written into the row');
+  console.log('ok  "/" Meeting: a name, then the exact slot to press, one meeting per press, referenced in its row; Back, stale and failed answers handled');
+}
+
+// New tab, New pane and New floating pane (⌘N, ⇧⌘N, ⌥⌘N, #756): each makes one new note and opens its page on it, with the
+// caret in it; a press while it is being made is the same note, and a note no page could open on is kept and offered.
+async function runNoteInPageCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [], pending = [], extra = new Map();
+    let pageAnswer = 'p3', demoMode = false;
+    const run = (fn) => Promise.resolve().then(fn).catch((e) => calls.push(['error', e.message]));
+    const showNote = (text, error, open) => calls.push(['note', text, open]);
+    const tana = {
+      createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => pending.push({ resolve, reject })); },
+      splitWindow: async (where, start) => { calls.push(['splitWindow', where, JSON.parse(start.place), start.view]); return pageAnswer; },
+    };
+    ${sourceLine('let openingNote')}
+    ${functionSource('openNoteIn')}
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+    ({ open: openNoteIn, calls: () => calls, tick: settle, demo: () => { demoMode = true; }, land: async (n) => { pending.shift().resolve(n); await settle(); await settle(); }, fail: async (e) => { pending.shift().reject(e); await settle(); await settle(); }, noPage: () => { pageAnswer = null; } });
+  `, { Promise, setTimeout, JSON });
+  api.open('right'); api.open('right'); api.open('tab');
+  await api.tick();
+  assert.deepEqual(plain(api.calls()), [['createDocument', 'New Note', { kind: 'doc' }]], 'presses while it is made are the same note');
+  await api.land({ id: 'tana:text:n1', title: 'New Note', icon: 'doc' });
+  assert.deepEqual(plain(api.calls().slice(1)), [['splitWindow', 'right', { docId: 'tana:text:n1', nodeId: null, title: 'New Note', icon: 'doc', edit: true }, 'library']],
+    'the new page opens on the note, with the caret in it');
+  for (const where of ['tab', 'float']) { api.open(where); await api.tick(); await api.land({ id: 'tana:text:' + where, title: 'New Note', icon: 'doc' }); }
+  assert.deepEqual(plain(api.calls().filter((c) => c[0] === 'splitWindow').map((c) => [c[1], c[2].docId])), [['right', 'tana:text:n1'], ['tab', 'tana:text:tab'], ['float', 'tana:text:float']],
+    'each key keeps its place for the page, each with a note of its own');
+  api.noPage(); api.open('tab'); await api.tick(); await api.land({ id: 'tana:text:n4', title: 'New Note', icon: 'doc' });
+  assert.deepEqual(plain(api.calls().slice(-1)), [['note', 'New Note created', 'tana:text:n4']], 'no page could open: the note is kept and the toast opens it');
+  api.open('tab'); await api.tick(); await api.fail(new Error('Demo mode is on: nothing is saved to Tana'));
+  assert.deepEqual(plain(api.calls().slice(-1)), [['error', 'Demo mode is on: nothing is saved to Tana']], 'a refused note opens no page');
+  api.open('tab'); await api.tick();
+  assert.equal(api.calls().filter((c) => c[0] === 'createDocument').length, 6, 'and the next press is a fresh try');
+  await api.land({ id: 'tana:text:n6', title: 'New Note', icon: 'doc' });
+  api.demo(); api.open('right'); await api.tick(); await api.tick();
+  assert.deepEqual(plain(api.calls().slice(-1)), [['splitWindow', 'right', {}, 'library']], 'demo mode saves nothing: the page opens on the Library, as it did');
+  assert.equal(api.calls().filter((c) => c[0] === 'createDocument').length, 6, 'and no note is asked for');
+  console.log('ok  New tab, New pane and New floating pane each open on a new note of their own, one per press');
+}
+
+
+// Edit meeting details (#758): offered where Change time is, one field, read by the AI only when ↩ asks, and written only
+// when the time it read is pressed, as a start and an end through Change time's own write.
+async function runMeetingDetailsCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [], reads = [], relatedBy = new Map();
+    let meetingCtx = null, palSeq = 0, palMode = 'cmd', page = null;
+    const palette = { hidden: false }, BACK_TO_COMMANDS = () => calls.push(['back']);
+    const openPage = (mode, placeholder, p) => { palSeq++; palMode = mode; page = { mode, placeholder, ...p }; };
+    const renderPalette = () => {};
+    const meetingSpan = (start, end) => start + '-' + end;
+    const editMeetingNow = (change) => calls.push(['edit', change]);
+    const tana = { editMeeting: () => {}, readMeetingTime: (words, docId) => { calls.push(['read', words, docId]); return new Promise((resolve, reject) => reads.push({ resolve, reject })); } };
+    ${functionSource('meetingOf')}
+    ${sourceLine('let meetingDetailsRead')}
+    ${functionSource('readRows')}
+    ${functionSource('readWords')}
+    ${sourceLine('const localZone')}
+    ${sourceLine('const zoneName')}
+    ${functionSource('zoneSpan')}
+    ${functionSource('zoneNote')}
+    ${functionSource('meetingDetailsRows')}
+    ${functionSource('openMeetingDetails')}
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+    ({
+      offered: (info, doc = { id: 'tana:event:m', icon: 'meeting' }) => { meetingCtx = { docId: 'tana:event:m', info }; return meetingDetailsRows(doc, 'Current node').map((r) => [r.id, r.label]); },
+      noAI: () => { delete tana.readMeetingTime; },
+      open: () => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2 } }; openMeetingDetails(); return [page.mode, page.placeholder]; },
+      openKept: (timeZone) => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2, timeZone } }; openMeetingDetails(); },
+      rows: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
+      spins: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => !!r.spin),
+      press: (typed, i = 0) => { const r = page.rows(typed.toLowerCase(), typed)[i]; if (r && !r.disabled) r.run(); }, // as runRow: ↩ on a note does nothing
+      row: (typed, i = 0) => page.rows(typed.toLowerCase(), typed)[i],
+      answer: async (a) => { reads.shift().resolve(a); await settle(); },
+      refuse: async (e) => { reads.shift().reject(e); await settle(); },
+      elsewhere: () => { meetingCtx = { docId: 'tana:event:other', info: { editable: true, start: 5, end: 6 } }; },
+      back: () => page.back(), calls: () => calls,
+    });
+  `, { setTimeout, Promise });
+  assert.deepEqual(plain(api.offered({ editable: true, start: 1, end: 2 })), [['meetingDetails', 'Edit meeting details']], 'on a meeting this user may change');
+  for (const info of [{ editable: false, start: 1, end: 2 }, { editable: true, allDay: true, start: 1, end: 2 }, null])
+    assert.deepEqual(plain(api.offered(info)), [], 'never on one they may not, on an all-day one, or before main has said');
+  assert.deepEqual(plain(api.offered({ editable: true, start: 1, end: 2 }, { id: 'tana:text:x', icon: 'doc' })), [], 'nor on a page that is not that meeting\u2019s');
+  assert.deepEqual(plain(api.open()), ['meetingDetails', 'When? tomorrow from 3-5, an hour later, for 45 minutes'], 'one field, saying what it takes');
+  assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true]], 'empty, it shows the meeting as it is');
+  assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['Read \u201Ctomorrow from 3-5\u201D with AI', '\u21A9', false], ['1-2', 'Now', true]], 'words are read only when \u21A9 asks');
+  api.press('tomorrow from 3-5'); api.press('tomorrow from 3-5');
+  assert.deepEqual(plain(api.calls()), [['read', 'tomorrow from 3-5', 'tana:event:m']], 'one press, one reading, for this meeting');
+  assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['Reading \u201Ctomorrow from 3-5\u201D\u2026', '', true], ['1-2', 'Now', true]], 'it says it is reading, with nothing to press');
+  assert.deepEqual(plain(api.spins('tomorrow from 3-5')), [true, false], 'the reading row thinks, as the palette\u2019s AI rows do');
+  await api.answer({ start: 100, end: 200, timeZone: 'Europe/Amsterdam' });
+  assert.equal(api.spins('tomorrow from 3-5').some(Boolean), false, 'and stops once it has answered');
+  assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['100-200', '\u21A9 Apply \u00B7 read by AI', false], ['1-2', 'Now', true]], 'what it read is shown beside what is, said to be the AI\u2019s');
+  assert.equal(api.calls().some((c) => c[0] === 'edit'), false, 'and nothing is written until it is pressed');
+  assert.deepEqual(plain(api.rows('tomorrow from 3-6')).slice(0, 1), [['Read \u201Ctomorrow from 3-6\u201D with AI', '\u21A9', false]], 'words typed since are not the ones it read');
+  api.press('tomorrow from 3-5');
+  assert.deepEqual(plain(api.calls().slice(-1)), [['edit', { start: 100, end: 200 }]], 'the press writes the time it showed: a start and an end, nothing else');
+  api.press('next week'); await api.answer({ question: 'Which day next week?' });
+  assert.deepEqual(plain(api.rows('next week')), [['Which day next week?', 'Add it to your words', true], ['1-2', 'Now', true]], 'a question comes back in the same field');
+  api.press('friday at 3'); await api.refuse(new Error('Sign in with ChatGPT or add an OpenAI API key to read a time'));
+  assert.deepEqual(plain(api.rows('friday at 3')).slice(0, 2), [['Sign in with ChatGPT or add an OpenAI API key to read a time', '', true], ['Read \u201Cfriday at 3\u201D with AI', '\u21A9', false]], 'no AI: said so, never a time made up');
+  api.press('friday at 4'); await api.answer({ start: 300, end: 400, timeZone: 'Europe/Amsterdam' });
+  const writes = api.calls().filter((c) => c[0] === 'edit').length;
+  const held = api.row('friday at 4');
+  api.elsewhere();
+  assert.deepEqual(plain(api.rows('friday at 4')), [], 'once ⌘K is on another meeting this page offers nothing');
+  held.run();
+  assert.equal(api.calls().filter((c) => c[0] === 'edit').length, writes, 'and a reading for one meeting is never written to another');
+  api.back();
+  assert.deepEqual(plain(api.calls().slice(-1)), [['back']], 'Escape goes back to the commands');
+  const away = Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
+  api.openKept(away);
+  assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true], ['Your time \u00B7 the meeting keeps ' + away.split('/').pop().replace(/_/g, ' ') + ' time', '', true]],
+    'a meeting kept in another zone says the times are yours');
+  api.openKept(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true]], 'and one kept in yours says nothing more');
+  console.log('ok  Edit meeting details: one field, read by the AI on \u21A9, shown before it is written, a start and an end only, on a meeting you may change');
+}
+
+// linkTo (renderer/toolbar.js) tells a caller that asks when its write did not land, so "/" Meeting can answer for a meeting
+// that exists without its reference; a caller that does not ask ("@", "/" Task) is left the toast run() shows, as before.
+async function runLinkToFailureCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let refuse = false;
+    const run = (fn) => Promise.resolve().then(fn).catch((e) => calls.push(['toast', e.message]));
+    const tana = { setText: async () => { if (refuse) throw new Error('write refused'); calls.push(['setText']); }, setTitle: async () => {} };
+    const reload = async () => {}, render = () => calls.push(['render']), placeCaret = () => calls.push(['caret']), popMention = () => {}, chatMention = () => {};
+    const splitSegs = (segs, at) => [segs.slice(0, at ? 1 : 0), []], plainOf = (segs) => segs.map((s) => s.text || (s.mention && s.mention.label) || '').join('');
+    ${functionSource('linkTo')}
+    const ctx = () => ({ item: { key: 'doc/b', docId: 'doc', node: { id: 'b', kind: 'block' } }, segs: [], start: 0, end: 0 });
+    ({ link: (fails, withCallback) => { refuse = fails; calls.length = 0; return linkTo(ctx(), { label: 'Retro', uri: 'tana:event:m' }, withCallback ? (e) => calls.push(['failed', e.message]) : undefined).then(() => calls.slice()); } });
+  `, { Promise });
+  assert.deepEqual(plain(await api.link(false, true)), [['setText'], ['render'], ['caret']], 'a write that lands draws the row and puts the caret after the reference, and tells nobody');
+  assert.deepEqual(plain(await api.link(true, true)), [['toast', 'write refused'], ['failed', 'write refused']], 'a write that does not land is told to the caller that asked, and the row is not drawn as if it had');
+  assert.deepEqual(plain(await api.link(true, false)), [['toast', 'write refused'], ['render'], ['caret']], 'a caller that did not ask is left the toast, as before');
+  console.log('ok  linkTo says when its write did not land, to the caller that asks');
+}
+
+// A page opened on a fresh note owes its caret until it is used (#756): the shell's activation can blur its window and
+// focus it again with nothing focused (traced). Coming back like that puts the caret back, and only then: not over
+// something focused, not with ⌘K open, not after the page went elsewhere, and never on a page that was not such an open.
+function runCaretBackCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [], palette = { hidden: true }, document = { activeElement: null, body: { tag: 'body' } };
+    let zoom = { docId: 'tana:text:note' }, caretOnOpen = false;
+    const render = (force) => calls.push(['render', caretOnOpen, force]);
+    ${sourceLine('let caretOwed')}
+    ${functionSource('caretBack')}
+    ({ owe: (id) => { caretOwed = id; }, focusBack: (active) => { document.activeElement = active === 'body' ? document.body : active; calls.length = 0; caretOnOpen = false; caretBack(); return calls.slice(); },
+      go: (id) => { zoom = { docId: id }; }, palette, owed: () => caretOwed });
+  `);
+  assert.deepEqual(plain(api.focusBack('body')), [], 'a page that opened on no fresh note asks for nothing');
+  api.owe('tana:text:note');
+  assert.deepEqual(plain(api.focusBack('body')), [['render', true, true]], 'focus back with nothing focused: the caret goes back in the note');
+  assert.deepEqual(plain(api.focusBack({ className: 'text' })), [], 'not over something that has the focus');
+  api.palette.hidden = false;
+  assert.deepEqual(plain(api.focusBack('body')), [], 'not with \u2318K open');
+  api.palette.hidden = true;
+  api.go('tana:text:other');
+  assert.deepEqual(plain([api.focusBack('body'), api.owed()]), [[], null], 'and not once the page has gone somewhere else, which also ends what it owed');
+  console.log('ok  a fresh note keeps its caret through the pane\u2019s activation, and nowhere else');
+}
+
+// ↑ from a page's first line (#764): the edge is where the words start, inside a code block's padding; past the first row
+// come the fields, nearest first, then the title. Up from the top field never goes back down to the last one, a read-only
+// title is focused as a stop, and a title hidden under a tab bar is shown as Rename shows it.
+function runUpToTitleCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [], html = new Set(), document = { documentElement: { classList: { add: (c) => html.add(c) } } };
+    let zoom = { docId: 'd' }, fields = [], pillsHidden = true, shown = true, caret = null, padding = '0px';
+    const row = (name, inFields) => ({ name, textContent: name, closest: (s) => (s === '#fields' && inFields ? {} : null), blur: () => calls.push(['blur', name]) });
+    const titleEl = { name: 'title', textContent: 'Title', dataset: { key: '' }, getClientRects: () => (shown || html.has('renaming') ? [1] : []), focus: () => calls.push(['focus', 'title', titleEl.tabIndex]) };
+    const pill = { focus: () => calls.push(['focus', 'pill']) };
+    const $ = (id) => (id === 'pills' ? { lastElementChild: pill, hidden: pillsHidden } : null);
+    const fieldValues = () => fields, flush = () => {}, keyOfEl = () => null, setCaret = (target, at) => calls.push(['caret', target.name, at]);
+    const getSelection = () => ({ rangeCount: 1, getRangeAt: () => ({ getClientRects: () => [caret] }) });
+    const getComputedStyle = () => ({ paddingTop: padding, paddingBottom: padding, borderTopWidth: '0px', borderBottomWidth: '0px' });
+    const box = { getBoundingClientRect: () => ({ top: 100, bottom: 100 + 12 + 2 * 22 }) }; // a code block: two 22px lines inside 6px of padding
+    ${functionSource('atEdge')}
+    ${functionSource('revealTitle')}
+    ${functionSource('focusAbove')}
+    ({ calls, html, titleEl, row,
+      set: (o) => { if ('fields' in o) fields = o.fields; if ('pills' in o) pillsHidden = !o.pills; if ('shown' in o) shown = o.shown; if ('zoom' in o) zoom = o.zoom; },
+      edge: (line, dir, pad = '6px') => { padding = pad; const top = 100 + 6 + line * 22 + 2; caret = { top, bottom: top + 17, height: 17 }; return atEdge(box, dir); },
+      up: (from) => { calls.length = 0; html.clear(); delete titleEl.tabIndex; focusAbove(from); return calls.slice(); } });
+  `);
+  assert.deepEqual([api.edge(0, 'up'), api.edge(1, 'up'), api.edge(1, 'down'), api.edge(0, 'down')], [true, false, true, false], 'in a code block, its first line is the top and its last the bottom, inside its padding');
+  const f1 = api.row('Level', true), f2 = api.row('Owner', true), first = api.row('Why', false);
+  api.set({ fields: [f1, f2] });
+  assert.deepEqual(plain(api.up(first)), [['caret', 'Owner', 5]], 'up from the first row is the field nearest the outline');
+  assert.deepEqual(plain(api.up(f1)), [['blur', 'Level'], ['focus', 'title', -1]], 'up from the top field, under a read-only title, is that title as a stop, not the last field again');
+  api.titleEl.dataset.key = 'doc';
+  assert.deepEqual(plain(api.up(f1)), [['caret', 'title', 5]], 'an editable one takes the caret');
+  api.set({ fields: [], shown: false });
+  assert.deepEqual(plain([api.up(first), [...api.html]]), [[['caret', 'title', 5]], ['renaming']], 'a title a tab bar hides is shown as Rename shows it, then takes the caret');
+  api.titleEl.dataset.key = '';
+  assert.deepEqual(plain([api.up(first), [...api.html]]), [[], []], 'a hidden title nobody can type in is not aimed at');
+  api.set({ shown: true, pills: true });
+  assert.deepEqual(plain(api.up(first)), [['blur', 'Why'], ['focus', 'pill']], 'a page with pills and a read-only title keeps going to its last pill');
+  api.set({ pills: false, zoom: null });
+  assert.deepEqual(plain(api.up(first)), [], 'and a view that is no page has no title to stop at');
+  console.log('ok  up from a page\u2019s first line: the edge inside a code block\u2019s padding, the fields, then the title, read-only or hidden');
 }
 
 // A filter choice must stop covering the list it just filtered: single-choice rows close the menu, multi-select ticks stay.
@@ -7935,7 +8326,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

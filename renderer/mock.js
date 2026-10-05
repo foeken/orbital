@@ -83,7 +83,7 @@ function mockApi() {
     const crowd = i !== 2 ? [] : [...['robin', 'sam', 'priya', 'tomas'].map((p) => ({ key: 'tana:mock' + p, identityUri: 'tana:user-profile:' + p })),
       ...['Noor Haddad', 'Jonas Berg', 'Mei Lin', 'Alex Moreau'].map((name) => ({ key: 'email:' + name.split(' ')[0].toLowerCase() + '@example.com', name, email: name.split(' ')[0].toLowerCase() + '@example.com' })),
       { key: 'email:room412@example.com', name: 'Room 4.12', email: 'room412@example.com', cutype: 'room' }];
-    meetingEdits['mockmeeting' + i] = { title: text, start, end: start + (soon ? mins * 6e4 : h == null ? 864e5 : 36e5), allDay: h == null && !soon, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: crowd };
+    meetingEdits['mockmeeting' + i] = { title: text, start, end: start + (soon ? mins * 6e4 : h == null ? 864e5 : 36e5), allDay: h == null && !soon, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: crowd, ...(i === 2 ? { timeZone: 'America/New_York' } : {}) }; // Leadership sync is kept on New York's clock (main/meetings.js timeZone)
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting], start: new Date(start).toISOString(), end: new Date(meetingEdits['mockmeeting' + i].end).toISOString() };
   });
   // two tasks Tana's AI took from Leadership sync (main/rows.js meetingOf): their rows link back to it on hover
@@ -408,6 +408,19 @@ function mockApi() {
       if (!meetingEdits[docId]) throw new Error('Not a meeting');
       return structuredClone({ id: docId, editable: true, ...meetingEdits[docId] });
     },
+    // the AI's reading of a meeting's time (main/meetings.js readTime), for the few words the flows and scenes type; no
+    // model is asked here, and anything else reads as no time, as an answer the AI could not make a time of
+    readMeetingTime: async (words, docId) => {
+      const m = docId ? meetingEdits[docId] : null;
+      if (docId && !m) throw new Error('Not a meeting');
+      const start = m ? m.start : Math.floor(Date.now() / 6e4) * 6e4, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const at = (days, h) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, 0, 0, 0); return d.getTime(); };
+      const said = String(words || '').trim().toLowerCase();
+      if (said === 'tomorrow from 3-5') return { start: at(1, 15), end: at(1, 17), timeZone };
+      if (said === 'for 45 minutes') return { start, end: start + 27e5, timeZone };
+      if (said === 'next week') return { question: 'Which day next week?' };
+      throw new Error('No day or time in those words');
+    },
     editMeeting: async (docId, change) => {
       const m = meetingEdits[docId], d = all.find((x) => x.id === docId);
       if (!m) throw new Error('Not a meeting');
@@ -602,11 +615,15 @@ function mockApi() {
       { id: 'tana:type:mockproject', kind: 'custom', typeUri: 'tana:type:mockproject', title: 'Project', icon: 'doc', hue: 268, selectable: true },
     ], complete: true }),
     openCanvas: async () => {}, // main.js canvas:open: a window of Tana's own, which the mock has none of
-    createDocument: async (title, { kind = 'doc', typeUri } = {}) => {
+    createDocument: async (title, { kind = 'doc', typeUri, start, end } = {}) => {
       const nativeKind = kind === 'custom' ? 'doc' : kind;
-      const n = { id: 'mocknew' + (++seq), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };
+      // a meeting's time is checked as main checks it (main/documents.js meetingTime): only a meeting carries one, start before end
+      if ((start !== undefined || end !== undefined) && (kind !== 'meeting' || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start <= 0 || end <= start)) throw new Error(kind !== 'meeting' ? 'Only a meeting carries a time' : 'A meeting needs a start before its end');
+      // a plain document gets an id that reads as Tana's, so a page can open on it as its place (New tab, New pane, #756)
+      const n = { id: (kind === 'doc' ? 'tana:text:mocknew' : 'mocknew') + (++seq) + (kind === 'doc' ? Math.random().toString(36).slice(2, 8) : ''), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };
       if (nativeKind === 'task') { n.done = 0; taskDetails.set(n.id, { assignees: [members[0].id], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); settling.add(n.id); }
-      if (nativeKind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
+      if (nativeKind === 'meeting' && start !== undefined) { const d = new Date(start), at = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); Object.assign(n, { meta: WD[d.getDay()] + ' ' + at, start: d.toISOString(), end: new Date(end).toISOString() }); }
+      else if (nativeKind === 'meeting') { const s = Math.floor(Date.now() / 6e4) * 6e4, hm = (t) => new Date(t).toTimeString().slice(0, 5); Object.assign(n, { meta: WD[new Date(s).getDay()] + ' ' + hm(s), start: new Date(s).toISOString(), end: new Date(s + 18e5).toISOString() }); } // main/documents.js: now, for half an hour
       if (typeUri) n.typeUri = typeUri;
       created[n.id] = n; content[n.id] = []; all.push(n);
       if (nativeKind !== 'doc') unlisted.push(n);

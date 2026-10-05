@@ -149,7 +149,11 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   place (the usual debounce and flush; Enter blurs and focuses the first child; Escape restores). Titles are plain
   strings in Tana, so "@" in a title inserts the linked item's title as text. User profiles, meetings and unsupported
   kinds are read-only. With the caret in the title, Cmd+K takes that document as the current node. Up from the first
-  child focuses the title, Down from the title the first child (or the draft child). A zoomed task shows its checkbox
+  line of the first child goes through the page's fields, nearest first, to the title, and Down from the title goes
+  back through them to the first child (or the draft child), so a page is walked by keyboard alone (#764). A title
+  hidden under a tab bar is shown as Rename shows it while the caret is in it (renderer/document.js `revealTitle`); a
+  read-only title is focused as a stop, drawn with a field chip's ring, from which ↓ or ↩ goes back down, Escape leaves
+  and ⌘K acts on the page (renderer/edit.js `focusAbove`). A zoomed task shows its checkbox
   before the title (⌘↩ in the title toggles it), struck through and grey when done. A zoomed event shows the full date
   form ("Fri 11 Sep 9:00-10:00").
 - **Pills and the filter row.** On a page with pills (a view, a saved search, a type page) they sit under the title,
@@ -311,7 +315,7 @@ debounce flushes it. Read-only rows ignore every edit key.
 | ⇧Enter | A soft line break inside the row. |
 | Tab / ⇧Tab | Indent under the previous sibling / outdent to after the parent (block rows; document rows ignore them). On a plain line Tab makes it a bullet, and indents it under the row above when that is a list row (a plain line is never made a parent); at the start of a plain line it starts a list there, as "- " does. ⇧Tab takes the marker off a top-level bullet. |
 | Backspace at the start | First takes the row's bullet off (`unbullet`); a row with children keeps it, and so does a child (`nestedRow`), because a paragraph cannot own an outline or sit under a listItem. Then, if the row above is an empty plain row, that row goes and the caret stays (`removeEmptyAbove`). Otherwise the row's words join the row above, marks and mentions included, the caret where they meet (`joinAbove`, `api.join`, one undo step, #125). An empty row is removed and the caret goes to the end of the row above. None of this reaches past a row with children, an image, a divider, a table, a reference, a draft or a row of another document. |
-| ↑ / ↓ | The previous / next row, keeping the horizontal offset where possible. The caret walks title → fields → outline (`caretRows()`); anything that changes what a row belongs to works in `rowsBeside(el)`, the list that row lives in. |
+| ↑ / ↓ | The previous / next row, keeping the horizontal offset where possible, once the caret is on a row's first / last line (`atEdge`, measured inside the row's padding, so a code block's first and last lines count). The caret walks title → fields → outline (`caretRows()`), and ↑ past the top field reaches the title even when it is read-only or hidden (`focusAbove`, #764); anything that changes what a row belongs to works in `rowsBeside(el)`, the list that row lives in. |
 | ← / → at an edge | The previous / next row. |
 | ⌘↑ / ⌘↓ | Collapse / expand (built-in keys, §8). |
 | ⇧⌘↑ / ⇧⌘↓ | Move the row, or the selection, one step among its siblings. |
@@ -359,7 +363,20 @@ Image (also found by picture, photo, upload), then Doc, Task and the rest of wha
 types under their own heading. Task (`taskFromSlash`, #602) asks the task's name on a page of its own and the row
 becomes a reference to the new task, as Tana's own "/" Task embeds one; Escape goes back to the menu. Choosing one
 of the others opens a page that asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens
-it, Escape goes back to the choices. The “/” menu in a row keeps drafting in place instead.
+it, Escape goes back to the choices. The “/” menu in a row keeps drafting in place instead. Meeting (`meetingFromSlash`,
+#755) is made the way Task is, with a second page: after its name, “When?” takes a day and/or a time in ⌘K Change time's
+words (“14:00”, “tomorrow 9:30”, “fri 10:00-11:30”, `parseMeetingTime`) and shows the exact slot as the row to press
+before anything exists. With nothing typed that row is now, to the minute, for 30 minutes, labelled so. Words those do not
+read (“tomorrow from 3-5”, “for an hour”) offer one row, Read “…” with AI, and ↩ hands them to the AI the way Edit meeting
+details does (below): what it read becomes the row to press, marked “read by AI”, its question comes back as a note, and
+a failure (no AI, no time in the words) says why. Nothing is made from words until a slot is shown and pressed. Enter makes one meeting (a second Enter while it is being made makes nothing more), in the Library
+with nobody on it, at that time (`api.createDocument(title, { kind: 'meeting', start, end })`), and the row becomes its
+reference. Escape walks back a page at a time: when → the name, kept → the menu → the row. A meeting that lands after
+its page was left leaves the row as it is, and the toast that says it was made opens it. One made whose reference could
+not be written into the row (`linkTo`'s failure callback) puts the row back as it was, but only while it still shows just
+that link on this page with nothing typed waiting (words typed since, or a row that has gone, are left alone), and says so
+in a red toast that opens the meeting; nothing offers to make it again. Tana's server puts a meeting
+made in Tana into your own calendar ([MEETINGS.md](MEETINGS.md)); people are invited with Add attendee …, never here.
 
 ### @ linking
 
@@ -417,9 +434,10 @@ owned by the page and the block (main/images.js), outside the renderer's write q
   starts open and yours. Unassigned takes you off, My inbox / Waiting / My later / My completed set the state, Pinned pins it to
   today. Agent opens the Assign to Agent prompt once it exists, and Tracking takes you off, watches it and opens the
   assignee picker for who you are waiting on. Assigned by others drafts nothing: only somebody else puts a task there.
-- **`api.createDocument(title, { kind, typeUri? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
+- **`api.createDocument(title, { kind, typeUri?, start?, end? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
   assigned to you, with a workflow type when `typeUri` names one), a `meeting` (a `tana:event:` laid out like a
-  Tana-native event, the next half hour by default, so it shows in Tana's calendar), a `chat`, a `search` (which must
+  Tana-native event, now to the minute for half an hour by default, so it shows in Tana's calendar; `start` and `end`, epoch ms, give it
+  its time instead, refused unless a start before an end and on a meeting alone, before anything is made), a `chat`, a `search` (which must
   carry a `query`) or an instance of a workspace type (`custom`, with its `typeUri`; a type with a workflow makes an open task of yours, as
   Quick Add Task does, and its draft has a box, issue #534), and answers its Node.
 
@@ -523,7 +541,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   whichever file builds them: the focused field's rows; Open node (the row under the caret, or the one selected row, opened as the mouse opens it: zoomed into, a reference's target, what a Timeline row or notification opens; absent on the page you are in and for a selection of several), Expand, Collapse; the task state (Complete/Reopen,
   Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Discuss with …,
   Add to chat …);
-  a meeting's Change time / location, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
+  a meeting's Change time / location, Edit meeting details, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Auto-pick type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
   sensitive); the agents (Assign to Agent, Go to <agent> task, Link <agent> task …, Open in <agent>, one of each for every agent that is on); Edit visibility, Add participants … (Edit
@@ -574,7 +592,7 @@ one.
 the last page left behind and takes the new page's rows and back step; Escape (`backPalette`) goes where the page says:
 the command page, or for a page opened from elsewhere, the page that opened it. The pages are described with their features: Set type, Auto-pick type, Set icon, Set colour,
 Discuss with (§11); Edit pins, Pin to date, Pin to meeting (§9); Recently deleted, Archived types (§14); Change time /
-location, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
+location, Edit meeting details, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
 
 ### Built-in keys and the recorder
 
@@ -595,7 +613,7 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Reload (the window, every pane) | ⌘R |
 | Go to Home | ⇧⌘H |
 | New window | ⌃⌘N |
-| New tab / New pane (to the right) / New floating pane | ⌘N / ⇧⌘N / ⌥⌘N (the modifiers that open a link there) |
+| New tab / New pane (to the right) / New floating pane, each on a new note | ⌘N / ⇧⌘N / ⌥⌘N (the modifiers that open a link there) |
 | Next / Previous pane | ⌘/ / ⇧⌘/ |
 | Next / Previous tab | ⇧⌘] / ⇧⌘[ |
 | Maximize or restore pane | ⌥⌘↓ |
@@ -1250,9 +1268,16 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **One pane per place** (issue #533):
   a document, a node or a view already shown in another pane of the window is not opened a second time; going there (a
   row, a link, ⌘K, ⌘-click) takes you to that pane instead (renderer/edit.js `inOtherPane`, over the places each page tells
-  the shell). The Library alone may be open in any number of panes. **New pane** (⇧⌘N) opens the Library in a
-  page to the right of yours, **New tab** (⌘N) one in your panel and **New floating pane** (⌥⌘N) a floating one, the
-  same modifiers ⌘-, ⇧- and ⌥-click open a link with: main gives the id
+  the shell). The Library alone may be open in any number of panes. **New pane** (⇧⌘N) opens a page to the right of
+  yours, **New tab** (⌘N) one in your panel and **New floating pane** (⌥⌘N) a floating one, the same modifiers ⌘-, ⇧- and
+  ⌥-click open a link with, and each opens on a note of its own (issue #756, renderer/palette.js `openNoteIn`): a plain
+  document titled “New Note” is made in the Library first, and the new page opens zoomed into it with the caret in its
+  first row (its start place carries `edit: true`, renderer/edit.js `restorePlace`), which it owes until the page is used:
+  the shell can blur a new pane's window and focus it again as it lays it out, and focus coming back with nothing focused,
+  before a key, a press or another place, puts the caret back in the note (`caretBack`). One press makes one note and one
+  page: a press while it is being made is the same one, and the key held down repeats nothing (renderer/events.js
+  `NOTE_PAGES`). A note no page could open on (signed out) stays in the Library and the toast opens it; demo mode, which
+  saves nothing, opens the page on the Library as before. ⌃⌘N (New window) still opens on the place you are. Main gives the id
   (`api.splitWindow(where)` answers it) and tells the shell (`shell:command` 'open'), the page that asked stores its
   view and place under that id, and the new page opens there and takes the keyboard. Panes are docked, tabbed or
   floating and dragged between those by their tabs; the tab's title is the page's (renderer/render.js `tellTitle`

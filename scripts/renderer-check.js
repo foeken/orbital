@@ -494,7 +494,7 @@ const DEMO_SAFE = new Set([
   'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
   'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList',
   'docTypes', 'enableAgent', 'exportPdf', 'filters', 'image', 'inboxUnread', 'installUpdate', 'login', 'logout',
-  'mcpHidden', 'meetingInfo', 'members', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
+  'mcpHidden', 'meetingInfo', 'members', 'readMeetingTime', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
   'onChatGPTStatus', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
   'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
   'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',

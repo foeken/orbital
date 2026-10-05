@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('api', {
   // a meeting's time, place and people (main/meetings.js): { editable, start, end, allDay, location, participants[], attendees[], syncStatus }
   meetingInfo: (docId) => ipcRenderer.invoke('meeting:info', docId),
   editMeeting: (docId, change) => ipcRenderer.invoke('meeting:edit', docId, change), // { start, end } | { location } | { attendees: [{ email?, userUri? }] }
+  readMeetingTime: (words, docId) => ipcRenderer.invoke('meeting:read', words, docId), // words read by the AI, nothing written: { start, end, timeZone } | { question }; docId: a meeting you may change, or none for a new one
   attendeeSuggestions: () => ipcRenderer.invoke('meeting:suggestions'), // [{ email, displayName, eventCount, identityUri }]
   summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
   todayNode: (offset, findOnly) => ipcRenderer.invoke('doc:todayNode', offset, findOnly === true), // the date-titled node pinned to that day (0 today, 1 tomorrow, or 'YYYY-MM-DD'), created if missing unless findOnly (demo mode)
@@ -177,7 +178,7 @@ contextBridge.exposeInMainWorld('api', {
   chatgptLogout: () => ipcRenderer.invoke('chatgpt:logout'),
   onChatGPTStatus: (cb) => ipcRenderer.on('ai:chatgptChanged', (_e, status) => cb(status)),
   onSettings: (cb) => ipcRenderer.on('settings:changed', (_e, synced) => cb(synced)),
-  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search|canvas,typeUri?,query?}; a search requires query and nothing else may carry one; a task may carry a workflow typeUri; returns Node to zoom
+  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search|canvas,typeUri?,query?}; a search requires query and nothing else may carry one; a task may carry a workflow typeUri; a meeting may carry start and end (epoch ms, start before end); returns Node to zoom
   sendChat: (id, text, attachments, opts) => ipcRenderer.invoke('chat:send', id, text, attachments, opts), // a message (markdown, mentions as [label](uri)) with attachments (a skill to run); opts.ai true asks Tana to answer, false keeps it for the people in the chat: { messageId, responding, replyError? }
   chatAnswers: (id) => ipcRenderer.invoke('chat:answers', id), // { ai, canWrite }: whether Tana answers there by itself, and whether you may write in it
   newChat: () => ipcRenderer.invoke('chat:new'),
