@@ -55,6 +55,8 @@ From fastest to slowest. Each catches what the one before it cannot.
    - a slow answer for a page you left does not replace the one you are on;
    - a change made elsewhere shows live and leaves what you are typing alone.
    - a right-click on a Timeline meeting is Cmd+K on it, and Copy link copies the meeting's link.
+   - Copy link on a meeting offers your notes and its summary while they exist or may still come, copies the
+     summary's link, and makes no notes by asking.
    - the Settings window (settings.html, on a stand-in for main) stores what you pick, keeps the newest answer when an
      older read lands after it, keeps the keyboard on a switch through its redraw, and masks your email and hidden
      titles in demo mode.
