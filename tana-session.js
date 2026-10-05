@@ -1,6 +1,6 @@
 'use strict';
 // Electron-only Tana auth: cookie session in a persistent partition, bearer token from /api/auth/session.
-const { BrowserWindow, session } = require('electron');
+const { BrowserWindow, WebContentsView, session } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const { derivePeerId } = require('./sdk');
@@ -8,6 +8,17 @@ const { derivePeerId } = require('./sdk');
 function jwtClaims(token) {
   try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')); } catch { return {}; }
 }
+
+// The login window's strip above Tana's page: passkeys do not work in this window yet, so it says what does. Orbital's
+// own page, as the window's main frame, with Tana's sign-in in a view under it; nothing is written into Tana's page.
+const NOTE_HEIGHT = 40;
+const NOTE = 'data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><title>Log in to Tana</title>
+<meta name="color-scheme" content="light dark"><style>
+body { margin: 0; height: ${NOTE_HEIGHT}px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 14px;
+  background: #f3f3f3; border-bottom: 1px solid #e3e3e3; color: #555; font: 13px -apple-system, sans-serif; cursor: default; user-select: none; }
+b { font-weight: 600; color: #1d1d1f; } svg { flex: none; width: 16px; height: 16px; color: #666; }
+@media (prefers-color-scheme: dark) { body { background: #222527; border-color: #2f3335; color: #a0a5a8; } b { color: #e0e0e0; } svg { color: #a0a5a8; } }
+</style><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1" stroke="currentColor"><path d="M5.75,8.25v-3.25c0-1.795,1.455-3.25,3.25-3.25h0c1.795,0,3.25,1.455,3.25,3.25v3.25"></path><line x1="9" y1="11.75" x2="9" y2="12.75"></line><rect x="3.25" y="8.25" width="11.5" height="8" rx="2" ry="2"></rect></g></svg><span><b>Passkeys aren't supported yet.</b> Sign in with your password and 2FA code.</span>`);
 
 function createTanaSession({ partition = 'persist:tana', origin = 'https://home.tana.inc' } = {}) {
   const ses = session.fromPartition(partition);
@@ -48,11 +59,18 @@ function createTanaSession({ partition = 'persist:tana', origin = 'https://home.
   function login() {
     return new Promise((resolve) => {
       const win = new BrowserWindow({
-        width: 520, height: 720, title: 'Log in to Tana',
-        webPreferences: { partition, sandbox: true, contextIsolation: true, nodeIntegration: false },
+        width: 520, height: 720 + NOTE_HEIGHT, title: 'Log in to Tana',
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
       });
+      const view = new WebContentsView({ webPreferences: { partition, sandbox: true, contextIsolation: true, nodeIntegration: false } });
+      const wc = view.webContents;
+      const fit = () => { const [width, height] = win.getContentSize(); view.setBounds({ x: 0, y: NOTE_HEIGHT, width, height: height - NOTE_HEIGHT }); };
+      win.contentView.addChildView(view);
+      fit();
+      win.on('resize', fit);
+      win.loadURL(NOTE);
       // Google & co refuse embedded logins that advertise Electron.
-      win.webContents.setUserAgent(win.webContents.getUserAgent().replace(/ (Electron|tana-tasks)\/\S+/g, ''));
+      wc.setUserAgent(wc.getUserAgent().replace(/ (Electron|tana-tasks)\/\S+/g, ''));
       let done = false, checking = false, signedIn = false;
       const finish = () => {
         if (done) return;
@@ -67,9 +85,10 @@ function createTanaSession({ partition = 'persist:tana', origin = 'https://home.
         try { if (await isAuthenticated()) { signedIn = true; finish(); } } catch { /* not yet */ } finally { checking = false; }
       };
       const timer = setInterval(check, 2000);
-      win.webContents.on('did-navigate', check);
-      win.on('closed', finish);
-      win.loadURL(origin);
+      wc.on('did-navigate', check);
+      wc.once('did-finish-load', () => wc.focus()); // the keys go to Tana's form, not the strip
+      win.on('closed', () => { if (!wc.isDestroyed()) wc.close(); finish(); }); // a view's page outlives its window unless closed
+      wc.loadURL(origin);
       check();
     });
   }
