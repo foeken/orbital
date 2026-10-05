@@ -6,6 +6,13 @@
 // reporting it in data.syncStatus ('pending' | 'synced' | 'failed') and data.syncError. No client writes those two.
 const { LoroMap } = require('loro-crdt');
 const { ulid } = require('./node');
+const { deterministicId } = require('./chat');
+
+// Where one person's private notes on a meeting live (main/meeting-notes.js): ids derived from the two, in a few places.
+// Here so main/related.js can keep them out of the meeting's References, where the meeting's editor already is.
+const NOTES_SLOTS = 4;
+const notesSlotName = (me, eventId, k) => 'orbital:meeting-notes:' + me + ':' + eventId + ':' + k;
+const notesSlotId = (me, eventId, k) => 'tana:text:' + deterministicId(notesSlotName(me, eventId, k));
 
 const PROFILE = /^tana:(?:user-profile|contact):[0-9a-z]{26}$/;
 // A roster line is keyed by its email, or 'tana:<ulid>' for a person without one. Tana's Yl/xl trims ASCII whitespace
@@ -100,4 +107,4 @@ function callOf(ev) {
   } catch { return undefined; }
 }
 
-module.exports = { setTime, setTimezone, setLocation, setDescription, addAttendees, attendees, lineKey, writeUpOf, callOf };
+module.exports = { setTime, setTimezone, setLocation, setDescription, addAttendees, attendees, lineKey, writeUpOf, callOf, NOTES_SLOTS, notesSlotName, notesSlotId };

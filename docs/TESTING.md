@@ -96,12 +96,13 @@ From fastest to slowest. Each catches what the one before it cannot.
      document of another kind never seeded, a rename, a deleted note, other people's, never-confirmed shared (a create
      Tana answered as shared, retried) and meeting-owned notes left untouched, your notes shared after confirmation
      kept with a write under a stale "only you" refused until told, a public link, unshared, view-only, your grant
-     gone, an owner set, older notes without the mark, and another account; the sync checks hold
+     gone, another owner set, older notes without the mark, older unowned notes given to their meeting only while
+     restricted, and another account; the sync checks hold
      subscribe's ifMissing to writing a seed on MISSING only;
-   - Notes | Summary on a meeting with a write-up: Notes first, none without one; Summary shows the write-up's rows and
+   - Notes | Summary on a meeting with a write-up: Summary first, none without one; Summary shows the write-up's rows and
      its own audience (three people against the meeting's two), keeps the meeting and its Tana button, and makes no
      notes; typing in it saves to the write-up; a switch saves what was typed to its own document, a first word's create
-     carries on under Summary, Notes puts the caret back; kept on reopening; a newer answer about who sees it is never
+     carries on under Summary, Notes puts the caret back; Notes kept on reopening; a newer answer about who sees it is never
      replaced by an older one; made public while a row is typed in, the line says "Checking" at once, then anyone with
      the link, never the lock; read only said; an answer from before the session changed is dropped;
    - "/" Task and "/" Meeting: each named and referenced in its row; the meeting's when page shows the slot it will make

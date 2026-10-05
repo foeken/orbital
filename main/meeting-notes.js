@@ -3,13 +3,14 @@
 // made visible to you alone. You may share it in Tana afterwards, as any document of yours: it stays the meeting's
 // editor, and the page says who sees it. Tana has no notion of personal notes (its web client, read 2026-10-05, has no key,
 // kind or rule for them), so a note is an ordinary text document, restricted, with one grant: you, as admin.
-// It is deliberately not owned by the meeting. Ownership (ownerUri) is how Tana links a meeting to its documents, and
-// it is what Tana's server-side work on a meeting starts from: the wrap-up that writes the meeting's summary runs on
-// Tana's servers from the event alone (its client sends only { eventUri }), and what that job reads, and with whose
-// access, is not visible from here. So the note stays out of the meeting's graph — no owner, no edge (verified live) —
-// and is linked to it by its id, derived from you and the meeting, and by Orbital's own mark inside it (root
-// ext:orbital:notes, key meeting). Tana's web client (every file of its build, read 2026-10-05) never reads that root;
-// what Tana's servers do with a private document of yours is not visible from here, as for any other.
+// It is owned by the meeting (ownerUri), as Tana's own notes on a meeting are, so in Tana it is found inside the
+// meeting — by you alone: a restricted document is its own boundary, and Tana reads an owner's grants only for an
+// unrestricted one, so the meeting's people get nothing from owning it (the user's rule: connected is fine, as long as
+// the notes are yours alone when made; sharing them later is your choice). Notes made before this were owned by
+// nothing, and are given to their meeting when next found (adopt), only while still restricted, since an unrestricted
+// note under the meeting would be open to its people. It is also linked to the meeting by its id, derived from you and
+// the meeting, and by Orbital's own mark inside it (root ext:orbital:notes, key meeting), which Tana's web client
+// (every file of its build, read 2026-10-05) never reads.
 //
 // Nothing is written until you type. Then the note is created and Tana is asked back, through the graph and the owner
 // chain, whether it holds what was sent, private; only once it answers is a single character written into it, and with
@@ -22,6 +23,7 @@ const { createHash } = require('node:crypto');
 const { LoroDoc, LoroList, LoroMap } = require('loro-crdt');
 const { readNode, audienceMetadata } = require('../sdk/node');
 const { deterministicId } = require('../sdk/chat');
+const { NOTES_SLOTS: SLOTS, notesSlotName: slotName, notesSlotId: slotId } = require('../sdk/events');
 const { NOT_CONNECTED, S, sendChanged } = require('./state');
 const { readOutline, insertAfter, inlineGroups, styleDoc, writeInline } = require('../sdk/content');
 const { info, mut, op, writeGuards } = require('./documents');
@@ -44,25 +46,27 @@ function alone(participants, me) {
 }
 // The one grant a new note is made with and must be confirmed with: you, as admin.
 const onlyMe = (participants, me) => alone(participants, me) && participants[me].role === 'admin';
-// The graph's row: Tana's own record of the note, who made it. undefined when it has no row yet. No owner: a note owned
-// by anything (the meeting included) is in that owner's graph, so it is not one of these.
-function graphOurs(n, me) {
+// The graph's row: Tana's own record of the note, who made it. undefined when it has no row yet. Owned by this meeting,
+// or by nothing (made before notes were owned): a note under anything else is not one of these.
+const ownedOk = (owner, eventId) => !owner || owner === eventId;
+function graphOurs(n, me, eventId) {
   if (!n) return undefined;
-  return TEXT.test(n.id || '') && !n.ownerUri && n.createdBy === me && !(n.state && n.state.type) && !n.archivedAt;
+  return TEXT.test(n.id || '') && ownedOk(n.ownerUri, eventId) && n.createdBy === me && !(n.state && n.state.type) && !n.archivedAt;
 }
 // ... and who it is for: you alone, with no public link (graphPrivate: as admin, the proof a new note needs)
-const graphAlone = (n, me) => (n ? graphOurs(n, me) && n.restricted === true && alone(n.participants, me) && !(n.linkSharing && n.linkSharing.mode) : undefined);
-const graphPrivate = (n, me) => (n ? graphAlone(n, me) && onlyMe(n.participants, me) : undefined);
-// The owner chain: the note itself first, readable; for private notes, the boundary too. undefined when Tana has no chain yet.
+const graphAlone = (n, me, eventId) => (n ? graphOurs(n, me, eventId) && n.restricted === true && alone(n.participants, me) && !(n.linkSharing && n.linkSharing.mode) : undefined);
+const graphPrivate = (n, me, eventId) => (n ? graphAlone(n, me, eventId) && onlyMe(n.participants, me) : undefined);
+// The owner chain: the note itself first, readable; for private notes, the boundary too (the meeting above it gives it
+// nothing then). undefined when Tana has no chain yet.
 function chainOurs(chain, id) {
   const [self] = (chain && chain.entries) || [];
   return self ? self.uri === id && self.accessible !== false : undefined;
 }
 const chainPrivate = (chain, id) => { const ours = chainOurs(chain, id); return ours && chain.entries[0].restricted === true; };
-// The document as it is now, live updates included: still a note of this meeting's, owned by nothing, not deleted.
+// The document as it is now, live updates included: still a note of this meeting's, owned by it (or by nothing), not deleted.
 function docOurs(doc, eventId) {
   const n = readNode(doc);
-  return n.type === 'text' && !n.ownerUri && markOf(doc) === eventId && !(n.deletedAt > 0) && !(n.archivedAt > 0) && !n.stateType;
+  return n.type === 'text' && ownedOk(n.ownerUri, eventId) && markOf(doc) === eventId && !(n.deletedAt > 0) && !(n.archivedAt > 0) && !n.stateType;
 }
 // ... and seen by you alone: restricted, your grant the only one, no public link. What the line over the notes calls
 // "only you"; a view-only grant of yours is still you alone, and read only (mayWrite).
@@ -87,8 +91,8 @@ function confirmed(doc, me, login) {
   const user = userBits(login);
   return [...doc.loro.oplogVersion().toJSON().keys()].some((peer) => { const p = BigInt(peer); return p >> 16n === user && (p & 65535n) < 32768n; });
 }
-// Writable under Tana's own rule (sdk/access.js canWrite) for a note owned by nothing: your grant's role, or, with no
-// grant, an open note any member of your organization writes. Read from the live document at every write.
+// Writable under Tana's own rule (sdk/access.js canWrite): your grant's role (every note is made with yours), or, with
+// no grant, an open note any member of your organization writes. Read from the live document at every write.
 function mayWrite(doc, me) {
   const n = readNode(doc), p = n.participants && n.participants[me];
   return !n.writeDenied && (p ? p.type === 'user' && WRITERS.has(p.role) : n.restricted !== true);
@@ -102,7 +106,7 @@ async function verify(client, eventId, me, id, login) {
   try {
     [{ nodes: [row] = [] }, chain] = await Promise.all([client.graph.listNodes({ nodeIds: [id], limit: 1 }), client.graph.getOwnerChain(id)]);
   } catch { return 'lag'; }
-  const graph = graphOurs(row, me), boundary = chainOurs(chain, id);
+  const graph = graphOurs(row, me, eventId), boundary = chainOurs(chain, id);
   if (graph === false || boundary === false) return 'refused';
   if (graph === undefined || boundary === undefined) return 'lag';
   let doc;
@@ -110,9 +114,9 @@ async function verify(client, eventId, me, id, login) {
   // what this machine holds of it may be part of it: a document still loading, or one seeded by nothing yet, proves nothing
   if ((client.sync.stateOf && client.sync.stateOf(id) !== 'live') || readNode(doc).type === undefined) return 'lag';
   if (!docOurs(doc, eventId)) return 'refused';
-  if (docPrivate(doc, eventId, me) && graphPrivate(row, me) && chainPrivate(chain, id)) return 'private';
+  if (docPrivate(doc, eventId, me) && graphPrivate(row, me, eventId) && chainPrivate(chain, id)) return 'private';
   if (!confirmed(doc, me, login)) return 'refused'; // never confirmed: only the strict proof above makes it usable
-  return docAlone(doc, eventId, me) && graphAlone(row, me) && chainPrivate(chain, id) ? 'private' : 'shared';
+  return docAlone(doc, eventId, me) && graphAlone(row, me, eventId) && chainPrivate(chain, id) ? 'private' : 'shared';
 }
 // A meeting's notes for one person live at ids derived from the two (Tana's own createDeterministicId, sdk/chat.js), in
 // a few slots: the first unless an earlier one is gone or not usable. So every machine, every restart and every pane
@@ -125,9 +129,7 @@ async function verify(client, eventId, me, id, login) {
 // land, each as a row of its own after the seed's. What differs per machine — the note's title naming the meeting,
 // createdAt — is written after Tana has confirmed the note, as plain values where the last write wins and no words can
 // be lost.
-const SLOTS = 4, SEED_WAIT_MS = 2500;
-const slotName = (me, eventId, k) => 'orbital:meeting-notes:' + me + ':' + eventId + ':' + k;
-const slotId = (me, eventId, k) => 'tana:text:' + deterministicId(slotName(me, eventId, k));
+const SEED_WAIT_MS = 2500; // the places (SLOTS, slotName, slotId) are sdk/events.js's
 const REFERENCE = 'Open the meeting in Tana';
 // Its inputs are you (your profile and your login's id), the meeting, the place and your organization's document,
 // checked here, and nothing else: no clock, no title, nothing optional, so the same inputs always give the same bytes.
@@ -146,6 +148,7 @@ function seedBytes(me, eventId, k, orgDocUri, login) {
   data.set('type', 'text');
   data.set('title', 'Private notes');
   data.set('restricted', true);
+  data.set('ownerUri', eventId); // inside the meeting in Tana, for you alone: restricted is its own boundary
   const grant = data.setContainer('participants', new LoroMap()).setContainer(me, new LoroMap());
   grant.set('type', 'user'); grant.set('role', 'admin');
   data.setContainer('sharedPinDates', new LoroList());
@@ -155,9 +158,8 @@ function seedBytes(me, eventId, k, orgDocUri, login) {
   const content = loro.getMap('content');
   content.set('nodeName', 'doc');
   content.setContainer('attributes', new LoroMap());
-  // its first row names the meeting, linked to its page in Tana: a reference anyone opening the note in Tana can see and
-  // follow. A link, not an @ mention: Tana derives a LINKS_TO edge into the meeting from a mention (and CREATED_IN from
-  // createdInUri), and none from a link (platform-cli notesref, live 2026-10-05).
+  // its first row names the meeting, linked to its page in Tana: a reference to follow wherever the note is opened on
+  // its own. A link, not an @ mention, which would add a LINKS_TO edge beside the ownership (platform-cli notesref).
   const children = content.setContainer('children', new LoroList());
   const row = children.pushContainer(new LoroMap());
   row.set('nodeName', 'paragraph');
@@ -263,6 +265,11 @@ writeGuards.push((doc) => {
 // The first words, written once the notes are confirmed: a row of their own after the last one, so two panes' or two
 // machines' first words both land, one after the other.
 const firstWords = (doc, text) => { const rows = readOutline(doc); return insertAfter(doc, rows.length ? rows.at(-1).id : null, text); };
+// Notes made before they were owned, given to their meeting so Tana shows them inside it: only while restricted (an
+// unrestricted note under the meeting would be open to its people) and writable, and outside the undo stack, as a move
+// is (main/documents.js mut). Once: an owned note is left as it is.
+const adoptable = (doc, eventId, me) => { const n = readNode(doc); return !n.ownerUri && n.restricted === true && docOurs(doc, eventId) && mayWrite(doc, me); };
+const adopt = (id, eventId, me) => mut(id, (doc) => { if (adoptable(doc, eventId, me)) doc.transact((l) => l.getMap('data').set('ownerUri', eventId)); }, true);
 // What may differ between machines, written once Tana has confirmed the note: plain values, the last write wins. The
 // title only while it is still the seed's: a note you renamed keeps your name. The mark that Tana confirmed it private
 // (confirmed), only while it is private this very moment: a note shared before it was ever confirmed never gets it.
@@ -304,6 +311,7 @@ async function privateNotes(eventId, { create = false, first } = {}) {
     const said = found.audience === 'private' && doc && docAlone(doc, eventId, me) ? 'private' : 'shared';
     if (!doc || !docOurs(doc, eventId) || (!docPrivate(doc, eventId, me) && !confirmed(doc, me, login))) throw new Error('Tana did not keep these notes private, so nothing was written to them');
     serve(client, eventId, me, login, id, doc, said);
+    if (adoptable(doc, eventId, me)) await adopt(id, eventId, me).catch(() => {}); // not given to it this time: still your notes, asked again next open
     // made just now, or another than before: every other page on the meeting starts using it
     if (handed.get(key) !== id) { const changed = create || handed.has(key); handed.set(key, id); if (changed) sendChanged(eventId, { notes: true }); }
     // in the same turn as the create: two panes' first words both land, one after the other, and neither replaces the other

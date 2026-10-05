@@ -832,6 +832,7 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   // 1-1 with Sam: a write-up shared with the meeting, and no notes of yours yet
   await open('mockmeeting4');
   await p.waitFor('document.querySelector(".notes-head .notes-switch")', 'the line over the notes, with Notes | Summary');
+  await p.js('[...document.querySelectorAll(".notes-switch [role=tab]")].find((b) => b.textContent === "Notes").click()'); await settle(p, 300); // Summary is the default
   assert.match(await p.js('document.querySelector(".notes-head").textContent'), /only you can see them/, 'the notes say who sees them');
   assert.deepEqual([await p.js('zoom.docId'), await p.js('__notes.made')], ['mockmeeting4', 0], 'the meeting is the page, and opening it made nothing');
   // Open in Tana beside the title (option A): there before any notes, the glyph alone until hovered or focused by keyboard,
@@ -959,13 +960,12 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
 });
 
 // 17e. Notes | Summary (#761): a meeting with a write-up switches between your notes and its write-up on the meeting's own
-// page. Notes is the default; Summary shows the write-up's rows and its own audience (three people, not the meeting's
+// page. Summary is the default; it shows the write-up's rows and its own audience (three people, not the meeting's
 // two) and makes no notes; what was typed is saved to the document it was typed in; a read-only write-up says so; an
 // answer for a meeting you left draws nothing; a meeting without a write-up has no switch.
 flow('golden path: switch a meeting between your notes and its summary', async (p) => {
   await p.start();
   const open = async (id) => { await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 400); };
-  const head = () => p.js('document.querySelector(".notes-head")?.textContent || ""');
   const tab = (name) => '[...document.querySelectorAll(".notes-switch [role=tab]")].find((b) => b.textContent === ' + J(name) + ')';
   const selected = () => p.js('document.querySelector(".notes-switch [aria-selected=true]")?.textContent || null');
   const wu = 'tana:text:mockwriteup4';
@@ -973,10 +973,7 @@ flow('golden path: switch a meeting between your notes and its summary', async (
   assert.equal(await p.js('!!document.querySelector(".notes-switch")'), false, 'no write-up: no switch');
   await open('mockmeeting4');
   await p.waitFor('document.querySelector(".notes-switch")', 'Notes | Summary');
-  assert.deepEqual([await selected(), await p.js('__notes.made')], ['Notes', 0], 'Notes by default, and nothing made');
-  assert.match(await head(), /only you can see them/);
-  // Summary with no notes yet: the write-up's rows and who sees it, from the write-up itself; still no notes
-  await p.js('(' + tab('Summary') + ').click()');
+  // Summary by default, with no notes yet: the write-up's rows and who sees it, from the write-up itself; no notes made
   await p.waitFor('/visible to/.test(document.querySelector(".notes-head")?.textContent || "")', 'the summary\u2019s own audience');
   assert.deepEqual(await p.js('__screen()'), ['Agreed to trim the synthetic roadmap to two themes', 'Sam drafts the pilot review by Friday', 'Next check-in in two weeks'], 'the write-up\u2019s rows');
   assert.deepEqual([await selected(), await p.js('document.querySelectorAll(".notes-head .face").length'), await p.js('!!document.querySelector(".notes-head [aria-label=\\"Visible only to you\\"]")')], ['Summary', 3, false], 'three faces, its own, and no lock');
@@ -1004,11 +1001,9 @@ flow('golden path: switch a meeting between your notes and its summary', async (
   assert.deepEqual([(await p.js('__saved(' + J(notes) + ')')).at(-1), (await p.js('__saved(' + J(wu) + ')')).includes('Private thought kept')], ['Private thought kept', false], 'switching saved it where it was typed');
   await p.js('(' + tab('Notes') + ').click()'); await settle(p, 300);
   assert.deepEqual([await p.js('document.activeElement === ' + T('Private thought kept')), await p.js('__caret().offset')], [true, 'Private thought kept'.length], 'the caret back where it was');
-  await p.js('(' + tab('Summary') + ').click()'); await settle(p, 300);
-  // reopened: the meeting remembers Summary for the session, and Notes still holds your words
+  // reopened: the meeting remembers Notes for the session, holding your words
   await open('mockmeeting5'); await open('mockmeeting4');
-  assert.equal(await selected(), 'Summary', 'reopened on what you last chose');
-  await p.js('(' + tab('Notes') + ').click()'); await settle(p, 300);
+  assert.equal(await selected(), 'Notes', 'reopened on what you last chose');
   assert.deepEqual(await p.js('__screen()'), ['Private thought kept'], 'your notes, as saved');
   // who sees the write-up changed in Tana while its first answer was still on its way: the newer answer stands
   await p.js('(' + tab('Summary') + ').click()'); await settle(p, 300);

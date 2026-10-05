@@ -1,8 +1,8 @@
 'use strict';
 // A meeting's editor is your notes (main/meeting-notes.js, docs/MEETINGS.md "Private notes", docs/OUTLINER.md). The page
 // stays the meeting's — its title, Visible to and attendees, its sidebar, ⌘K, back and forward — and the outline under
-// it is the whole outline of a document of yours, made visible to you alone, which the meeting does not own (it is out
-// of the meeting's graph) and which names the meeting in its first row, a link to the meeting's page in Tana. Every row
+// it is the whole outline of a document of yours, made visible to you alone, owned by the meeting (inside it in Tana,
+// for you) and naming the meeting in its first row, a link to the meeting's page in Tana. Every row
 // there belongs to that document, so each edit is an edit of it, through the same paths as any page. A line over the
 // rows says who sees them — only you, or, once you shared them in Tana, "Shared notes" and with whom — so the meeting's
 // own Visible to, which is about the meeting, is never read as theirs.
@@ -18,7 +18,8 @@ const notesWaitSaid = new Set(); // event ids whose "what you typed is kept" was
 const notesHeld = new Map(); // row key -> { item, segs }: a save main refused while who sees the notes changed, saved once the line says so
 // Notes / Summary: a meeting with a write-up (summaryUri) shows a switch over its rows; Summary shows the write-up's own
 // rows in the notes' place, with its own audience and permissions read from it, never from the meeting or the notes.
-const notesSummaryOn = new Set(); // event ids showing their write-up: Notes is the default, kept per meeting for the session
+// Summary is the default: once Tana has written a meeting up, that is what its page shows.
+const notesOn = new Set(); // event ids showing your notes over their write-up, chosen with Notes, kept per meeting for the session
 const summaryMeta = new Map(); // write-up id -> its own taskMeta (who sees it), null while asked
 const summarySeq = new Map(); // write-up id -> the newest ask: an older answer, landing after a live change asked again, is dropped
 const notesCaret = new Map(); // event id -> { key, offset }: where the caret was in the notes when Summary took their place
@@ -38,7 +39,8 @@ function askNotes(eventId) {
   // asked again, the answer on screen stays until the new one lands: main refuses every write to notes that stopped
   // being private (main/documents.js writeGuards), so nothing is written to them meanwhile
   if (!meetingNotes.get(eventId)) meetingNotes.set(eventId, null);
-  if (tana.summaryUri && !notesWriteUps.has(eventId)) tana.summaryUri(eventId).then((uri) => { if (asked === notesAsked) { notesWriteUps.set(eventId, uri || null); renderSoon(); } }, () => {});
+  const writeUp = (uri) => { if (asked === notesAsked) { notesWriteUps.set(eventId, uri || null); renderSoon(); } };
+  if (tana.summaryUri && !notesWriteUps.has(eventId)) tana.summaryUri(eventId).then(writeUp, () => writeUp(null));
   tana.meetingNotes(eventId).then((answer) => {
     if (asked !== notesAsked || notesSeq.get(eventId) !== seq) return; // signed out or disconnected meanwhile, or asked again since
     if (answer && answer.id && who && answer.owner !== who) return meetingNotes.delete(eventId); // another account's
@@ -65,7 +67,7 @@ function noteNotesChanged(eventId) {
   if (was && was.id) { meetingNotes.set(eventId, { ...was, checking: true }); patchNotesHead(eventId); }
   askNotes(eventId);
 }
-function forgetNotes(signedOutToo) { notesAsked++; meetingNotes.clear(); notesWriteUps.clear(); notesSeq.clear(); notesHeld.clear(); summaryMeta.clear(); if (signedOutToo) { notesDrafts.clear(); notesSummaryOn.clear(); } }
+function forgetNotes(signedOutToo) { notesAsked++; meetingNotes.clear(); notesWriteUps.clear(); notesSeq.clear(); notesHeld.clear(); summaryMeta.clear(); if (signedOutToo) { notesDrafts.clear(); notesOn.clear(); } }
 // The write-up as its own document: its node (title, whether you may edit it) and who sees it, asked of main for it alone.
 // An answer from before a sign-out, or for a write-up the meeting no longer has, is dropped.
 function askSummary(eventId, uri) {
@@ -85,17 +87,26 @@ function askSummary(eventId, uri) {
 function noteSummaryChanged(docId, info) {
   if (!summaryMeta.has(docId) || (info && info.meta === false)) return;
   summarySeq.set(docId, (summarySeq.get(docId) || 0) + 1);
-  const shown = [...notesSummaryOn].filter((eventId) => notesWriteUps.get(eventId) === docId);
+  const shown = [...notesWriteUps].filter(([eventId, uri]) => uri === docId && !notesOn.has(eventId)).map(([eventId]) => eventId);
   if (!shown.length) { summaryMeta.delete(docId); return; }
   for (const eventId of shown) { askSummary(eventId, docId); patchNotesHead(eventId); }
 }
 // The meeting's write-up, when it is the one on screen
-const summaryShown = (eventId) => (notesSummaryOn.has(eventId) && notesWriteUps.get(eventId)) || null;
+const summaryShown = (eventId) => (!notesOn.has(eventId) && notesWriteUps.get(eventId)) || null;
+// A write-up the sidebar's read found (main/related.js related summaryUri) that the page did not know: Tana writes it
+// after the meeting, so it is shown once it is there, without a restart, unless you are typing in your notes right then.
+function noteWriteUp(eventId, uri) {
+  if (!notesWriteUps.has(eventId) || notesWriteUps.get(eventId) === uri) return;
+  if (zoom && zoom.docId === eventId && editingRow()) notesOn.add(eventId);
+  notesWriteUps.set(eventId, uri); renderSoon();
+}
+// Whether the meeting has a write-up is known: until then neither the notes nor their line are drawn, as it may be the summary
+const writeUpKnown = (eventId) => !tana.summaryUri || notesWriteUps.has(eventId);
 function showSummary(eventId, on) {
   const el = document.activeElement, key = el && el.closest && el.closest('#outline .node') && keyOfEl(el);
   if (on && key) notesCaret.set(eventId, { key, offset: caretOffset(el) }); // the tabs take no focus on a click: the caret is still in the row
   flushAll(); // what was typed is saved to the document it was typed in, before the other one takes its place
-  if (on) notesSummaryOn.add(eventId); else notesSummaryOn.delete(eventId);
+  if (on) notesOn.delete(eventId); else notesOn.add(eventId);
   render(true);
   const back = !on && notesCaret.get(eventId);
   if (back && textEl(back.key)) placeCaret(back.key, back.offset); // back in the notes where you were
@@ -120,9 +131,10 @@ function notesBody(parent) {
     return mkItem(wu, docOf(wu) || { id: wu, text: '', kind: 'document', hasChildren: true, editable: false }, null);
   }
   const answer = meetingNotes.get(eventId);
-  if (answer && answer.id) return mkItem(answer.id, docOf(answer.id) || asDoc(answer.node), null);
+  const known = writeUpKnown(eventId);
+  if (known && answer && answer.id) return mkItem(answer.id, docOf(answer.id) || asDoc(answer.node), null);
   // none (yet): a stand-in for them, holding the one draft row whose first character makes them
-  const open = !!answer && !answer.failed && !demoMode;
+  const open = known && !!answer && !answer.failed && !demoMode;
   const stand = { id: 'notes:' + eventId, text: '', kind: 'document', hasChildren: false, notesFor: eventId, editable: open };
   if (!notesDrafts.has(eventId)) notesDrafts.set(eventId, { id: 'draft:notes:' + eventId, text: '', kind: 'block', block: 'paragraph', draft: true, notesDraft: true });
   kids.set(stand.id, open ? [notesDrafts.get(eventId)] : []);
@@ -142,7 +154,7 @@ const notesWaiting = (parent) => {
   if (!notesPage(parent)) return false;
   const wu = summaryShown(parent.docId);
   if (wu) return !Array.isArray(kids.get(wu));
-  const a = meetingNotes.get(parent.docId); return !a || (!!a.id && !Array.isArray(kids.get(a.id)));
+  const a = meetingNotes.get(parent.docId); return !writeUpKnown(parent.docId) || !a || (!!a.id && !Array.isArray(kids.get(a.id)));
 };
 
 // The line over the rows: who sees them, in the words and glyphs of Visible to (renderer/tasks.js AUDIENCES, facesEls).
@@ -151,7 +163,7 @@ const notesWaiting = (parent) => {
 function notesHeadEl(parent) { return notesPage(parent) ? notesHeadFor(parent.docId) : null; }
 function notesHeadFor(eventId) {
   const answer = meetingNotes.get(eventId), writeUp = notesWriteUps.get(eventId), wu = summaryShown(eventId);
-  if (!answer && !wu) return null;
+  if ((!answer && !wu) || !writeUpKnown(eventId)) return null;
   const el = document.createElement('div'), a = answer && answer.audience, span = (text) => Object.assign(document.createElement('span'), { textContent: text });
   el.className = 'notes-head';
   if (writeUp) el.append(notesSwitchEl(eventId, !!wu));

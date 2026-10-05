@@ -480,13 +480,13 @@ Cmd+K leads with a Selection group for it (§8).
   `block: 'nearest'`). A read-only row neither scrolls nor spends that one-shot.
 - **A meeting's editor is your private notes** (renderer/meetingnotes.js, main/meeting-notes.js, [MEETINGS.md](MEETINGS.md)
   Private notes). An event has no content of its own, so a meeting page stays the meeting's — title, Visible to,
-  Attendees, sidebar, ⌘K, Back and Forward — and the rows under it are the whole outline of a document only you can see (no owner and
-  no edge into the meeting; found by its id; its first row "Open the meeting in Tana", a link to the meeting's page, so
+  Attendees, sidebar, ⌘K, Back and Forward — and the rows under it are the whole outline of a document only you can see (owned by
+  the meeting, so Tana shows it inside the meeting, to you alone, and left out of the meeting's References here; found by its id; its first row "Open the meeting in Tana", a link to the meeting's page, so
   the reference shows in Tana too, and is left out of the meeting's own page while it is exactly as written; no pin on the meeting, which its people would see): every row's `docId` is that document, so every edit, Enter, "/" and paste is an edit of it. A
   grey line over the rows says who sees them ("Your notes · only you can see them", the lock of Visible to; once you
   shared them in Tana, "Shared notes" and the faces, everyone, anyone with the link, or read only). A meeting with a
-  write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js) shows Notes | Summary first on that line (`notesSwitchEl`):
-  Summary shows the write-up's rows in the notes' place, the line then saying who sees the write-up and whether you may
+  write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js) opens on Summary, with Notes | Summary first on that line
+  (`notesSwitchEl`; nothing drawn until that answer, `writeUpKnown`): Summary shows the write-up's rows in the notes' place, the line then saying who sees the write-up and whether you may
   edit it from the write-up's own metadata and node (`askSummary`, asked again on a live change, an older answer
   dropped), never the meeting's attendees; it makes no notes, a switch saves what was typed where it was typed, and
   Notes puts the caret back. The meeting no longer forwards to its write-up (`followSummary` stands down wherever `api.meetingNotes` exists). Beside the title, the
