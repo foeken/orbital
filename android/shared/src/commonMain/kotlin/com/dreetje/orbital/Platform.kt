@@ -66,6 +66,9 @@ interface Platform {
     // the language a text is in (an ISO code) and how sure, or null; renderer/translate.js's detection, as NaturalLanguage on the iPhone
     suspend fun language(text: String): Pair<String, Float>?
     fun decode(image: ByteArray): ImageBitmap?
+    // a tana:image:'s bytes, fetched as sdk/assets.js fetchImage does (Engine.image); token(refresh) is Tana's access
+    // token, asked again fresh after a 401. Null where the platform fetches nothing, or when it did not come.
+    suspend fun image(uri: String, token: suspend (refresh: Boolean) -> String): ByteArray? = null
     fun share(text: String)
     fun open(url: String)
     fun copy(text: String) // words on the clipboard (Connect your personal agent's URLs and instructions)

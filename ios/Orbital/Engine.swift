@@ -325,6 +325,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let title: String
         let kind: String
         let rows: [Row]
+        let summary: [Row]? // a meeting Tana has written up: its summary's outline (ios/engine/index.js meeting)
+        let notes: [Row]? // ... and your notes', when you have them: Notes | Summary over them (MeetingSummary)
         let sensitive: Bool? // the node itself marked sensitive in Orbital: drawn blurred until a shake
     }
     func open(_ id: String) async throws -> Page {
@@ -332,6 +334,38 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let page: Page = try await call("return await orbital.open(id)", ["id": id])
         settle(page.rows) // a search's tasks ticked here, once Tana agrees
         return page
+    }
+
+    // An outline's image (Row.image), fetched as the desktop fetches it (sdk/assets.js fetchImage): Tana's images/by-uri
+    // with the session's token answers a redirect to its image CDN and a cookie the CDN wants, both out of the engine
+    // page's reach, so it is done here. Kept for the session; nil while it cannot be had, and the row says Image.
+    private let images = NSCache<NSString, UIImage>()
+    func image(_ uri: String) async -> UIImage? {
+        if let kept = images.object(forKey: uri as NSString) { return kept }
+        guard !Self.isSample, uri.wholeMatch(of: /tana:image:[0-9a-z]{26}/) != nil,
+              let url = URL(string: "https://home.tana.inc/api/general/images/by-uri/" + uri) else { return nil }
+        for refresh in [false, true] { // a token Tana refused: once more with a fresh one
+            guard let token: String = try? await call("return await orbital.token(refresh)", ["refresh": refresh]) else { return nil }
+            var ask = URLRequest(url: url)
+            ask.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+            guard let asked = try? await Self.unfollowed.data(for: ask), let http = asked.1 as? HTTPURLResponse else { return nil }
+            if http.statusCode == 401 { continue }
+            guard http.statusCode == 302, let to = http.value(forHTTPHeaderField: "Location").flatMap(URL.init(string:)) else { return nil }
+            var get = URLRequest(url: to)
+            let cookies = HTTPCookie.cookies(withResponseHeaderFields: http.allHeaderFields as? [String: String] ?? [:], for: url)
+            if !cookies.isEmpty { get.setValue(cookies.map { $0.name + "=" + $0.value }.joined(separator: "; "), forHTTPHeaderField: "Cookie") }
+            guard let got = try? await Self.followed.data(for: get), (got.1 as? HTTPURLResponse)?.statusCode == 200, let image = UIImage(data: got.0) else { return nil }
+            images.setObject(image, forKey: uri as NSString)
+            return image
+        }
+        return nil
+    }
+    // no cookie jar of their own: the CDN's cookie goes only where it is set by hand
+    private static let jarless = { let c = URLSessionConfiguration.ephemeral; c.httpShouldSetCookies = false; c.httpCookieAcceptPolicy = .never; return c }()
+    private static let followed = URLSession(configuration: jarless)
+    private static let unfollowed = URLSession(configuration: jarless, delegate: Unfollowed(), delegateQueue: nil)
+    private final class Unfollowed: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest) async -> URLRequest? { nil }
     }
 
     // What a refresh reads besides the rows (orbital.setup)

@@ -13,6 +13,7 @@ import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
 import { completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { dateLabel, isDateUri } from '../../sdk/dates';
+import { NOTES_SLOTS, notesSlotId, writeUpOf } from '../../sdk/events';
 import { canDelete, canWrite, capabilities, everyoneOnly, setSharing } from '../../sdk/access';
 import { arrange } from './arrange';
 import { listFilter } from './listed';
@@ -92,6 +93,28 @@ const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DE
 // here, so the row still has one to be drawn by
 const named = (rows, at = 'row') => rows.map((r, i) => ({ ...r, id: r.id || at + '.' + i, children: named(r.children || [], r.id || at + '.' + i) }));
 const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', ...(secret().has(n.id) ? { sensitive: true } : {}), icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
+
+// A meeting's page, as the desktop's (renderer/meetingnotes.js), read only here: written up by Tana (sdk/events.js
+// writeUpOf), its summary's outline, and your notes' too when you have them (main/meeting-notes.js: one of the places
+// made for them, yours, owned by the meeting or by nothing, not a task, not archived), for Notes | Summary over them.
+// Not written up yet: the documents it owns (rows), as before.
+async function meeting(id) {
+  const me = S.me.userUri, places = Array.from({ length: NOTES_SLOTS }, (_, k) => notesSlotId(me, id, k));
+  const [{ nodes: self = [] }, { nodes: owned = [] }, { nodes: found = [] }] = await Promise.all([
+    S.client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({})),
+    S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest }),
+    S.client.graph.listNodes({ nodeIds: places, limit: NOTES_SLOTS }).catch(() => ({})),
+  ]);
+  const rows = owned.map(listRow), writeUp = writeUpOf(self[0], owned);
+  if (!writeUp) return { rows };
+  const mine = places.map((p) => found.find((n) => n.id === p)).find((n) => n && n.createdBy === me && (!n.ownerUri || n.ownerUri === id) && !(n.state && n.state.type) && !n.archivedAt);
+  const outline = async (docId) => named(readOutline(await hold(docId)));
+  const [summary, notes] = await Promise.all([outline(writeUp.id), mine ? outline(mine.id) : null]);
+  // the notes' first row names the meeting for whoever opens them on their own (main/meeting-notes.js referenceOf):
+  // left out while it is still only that link, as on the desktop, where you are on the meeting already
+  const naming = (r) => !(r.children || []).length && (r.segments || []).length === 1 && String((r.segments[0].marks || {}).link || '').endsWith('/e/' + encodeURIComponent(id));
+  return { rows, summary, notes: notes && notes.filter((r, i) => i || !naming(r)) };
+}
 
 // What you marked sensitive in Orbital (the settings document's sensitive: node ids), drawn blurred (sensitive.js)
 // Every content call reads this account's settings document first, since only it says what is sensitive: a node marked
@@ -428,12 +451,12 @@ window.orbital = {
     await settled();
     const kind = id.split(':')[1];
     const doc = await hold(id), n = readNode(doc);
-    let rows;
+    let rows, summary, notes;
     if (kind === 'chat') {
       const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), messages = doc.data.get('messages');
       rows = chatRows(messages ? messages.toJSON() : [], { authorName: (uri) => names.get(uri), me: S.me.userUri, streamingId: doc.data.get('streamingMessageId') });
     } else if (kind === 'search') rows = await searchRows(doc);
-    else if (kind === 'event') rows = (await S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest })).nodes.map(listRow);
+    else if (kind === 'event') ({ rows, summary, notes } = await meeting(id));
     else rows = named(readOutline(doc));
     // heard from now on (live.js): its own document, and for a saved search or a meeting the list its rows come from,
     // the search as it is saved now (a Save while it is open listens with the new query). A meeting's notes and write-up
@@ -441,8 +464,12 @@ window.orbital = {
     // ponytail: a chat or call newly owned by the meeting shows at the next read; add their kinds if that is missed
     live?.page(id, kind === 'search' ? () => { const { query } = readSearch(doc); return query && Object.keys(query).length ? liveTrigger(searchQueryParams(query, S.me.userUri)) : null; }
       : kind === 'event' ? () => ({ types: ['text'], ownerUris: [id], orderBy: ['-updatedAt'], limit: 100 }) : undefined);
-    return JSON.stringify({ title: demoTitle(n.title || 'Untitled', id), kind, rows: redact(await titled(rows)), sensitive: secret().has(id) });
+    const outline = async (list) => (list ? redact(await titled(list)) : undefined); // undefined: left out of the JSON
+    return JSON.stringify({ title: demoTitle(n.title || 'Untitled', id), kind, rows: redact(await titled(rows)), summary: await outline(summary), notes: await outline(notes), sensitive: secret().has(id) });
   },
+  // An outline's image (Row.image), fetched by the app itself as main/images.js does (sdk/assets.js fetchImage): the
+  // redirect and the CDN's cookie it needs are out of a page's reach. refresh: Tana refused the last one.
+  token: async (refresh) => JSON.stringify(await getAccessToken({ refresh: !!refresh })),
   // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
   // answer (main/documents.js newChat), with what you typed as its first message. Answers the chat's id.
   // The message is written with the chat, in one go: a chat that is slow to reach Tana still arrives with its message,

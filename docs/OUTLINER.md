@@ -486,7 +486,8 @@ Cmd+K leads with a Selection group for it (§8).
   grey line over the rows says who sees them ("Your notes · only you can see them", the lock of Visible to; once you
   shared them in Tana, "Shared notes" and the faces, everyone, anyone with the link, or read only). A meeting with a
   write-up (`api.summaryUri`, `writeUpOf` in sdk/events.js) opens on Summary, with Notes | Summary first on that line
-  (`notesSwitchEl`; nothing drawn until that answer, `writeUpKnown`): Summary shows the write-up's rows in the notes' place, the line then saying who sees the write-up and whether you may
+  when you have notes there or are in them (`notesSwitchEl`; nothing drawn until both answers, `writeUpKnown`), the
+  summary alone when you have none: Summary shows the write-up's rows in the notes' place, the line then saying who sees the write-up and whether you may
   edit it from the write-up's own metadata and node (`askSummary`, asked again on a live change, an older answer
   dropped), never the meeting's attendees; it makes no notes, a switch saves what was typed where it was typed, and
   Notes puts the caret back. The meeting no longer forwards to its write-up (`followSummary` stands down wherever `api.meetingNotes` exists). Beside the title, the
@@ -1177,7 +1178,10 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     after this one"), counted down every 15
     seconds in the renderer and gone when the meetings touch or overlap. Then, when any are left, **Upcoming meetings**: today's meetings still to
     start, earliest first, each with its time and who else is on it ("14:00–15:00 · Jeroen Oostewechel"), opening the
-    meeting. A meeting still to come, or under way on the timeline, has the Tana glyph after its title ("Join in
+    meeting, and under them **New meeting**, which opens ⌘K's Create new … → Meeting at its name (renderer/timeline.js
+    `openNewMeeting`; ↩ goes on to when). With none left, main sends neither block and the desktop draws one line in their
+    place, "No more meetings today · **Plan one**", Plan one doing what New meeting does (renderer/timeline.js
+    `timelineNoMeetings`; the phones, reading the same page, show nothing there). A meeting still to come, or under way on the timeline, has the Tana glyph after its title ("Join in
     Tana"), which opens it in Tana (`row.join` through `doc:link`). One timer per read, a second after the next start
     or end (`startTimer`), re-reads the page. A meeting under way whose call is on the record has a blue marker with a
     blue ring pulsing out of it (`.tl-recording`; the ring stays still under reduced motion): somebody is in the call and it

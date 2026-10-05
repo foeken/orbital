@@ -380,11 +380,8 @@ flow('Copy link on a meeting offers the meeting, your notes and its summary, and
   };
   const link = (uri) => p.js('tana.nodeLink(' + J(uri) + ')');
   await open('tana:event:mockmeeting4');
-  await p.waitFor('document.querySelector(".notes-switch [aria-selected=true]")?.textContent === "Summary"', 'its summary on screen');
+  await p.waitFor('summaryShown(zoom.docId) && __screen().length', 'its summary on screen'); // no notes: the summary alone, no switch
   assert.deepEqual(await links(), [['Copy link to meeting', 'Copy link to notes (No notes yet)', '\u2318C Copy link to summary'], await link('tana:text:mockwriteup4')], 'tomorrow, its summary shown: \u2318C copies the summary');
-  await p.js('[...document.querySelectorAll(".notes-switch [role=tab]")].find((b) => b.textContent === "Notes").click()');
-  await p.waitFor('document.querySelector(".notes-switch [aria-selected=true]")?.textContent === "Notes"', 'its empty notes on screen');
-  assert.deepEqual(await links(), [['Copy link to summary', '\u2318C Copy link to meeting', 'Copy link to notes (No notes yet)'].sort(), await link('tana:event:mockmeeting4')], 'no notes yet on screen: \u2318C copies the meeting');
   await open('tana:event:mockmeeting5');
   await p.waitFor('meetingNotes.get("tana:event:mockmeeting5")?.id', 'its notes on screen');
   assert.deepEqual(await links(), [['Copy link to meeting', '\u2318C Copy link to notes'], await link('tana:text:mocknotes5')], 'in three days, its notes shown: \u2318C copies them, no summary yet');
@@ -499,6 +496,19 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   const pages = await p.js('timelinePages');
   await p.js('document.querySelector(".tl-older").click()');
   await p.waitFor('timelinePages > ' + pages + ' && !timelineLoading && document.querySelector(".tl-older")?.textContent === "Show three more days"', 'three more days read');
+  // New meeting under today's meetings is ⌘K's new meeting at its name, which goes on to when
+  const named = 'palMode === "createName" && palInput.placeholder === "Name the new Meeting…"';
+  await p.js('document.querySelector(".node.tl-upcoming .tl-add").click()');
+  await p.waitFor(named, 'the new meeting\u2019s name page');
+  await p.type('Design review'); await p.key('↩'); await p.waitFor('palMode === "slashMeetingWhen"', 'its when page');
+  await p.js('closePalette()');
+  // a day with no meetings left: no Upcoming meetings, and under Today's Tasks "No more meetings today · Plan one"
+  await p.js('const all = tana.children; tana.children = async (id) => { const r = await all(id); return id === TIMELINE_PAGE ? r.filter((n) => !n.timeline?.free && !n.timeline?.upcoming) : r; }; reload(TIMELINE_PAGE).then(() => render(true)); 1');
+  await p.waitFor('!document.querySelector(".node.tl-upcoming") && document.querySelector(".tl-plan")', 'the day with no meetings left');
+  assert.equal(await p.js('document.querySelector(".node.tl-today").nextElementSibling.querySelector(":scope > .line").textContent'), 'No more meetings today · Plan one', 'it says so under Today\u2019s Tasks');
+  await p.js('document.querySelector(".tl-plan button").click()');
+  await p.waitFor(named, 'Plan one opens the same page');
+  assert.equal(await p.js('zoom.docId'), 'orbital:timeline', 'and the row itself opens nothing');
 });
 
 // 11. Pins (docs/PINNING.md): pinned to today it is on the Timeline's Today's Tasks; pinned to the sidebar and on a
@@ -858,10 +868,10 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   const open = async (id) => { await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 400); };
   const draftText = () => p.js('document.querySelector(' + J(draft) + ')?.textContent ?? null');
   const notesOf = (ev) => p.js('meetingNotes.get(' + J(ev) + ')?.id || null');
-  // 1-1 with Sam: a write-up shared with the meeting, and no notes of yours yet
+  // 1-1 with Sam, before Tana has written it up (with a write-up and no notes it shows only that, 17e): no notes yet
+  await p.js('tana.summaryUri = async () => null; 1');
   await open('mockmeeting4');
-  await p.waitFor('document.querySelector(".notes-head .notes-switch")', 'the line over the notes, with Notes | Summary');
-  await p.js('[...document.querySelectorAll(".notes-switch [role=tab]")].find((b) => b.textContent === "Notes").click()'); await settle(p, 300); // Summary is the default
+  await p.waitFor('document.querySelector(".notes-head")', 'the line over the notes');
   assert.match(await p.js('document.querySelector(".notes-head").textContent'), /only you can see them/, 'the notes say who sees them');
   assert.deepEqual([await p.js('zoom.docId'), await p.js('__notes.made')], ['mockmeeting4', 0], 'the meeting is the page, and opening it made nothing');
   // Open in Tana beside the title (option A): there before any notes, the glyph alone until hovered or focused by keyboard,
@@ -990,8 +1000,9 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
 
 // 17e. Notes | Summary (#761): a meeting with a write-up switches between your notes and its write-up on the meeting's own
 // page. Summary is the default; it shows the write-up's rows and its own audience (three people, not the meeting's
-// two) and makes no notes; what was typed is saved to the document it was typed in; a read-only write-up says so; an
-// answer for a meeting you left draws nothing; a meeting without a write-up has no switch.
+// two) and makes no notes; with no notes of yours there is no switch, only the summary; a write-up found while your
+// first words are being made keeps you in them, with the switch; what was typed is saved to the document it was typed
+// in; a read-only write-up says so; an answer for a meeting you left draws nothing; a meeting without a write-up has no switch.
 flow('golden path: switch a meeting between your notes and its summary', async (p) => {
   await p.start();
   const open = async (id) => { await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 400); };
@@ -1001,24 +1012,28 @@ flow('golden path: switch a meeting between your notes and its summary', async (
   await open('mockmeeting5');
   assert.equal(await p.js('!!document.querySelector(".notes-switch")'), false, 'no write-up: no switch');
   await open('mockmeeting4');
-  await p.waitFor('document.querySelector(".notes-switch")', 'Notes | Summary');
-  // Summary by default, with no notes yet: the write-up's rows and who sees it, from the write-up itself; no notes made
+  // Summary by default, with no notes yet: the write-up's rows and who sees it, from the write-up itself; no notes
+  // made, and no switch to notes that do not exist
   await p.waitFor('/visible to/.test(document.querySelector(".notes-head")?.textContent || "")', 'the summary\u2019s own audience');
   assert.deepEqual(await p.js('__screen()'), ['Agreed to trim the synthetic roadmap to two themes', 'Sam drafts the pilot review by Friday', 'Next check-in in two weeks'], 'the write-up\u2019s rows');
-  assert.deepEqual([await selected(), await p.js('document.querySelectorAll(".notes-head .face").length'), await p.js('!!document.querySelector(".notes-head [aria-label=\\"Visible only to you\\"]")')], ['Summary', 3, false], 'three faces, its own, and no lock');
+  assert.deepEqual([await p.js('!!document.querySelector(".notes-switch")'), await p.js('document.querySelectorAll(".notes-head .face").length'), await p.js('!!document.querySelector(".notes-head [aria-label=\\"Visible only to you\\"]")')], [false, 3, false], 'the summary alone: three faces, its own, and no lock');
   assert.deepEqual([await p.js('zoom.docId'), await p.js('!!document.querySelector("#pagehead .meeting-tana")'), await p.js('__notes.made')], ['mockmeeting4', true, 0], 'the meeting stays the page, its Tana button too, and no notes are made');
   // typed into the summary: saved to the write-up
   await p.js('(() => { const el = ' + T('Next check-in in two weeks') + '; el.focus(); placeCaret(keyOfEl(el), el.textContent.length); return 1; })()');
   await p.type(' or sooner'); await p.js('flushAll()'); await settle(p, 300);
   assert.equal((await p.js('__saved(' + J(wu) + ')')).at(-1), 'Next check-in in two weeks or sooner', 'saved to the write-up');
-  // back to Notes: the empty notes' draft row; the first words make them, private
-  await p.js('(' + tab('Notes') + ').click()'); await settle(p, 300);
-  assert.equal(await selected(), 'Notes');
+  // before the write-up was known (a new session, main/related.js not read yet): the empty notes' draft row, no switch
+  await p.js('window.__wuOf = tana.summaryUri; tana.summaryUri = async () => null; forgetNotes(false); render(true); 1');
   await p.waitFor('document.querySelector("#outline .node.draft .text")', 'the notes\u2019 draft row');
+  assert.equal(await p.js('!!document.querySelector(".notes-switch")'), false, 'no write-up known: no switch');
+  await p.js('tana.summaryUri = __wuOf; 1');
   await p.js('(() => { const el = document.querySelector("#outline .node.draft .text"); el.focus(); placeCaret(keyOfEl(el), 0); return 1; })()');
-  // Summary while the notes are still being made by those first words: they are made with them, and Summary stays
+  // the write-up found while the first words are being made into notes: you stay in them, Notes | Summary over them;
+  // Summary while the notes are still being made: they are made with them, and Summary stays
   await p.js('__notes.delay = 600; 1');
-  await p.type('Private thought'); await p.js('(' + tab('Summary') + ').click()');
+  await p.type('Private thought'); await p.js('noteWriteUp("mockmeeting4", ' + J(wu) + '); 1'); await settle(p, 100);
+  assert.equal(await selected(), 'Notes', 'found while typing: still your notes, with the switch');
+  await p.js('(' + tab('Summary') + ').click()');
   await p.waitFor('__notes.made === 1 && meetingNotes.get("mockmeeting4")?.id', 'the notes made'); await settle(p, 800);
   const notes = await p.js('meetingNotes.get("mockmeeting4").id');
   assert.deepEqual([await selected(), (await p.js('__screen()'))[0], (await p.js('__saved(' + J(notes) + ')')).at(-1)], ['Summary', 'Agreed to trim the synthetic roadmap to two themes', 'Private thought'], 'the words in the notes, the summary still shown');
@@ -1322,7 +1337,7 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   assert.ok(notes.every((id) => /^tana:text:/.test(id)), 'and opened its page on it');
   // Copy link in a tab's menu (shell.js) on a meeting copies what its page shows, as ⌘C does: here its summary
   await p.jsIn('2', 'window.copyText = (text) => { window.__copied = text; }; goTo("mockmeeting4"); 1');
-  await p.waitFor(frame('2') + '.contentDocument.querySelector(".notes-switch [aria-selected=true]")?.textContent === "Summary"', 'the meeting\u2019s summary on screen');
+  await p.waitFor(frame('2') + '.contentDocument.querySelector(".notes-head")?.textContent.includes("isible to") && ' + frame('2') + '.contentDocument.getElementById("title").textContent === "1-1 with Sam"', 'the meeting\u2019s summary on screen');
   await p.js(frame('2') + '.contentWindow.postMessage({ orbital: "copyLink" }, "*")');
   await p.waitFor(frame('2') + '.contentWindow.__copied', 'the tab\u2019s Copy link');
   assert.equal(await p.jsIn('2', 'window.__copied'), await p.jsIn('2', 'tana.nodeLink("tana:text:mockwriteup4")'), 'the tab\u2019s Copy link copied the summary');

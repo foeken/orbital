@@ -30,12 +30,14 @@ struct Row: Codable, Identifiable {
     let sensitive: Bool? // marked sensitive in Orbital: drawn blurred until a shake shows it (ios/engine/sensitive.js)
     let group: String? // the section a saved search files it under (ios/engine/arrange.js)
     let glyph: String? // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
+    var image: Picture? = nil // an outline's image (sdk/content.js): the tana:image: uri Engine.image fetches; none in demo mode
 
     // content: the node's own words in a sentence of the app's (main/timeline.js), person: a person's name; the widgets'
     // Activity draws a line from them, title first (ios/Widgets Brief)
     struct Segment: Codable { let text: String?; let marks: Marks?; let mention: Ref?; var content: Bool? = nil; var person: Bool? = nil }
     struct Marks: Codable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
     struct Ref: Codable { let uri: String; var label: String? }
+    struct Picture: Codable { let uri: String? }
     struct Chat: Codable { let mine: Bool?; let status: Bool?; let streaming: Bool?; let author: String? }
     struct Person: Codable { let name: String }
     struct Free: Codable { let from: Double; let until: Double }

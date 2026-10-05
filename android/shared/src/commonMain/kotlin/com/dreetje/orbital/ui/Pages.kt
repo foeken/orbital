@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,6 +39,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -52,6 +57,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -86,8 +93,9 @@ import kotlinx.coroutines.launch
 // The iPhone's ios/Orbital/Pages.swift: a node zoomed into (an outline, a saved search, a meeting, a chat) and who
 // has it and who sees it
 
-// Zoomed into a node: a chat as its conversation, a saved search as its results, a meeting as the documents it owns,
-// anything else as its outline. A mention, a reference or a row opens the node it names.
+// Zoomed into a node: a chat as its conversation, a saved search as its results, a meeting as its summary once Tana
+// wrote it up (Notes | Summary over it when you have notes too) and as the documents it owns until then, anything else
+// as its outline. A mention, a reference or a row opens the node it names.
 @Composable
 fun NodeScreen(
     engine: Engine,
@@ -108,6 +116,7 @@ fun NodeScreen(
     var access by remember(id) { mutableStateOf<Access?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var assigningVisibility by remember { mutableStateOf(false) }
+    var showNotes by remember(id) { mutableStateOf(false) } // a meeting's Notes | Summary: Summary first
 
     // A read keeps what is on screen when it fails, and says why only while there is nothing to show
     suspend fun load() {
@@ -148,6 +157,22 @@ fun NodeScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 current != null && hiddenPage -> Empty("Hidden", "You marked this sensitive in Orbital. Shake your phone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.", glyph = "hidden")
+                // a meeting Tana wrote up, read only, as the desktop's meeting page (renderer/meetingnotes.js)
+                current?.summary != null -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
+                    val notes = current.notes
+                    val flat = Lists.flat(if (showNotes && notes != null) notes else current.summary)
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp + LocalBottomInset.current)) {
+                        val key = uniqueKeys()
+                        if (notes != null) item("switch") {
+                            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                listOf(true to "Notes", false to "Summary").forEachIndexed { i, (n, label) ->
+                                    SegmentedButton(showNotes == n, { showNotes = n }, SegmentedButtonDefaults.itemShape(i, 2)) { Text(label) }
+                                }
+                            }
+                        }
+                        flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine) } }
+                    }
+                }
                 current != null -> when (current.kind) {
                     "chat" -> Column(Modifier.fillMaxSize()) {
                         ChatView(current.rows, if (waitOver) null else since, engine, Modifier.weight(1f))
@@ -174,7 +199,7 @@ fun NodeScreen(
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp + LocalBottomInset.current)) {
                             val key = uniqueKeys()
                             access?.let { a -> item("details") { NodeDetails(id, a, engine, open = { assigningVisibility = true }) { load() } } }
-                            flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine.reveal) } }
+                            flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine) } }
                         }
                         // a document with fields shows them alone
                         if (flat.isEmpty() && access == null) Empty("Nothing in here yet", glyph = "doc")
@@ -221,14 +246,18 @@ fun ListRow(row: Node, engine: Engine, tight: Boolean = false, reload: suspend (
 }
 
 // One block of an outline: a bullet and its words, indented by depth; a heading bigger and with no bullet; a reference
-// its node's glyph and name, which opens it
+// its node's glyph and name, which opens it; an image its picture, the word Image until it has come (or in the sample)
 @Composable
-fun OutlineRow(row: Node, depth: Int, reveal: Boolean) {
+fun OutlineRow(row: Node, depth: Int, engine: Engine) {
     val c = Theme.colors
     val zoom = LocalZoom.current
     val density = LocalDensity.current
     val ref = row.reference
+    val reveal = engine.reveal
     val style = when (row.heading) { null -> Type.body; 1 -> Type.title2; 2 -> Type.title3; else -> Type.headline }
+    val uri = row.image?.uri
+    var picture by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    if (uri != null) LaunchedEffect(uri) { picture = engine.image(uri) }
     Row(
         Modifier.fillMaxWidth()
             .then(if (ref != null) Modifier.clickable { zoom(ref.uri) }.semantics { role = Role.Button } else Modifier)
@@ -243,7 +272,9 @@ fun OutlineRow(row: Node, depth: Int, reveal: Boolean) {
             }
         }
         Sensitive(row, reveal, Modifier.weight(1f).alignByBaseline()) {
-            if (row.type == "image" || row.type == "table") Text(if (row.type == "image") "Image" else "Table", style = style, color = c.secondary)
+            val shown = picture?.takeIf { row.sensitive != true || reveal }
+            if (row.type == "image" && shown != null) Image(shown, "Image", Modifier.fillMaxWidth().heightIn(max = 360.dp).clip(RoundedCornerShape(8.dp)), alignment = Alignment.TopStart, contentScale = ContentScale.Fit)
+            else if (row.type == "image" || row.type == "table") Text(if (row.type == "image") "Image" else "Table", style = style, color = c.secondary)
             else Words(row.styled(c, zoom), style = style, modifier = if (row.heading != null) Modifier.semantics { heading() } else Modifier)
         }
     }
