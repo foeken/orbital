@@ -1,11 +1,12 @@
 name: Checks
 
 # Every check, on main, every six hours when main has moved since the last scheduled run: the desktop's lint, checks and
-# user flows, the Android app, and the iPhone app's UI tests. A pull request runs none of this on GitHub (ci.yml only scans
-# it for secrets): it is checked on the machine that writes it before it merges (AGENTS.md, Pull requests). A failure
+# user flows, and the Android app. The iPhone's UI tests run on the Mac that writes a change and before every release
+# (npm run phones, AGENTS.md): on GitHub's macOS runners they took a quarter of an hour and failed on their own.
+# A pull request runs none of this on GitHub (ci.yml only scans it for secrets): it is checked on the machine that writes it before it merges (AGENTS.md, Pull requests). A failure
 # of the desktop or Android opens one issue, "Scheduled checks failed", or adds the run to it, and the next good run
 # closes it; while it is open a pull request cannot merge unless it is the fix (main-green.yml, required by main's
-# ruleset). An iPhone failure opens "Scheduled iPhone checks failed" the same way, which blocks nothing.
+# ruleset).
 # By hand, on any branch: gh workflow run checks.yml --ref <branch>
 on:
   schedule:
@@ -90,42 +91,9 @@ jobs:
       - run: ./gradlew :shared:jvmTest :androidApp:testDebugUnitTest :androidApp:lintDebug :androidApp:assembleDebug --console=plain
         working-directory: android
 
-  # The iPhone app's UI tests (ios/OrbitalUITests) on a simulator, on the invented -sample content
-  ios:
-    needs: moved
-    if: needs.moved.outputs.run == 'true'
-    runs-on: macos-26
-    # a run takes about 13 minutes: one that has not finished in 25 is stuck (a simulator that never launched the app once
-    # held a run for over half an hour), and is ended rather than left for GitHub's six hours
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci --ignore-scripts # loro-crdt for the engine bundle; the Electron download is not needed
-      - uses: oven-sh/setup-bun@v2
-      # the newest iOS runtime's first iPhone: the app needs iOS 26. Booting it in the background while the app builds was
-      # tried (#702) and made the build six times slower: the runner has few cores, and the boot takes them
-      - name: Pick a simulator
-        run: |
-          id=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices; const rt=Object.keys(d).filter(k=>k.includes('iOS')).sort().reverse()[0]; console.log(d[rt].find(x=>x.name.startsWith('iPhone')).udid)")
-          echo "SIM=$id" >> "$GITHUB_ENV"
-      - name: UI tests
-        working-directory: ios
-        # A test that hangs (most often the app launch, "Timed out while launching application via Xcode") is ended after
-        # three minutes, and a failed test runs once more on its own, so a flaky launch costs a test's retry, not a whole
-        # new run. The index store is only for the editor.
-        run: >-
-          xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$SIM"
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300
-          -retry-tests-on-failure -test-iterations 2
-          CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
-
   # main's result as one issue: opened (or added to) when a job fails, closed when a later run passes them all
   report:
-    needs: [moved, desktop, android, ios]
+    needs: [moved, desktop, android]
     # !cancelled(), not always(): a run cancelled as a whole (a newer one in its concurrency group, or by hand) reports
     # nothing. always() kept this job running through the cancel (GitHub re-evaluates if: on cancelling, and always()
     # stays true), and BLOCKING below read the cancelled jobs as main failing. A job that times out ends only itself, so
@@ -137,11 +105,9 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           # Desktop and Android run on Linux and fail only for a reason, so their failure blocks every pull request but
-          # its fix (main-green.yml reads "Scheduled checks failed"). The iPhone's simulator can fail on its own (a home
-          # screen in the wrong state, a launch that times out), so its failure is an issue of its own that blocks nothing.
+          # its fix (main-green.yml reads "Scheduled checks failed").
           BLOCKING: ${{ contains(fromJSON('["failure","cancelled"]'), needs.desktop.result) || contains(fromJSON('["failure","cancelled"]'), needs.android.result) }}
-          IPHONE: ${{ contains(fromJSON('["failure","cancelled"]'), needs.ios.result) }}
-          RESULTS: desktop ${{ needs.desktop.result }}, android ${{ needs.android.result }}, ios ${{ needs.ios.result }}
+          RESULTS: desktop ${{ needs.desktop.result }}, android ${{ needs.android.result }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           note="main at ${GITHUB_SHA::7}: $RESULTS. $RUN"
@@ -159,4 +125,3 @@ jobs:
           if issue "Scheduled checks failed" "$BLOCKING" "Fix this before anything else lands: until it is closed, a pull request merges only if it says Fixes #<this issue> (main-green.yml)."; then
             gh workflow run main-green.yml -R "$GITHUB_REPOSITORY"
           fi
-          issue "Scheduled iPhone checks failed" "$IPHONE" "The iPhone UI tests failed on main. This blocks no pull request (the simulator can fail on its own): fix it, or close it when a run by hand passes." || true

@@ -31,6 +31,9 @@ security find-identity -v -p codesigning | grep -q 'Developer ID Application' \
 xcrun notarytool history --keychain-profile "$profile" >/dev/null \
   || { echo "notarytool profile '$profile' cannot authenticate; create it with: xcrun notarytool store-credentials"; exit 1; }
 [ "$android" = 0 ] || sh scripts/android-release.sh --check
+# The phones are tested here and nowhere else (GitHub runs no iPhone tests): both apps' tests on this Mac before the
+# version is bumped, so a failure leaves nothing to undo (scripts/phones.sh; escalated, with an emulator for Android's)
+npm run phones
 
 npm version "${1:-patch}"
 version=$(node -p "require('./package.json').version")

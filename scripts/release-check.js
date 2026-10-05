@@ -39,6 +39,8 @@ const releases = (calls, repo) => calls.filter((c) => c.startsWith('gh release c
   assert.equal(status, 0, 'a release with Android runs to the end');
   assert.ok(at(calls, 'android-release.sh --check') > at(calls, 'xcrun notarytool history') && at(calls, 'android-release.sh --check') < at(calls, 'npm version'),
     'the Android key is checked with the Mac credentials, before the version is bumped');
+  assert.ok(at(calls, 'npm run phones') > at(calls, 'android-release.sh --check') && at(calls, 'npm run phones') < at(calls, 'npm version'),
+    'both phones are tested on this Mac before the version is bumped');
   const build = at(calls, 'android-release.sh dist/Orbital-android.apk');
   assert.ok(build > at(calls, 'npm run package') && build < at(calls, 'git push'), 'the APK is built from the bumped commit, before anything is pushed');
   const [main] = releases(calls, 'foeken/orbital ');

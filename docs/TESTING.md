@@ -144,9 +144,9 @@ From fastest to slowest. Each catches what the one before it cannot.
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; the scheduled checks run it on main (a pull request is tested on the machine that writes it, AGENTS.md).
 3. **iPhone UI tests** (about five minutes of tests here, a quarter of an hour on GitHub's runner, `ios/OrbitalUITests`). The
-   app on `-sample`, driven by the labels VoiceOver reads; the scheduled checks run them on a simulator on main, and
-   `npm run phones` on a simulator of the checkout's own ("Orbital <hash of its path>", made once and reused): two
-   checkouts testing on one shared iPhone killed each other's tests ("Test crashed with signal kill"). `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
+   app on `-sample`, driven by the labels VoiceOver reads; GitHub runs none of them (its macOS runners took a quarter of an hour and failed on their own), so they run
+   only here: `npm run phones`, before a phone change merges and in `npm run release`, on a simulator of the checkout's own ("Orbital <hash of its path>", made once and reused): two
+   checkouts testing on one shared iPhone killed each other's tests ("Test crashed with signal kill"). Its build output stays in the checkout (`ios/.derived`), and `npm run done` deletes both when the worktree goes. `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
    build's stand-in for a Tana that never answers) with `-patience 3`, and expects Can't reach Tana in place of a Timeline
    that builds itself for good; Android's `EngineTest` drives the same on virtual time. `VisibleToTests` opens a note for
    each audience in `pages-sample.json` (`-zoom`), at the default and an accessibility text size, and measures the gap
