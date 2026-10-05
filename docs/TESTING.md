@@ -97,7 +97,8 @@ From fastest to slowest. Each catches what the one before it cannot.
      Tana answered as shared, retried) and meeting-owned notes left untouched, your notes shared after confirmation
      kept with a write under a stale "only you" refused until told, a public link, unshared, view-only, your grant
      gone, another owner set, older notes without the mark, older unowned notes given to their meeting only while
-     restricted, and another account; the sync checks hold
+     restricted, notes pinned on the meeting once and left unpinned when unpinned in Tana, and another account; the
+     sync checks hold
      subscribe's ifMissing to writing a seed on MISSING only;
    - Notes | Summary on a meeting with a write-up: Summary first, none without one; Summary shows the write-up's rows and
      its own audience (three people against the meeting's two), keeps the meeting and its Tana button, and makes no

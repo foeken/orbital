@@ -615,6 +615,20 @@ commands.privatenotes = async () => {
   }
 };
 
+// meetingnotes <event id>: opens a meeting's private notes as the app does (main/meeting-notes.js privateNotes), so it
+// WRITES what opening writes: older notes given to the meeting, and notes pinned on it once. Prints the answer, your role
+// on the meeting and what is pinned on it.
+commands.meetingnotes = async () => {
+  const me = await connect();
+  backend(me);
+  const eventId = positional[0];
+  await client.sync.connect();
+  const answer = await require('../main/meeting-notes').privateNotes(eventId);
+  const ev = await client.sync.subscribe(eventId), n = readNode(ev);
+  const notes = answer && answer.id ? readNode(await client.sync.subscribe(answer.id)) : null;
+  out({ meeting: n.title, yourRole: n.participants?.[me.userUri]?.role, notes: answer && answer.id, owner: notes && (notes.ownerUri === eventId ? 'this meeting' : notes.ownerUri || null), audience: answer && answer.audience, pinnedOnMeeting: pins.items(ev).map((x) => x.uri === (answer && answer.id) ? 'your notes' : x.uri) });
+};
+
 // notesinvited [--event <id>]: WRITES one note, deleted in the same run. Private notes on a meeting you were only invited
 // to (an attendee, someone else organizing), made by main/meeting-notes.js as the app makes them: owned by the meeting,
 // yours alone, read back from Tana, the meeting itself left unwritten, then deleted. Without --event: your most recent

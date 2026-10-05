@@ -27,6 +27,7 @@ const { NOTES_SLOTS: SLOTS, notesSlotName: slotName, notesSlotId: slotId } = req
 const { NOT_CONNECTED, S, sendChanged } = require('./state');
 const { readOutline, insertAfter, inlineGroups, styleDoc, writeInline } = require('../sdk/content');
 const { info, mut, op, writeGuards } = require('./documents');
+const { nodePin } = require('./pins');
 
 const EVENT = /^tana:event:[0-9a-z]{26}$/, USER = /^tana:user-profile:[0-9a-z]{26}$/, TEXT = /^tana:text:[0-9a-z]{26}$/;
 // The link to the meeting, in a root container of Orbital's own, as the settings document carries its mark
@@ -270,6 +271,16 @@ const firstWords = (doc, text) => { const rows = readOutline(doc); return insert
 // is (main/documents.js mut). Once: an owned note is left as it is.
 const adoptable = (doc, eventId, me) => { const n = readNode(doc); return !n.ownerUri && n.restricted === true && docOurs(doc, eventId) && mayWrite(doc, me); };
 const adopt = (id, eventId, me) => mut(id, (doc) => { if (adoptable(doc, eventId, me)) doc.transact((l) => l.getMap('data').set('ownerUri', eventId)); }, true);
+// Shown on the meeting in Tana: its page lists what is pinned on the meeting (EventPins, over HAS_PIN), not what it owns,
+// so the notes are pinned there as Tana's own Agenda is. Once per note (the mark pinned, written after the pin): one you
+// unpin in Tana stays unpinned. The pin is the note's id in the meeting's pinnedItems, read by the meeting's people; it
+// opens nothing, since the note is restricted, its own boundary. Gated by nodePin on write access to the meeting.
+async function pinOnMeeting(id, eventId) {
+  const doc = S.client && S.client.sync.getDocument(id);
+  if (!doc || doc.loro.getMap(MARK).get('pinned') !== undefined || readNode(doc).ownerUri !== eventId || !docOurs(doc, eventId)) return;
+  await nodePin(eventId, id, true);
+  await mut(id, (d) => d.transact((l) => l.getMap(MARK).set('pinned', Date.now())), true);
+}
 // What may differ between machines, written once Tana has confirmed the note: plain values, the last write wins. The
 // title only while it is still the seed's: a note you renamed keeps your name. The mark that Tana confirmed it private
 // (confirmed), only while it is private this very moment: a note shared before it was ever confirmed never gets it.
@@ -312,6 +323,7 @@ async function privateNotes(eventId, { create = false, first } = {}) {
     if (!doc || !docOurs(doc, eventId) || (!docPrivate(doc, eventId, me) && !confirmed(doc, me, login))) throw new Error('Tana did not keep these notes private, so nothing was written to them');
     serve(client, eventId, me, login, id, doc, said);
     if (adoptable(doc, eventId, me)) await adopt(id, eventId, me).catch(() => {}); // not given to it this time: still your notes, asked again next open
+    await pinOnMeeting(id, eventId).catch(() => {}); // not pinned this time (no write access to the meeting): asked again next open
     // made just now, or another than before: every other page on the meeting starts using it
     if (handed.get(key) !== id) { const changed = create || handed.has(key); handed.set(key, id); if (changed) sendChanged(eventId, { notes: true }); }
     // in the same turn as the create: two panes' first words both land, one after the other, and neither replaces the other

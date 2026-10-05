@@ -73,7 +73,7 @@ kind or rule for them. So the notes are an ordinary `tana:text:` document:
 |------|-------|-----|
 | private | `data.restricted: true`, `data.participants` = exactly `{ <you>: { type: 'user', role: 'admin' } }` | a restricted document is its own boundary (Tana's client reads an owner's grants only for an unrestricted one) |
 | no public link | no `linkSharing.mode` | Tana writes `setLinkSharing({ mode: 'view' })` to share by link |
-| inside the meeting in Tana | **`ownerUri` = the meeting** (as Tana's own notes on a meeting), still restricted to you | found under the meeting in Tana, by you alone: a restricted document is its own boundary (below) |
+| inside the meeting in Tana | **`ownerUri` = the meeting**, and **pinned on it** once (`pinnedItems`, the mark `pinned`), as Tana's own Agenda is; still restricted to you | Tana's meeting page lists what is pinned on a meeting, not what it owns; opened by you alone: a restricted document is its own boundary (below) |
 | found again | id `tana:text:` + Tana's `createDeterministicId` of `orbital:meeting-notes:<you>:<event>:<place>` (sdk/chat.js), place 0 to 3 | any machine, any restart, after any rename or lost cache, without a search |
 | visible reference in Tana | first row "Open the meeting in Tana", a link to `https://home.tana.inc/o/<org>/e/<event>` (the app's own `webLink`) | followable in Tana's own client; a link adds no edge (below) |
 | marked by Orbital | root `ext:orbital:notes`, key `meeting` = the event | Orbital's own root, as the settings document's `ext:orbital:doc` (docs/SETTINGS.md); nothing is added to Tana's `data` |
@@ -88,10 +88,15 @@ people get nothing from owning it. Notes made before this (owned by nothing) are
 the meeting is opened (`adopt`, outside the undo stack as a move is), only while still restricted: an unrestricted
 note under the meeting would be open to its people. A note under anything else is not one of these. The meeting's
 References in Orbital leave your own notes out (main/related.js, `notesSlotId` in sdk/events.js), since they are its
-editor already. Not chosen: a pin on the meeting, which writes the meeting itself (an invitee may not), and its
-`pinnedItems` are read by everyone who sees the meeting, so its people would see that a pin is there; an @ mention or
-`createdInUri` (`platform-cli notesref`: `LINKS_TO` and `CREATED_IN` edges), which Tana's client does not use to
-show a meeting's documents. The first row stays a link to the meeting's page, for whoever opens the notes on their own.
+editor already. Owning is not enough to be seen in Tana: its meeting page lists what is pinned on the meeting
+(`EventPins`, over `HAS_PIN`), and a document added in Tana's own meeting page is owned by the meeting and pinned on it
+(the Agenda documents on your meetings, read live 2026-10-05). So the notes are pinned there too, once, when found
+(`pinOnMeeting`, gated by write access to the meeting, which an attendee has): the mark `pinned` is written after the
+pin, so notes you unpin in Tana stay unpinned. The pin is the notes' id in the meeting's `pinnedItems`, which its
+people read; it opens nothing. What another attendee's Tana draws for a pin it cannot open is not verified (no second
+account). Orbital's own sidebar leaves the pin out as well. Not chosen: an @ mention or `createdInUri`
+(`platform-cli notesref`: `LINKS_TO` and `CREATED_IN` edges), which Tana's client does not use to show a meeting's
+documents. The first row stays a link to the meeting's page, for whoever opens the notes on their own.
 
 **What is and is not established.** Tana writes a meeting's summary on its servers: its client starts the wrap-up with
 `wrapUpJob({ eventUri })` (ActiveCallAutoWrapUp, bundle of 2026-10-05) and nothing else, so which documents that job
@@ -177,6 +182,9 @@ a real past meeting, your role `attendee`, someone else organizing, with no note
 the end): Tana took the note owned by the meeting, restricted, your grant alone as admin, no link sharing, the chain
 the note (restricted) then the meeting, listed among the meeting's documents; an older private note owned by nothing,
 given to the meeting as `adopt` does, read back the same; the meeting itself was not written (its version unchanged).
+Pinning (`node scripts/platform-cli.js meetingnotes <event>`, which opens a meeting's notes as the app does): on your
+notes on a real meeting where you are an attendee, the notes were pinned on the meeting, still restricted to you as
+admin alone, and read back so in a fresh session; asked again, nothing more was written.
 `ifMissing` lines in the sync checks; scripts/flow-check.js, "type under a meeting") cover the rest with a second user,
 a second machine, independent Loro documents and a fake Tana whose graph answers only what it has indexed.
 

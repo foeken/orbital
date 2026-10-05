@@ -6221,7 +6221,8 @@ async function main() {
       return { backend: mainHelpers(), client: { sync, graph }, listeners };
     };
     const mac = machine(), { backend, client, listeners } = mac, notes = backend.meetingNotes;
-    const runtime = (user, m = mac) => { whoWrites = user; m.backend.testRuntime({ me: { userUri: user, orgDocUri: ORGDOC, userExternalId: LOGIN }, client: m.client, win: { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } } }); };
+    const session = { getAccessToken: async () => 'h.' + Buffer.from('{}').toString('base64url') + '.s' }; // write checks read its claims
+    const runtime = (user, m = mac) => { whoWrites = user; m.backend.testRuntime({ me: { userUri: user, orgDocUri: ORGDOC, userExternalId: LOGIN }, client: m.client, session, win: { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } } }); };
     const call = (...a) => backend.handlers.get('meeting:privateNotes')({}, ...a);
     const plain = (x) => JSON.parse(JSON.stringify(x)); // an answer from main's realm, compared as data
     const lines = (id) => readOutline(server.get(id)).map((b) => b.text).filter(Boolean);
@@ -6256,7 +6257,13 @@ async function main() {
     assert.deepEqual(lines(first.id), [R, 'First synthetic line'], 'the meeting first, then the first words');
     assert.deepEqual(readOutline(note)[0].segments, [{ text: R, marks: { link: linkOf(EV) } }], 'the meeting as a link to its page in Tana: a reference, and no edge into it');
     assert.deepEqual(plain(first.reference), { id: readOutline(note)[0].id, text: R, link: linkOf(EV) }, 'the page is told that row exactly, to leave it out of the meeting’s own page (renderer/meetingnotes.js notesRows)');
-    assert.ok(sent.some(([ch, id, info]) => ch === 'outline:changed' && id === EV && info.notes), 'other pages on the meeting hear of it');
+    assert.ok(sent.some(([ch, id, info]) => ch === 'outline:changed' && id === EV && info && info.notes), 'other pages on the meeting hear of it');
+    // pinned on the meeting, where Tana's meeting page lists documents, once: unpinned in Tana, it is not pinned again
+    const pinsOf = (ev) => require('../sdk/pins').items(server.get(ev)).map((x) => x.uri);
+    assert.deepEqual([pinsOf(EV), typeof note.loro.getMap(notes.MARK).get('pinned')], [[first.id], 'number'], 'pinned on the meeting, and marked so');
+    require('../sdk/pins').unpinItem(server.get(EV), first.id);
+    await call(EV);
+    assert.deepEqual(pinsOf(EV), [], 'unpinned in Tana: left unpinned');
 
     // Asked again, by an open or by more first words (a second pane), it is the same note.
     assert.equal((await call(EV)).id, first.id);

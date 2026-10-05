@@ -481,7 +481,7 @@ Cmd+K leads with a Selection group for it (§8).
 - **A meeting's editor is your private notes** (renderer/meetingnotes.js, main/meeting-notes.js, [MEETINGS.md](MEETINGS.md)
   Private notes). An event has no content of its own, so a meeting page stays the meeting's — title, Visible to,
   Attendees, sidebar, ⌘K, Back and Forward — and the rows under it are the whole outline of a document only you can see (owned by
-  the meeting, so Tana shows it inside the meeting, to you alone, and left out of the meeting's References here; found by its id; its first row "Open the meeting in Tana", a link to the meeting's page, so
+  the meeting and pinned on it once, so Tana's meeting page shows it, to you alone, and left out of the meeting's Pinned and References here; found by its id; its first row "Open the meeting in Tana", a link to the meeting's page, so
   the reference shows in Tana too, and is left out of the meeting's own page while it is exactly as written; no pin on the meeting, which its people would see): every row's `docId` is that document, so every edit, Enter, "/" and paste is an edit of it. A
   grey line over the rows says who sees them ("Your notes · only you can see them", the lock of Visible to; once you
   shared them in Tana, "Shared notes" and the faces, everyone, anyone with the link, or read only). A meeting with a
