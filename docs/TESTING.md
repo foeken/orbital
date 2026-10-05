@@ -94,7 +94,9 @@ From fastest to slowest. Each catches what the one before it cannot.
      palette closes on its name, and it is in Choose agents (on, where it runs) with a page to rename or unlink it;
    - panes and tabs (shell.html): ⌘↩ on a search result opens a tab, ⇧↩ a pane beside; ⇧⌘N, ⌘N and ⌥⌘N a pane, a tab
      and a floating pane each on a new note of its own with the caret in it, a held ⌘N opening one; the keys go with
-     the page just opened and every page keeps its own place.
+     the page just opened (waited for: the shell gives them once the frame has loaded) and every page keeps its own
+     place; the new note's caret, dropped as the shell's activation can drop it (its window focused again with nothing
+     focused), comes back (renderer/edit.js caretBack);
 
    A drag is dispatched in the page as Chromium delivers one (`__drag`: dragstart on the row's grip, dragover and drop
    where the pointer is), since the DevTools protocol cannot start a native drag in a headless page.
