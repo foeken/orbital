@@ -6,7 +6,7 @@ const { createTanaClient, takeCalls } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, addMeetingChats } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView, rowLimit } = require('../sdk/node');
-const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, inboxFrom, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { agentIds, createDocument, creatorOf, document, forgetOwners, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe, workflowTypes } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
@@ -333,14 +333,6 @@ async function refreshWatched() {
 // ponytail: seen = the newest 50 Inbox ids of the last answer; a task leaving and re-entering the Inbox within its
 // first day is announced twice. Keep a dated set if that ever happens in practice.
 const NEW_TASK_MS = 24 * 60 * 60 * 1000, NEW_TASK_MAX = 3;
-// Where a new Inbox task came from, in the words a banner and the Timeline (main/timeline.js) both use; null when it is
-// yours by hand. chat: the node the task was created in, {} when that chat cannot be read, null when there is none.
-function inboxFrom(me, creator, chat, names) {
-  if (creator && creator !== me) return 'From ' + (names.get(creator) || 'someone else');
-  if (!chat) return null;
-  const topic = /^MCP:\s*(.+)/i.exec(chat.title || '')?.[1]; // the chat's title names what the agent was doing
-  return isMcp(chat) ? 'Via MCP' + (topic ? ': ' + topic : '') : "From Tana's AI";
-}
 const INBOX_QUERY = (me) => ({ types: ['text'], stateTypes: ['proposed'], assignedTo: [me], orderBy: ['-createdAt'], limit: 50 });
 async function watchInbox() {
   const client = S.client, me = S.me && S.me.userUri;
@@ -544,4 +536,4 @@ const ipc = {
   'sync:refresh': () => refresh(),
 };
 
-module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, stop, settingsReady, refresh, doRefresh, listFilter, setHidden, setMcpHidden, ipc };
+module.exports = { announceNewInbox, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, stop, settingsReady, refresh, doRefresh, listFilter, setHidden, setMcpHidden, ipc };

@@ -1,7 +1,5 @@
 package com.dreetje.orbital
 
-import kotlin.math.ceil
-import kotlin.math.max
 import kotlinx.datetime.TimeZone
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -44,15 +42,6 @@ object Lists {
         val last = rows.lastOrNull { it.chat?.status != true }
         if (last?.chat?.streaming == true) return last.children.isNullOrEmpty()
         return last?.chat?.mine == true && since != null && now - since < 2.minutes
-    }
-
-    // The free time before the next meeting, counted down while it shows (renderer/timeline.js timelineFreeSegs):
-    // "No meetings for ", the time in bold, and " after this one" while a meeting is still on
-    fun free(f: Row.Free, nowMs: Double): Triple<String, String, String> {
-        val later = f.from > nowMs
-        val m = max(1, ceil((f.until - max(nowMs, f.from)) / 60000).toInt())
-        val left = if (m < 60) "$m " + (if (later) "" else "more ") + "min" else "${m / 60} h" + (if (m % 60 > 0) " ${m % 60} min" else "")
-        return Triple("No meetings for ", left, if (later) " after this one" else "")
     }
 
     // a day as Tana mentions one (sdk/dates.js): tana:plaindate:YYYY-MM-DD

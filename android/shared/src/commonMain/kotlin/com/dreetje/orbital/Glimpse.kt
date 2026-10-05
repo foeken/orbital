@@ -41,9 +41,22 @@ data class Glimpse(val read: Long, val rows: List<Row>) {
 // The iPhone's ios/Widgets Row.asTask is the same.
 private val stateOfIcon = mapOf("apply" to "closed", "tlAccepted" to "open", "tlLater" to "not_now", "tlInbox" to "proposed")
 
-// The tasks the launcher offers as shortcuts (androidApp Shortcuts.kt): the first n still to do, newest first as
+// The tasks the launcher offers as shortcuts (androidApp AndroidPlatform.keepTasks): the first n still to do, newest first as
 // orbital.tasks answers them, never one whose words are hidden
 fun List<Row>.forShortcuts(n: Int): List<Row> = filter { it.sensitive != true && it.stateType != "closed" && it.words.isNotBlank() }.take(n)
+
+// The launcher's shortcuts for those tasks (androidApp AndroidPlatform.keepTasks), as the iPhone's Shortcuts offer each
+// task (Intents.swift): open it, Check Off, and Pin to Today or Remove Pin, each an orbital: link of Orbital's own that
+// FromOrbital takes in (ui/Shell.kt Link). A task's three together, newest task first, as many tasks as room allows.
+data class TaskShortcut(val id: String, val label: String, val link: String)
+fun List<Row>.shortcuts(room: Int, pinned: Set<String>): List<TaskShortcut> = forShortcuts(room / 3).flatMap { t ->
+    listOf(
+        TaskShortcut(t.id, t.words, "orbital:" + t.id),
+        TaskShortcut("check:" + t.id, "Check off " + t.words, "orbital:check:" + t.id),
+        if (t.id in pinned) TaskShortcut("unpin:" + t.id, "Remove pin " + t.words, "orbital:unpin:" + t.id)
+        else TaskShortcut("pin:" + t.id, "Pin to Today " + t.words, "orbital:pin:" + t.id),
+    )
+}
 fun Row.asTask(): Row? {
     val uri = timeline?.uri ?: return null
     val state = stateOfIcon[icon] ?: return null

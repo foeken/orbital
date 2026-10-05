@@ -10,14 +10,14 @@ const KEEP = 12;
 // sync(): the client's SyncConnection now; within(what, promise): the engine's give-up (stand-ins.js)
 function createHeld(sync, within) {
   const kept = [], peeking = new Set();
-  // init makes a new document (sdk/sync.js subscribe); it is counted before the wait, so one that times out is still let go.
-  // One a peek has open is ours: the peek leaves it subscribed.
-  async function hold(id, init) {
+  // init makes a new document (sdk/sync.js subscribe, with its options); it is counted before the wait, so one that times
+  // out is still let go. One a peek has open is ours: the peek leaves it subscribed.
+  async function hold(id, init, options) {
     const had = !!sync().getDocument(id) && !peeking.has(id), at = kept.indexOf(id);
     if (at >= 0) kept.splice(at, 1);
     if (at >= 0 || !had) kept.push(id); // newest last
     while (kept.length > KEEP) sync().unsubscribe(kept.shift()).catch(() => {}); // drains queued writes first
-    return within('opening ' + id, sync().subscribe(id, init));
+    return within('opening ' + id, sync().subscribe(id, init, options));
   }
   // read(document): what is wanted of it
   async function peek(id, read) {

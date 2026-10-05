@@ -152,6 +152,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    between the Visible to glyph and its word in the row as drawn: a SwiftUI `Label` in a List row had put the glyph in the
    list's icon column, about 20 pt from its word (#753). `scripts/ios-engine-check.js`
    covers the engine, and the desktop code it bundles, in `npm run check`, among it every list the phones ask for (ios/engine/listed.js): your hidden titles, Hide MCP and the settings document stay out of it, as main/views.js listFilter keeps them out on the Mac, where the phones once showed Block and Lunch in Upcoming meetings.
+   What each phone keeps a copy of, since it must answer without the engine (a box ticked before the page has written it, the widgets' Activity lines, the app's words), is held to one spec both run: `ios/PhoneSpec.json`, by `SpecTests` in the iPhone's UI test bundle (no app launched; `ios/Common` is compiled into it) and `SpecTest` in Android's jvmTest. A rule changed on one phone is changed in the spec, and the other phone's test fails until it follows.
 4. **The running app**, only for what the mock cannot reach: main's live subscriptions, real Tana answers, a restart.
    Read-only first (`node scripts/platform-cli.js`), escalated. Say in the PR what was and was not tried there.
 
@@ -171,6 +172,7 @@ The manual's scenes (`manual/scenes`) play the same mock in the same Chromium, b
   Notifications and Proposals, chats, panes and tabs): its flow passes, and a step that is new there joins it. A path
   the flows do not walk yet is listed under Open.
 - **An iPhone screen**: an accessibility label for everything you can tap, and a step in `SampleTests`.
+- **A rule both phones keep a copy of** (`Ticks`, `Phrases`, `Glimpse`): a case in `ios/PhoneSpec.json`, which both phones run.
 - **Before the first push**: read the whole diff and trace every caller of what changed; walk missing and empty values, a
   rename or retype, async ordering, cache and restart, masking, and the labels. Review bots are a second opinion.
 

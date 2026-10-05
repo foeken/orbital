@@ -4,8 +4,8 @@
 // rows this hands back (ios/Orbital/Engine.swift). What main/timeline.js needs of the desktop is stood in for by
 // ./stand-ins.js, chosen at bundle time (build.js).
 // An ES module so the bundle runs it (Bun leaves a CommonJS entry of an iife bundle wrapped and never called).
-import { createTanaClient } from '../../sdk';
-import { STATE_TYPES, audienceMetadata, editable, initDocument, readNode, readSearch, rowLimit, setAssignees, setState, taskMeta, ulid } from '../../sdk/node';
+import { createTanaClient, derivePeerId } from '../../sdk';
+import { STATE_TYPES, initDocument, readNode, readSearch, rowLimit, setAssignees, ulid } from '../../sdk/node';
 import { insertAfter, insertImage, readOutline } from '../../sdk/content';
 import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
@@ -14,7 +14,7 @@ import { completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter 
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { dateLabel, isDateUri } from '../../sdk/dates';
 import { NOTES_SLOTS, notesOurs, notesSlotId, writeUpOf } from '../../sdk/events';
-import { canDelete, canWrite, capabilities, everyoneOnly, setSharing } from '../../sdk/access';
+import { canDelete, canWrite, everyoneOnly } from '../../sdk/access';
 import { arrange } from './arrange';
 import { listFilter } from './listed';
 import { S, isSpace, iso, today } from '../../main/state';
@@ -25,9 +25,10 @@ import { mark } from './sensitive';
 import { times } from './labels';
 import { read } from './read';
 import { createHeld } from './held';
-import { demo, demoName, demoOn, demoTitle, isDemo } from './demo';
-import { agentOf, agents, handed, linked, refreshSoon } from './agents';
+import { demo, demoOn, demoTitle, isDemo } from './demo';
+import { agents, handed, linked, refreshSoon } from './agents';
 import { createLive } from './live';
+import { createTasks } from './tasks';
 import { IMAGE_INSTRUCTIONS, TRANSLATE_INSTRUCTIONS, TRANSLATE_SCHEMA, modelLabel, effortLabel } from '../../main/prompts';
 import NUCLEO from 'nucleo-ui';
 
@@ -77,11 +78,6 @@ async function getAccessToken({ refresh = false } = {}) {
   return last.accessToken;
 }
 
-// sdk/sync.js derivePeerId, asynchronous here: a page has no synchronous sha256
-async function peerId(user) {
-  const hash = new DataView(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(user.trim().toLowerCase()))).getBigUint64(0) >> 16n;
-  return ((hash << 16n) | BigInt(Math.floor(Math.random() * 32768))).toString(10);
-}
 // peer.json's storageId (tana-session.js peerIdentity), kept in the page's own storage
 function storageId() {
   let id = localStorage.getItem('orbital:storageId');
@@ -286,10 +282,16 @@ async function presetFields(doc, fields) {
 // a new document of yours, created as main/documents.js createDocument creates one, answered once Tana has it
 // Tana slow to answer is not a failure: the document is made here at once and its writes wait in the queue, so it is
 // carried on with (as ask does) rather than refused, which would have Quick Add offer to make it a second time
-async function create(title, config) {
-  const id = 'tana:text:' + ulid();
-  const doc = await hold(id, (loro) => initDocument(loro, title, S.me.userUri, config)).catch((e) => S.client.sync.getDocument(id) || Promise.reject(e));
-  return { id, doc };
+// given: an id the app chose (Android's Quick Add, sending again what Android ended the app on, Engine.kt takeFlights),
+// made only when Tana has no document of that id (sdk/sync.js ifMissing): seeded false when it had one, so the same add
+// sent twice is one task
+async function create(title, config, given) {
+  const id = given || 'tana:text:' + ulid();
+  let seeded = false;
+  const init = (loro) => { seeded = true; initDocument(loro, title, S.me.userUri, config); };
+  // given up on before Tana answered: carried on with only once seeded here, never taken for one Tana had
+  const doc = await hold(id, init, given ? { ifMissing: true } : undefined).catch((e) => (seeded && S.client.sync.getDocument(id)) || Promise.reject(e));
+  return { id, doc, seeded };
 }
 
 // What is kept live on this client (live.js): the pages opened and the Timeline, told to the app as they change
@@ -324,17 +326,6 @@ async function iconPng(label) {
   return canvas.toDataURL('image/png').split(',')[1];
 }
 
-// A write only queues, and Tana says no later, as a write-denied event (sdk/sync.js): true when it does within 3 s
-const refusedSoon = (id) => new Promise((resolve) => {
-  const on = (denied) => { if (denied === id) done(true); };
-  const done = (answer) => { S.client.sync.off('write-denied', on); clearTimeout(timer); resolve(answer); };
-  const timer = setTimeout(() => done(false), 3000);
-  S.client.sync.on('write-denied', on);
-});
-
-// who of the people assigned cannot open the task (sdk/node.js audienceMetadata hiddenFrom), as the desktop asks after Assign to
-const shutOut = async (doc) => (await audienceMetadata(doc, S.me.userUri, S.client.graph, (await access()).sync)).hiddenFrom || [];
-
 const LANGS = ['English', 'Dutch', 'German', 'French', 'Spanish']; // renderer/translate.js TRANSLATE_LANGS
 
 window.orbital = {
@@ -348,7 +339,7 @@ window.orbital = {
     S.me = me;
     if (!S.client) {
       // the whole client, sync stream included: a same-origin fetch stream here, as Tana's own client runs it
-      S.client = createTanaClient({ getAccessToken, orgId: S.me.orgId, peerId: await peerId(user), storageId: storageId(), clientName: 'orbital-ios' });
+      S.client = createTanaClient({ getAccessToken, orgId: S.me.orgId, peerId: derivePeerId(user), storageId: storageId(), clientName: 'orbital-ios' });
       // every list as the desktop's (listed.js): your hidden titles and Hide MCP applied, as main/views.js listFilter does
       listFilter(S.client.graph, settings);
       // what another device writes to the settings document (a mark made sensitive on the Mac) read in as it arrives, as
@@ -379,61 +370,11 @@ window.orbital = {
     live?.timeline(rows); // what it lists, followed until the next read
     return JSON.stringify(times(rows));
   },
-  // A task's box, as the desktop's does it (renderer/edit.js toggleDone, main/documents.js doc:setDone and mutTasks): an
-  // Inbox task is accepted first (In Progress), a finished one is reopened, anything else is completed. Answers the state
-  // written; refuses what is not a task or is read-only to you.
-  // A write only queues, and Tana says no later, as a write-denied event (sdk/sync.js): its answer is waited for a few
-  // seconds so a refused box goes back rather than looking ticked until the next read.
-  // ponytail: 3 s for Tana's refusal; a slower one shows at the first read half a minute on (Engine.swift settle).
-  // to: a state of its own instead (long press Move to Inbox: 'proposed')
-  async toggle(id, to) {
-    const doc = await hold(id), n = readNode(doc);
-    if (!STATE_TYPES.includes(n.stateType) || (to != null && !STATE_TYPES.includes(to))) throw new Error('Only a task can be ticked off');
-    if (doc.writeDenied || editable(n, S.me.userUri) === false) throw new Error('This task is read-only to you');
-    const next = to ?? (n.stateType === 'proposed' || n.stateType === 'closed' ? 'open' : 'closed');
-    const refused = refusedSoon(id);
-    setState(doc, next, S.me.userUri);
-    if (await refused) throw new Error('Tana refused the change: this task is read-only to you');
-    return JSON.stringify(next);
-  },
   // Long press, Assign to …: the workspace's people to pick from, and the task given to the one picked ([] unassigns), as the
   // desktop's Assign to … sets it outright (main/documents.js doc:setAssignees)
   members: async () => JSON.stringify((await members()).map((m) => ({ id: m.id, name: m.title }))),
-  async assign(id, uris) {
-    const doc = await hold(id);
-    if (doc.writeDenied || editable(readNode(doc), S.me.userUri) === false) throw new Error('This task is read-only to you');
-    const refused = refusedSoon(id);
-    const before = taskMeta(doc).assignees;
-    setAssignees(doc, uris, S.me.userUri); // refuses what is not a task
-    if (await refused) throw new Error('Tana refused the change: this task is read-only to you');
-    return JSON.stringify((await shutOut(doc)).filter((uri) => !before.includes(uri))); // just given work they cannot open: the app asks (renderer/access.js openShareAsk)
-  },
-  // A zoomed node's Assigned to and Visible to, as the desktop's fields show them (doc:taskMeta, doc:accessOptions): who has
-  // it, who can see it, the assignees shut out, and the sharing rules you may pick from (sdk/access.js capabilities)
-  async access(id) {
-    const doc = await hold(id), n = readNode(doc), direct = taskMeta(doc), ctx = await access();
-    const [meta, options, people] = await Promise.all([audienceMetadata(doc, S.me.userUri, S.client.graph, ctx.sync), capabilities(doc, S.me.userUri, ctx), members().catch(() => [])]);
-    const person = (uri) => ({ id: uri, name: demoName((people.find((m) => m.id === uri) || {}).title || 'Someone') });
-    const space = (a) => a && a.title ? demoTitle(a.title, a.boundaryUri || a.uri || 'space') : null;
-    return JSON.stringify({
-      title: demoTitle(n.title || 'Untitled', id), me: S.me.userUri, task: STATE_TYPES.includes(n.stateType), assignees: direct.assignees.map(person),
-      state: STATE_TYPES.includes(n.stateType) ? n.stateType : null, // the Status field's (Pages.swift NodeDetails)
-      audience: meta.audience, space: space(meta.audienceSpace), people: meta.audience === 'everyone' ? [] : (meta.people || []).map(person), // everyone: the org, named by its word
-      hidden: (meta.hiddenFrom || []).map(person), restricted: direct.restricted === true, participants: direct.participants.map((p) => p.uri).filter((uri) => uri !== S.me.userUri),
-      rules: options.rules, reason: options.reason, inherit: { scope: options.inheritAudience.scope, space: space(options.inheritAudience) }, token: options.sharingToken,
-      agent: agentOf(id, doc), // the agent linked through orbital.md it is handed to, and how that is going (agents.js)
-    });
-  },
-  // Visibility (renderer/access.js applySharing): only you, the people named (each keeping the role they had, editors
-  // otherwise), or where it lives, with the token access() disclosed; Grant access is the people named plus those shut out
-  async share(id, rule, uris, token) {
-    const doc = await hold(id), n = readNode(doc);
-    const participants = rule === 'people' ? uris.map((uri) => ({ uri, role: (n.participants && n.participants[uri] && n.participants[uri].role) || 'editor' })) : undefined;
-    const refused = refusedSoon(id);
-    await setSharing(doc, S.me.userUri, { rule, participants, token: token || undefined }, await access());
-    if (await refused) throw new Error('Tana refused the change: you cannot change who sees this');
-    return JSON.stringify(true);
-  },
+  // A task's box, Assign to …, and a zoomed node's Assigned to and Visible to (tasks.js)
+  ...createTasks({ hold, access, members }),
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
   email: () => (last && last.user && last.user.email) || null,
   account: () => (S.me ? S.me.userUri + '@' + S.me.orgId : null), // who in which workspace, as the settings mirror keys it (stand-ins.js ns): what the app keeps its saved Timeline for
@@ -590,21 +531,25 @@ window.orbital = {
   },
   // searchId: the saved search Quick Add was opened on; its type, when that is the one chosen, comes with its preset
   // values. values: what was set in Quick Add's fields ({ key: { ref, label? } | { text } }), over the preset's;
-  // assignee: whom a task is for, yours when none
-  async createTask(title, typeUri, searchId, assignee, values) {
+  // assignee: whom a task is for, yours when none. id: the task's own, chosen by the app so it can send it again
+  // (create): when Tana has it already, nothing more is written to it
+  async createTask(title, typeUri, searchId, assignee, values, id) {
     if (typeof title !== 'string' || !title.trim()) throw new Error('A task needs a title');
+    if (id != null && !/^tana:text:[0-9a-z]{26}$/.test(id)) throw new Error('Not an id for a new task: ' + id);
     const preset = searchId ? await presetOf(searchId) : null, fromSearch = preset && preset.uri === typeUri;
     const type = typeUri ? (fromSearch ? preset : (await taskTypes()).find((t) => t.uri === typeUri)) : null;
     if (typeUri && !type) throw new Error('A task cannot be made with that type here');
-    const { id, doc } = await create(title.trim(), { kind: type && !type.task ? 'doc' : 'task', ...(type ? { entityTypeUri: type.uri, ...(type.ownerUri ? { ownerUri: type.ownerUri } : {}) } : {}) });
+    const made = await create(title.trim(), { kind: type && !type.task ? 'doc' : 'task', ...(type ? { entityTypeUri: type.uri, ...(type.ownerUri ? { ownerUri: type.ownerUri } : {}) } : {}) }, id);
+    if (!made.seeded) return JSON.stringify(made.id); // sent before, and it landed then
+    const doc = made.doc;
     const own = Object.fromEntries(Object.entries(values || {}).filter(([k, v]) => type && k.startsWith(type.uri + '?attribute=') && v && (v.ref || (typeof v.text === 'string' && v.text.trim()))));
     const fields = values ? own : fromSearch ? preset.fields : {}; // Quick Add sends what it shows, the preset's included
     if (Object.keys(fields).length) await presetFields(doc, fields);
     if (assignee && assignee !== S.me.userUri && (!type || type.task)) setAssignees(doc, [assignee], S.me.userUri);
     // answered once Tana has it, not when it is only queued here: the app keeps itself running until then when you leave
     // it right after Add (Engine.swift add), and a page paused with the task still queued could lose it
-    await S.client.sync.flushed(id);
-    return JSON.stringify(id);
+    await S.client.sync.flushed(made.id);
+    return JSON.stringify(made.id);
   },
   // Process image (main.js ai:processImage): what the model read from it (QuickAdd.swift ChatGPT.readImage) made a task
   // or a note, its lines under the title and the image under them, uploaded as the desktop uploads a pasted one

@@ -490,12 +490,10 @@ struct FreeLine: View {
     }
 
     static func text(_ f: Row.Free, now date: Date) -> AttributedString {
-        let now = date.timeIntervalSince1970 * 1000, later = f.from > now
-        let m = max(1, Int(((f.until - max(now, f.from)) / 60000).rounded(.up)))
-        let left = m < 60 ? "\(m) \(later ? "" : "more ")min" : "\(m / 60) h" + (m % 60 > 0 ? " \(m % 60) min" : "")
+        let (before, left, after) = Phrases.free(from: f.from, until: f.until, now: date.timeIntervalSince1970 * 1000)
         var bold = AttributedString(left)
         bold.inlinePresentationIntent = .stronglyEmphasized
-        return AttributedString("No meetings for ") + bold + AttributedString(later ? " after this one" : "")
+        return AttributedString(before) + bold + AttributedString(after)
     }
 }
 

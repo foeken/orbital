@@ -19,8 +19,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var error: String?
     var pages = 1
     var email: String? // the Tana account signed in, for Settings
-    var states: [String: String] = [:] // task id -> the stateType ticked here, until a read of Tana agrees with it
-    @ObservationIgnored private var ticked: [String: Date] = [:] // task id -> when it was ticked here
+    var ticks = Ticks() // the boxes ticked here, until a read of Tana agrees (ios/Common/Ticks.swift)
+    var states: [String: String] { ticks.states }
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value (#658). A line is
     // added only when it differs from the one before, so the screen is redrawn only when something moved.
     var log: [String] = []
@@ -327,7 +327,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // What the last account's session knew, gone with it: a refused draft or request (made again, it would go to the next
     // account), its ticks, its agents and marks, and the images fetched with its token
     private func forgetAccount() {
-        states = [:]; ticked = [:]; removed = []; unpinned = []; unsent = []; unhanded = [:]
+        ticks = Ticks(); removed = []; unpinned = []; unsent = []; unhanded = [:]
         agents = []; handed = [:]; sensitiveIds = []; pinned = []
         images.removeAllObjects()
     }
@@ -511,7 +511,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func access(_ id: String) async -> Access? {
         if let s = Self.sample { return s.access?[id] } // -sample: the invented audiences of pages-sample.json
         let got: Access? = try? await call("return await orbital.access(id)", ["id": id])
-        if let state = got?.state { settle { $0 == id ? state : nil } }
+        if let state = got?.state { ticks.settle { $0 == id ? state : nil } }
         return got
     }
     func share(_ id: String, _ rule: String, _ uris: [String] = [], token: String? = nil) async {
@@ -733,14 +733,13 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func toggle(_ task: Row) async {
         guard !demo else { return } // a box does nothing in demo mode, as the desktop's is disabled
         let before = state(of: task)
-        states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
-        ticked[task.id] = .now
+        ticks.tap(task.id, shown: before)
         defer { keepTimeline() } // the widgets show it ticked too
         guard !Self.isSample else { return } // the sample writes nothing
         do {
-            states[task.id] = try await call("return await orbital.toggle(id)", ["id": task.id]) as String
+            ticks.answer(task.id, try await call("return await orbital.toggle(id)", ["id": task.id]) as String)
         } catch {
-            states[task.id] = before
+            ticks.refuse(task.id, back: before)
             self.error = error.localizedDescription
         }
     }
@@ -754,17 +753,15 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // so a second tap on a widget not yet drawn again does not undo the first.
     func tick(_ id: String, to next: String) async {
         guard !demo else { return }
-        let before = states[id]
-        states[id] = next
-        ticked[id] = .now
+        let before = ticks.set(id, to: next)
         defer { keepTimeline() } // the widgets drawn again with it
         guard !Self.isSample else { return }
-        do { states[id] = try await call("return await orbital.toggle(id, to)", ["id": id, "to": next]) as String }
-        catch { states[id] = before; self.error = error.localizedDescription }
+        do { ticks.answer(id, try await call("return await orbital.toggle(id, to)", ["id": id, "to": next]) as String) }
+        catch { ticks.refuse(id, back: before); self.error = error.localizedDescription }
     }
 
     func state(of task: Row) -> String {
-        states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
+        ticks.state(task.id, row: task.stateType, done: task.done)
     }
 
     // The Timeline is kept on this phone twice, both written here and nowhere else (Android's Engine.kt the same):
@@ -789,7 +786,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                     r.timeline?.note = nil; r.timeline?.change = nil; r.timeline?.detail = nil
                 }
                 // a tick made here: on the task, and on an Activity line about it (its uri), which the widget draws as the task
-                r.stateType = states[r.id] ?? r.timeline?.uri.flatMap { states[$0] } ?? r.stateType
+                r.stateType = ticks.on(r.id, uri: r.timeline?.uri) ?? r.stateType
                 r.children = kept(r.children, today: r.timeline?.today == true)
                 return r
             } }
@@ -820,7 +817,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let kept = list.map { row in
             var r = row
             if r.sensitive == true { r.text = nil; r.title = nil; r.segments = nil }
-            r.stateType = states[r.id] ?? r.stateType
+            r.stateType = ticks.on(r.id) ?? r.stateType
             return r
         }
         if let data = try? JSONEncoder().encode(kept) { Keychain.save(data, "tasks") }
@@ -834,17 +831,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         Task { await Tasks.index(demo: true) } // nor in Spotlight (Intents.swift)
     }
 
-    // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
-    // minute on (Tana refused it later than toggle waits for, or someone changed it back): the graph can trail a write by
-    // seconds, never by that long. One that is not in the rows read keeps its tick.
-    private func settle(_ rows: [Row]) { settle { Self.stateType($0, in: rows) } }
-    private func settle(_ read: (String) -> String?) {
-        states = states.filter { id, state in
-            guard let was = read(id) else { return true }
-            return was != state && Date.now.timeIntervalSince(ticked[id] ?? .distantPast) < 30
-        }
-        ticked = ticked.filter { states[$0.key] != nil }
-    }
+    // a read of Tana settles the boxes ticked here (Ticks.settle)
+    private func settle(_ rows: [Row]) { ticks.settle { Self.stateType($0, in: rows) } }
 
     private static func stateType(_ id: String, in rows: [Row]) -> String? {
         for row in rows {

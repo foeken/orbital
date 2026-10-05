@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const here = __dirname, standIns = path.join(here, 'stand-ins.js');
-const DESKTOP = new Set(['../db', './pins', './rows', './documents', './views']);
+const DESKTOP = new Set(['../db', './pins', './rows', './documents']);
 
 const result = await Bun.build({
   entrypoints: [path.join(here, 'index.js')], target: 'browser', format: 'iife', minify: true,

@@ -365,13 +365,13 @@ struct NodeDetails: View {
             // Status: Tana's own four, as the desktop's Status pill offers them (renderer/pills.js); set outright (engine.tick)
             let now = engine.states[id] ?? access.state ?? "open"
             Menu {
-                ForEach(Self.states, id: \.0) { state in
+                ForEach(Phrases.states, id: \.0) { state in
                     Button { Task { await engine.tick(id, to: state.0); await reload() } } label: {
                         if state.0 == now { Label(state.1, systemImage: "checkmark") } else { Text(state.1) }
                     }
                 }
             } label: {
-                line("Status") { Text(Self.states.first { $0.0 == now }?.1 ?? "In Progress").foregroundStyle(.primary) }
+                line("Status") { Text(Phrases.state(now)).foregroundStyle(.primary) }
             }
             .buttonStyle(.plain)
             .modifier(FieldLine())
@@ -415,7 +415,6 @@ struct NodeDetails: View {
         }
     }
 
-    static let states = [("proposed", "Inbox"), ("open", "In Progress"), ("closed", "Completed"), ("not_now", "Later")]
 
     // a field as the desktop draws one: its name in grey, its value after it, a line under it, the whole row the button
     // that changes it
@@ -447,13 +446,7 @@ extension Engine.Access {
     // Android's AudienceLabel draws it (a Label in a List row puts its glyph in the list's icon column, far from the
     // word, #753), and read by VoiceOver as the word alone
     static func label(_ scope: String, _ space: String?, glyphs: Bool = true) -> some View {
-        let (word, glyph) = switch scope {
-        case "only-me": ("Only you", "lock")
-        case "people": ("Selected people", "userLock")
-        case "space": (space.map { "Members of " + $0 } ?? "Space members", "houseLock")
-        case "everyone": ("Everyone", "users")
-        default: ("Unknown", "hidden")
-        }
+        let (word, glyph) = Phrases.audience(scope, space)
         return HStack(spacing: 6) {
             if glyphs { Image("Glyphs/" + glyph).resizable().frame(width: 18, height: 18).accessibilityHidden(true) }
             Text(word)

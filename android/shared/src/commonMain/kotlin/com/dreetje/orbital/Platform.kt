@@ -80,7 +80,7 @@ interface Platform {
     suspend fun keepGlimpse(read: Glimpse?) {}
     // the tasks assigned to you (Engine.keepTasks), for the launcher's shortcuts on Android; null once they are forgotten.
     // Nothing where the platform has no such place.
-    suspend fun keepTasks(tasks: List<Row>?) {}
+    suspend fun keepTasks(tasks: List<Row>?, pinned: Set<String> = emptySet()) {}
     @Composable fun rememberPhotoPicker(picked: (ByteArray) -> Unit): () -> Unit // a JPEG, 2048 px at most
     @Composable fun EngineView(modifier: Modifier) // the engine's web view: Tana's sign-in while signed out
     @Composable fun ChatGPTSignIn(done: () -> Unit, failed: (String) -> Unit)

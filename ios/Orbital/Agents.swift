@@ -247,7 +247,7 @@ struct HandSheet: View {
 
 extension Engine.HandedTo {
     // its last Agent status line, as the Mac's badge reads it: Assigned is waiting for the agent to pick it up
-    var word: String { ["assigned": "Assigned", "working": "Working", "completed": "Completed", "failed": "Failed"][status] ?? "Assigned" }
+    var word: String { Phrases.agent(status) }
 }
 
 extension Engine {
