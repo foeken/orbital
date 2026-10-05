@@ -18,7 +18,7 @@
   @keyframes mt-pulse { from { transform: scale(1); opacity: .45; } to { transform: scale(2.6); opacity: 0; } }
   .mt-small { font-size: 12px; color: var(--muted); }
 
-  /* hero: a meeting row is clicked, its write-up opens, and what hangs off the meeting lights up beside it */
+  /* hero: a meeting row is clicked, its page opens on your notes, and what hangs off the meeting lights up beside it */
   .mt-hero { --loop: 8s; gap: 34px; }
   .mt-hero .mt-list { width: 250px; }
   .mt-hero .mt-page { width: 430px; display: grid; grid-template-columns: 1fr 138px; gap: 18px; }
@@ -71,7 +71,7 @@
   <header class="hero">
     <p class="eyebrow">Chapter 9</p>
     <h1>Meetings open at their notes</h1>
-    <p class="lead">A meeting in Orbital is the page Tana wrote about it. You open it to read what was decided, change when and where it is, add people, and pin the things you want on the table.</p>
+    <p class="lead">A meeting in Orbital is a page of its own: who can see it and who was invited, your notes that only you can see, and Tana's summary one click away. You open it to write down what matters to you, read what was decided, change when and where it is, add people, and pin the things you want on the table.</p>
     <div class="mg mt-hero" aria-hidden="true">
       <div class="win mt-list">
         <div class="lbl" style="margin-bottom:6px">Upcoming meetings</div>
@@ -85,7 +85,7 @@
           <div class="ttl">Leadership sync</div>
           <div class="mt-field">Attendees <span class="faces"><span class="face" style="--hue:250">R</span><span class="face" style="--hue:150">S</span><span class="face" style="--hue:30">P</span><span class="face" style="--hue:300">T</span></span></div>
           <div class="row"><span class="dot"></span><span class="bar" style="--w:190px"></span></div>
-          <div class="mt-h">Key takeaways</div>
+          <div class="mt-h">Your notes</div>
           <div class="row"><span class="dot"></span><span class="bar" style="--w:170px"></span></div>
           <div class="row"><span class="dot"></span><span class="bar" style="--w:140px"></span></div>
         </div>
@@ -100,32 +100,42 @@
   </header>
 
   <section class="topic">
-    <h2 id="write-up" data-k="summary tagline event forward">A meeting opens at its write-up</h2>
-    <p>After a meeting, Tana writes it up: a short summary, the key takeaways and the decisions, in a document titled after the meeting. Orbital treats that document as the meeting's page. Click a meeting anywhere, on the Timeline, in a search, in a mention or in your pins, and Orbital opens its write-up straight away.</p>
-    <p>You read and edit the write-up like any other page. The meeting's own facts, who can see it and who was invited, sit under the title. Everything else Tana keeps about the meeting (what was pinned to it, the tasks that came out of it, notes written in it) shows in the Graph pane beside it.</p>
+    <h2 id="notes" data-short="Your notes and the summary" data-k="notes private only you summary write-up tagline event open in tana shared">A meeting opens at your notes</h2>
+    <p>Click a meeting anywhere, on the Timeline, in a search, in a mention or in your pins, and its page opens: the meeting's title, who can see the meeting, who was invited, and under them your notes for it. Just start typing. Nothing is made until your first word; then Orbital makes a note for this meeting in Tana that only you can see, and the line over it says so, with a lock: <b>only you can see them</b>. Your notes are not shared with the meeting's attendees.</p>
+    <p>Your notes are an ordinary Tana document of yours. Opened in Tana, their first row links back to the meeting; Orbital leaves that row out on the meeting's page, where you already are. If you share them in Tana, they stay this meeting's notes, and the line says <b>Shared notes</b> and with whom, with no lock.</p>
     <figure class="anno wide">
-      <img data-m="meetings-page" alt="The Leadership sync meeting page, with the Graph pane beside it">
-      <span class="pin" style="--x:22%;--y:13%">1</span>
-      <span class="pin" style="--x:21%;--y:19.3%">2</span>
-      <span class="pin" style="--x:21%;--y:23.6%">3</span>
-      <span class="pin" style="--x:68%;--y:41.2%">4</span>
-      <span class="pin" style="--x:14%;--y:47.5%">5</span>
-      <span class="pin" style="--x:80.5%;--y:11.7%">6</span>
-      <span class="pin" style="--x:82.2%;--y:24.8%">7</span>
-      <span class="pin" style="--x:82.6%;--y:38.3%">8</span>
+      <img data-m="meetings-page" alt="The 1-1 with Sam meeting page with your notes under it, and the Graph pane beside it">
+      <span class="pin" style="--x:17.5%;--y:14.5%">1</span>
+      <span class="pin" style="--x:66.3%;--y:14.6%">2</span>
+      <span class="pin" style="--x:15%;--y:20.8%">3</span>
+      <span class="pin" style="--x:1.1%;--y:26%">4</span>
+      <span class="pin" style="--x:22.6%;--y:23.4%">5</span>
+      <span class="pin" style="--x:24%;--y:29.7%">6</span>
+      <span class="pin" style="--x:80.5%;--y:11.7%">7</span>
+      <span class="pin" style="--x:82.2%;--y:24.8%">8</span>
+      <span class="pin" style="--x:82.6%;--y:38.3%">9</span>
     </figure>
     <ol class="legend">
-      <li><b>Title</b> The write-up's title, which Tana gives it with the write-up.</li>
-      <li><b>Visible to</b> Who can read the meeting. Click it to change who can see it.</li>
-      <li><b>Attendees</b> Who was invited, one per line: colleagues as links, guests by name.</li>
-      <li><b>Summary</b> Tana's few lines on what the meeting was about.</li>
-      <li><b>Key takeaways</b> The write-up itself, with the decisions under it. Edit it like any note.</li>
+      <li><b>Title</b> The meeting's own title, as the calendar has it.</li>
+      <li><b>Open in Tana</b> The Tana logo opens the meeting in Tana's web app. Hover over it, or reach it with <kbd>⇥</kbd>, and it says “Open in Tana”.</li>
+      <li><b>Visible to</b> Who can see the meeting itself. Click it to change who can see it.</li>
+      <li><b>Notes | Summary</b> Shown once Tana has written the meeting up: your notes, or the write-up in their place.</li>
+      <li><b>Who sees this</b> For your notes, “only you can see them” with the lock, or “Shared notes” and with whom. On Summary, who can see the write-up.</li>
+      <li><b>Your notes</b> An outline like any page, made the first time you type.</li>
       <li><b>Pinned</b> Documents and chats pinned to the meeting.</li>
       <li><b>Outcomes</b> Tasks that came out of the meeting.</li>
       <li><b>References</b> Other notes written in the meeting.</li>
     </ol>
-    <div class="note">A meeting on Tana's side is a calendar event with no content of its own. Its write-up is the document whose title is the meeting's "The one where …" line, so a meeting that has not been written up yet opens on its empty event.</div>
-    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>Timeline</b> <i>→</i><kbd>↩</kbd></span>, then click any meeting under <b>Upcoming meetings</b>.</div>
+    <div class="split">
+      <div>
+        <h3>Notes and Summary</h3>
+        <p>After a meeting, Tana writes it up: a short summary, the key takeaways and the decisions, in a document of its own. A meeting that has one shows <b>Notes | Summary</b> over your notes. <b>Summary</b> shows the write-up in their place, on the same page, and the line then says who can see the write-up, as Tana has it for the write-up itself. Read and edit it like any page, if Tana lets you; a write-up you may only read says <b>read only</b>.</p>
+        <p><b>Notes</b> takes you back, with your caret where it was. Whatever you typed is saved to the document you typed it in before the other one takes its place, and looking at the summary never makes notes. The meeting remembers which one you chose until you quit.</p>
+      </div>
+      <figure class="clip"><video data-m="meetings-notes"></video><figcaption>The first words make your notes; <b>Summary</b> shows the write-up and who sees it; <b>Notes</b> again.</figcaption></figure>
+    </div>
+    <div class="note">A meeting on Tana's side is a calendar event with no content of its own, so your notes are a document of their own, linked to the meeting by Orbital. Who can open them is Tana's own sharing, restricted to you when they are made, which Orbital reads back from Tana before it writes your first words. The line over them shows who Tana says can see them.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>Timeline</b> <i>→</i><kbd>↩</kbd></span>, click any meeting under <b>Upcoming meetings</b>, and type a first line.</div>
   </section>
 
   <section class="topic">
@@ -142,7 +152,7 @@
       <div>
         <h3>Join call</h3>
         <p>When the meeting has a video link, <kbd>⌘K</kbd> on its page offers <b>Join call</b>, with the link as its hint. It opens the call in your browser. Orbital takes the first web link in the meeting's location, or else the call link Tana keeps for the meeting.</p>
-        <p><b>Open in Tana</b> opens the same meeting in Tana's web app.</p>
+        <p><b>Open in Tana</b> opens the same meeting in Tana's web app, as the Tana logo beside the title does.</p>
       </div>
       <figure class="shot"><img data-m="meetings-join" alt="⌘K showing Join call with the meeting's link"><figcaption><b>Join call</b> names the link it will open.</figcaption></figure>
     </div>
@@ -258,7 +268,7 @@
       <figure class="shot"><img data-m="meetings-tasklink" alt="A task row in the Library with a meeting glyph after the assignee"><figcaption>The calendar glyph after the assignee links back to the meeting.</figcaption></figure>
     </div>
     <h3>The meeting button in the header</h3>
-    <p>On the task's own page, a calendar button joins the buttons at the top right. It shows while your pointer is over the page, and its tooltip names the meeting. Click it to open the meeting's write-up. The button is never on the write-up itself, since that page is the meeting.</p>
+    <p>On the task's own page, a calendar button joins the buttons at the top right. It shows while your pointer is over the page, and its tooltip names the meeting. Click it to open the meeting.</p>
     <figure class="clip wide"><video data-m="meetings-header"></video><figcaption>From a task to the meeting it came from: the calendar button at the top right.</figcaption></figure>
     <div class="try"><span class="seq">Open a task from a meeting <i>→</i> move the pointer over the page <i>→</i> click the calendar button at the top right</span></div>
   </section>

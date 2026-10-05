@@ -16,10 +16,18 @@ const REC = `(() => { const f = tana.children; tana.children = async (id) => { c
 const real = (panes = 1) => (panes > 1 ? [{ js: REAL }, { js: REAL, page: '2' }] : [{ js: REAL }]);
 const open = (id) => ({ js: "goTo('" + id + "')" });
 const M = 'tana:event:mockmeeting2';
+// 1-1 with Sam: a meeting as Tana keeps one (an event with no content of its own) with a write-up, so its page is your
+// notes with Notes | Summary over them; the notes are written before the shot (main makes them on the first word)
+const W = 'tana:event:mockmeeting4';
+const notes = { js: "tana.meetingNotes('" + W + "', true, 'Ask Sam how the synthetic pilot went').then((n) => tana.insertAfter(n.id, n.blockId, 'Agree on a date for the next review'))" };
 const pal = { sel: '#palette .box, #palette > div', pad: 14 };
 module.exports = [
-  // the meeting page, with the Graph pane beside it
-  { name: 'meetings-page', graph: true, size: '1440x900', setup: [...real(2), open(M), { wait: 2500 }] },
+  // the meeting page: its details, then your notes, with the Graph pane beside it
+  { name: 'meetings-page', graph: true, size: '1440x900', setup: [...real(2), notes, { wait: 500 }, open(W), { wait: 2500 }] },
+  // the first word makes your notes, then Summary shows the write-up in their place, and Notes again
+  { name: 'meetings-notes', video: true, setup: [...real(), open(W), { wait: 1400 }], clip: [0, 0, 1280, 560],
+    steps: [{ click: '#outline .node.draft .text' }, { wait: 300 }, { type: 'Ask Sam how the pilot went', delay: 70 }, { wait: 1400 },
+      { click: '.notes-switch button', text: 'Summary' }, { wait: 1600 }, { click: '.notes-switch button', text: 'Notes' }, { wait: 900 }] },
   // Attendees: five lines, then And 3 more
   { name: 'meetings-attendees', video: true, setup: [...real(), open(M), { wait: 1200 }], clip: [0, 30, 720, 420],
     steps: [{ wait: 600 }, { click: '.fmore' }, { js: "document.querySelector('.fmore')?.click()" }, { wait: 800 }] },
