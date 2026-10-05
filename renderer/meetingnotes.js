@@ -93,6 +93,8 @@ function noteSummaryChanged(docId, info) {
 }
 // The meeting's write-up, when it is the one on screen
 const summaryShown = (eventId) => (!notesOn.has(eventId) && notesWriteUps.get(eventId)) || null;
+// What a meeting's page shows, for ⌘C and the tab's Copy link: its write-up, or your notes once they exist; else null
+const meetingShown = (eventId) => summaryShown(eventId) || (meetingNotes.get(eventId) || {}).id || null;
 // A write-up the sidebar's read found (main/related.js related summaryUri) that the page did not know: Tana writes it
 // after the meeting, so it is shown once it is there, without a restart, unless you are typing in your notes right then.
 function noteWriteUp(eventId, uri) {

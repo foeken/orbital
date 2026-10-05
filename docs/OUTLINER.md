@@ -1317,7 +1317,7 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   (its query asked again, the rows kept in place let go: renderer/pills.js `offerRefresh` tells the shell with the title,
   `{ refresh }`, and the menu posts `{ orbital: 'refresh' }`; not while pills stage an unsaved filter), **Save as new search** on a view with pills such as the Library
   (the Cmd+K row, run in that page; issue #538), **Copy link** on a page showing a node of Tana's (that node's link, not
-  the row with the caret; issue #542), **Delete** on a saved search (the page's ⇧⌘⌫: Tana decides, ⌘Z restores; `{ remove }`, issue #615) and **Rename** when the page's title
+  the row with the caret; issue #542; on a meeting what its page shows, as ⌘C: `meetingShown`), **Delete** on a saved search (the page's ⇧⌘⌫: Tana decides, ⌘Z restores; `{ remove }`, issue #615) and **Rename** when the page's title
   can be typed in (a chat's, agent's or skill's too, where you are its admin or editor, and a type's: their bodies stay
   read-only, only the title is written; a meeting's title stays calendar protected; sdk/node.js `editable(n, me, true)`, issue #540): the shell posts `{ orbital: 'rename' }` and the page shows its heading (`html.renaming`) with its
   words selected until it loses the focus (renderer/document.js `renameTitle`); Cmd+K **Rename** under Current node does the same, with or

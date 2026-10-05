@@ -215,8 +215,8 @@ function paletteRows(q, typed = q) {
     const isMeeting = /^tana:event:/.test(linkId) || (palDoc && palDoc.id === linkId && palDoc.icon === 'meeting');
     // On a meeting's page ⌘C copies what the page shows: its summary, or your notes (renderer/meetingnotes.js), read
     // from the page itself so a key with ⌘K closed does the same; with neither on screen, the meeting.
-    const summary = isMeeting && !tlUri && zoom && zoom.docId === linkId ? summaryShown(linkId) : null;
-    const seen = summary || (isMeeting && !tlUri && zoom && zoom.docId === linkId && (meetingNotes.get(linkId) || {}).id) || null;
+    const onPage = isMeeting && !tlUri && zoom && zoom.docId === linkId;
+    const summary = onPage ? summaryShown(linkId) : null, seen = onPage ? meetingShown(linkId) : null;
     // with ⌘K open the meeting's other links are offered too (meetingLinkRows), each named after what it copies
     const more = isMeeting && !palette.hidden && tana.meetingNotes && tana.summaryUri && tana.meetingInfo;
     const label = seen ? (summary ? 'Copy link to summary' : 'Copy link to notes') : more ? 'Copy link to meeting' : 'Copy link';

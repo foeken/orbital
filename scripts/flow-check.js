@@ -1320,6 +1320,12 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   const notes = []; for (const s of ['5', '6', '7']) notes.push(await p.jsIn(s, 'zoom && zoom.docId'));
   assert.equal(new Set(notes).size, 3, 'each key made a note of its own');
   assert.ok(notes.every((id) => /^tana:text:/.test(id)), 'and opened its page on it');
+  // Copy link in a tab's menu (shell.js) on a meeting copies what its page shows, as ⌘C does: here its summary
+  await p.jsIn('2', 'window.copyText = (text) => { window.__copied = text; }; goTo("mockmeeting4"); 1');
+  await p.waitFor(frame('2') + '.contentDocument.querySelector(".notes-switch [aria-selected=true]")?.textContent === "Summary"', 'the meeting\u2019s summary on screen');
+  await p.js(frame('2') + '.contentWindow.postMessage({ orbital: "copyLink" }, "*")');
+  await p.waitFor(frame('2') + '.contentWindow.__copied', 'the tab\u2019s Copy link');
+  assert.equal(await p.jsIn('2', 'window.__copied'), await p.jsIn('2', 'tana.nodeLink("tana:text:mockwriteup4")'), 'the tab\u2019s Copy link copied the summary');
   for (const s of await sides()) assert.deepEqual(await p.jsIn(s, 'window.__errors'), [], 'page ' + s + ' reported errors');
 });
 
