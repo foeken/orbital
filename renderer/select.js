@@ -29,7 +29,7 @@ function selectAllRows(el) {
   const keys = rowsBeside(el).map(keyOfEl).filter(Boolean);
   if (!keys.length) return false;
   sel = { keys: new Set(keys), anchor: keys[0], focus: keys.at(-1) };
-  leaveText(); applySel();
+  leaveText(); hideToolbar(); applySel(); // the first ⌘A's words had the toolbar up, and leaving the row fires no selectionchange to take it down
   return true;
 }
 function toggleSel(key) {
@@ -127,6 +127,16 @@ async function indentSel(keys, op) {
   sel = { keys: new Set(keys), anchor: keys[0], focus: keys[keys.length - 1] };
   render();
 }
+// ⌘↩ on a selection of rows: every one takes the same checkbox step, no box → empty → ticked → no box (renderer/edit.js
+// cycleCheckboxes), in one write, and the rows stay selected for the next press
+async function cycleSel(keys) {
+  const its = keys.map((k) => items.get(k));
+  if (!its.some(checkable)) return showError(new Error('Checkboxes require writable text rows'));
+  const kept = { keys: new Set(sel.keys), anchor: sel.anchor, focus: sel.focus };
+  await cycleCheckboxes(its);
+  sel = kept;
+  render();
+}
 function selKey(e) { // keys while a selection is active (nothing focused); document nodes: delete/move ignored
   const mod = e.metaKey || e.ctrlKey, keys = selKeys();
   if (!keys.length) return false;
@@ -138,6 +148,7 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   else if (e.key === ' ' && !mod && keys.length === 1) openSelectedRow(items.get(keys[0])); // Space on one selected row zooms into it, or opens what it references or is about
   else if (e.key === 'Enter' && !mod && keys.length === 1 && canEditText(items.get(keys[0])) && !timelineRow(items.get(keys[0])) && (!topListRow(items.get(keys[0])) || typesInto(items.get(keys[0])))) clearSel(keys[0]); // Enter starts editing the selected row, caret at the end — the way a second click on it does
   else if (e.key === 'Enter' && !mod && keys.length === 1 && (topListRow(items.get(keys[0])) || timelineRow(items.get(keys[0])))) openSelectedRow(items.get(keys[0])); // a list or Timeline row that cannot be typed in: Enter goes in, as a second click on it does
+  else if (comboOf(e) === hotkeyFor('toggleDone') && keys.every((k) => items.get(k)?.node.kind === 'block')) cycleSel(keys); // a selection of tasks leaves ⌘↩ to its own row (renderer/tasks.js)
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;

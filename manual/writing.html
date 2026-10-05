@@ -135,9 +135,10 @@
     <h3>Backspace at the start of a row <kbd>⌫</kbd></h3>
     <p>At the start of a row, <kbd>⌫</kbd> works in small steps. First it takes the bullet off. If the row above is empty, that empty row goes. Otherwise the row's words join the row above, with the caret where they meet. An empty row is removed and the caret goes up. Nothing joins across an image, a table, a divider or a reference.</p>
     <h3>Moving the caret</h3>
-    <p><kbd>↑</kbd> and <kbd>↓</kbd> go to the row above or below and try to keep the caret at the same spot across. <kbd>←</kbd> and <kbd>→</kbd> at the edge of a row carry on into the next one. From the first row, <kbd>↑</kbd> goes into the title. <kbd>esc</kbd> leaves the row.</p>
+    <p><kbd>↑</kbd> and <kbd>↓</kbd> go to the row above or below and try to keep the caret at the same spot across. In a row of several lines, a code block too, they first move line by line. <kbd>←</kbd> and <kbd>→</kbd> at the edge of a row carry on into the next one. From the first line of the first row, <kbd>↑</kbd> goes up through the page's fields, the nearest first, and then into the title; <kbd>↓</kbd> walks back down. A title you cannot type in gets a focus ring instead of a caret, and <kbd>↓</kbd> or <kbd>↩</kbd> leaves it again. <kbd>⌥↑</kbd> and <kbd>⌥↓</kbd> keep the Mac's own moves inside a row. <kbd>esc</kbd> leaves the row.</p>
     <p>A new row takes after the row it came from: a bullet makes a bullet, a quote a quote, a numbered row the next number. After a heading or a code block, the next row is plain text.</p>
     <div class="try"><span class="seq">Type a line <i>→</i><kbd>↩</kbd><i>→</i> type another <i>→</i><kbd>⇥</kbd><i>→</i><kbd>⇧⇥</kbd></span></div>
+    <figure class="clip"><video data-m="writing-up"></video><figcaption><kbd>↑</kbd> from a code block's second line to its first, then into the title; <kbd>↓</kbd> walks back in, line by line.</figcaption></figure>
   </section>
 
   <section class="topic">
@@ -181,12 +182,13 @@
       <figcaption>The style menu: <b>Text</b>, <b>Heading 1</b> to <b>Heading 3</b>, <b>Bullet List</b>, <b>Numbered List</b>, <b>Code Block</b> and <b>Quote</b>. The tick marks what the row is now. Use <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>↩</kbd>, or click.</figcaption>
     </figure>
     <p>For a child row, <b>Text</b> stays in the menu but greyed out: in Tana a child has to be a list row. The mark keys work without the toolbar too, on whatever you have selected. <kbd>esc</kbd> hides the toolbar and keeps your selection.</p>
-    <p><kbd>⌘↩</kbd> turns any plain row into a checkbox, and ticks or unticks one that is already a checkbox. On a task it completes the task (see <a href="tasks.html">Tasks</a>).</p>
+    <p><kbd>⌘↩</kbd> turns a plain row into a checkbox, presses again tick it, and a third takes the checkbox off. Select several rows and <kbd>⌘↩</kbd> does the same to all of them: rows without a checkbox get one first, then they are all ticked, then the checkboxes go. On a task it completes the task (see <a href="tasks.html">Tasks</a>).</p>
+    <figure class="clip"><video data-m="writing-checkbox"></video><figcaption><kbd>⌘↩</kbd> on one row gives it a checkbox, then ticks it. With every row selected, the next <kbd>⌘↩</kbd> gives the others one, and the one after ticks them all.</figcaption></figure>
     <div class="try"><span class="seq">Select a word <i>→</i><kbd>⌘B</kbd><i>→</i><kbd>⌘I</kbd></span></div>
   </section>
 
   <section class="topic">
-    <h2 id="slash" data-k="slash command insert block checklist divider table image doc task">The “/” menu</h2>
+    <h2 id="slash" data-k="slash command insert block checklist divider table image doc task meeting">The “/” menu</h2>
     <div class="split flip">
       <div>
         <p>Type <kbd>/</kbd> at the start of an empty row to choose what the row should be. Keep typing to narrow the list, then press <kbd>↩</kbd>.</p>
@@ -194,6 +196,14 @@
         <p>Below the blocks come the things you can create: <b>Doc</b>, <b>Task</b> and the rest of what <b>Create new …</b> offers, with your workspace's own types under their own heading. <b>Task</b> asks for the task's name, makes it, and turns the row into a reference to it, as Tana's own “/” does. <kbd>esc</kbd> goes back to the list.</p>
       </div>
       <figure class="shot"><img data-m="writing-slash" alt="The / menu listing block types"><figcaption>The “/” menu on an empty row.</figcaption></figure>
+    </div>
+    <div class="split">
+      <div>
+        <h3>A meeting from “/”</h3>
+        <p><b>Meeting</b> works like Task, with one more page. Name the meeting and press <kbd>↩</kbd> on <b>Choose when for “…”</b>. The next page shows exactly when it will be before anything is made: <b>Now, for 30 minutes</b> when you type nothing. Type a time to change it: <b>14:00</b>, <b>tomorrow 9:30</b> or <b>fri 10:00-11:30</b> are read on the spot. Other words, like <b>tomorrow from 3-5</b>, offer <b>Read “…” with AI</b>; the row says <b>Reading “…”</b> while the AI reads, and its reading comes back as the row to press, marked <b>read by AI</b>.</p>
+        <p>One <kbd>↩</kbd> makes one meeting, and the row says <b>Creating “…”</b> until it is there, as Task's does. The page says where it goes: <b>In your calendar · nobody is invited</b>. The row becomes a reference to it. <kbd>esc</kbd> goes back a page at a time: to the name, which is kept, then to the list.</p>
+      </div>
+      <figure class="shot"><img data-m="writing-slash-meeting" alt="The when page of a new meeting named Design review, offering now for 30 minutes"><figcaption>Named, then reviewed: now, for half an hour, unless you say otherwise.</figcaption></figure>
     </div>
   </section>
 
@@ -370,7 +380,7 @@
       <tr><td>Move the row up / down</td><td><kbd>⇧⌘↑</kbd> <kbd>⇧⌘↓</kbd></td></tr>
       <tr><td>Fold / unfold</td><td><kbd>⌘↑</kbd> <kbd>⌘↓</kbd></td></tr>
       <tr><td>Remove the row and its children</td><td><kbd>⇧⌘⌫</kbd></td></tr>
-      <tr><td>Checkbox on or off, complete a task</td><td><kbd>⌘↩</kbd></td></tr>
+      <tr><td>Checkbox, ticked, no checkbox; complete a task</td><td><kbd>⌘↩</kbd></td></tr>
       <tr><td>Bold, italic, strikethrough, code</td><td><kbd>⌘B</kbd> <kbd>⌘I</kbd> <kbd>⇧⌘S</kbd> <kbd>⌘E</kbd></td></tr>
       <tr><td>Link to a node</td><td><kbd>@</kbd></td></tr>
       <tr><td>Choose a block type</td><td><kbd>/</kbd> on an empty row</td></tr>

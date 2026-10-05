@@ -6,13 +6,20 @@ titleEl.addEventListener('input', () => { const item = items.get(titleEl.dataset
 titleEl.addEventListener('blur', () => { const item = items.get(titleEl.dataset.key); if (item?.node.draft && !item.busy && !titleEl.textContent) { zoom = null; return dropDraft(item); } flush(titleEl.dataset.key); });
 titleEl.addEventListener('keydown', (e) => {
   const item = items.get(titleEl.dataset.key);
-  if (!titleEl.isContentEditable || !item) return;
+  if (!titleEl.isContentEditable) { // a read-only title, reached by ↑: ↓ and ↩ go back down, Escape leaves it, ⌘K is the document's
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.isComposing) return;
+    if (e.key === 'ArrowDown' || e.key === 'Enter') { const first = fieldValues()[0] || texts()[0]; if (first) { e.preventDefault(); setCaret(first, 0); } }
+    else if (e.key === 'Escape') { e.preventDefault(); titleEl.blur(); }
+    return;
+  }
+  if (!item) return;
   if (e.key === 'Backspace' && (e.metaKey || e.ctrlKey) && e.shiftKey) { e.preventDefault(); removeDocument(item); }
   else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleDone(item); }
   else if (e.key === 'Enter') { e.preventDefault(); flush(item.key); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.blur(); }
   else if (e.key === 'Escape') { e.preventDefault(); dropPending(item.key); titleEl.textContent = item.node.text; titleEl.blur(); }
   else if (e.key === 'ArrowDown' && atEdge(titleEl, 'down')) { const first = fieldValues()[0] || texts()[0]; if (first) { e.preventDefault(); flush(item.key); setCaret(first, 0); } } // down through the fields, then the outline
 });
+titleEl.addEventListener('blur', () => titleEl.removeAttribute('tabindex')); // a read-only title is a stop only while ↑ has it (renderer/edit.js focusAbove)
 // the document Cmd+K context actions apply to: the zoomed one, else the document whose node is focused
 // Rename, on the tab (shell.js) and in Cmd+K: the heading back where a page hides it (a chat), its words selected. Only
 // while it can be typed in: titleEl carries a key then (isContentEditable reads false while it is hidden).
@@ -22,6 +29,11 @@ function renameTitle() {
   titleEl.focus();
   getSelection().selectAllChildren(titleEl);
   return true;
+}
+// The caret going up into a title a tab bar hides (a saved search's, styles.css html.listing): shown as Rename shows it,
+// until the caret leaves it (renderer/app.js), so ↑ never aims at a title that cannot be seen (#764)
+function revealTitle() {
+  if (titleEl.dataset.key && !titleEl.getClientRects().length) document.documentElement.classList.add('renaming');
 }
 function currentDoc() {
   const f = focused(), item = f && items.get(f.key);

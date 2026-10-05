@@ -601,6 +601,18 @@ if (process.env.TANA_MAIN_TEST) {
   // folder is named after the app, so an install still carrying the old name is moved here once (userdata.js).
   app.setPath('userData', userDataDir(app.getPath('appData'), { migrate: true }));
 
+  // orbital:<id> (orbital:tana:text:…), clicked anywhere on this Mac, opens that node here, as it does on the phones
+  // (ios Shell.swift open, android MainActivity). Heard before 'ready': the link that launched the app comes before it.
+  // Only a node id is taken; any page can open such a link, and opening is all it does.
+  let openNode = null, linked = null;
+  app.on('open-url', (e, url) => {
+    e.preventDefault();
+    const id = String(url).slice('orbital:'.length);
+    if (!/^orbital:tana:[a-z-]+:[0-9a-z]{26}$/.test(url)) return;
+    if (openNode) openNode(id); else linked = id;
+  });
+  if (app.isPackaged) app.setAsDefaultProtocolClient('orbital'); // a dev run would take the links from the installed app
+
   app.whenReady().then(async () => {
     if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); // packaged builds carry the icon in the bundle
     // The dock belongs to main, the counting to main/views: the same split refresh already uses through S.refresh.
@@ -613,6 +625,15 @@ if (process.env.TANA_MAIN_TEST) {
     // Notification Center, and its click handler with it, so a click minutes later did nothing. One per macOS id: a
     // banner replaced in place lets go of the one it replaced.
     const onScreen = new Map();
+    // A node opened in the page used last, not all of them; a new window when the last one was closed, or the first
+    // page when it has not loaded yet (a link that launched the app): told once it has, and so listens.
+    openNode = (docId) => {
+      const page = frontPane();
+      if (page) { S.win.show(); S.win.focus(); page.focus(); return page.send('notify:open', docId); }
+      if (!S.windows.size) createWindow();
+      const wc = S.win.shell.webContents, loaded = (_e, isMainFrame) => { const first = !isMainFrame && frontPane(); if (first) { wc.off('did-frame-finish-load', loaded); first.send('notify:open', docId); } };
+      wc.on('did-frame-finish-load', loaded);
+    };
     S.notify = async (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
       if (S.demo || !Notification.isSupported || !Notification.isSupported()) return; // demo mode: nothing real on screen, banners included
       // Auto-translate (#547) covers banners too: their words in the chosen language, never a sensitive node's, and the
@@ -629,15 +650,10 @@ if (process.env.TANA_MAIN_TEST) {
       const key = id || note;
       onScreen.set(key, note);
       note.on('close', () => { if (onScreen.get(key) === note) onScreen.delete(key); });
-      note.on('click', () => { // the page used last, not all of them; a new window when the last one was closed
+      note.on('click', () => {
         if (onScreen.get(key) === note) onScreen.delete(key);
         if (id) clickedEdits.add(id);
-        const page = frontPane();
-        if (page) { S.win.show(); S.win.focus(); page.focus(); return page.send('notify:open', docId); }
-        // a new window: told once its first page has loaded, and so listens
-        createWindow();
-        const wc = S.win.shell.webContents, loaded = (_e, isMainFrame) => { const first = !isMainFrame && frontPane(); if (first) { wc.off('did-frame-finish-load', loaded); first.send('notify:open', docId); } };
-        wc.on('did-frame-finish-load', loaded);
+        openNode(docId);
       });
       note.show();
     };
@@ -646,6 +662,7 @@ if (process.env.TANA_MAIN_TEST) {
     S.session = createTanaSession();
     createMenu();
     createWindow();
+    if (linked) openNode(linked);
     // Closing the last window keeps the app in the Dock, as a Mac app does (Cmd+Q quits); the Dock icon opens a new
     // one, and brings the window forward while there is one. Registered once the first window exists, so a click
     // during launch cannot open a window before the database is.

@@ -96,14 +96,16 @@ function placeCaret(key, offset, preventScroll) {
 function caretNear(keys, i, offset) {
   for (const k of [keys[i], ...keys.slice(0, i).reverse(), ...keys.slice(i + 1)]) if (k && textEl(k)) return placeCaret(k, k === keys[i] ? offset : null);
 }
-// true when the caret sits on the first (up) / last (down) visual line of el
+// true when the caret sits on the first (up) / last (down) visual line of el, measured from where its words start and
+// end: inside its padding and border, so a code block's 6px around its lines is no line of its own (#764)
 function atEdge(el, dir) {
   const sel = getSelection();
   if (!sel.rangeCount) return true;
   const rects = sel.getRangeAt(0).getClientRects();
   if (!rects.length) return true;
-  const r = rects[0], box = el.getBoundingClientRect(), lh = r.height || 20;
-  return dir === 'up' ? r.top - box.top < lh / 2 : box.bottom - r.bottom < lh / 2;
+  const r = rects[0], box = el.getBoundingClientRect(), lh = r.height || 20, cs = getComputedStyle(el), px = (v) => parseFloat(v) || 0;
+  const top = box.top + px(cs.paddingTop) + px(cs.borderTopWidth), bottom = box.bottom - px(cs.paddingBottom) - px(cs.borderBottomWidth);
+  return dir === 'up' ? r.top - top < lh / 2 : bottom - r.bottom < lh / 2;
 }
 
 // ---- render ----

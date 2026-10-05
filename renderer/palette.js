@@ -34,7 +34,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'zoomIn', 'expand', 'collapse',
   'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status',
   'assign', 'assignTo', 'discussWith', 'addToChat',
-  'meetingTime', 'meetingLocation', 'meetingAttendee',
+  'meetingTime', 'meetingDetails', 'meetingLocation', 'meetingAttendee',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
@@ -174,6 +174,7 @@ function paletteRows(q, typed = q) {
     rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date \u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
   }
   rows.push(...meetingRows(palDoc, docGroup)); // Change time / location, Add attendee: on a meeting this user may change (renderer/meeting.js)
+  rows.push(...meetingDetailsRows(palDoc, docGroup)); // Edit meeting details: the same meetings, a time said in your own words and read by the AI (#758)
   // Pin this node onto the meeting I am in, through the event pin the sidebar reads back under Pinned (docs/PINNING.md).
   // The row is listed whenever a real node is on screen, so ⇧⌘K can record
   // a key against it, and says why instead of disappearing when there is no meeting to pin to. Its id is unchanged
@@ -383,11 +384,10 @@ function paletteRows(q, typed = q) {
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
   // A new page starts where you are: main hands it this view and place with its id, before it reads them (main.js starts)
   rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(() => tana.newWindow({ view, place: placeJSON() })) });
-  // a new page opens on the Library, the one place more than one pane may show (#533): a copy of this one would be a second pane on it
-  const openPage = (where) => run(() => tana.splitWindow(where, { view: 'library', place: '{}' }));
-  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'Library, to the right', run: () => openPage('right') });
-  rows.push({ id: 'newTab', group: 'Window', icon: 'createNew', label: 'New tab', hint: 'Beside this page', run: () => openPage('tab') });
-  rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', run: () => openPage('float') }); // "Float" in a pane's menu floats that pane
+  // a new page opens on a new note of its own (#756), never a copy of this place, which would be a second pane on it (#533)
+  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'A new note, to the right', run: () => openNoteIn('right') });
+  rows.push({ id: 'newTab', group: 'Window', icon: 'createNew', label: 'New tab', hint: 'A new note, beside this page', run: () => openNoteIn('tab') });
+  rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', hint: 'A new note', run: () => openNoteIn('float') }); // "Float" in a pane's menu floats that pane
   // With more than one page, the workspace's own moves (shell.js run): Trellis does them, this page only asks
   if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, ...(id === 'closePane' ? { kbd: '⌘W' } : {}), run: () => shellRun(command) }); // ⌘W: the File menu's Close
   // The window's Graph pane (issue #462, renderer/rail.js): opened beside this page on this place, or closed by the shell
@@ -483,7 +483,7 @@ function runAction(id) {
   }
   // The same for Change time, Change location and Add attendee: they are offered once main has said this meeting may be
   // changed, which the closed palette does not ask. Asked for this key only, and the key runs again with the answer (#391).
-  const meeting = palette.hidden && /^meeting(Time|Location|Attendee)$/.test(id) && tana.meetingInfo ? meetingOf(palDoc) : null;
+  const meeting = palette.hidden && /^meeting(Time|Details|Location|Attendee)$/.test(id) && tana.meetingInfo ? meetingOf(palDoc) : null;
   if (meeting && !(meetingCtx && meetingCtx.docId === meeting.id && meetingCtx.info)) {
     const doc = palDoc;
     run(async () => { await loadMeetingCtx(meeting); if (current() && currentDoc()?.id === doc.id) runAction(id); });
@@ -671,6 +671,24 @@ function createNamed(choice, title) {
     addSearch(made); // a saved search is in Cmd+K at once (#141)
     extra.set(made.id, made); closePalette(); openDoc(made.id);
   }).finally(() => { creatingNamed = false; });
+}
+// New tab, New pane and New floating pane (⌘N, ⇧⌘N, ⌥⌘N, #756) each open a new page on a note of its own: a plain document
+// titled "New Note", made in the Library first, then opened in the page with the caret in its first row (edit: true,
+// renderer/edit.js restorePlace). One press makes one note and one page: a press while main answers is the same one, and
+// a held key repeats nothing (renderer/events.js). A note made where no page can open (signed out, a window closing) is
+// kept in the Library and the toast opens it here instead. Demo mode saves nothing, so there the page opens on the
+// Library, as it did before #756.
+let openingNote = false;
+function openNoteIn(where) {
+  if (demoMode) return run(() => tana.splitWindow(where, { view: 'library', place: '{}' }));
+  if (openingNote) return;
+  openingNote = true;
+  return run(async () => {
+    const n = await tana.createDocument('New Note', { kind: 'doc' }), title = n.title ?? n.text ?? 'New Note';
+    extra.set(n.id, { ...n, text: title, hasChildren: true });
+    const page = await tana.splitWindow(where, { view: 'library', place: JSON.stringify({ docId: n.id, nodeId: null, title, icon: n.icon, edit: true }) });
+    if (page === null) showNote('New Note created', false, n.id);
+  }).finally(() => { openingNote = false; });
 }
 // search result / pin: zoom into it wherever it lives (api.node shape -> extra); from = breadcrumb root when not opened in its view
 function openResult(n, from) {

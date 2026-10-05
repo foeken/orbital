@@ -6,6 +6,7 @@ function moveTo(el, dir, offset) {
   const all = caretRows(), target = all[all.indexOf(el) + dir];
   if (!target) { if (dir < 0) focusAbove(el); return; }
   flush(keyOfEl(el));
+  if (target === titleEl) revealTitle();
   setCaret(target, offset);
 }
 
@@ -78,8 +79,8 @@ onRows('keydown', (e) => {
     else if (item.parent?.node?.timeline && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); goTo(item.node.id); } // a task listed under a Timeline entry opens as itself (see render.js)
     else if (!mod && (e.key === ' ' || (e.key === 'Enter' && opensOnClick(item)))) { e.preventDefault(); if (isReference(item.node)) openReference(item.node); else if (zoomable(item.node)) zoomTo(item); } // Space zooms into a read-only row, since typing into it is not an option; a member has no page; Enter opens a type row as its click does; a ⌘ combo is a recorded shortcut's
     else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); }
-    else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
-    else if (e.key === 'ArrowDown' && !mod && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }
+    else if (e.key === 'ArrowUp' && !mod && !e.altKey && !e.isComposing && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
+    else if (e.key === 'ArrowDown' && !mod && !e.altKey && !e.isComposing && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }
     else if (e.key === 'ArrowLeft' && !mod && off === 0 && collapsed) { e.preventDefault(); moveTo(el, -1, Infinity); }
     else if (e.key === 'ArrowRight' && !mod && off === len && collapsed) { e.preventDefault(); moveTo(el, 1, 0); }
     else if (!mod) e.preventDefault(); // every ⌘ combo (⌘K, ⌘S, ⌘F …) is the document handler's to run, as the atomic branch above already does
@@ -109,7 +110,7 @@ onRows('keydown', (e) => {
   else if (e.key === 'Escape') { e.preventDefault(); if (item.node.draft && isDoc) el.textContent = ''; flush(item.key); el.blur(); } // a new document not created yet: Escape throws it away
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); } // multi-select over siblings
   else if (e.key === '@' && (!collapsed || !isDoc)) { const range = collapsed ? [off, off] : selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // a selection links it; a caret in a block inserts a reference there (a title cannot hold one, so "@" is typed)
-  else if (combo === hotkeyFor('toggleDone')) { e.preventDefault(); if (isDoc) toggleDone(item); else toggleCheckbox(item); }
+  else if (combo === hotkeyFor('toggleDone')) { e.preventDefault(); if (isDoc) toggleDone(item); else cycleCheckboxes([item]); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
   else if (e.key === 'Enter' && isDoc && collapsed && (off ?? len) === len && groupDraft(item)) e.preventDefault(); // My Tasks by Responsibility: a new task in this row's section (#548)
   else if (e.key === 'Enter' && isDoc && item.parent && collapsed && (off ?? len) === len && searchDraft(item)) e.preventDefault(); // a saved search of one type: a new row of it, its filter's values set (#537)
@@ -134,8 +135,8 @@ onRows('keydown', (e) => {
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) shiftNode(item, el, 'move', e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (combo === hotkeyFor('collapse')) { e.preventDefault(); setOpen(item, false); }
   else if (combo === hotkeyFor('expand')) { e.preventDefault(); setOpen(item, true); } // an empty node opens onto a draft child
-  else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
-  else if (e.key === 'ArrowDown' && !mod && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }
+  else if (e.key === 'ArrowUp' && !mod && !e.altKey && !e.isComposing && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
+  else if (e.key === 'ArrowDown' && !mod && !e.altKey && !e.isComposing && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }
   else if (e.key === 'ArrowLeft' && off === 0 && collapsed) { e.preventDefault(); moveTo(el, -1, Infinity); }
   else if (e.key === 'ArrowRight' && off === len && collapsed) { e.preventDefault(); moveTo(el, 1, 0); }
 });
@@ -305,7 +306,8 @@ document.addEventListener('keydown', (e) => {
   // ⌘C copies the current node's link, but only with nothing selected: a text selection is the browser's copy to make,
   // and taking it would break copying a few words out of a node. With no document to copy, runAction finds no row and
   // the key falls through on its own.
-  const hotkey = found === 'copyLink' && !getSelection().isCollapsed ? undefined : found;
+  // ⌘N, ⇧⌘N and ⌥⌘N held down open one page on one new note, not one per repeat (#756): a repeat of them is no key at all
+  const hotkey = (found === 'copyLink' && !getSelection().isCollapsed) || (e.repeat && NOTE_PAGES.has(found)) ? undefined : found;
   if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
   else if (mod && (e.key === '0' || (e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')))) { e.preventDefault(); setZoom(e.key === '0' ? BASE_ZOOM : zoomFactor * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)); }
   else if (hotkey === 'search') { e.preventDefault(); togglePalette('search'); } // also while the palette is open: it switches it to search

@@ -29,11 +29,20 @@ module.exports = [
     { type: 'Sam leads onboarding', delay: 60 }, { key: '↩' }, { key: '⇧⇥' },
     { type: 'Book a room', delay: 60 },
   ], clip: { page: '' } },
+  // ↑ from a code block's last line: its first line, then the title (#764); ↓ walks back in
+  { name: 'writing-up', video: true, size: '640x320', setup: [...blank('Release checks'), { type: '```' }, { wait: 300 }, { type: 'npm run lint' }, { key: '⇧↩' }, { type: 'npm run check' }, { wait: 500 }],
+    steps: [{ wait: 300 }, { key: '↑' }, { wait: 700 }, { key: '↑' }, { wait: 1000 }, { key: '↓' }, { wait: 700 }, { key: '↓' }, { wait: 900 }], clip: { page: '' } },
   // markdown typed at the start of a row and inline
   { name: 'writing-markdown', video: true, size: '640x320', setup: blank('Offsite plan'), steps: [
     { type: '## Agenda', delay: 70 }, { key: '↩' },
     { type: 'Keep it **short** and ~~formal~~ friendly', delay: 55 }, { key: '↩' },
     { type: '[] Book the room', delay: 60 },
+  ], clip: { page: '' } },
+  // ⌘↩ cycles a checkbox: on one row, then on every selected row at once
+  { name: 'writing-checkbox', video: true, size: '640x320', setup: blank('Offsite prep'), steps: [
+    { type: 'Book the room', delay: 55 }, { key: '↩' }, { type: 'Order lunch', delay: 55 }, { key: '↩' }, { type: 'Send the agenda', delay: 55 }, { wait: 400 },
+    row('Order lunch'), { key: '⌘↩' }, { wait: 700 }, { key: '⌘↩' }, { wait: 900 },
+    { key: '⌘A' }, { key: '⌘A' }, { wait: 700 }, { key: '⌘↩' }, { wait: 900 }, { key: '⌘↩' }, { wait: 2000 },
   ], clip: { page: '' } },
   // the floating toolbar over a selection: B, then the style menu
   { name: 'writing-toolbar', video: true, size: '640x480', setup: [...doc0, scrollTo('Slots:')], steps: [
@@ -44,6 +53,8 @@ module.exports = [
   { name: 'writing-style', size: '1100x720', setup: [...doc0, scrollTo('Slots:')], steps: [{ js: "T('Slots:').focus(); selectRange(K('Slots:'), 7, 20); 1" }, { wait: 300 }, { js: 'toggleStyleMenu(); 1' }, { wait: 900 }], clip: [0, 38, 760, 480] },
   // "/" on an empty row
   { name: 'writing-slash', size: '640x560', setup: blank('Offsite plan'), steps: [{ type: '/' }, { wait: 400 }], clip: { page: '' } },
+  // "/" Meeting: named, then its when page, offering now for half an hour before anything is made
+  { name: 'writing-slash-meeting', size: '640x560', setup: blank('Offsite plan'), steps: [{ type: '/' }, { wait: 400 }, { type: 'meeting' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'Design review' }, { wait: 300 }, { key: '↩' }, { wait: 600 }], clip: { page: '' } },
   // @ over selected words
   { name: 'writing-link', video: true, size: '640x520', setup: [...doc0, scrollTo('Next steps', 120)], steps: [
     row('Send both slots'), { js: "selectRange(K('Send both slots'), 19, 22); 1" }, { wait: 700 },
@@ -89,8 +100,6 @@ module.exports = [
     { click: 'tr:last-child td:last-child' }, { type: 'Waiting', delay: 70 }, { key: '⌘K' }, { wait: 400 }, { type: 'row', delay: 80 },
   ], clip: { page: '' } },
 ];
-
-
 
 
 

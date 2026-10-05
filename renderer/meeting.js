@@ -132,3 +132,28 @@ function meetingLinkEl(meeting, fact = false) { // fact: one of the row's fact i
   b.onclick = (e) => { e.stopPropagation(); run(() => goTo(meeting.id)); };
   return b;
 }
+// ---- Edit meeting details (#758): one field, the words read by the AI into a day, a start and an end ----
+// Offered where Change time is (a meeting this user may change, not all-day). The words are read only when ↩ asks
+// (api.readMeetingTime: the AI transcribes them, main/meetings.js readTime and resolveTime decide what they come to, on
+// this Mac's clock), and what they came to is shown as the row to press, said to be the AI's reading; only that press writes
+// it, through the same editMeeting as Change time. The page reads nothing else: no people, no place, no invitation.
+let meetingDetailsRead = null; // { words, busy, answer, error } for the page on screen (renderer/toolbar.js readRows)
+function meetingDetailsRows(page, group) {
+  const doc = meetingOf(page), info = meetingCtx && doc && meetingCtx.docId === doc.id ? meetingCtx.info : null; // meetingRows has asked main already
+  if (!info || !info.editable || info.allDay || !tana.readMeetingTime || !tana.editMeeting) return [];
+  return [{ id: 'meetingDetails', group, icon: 'sparkle', label: 'Edit meeting details', hint: 'Say when, in your own words', keepOpen: true, run: openMeetingDetails }];
+}
+function openMeetingDetails() {
+  const docId = meetingCtx && meetingCtx.docId;
+  meetingDetailsRead = null;
+  openPage('meetingDetails', 'When? tomorrow from 3-5, an hour later, for 45 minutes', { back: BACK_TO_COMMANDS, typed: true, rows: (q, typed) => {
+    const info = meetingCtx && meetingCtx.docId === docId ? meetingCtx.info : null, words = String(typed || '').trim(), group = 'Edit meeting details';
+    if (!info) return [];
+    const now = { group, icon: 'calendar', label: meetingSpan(info.start, info.end), hint: 'Now', disabled: true, note: true };
+    // a meeting kept in another zone: what this page shows, and what words mean, is your clock
+    const kept = info.timeZone && info.timeZone !== localZone() ? [{ group, icon: 'globe', label: 'Your time \u00B7 the meeting keeps ' + zoneName(info.timeZone) + ' time', disabled: true, note: true }] : [];
+    if (!words) return [now, ...kept];
+    return [...readRows(meetingDetailsRead, words, group, () => readWords(meetingDetailsRead, (r) => { meetingDetailsRead = r; }, words, docId, 'meetingDetails'),
+      (t) => ({ group, icon: 'calendar', label: meetingSpan(t.start, t.end), hint: '↩ Apply · read by AI', run: () => { if (meetingCtx && meetingCtx.docId === docId) editMeetingNow({ start: t.start, end: t.end }); } })), now, ...kept];
+  } });
+}

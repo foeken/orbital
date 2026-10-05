@@ -94,6 +94,7 @@ html.tabbed.listing:not(.renaming) .titlebar { padding-left: 19px; }
 html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; color: #1c2024; } /* the page title is a heading: the same near-black */
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
+.titlebar h1[tabindex]:not([contenteditable]):focus { outline: none; border-radius: 4px; box-shadow: 0 0 0 2px var(--focus); } /* a read-only title reached by ↑ (renderer/edit.js focusAbove): the ring a field's chips take */
 .titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }
 .pagehead { display: flex; align-items: flex-start; }
 .pagehead[hidden] { display: none; } /* its flex would otherwise win over [hidden] */
@@ -1088,12 +1089,13 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
   left var(--dur-quick) var(--ease-move), top var(--dur-quick) var(--ease-move); }
 .toolbar[hidden] { opacity: 0; transform: translateY(4px) scale(.96); pointer-events: none; transition-timing-function: var(--ease-in); }
 @starting-style { .toolbar:not([hidden]) { opacity: 0; transform: translateY(4px) scale(.96); } }
-.tbtn { position: relative; display: flex; align-items: center; gap: 4px; min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #444; font-size: 15px; cursor: pointer; }
+.tbtn { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #444; font-size: 15px; cursor: pointer; }
 .tbtn:hover { background: #f0f0f0; }
 .tbtn:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 .tbtn.on { background: #e8f1fb; color: #2257a3; }
 .tbtn.b { font-weight: 700; }
-.tbtn.i { font-style: italic; }
+/* a serif italic I: a sans-serif one slants into a bare stroke that reads as "/" */
+.tbtn.i { font-style: italic; font-family: Georgia, 'Times New Roman', serif; font-size: 16px; }
 .tbtn.s { text-decoration: line-through; }
 .tbtn.c { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .tbtn.c svg { width: 13px; height: 13px; display: block; }

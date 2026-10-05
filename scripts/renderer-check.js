@@ -189,7 +189,8 @@ assert.match(source, /const starts = nodes\.findIndex\(\(n\) => \(n\.title \?\? 
 assert.match(source, /palIndex = linkCtx && starts >= 0 && !\(palRows\[0\] && palRows\[0\]\.date\) \? starts \+ palRows\.filter\(\(r\) => r\.create\)\.length : 0;/);
 assert.match(source, /palRows\.find\(\(row\) => row\.create\)/);
 assert.match(source, /tana\.toggleCheckbox\(item\.docId, item\.node\.id\)/);
-assert.match(source, /else toggleCheckbox\(item\)/);
+assert.match(source, /else cycleCheckboxes\(\[item\]\)/, '⌘↩ in a block cycles its checkbox (renderer/edit.js cycleCheckboxes)');
+assert.match(source, /comboOf\(e\) === hotkeyFor\('toggleDone'\) && keys\.every\(.*\)\) cycleSel\(keys\)/, 'and on a selection of blocks, all of them');
 assert.match(source, /const isCheckboxBlock = \(node\) => node\?\.kind === 'block' && node\.done != null/);
 assert.match(source, /function visibleTags\(node\) \{/);
 assert.match(source, /tags\.some\(\(tag\) => tag\.label !== 'task'\) \? tags\.filter\(\(tag\) => tag\.label !== 'task'\) : tags/);
@@ -493,7 +494,7 @@ const DEMO_SAFE = new Set([
   'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
   'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList', 'meetingNotes', // meetingNotes: found only, never made (renderer/state.js)
   'docTypes', 'enableAgent', 'exportPdf', 'filters', 'image', 'inboxUnread', 'installUpdate', 'login', 'logout',
-  'mcpHidden', 'meetingInfo', 'members', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
+  'mcpHidden', 'meetingInfo', 'members', 'readMeetingTime', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
   'onChatGPTStatus', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
   'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
   'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',

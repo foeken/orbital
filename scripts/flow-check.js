@@ -207,6 +207,36 @@ flow('editing keeps the screen and the saved outline the same', async (p) => {
   assert.deepEqual(await same('⌘Z after the delete'), ['alpha', 'beta', '  gamma', 'delta']);
 });
 
+// ⌘↩ cycles a row's checkbox, no box → empty → ticked → no box, and on a selection every row takes the same step
+// (renderer/edit.js cycleCheckboxes), the boxes drawn as saved and one ⌘Z putting a whole step back
+flow('⌘↩ cycles a checkbox on a row and on a selection of rows', async (p) => {
+  await p.start();
+  const id = await p.js("tana.createDocument('Checkbox test').then((n) => { goTo(n.id); return n.id; })");
+  await p.waitFor('document.activeElement && document.activeElement.isContentEditable', 'the caret in the new page');
+  await p.type('one'); await p.key('↩'); await p.type('two'); await p.key('↩'); await p.type('three');
+  const boxes = async (step) => {
+    await p.js('flushAll()'); await settle(p, 450);
+    const saved = await p.js('tana.children(' + J(id) + ').then((rows) => rows.map((r) => r.done ?? null))');
+    const screen = await p.js('[...document.querySelectorAll("#outline .node")].filter((n) => n.querySelector(".text")).map((n) => { const c = n.querySelector(":scope > .line .check"); return c ? (c.checked ? 1 : 0) : null; })');
+    assert.deepEqual(screen, saved, 'the boxes drawn differ from the saved ones after ' + step);
+    return saved;
+  };
+  await p.js('placeCaret(keyOfEl(' + T('two') + '), 1)');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('one ⌘↩'), [null, 0, null], 'an empty box first');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('a second ⌘↩'), [null, 1, null], 'then ticked');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('a third ⌘↩'), [null, null, null], 'then no box');
+  await p.key('⌘↩'); await p.key('⌘↩'); assert.deepEqual(await boxes('two more'), [null, 1, null]);
+  await p.key('⌘a'); await p.key('⌘a'); // the words, then every row
+  await p.waitFor('sel && sel.keys.size === 3', 'the three rows selected');
+  assert.equal(await p.js('document.getElementById("toolbar").hidden'), true, 'the toolbar the first ⌘A raised over the words is gone once the rows are selected');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('⌘↩ on the selection'), [0, 1, 0], 'the rows without a box get one, the ticked one stays ticked');
+  assert.equal(await p.js('sel && sel.keys.size'), 3, 'and the rows stay selected');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('a second ⌘↩ on the selection'), [1, 1, 1], 'then all ticked');
+  await p.key('⌘↩'); assert.deepEqual(await boxes('a third ⌘↩ on the selection'), [null, null, null], 'then no boxes');
+  await p.key('⌘z'); await settle(p, 300);
+  assert.deepEqual(await boxes('⌘Z'), [1, 1, 1], 'one ⌘Z puts the whole step back');
+});
+
 // 5. Focus (#200, #377, #463, #603): the palette and the menus over a row give the caret back where it was
 flow('Cmd+K, / and Escape give the caret back', async (p) => {
   await p.start();
@@ -227,6 +257,65 @@ flow('Cmd+K, / and Escape give the caret back', async (p) => {
 });
 
 // 6. Out of order (#399, #406, #404, #463, #640): an answer for a page you already left never replaces the one you are on
+// 5b. Up from a page's first line (#764): the fields, then the title, by keyboard alone, and down again. A code block's
+// padding once held the caret inside it, a title hidden under a tab bar was aimed at and never reached, and a
+// read-only title sent ↑ from the top field back to the last one.
+flow('↑ from the first line walks the fields to the title, from any row, and ↓ comes back', async (p) => {
+  await p.start();
+  const where = () => p.js('(() => { const a = document.activeElement; return a === document.getElementById("title") ? "title" : a?.closest?.("#fields") ? "field " + a.textContent.replace(/\\u200b/g, "").slice(0, 12) : a?.closest?.("#outline") ? "row " + a.textContent.slice(0, 12) : "none"; })()');
+  const fresh = async (name) => {
+    await p.js('tana.createDocument(' + J(name) + ').then((n) => goTo(n.id))');
+    await p.waitFor('zoom && document.getElementById("title").textContent === ' + J(name) + ' && document.activeElement?.closest?.("#outline")', 'the caret in ' + name);
+  };
+  await fresh('Up note');
+  await p.key('↑'); assert.equal(await where(), 'title', 'a new note with no fields: up from its empty row is its title');
+  await p.key('↓'); assert.equal(await where(), 'row ', 'and down is the row again');
+  await fresh('Code first');
+  await p.type('```'); await p.waitFor('document.activeElement.closest(".node.t-code")', 'a code block');
+  await p.type('let a = 1'); await p.key('⇧↩'); await p.type('let b = 2'); await settle(p, 200);
+  await p.key('↑'); assert.deepEqual([await where(), await p.js('__caret().offset < 10')], ['row let a = 1\nle', true], 'up from a code block\u2019s second line is its first');
+  await p.key('⌥↑'); assert.equal(await where(), 'row let a = 1\nle', '\u2325\u2191 on its first line is the system\u2019s own move, and stays in the block');
+  assert.deepEqual(await p.js('(() => { const a = document.activeElement, kept = a.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", isComposing: true, bubbles: true, cancelable: true })); return [kept, document.activeElement === a]; })()'), [true, true], 'and so is \u2191 while an input method is composing');
+  await p.key('↑'); assert.equal(await where(), 'title', 'and up from its first line, inside its padding, is the title');
+  await p.key('↓'); await p.key('↓'); assert.deepEqual([await where(), await p.js('__caret().offset >= 10')], ['row let a = 1\nle', true], 'down goes back into it, line by line');
+  await fresh('Wrapped code');
+  await p.type('```'); await p.waitFor('document.activeElement.closest(".node.t-code")', 'a code block');
+  await p.type('token '.repeat(40)); await settle(p, 200);
+  const lines = await p.js('(() => { const r = document.createRange(); r.selectNodeContents(document.activeElement); return new Set([...r.getClientRects()].map((b) => Math.round(b.top))).size; })()');
+  assert.ok(lines >= 2, 'the code wraps (' + lines + ' lines)');
+  for (let i = 1; i < lines; i++) { await p.key('↑'); assert.equal(await where(), 'row token token ', 'a wrapped line moves within the block'); }
+  await p.key('↑'); assert.equal(await where(), 'title', 'and its first line up to the title');
+  // a page with fields: up through each, from the one nearest the outline, then the title; down the same way back
+  await p.js('goTo("mockdoc1")'); await p.waitFor('zoom?.docId === "mockdoc1" && document.querySelector("#outline .node .text")', 'mockdoc1');
+  await p.js("tana.related('mockdoc1').then((d) => { relatedBy.set('mockdoc1', d); render(true); return 1; })"); // the mock's ids are not tana: ids, so the page never reads them itself
+  await p.waitFor('fieldValues().length === 7', 'its fields');
+  const fields = await p.js('fieldValues().map((e) => "field " + e.textContent.replace(/\\u200b/g, "").slice(0, 12))');
+  await p.js('setCaret(texts()[0], 0)');
+  const up = []; for (let i = 0; i < 8; i++) { await p.key('↑'); up.push(await where()); }
+  assert.deepEqual(up, [...fields.slice().reverse(), 'title'], 'up from the first row: every field, nearest first, then the title');
+  const down = []; for (let i = 0; i < 8; i++) { await p.key('↓'); down.push(await where()); }
+  assert.deepEqual(down, [...fields, 'row ' + (await p.js('texts()[0].textContent.slice(0, 12)'))], 'down: every field again, then the first row');
+  // the same page in demo mode: its title cannot be typed in, so up from the top field focuses it, and down leaves it
+  await p.js('toggleDemoMode()'); await settle(p, 300);
+  await p.js("tana.related('mockdoc1').then((d) => { relatedBy.set('mockdoc1', d); render(true); return 1; })"); await p.waitFor('fieldValues().length === 7', 'its fields in demo mode');
+  assert.equal(await p.js('document.getElementById("title").isContentEditable'), false, 'demo mode: a title nobody types in');
+  await p.js('setCaret(fieldValues()[0], 0)');
+  await p.key('↑'); assert.equal(await where(), 'title', 'up from the top field is the read-only title, not the last field again');
+  assert.equal(await p.js('getComputedStyle(document.getElementById("title")).boxShadow !== "none"'), true, 'drawn focused, as a field\u2019s chips are');
+  await p.key('↓'); assert.equal(await where(), fields[0], 'down from it is the first field');
+  assert.equal(await p.js('document.getElementById("title").hasAttribute("tabindex")'), false, 'and the title is a stop no longer');
+  await p.js('toggleDemoMode()'); await settle(p, 300);
+  // a saved search under a tab bar names itself on the tab: up shows its title as Rename does, Escape hides it again
+  await p.js('tana.myTasks().then((n) => goTo(n.id))'); await p.waitFor('zoom?.docId?.startsWith("tana:search:") && texts().length', 'My Tasks');
+  await p.js('document.documentElement.classList.add("tabbed"); 1');
+  assert.equal(await p.js('getComputedStyle(document.getElementById("pagehead")).display'), 'none', 'its title is hidden under the tab bar');
+  await p.js('setCaret(texts()[0], 0)');
+  await p.key('↑'); assert.equal(await where(), 'title', 'up from its first row is its title');
+  assert.notEqual(await p.js('getComputedStyle(document.getElementById("pagehead")).display'), 'none', 'shown while the caret is in it');
+  await p.key('esc'); assert.equal(await p.js('getComputedStyle(document.getElementById("pagehead")).display'), 'none', 'and hidden again once it is left');
+  await p.js('document.documentElement.classList.remove("tabbed"); 1');
+});
+
 flow('a slow answer for a page you left does not replace the one you are on', async (p) => {
   await p.start();
   const slow = 'mockdoc0', fast = 'mockdoc3';
@@ -631,7 +720,87 @@ flow('golden path: write on Today\u2019s page with / blocks, @ links and dates',
     { block: null, done: 0, segments: [{ text: 'Buy cake' }] }], 'a heading, a row linking a task and a day, and a checklist row, saved as they read');
 });
 
-// 17b. A meeting's editor is your private notes (renderer/meetingnotes.js, main/meeting-notes.js, docs/MEETINGS.md
+// 17b. "/" Task and Meeting (#602, #755): each named on a page of its own and referenced in the row the "/" was typed in;
+// the meeting's when page shows the exact slot before anything is made, words that read as no time make nothing, Escape
+// walks back to the row, and a second ↩ while one is being made makes nothing more
+flow('golden path: "/" Task and Meeting, named, the meeting\u2019s time reviewed, each referenced in its row', async (p) => {
+  await p.start();
+  await command(p, 'today', 'Today');
+  await p.waitFor('zoom && document.getElementById("title").textContent === localDate()', 'today\u2019s page');
+  const day = await p.js('zoom.docId');
+  await p.js('document.querySelector("#outline .node .text").focus(); placeCaret(keyOfEl(document.querySelector("#outline .node .text")), 0)');
+  // every create counted, and slowed, so a second ↩ lands while the first is still being made
+  await p.js('window.__creates = []; const made = tana.createDocument; tana.createDocument = (title, opts) => { __creates.push([title, opts || null]); return new Promise((r) => setTimeout(r, 400)).then(() => made(title, opts)); }; 1');
+  await p.type('/'); await p.waitFor('palMode === "slash"', 'the / menu'); await p.type('task');
+  await p.waitFor('palRows[palIndex]?.label === "Task"', 'Task offered'); await p.key('↩');
+  await p.waitFor('palMode === "slashTask"', 'the task\u2019s name page'); await p.type('Book the venue'); await p.key('↩'); await p.key('↩');
+  await p.waitFor('palette.hidden && document.activeElement?.closest?.("#outline")', 'the task made and the caret back in its row', 6000);
+  await p.key('↩'); await p.type('/'); await p.waitFor('palMode === "slash"', 'the / menu'); await p.type('meeting');
+  await p.waitFor('palRows[palIndex]?.label === "Meeting"', 'Meeting offered'); await p.key('↩');
+  await p.waitFor('palMode === "slashMeeting"', 'the meeting\u2019s name page'); await p.type('Design review'); await p.key('↩');
+  await p.waitFor('palMode === "slashMeetingWhen"', 'the when page');
+  const slots = await p.js('[0, 1].map((back) => { const s = (Math.floor(Date.now() / 6e4) - back) * 6e4; return meetingSpan(s, s + 18e5); })');
+  const offered = await p.js('[palRows[palIndex].label, palRows[palIndex].hint]');
+  assert.ok(slots.includes(offered[0]) && offered[1] === 'Now, for 30 minutes', 'with nothing typed, now for half an hour is offered, as it would be made: ' + J(offered));
+  await p.type('xyz'); await settle(p, 100);
+  assert.deepEqual(await p.js('palRows.filter((r) => !r.disabled).map((r) => r.label)'), ['Read \u201Cxyz\u201D with AI'], 'words this page cannot read can only be handed to the AI');
+  await p.js("const slow = tana.readMeetingTime; tana.readMeetingTime = (...a) => new Promise((r) => setTimeout(r, 500)).then(() => slow(...a)); 1"); // the AI takes a moment: the row reading the words thinks meanwhile, as every AI row in the palette does
+  await p.key('↩'); await p.waitFor('document.querySelector("#palette .row .ricon.thinking")', 'the reading row\u2019s thinking glyph');
+  await p.waitFor('palRows.some((r) => r.label === "No day or time in those words")', 'the AI\u2019s answer that it is no time');
+  assert.equal(await p.js('!!document.querySelector("#palette .ricon.thinking")'), false, 'and it stops once the AI has answered');
+  assert.deepEqual([await p.js('palMode'), await p.js('__creates.length')], ['slashMeetingWhen', 1], 'and nothing is made');
+  await p.key('esc'); await p.waitFor('palMode === "slashMeeting" && palInput.value === "Design review"', 'Escape back to the name, kept');
+  await p.key('esc'); await p.waitFor('palMode === "slash"', 'Escape back to the menu');
+  await p.key('esc'); await p.waitFor('palette.hidden && document.activeElement?.textContent === "/"', 'Escape back to the row, the caret in it');
+  await p.key('⌫'); await p.type('/'); await p.waitFor('palMode === "slash"', 'the / menu again'); await p.type('meeting'); await p.waitFor('palRows[palIndex]?.label === "Meeting"', 'Meeting offered'); await p.key('↩');
+  await p.type('Design review'); await p.key('↩'); await p.waitFor('palMode === "slashMeetingWhen"', 'the when page');
+  await p.type('tomorrow 14:00-15:00'); await settle(p, 100);
+  const typed = await p.js('new Date(parseDay("tomorrow") + "T14:00").getTime()');
+  assert.deepEqual(await p.js('[palRows[palIndex].label, palRows[palIndex].hint]'), [await p.js('meetingSpan(' + typed + ', ' + (typed + 36e5) + ')'), '\u21A9 Create'], 'the slot typed, shown before it is made');
+  await p.js('palInput.value = ""; palInput.dispatchEvent(new Event("input"))'); await p.type('tomorrow from 3-5');
+  await p.key('↩'); await p.waitFor('palRows[palIndex]?.hint === "\u21A9 Create \u00B7 read by AI"', 'the AI\u2019s reading, shown before it is made');
+  const start = await p.js('new Date(parseDay("tomorrow") + "T15:00").getTime()');
+  assert.equal(await p.js('palRows[palIndex].label'), await p.js('meetingSpan(' + start + ', ' + (start + 72e5) + ')'), 'tomorrow from 3-5 is the afternoon');
+  await p.key('↩'); await p.key('↩');
+  await p.waitFor('palette.hidden && document.activeElement?.closest?.("#outline")', 'the meeting made and the caret back in its row', 6000);
+  await p.js('flushAll()'); await settle(p, 500);
+  assert.deepEqual(await p.js('__creates'), [['Book the venue', { kind: 'task' }], ['Design review', { kind: 'meeting', start, end: start + 72e5 }]], 'one task and one meeting, the meeting at the time shown and with nobody on it');
+  const saved = await p.js('tana.children(' + J(day) + ').then((rows) => rows.map((n) => n.segments.map((s) => (s.mention ? s.mention.label : s.text))))');
+  assert.deepEqual(saved, [['Book the venue'], ['Design review']], 'each row is the reference to what it made, saved');
+  assert.equal(await p.js('tana.children(' + J(day) + ').then((rows) => rows[1].segments[0].mention.icon)'), 'meeting', 'the meeting’s with its glyph');
+  const meeting = await p.js('tana.children(' + J(day) + ').then((rows) => tana.node(rows[1].segments[0].mention.uri)).then((n) => n.start)');
+  assert.equal(meeting, new Date(start).toISOString(), 'and the meeting starts when it said');
+});
+
+// 17c. Edit meeting details (#758): ⌘K on a meeting you may change, one field, read by the AI only when ↩ asks (the mock
+// stands in for it), its reading shown beside the meeting as it is and written only when pressed; Escape goes back to the
+// commands and the caret comes back
+flow('golden path: Edit meeting details reads "tomorrow from 3-5" and applies it only when pressed', async (p) => {
+  await p.start();
+  await p.js("goTo('mockmeeting2')"); await at(p, 'mockmeeting2');
+  const was = await p.js('tana.meetingInfo("mockmeeting2").then((m) => [m.start, m.end, m.attendees.length])');
+  await command(p, 'edit meeting details', 'Edit meeting details');
+  await p.waitFor('palMode === "meetingDetails"', 'its one field');
+  await p.type('xyz'); await p.key('↩');
+  await p.waitFor('palRows.some((r) => r.label === "No day or time in those words")', 'the AI\u2019s answer that it is no time');
+  await p.key('esc'); await p.waitFor('palMode === "cmd"', 'Escape back to the commands');
+  await p.key('esc'); await p.waitFor('palette.hidden', 'and closed');
+  await command(p, 'edit meeting details', 'Edit meeting details');
+  await p.js("const slow = tana.readMeetingTime; tana.readMeetingTime = (...a) => new Promise((r) => setTimeout(r, 500)).then(() => slow(...a)); 1");
+  await p.type('tomorrow from 3-5'); await p.key('↩');
+  await p.waitFor('document.querySelector("#palette .row .ricon.thinking")', 'the reading row\u2019s thinking glyph');
+  await p.waitFor('palRows[palIndex]?.hint === "\u21A9 Apply \u00B7 read by AI"', 'the AI\u2019s reading, to review');
+  assert.equal(await p.js('!!document.querySelector("#palette .ricon.thinking")'), false, 'nothing thinks once it has read');
+  const start = await p.js('new Date(parseDay("tomorrow") + "T15:00").getTime()');
+  assert.equal(await p.js('palRows[palIndex].label'), await p.js('meetingSpan(' + start + ', ' + (start + 72e5) + ')'), 'tomorrow from 3-5 is tomorrow afternoon');
+  assert.deepEqual(await p.js('tana.meetingInfo("mockmeeting2").then((m) => [m.start, m.end, m.attendees.length])'), was, 'nothing changes while it is only shown');
+  await p.key('↩');
+  await p.waitFor('palette.hidden', 'the palette closed on the press');
+  await p.waitFor('tana.meetingInfo("mockmeeting2").then((m) => m.start === ' + start + ')', 'the meeting moved');
+  assert.deepEqual(await p.js('tana.meetingInfo("mockmeeting2").then((m) => [m.start, m.end, m.attendees.length])'), [start, start + 72e5, was[2]], 'to the time shown, and nobody added');
+});
+
+// 17d. A meeting's editor is your private notes (renderer/meetingnotes.js, main/meeting-notes.js, docs/MEETINGS.md
 // "Private notes"): the meeting stays the page, write-up or not, and nothing is made by opening it; its first words
 // make notes only you can see, and the rest is any outline. Tana slow or refusing keeps each meeting's words in its own
 // row, an answer landing after you moved on changes nothing on screen, and notes shared in Tana stop being the editor.
@@ -677,6 +846,14 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
   await p.js('tana.setText(' + J(notes) + ', meetingNotes.get("mockmeeting4").reference.id, [{ text: "Open the meeting in Tana", marks: { link: meetingNotes.get("mockmeeting4").reference.link } }])');
   await open('mockmeeting4');
   assert.deepEqual(await p.js('__screen()'), ['Synthetic first thought', 'Synthetic second thought'], 'as it was written: hidden again');
+  // ↑ from the notes' first row leaves them for the meeting above (#764): its fields or its title, never the row the page
+  // does not draw; ↓ comes back to that first row
+  await p.js('setCaret(texts()[0], 0)');
+  assert.equal(await p.js('texts()[0].textContent'), 'Synthetic first thought', 'the first row the caret can reach is your own');
+  await p.key('↑');
+  assert.equal(await p.js('(() => { const a = document.activeElement; return a === document.getElementById("title") || !!a?.closest?.("#fields"); })()'), true, 'up from the notes is the meeting');
+  await p.key('↓');
+  assert.equal(await p.js('document.activeElement === ' + T('Synthetic first thought')), true, 'and down is the notes’ first row again');
   // Offsite: your notes already there are its editor, used as they are
   await open('mockmeeting5');
   await p.waitFor(T('Bring the synthetic agenda'), 'your notes on Offsite');
@@ -924,14 +1101,18 @@ flow('golden path: a list row is picked up by its words until it is selected', a
   assert.deepEqual(await p.js('[__caret().key, __caret().editable]'), [key, true], 'it goes into the words instead');
 });
 
-// main.js window:split does. ⌘↩ on a search result opens it in a new tab, ⇧↩ in a pane beside, ⇧⌘N a new pane on the
-// Library; the keys stay with the page just opened, and every page keeps its own place.
+// main.js window:split does. ⌘↩ on a search result opens it in a new tab, ⇧↩ in a pane beside; ⇧⌘N, ⌘N and ⌥⌘N a pane, a
+// tab and a floating pane each on a new note of its own (#756), a held key making one; the keys stay with the page just
+// opened, and every page keeps its own place.
 const TWO_PANES = { schema: 1, root: { kind: 'split', id: 'split-m', axis: 'x', weights: [0.55, 0.45], children: [{ kind: 'panel', id: 'panel-a', views: ['page'], selected: 'page' },
   { kind: 'panel', id: 'panel-b', views: ['page2'], selected: 'page2' }] }, floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2' } } } };
 // On the mock a page has no preload to give it its id, so every page reads the one 'view' and 'place': the page about
 // to open gets them written just before, as manual/scenes/kit.js live() does
 const SHELL_API = 'if (window === top) { let seq = 2; window.shell = { state: () => ({ doc: ' + J(TWO_PANES) + ', theme: "light" }), onCommand: (cb) => { window.shellCmd = cb; }, layout() {} };'
-  + ' window.orbOpen = (where, start, from) => { const id = String(++seq); localStorage.setItem("view", start.view || "library"); localStorage.setItem("place", start.place || "{}"); window.shellCmd("open", { id, where, from, focus: true }); return id; }; }';
+  + ' window.orbOpen = (where, start, from) => { const id = String(++seq); window.lastStart = start; localStorage.setItem("view", start.view || "library"); localStorage.setItem("place", start.place || "{}"); window.shellCmd("open", { id, where, from, focus: true }); return id; }; }';
+// Each page runs a mock of its own, so a note one page made is unknown to the page opened on it; main, which both share
+// in the app, would have it. The new page is handed that one note's node, as main would answer it.
+const NOTE_FROM_OPENER = 'const pl = JSON.parse((parent.lastStart && parent.lastStart.place) || "{}"); if (pl.edit) { const o = tana.node; tana.node = async (id) => (id === pl.docId ? { id, title: pl.title, kind: "document", icon: "doc", editable: true, hasChildren: true } : o(id)); }';
 flow('golden path: open pages in tabs and panes, each keeping its own place', async (p) => {
   await p.beforeLoad(SHELL_API);
   await p.open('shell.html');
@@ -945,7 +1126,7 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
       if (signed.has(s)) continue;
       signed.add(s);
       await p.waitFor(frame(s) + '?.contentDocument?.readyState === "complete" && typeof ' + frame(s) + '.contentWindow.goTo === "function"', 'page ' + s + ' to load', 8000);
-      for (let i = 0; ; i++) { try { await p.jsIn(s, 'tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, ' + J(s) + '); document.getElementById("login")?.click(); 1'); break; } catch (e) { if (i > 20) throw e; await p.sleep(50); } }
+      for (let i = 0; ; i++) { try { await p.jsIn(s, 'tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, ' + J(s) + '); ' + NOTE_FROM_OPENER + '; document.getElementById("login")?.click(); 1'); break; } catch (e) { if (i > 20) throw e; await p.sleep(50); } }
       await p.waitFor(frame(s) + '.contentDocument.querySelector("#outline .node, #outline .empty") && ' + frame(s) + '.contentDocument.getElementById("title").textContent', 'page ' + s + ' drawn', 8000);
     }
   };
@@ -967,9 +1148,26 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   await pages(4);
   await p.key('⇧⌘N');
   await pages(5);
-  assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['Library']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on the Library');
-  assert.equal(await keysIn(), '5', 'the keys went with the new pane');
-  assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'Library' }, 'every page kept its own place');
+  await p.waitFor(frame('5') + '.contentDocument.getElementById("title").textContent === "New Note"', 'the new pane on its note');
+  assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['New Note']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on a new note');
+  // the shell gives a new pane the keys once its frame has loaded (shell.js open), a moment after it is drawn
+  await p.waitFor('new URL(document.activeElement.src).searchParams.get("side") === "5"', 'the keys to go with the new pane');
+  await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret in the new note');
+  // the window can lose and regain focus as the shell lays the pane out: coming back with nothing focused, the note
+  // it opened on gets the caret back (renderer/edit.js caretBack)
+  await p.jsIn('5', 'document.activeElement.blur(); dispatchEvent(new FocusEvent("focus")); 1');
+  await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret back in the new note');
+  assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'New Note' }, 'every page kept its own place');
+  await p.key('⌘N', 4, true); // held: the first press and three repeats
+  await pages(6); await p.sleep(800);
+  assert.equal((await sides()).length, 6, 'a held ⌘N opens one tab');
+  assert.deepEqual((await tabs()).at(-1), ['New Note', 'New Note'], 'beside the page that asked, on a new note');
+  await p.key('⌥⌘N');
+  await pages(7);
+  await p.waitFor(frame('7') + '.contentDocument.getElementById("title").textContent === "New Note"', 'the floating pane on its note');
+  const notes = []; for (const s of ['5', '6', '7']) notes.push(await p.jsIn(s, 'zoom && zoom.docId'));
+  assert.equal(new Set(notes).size, 3, 'each key made a note of its own');
+  assert.ok(notes.every((id) => /^tana:text:/.test(id)), 'and opened its page on it');
   for (const s of await sides()) assert.deepEqual(await p.jsIn(s, 'window.__errors'), [], 'page ' + s + ' reported errors');
 });
 
@@ -1028,11 +1226,12 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
       for (const end = Date.now() + ms; Date.now() < end; await sleep(40)) if (await js('!!(' + expression + ')')) return;
       throw new Error('timed out waiting for ' + (what || expression));
     };
-    const key = async (combo, times = 1) => {
+    // held: the first press and then repeats (e.repeat), as a key held down sends them, with one key-up at the end
+    const key = async (combo, times = 1, held = false) => {
       const k = parseKey(combo), b = { key: k.key, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode, modifiers: k.mods };
       for (let i = 0; i < times; i++) {
-        await send('Input.dispatchKeyEvent', { type: k.text ? 'keyDown' : 'rawKeyDown', ...b, ...(k.text ? { text: k.text, unmodifiedText: k.text } : {}) });
-        await send('Input.dispatchKeyEvent', { type: 'keyUp', ...b });
+        await send('Input.dispatchKeyEvent', { type: k.text ? 'keyDown' : 'rawKeyDown', ...b, ...(k.text ? { text: k.text, unmodifiedText: k.text } : {}), ...(held && i > 0 ? { autoRepeat: true } : {}) });
+        if (!held || i === times - 1) await send('Input.dispatchKeyEvent', { type: 'keyUp', ...b });
       }
       await sleep(60);
     };

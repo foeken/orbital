@@ -6,7 +6,7 @@ const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi())
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
 const DEMO_WRITES = new Set(['sendChat', 'askAgent', 'deleteAgentAsk', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
-  'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
+  'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox', 'cycleCheckboxes',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
   'insertImage', 'insertTable', 'insertAfter', 'insertBefore', 'split', 'join', 'insertChild', 'pasteMarkdown', 'removeMany', 'moveMany', 'indentMany',
   'outdentMany', 'remove', 'indent', 'outdent', 'move', 'moveTo', 'insertMention', 'pin', 'unpin', 'pinTo', 'unpinFrom', 'setSensitive',
@@ -81,6 +81,7 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // and brackets and \ with ⇧ or ⌥; while there are panes they are taken before a row sees them (renderer/palette.js).
 // Close pane has no key of its own: ⌘W closes the pane in front (the File menu).
 const DEFAULT_HOTKEYS = { openSettings: '⌘,', createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌃⌘N', newTab: '⌘N', splitView: '⇧⌘N', floatPane: '⌥⌘N', otherPane: '⌘/', previousPane: '⇧⌘/', maximizePane: '⌥⌘↓', overview: '⌥⌘↑', zoomBack: '⌥⌘[', zoomForward: '⌥⌘]', nextTab: '⇧⌘]', previousTab: '⇧⌘[', goHome: '⇧⌘H' }; // "Focus graph" and "Show/Hide graph" are palette rows with no default key
+const NOTE_PAGES = new Set(['newTab', 'splitView', 'floatPane']); // the rows whose page opens on a new note (#756): their key, held, makes one
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 // A header button's tooltip: what it does and, when it has one, the key that does the same. The label and row id stay
 // on the button so hovering can read the key again (renderer/edit.js), since a key recorded later changes it.
