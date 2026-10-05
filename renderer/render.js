@@ -923,6 +923,7 @@ function nodeEl(node, docId, parent) {
   }
   body.append(text);
   if (node.join && tana.openExternal && tana.nodeLink) body.append(timelineJoinEl(node)); // a meeting to come or under way, on the Timeline
+  if (node.timeline?.free && !node.timeline.free.until) body.append(timelinePlanEl()); // no meetings left today
   const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? node.timeline.time ?? timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : demoMeta(display, display.meta); // a notification says when it came in, a proposal when it was made
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
@@ -1042,6 +1043,7 @@ function nodeEl(node, docId, parent) {
       if (emptyToday) { const empty = document.createElement('span'); empty.className = 'tl-empty'; empty.textContent = 'All done - '; wrap.append(empty); }
       wrap.append(timelineAddMoreEl(node, emptyToday));
     }
+    if (node.timeline?.upcoming) wrap.append(timelineNewMeetingEl());
     el.append(wrap);
   }
   return el;

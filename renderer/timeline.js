@@ -39,6 +39,7 @@ function timelineDay(key) {
   return new Date(key + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 }
 function timelineGroups(list) {
+  list = timelineNoMeetings(list);
   const days = [];
   for (const n of list) { const key = dayKey(n.createdAt); const last = days.at(-1); if (last && last.id === key) last.nodes.push(n); else days.push({ id: key, nodes: [n] }); }
   return days.map((g) => ({ ...g, title: timelineDay(g.id), collapsed: timelineFolded.has(g.id),
@@ -46,10 +47,21 @@ function timelineGroups(list) {
 }
 // The rule closes the blocks at the top — Today's Tasks, then the free time and Upcoming meetings when there are any — before the history
 const timelineTopEnds = (n, next) => !!(n.timeline?.today || n.timeline?.free || n.timeline?.upcoming) && !(next?.timeline?.free || next?.timeline?.upcoming);
+// No meetings left today: main sends neither the free time nor Upcoming meetings, so the page says so itself under
+// Today's Tasks, with Plan one after it (timelinePlanEl). The desktop's own row: the phones read the same page from
+// main/timeline.js and leave the day without one.
+function timelineNoMeetings(list) {
+  const i = list.findIndex((n) => n.timeline?.today);
+  if (i < 0 || list.some((n) => n.timeline?.free || n.timeline?.upcoming)) return list;
+  const none = { id: TIMELINE_PAGE + ':free', text: 'No more meetings today', kind: 'block', block: 'bullet', icon: 'free', editable: false, hasChildren: false, children: [],
+    createdAt: list[i].createdAt, unread: false, timeline: { uri: null, time: '', tone: 'new', free: { from: 0, until: 0 } } };
+  return [...list.slice(0, i + 1), none, ...list.slice(i + 1)];
+}
 // The free time before the next meeting (main/timeline.js pageOf): "No meetings for 44 more minutes", in whole minutes
 // rounded up, counted down while the page is on screen; the page is read again once the meeting starts, which takes
 // the row away. During a meeting it is the gap after it: "No meetings for 30 minutes after this one".
 function timelineFreeSegs({ from, until }) {
+  if (!until) return [{ text: 'No more meetings today' }]; // timelineNoMeetings
   const later = from > Date.now(), more = later ? '' : 'more ';
   const m = Math.max(1, Math.ceil((until - Math.max(Date.now(), from)) / 6e4)), h = Math.floor(m / 60);
   const unit = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
@@ -116,6 +128,31 @@ function timelineAddMoreEl(node, inline = false) {
   el.setAttribute('aria-label', 'Add more tasks pinned to today');
   el.onmousedown = (e) => e.preventDefault();
   el.onclick = () => openTodayTaskSearch(node);
+  return el;
+}
+// New meeting under today's meetings, and Plan one when none are left: ⌘K's Create new … → Meeting at its name
+// (renderer/palette.js openNamePage), which goes on to when.
+function openNewMeeting() {
+  run(async () => {
+    if (!creationChoices.length) creationChoices = (await tana.creationOptions()).options || [];
+    const meeting = creationChoices.find((c) => c.kind === 'meeting');
+    if (meeting) openNamePage(meeting); else openCreationPalette();
+  });
+}
+function timelineNewMeetingEl() {
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'gmore tl-add'; el.textContent = 'New meeting';
+  el.onmousedown = (e) => e.preventDefault();
+  el.onclick = openNewMeeting;
+  return el;
+}
+// " · Plan one" after "No more meetings today", in the row's own words: its click is the link's, not the row's
+function timelinePlanEl() {
+  const el = document.createElement('span'), b = document.createElement('button');
+  el.className = 'tl-plan'; el.append(' · ', b);
+  b.type = 'button'; b.className = 'gmore tl-add-inline'; b.textContent = 'Plan one'; b.setAttribute('aria-label', 'Plan a meeting');
+  b.onmousedown = (e) => e.preventDefault();
+  b.onclick = (e) => { e.stopPropagation(); openNewMeeting(); };
   return el;
 }
 const timelineTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }); // a column of times: 24-hour, so they line up

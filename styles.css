@@ -1075,6 +1075,8 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .gmore.tl-older { margin: 18px 0 8px; padding-left: 127px; } /* under the rail, in line with the entries' words */
 .gmore.tl-add { padding-left: 6px; } /* inside the today row, aligned with task titles */
 .gmore.tl-add-inline { display: inline-block; margin: 0; padding: 0; }
+.tl-plan { color: var(--muted); }
+.tl-plan .gmore { font-size: inherit; } /* Plan one reads as the rest of its row */
 .tl-empty { color: var(--muted); font-size: 14px; }
 .gmore:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); border-radius: 3px; }
 /* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
