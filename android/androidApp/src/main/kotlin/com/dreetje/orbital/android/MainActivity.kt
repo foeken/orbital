@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
             engine.reveal = !engine.reveal
             window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         }
-        val start = if (savedInstanceState == null) Start(intent.getStringExtra("zoom"), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false), intent.getBooleanExtra("menu", false)) else Start()
+        val start = if (savedInstanceState == null) Start(zoom(intent), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false), intent.getBooleanExtra("menu", false)) else Start()
         if (savedInstanceState == null) tick(intent)
         setContent { OrbitalApp(engine, start) }
     }
@@ -50,10 +50,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        holder.engine.widget = intent.getStringExtra("zoom") ?: "add".takeIf { intent.getBooleanExtra("add", false) }
+        holder.engine.widget = zoom(intent) ?: "add".takeIf { intent.getBooleanExtra("add", false) }
             ?: "timeline".takeIf { intent.hasExtra("tick") || intent.data?.schemeSpecificPart == "timeline" }
         tick(intent)
     }
+
+    // the node to open: a widget's zoom, or an orbital:<id> link from anywhere (only a node id, as Shell.swift takes it)
+    private fun zoom(intent: Intent) = intent.getStringExtra("zoom")
+        ?: intent.data?.takeIf { it.scheme == "orbital" }?.schemeSpecificPart?.takeIf { Regex("tana:[a-z-]+:[0-9a-z]{26}").matches(it) }
 
     // a widget's task box (Widgets.kt Tick): the task set as the widget asked and written to Tana at once, the engine
     // waiting for Tana on a cold start

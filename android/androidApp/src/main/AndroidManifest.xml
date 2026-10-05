@@ -29,6 +29,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- orbital:<id> (orbital:tana:text:…) from anywhere opens that node, as on the iPhone and the Mac -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="orbital" />
+            </intent-filter>
         </activity>
         <!-- shared to Orbital: words or an image, opened in Quick Add (the iPhone's Share extension). It runs in the
              sharing app's task with no screen of its own (no task of ours to join: taskAffinity ""), leaves what was
