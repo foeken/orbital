@@ -101,7 +101,10 @@ From fastest to slowest. Each catches what the one before it cannot.
 3. **iPhone UI tests** (about a minute, `ios/OrbitalUITests`). The app on `-sample`, driven by the labels VoiceOver reads; the
    scheduled checks run them on a simulator on main. `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
    build's stand-in for a Tana that never answers) with `-patience 3`, and expects Can't reach Tana in place of a Timeline
-   that builds itself for good; Android's `EngineTest` drives the same on virtual time. `scripts/ios-engine-check.js`
+   that builds itself for good; Android's `EngineTest` drives the same on virtual time. `VisibleToTests` opens a note for
+   each audience in `pages-sample.json` (`-zoom`), at the default and an accessibility text size, and measures the gap
+   between the Visible to glyph and its word in the row as drawn: a SwiftUI `Label` in a List row had put the glyph in the
+   list's icon column, about 20 pt from its word (#753). `scripts/ios-engine-check.js`
    covers the engine, and the desktop code it bundles, in `npm run check`, among it every list the phones ask for (ios/engine/listed.js): your hidden titles, Hide MCP and the settings document stay out of it, as main/views.js listFilter keeps them out on the Mac, where the phones once showed Block and Lunch in Upcoming meetings.
 4. **The running app**, only for what the mock cannot reach: main's live subscriptions, real Tana answers, a restart.
    Read-only first (`node scripts/platform-cli.js`), escalated. Say in the PR what was and was not tried there.

@@ -140,7 +140,7 @@ data class Access(
 @Serializable data class Sent(val id: String, val warning: String? = null)
 
 // pages-sample.json: invented saved searches and pages for -sample
-@Serializable data class Sample(val searches: List<Row> = emptyList(), val pages: Map<String, Page> = emptyMap())
+@Serializable data class Sample(val searches: List<Row> = emptyList(), val pages: Map<String, Page> = emptyMap(), val access: Map<String, Access> = emptyMap())
 
 class Failure(message: String) : Exception(message)
 

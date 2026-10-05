@@ -387,6 +387,255 @@
     }
    ],
    "sensitive": true
+  },
+  "tana:text:000000000000000000000000v1": {
+   "id": "tana:text:000000000000000000000000v1",
+   "title": "Notes to self",
+   "kind": "text",
+   "rows": [
+    {
+     "id": "v1r1",
+     "segments": [
+      {
+       "text": "Questions to ask before the offsite"
+      }
+     ]
+    }
+   ]
+  },
+  "tana:text:000000000000000000000000v2": {
+   "id": "tana:text:000000000000000000000000v2",
+   "title": "Shared draft",
+   "kind": "text",
+   "rows": [
+    {
+     "id": "v2r1",
+     "segments": [
+      {
+       "text": "Rough outline, still moving"
+      }
+     ]
+    }
+   ]
+  },
+  "tana:text:000000000000000000000000v3": {
+   "id": "tana:text:000000000000000000000000v3",
+   "title": "Team handbook",
+   "kind": "text",
+   "rows": [
+    {
+     "id": "v3r1",
+     "segments": [
+      {
+       "text": "How we plan, review and ship"
+      }
+     ]
+    }
+   ]
+  },
+  "tana:text:000000000000000000000000v4": {
+   "id": "tana:text:000000000000000000000000v4",
+   "title": "Company holidays",
+   "kind": "text",
+   "rows": [
+    {
+     "id": "v4r1",
+     "segments": [
+      {
+       "text": "The office is closed between the holidays"
+      }
+     ]
+    }
+   ]
+  },
+  "tana:text:000000000000000000000000v5": {
+   "id": "tana:text:000000000000000000000000v5",
+   "title": "Imported note",
+   "kind": "text",
+   "rows": [
+    {
+     "id": "v5r1",
+     "segments": [
+      {
+       "text": "Brought over from an older notebook"
+      }
+     ]
+    }
+   ]
+  },
+  "tana:text:000000000000000000000000v6": {
+   "id": "tana:text:000000000000000000000000v6",
+   "title": "Interview loop",
+   "kind": "text",
+   "rows": [
+    {
+     "id": "v6r1",
+     "segments": [
+      {
+       "text": "Two rounds, one take-home"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "access": {
+  "tana:text:00000000000000000000000d01": {
+   "title": "Offsite planning",
+   "me": "tana:user-profile:000000000000000000000000me",
+   "task": false,
+   "assignees": [],
+   "audience": "space",
+   "people": [],
+   "hidden": [],
+   "restricted": false,
+   "participants": [],
+   "rules": [
+    "me",
+    "people",
+    "inherit"
+   ],
+   "inherit": {
+    "scope": "space",
+    "space": "Offsite crew"
+   },
+   "space": "Offsite crew"
+  },
+  "tana:text:000000000000000000000000v1": {
+   "title": "Notes to self",
+   "me": "tana:user-profile:000000000000000000000000me",
+   "task": false,
+   "assignees": [],
+   "audience": "only-me",
+   "people": [],
+   "hidden": [],
+   "restricted": true,
+   "participants": [],
+   "rules": [
+    "me",
+    "people",
+    "inherit"
+   ],
+   "inherit": {
+    "scope": "space",
+    "space": "Offsite crew"
+   }
+  },
+  "tana:text:000000000000000000000000v2": {
+   "title": "Shared draft",
+   "me": "tana:user-profile:000000000000000000000000me",
+   "task": false,
+   "assignees": [],
+   "audience": "people",
+   "people": [],
+   "hidden": [],
+   "restricted": true,
+   "participants": [
+    "tana:user-profile:000000000000000000000000p1"
+   ],
+   "rules": [
+    "me",
+    "people",
+    "inherit"
+   ],
+   "inherit": {
+    "scope": "space",
+    "space": "Offsite crew"
+   }
+  },
+  "tana:text:000000000000000000000000v3": {
+   "title": "Team handbook",
+   "me": "tana:user-profile:000000000000000000000000me",
+   "task": false,
+   "assignees": [],
+   "audience": "space",
+   "people": [],
+   "hidden": [],
+   "restricted": false,
+   "participants": [],
+   "rules": [
+    "me",
+    "people",
+    "inherit"
+   ],
+   "inherit": {
+    "scope": "space"
+   }
+  },
+  "tana:text:000000000000000000000000v4": {
+   "title": "Company holidays",
+   "me": "tana:user-profile:000000000000000000000000me",
+   "task": false,
+   "assignees": [],
+   "audience": "everyone",
+   "people": [],
+   "hidden": [],
+   "restricted": false,
+   "participants": [],
+   "rules": [
+    "me",
+    "people",
+    "inherit"
+   ],
+   "inherit": {
+    "scope": "everyone"
+   }
+  },
+  "tana:text:000000000000000000000000v5": {
+   "title": "Imported note",
+   "me": "tana:user-profile:000000000000000000000000me",
+   "task": false,
+   "assignees": [],
+   "audience": "unknown",
+   "people": [],
+   "hidden": [],
+   "restricted": false,
+   "participants": [],
+   "rules": [
+    "me",
+    "people",
+    "inherit"
+   ],
+   "inherit": {
+    "scope": "unknown"
+   }
+  },
+  "tana:text:000000000000000000000000v6": {
+   "title": "Interview loop",
+   "me": "tana:user-profile:000000000000000000000000me",
+   "task": true,
+   "assignees": [
+    {
+     "id": "tana:user-profile:000000000000000000000000p2",
+     "name": "Sam Lee"
+    }
+   ],
+   "audience": "people",
+   "people": [
+    {
+     "id": "tana:user-profile:000000000000000000000000p1",
+     "name": "Priya Shah"
+    },
+    {
+     "id": "tana:user-profile:000000000000000000000000p2",
+     "name": "Sam Lee"
+    }
+   ],
+   "hidden": [],
+   "restricted": true,
+   "participants": [
+    "tana:user-profile:000000000000000000000000p1",
+    "tana:user-profile:000000000000000000000000p2"
+   ],
+   "rules": [
+    "me",
+    "people",
+    "inherit"
+   ],
+   "inherit": {
+    "scope": "space",
+    "space": "Offsite crew"
+   }
   }
  }
 }
