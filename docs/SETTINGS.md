@@ -71,6 +71,10 @@ deleted one had taken over (it holds what was true before), and the deleted one'
 is created and filled from this machine. Restoring the old one from the trash makes it the oldest again, so the next
 launch goes back to it.
 
+The same namespace marks Orbital's other documents in Tana: a meeting's private notes carry root `ext:orbital:notes` with
+key `meeting` and, from their first words, `confirmed` (main/meeting-notes.js, docs/MEETINGS.md Private notes); their ids are derived from you and the
+meeting, so nothing about them is kept in the settings.
+
 Which keys are synced is one list, `SYNCED` in main/settings.js: every `pref:` key and the named ones above. A key
 written through `settings.set` that matches no rule stays in SQLite on this machine (`openaiApiKey` is one).
 

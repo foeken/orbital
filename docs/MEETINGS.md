@@ -40,8 +40,134 @@ which the graph reports as EDGE_TYPE_BELONGS_TO), so it has to be identified by 
 related() returns it as summaryUri (sdk/events.js `writeUpOf`) using the tagline first and the sketch as a fallback, and never guesses
 when neither signal is present. A write-up can be moved out of its meeting into a space, and then the meeting owns
 nothing that matches: with a tagline, the document titled exactly that is looked up instead (`writeUpFor`, main/related.js;
-the sketch rule stays with owned documents, since any page can carry one). The renderer forwards a zoomed meeting to that document, since an event has no
-content of its own.
+the sketch rule stays with owned documents, since any page can carry one). A zoomed meeting used to forward to that document, since an event has no
+content of its own; it now stays the meeting, its editor your private notes, and its write-up is the other side of a Notes | Summary switch over them (Private notes, below).
+
+## Private notes: what you type under a meeting (issue #761, verified live 2026-10-05)
+
+A meeting page's editor is your own notes for that meeting. The page stays the meeting's — its title, Visible to (who
+sees the meeting), Attendees, the sidebar, ⌘K, Back and Forward — and the rows under it are the whole outline of a
+document of yours, its first row included, so every edit there is an edit of that document through the outliner's
+ordinary paths (renderer/meetingnotes.js gives the page that document as its body). A line over the rows says who sees
+them, so the meeting's own Visible to is never read as theirs: "Your notes · only you can see them" with the lock of
+Visible to, or — once you shared them in Tana — "Shared notes" and who: the people's faces, everyone in your
+organization, anyone with the link, read only when your grant no longer lets you write; never a lock or "only you"
+then. Beside the meeting's title, the Tana glyph opens the meeting itself in Tana (never the notes), "Open in Tana" shown
+on hover and keyboard focus; it is there before any notes and makes none. A meeting no longer forwards to its write-up:
+a meeting that has one shows Notes | Summary on that line, Notes first. Summary puts the write-up's own rows in the notes'
+place on the meeting's page, and the line says who sees the write-up and whether you may edit it, read from the
+write-up itself (its own metadata and node, asked for it alone, again when it changes live; the line says "Checking" at
+once, a row being typed in too, and an older answer never replaces a newer one). It is never inferred from the meeting's
+attendees or the notes, and a public link is never drawn with the lock or "only you". Summary never makes notes; what
+was typed is saved to the document it was typed in before the other takes its place, a first word's create carries on
+under Summary, and Notes puts the caret back where it was. The choice is kept per meeting for the session. The notes' first row, which names the meeting for whoever opens them on their own (in Tana, or in Orbital),
+is left out of the meeting's own page while it is exactly the row the seed wrote — its block id, its words, its one
+link, nothing under it (main/meeting-notes.js `referenceOf`, renderer/meetingnotes.js `notesRows`); changed, it is
+yours and shows.
+
+**Tana has no personal-notes concept.** Its web client (all 149 files of the build served on 2026-10-05) has no key,
+kind or rule for them. So the notes are an ordinary `tana:text:` document:
+
+| What | Where | Why |
+|------|-------|-----|
+| private | `data.restricted: true`, `data.participants` = exactly `{ <you>: { type: 'user', role: 'admin' } }` | a restricted document is its own boundary (Tana's client reads an owner's grants only for an unrestricted one) |
+| no public link | no `linkSharing.mode` | Tana writes `setLinkSharing({ mode: 'view' })` to share by link |
+| not in the meeting's graph | **no `ownerUri`** (a Library document), no edge into the meeting | see "What is and is not established" |
+| found again | id `tana:text:` + Tana's `createDeterministicId` of `orbital:meeting-notes:<you>:<event>:<place>` (sdk/chat.js), place 0 to 3 | any machine, any restart, after any rename or lost cache, without a search |
+| visible reference in Tana | first row "Open the meeting in Tana", a link to `https://home.tana.inc/o/<org>/e/<event>` (the app's own `webLink`) | followable in Tana's own client; a link adds no edge (below) |
+| marked by Orbital | root `ext:orbital:notes`, key `meeting` = the event | Orbital's own root, as the settings document's `ext:orbital:doc` (docs/SETTINGS.md); nothing is added to Tana's `data` |
+| named | `data.title` "Private notes · <meeting>" and `createdAt`, written once Tana has confirmed the note | the title only while it is still the seed's, so your own name for it stays |
+| confirmed private | root `ext:orbital:notes`, key `confirmed` = you, written with the first words, and only while the note is private at that moment | the proof that a note shared later was made private first (Shared by you, below) |
+
+**A reference you can see in Tana, without a way back from the meeting.** Measured live on scratch documents
+(`node scripts/platform-cli.js notesref`): a note naming its meeting by `data.createdInUri` gives an
+`EDGE_TYPE_CREATED_IN` edge into the meeting, an @ mention an `EDGE_TYPE_LINKS_TO` edge, and a link to the meeting's
+page in Tana nothing but the note's own created-by and edited-by edges. So the reference is that link. A pin on the
+meeting is not made: a meeting's pins are its own `pinnedItems` root, read by everyone who sees the meeting, with a
+`HAS_PIN` edge Tana derives from the meeting (docs/PINNING.md §4), so a pin would tell the meeting's people the notes
+exist and put them in the meeting's graph; it would also write to the meeting itself. Pinning the notes on a meeting
+stays a deliberate act in Tana, with what it shows.
+
+**What is and is not established.** Tana writes a meeting's summary on its servers: its client starts the wrap-up with
+`wrapUpJob({ eventUri })` (ActiveCallAutoWrapUp, bundle of 2026-10-05) and nothing else, so which documents that job
+reads, and with whose access, cannot be seen from a client. Ownership (`ownerUri`, reported as `BELONGS_TO`) and the
+edges above are how Tana links a meeting to documents, so the notes have none of them: live, the scratch meeting
+owned nothing and none of its edges touched either note before or after the notes were made and written. Notes the
+meeting does own — yours included, made in Tana's own client, private or not — are therefore never this editor and
+never written from here. Not established: anything about Tana's servers beyond what they answered — that no
+server-side process reads a private document of yours other than on your behalf, and that a second account is refused
+(no second account was used; the separation is Tana's ACL as read back, and the offline checks with a second user).
+Those hold for these notes as for any private document of yours in Tana; nothing about them is specific to meetings.
+
+**Nothing is written by opening a meeting.** The page asks main (`meeting:privateNotes`, main/meeting-notes.js), which
+reads the graph rows of the four places and nothing else: no document is even asked for. The first character typed
+asks again with the words. Main uses the first place Tana proves to hold your notes for this meeting — private, or
+shared by you since they were confirmed private; otherwise it makes them at the first place Tana lists nothing at, then
+asks Tana back before writing a word: the graph row (`restricted`, `participants` only you as admin, `createdBy` you, no
+owner, no `linkSharing`, no task state), the owner chain (the note itself the restricted boundary) and the live document
+(the same, plus the mark). Only then are the title, the `confirmed` mark and the words written, in one write (one
+`mut` and one undo step; the title and mark in one Loro transaction, the words in the next), the words as a row of
+their own after the last one.
+
+**How a note is made, safely and once.** The seed — type, the title "Private notes", access, the mark, the reference
+row — is the same on every machine, byte for byte: written by a peer that is yours as Tana reads peers (sdk/sync.js
+`derivePeerId`: your login's hash above, then 16 bits from the place in 32768–65535, which no machine of yours uses),
+with fixed block ids and no clock, title, or anything optional among its inputs (you, the meeting, the place, your
+organization's document; anything malformed or missing refuses before anything is made). It is subscribed with
+`{ ifMissing: true }` (sdk/sync.js): Tana's first answer for a document this machine has nothing of decides — MISSING
+and the seed is written and the note created on the next ask, at once; EXISTING and the document is read as it is,
+the seed never written. So the seed never reaches a document that was already there, of anyone's or made any other
+way, and two machines making the same new note at once write the same seed, which Loro knows by its operations' ids as
+one: both machines' first words land, each as its own row (live: two clients, two peers, one note, both words, one
+reference row). Live, Tana confirmed a new note in under 200 ms.
+
+**What is left alone.** A place holding anything else — a note you deleted (the next words go to the next place), a
+document someone else holds there, one made by someone else, one shared before it was ever confirmed private (with
+someone, by link, opened up), one given an owner, a task, another meeting's — is never written; the next place is used,
+and with all four taken no notes are made. Other people's notes on the meeting are never looked for: the places are
+derived from you.
+Notes of yours at a later place are used before an earlier free one is made into new ones. The meeting's write-up is a
+link, never edited from here.
+
+**What fails closed.** Only an answer from Tana lets a place go. No graph row yet, no owner chain, a failed read, or a
+document this machine holds only in part (still loading, or empty) is not an answer: the words stay in the row,
+nothing new is made, and the page asks again by itself while the row holds words (and on the next keystroke).
+Two panes, or a reload, asking at once wait for one answer in main.
+
+**Shared by you.** You may share your notes in Tana as any document of yours (the user's rule: "If someone shares their
+notes, it is allowed, just be very clear in the UI under meeting the notes are shared"). They stay the meeting's
+editor — the same document, no new one — and the line says "Shared notes" and with whom. Main tells notes you shared
+from a note Tana answered as shared before it was ever private by the `confirmed` mark: a create Tana answers as
+already shared is refused, never written, and the words go to new private notes at the next place, on every retry.
+Notes made before the mark existed count as confirmed by `createdAt` with a write by one of your machines (a peer with
+your login's hash and 0–32767 below), which were written only with the first words after the confirmation; the seed
+has neither. "Only you" means restricted, your grant the only one (whatever its role) and no public link; a new note
+must also hold you as admin before its first word.
+
+Every note main has handed out is checked again at every write to it (`writeGuards` in main/documents.js, which `mut`,
+undo/redo and image uploads ask). A change to who sees it or who may write tells every page on the meeting at once
+(`outline:changed` with `{ notes: true }`); each turns its line into "Checking who can see your notes…" as it hears
+that, and asks again. Shared under a page that said "only you", every write is refused until a page has been told who
+sees them now; the page keeps those words and saves them once its line says so (`holdNotesSave`). The hold is per
+process, not per pane: the first page told releases it for all, and the others are by then saying "Checking", never
+"only you". Moved under an owner or deleted in Tana, they are not this meeting's notes any more and are not written
+again; your grant made view-only or taken away makes them read only, by Tana's own rule (sdk/access.js `canWrite`).
+
+**Per account.** Everything is keyed by your user uri, the ids and the seed's peer included: another account never
+sees your notes as theirs, never writes to them, and an answer asked under one session is dropped if the account or
+the connection changed meanwhile (main checks `S.client`/`S.me` after every wait; the page drops answers from before a
+sign-out or a lost connection, older answers for the same meeting, and answers for another account).
+
+**Live proof** (`node scripts/platform-cli.js privatenotes`, escalated; a scratch meeting of yours alone dated in 2020
+and its notes, all deleted at the end): opening wrote nothing; the first words made the note at place 0, confirmed in
+under 200 ms (graph: no owner, restricted, one grant, you, admin, created by you, no link sharing; chain: the note
+alone); asking again gave the same note; no edge of the meeting touched a note; two clients making place 2 at once
+both kept their words under one reference row; a fresh connection that remembered nothing read the note back — title
+"Private notes · <meeting>", the `ext:orbital:notes` mark with `confirmed` you, no Orbital key in `data`, the reference row linking to the
+meeting — and found it at its id; with both notes deleted and Tana reporting it (read back, at most 30 s), an open found
+none and the next words went to place 1. Each of these is asserted: the command fails if one does not hold. Sharing was not tried live: no real access was changed and no second account was used, so "Shared by you" rests on the offline checks. The offline checks (scripts/sdk-check.js, "meeting notes" and the
+`ifMissing` lines in the sync checks; scripts/flow-check.js, "type under a meeting") cover the rest with a second user,
+a second machine, independent Loro documents and a fake Tana whose graph answers only what it has indexed.
 
 ## Typed fields
 

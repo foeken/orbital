@@ -138,7 +138,10 @@ class SyncConnection extends EventEmitter {
 
   // `init(loro)` seeds a new document before bootstrap: the warm start turns MISSING into a create, the full
   // snapshot is the catch-up (§2.1). Without it, an unknown id fails with 'document not found'.
-  subscribe(id, init) {
+  // With { ifMissing: true } the seed waits for Tana's answer instead: written only once Tana says it has no such
+  // document (a cold MISSING), and the create follows on the next ask at once; when Tana has one (EXISTING) it is read
+  // as it is and the seed is never written, so nothing of it can reach a document that was already there.
+  subscribe(id, init, { ifMissing = false } = {}) {
     let entry = this.docs.get(id);
     if (!entry) {
       const document = new Document(id, { peerId: this.peerId });
@@ -148,9 +151,12 @@ class SyncConnection extends EventEmitter {
       document.on('change', entry.onChange);
       document.on('local-update', entry.onLocal);
       this.docs.set(id, entry);
-      if (init) document.transact(init);
+      if (init && ifMissing) entry.seedIfMissing = init;
+      else if (init) document.transact(init);
       if (this.connected) this._bootstrap(entry);
     } else {
+      // asked for already and not answered yet, with nothing of it here: the seed waits for the answer like a new one's
+      if (init && ifMissing && entry.state !== 'live' && !entry.document.loro.oplogVersion().length()) entry.seedIfMissing = init;
       // Asked for again while an unsubscribe waits on a send or a draining bootstrap: that unsubscribe lets it be, and a
       // drain ends here, so the bootstrap goes back to retrying rather than stopping after its one attempt.
       entry.releasing = false;
@@ -358,7 +364,17 @@ class SyncConnection extends EventEmitter {
         entry.sessionId = null;
         try {
           const status = await this._bootstrapOnce(entry, gen);
-          if (status !== 'missing' && status !== 'unavailable') { if (status !== 'stale') this.streamLoaded = true; return; }
+          if (status !== 'missing' && status !== 'unavailable') { entry.seedIfMissing = null; if (status !== 'stale') this.streamLoaded = true; return; }
+          // Tana has no such document, and this one was to be made only then (subscribe ifMissing): seeded now, and asked
+          // again at once, which is the warm create below
+          if (status === 'missing' && entry.seedIfMissing && !entry.document.loro.oplogVersion().length()) {
+            const seed = entry.seedIfMissing;
+            entry.seedIfMissing = null;
+            entry.document.transact(seed);
+            entry.state = 'retrying';
+            attempt = -1;
+            continue;
+          }
           // A MISSING document with local state is a warm create path: keep retrying until the server accepts it,
           // rather than concluding that the id will never exist. Only a truly empty document becomes not found.
           if (status === 'missing' && (entry.queue.length || entry.document.loro.oplogVersion().length())) {

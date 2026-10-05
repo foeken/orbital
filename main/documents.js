@@ -1133,6 +1133,14 @@ function releaseOnDemand(held) { // returns the ids it let go of
 // Mutations: same as op, plus global undo ordering across documents (each Document keeps its own Loro UndoManager).
 // Every document a step can still undo, as one set per sweep: asked once per subscription, a copy of both stacks per
 // question cost 10 ms a refresh at 300 subscriptions and 5,000 steps.
+// Refusals a module adds for writes it owns the rule of, checked on the live document at the moment of each write:
+// main/meeting-notes.js refuses a meeting's notes when they are no longer that meeting's, when you can no longer write
+// them, or while a page still says "only you" over notes just shared. A reason, or nothing.
+const writeGuards = [];
+const refusal = (doc) => { for (const guard of writeGuards) { const why = guard(doc); if (why) return why; } return null; };
+// the same, by id, for a write that starts elsewhere (an image is uploaded and made before it is inserted): nothing is
+// subscribed for it, since a document a guard cares about is one already open
+const refusedWrite = (id) => { const doc = S.client && S.client.sync.getDocument(String(id).split('|')[0]); return doc ? refusal(doc) : null; };
 function historyIds() {
   const ids = new Set();
   for (const step of [...undoStack, ...redoStack]) for (const id of Array.isArray(step) ? step : [step && typeof step === 'object' ? step.id : step]) ids.add(id);
@@ -1143,6 +1151,8 @@ async function mut(id, fn, accessMutation = false, title = false) {
   // A write into a field needs its value to exist; a read of the same id must not make one.
   const result = await op(id, (doc) => {
     if (!accessMutation && editable(readNode(doc), S.me && S.me.userUri, title) === false) throw new Error('This node is read-only in the outliner');
+    const refused = refusal(doc);
+    if (refused) throw new Error(refused);
     return fn(doc);
   }, { create: true });
   // Sharing and moves are gated by an audience disclosure and a preview token; a raw CRDT undo would rewrite
@@ -1254,7 +1264,7 @@ async function history(from, to, action, can) {
         let changedId = null;
         for (const id of action === 'undo' ? [...step].reverse() : step) {
           const doc = S.client && S.client.sync.getDocument(id);
-          if (!doc || !doc[can]() || isDeleted(readNode(doc)) || editable(readNode(doc), S.me && S.me.userUri) === false) continue;
+          if (!doc || !doc[can]() || isDeleted(readNode(doc)) || editable(readNode(doc), S.me && S.me.userUri) === false || refusal(doc)) continue;
           if (doc[action]()) changedId ||= id;
         }
         from.pop();
@@ -1267,7 +1277,7 @@ async function history(from, to, action, can) {
         from.pop(); to.push(step); return step.id;
       }
       const id = step, doc = S.client && S.client.sync.getDocument(id);
-      if (!doc || !doc[can]() || isDeleted(readNode(doc)) || editable(readNode(doc), S.me && S.me.userUri) === false) { from.pop(); continue; }
+      if (!doc || !doc[can]() || isDeleted(readNode(doc)) || editable(readNode(doc), S.me && S.me.userUri) === false || refusal(doc)) { from.pop(); continue; }
       // An undone state change belongs back on its list (unchecking a task returns it to Tasks), which only a refresh knows.
       if (doc[action]()) { from.pop(); to.push(id); scheduleRefresh(2000); return id; }
       from.pop();
@@ -1443,4 +1453,4 @@ const ipc = {
   'doc:link': (_e, id) => webLink(id),
 };
 
-module.exports = { agentPrompt, dropAgentMark, forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { writeGuards, refusedWrite, agentPrompt, dropAgentMark, forgetOwners, webLink, newChat, sendChat, discard, announcedEdits, rememberEdit, actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, workflowTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, agentIds, setAgentMark, lastAgentStatus, writeAgentStatus, agentStatus, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

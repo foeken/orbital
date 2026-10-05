@@ -151,6 +151,7 @@ onRows('input', (e) => {
   const chip = chipOnly(el);
   el.classList.toggle('chiponly', chip); // typing beside the chip gives the row a caret again
   if (!item.node.draft) scheduleSave(item, readSegs(el));
+  else if (item.node.notesDraft) { item.node.text = el.textContent; if (!item.busy) { item.busy = true; materialise(item, el); } } // a meeting's first words: kept in the row however its notes' create goes (renderer/meetingnotes.js)
   // A new document in a list is created once, with all its words, when it is left (focusout below) or Enter is pressed:
   // created on its first key, a saved search re-read and re-sorted around it mid-word, and what followed was lost (#549)
   else if (item.node.kind === 'document') item.node.text = el.textContent;

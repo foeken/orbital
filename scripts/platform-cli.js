@@ -524,6 +524,128 @@ commands.meetingedit = async () => {
   }
 };
 
+// privatenotes: WRITES, but only to scratch documents it creates and deletes in the same run (docs/MEETINGS.md
+// "Private notes"). A scratch meeting of yours alone, dated in 2020 (the server copies it into your calendar meanwhile),
+// then main/meeting-notes.js on it as the app runs it: opening writes nothing, the first words create the note and wait
+// for Tana to confirm it private, asking again reuses it, the meeting's graph holds no trace of it, two clients (two
+// peers, as two Macs) seed and write one new note at once and both their words stay, a fresh connection that remembers
+// nothing finds the note at its id, and once it is deleted the next words go to the next place.
+commands.privatenotes = async () => {
+  const me = await connect();
+  process.env.TANA_MAIN_TEST = '1';
+  require('../db').open(path.join(app.getPath('temp'), 'tana-cli-privatenotes.sqlite'));
+  const notes = require('../main/meeting-notes'), { readOutline } = require('../sdk/content'), { createTanaClient: makeClient, derivePeerId } = require('../sdk');
+  await client.sync.connect();
+  const eventId = 'tana:event:' + ulid(), past = Date.UTC(2020, 0, 6, 9, 0), sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const link = 'https://home.tana.inc/o/' + me.orgDocUri.split(':').pop() + '/e/' + encodeURIComponent(eventId);
+  await client.sync.subscribe(eventId, (loro) => { initDocument(loro, 'Orbital scratch meeting (delete me)', me.userUri, { kind: 'meeting' }); const d = loro.getMap('data'); d.set('startTime', past); d.set('endTime', past + 18e5); });
+  let noteId = null, nextId = null, raceId = null;
+  const kind = (uri) => (uri ? uri.split(':')[1] : null);
+  const row = async (id) => { const { nodes: [n] = [] } = await client.graph.listNodes({ nodeIds: [id], limit: 1 }); return n && { owner: kind(n.ownerUri), restricted: n.restricted, grants: Object.entries(n.participants || {}).map(([uri, p]) => ({ me: uri === me.userUri, type: p.type, role: p.role })), createdByMe: n.createdBy === me.userUri, linkSharing: n.linkSharing || null, state: n.state || null }; };
+  // everything the meeting's graph says it holds or is linked to: what Tana's own work on the meeting can start from
+  const meetingGraph = async () => {
+    const owned = (await client.graph.listNodes({ ownerIds: [eventId], limit: 50 })).nodes || [];
+    const [from, to] = await Promise.all([client.graph.listEdges({ fromNodeIds: [eventId] }), client.graph.listEdges({ toNodeIds: [eventId] })]);
+    const edges = [...(from.edges || []), ...(to.edges || [])], mine = [noteId, raceId].filter(Boolean);
+    return { owned: owned.length, edges: edges.length, mentionsNotes: owned.some((x) => mine.includes(x.id)) || edges.some((e) => mine.includes(e.fromNodeId) || mine.includes(e.toNodeId)) };
+  };
+  // as the app does: asked again while Tana has not confirmed
+  const make = async () => { for (const t = Date.now(); ; await sleep(2000)) { try { return (await notes.resolveNotes(client, eventId, me.userUri, { create: true, org: me.orgDocUri, login: me.userExternalId })).id; } catch (e) { if (!e.lag || Date.now() - t > 60000) throw e; } } };
+  try {
+    await sleep(3000);
+    const opened = await notes.resolveNotes(client, eventId, me.userUri, { create: false });
+    const before = await meetingGraph();
+    const t0 = Date.now();
+    noteId = await make();
+    const confirmedMs = Date.now() - t0;
+    const again = (await notes.resolveNotes(client, eventId, me.userUri, { create: true, org: me.orgDocUri, login: me.userExternalId })).id;
+    const doc = client.sync.getDocument(noteId);
+    notes.settle(doc, 'Orbital scratch meeting (delete me)', eventId, me.userUri);
+    const block = notes.firstWords(doc, 'Synthetic private line');
+    await client.sync.flushed(noteId);
+    const chain = await client.graph.getOwnerChain(noteId);
+    const graph = await row(noteId);
+    // two Macs at once: a second client (another peer, another storage) seeds the next place and writes its words while
+    // this one does, neither having heard of the other
+    const peer = { peerId: derivePeerId(me.userExternalId), storageId: require('node:crypto').randomUUID() };
+    const second = makeClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: 'Orbital-CLI/' + require('../package.json').version });
+    await second.sync.connect();
+    raceId = notes.slotId(me.userUri, eventId, 2);
+    const [ra, rb] = await Promise.all([client.sync.subscribe(raceId, notes.seed(me.userUri, eventId, 2, me.orgDocUri, me.userExternalId), { ifMissing: true }), second.sync.subscribe(raceId, notes.seed(me.userUri, eventId, 2, me.orgDocUri, me.userExternalId), { ifMissing: true })]);
+    notes.firstWords(ra, 'Synthetic words from machine A'); notes.firstWords(rb, 'Synthetic words from machine B');
+    await Promise.all([client.sync.flushed(raceId), second.sync.flushed(raceId)]);
+    await sleep(5000);
+    await second.close();
+    const after = await meetingGraph();
+    // a fresh connection, and nothing remembered: found at the id derived from you and the meeting
+    await client.close(); notes.forget();
+    await connect(); await client.sync.connect();
+    const cold = await client.sync.subscribe(noteId);
+    const n = readNode(cold), coldPrivate = notes.docPrivate(cold, eventId, me.userUri), coldRows = readOutline(cold);
+    const race = await client.sync.subscribe(raceId), raceRows = readOutline(race).map((b) => b.text), racePrivate = notes.docPrivate(race, eventId, me.userUri);
+    const reopened = (await notes.resolveNotes(client, eventId, me.userUri, { create: false, login: me.userExternalId }))?.id ?? null;
+    // deleted in Tana, both notes: once Tana's own copy of each says so (read back, at most 30 s), an open finds none
+    // and the next words go to place 1, the deleted notes untouched
+    for (const id of [noteId, raceId]) await client.sync.softDelete(id);
+    const gone = async (id) => readNode(await client.sync.subscribe(id)).deletedAt > 0;
+    for (const t = Date.now(); !((await gone(noteId)) && (await gone(raceId))); await sleep(500)) if (Date.now() - t > 30000) throw new Error('Tana did not report the deletes within 30 s');
+    const afterDelete = (await notes.resolveNotes(client, eventId, me.userUri, { create: false, login: me.userExternalId }))?.id ?? null;
+    nextId = await make();
+    const place = (id) => (id ? [0, 1, 2, 3].find((k) => id === notes.slotId(me.userUri, eventId, k)) ?? 'other' : null);
+    out({ openedWritesNothing: opened === null && !before.owned, confirmedMs, sameOnSecondAsk: again === noteId, graph,
+      chain: (chain.entries || []).slice(0, 3).map((e) => ({ kind: kind(e.uri), restricted: e.restricted, accessible: e.accessible })), effectivelyRestricted: chain.effectivelyRestricted,
+      meetingGraph: { before, after },
+      freshRead: { type: n.type, title: n.title, owner: kind(n.ownerUri), marked: notes.markOf(cold) === eventId, confirmedByMe: cold.loro.getMap(notes.MARK).get('confirmed') === me.userUri, dataKeys: Object.keys(n).filter((k) => /orbital/i.test(k)), restricted: n.restricted, grants: Object.keys(n.participants || {}).map((u) => u === me.userUri ? 'me' : 'other'), linkMode: cold.loro.getMap('linkSharing').get('mode') ?? null, docPrivate: coldPrivate, rows: coldRows.map((b) => b.text), referenceLinksToMeeting: coldRows[0]?.segments?.[0]?.marks?.link === link },
+      twoMachines: { rows: raceRows, bothKept: raceRows.includes('Synthetic words from machine A') && raceRows.includes('Synthetic words from machine B'), references: raceRows.filter((t) => t === notes.REFERENCE).length, private: racePrivate },
+      atSlot0: noteId === notes.slotId(me.userUri, eventId, 0), foundAfterReconnect: reopened === noteId, afterDeleteOpenPlace: place(afterDelete), nextPlace: place(nextId), block: !!block });
+    // every claim the docs make of this run, held here: the command fails when one does not
+    const assert = require('node:assert/strict');
+    assert.ok(opened === null && !before.owned, 'opening wrote nothing');
+    assert.equal(noteId, notes.slotId(me.userUri, eventId, 0), 'the first note is at place 0');
+    assert.equal(again, noteId, 'asking again gives the same note');
+    assert.deepEqual([graph.owner, graph.restricted, graph.grants.length, graph.grants[0].me, graph.grants[0].role, graph.createdByMe, graph.linkSharing, graph.state], [null, true, 1, true, 'admin', true, null, null], 'Tana\'s row: yours alone, no owner, no link');
+    assert.deepEqual([chain.entries?.[0]?.uri, chain.entries?.[0]?.restricted, chain.entries?.length], [noteId, true, 1], 'the note is its own boundary');
+    assert.equal(after.mentionsNotes, false, 'no edge of the meeting touches a note');
+    assert.ok(coldPrivate && notes.markOf(cold) === eventId && cold.loro.getMap(notes.MARK).get('confirmed') === me.userUri && coldRows[0]?.segments?.[0]?.marks?.link === link, 'read back private, marked and marked confirmed with its first words, with the reference');
+    assert.deepEqual([raceRows.includes('Synthetic words from machine A'), raceRows.includes('Synthetic words from machine B'), raceRows.filter((t) => t === notes.REFERENCE).length, racePrivate], [true, true, 1, true], 'two machines at once: every word, one reference row, private');
+    assert.equal(reopened, noteId, 'found again by a connection that remembered nothing');
+    assert.deepEqual([place(afterDelete), place(nextId)], [null, 1], 'deleted: none found, and the next words at place 1');
+  } finally {
+    for (const id of [raceId, nextId, noteId, eventId].filter(Boolean)) { await client.sync.softDelete(id).catch((e) => out('delete failed: ' + e.message)); out('deleted ' + id.split(':')[1]); }
+  }
+};
+
+// notesref: WRITES, but only to scratch documents it creates and deletes in the same run. Which reference from a
+// private note to its meeting Tana turns into a graph edge (docs/MEETINGS.md, Private notes): a scratch meeting of
+// yours alone, dated in 2020, and three private unowned notes, each naming it one way — data.createdInUri, an inline
+// mention, a link to the meeting's web page — then every edge into the meeting and out of each note.
+commands.notesref = async () => {
+  const me = await connect();
+  const { insertMention, setText, readOutline } = require('../sdk/content');
+  await client.sync.connect();
+  const eventId = 'tana:event:' + ulid(), past = Date.UTC(2020, 0, 6, 9, 0), org = me.orgDocUri.split(':').pop();
+  await client.sync.subscribe(eventId, (loro) => { initDocument(loro, 'Orbital scratch meeting (delete me)', me.userUri, { kind: 'meeting' }); const d = loro.getMap('data'); d.set('startTime', past); d.set('endTime', past + 18e5); });
+  const ways = { createdIn: null, mention: null, webLink: null }, made = [];
+  try {
+    for (const way of Object.keys(ways)) {
+      const id = 'tana:text:' + ulid(); made.push(id); ways[way] = id;
+      const doc = await client.sync.subscribe(id, (loro) => { initDocument(loro, 'Orbital scratch private note (delete me)', me.userUri); if (way === 'createdIn') loro.getMap('data').set('createdInUri', eventId); });
+      const first = readOutline(doc)[0].id;
+      if (way === 'mention') insertMention(doc, { uri: eventId, label: 'Orbital scratch meeting' });
+      if (way === 'webLink') setText(doc, first, [{ text: 'Orbital scratch meeting', marks: { link: 'https://home.tana.inc/o/' + org + '/e/' + encodeURIComponent(eventId) } }]);
+      await client.sync.flushed(id);
+    }
+    await new Promise((r) => setTimeout(r, Number(flag('settle', 10000))));
+    const name = (uri) => uri === eventId ? 'meeting' : Object.keys(ways).find((k) => ways[k] === uri) || (uri || '').split(':')[1];
+    const [into, outward] = await Promise.all([client.graph.listEdges({ toNodeIds: [eventId] }), client.graph.listEdges({ fromNodeIds: made })]);
+    const show = (edges) => (edges || []).map((e) => ({ from: name(e.fromNodeId), to: name(e.toNodeId), type: e.type }));
+    const rows = (await client.graph.listNodes({ nodeIds: made, limit: made.length })).nodes || [];
+    out({ intoMeeting: show(into.edges), outOfNotes: show(outward.edges), notes: rows.map((n) => ({ way: name(n.id), owner: n.ownerUri ? n.ownerUri.split(':')[1] : null, restricted: n.restricted, grants: Object.keys(n.participants || {}).length })) });
+  } finally {
+    for (const id of [...made, eventId]) { await client.sync.softDelete(id).catch((e) => out('delete failed: ' + e.message)); out('deleted ' + id.split(':')[1]); }
+  }
+};
+
 // datemention [--date 2099-12-31] [--settle ms]: WRITES, but only to a scratch document it creates and deletes in the
 // same run. Mentions the date in it (sdk/dates.js), then asks what mentions that date — listEdges and the edge live
 // query the sidebar keeps — and prints the outline read back, so the whole date-mention path is checked live.
@@ -1181,6 +1303,8 @@ const USAGE = [
   '             set-title <id> <title> |',
   '             upload <image file> <doc id> [--after <block id>] |',
   '             meetingedit   (a scratch meeting it creates, edits and deletes; the server puts it in your calendar meanwhile) |',
+  '             notesref   (a scratch meeting and three private notes naming it three ways, their edges read back and deleted) |',
+  '             privatenotes   (a scratch meeting of yours and its private notes, checked as the app checks them, read back and deleted) |',
   '             datemention [--date YYYY-MM-DD]   (a scratch document mentioning the date, read back and deleted) |',
   '             proposalcycle   (a scratch chat proposing two scratch documents, one approved and one rejected, read back and deleted) |',
   '             approve <chat id> <proposed id> | reject <chat id> <proposed id>   (an AI proposal: accepted, or removed and its draft deleted) |',
