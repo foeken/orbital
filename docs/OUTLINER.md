@@ -363,7 +363,9 @@ Image (also found by picture, photo, upload), then Doc, Task and the rest of wha
 types under their own heading. Task (`taskFromSlash`, #602) asks the task's name on a page of its own and the row
 becomes a reference to the new task, as Tana's own "/" Task embeds one; Escape goes back to the menu. Choosing one
 of the others opens a page that asks its name (“Name the new Project Task…”, issue #535): Enter creates it and opens
-it, Escape goes back to the choices. The “/” menu in a row keeps drafting in place instead. Meeting (`meetingFromSlash`,
+it, Escape goes back to the choices. Meeting there goes on to the When page below instead of being made on Enter, and is
+opened once made, Escape walking back to its name, kept (issue #765, `meetingWhen` with no row). The “/” menu in a row
+keeps drafting in place instead. Meeting (`meetingFromSlash`,
 #755) is made the way Task is, with a second page: after its name, “When?” takes a day and/or a time in ⌘K Change time's
 words (“14:00”, “tomorrow 9:30”, “fri 10:00-11:30”, `parseMeetingTime`) and shows the exact slot as the row to press
 before anything exists. With nothing typed that row is now, to the minute, for 30 minutes, labelled so. Words those do not

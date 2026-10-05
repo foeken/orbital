@@ -770,6 +770,20 @@ flow('golden path: "/" Task and Meeting, named, the meeting\u2019s time reviewed
   assert.equal(await p.js('tana.children(' + J(day) + ').then((rows) => rows[1].segments[0].mention.icon)'), 'meeting', 'the meeting’s with its glyph');
   const meeting = await p.js('tana.children(' + J(day) + ').then((rows) => tana.node(rows[1].segments[0].mention.uri)).then((n) => n.start)');
   assert.equal(meeting, new Date(start).toISOString(), 'and the meeting starts when it said');
+  // ⌘K Create new → Meeting (#765): the same When page, then the meeting opens; nothing is written into a row
+  await command(p, 'create new', 'Create new \u2026');
+  await p.type('meeting'); await p.waitFor('palRows[palIndex]?.label === "Meeting"', 'Meeting among the choices'); await p.key('↩');
+  await p.waitFor('palMode === "createName"', 'its name page'); await p.type('Retro'); await p.key('↩');
+  await p.waitFor('palMode === "slashMeetingWhen" && palRows[palIndex]?.hint === "Now, for 30 minutes"', 'the same when page, now for half an hour offered');
+  assert.equal(await p.js('__creates.length'), 2, 'nothing made by naming it');
+  await p.key('esc'); await p.waitFor('palMode === "createName" && palInput.value === "Retro"', 'Escape back to the name, kept');
+  await p.key('↩'); await p.waitFor('palMode === "slashMeetingWhen"', 'the when page again');
+  await p.type('tomorrow 9:30'); await settle(p, 100);
+  const retro = await p.js('new Date(parseDay("tomorrow") + "T09:30").getTime()');
+  await p.key('↩'); await p.key('↩');
+  await p.waitFor('palette.hidden && zoom && document.getElementById("title").textContent === "Retro"', 'the meeting made and opened', 6000);
+  assert.deepEqual((await p.js('__creates')).slice(2), [['Retro', { kind: 'meeting', start: retro, end: retro + 18e5 }]], 'one meeting, at the time shown');
+  assert.deepEqual(await p.js('tana.children(' + J(day) + ').then((rows) => rows.length)'), 2, 'and no row anywhere was changed');
 });
 
 // 17c. Edit meeting details (#758): ⌘K on a meeting you may change, one field, read by the AI only when ↩ asks (the mock

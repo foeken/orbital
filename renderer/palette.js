@@ -652,15 +652,17 @@ function startCreation(choice) {
   loadView(view); // the target view may not have fetched its rows yet
 }
 // Create new … (Cmd+K and the corner button) asks the name on a page of its own, in the palette's field (#535): Enter makes
-// the node and opens it, Escape goes back to the choices. The "/" menu, typed in a row, keeps its draft on the page
-// (startCreation), where the words go on being typed.
+// the node and opens it, Escape goes back to the choices. A meeting's Enter goes on to "/" Meeting's When page instead
+// (renderer/toolbar.js meetingWhen, #765): its time is shown, and chosen, before it is made. The "/" menu, typed in a row,
+// keeps its draft on the page (startCreation), where the words go on being typed.
 let creatingNamed = false; // one create per Enter: a second press while main answers makes no second node
-function openNamePage(choice) {
+function openNamePage(choice, name) {
   const group = 'New ' + choice.title;
   openPage('createName', 'Name the new ' + choice.title + '…', { back: openCreationPalette, typed: true, rows: (q, typed) => {
     const title = String(typed || '').trim();
+    if (title && choice.kind === 'meeting') return [{ group, icon: choice.icon, label: 'Choose when for “' + title + '”', keepOpen: true, run: () => meetingWhen(null, choice, title) }];
     return [title ? { group, icon: choice.icon, label: 'Create “' + title + '”', run: () => createNamed(choice, title) } : { group, icon: choice.icon, label: 'Type a name', disabled: true, note: true }];
-  } });
+  } }, name);
 }
 function createNamed(choice, title) {
   if (creatingNamed) return;
