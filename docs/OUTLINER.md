@@ -1170,7 +1170,10 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     after this one"), counted down every 15
     seconds in the renderer and gone when the meetings touch or overlap. Then, when any are left, **Upcoming meetings**: today's meetings still to
     start, earliest first, each with its time and who else is on it ("14:00–15:00 · Jeroen Oostewechel"), opening the
-    meeting. A meeting still to come, or under way on the timeline, has the Tana glyph after its title ("Join in
+    meeting, and under them **New meeting**, which opens ⌘K's Create new … → Meeting at its name (renderer/timeline.js
+    `openNewMeeting`; ↩ goes on to when). With none left, main sends neither block and the desktop draws one line in their
+    place, "No more meetings today · **Plan one**", Plan one doing what New meeting does (renderer/timeline.js
+    `timelineNoMeetings`; the phones, reading the same page, show nothing there). A meeting still to come, or under way on the timeline, has the Tana glyph after its title ("Join in
     Tana"), which opens it in Tana (`row.join` through `doc:link`). One timer per read, a second after the next start
     or end (`startTimer`), re-reads the page. A meeting under way whose call is on the record has a blue marker with a
     blue ring pulsing out of it (`.tl-recording`; the ring stays still under reduced motion): somebody is in the call and it

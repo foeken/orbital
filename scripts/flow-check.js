@@ -470,6 +470,19 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   const pages = await p.js('timelinePages');
   await p.js('document.querySelector(".tl-older").click()');
   await p.waitFor('timelinePages > ' + pages + ' && !timelineLoading && document.querySelector(".tl-older")?.textContent === "Show three more days"', 'three more days read');
+  // New meeting under today's meetings is ⌘K's new meeting at its name, which goes on to when
+  const named = 'palMode === "createName" && palInput.placeholder === "Name the new Meeting…"';
+  await p.js('document.querySelector(".node.tl-upcoming .tl-add").click()');
+  await p.waitFor(named, 'the new meeting\u2019s name page');
+  await p.type('Design review'); await p.key('↩'); await p.waitFor('palMode === "slashMeetingWhen"', 'its when page');
+  await p.js('closePalette()');
+  // a day with no meetings left: no Upcoming meetings, and under Today's Tasks "No more meetings today · Plan one"
+  await p.js('const all = tana.children; tana.children = async (id) => { const r = await all(id); return id === TIMELINE_PAGE ? r.filter((n) => !n.timeline?.free && !n.timeline?.upcoming) : r; }; reload(TIMELINE_PAGE).then(() => render(true)); 1');
+  await p.waitFor('!document.querySelector(".node.tl-upcoming") && document.querySelector(".tl-plan")', 'the day with no meetings left');
+  assert.equal(await p.js('document.querySelector(".node.tl-today").nextElementSibling.querySelector(":scope > .line").textContent'), 'No more meetings today · Plan one', 'it says so under Today\u2019s Tasks');
+  await p.js('document.querySelector(".tl-plan button").click()');
+  await p.waitFor(named, 'Plan one opens the same page');
+  assert.equal(await p.js('zoom.docId'), 'orbital:timeline', 'and the row itself opens nothing');
 });
 
 // 11. Pins (docs/PINNING.md): pinned to today it is on the Timeline's Today's Tasks; pinned to the sidebar and on a
