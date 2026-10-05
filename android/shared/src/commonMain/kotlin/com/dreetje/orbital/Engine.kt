@@ -806,6 +806,8 @@ class Engine(
     companion object {
         const val SESSION = "https://home.tana.inc/api/auth/session"
         const val HOME = "https://home.tana.inc"
+        // the engine's words when this account has no settings document yet (ios/engine/index.js MAC_FIRST, word for word)
+        const val MAC_FIRST = "Open Orbital on your Mac once to set it up for this account, then check again here."
         const val PENDING = "pending" // Platform.files' key for what is on its way to Tana (fly)
         // how long Tana's page has to connect, and a first Timeline read with nothing on screen to answer, before the app
         // says so (Engine.swift patience)

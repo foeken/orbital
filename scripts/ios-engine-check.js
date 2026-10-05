@@ -418,11 +418,12 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   // one page: a fresh vm, as a fresh web view, over the given storage
   const session = JSON.stringify({ authenticated: true, accessToken: token, userExternalId: 'u1', orgDocUri: 'tana:org:01aaaaaaaaaaaaaaaaaaaaaaaa', user: { email: 'a@b.c' } });
   // shown: what the page itself says, the session's answer as the app loads it (Engine.swift start); none, no document
-  const boot = (store, shown) => {
+  const boot = (store, shown, graphDown) => {
     const calls = [], posted = [];
     const fetch = async (url, init = {}) => {
       calls.push(String(url));
       if (String(url).startsWith('/api/auth/session')) return new Response(session);
+      if (graphDown && /GraphService/.test(String(url))) throw new TypeError('Load failed'); // Tana out of reach
       assert.ok(new Headers(init.headers).get('authorization') === 'Bearer ' + token, 'every platform call carries the session token');
       return new Response(new Uint8Array(0), { headers: { 'content-type': 'application/proto' } });
     };
@@ -441,7 +442,16 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   const first = boot(new Map());
   assert.deepStrictEqual(first.posted, ['ready'], 'the page says ready');
   assert.strictEqual(await first.orbital.connect(), true, 'signed in, it connects');
-  await assert.rejects(first.orbital.timeline(1), /Could not read your Orbital settings/, 'no Timeline without the settings document');
+  // a search that found no settings document at all: this account never used Orbital on a Mac (#751), said in the words
+  // both phones draw their Set up Orbital on a Mac first screen for, which must stay word for word in all three places
+  const MAC_FIRST = /const MAC_FIRST = ("[^"]+");/.exec(fs.readFileSync(path.join(__dirname, '../ios/engine/index.js'), 'utf8'))[1];
+  assert.ok(fs.readFileSync(path.join(__dirname, '../ios/Orbital/Engine.swift'), 'utf8').includes('static let macFirst = ' + MAC_FIRST), 'Engine.swift macFirst is the engine\'s sentence');
+  assert.ok(fs.readFileSync(path.join(__dirname, '../android/shared/src/commonMain/kotlin/com/dreetje/orbital/Engine.kt'), 'utf8').includes('const val MAC_FIRST = ' + MAC_FIRST), 'Engine.kt MAC_FIRST is the engine\'s sentence');
+  await assert.rejects(first.orbital.timeline(1), (e) => e.message === JSON.parse(MAC_FIRST), 'no settings document anywhere: set up on a Mac first');
+  // a search that failed says nothing about the document: the plain refusal, which a pull can clear
+  const down = boot(new Map(), undefined, true);
+  assert.strictEqual(await down.orbital.connect(), true);
+  await assert.rejects(down.orbital.timeline(1), /Could not read your Orbital settings/, 'Tana not answering is not a missing document');
   await new Promise((r) => setTimeout(r, 50));
   assert.deepStrictEqual(first.posted, ['ready'], 'and no part of it told to the app');
   // the session page signed in: connected from it, with no second lookup; signed out, Tana is asked again

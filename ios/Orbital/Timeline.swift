@@ -222,7 +222,13 @@ struct TimelineScreen: View {
             ZStack {
                 if building { Building().transition(.opacity) }
                 else if engine.rows.isEmpty {
-                if let error = engine.error { ContentUnavailableView("Timeline didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
+                if let error = engine.error, error == Engine.macFirst {
+                    // this account never used Orbital on a Mac, which makes its settings document (#751)
+                    ContentUnavailableView { Label("Set up Orbital on a Mac first", systemImage: "laptopcomputer") } description: { Text(error) } actions: {
+                        Button("Check Again") { Task { await engine.refresh() } }
+                    }
+                }
+                else if let error = engine.error { ContentUnavailableView("Timeline didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
                 else { ContentUnavailableView("Nothing yet", systemImage: "clock", description: Text("Changes to your tasks, new Inbox tasks and your meetings show up here.")) }
                 }
             }
