@@ -35,9 +35,8 @@ manual's iPhone pictures with them.
 itself, driven in a vm made to look like the session page.
 
 `OrbitalUITests` drives the app itself on `-sample`, finding everything by the label VoiceOver reads: the Timeline, ticking a
-task, a sensitive task's hidden words, the menu and a saved search, a meeting's page, Ask Tana, Quick Add and Settings. The
-scheduled checks run it on a simulator on main (.github/workflows/checks.yml), a quarter of an hour a run; locally, in a minute or
-so, with the Android app's screen tests beside it (`scripts/phones.sh`):
+task, a sensitive task's hidden words, the menu and a saved search, a meeting's page, Ask Tana, Quick Add and Settings. It runs
+locally only, in a few minutes, with the Android app's screen tests beside it (`scripts/phones.sh`):
 
 ```sh
 npm run phones        # both; npm run phones ios, or android, for one

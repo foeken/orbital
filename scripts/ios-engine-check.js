@@ -407,7 +407,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     sync.emit('change', 'tana:text:day');
     assert.strictEqual(moved, 5, 'no Today stop on the page: its node is no longer followed');
   }
-  if (!bun && process.env.CI) throw new Error('CI must build the engine: install Bun (.github/workflows/checks.yml)');
+  if (!bun && process.env.CI) throw new Error('CI must build the engine: install Bun');
   if (!bun) return console.log('ios engine check ok (the bundle skipped: no Bun)');
   const out = path.join(os.tmpdir(), 'orbital-engine-check.js');
   const built = spawnSync(bun, [path.join(__dirname, '../ios/engine/build.js'), out], { encoding: 'utf8' });
