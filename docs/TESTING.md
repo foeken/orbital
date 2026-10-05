@@ -20,7 +20,7 @@ the same kinds came back PR after PR.
 | Screen and saved outline apart | Enter flashed old text, ⇧↑ selected nothing, a draft row stayed after a delete, a checkbox leaked into a new row. | #125, #488, #489, #490, #601, #603 |
 | Panes and windows | State that belongs to one pane leaked into another, or closing a pane lost an edit or a presence. | #138, #164, #435, #463, #474 |
 | Drift | Docs, the mock, the manual or the PR description no longer matched the code; a third of all findings. New code no check exercised. | #314, #324, #607, #671, and "not covered by npm run check" in #510, #659, #668, #673, #677 |
-| iPhone | VoiceOver read what the eye could not see, Reduce Motion was ignored, demo mode let a write through. | #659, #677 |
+| iPhone | VoiceOver read what the eye could not see, Reduce Motion was ignored, demo mode let a write through, the Timeline built itself for good while a request in Tana's page never answered. | #659, #677, TestFlight report 2026-10-04 |
 
 ## The layers
 
@@ -98,8 +98,10 @@ From fastest to slowest. Each catches what the one before it cannot.
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; the scheduled checks run it on main (a pull request is tested on the machine that writes it, AGENTS.md).
 3. **iPhone UI tests** (about a minute, `ios/OrbitalUITests`). The app on `-sample`, driven by the labels VoiceOver reads; the
-   scheduled checks run them on a simulator on main. `scripts/ios-engine-check.js` covers the engine, and the desktop
-   code it bundles, in `npm run check`.
+   scheduled checks run them on a simulator on main. `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
+   build's stand-in for a Tana that never answers) with `-patience 3`, and expects Can't reach Tana in place of a Timeline
+   that builds itself for good; Android's `EngineTest` drives the same on virtual time. `scripts/ios-engine-check.js`
+   covers the engine, and the desktop code it bundles, in `npm run check`.
 4. **The running app**, only for what the mock cannot reach: main's live subscriptions, real Tana answers, a restart.
    Read-only first (`node scripts/platform-cli.js`), escalated. Say in the PR what was and was not tried there.
 
