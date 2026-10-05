@@ -1,6 +1,8 @@
 'use strict';
 // Renders the app icon (the Orbital planet, white on a black rounded square, macOS layout) to build/icon.icns and
 // build/icon.png, the dev Dock and About icon: 512 px, because main.js decodes it on main before the first window (#418).
+// build/icon.icon is the same icon for macOS 26 and later (Icon Composer: the planet as one glass layer on black), which
+// the packager compiles beside the .icns; it keeps its own copy of the symbol in Assets/orbital.svg, so change both.
 // With --ios, the iPhone app's icon instead (ios/Orbital/Assets.xcassets): the same planet at the same share of the
 // square, full bleed at 1024 px, since iOS rounds the corners itself.
 // Run: ./node_modules/.bin/electron scripts/build-icon.js [--ios]
