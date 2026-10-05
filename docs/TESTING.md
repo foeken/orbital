@@ -16,7 +16,7 @@ the same kinds came back PR after PR.
 | Live updates and caches | A change made elsewhere did not show, showed twice, wiped what you were typing, or a released document was never read again. | #148, #228, #265, #289, #406, #436 (13), #452 |
 | Private words | A new surface showed a sensitive title or a real word in demo mode: palette hints, meeting locations, image pixels, tab titles, tooltips, the iPhone's VoiceOver labels. | #157 (9), #203, #435, #447, #659 (6) |
 | Write access | A read-only row could be written, or an unknown (inherited) access was treated as read-only. | #170, #447, #545, #659 |
-| Keys and focus | Escape, a click outside or a palette page left the caret somewhere else, or a recorded shortcut did not run. | #187, #200, #288, #377, #463, #603 |
+| Keys and focus | Escape, a click outside or a palette page left the caret somewhere else, or a recorded shortcut did not run; ↑ stayed inside a code block's padding, aimed at a title a tab bar hid, or circled a page's fields under a read-only title. | #187, #200, #288, #377, #463, #603, #764 |
 | Screen and saved outline apart | Enter flashed old text, ⇧↑ selected nothing, a draft row stayed after a delete, a checkbox leaked into a new row. | #125, #488, #489, #490, #601, #603 |
 | Panes and windows | State that belongs to one pane leaked into another, or closing a pane lost an edit or a presence. | #138, #164, #435, #463, #474 |
 | Drift | Docs, the mock, the manual or the PR description no longer matched the code; a third of all findings. New code no check exercised. | #314, #324, #607, #671, and "not covered by npm run check" in #510, #659, #668, #673, #677 |
@@ -49,6 +49,9 @@ From fastest to slowest. Each catches what the one before it cannot.
    - a read-only document takes no caret, and no key asks for a write;
    - typing, Enter, Tab, ⇧Tab, Backspace, ⇧⌘⌫ and ⌘Z keep the screen and the saved outline the same;
    - Cmd+K, the / menu and Escape give the caret back where it was;
+   - ↑ from a page's first line walks its fields, nearest first, to the title and ↓ comes back: from an empty new note,
+     from a code block's first line (one wrapped and one of two lines), through the seven fields of a mock page, to a
+     read-only title in demo mode, and to a saved search's title hidden under a tab bar (#764);
    - a slow answer for a page you left does not replace the one you are on;
    - a change made elsewhere shows live and leaves what you are typing alone.
    - a right-click on a Timeline meeting is Cmd+K on it, and Copy link copies the meeting's link.

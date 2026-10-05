@@ -11,19 +11,23 @@ const real = (...pages) => pages.map((page) => ({ js: REAL, page }));
 // Panes the window opens while a clip plays need main (window:split), which the runner's shell has none of. live()
 // loads the shell's module again under a bridge that keeps its commands, and gives each page a splitWindow that asks
 // it, the way main.js does: the page's own rows and clicks (⌘N, ⌘-click, Show graph) then open real Trellis panes.
-const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (async (doc, REAL) => {
+// Each page runs a mock of its own, so the note ⌘N made in one page is unknown to the page opened on it; main, which
+// both share in the app, would have it. A page opened on a fresh note (its place has edit: true, renderer/palette.js
+// openNoteIn; the shell keeps what was asked for as lastStart) is handed that one note's node, as main would answer it.
+const NOTE = "(() => { const pl = JSON.parse((parent.lastStart && parent.lastStart.place) || '{}'); if (pl.edit) { const o = tana.node; tana.node = async (id) => (id === pl.docId ? { id, title: pl.title, kind: 'document', icon: 'doc', editable: true, hasChildren: true } : o(id)); } })()";
+const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (async (doc, REAL, NOTE) => {
   const theme = document.documentElement.dataset.theme || 'light';
-  const prep = (f) => { const w = f.contentWindow; if (REAL) w.eval(REAL); w.document.getElementById('login')?.click(); if (theme === 'dark') w.applyTheme('dark');
+  const prep = (f) => { const w = f.contentWindow; if (REAL) w.eval(REAL); w.eval(NOTE); w.document.getElementById('login')?.click(); if (theme === 'dark') w.applyTheme('dark');
     w.eval("tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, new URLSearchParams(location.search).get('side') || '')"); };
   document.addEventListener('load', (e) => { if (e.target.tagName === 'IFRAME') prep(e.target); }, true);
   document.getElementById('workspace').replaceChildren();
   for (const b of document.querySelectorAll('.head button, #create')) b.querySelector('svg')?.remove();
   let seq = 3;
   window.shell = { state: () => ({ doc, theme }), onCommand: (cb) => { window.shellCmd = cb; }, layout() {} };
-  window.orbOpen = (where, start, from) => { const id = String(++seq); localStorage.setItem('view', start.view || 'library'); localStorage.setItem('place', start.place || '{}'); window.shellCmd('open', { id, where, from, focus: true }); return id; };
+  window.orbOpen = (where, start, from) => { const id = String(++seq); window.lastStart = start; localStorage.setItem('view', start.view || 'library'); localStorage.setItem('place', start.place || '{}'); window.shellCmd('open', { id, where, from, focus: true }); return id; };
   await import('/shell.js?live');
   await new Promise((r) => setTimeout(r, 1800));
-}) + ')(' + JSON.stringify(doc) + ',' + JSON.stringify(withReal ? REAL : '') + ')' });
+}) + ')(' + JSON.stringify(doc) + ',' + JSON.stringify(withReal ? REAL : '') + ',' + JSON.stringify(NOTE) + ')' });
 
 const panel = (id, views, selected = views[0]) => ({ kind: 'panel', id: 'panel-' + id, views, selected });
 const page = (side, links) => ({ type: 'page', params: links ? { side, links: true } : { side } });

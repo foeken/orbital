@@ -257,6 +257,65 @@ flow('Cmd+K, / and Escape give the caret back', async (p) => {
 });
 
 // 6. Out of order (#399, #406, #404, #463, #640): an answer for a page you already left never replaces the one you are on
+// 5b. Up from a page's first line (#764): the fields, then the title, by keyboard alone, and down again. A code block's
+// padding once held the caret inside it, a title hidden under a tab bar was aimed at and never reached, and a
+// read-only title sent ↑ from the top field back to the last one.
+flow('↑ from the first line walks the fields to the title, from any row, and ↓ comes back', async (p) => {
+  await p.start();
+  const where = () => p.js('(() => { const a = document.activeElement; return a === document.getElementById("title") ? "title" : a?.closest?.("#fields") ? "field " + a.textContent.replace(/\\u200b/g, "").slice(0, 12) : a?.closest?.("#outline") ? "row " + a.textContent.slice(0, 12) : "none"; })()');
+  const fresh = async (name) => {
+    await p.js('tana.createDocument(' + J(name) + ').then((n) => goTo(n.id))');
+    await p.waitFor('zoom && document.getElementById("title").textContent === ' + J(name) + ' && document.activeElement?.closest?.("#outline")', 'the caret in ' + name);
+  };
+  await fresh('Up note');
+  await p.key('↑'); assert.equal(await where(), 'title', 'a new note with no fields: up from its empty row is its title');
+  await p.key('↓'); assert.equal(await where(), 'row ', 'and down is the row again');
+  await fresh('Code first');
+  await p.type('```'); await p.waitFor('document.activeElement.closest(".node.t-code")', 'a code block');
+  await p.type('let a = 1'); await p.key('⇧↩'); await p.type('let b = 2'); await settle(p, 200);
+  await p.key('↑'); assert.deepEqual([await where(), await p.js('__caret().offset < 10')], ['row let a = 1\nle', true], 'up from a code block\u2019s second line is its first');
+  await p.key('⌥↑'); assert.equal(await where(), 'row let a = 1\nle', '\u2325\u2191 on its first line is the system\u2019s own move, and stays in the block');
+  assert.deepEqual(await p.js('(() => { const a = document.activeElement, kept = a.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", isComposing: true, bubbles: true, cancelable: true })); return [kept, document.activeElement === a]; })()'), [true, true], 'and so is \u2191 while an input method is composing');
+  await p.key('↑'); assert.equal(await where(), 'title', 'and up from its first line, inside its padding, is the title');
+  await p.key('↓'); await p.key('↓'); assert.deepEqual([await where(), await p.js('__caret().offset >= 10')], ['row let a = 1\nle', true], 'down goes back into it, line by line');
+  await fresh('Wrapped code');
+  await p.type('```'); await p.waitFor('document.activeElement.closest(".node.t-code")', 'a code block');
+  await p.type('token '.repeat(40)); await settle(p, 200);
+  const lines = await p.js('(() => { const r = document.createRange(); r.selectNodeContents(document.activeElement); return new Set([...r.getClientRects()].map((b) => Math.round(b.top))).size; })()');
+  assert.ok(lines >= 2, 'the code wraps (' + lines + ' lines)');
+  for (let i = 1; i < lines; i++) { await p.key('↑'); assert.equal(await where(), 'row token token ', 'a wrapped line moves within the block'); }
+  await p.key('↑'); assert.equal(await where(), 'title', 'and its first line up to the title');
+  // a page with fields: up through each, from the one nearest the outline, then the title; down the same way back
+  await p.js('goTo("mockdoc1")'); await p.waitFor('zoom?.docId === "mockdoc1" && document.querySelector("#outline .node .text")', 'mockdoc1');
+  await p.js("tana.related('mockdoc1').then((d) => { relatedBy.set('mockdoc1', d); render(true); return 1; })"); // the mock's ids are not tana: ids, so the page never reads them itself
+  await p.waitFor('fieldValues().length === 7', 'its fields');
+  const fields = await p.js('fieldValues().map((e) => "field " + e.textContent.replace(/\\u200b/g, "").slice(0, 12))');
+  await p.js('setCaret(texts()[0], 0)');
+  const up = []; for (let i = 0; i < 8; i++) { await p.key('↑'); up.push(await where()); }
+  assert.deepEqual(up, [...fields.slice().reverse(), 'title'], 'up from the first row: every field, nearest first, then the title');
+  const down = []; for (let i = 0; i < 8; i++) { await p.key('↓'); down.push(await where()); }
+  assert.deepEqual(down, [...fields, 'row ' + (await p.js('texts()[0].textContent.slice(0, 12)'))], 'down: every field again, then the first row');
+  // the same page in demo mode: its title cannot be typed in, so up from the top field focuses it, and down leaves it
+  await p.js('toggleDemoMode()'); await settle(p, 300);
+  await p.js("tana.related('mockdoc1').then((d) => { relatedBy.set('mockdoc1', d); render(true); return 1; })"); await p.waitFor('fieldValues().length === 7', 'its fields in demo mode');
+  assert.equal(await p.js('document.getElementById("title").isContentEditable'), false, 'demo mode: a title nobody types in');
+  await p.js('setCaret(fieldValues()[0], 0)');
+  await p.key('↑'); assert.equal(await where(), 'title', 'up from the top field is the read-only title, not the last field again');
+  assert.equal(await p.js('getComputedStyle(document.getElementById("title")).boxShadow !== "none"'), true, 'drawn focused, as a field\u2019s chips are');
+  await p.key('↓'); assert.equal(await where(), fields[0], 'down from it is the first field');
+  assert.equal(await p.js('document.getElementById("title").hasAttribute("tabindex")'), false, 'and the title is a stop no longer');
+  await p.js('toggleDemoMode()'); await settle(p, 300);
+  // a saved search under a tab bar names itself on the tab: up shows its title as Rename does, Escape hides it again
+  await p.js('tana.myTasks().then((n) => goTo(n.id))'); await p.waitFor('zoom?.docId?.startsWith("tana:search:") && texts().length', 'My Tasks');
+  await p.js('document.documentElement.classList.add("tabbed"); 1');
+  assert.equal(await p.js('getComputedStyle(document.getElementById("pagehead")).display'), 'none', 'its title is hidden under the tab bar');
+  await p.js('setCaret(texts()[0], 0)');
+  await p.key('↑'); assert.equal(await where(), 'title', 'up from its first row is its title');
+  assert.notEqual(await p.js('getComputedStyle(document.getElementById("pagehead")).display'), 'none', 'shown while the caret is in it');
+  await p.key('esc'); assert.equal(await p.js('getComputedStyle(document.getElementById("pagehead")).display'), 'none', 'and hidden again once it is left');
+  await p.js('document.documentElement.classList.remove("tabbed"); 1');
+});
+
 flow('a slow answer for a page you left does not replace the one you are on', async (p) => {
   await p.start();
   const slow = 'mockdoc0', fast = 'mockdoc3';

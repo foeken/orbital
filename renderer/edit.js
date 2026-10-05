@@ -545,12 +545,14 @@ if (typeof addEventListener === 'function') {
   addEventListener('focus', caretBack);
   for (const used of ['keydown', 'mousedown']) addEventListener(used, () => { caretOwed = null; }, true);
 }
-// Up past the first node: the editable page title (zoomed), else the last filter pill
+// Up past the first node: the last field value (the fields sit between the outline and the title), unless up came from
+// the fields themselves; then the page title, typed in when it can be (shown again as Rename shows it when a tab bar
+// hides it), else the last filter pill, else a read-only title focused as a stop ↓, ↩ and ⌘K work from (#764)
 function focusAbove(el) {
   if (el) flush(keyOfEl(el));
-  const p = $('pills').lastElementChild;
-  const field = fieldValues().at(-1); // the last field value sits between the outline and the title
+  const p = $('pills').lastElementChild, field = !(el && el.closest && el.closest('#fields')) && fieldValues().at(-1);
   if (field) setCaret(field, field.textContent.length);
-  else if (titleEl.isContentEditable) setCaret(titleEl, titleEl.textContent.length);
+  else if (titleEl.dataset.key) { revealTitle(); setCaret(titleEl, titleEl.textContent.length); }
   else if (p && !$('pills').hidden) { if (el) el.blur(); p.focus(); }
+  else if (zoom && titleEl.getClientRects().length) { if (el) el.blur(); titleEl.tabIndex = -1; titleEl.focus(); }
 }

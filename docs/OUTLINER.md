@@ -149,7 +149,11 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   place (the usual debounce and flush; Enter blurs and focuses the first child; Escape restores). Titles are plain
   strings in Tana, so "@" in a title inserts the linked item's title as text. User profiles, meetings and unsupported
   kinds are read-only. With the caret in the title, Cmd+K takes that document as the current node. Up from the first
-  child focuses the title, Down from the title the first child (or the draft child). A zoomed task shows its checkbox
+  line of the first child goes through the page's fields, nearest first, to the title, and Down from the title goes
+  back through them to the first child (or the draft child), so a page is walked by keyboard alone (#764). A title
+  hidden under a tab bar is shown as Rename shows it while the caret is in it (renderer/document.js `revealTitle`); a
+  read-only title is focused as a stop, drawn with a field chip's ring, from which ↓ or ↩ goes back down, Escape leaves
+  and ⌘K acts on the page (renderer/edit.js `focusAbove`). A zoomed task shows its checkbox
   before the title (⌘↩ in the title toggles it), struck through and grey when done. A zoomed event shows the full date
   form ("Fri 11 Sep 9:00-10:00").
 - **Pills and the filter row.** On a page with pills (a view, a saved search, a type page) they sit under the title,
@@ -311,7 +315,7 @@ debounce flushes it. Read-only rows ignore every edit key.
 | ⇧Enter | A soft line break inside the row. |
 | Tab / ⇧Tab | Indent under the previous sibling / outdent to after the parent (block rows; document rows ignore them). On a plain line Tab makes it a bullet, and indents it under the row above when that is a list row (a plain line is never made a parent); at the start of a plain line it starts a list there, as "- " does. ⇧Tab takes the marker off a top-level bullet. |
 | Backspace at the start | First takes the row's bullet off (`unbullet`); a row with children keeps it, and so does a child (`nestedRow`), because a paragraph cannot own an outline or sit under a listItem. Then, if the row above is an empty plain row, that row goes and the caret stays (`removeEmptyAbove`). Otherwise the row's words join the row above, marks and mentions included, the caret where they meet (`joinAbove`, `api.join`, one undo step, #125). An empty row is removed and the caret goes to the end of the row above. None of this reaches past a row with children, an image, a divider, a table, a reference, a draft or a row of another document. |
-| ↑ / ↓ | The previous / next row, keeping the horizontal offset where possible. The caret walks title → fields → outline (`caretRows()`); anything that changes what a row belongs to works in `rowsBeside(el)`, the list that row lives in. |
+| ↑ / ↓ | The previous / next row, keeping the horizontal offset where possible, once the caret is on a row's first / last line (`atEdge`, measured inside the row's padding, so a code block's first and last lines count). The caret walks title → fields → outline (`caretRows()`), and ↑ past the top field reaches the title even when it is read-only or hidden (`focusAbove`, #764); anything that changes what a row belongs to works in `rowsBeside(el)`, the list that row lives in. |
 | ← / → at an edge | The previous / next row. |
 | ⌘↑ / ⌘↓ | Collapse / expand (built-in keys, §8). |
 | ⇧⌘↑ / ⇧⌘↓ | Move the row, or the selection, one step among its siblings. |

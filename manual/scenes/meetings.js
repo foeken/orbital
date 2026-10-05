@@ -29,6 +29,8 @@ module.exports = [
   { name: 'meetings-time', video: true, setup: [...real(), open(M), { wait: 1000 }], clip: [0, 0, 1280, 560],
     steps: [{ key: '⌘K' }, { wait: 500 }, { type: 'change time' }, { wait: 500 }, { key: '↩' }, { wait: 700 }, { type: 'tomorrow 9:30', delay: 90 }, { wait: 1400 }, { key: '↩' }, { wait: 500 }, { key: '⌘K' }, { wait: 600 }, { type: 'change time' }, { wait: 300 }] },
   { name: 'meetings-location', setup: [...real(), open(M), { wait: 900 }, { key: '⌘K' }, { wait: 500 }, { type: 'change location' }, { key: '↩' }, { wait: 500 }, { type: 'meet.example.com/leadership' }, { wait: 400 }], clip: pal },
+  // Edit meeting details: the words read by the (mock) AI and shown as the row to press, beside the time it has now
+  { name: 'meetings-details', setup: [...real(), open(M), { wait: 900 }, { key: '⌘K' }, { wait: 500 }, { type: 'edit meeting details' }, { wait: 300 }, { key: '↩' }, { wait: 500 }, { type: 'tomorrow from 3-5' }, { wait: 300 }, { key: '↩' }, { wait: 1200 }], clip: pal },
   { name: 'meetings-attendee', setup: [...real(), open(M), { wait: 900 }, { key: '⌘K' }, { wait: 500 }, { type: 'add attendee' }, { key: '↩' }, { wait: 900 }], clip: pal },
   // pinning a task to the meeting you are in, or to one you pick
   { name: 'meetings-pin', setup: [...real(), open('tana:text:mockdoc3'), { wait: 900 }, { key: '⌘K' }, { wait: 600 }, { type: 'meeting' }, { wait: 500 }], clip: { ...pal, pad: 0 } },

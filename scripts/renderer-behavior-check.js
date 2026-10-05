@@ -3173,6 +3173,47 @@ function runCaretBackCheck() {
   console.log('ok  a fresh note keeps its caret through the pane\u2019s activation, and nowhere else');
 }
 
+// ↑ from a page's first line (#764): the edge is where the words start, inside a code block's padding; past the first row
+// come the fields, nearest first, then the title. Up from the top field never goes back down to the last one, a read-only
+// title is focused as a stop, and a title hidden under a tab bar is shown as Rename shows it.
+function runUpToTitleCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [], html = new Set(), document = { documentElement: { classList: { add: (c) => html.add(c) } } };
+    let zoom = { docId: 'd' }, fields = [], pillsHidden = true, shown = true, caret = null, padding = '0px';
+    const row = (name, inFields) => ({ name, textContent: name, closest: (s) => (s === '#fields' && inFields ? {} : null), blur: () => calls.push(['blur', name]) });
+    const titleEl = { name: 'title', textContent: 'Title', dataset: { key: '' }, getClientRects: () => (shown || html.has('renaming') ? [1] : []), focus: () => calls.push(['focus', 'title', titleEl.tabIndex]) };
+    const pill = { focus: () => calls.push(['focus', 'pill']) };
+    const $ = (id) => (id === 'pills' ? { lastElementChild: pill, hidden: pillsHidden } : null);
+    const fieldValues = () => fields, flush = () => {}, keyOfEl = () => null, setCaret = (target, at) => calls.push(['caret', target.name, at]);
+    const getSelection = () => ({ rangeCount: 1, getRangeAt: () => ({ getClientRects: () => [caret] }) });
+    const getComputedStyle = () => ({ paddingTop: padding, paddingBottom: padding, borderTopWidth: '0px', borderBottomWidth: '0px' });
+    const box = { getBoundingClientRect: () => ({ top: 100, bottom: 100 + 12 + 2 * 22 }) }; // a code block: two 22px lines inside 6px of padding
+    ${functionSource('atEdge')}
+    ${functionSource('revealTitle')}
+    ${functionSource('focusAbove')}
+    ({ calls, html, titleEl, row,
+      set: (o) => { if ('fields' in o) fields = o.fields; if ('pills' in o) pillsHidden = !o.pills; if ('shown' in o) shown = o.shown; if ('zoom' in o) zoom = o.zoom; },
+      edge: (line, dir, pad = '6px') => { padding = pad; const top = 100 + 6 + line * 22 + 2; caret = { top, bottom: top + 17, height: 17 }; return atEdge(box, dir); },
+      up: (from) => { calls.length = 0; html.clear(); delete titleEl.tabIndex; focusAbove(from); return calls.slice(); } });
+  `);
+  assert.deepEqual([api.edge(0, 'up'), api.edge(1, 'up'), api.edge(1, 'down'), api.edge(0, 'down')], [true, false, true, false], 'in a code block, its first line is the top and its last the bottom, inside its padding');
+  const f1 = api.row('Level', true), f2 = api.row('Owner', true), first = api.row('Why', false);
+  api.set({ fields: [f1, f2] });
+  assert.deepEqual(plain(api.up(first)), [['caret', 'Owner', 5]], 'up from the first row is the field nearest the outline');
+  assert.deepEqual(plain(api.up(f1)), [['blur', 'Level'], ['focus', 'title', -1]], 'up from the top field, under a read-only title, is that title as a stop, not the last field again');
+  api.titleEl.dataset.key = 'doc';
+  assert.deepEqual(plain(api.up(f1)), [['caret', 'title', 5]], 'an editable one takes the caret');
+  api.set({ fields: [], shown: false });
+  assert.deepEqual(plain([api.up(first), [...api.html]]), [[['caret', 'title', 5]], ['renaming']], 'a title a tab bar hides is shown as Rename shows it, then takes the caret');
+  api.titleEl.dataset.key = '';
+  assert.deepEqual(plain([api.up(first), [...api.html]]), [[], []], 'a hidden title nobody can type in is not aimed at');
+  api.set({ shown: true, pills: true });
+  assert.deepEqual(plain(api.up(first)), [['blur', 'Why'], ['focus', 'pill']], 'a page with pills and a read-only title keeps going to its last pill');
+  api.set({ pills: false, zoom: null });
+  assert.deepEqual(plain(api.up(first)), [], 'and a view that is no page has no title to stop at');
+  console.log('ok  up from a page\u2019s first line: the edge inside a code block\u2019s padding, the fields, then the title, read-only or hidden');
+}
+
 // A filter choice must stop covering the list it just filtered: single-choice rows close the menu, multi-select ticks stay.
 // ⌘F opens the filter field and puts the caret in it, whatever the caret was doing before. The render that shows the
 // field is deferred while the caret is in a row or a selection is frozen, and focusing a hidden input does nothing —
@@ -8285,7 +8326,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runTimelineCopyLinkCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

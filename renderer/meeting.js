@@ -134,8 +134,8 @@ function meetingLinkEl(meeting, fact = false) { // fact: one of the row's fact i
 }
 // ---- Edit meeting details (#758): one field, the words read by the AI into a day, a start and an end ----
 // Offered where Change time is (a meeting this user may change, not all-day). The words are read only when ↩ asks
-// (api.readMeetingTime: the AI transcribes them, main/meetings.js readTime decides what they come to, in the meeting's
-// time zone), and what they came to is shown as the row to press, said to be the AI's reading; only that press writes
+// (api.readMeetingTime: the AI transcribes them, main/meetings.js readTime and resolveTime decide what they come to, on
+// this Mac's clock), and what they came to is shown as the row to press, said to be the AI's reading; only that press writes
 // it, through the same editMeeting as Change time. The page reads nothing else: no people, no place, no invitation.
 let meetingDetailsRead = null; // { words, busy, answer, error } for the page on screen (renderer/toolbar.js readRows)
 function meetingDetailsRows(page, group) {
