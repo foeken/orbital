@@ -30,7 +30,7 @@ module.exports = [
     { type: 'Book a room', delay: 60 },
   ], clip: { page: '' } },
   // ↑ from a code block's last line: its first line, then the title (#764); ↓ walks back in
-  { name: 'writing-up', video: true, size: '640x320', setup: [...blank('Offsite plan'), { type: '```' }, { wait: 300 }, { type: 'npm run lint' }, { key: '⇧↩' }, { type: 'npm run check' }, { wait: 500 }],
+  { name: 'writing-up', video: true, size: '640x320', setup: [...blank('Release checks'), { type: '```' }, { wait: 300 }, { type: 'npm run lint' }, { key: '⇧↩' }, { type: 'npm run check' }, { wait: 500 }],
     steps: [{ wait: 300 }, { key: '↑' }, { wait: 700 }, { key: '↑' }, { wait: 1000 }, { key: '↓' }, { wait: 700 }, { key: '↓' }, { wait: 900 }], clip: { page: '' } },
   // markdown typed at the start of a row and inline
   { name: 'writing-markdown', video: true, size: '640x320', setup: blank('Offsite plan'), steps: [
