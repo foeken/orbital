@@ -54,7 +54,8 @@ Visible to, or — once you shared them in Tana — "Shared notes" and who: the 
 organization, anyone with the link, read only when your grant no longer lets you write; never a lock or "only you"
 then. Beside the meeting's title, the Tana glyph opens the meeting itself in Tana (never the notes), "Open in Tana" shown
 on hover and keyboard focus; it is there before any notes and makes none. A meeting no longer forwards to its write-up:
-a meeting that has one shows Notes | Summary on that line, Notes first. Summary puts the write-up's own rows in the notes'
+a meeting that has one opens on Summary, with Notes | Summary on that line (nothing is drawn until main has said whether
+there is one, so the notes never flash first). Summary puts the write-up's own rows in the notes'
 place on the meeting's page, and the line says who sees the write-up and whether you may edit it, read from the
 write-up itself (its own metadata and node, asked for it alone, again when it changes live; the line says "Checking" at
 once, a row being typed in too, and an older answer never replaces a newer one). It is never inferred from the meeting's
@@ -72,29 +73,37 @@ kind or rule for them. So the notes are an ordinary `tana:text:` document:
 |------|-------|-----|
 | private | `data.restricted: true`, `data.participants` = exactly `{ <you>: { type: 'user', role: 'admin' } }` | a restricted document is its own boundary (Tana's client reads an owner's grants only for an unrestricted one) |
 | no public link | no `linkSharing.mode` | Tana writes `setLinkSharing({ mode: 'view' })` to share by link |
-| not in the meeting's graph | **no `ownerUri`** (a Library document), no edge into the meeting | see "What is and is not established" |
+| inside the meeting in Tana | **`ownerUri` = the meeting**, and **pinned on it** once (`pinnedItems`, the mark `pinned`), as Tana's own Agenda is; still restricted to you | Tana's meeting page lists what is pinned on a meeting, not what it owns; opened by you alone: a restricted document is its own boundary (below) |
 | found again | id `tana:text:` + Tana's `createDeterministicId` of `orbital:meeting-notes:<you>:<event>:<place>` (sdk/chat.js), place 0 to 3 | any machine, any restart, after any rename or lost cache, without a search |
 | visible reference in Tana | first row "Open the meeting in Tana", a link to `https://home.tana.inc/o/<org>/e/<event>` (the app's own `webLink`) | followable in Tana's own client; a link adds no edge (below) |
 | marked by Orbital | root `ext:orbital:notes`, key `meeting` = the event | Orbital's own root, as the settings document's `ext:orbital:doc` (docs/SETTINGS.md); nothing is added to Tana's `data` |
 | named | `data.title` "Private notes · <meeting>" and `createdAt`, written once Tana has confirmed the note | the title only while it is still the seed's, so your own name for it stays |
 | confirmed private | root `ext:orbital:notes`, key `confirmed` = you, written with the first words, and only while the note is private at that moment | the proof that a note shared later was made private first (Shared by you, below) |
 
-**A reference you can see in Tana, without a way back from the meeting.** Measured live on scratch documents
-(`node scripts/platform-cli.js notesref`): a note naming its meeting by `data.createdInUri` gives an
-`EDGE_TYPE_CREATED_IN` edge into the meeting, an @ mention an `EDGE_TYPE_LINKS_TO` edge, and a link to the meeting's
-page in Tana nothing but the note's own created-by and edited-by edges. So the reference is that link. A pin on the
-meeting is not made: a meeting's pins are its own `pinnedItems` root, read by everyone who sees the meeting, with a
-`HAS_PIN` edge Tana derives from the meeting (docs/PINNING.md §4), so a pin would tell the meeting's people the notes
-exist and put them in the meeting's graph; it would also write to the meeting itself. Pinning the notes on a meeting
-stays a deliberate act in Tana, with what it shows.
+**Owned by the meeting, private to you (2026-10-05).** The user's rule: "you can connect the notes to the meeting as
+long as the notes are only visible to me when I create them; if I opt to share them it's ok", and it has to work on
+meetings you were only invited to. So a note is made owned by its meeting, restricted, with your grant alone: Tana
+shows it inside the meeting, to you, and reads an owner's grants only for an unrestricted document, so the meeting's
+people get nothing from owning it. Notes made before this (owned by nothing) are given to their meeting the next time
+the meeting is opened (`adopt`, outside the undo stack as a move is), only while still restricted: an unrestricted
+note under the meeting would be open to its people. A note under anything else is not one of these. The meeting's
+References in Orbital leave your own notes out (main/related.js, `notesSlotId` in sdk/events.js), since they are its
+editor already. Owning is not enough to be seen in Tana: its meeting page lists what is pinned on the meeting
+(`EventPins`, over `HAS_PIN`), and a document added in Tana's own meeting page is owned by the meeting and pinned on it
+(the Agenda documents on your meetings, read live 2026-10-05). So the notes are pinned there too, once, when found
+(`pinOnMeeting`, gated by write access to the meeting, which an attendee has): the mark `pinned` is written after the
+pin, so notes you unpin in Tana stay unpinned. The pin is the notes' id in the meeting's `pinnedItems`, which its
+people read; it opens nothing. What another attendee's Tana draws for a pin it cannot open is not verified (no second
+account). Orbital's own sidebar leaves the pin out as well. Not chosen: an @ mention or `createdInUri`
+(`platform-cli notesref`: `LINKS_TO` and `CREATED_IN` edges), which Tana's client does not use to show a meeting's
+documents. The first row stays a link to the meeting's page, for whoever opens the notes on their own.
 
 **What is and is not established.** Tana writes a meeting's summary on its servers: its client starts the wrap-up with
 `wrapUpJob({ eventUri })` (ActiveCallAutoWrapUp, bundle of 2026-10-05) and nothing else, so which documents that job
-reads, and with whose access, cannot be seen from a client. Ownership (`ownerUri`, reported as `BELONGS_TO`) and the
-edges above are how Tana links a meeting to documents, so the notes have none of them: live, the scratch meeting
-owned nothing and none of its edges touched either note before or after the notes were made and written. Notes the
-meeting does own — yours included, made in Tana's own client, private or not — are therefore never this editor and
-never written from here. Not established: anything about Tana's servers beyond what they answered — that no
+reads, and with whose access, cannot be seen from a client; the notes are now in the meeting's graph (`BELONGS_TO`),
+which the user accepted. Notes the meeting owns that Orbital did not make — yours in Tana's own client, private or
+not — have no mark and are at no place of yours, so they are never this editor and never written from here. Not
+established: anything about Tana's servers beyond what they answered — that no
 server-side process reads a private document of yours other than on your behalf, and that a second account is refused
 (no second account was used; the separation is Tana's ACL as read back, and the offline checks with a second user).
 Those hold for these notes as for any private document of yours in Tana; nothing about them is specific to meetings.
@@ -160,12 +169,22 @@ sign-out or a lost connection, older answers for the same meeting, and answers f
 
 **Live proof** (`node scripts/platform-cli.js privatenotes`, escalated; a scratch meeting of yours alone dated in 2020
 and its notes, all deleted at the end): opening wrote nothing; the first words made the note at place 0, confirmed in
-under 200 ms (graph: no owner, restricted, one grant, you, admin, created by you, no link sharing; chain: the note
-alone); asking again gave the same note; no edge of the meeting touched a note; two clients making place 2 at once
+under 200 ms (graph: owned by the meeting, restricted, one grant, you, admin, created by you, no link sharing; chain:
+the note, restricted, then the meeting; Tana's `effectivelyRestricted` true); asking again gave the same note; the
+meeting's owned documents list it; two clients making place 2 at once
 both kept their words under one reference row; a fresh connection that remembered nothing read the note back — title
 "Private notes · <meeting>", the `ext:orbital:notes` mark with `confirmed` you, no Orbital key in `data`, the reference row linking to the
 meeting — and found it at its id; with both notes deleted and Tana reporting it (read back, at most 30 s), an open found
 none and the next words went to place 1. Each of these is asserted: the command fails if one does not hold. Sharing was not tried live: no real access was changed and no second account was used, so "Shared by you" rests on the offline checks. The offline checks (scripts/sdk-check.js, "meeting notes" and the
+
+**Live proof on a meeting you were only invited to** (`node scripts/platform-cli.js notesinvited`, escalated, 2026-10-05;
+a real past meeting, your role `attendee`, someone else organizing, with no notes of yours; both notes deleted at
+the end): Tana took the note owned by the meeting, restricted, your grant alone as admin, no link sharing, the chain
+the note (restricted) then the meeting, listed among the meeting's documents; an older private note owned by nothing,
+given to the meeting as `adopt` does, read back the same; the meeting itself was not written (its version unchanged).
+Pinning (`node scripts/platform-cli.js meetingnotes <event>`, which opens a meeting's notes as the app does): on your
+notes on a real meeting where you are an attendee, the notes were pinned on the meeting, still restricted to you as
+admin alone, and read back so in a fresh session; asked again, nothing more was written.
 `ifMissing` lines in the sync checks; scripts/flow-check.js, "type under a meeting") cover the rest with a second user,
 a second machine, independent Loro documents and a fake Tana whose graph answers only what it has indexed.
 

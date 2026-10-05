@@ -547,7 +547,7 @@ commands.privatenotes = async () => {
     const owned = (await client.graph.listNodes({ ownerIds: [eventId], limit: 50 })).nodes || [];
     const [from, to] = await Promise.all([client.graph.listEdges({ fromNodeIds: [eventId] }), client.graph.listEdges({ toNodeIds: [eventId] })]);
     const edges = [...(from.edges || []), ...(to.edges || [])], mine = [noteId, raceId].filter(Boolean);
-    return { owned: owned.length, edges: edges.length, mentionsNotes: owned.some((x) => mine.includes(x.id)) || edges.some((e) => mine.includes(e.fromNodeId) || mine.includes(e.toNodeId)) };
+    return { owned: owned.length, edges: edges.length, ownsNotes: owned.some((x) => mine.includes(x.id)), edgesTouchNotes: edges.filter((e) => mine.includes(e.fromNodeId) || mine.includes(e.toNodeId)).map((e) => e.type) };
   };
   // as the app does: asked again while Tana has not confirmed
   const make = async () => { for (const t = Date.now(); ; await sleep(2000)) { try { return (await notes.resolveNotes(client, eventId, me.userUri, { create: true, org: me.orgDocUri, login: me.userExternalId })).id; } catch (e) { if (!e.lag || Date.now() - t > 60000) throw e; } } };
@@ -603,15 +603,83 @@ commands.privatenotes = async () => {
     assert.ok(opened === null && !before.owned, 'opening wrote nothing');
     assert.equal(noteId, notes.slotId(me.userUri, eventId, 0), 'the first note is at place 0');
     assert.equal(again, noteId, 'asking again gives the same note');
-    assert.deepEqual([graph.owner, graph.restricted, graph.grants.length, graph.grants[0].me, graph.grants[0].role, graph.createdByMe, graph.linkSharing, graph.state], [null, true, 1, true, 'admin', true, null, null], 'Tana\'s row: yours alone, no owner, no link');
-    assert.deepEqual([chain.entries?.[0]?.uri, chain.entries?.[0]?.restricted, chain.entries?.length], [noteId, true, 1], 'the note is its own boundary');
-    assert.equal(after.mentionsNotes, false, 'no edge of the meeting touches a note');
+    assert.deepEqual([graph.owner, graph.restricted, graph.grants.length, graph.grants[0].me, graph.grants[0].role, graph.createdByMe, graph.linkSharing, graph.state], ['event', true, 1, true, 'admin', true, null, null], 'Tana\'s row: owned by the meeting, yours alone, no link');
+    assert.deepEqual([chain.entries?.[0]?.uri, chain.entries?.[0]?.restricted, chain.entries?.[1]?.uri], [noteId, true, eventId], 'the note is its own boundary, under the meeting');
+    assert.equal(after.ownsNotes, true, 'the meeting owns the notes, so Tana shows them inside it');
     assert.ok(coldPrivate && notes.markOf(cold) === eventId && cold.loro.getMap(notes.MARK).get('confirmed') === me.userUri && coldRows[0]?.segments?.[0]?.marks?.link === link, 'read back private, marked and marked confirmed with its first words, with the reference');
     assert.deepEqual([raceRows.includes('Synthetic words from machine A'), raceRows.includes('Synthetic words from machine B'), raceRows.filter((t) => t === notes.REFERENCE).length, racePrivate], [true, true, 1, true], 'two machines at once: every word, one reference row, private');
     assert.equal(reopened, noteId, 'found again by a connection that remembered nothing');
     assert.deepEqual([place(afterDelete), place(nextId)], [null, 1], 'deleted: none found, and the next words at place 1');
   } finally {
     for (const id of [raceId, nextId, noteId, eventId].filter(Boolean)) { await client.sync.softDelete(id).catch((e) => out('delete failed: ' + e.message)); out('deleted ' + id.split(':')[1]); }
+  }
+};
+
+// meetingnotes <event id>: opens a meeting's private notes as the app does (main/meeting-notes.js privateNotes), so it
+// WRITES what opening writes: older notes given to the meeting, and notes pinned on it once. Prints the answer, your role
+// on the meeting and what is pinned on it.
+commands.meetingnotes = async () => {
+  const me = await connect();
+  backend(me);
+  const eventId = positional[0];
+  await client.sync.connect();
+  const answer = await require('../main/meeting-notes').privateNotes(eventId);
+  const ev = await client.sync.subscribe(eventId), n = readNode(ev);
+  const notes = answer && answer.id ? readNode(await client.sync.subscribe(answer.id)) : null;
+  out({ meeting: n.title, yourRole: n.participants?.[me.userUri]?.role, notes: answer && answer.id, owner: notes && (notes.ownerUri === eventId ? 'this meeting' : notes.ownerUri || null), audience: answer && answer.audience, pinnedOnMeeting: pins.items(ev).map((x) => x.uri === (answer && answer.id) ? 'your notes' : x.uri) });
+};
+
+// notesinvited [--event <id>]: WRITES one note, deleted in the same run. Private notes on a meeting you were only invited
+// to (an attendee, someone else organizing), made by main/meeting-notes.js as the app makes them: owned by the meeting,
+// yours alone, read back from Tana, the meeting itself left unwritten, then deleted. Without --event: your most recent
+// such meeting of the last 60 days, past and without notes of yours. A meeting that has notes of yours is refused.
+commands.notesinvited = async () => {
+  const me = await connect();
+  process.env.TANA_MAIN_TEST = '1';
+  require('../db').open(path.join(app.getPath('temp'), 'tana-cli-notesinvited.sqlite'));
+  const notes = require('../main/meeting-notes'), assert = require('node:assert/strict'), sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  await client.sync.connect();
+  const invited = (n) => n.participants?.[me.userUri]?.role === 'attendee' && Object.entries(n.participants).some(([u, p]) => u !== me.userUri && ['admin', 'editor'].includes(p.role));
+  const mine = async (id) => (await notes.resolveNotes(client, id, me.userUri, { create: false, login: me.userExternalId }))?.id ?? null;
+  let eventId = flag('event', null);
+  if (!eventId) {
+    const now = Date.now();
+    const { nodes = [] } = await client.graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me.userUri], eventStartTimeMin: new Date(now - 60 * 864e5).toISOString(), eventStartTimeMax: new Date(now - 864e5).toISOString(), limit: 100 });
+    for (const n of nodes.filter(invited)) if (!(await mine(n.id))) { eventId = n.id; break; }
+    if (!eventId) throw new Error('no past meeting you were only invited to, without notes of yours');
+  }
+  if (await mine(eventId)) throw new Error('that meeting has notes of yours: left alone');
+  const ev = await client.sync.subscribe(eventId), evNode = readNode(ev);
+  const version = () => JSON.stringify([...ev.loro.oplogVersion().toJSON()]), evBefore = version();
+  let noteId = null, olderId = null;
+  try {
+    for (const t = Date.now(); ; await sleep(2000)) {
+      try { noteId = (await notes.resolveNotes(client, eventId, me.userUri, { create: true, org: me.orgDocUri, login: me.userExternalId })).id; break; }
+      catch (e) { if (!e.lag || Date.now() - t > 60000) throw e; }
+    }
+    const doc = client.sync.getDocument(noteId);
+    notes.settle(doc, evNode.title, eventId, me.userUri); notes.firstWords(doc, 'Synthetic private line');
+    await client.sync.flushed(noteId); await sleep(4000);
+    const [{ nodes: [row] = [] }, chain, owned] = await Promise.all([client.graph.listNodes({ nodeIds: [noteId], limit: 1 }), client.graph.getOwnerChain(noteId), client.graph.listNodes({ ownerIds: [eventId], limit: 100 })]);
+    const result = { yourRole: evNode.participants?.[me.userUri]?.role, organizedBySomeoneElse: invited({ participants: evNode.participants }), owner: row?.ownerUri === eventId ? 'this meeting' : row?.ownerUri ?? null, restricted: row?.restricted,
+      grants: Object.entries(row?.participants || {}).map(([u, p]) => (u === me.userUri ? 'me' : 'other') + ':' + p.role), linkSharing: row?.linkSharing ?? null,
+      chain: (chain.entries || []).slice(0, 3).map((e) => ({ kind: e.uri.split(':')[1], restricted: e.restricted, accessible: e.accessible })), listedInMeeting: (owned.nodes || []).some((n) => n.id === noteId),
+      docPrivate: notes.docPrivate(doc, eventId, me.userUri), meetingUnwritten: version() === evBefore };
+    out(result);
+    assert.deepEqual([result.owner, result.restricted, result.grants, result.linkSharing, result.chain[0]?.restricted, result.chain[1]?.kind, result.listedInMeeting, result.docPrivate, result.meetingUnwritten],
+      ['this meeting', true, ['me:admin'], null, true, 'event', true, true, true], 'owned by a meeting you were invited to, yours alone, and the meeting itself unwritten');
+    // notes made before they were owned: a private note owned by nothing, then given to the meeting as main's adopt does
+    olderId = 'tana:text:' + ulid();
+    const older = await client.sync.subscribe(olderId, (loro) => initDocument(loro, 'Orbital scratch older notes (delete me)', me.userUri)); // restricted, you as admin
+    await client.sync.flushed(olderId); await sleep(3000);
+    older.transact((l) => l.getMap('data').set('ownerUri', eventId));
+    await client.sync.flushed(olderId); await sleep(4000);
+    const [{ nodes: [orow] = [] }, ochain] = await Promise.all([client.graph.listNodes({ nodeIds: [olderId], limit: 1 }), client.graph.getOwnerChain(olderId)]);
+    const adopted = { owner: orow?.ownerUri === eventId ? 'this meeting' : orow?.ownerUri ?? null, restricted: orow?.restricted, grants: Object.keys(orow?.participants || {}).map((u) => (u === me.userUri ? 'me' : 'other')), chainRestricted: ochain.entries?.[0]?.restricted, meetingUnwritten: version() === evBefore };
+    out({ adopted });
+    assert.deepEqual(Object.values(adopted), ['this meeting', true, ['me'], true, true], 'an older private note given to the meeting stays yours alone');
+  } finally {
+    for (const id of [noteId, olderId].filter(Boolean)) { await client.sync.softDelete(id).catch((e) => out('delete failed: ' + e.message)); out('deleted a scratch note'); }
   }
 };
 
@@ -1305,6 +1373,7 @@ const USAGE = [
   '             meetingedit   (a scratch meeting it creates, edits and deletes; the server puts it in your calendar meanwhile) |',
   '             notesref   (a scratch meeting and three private notes naming it three ways, their edges read back and deleted) |',
   '             privatenotes   (a scratch meeting of yours and its private notes, checked as the app checks them, read back and deleted) |',
+  '             notesinvited [--event <id>]   (private notes on a meeting you were only invited to, owned by it, read back and deleted) |',
   '             datemention [--date YYYY-MM-DD]   (a scratch document mentioning the date, read back and deleted) |',
   '             proposalcycle   (a scratch chat proposing two scratch documents, one approved and one rejected, read back and deleted) |',
   '             approve <chat id> <proposed id> | reject <chat id> <proposed id>   (an AI proposal: accepted, or removed and its draft deleted) |',

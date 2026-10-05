@@ -6221,7 +6221,8 @@ async function main() {
       return { backend: mainHelpers(), client: { sync, graph }, listeners };
     };
     const mac = machine(), { backend, client, listeners } = mac, notes = backend.meetingNotes;
-    const runtime = (user, m = mac) => { whoWrites = user; m.backend.testRuntime({ me: { userUri: user, orgDocUri: ORGDOC, userExternalId: LOGIN }, client: m.client, win: { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } } }); };
+    const session = { getAccessToken: async () => 'h.' + Buffer.from('{}').toString('base64url') + '.s' }; // write checks read its claims
+    const runtime = (user, m = mac) => { whoWrites = user; m.backend.testRuntime({ me: { userUri: user, orgDocUri: ORGDOC, userExternalId: LOGIN }, client: m.client, session, win: { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } } }); };
     const call = (...a) => backend.handlers.get('meeting:privateNotes')({}, ...a);
     const plain = (x) => JSON.parse(JSON.stringify(x)); // an answer from main's realm, compared as data
     const lines = (id) => readOutline(server.get(id)).map((b) => b.text).filter(Boolean);
@@ -6250,13 +6251,19 @@ async function main() {
     assert.equal(first.id, slot(EV, 0), 'its id is derived from you and the meeting');
     assert.match(first.id, /^tana:text:[0-9a-z]{26}$/);
     assert.notEqual(slot(EV, 0), slot(EV, 0, OTHER), 'and differs per person');
-    assert.deepEqual([n.ownerUri, n.restricted, Object.keys(n.participants), n.participants[ME].role, notes.markOf(note), n[notes.MARK], n.orbitalPrivateNotesFor, first.owner], [undefined, true, [ME], 'admin', EV, undefined, undefined, ME], 'no owner, you alone, marked in Orbital\u2019s own root (ext:orbital:notes) and nothing added to Tana\u2019s data');
+    assert.deepEqual([n.ownerUri, n.restricted, Object.keys(n.participants), n.participants[ME].role, notes.markOf(note), n[notes.MARK], n.orbitalPrivateNotesFor, first.owner], [EV, true, [ME], 'admin', EV, undefined, undefined, ME], 'owned by the meeting, you alone, marked in Orbital\u2019s own root (ext:orbital:notes) and nothing added to Tana\u2019s data');
     assert.deepEqual([plain(first.audience), note.loro.getMap(notes.MARK).get('confirmed')], [{ private: true, writable: true }, ME], 'said to be only yours, and marked confirmed private with its first words');
     assert.deepEqual([n.title, typeof n.createdAt], ['Private notes \u00b7 Synthetic weekly', 'number'], 'named for the meeting once confirmed');
     assert.deepEqual(lines(first.id), [R, 'First synthetic line'], 'the meeting first, then the first words');
     assert.deepEqual(readOutline(note)[0].segments, [{ text: R, marks: { link: linkOf(EV) } }], 'the meeting as a link to its page in Tana: a reference, and no edge into it');
     assert.deepEqual(plain(first.reference), { id: readOutline(note)[0].id, text: R, link: linkOf(EV) }, 'the page is told that row exactly, to leave it out of the meeting’s own page (renderer/meetingnotes.js notesRows)');
-    assert.ok(sent.some(([ch, id, info]) => ch === 'outline:changed' && id === EV && info.notes), 'other pages on the meeting hear of it');
+    assert.ok(sent.some(([ch, id, info]) => ch === 'outline:changed' && id === EV && info && info.notes), 'other pages on the meeting hear of it');
+    // pinned on the meeting, where Tana's meeting page lists documents, once: unpinned in Tana, it is not pinned again
+    const pinsOf = (ev) => require('../sdk/pins').items(server.get(ev)).map((x) => x.uri);
+    assert.deepEqual([pinsOf(EV), typeof note.loro.getMap(notes.MARK).get('pinned')], [[first.id], 'number'], 'pinned on the meeting, and marked so');
+    require('../sdk/pins').unpinItem(server.get(EV), first.id);
+    await call(EV);
+    assert.deepEqual(pinsOf(EV), [], 'unpinned in Tana: left unpinned');
 
     // Asked again, by an open or by more first words (a second pane), it is the same note.
     assert.equal((await call(EV)).id, first.id);
@@ -6339,7 +6346,7 @@ async function main() {
     assert.deepEqual(plain(await call(EV5)), { id: null });
     await assert.rejects(call(EV5, true, 'no place left'), /cannot make private notes for this meeting/, 'four places taken: refused, nothing made');
     assert.deepEqual(taken.map(version), before5, 'and nothing written to them, the deleted note included');
-    const variants = [() => (l) => l.getMap('linkSharing').set('mode', 'view'), () => (l) => l.getMap('data').delete('restricted'), (ev) => (l) => l.getMap('data').set('ownerUri', ev),
+    const variants = [() => (l) => l.getMap('linkSharing').set('mode', 'view'), () => (l) => l.getMap('data').delete('restricted'), () => (l) => l.getMap('data').set('ownerUri', 'tana:space:' + ulid()),
       (ev) => grant(ev), () => (l) => l.getMap('data').set('stateType', 'open'), () => (l) => l.getMap(notes.MARK).set('meeting', EV)];
     for (const change of variants) {
       const evN = 'tana:event:' + ulid(); meeting(evN, 'Synthetic variant');
@@ -6352,8 +6359,8 @@ async function main() {
     const EVL = 'tana:event:' + ulid(); meeting(EVL, 'Synthetic later');
     const later = new Document(slot(EVL, 2)); later.transact(notes.seed(ME, EVL, 2, ORGDOC, LOGIN)); server.set(later.id, later); creators.set(later.id, ME); index(later);
     assert.deepEqual([(await call(EVL)).id, (await call(EVL, true, 'more words')).id, notesFor(EVL)], [later.id, later.id, []], 'the notes at place 2, nothing new');
-    // Notes the meeting owns, yours and private included (made in Tana's own client), are never its editor and never
-    // written: the meeting's graph reaches them, and what Tana's server-side work does with them is not known here.
+    // Notes the meeting owns that Orbital did not make (yours in Tana's own client, private included: no mark, not at a
+    // place of yours) are never its editor and never written.
     const EV6 = 'tana:event:' + ulid(); meeting(EV6, 'Synthetic one to one');
     const ownedNote = put('tana:text:' + ulid(), 'My notes in Tana', ME, (l) => l.getMap('data').set('ownerUri', EV6));
     const ownedBefore = version(ownedNote);
@@ -6468,14 +6475,21 @@ async function main() {
     od.transact((l) => l.getMap('data').delete('restricted')); index(od); for (const fn of listeners) fn(opened.id);
     const openedNow = await call(EVO);
     assert.deepEqual([openedNow.id, openedNow.audience.private], [opened.id, false]);
-    // moved under an owner (the meeting) in Tana: not this meeting's notes any more, never written, and new words make new
-    // private notes at the next place
+    // moved under another owner (a space) in Tana: not this meeting's notes any more, never written, and new words make
+    // new private notes at the next place
     const EVM = 'tana:event:' + ulid(); meeting(EVM, 'Synthetic owned');
     const owned = await call(EVM, true, 'private words'), md = server.get(owned.id);
-    md.transact((l) => l.getMap('data').set('ownerUri', EVM)); index(md); for (const fn of listeners) fn(owned.id);
+    md.transact((l) => l.getMap('data').set('ownerUri', 'tana:space:' + ulid())); index(md); for (const fn of listeners) fn(owned.id);
     const ownedVersion = version(md);
     await assert.rejects(writes(owned.id), /not this meeting/);
     assert.deepEqual([plain(await call(EVM)), (await call(EVM, true, 'new words')).id, version(md)], [{ id: null }, slot(EVM, 1), ownedVersion]);
+    // Notes made before notes were owned (owned by nothing): given to their meeting when next opened, while restricted;
+    // ones you opened up in Tana are left unowned, since under the meeting they would be open to its people.
+    const oldNotes = (ev, edit) => { const d = new Document(slot(ev, 0)); d.transact(notes.seed(ME, ev, 0, ORGDOC, LOGIN)); d.transact((l) => { l.getMap('data').delete('ownerUri'); l.getMap(notes.MARK).set('confirmed', ME); edit && edit(l); }); server.set(d.id, d); creators.set(d.id, ME); index(d); return d; };
+    const EVA = 'tana:event:' + ulid(), EVU = 'tana:event:' + ulid(); meeting(EVA, 'Synthetic adopted'); meeting(EVU, 'Synthetic opened up');
+    const kept = oldNotes(EVA), openedUp = oldNotes(EVU, (l) => l.getMap('data').delete('restricted'));
+    const [adopted, notAdopted] = [await call(EVA), await call(EVU)];
+    assert.deepEqual([adopted.id, readNode(kept).ownerUri, adopted.audience.private, notAdopted.id, readNode(openedUp).ownerUri], [kept.id, EVA, true, openedUp.id, undefined], 'private notes given to their meeting, opened-up ones left unowned');
 
     // Deleted in Tana after it was handed out: refused at the next write as deleted, not said to be shared, and new words
     // make new notes at the next place.

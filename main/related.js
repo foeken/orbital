@@ -6,7 +6,7 @@ const { openEdgeQuery, openLiveQuery, EDGE_TYPES } = require('../sdk/livequery')
 const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { everyoneOnly } = require('../sdk/access');
 const { readSearch, rowLimit } = require('../sdk/node');
-const { callOf, writeUpOf } = require('../sdk/events');
+const { NOTES_SLOTS, callOf, notesSlotId, writeUpOf } = require('../sdk/events');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, pageKey, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveMeetings, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe, workflowTypes } = require('./documents');
@@ -314,6 +314,8 @@ async function related(id, { lite = false } = {}) {
   const event = (self.nodes || [])[0] || {};
   const ev = event.calendarEvent || {};
   const stated = (n) => !!(n.state && n.state.type);
+  // your private notes on a meeting it owns are that meeting's editor already (main/meeting-notes.js)
+  const myNotes = new Set(S.me && idKind(hub) === 'event' ? Array.from({ length: NOTES_SLOTS }, (_, k) => notesSlotId(S.me.userUri, hub, k)) : []);
   // never list the open document itself, an untitled draft, or something already shown as a pin
   const pinnedIds = new Set(pinIds);
   const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)) && n.id !== id && !pinnedIds.has(n.id) && (n.title || '').trim());
@@ -333,10 +335,10 @@ async function related(id, { lite = false } = {}) {
     fields: await fieldsOf(id), // the zoomed node's own fields, not the meeting hub's
     definitions: idKind(id) === 'type' ? await fieldDefs(id) : undefined, // a type's page lists the fields it defines
     pinHub: canPin ? hub : undefined, // where a new pin would go, when this user may write it
-    pinned: pinned.map(row),
+    pinned: pinned.filter((n) => !myNotes.has(n.id)).map(row),
     outcomes: owns.filter(stated).map(row),
     proposals: pendingProposals,
-    notes: owns.filter((n) => !stated(n) && (!writeUp || n.id !== writeUp.id)).map(row),
+    notes: owns.filter((n) => !stated(n) && (!writeUp || n.id !== writeUp.id) && !myNotes.has(n.id)).map(row),
     // an untitled draft mentions nothing worth listing, and a document already shown as a pin is not listed twice
     backlinks: await backlinkGroups(mentionEdges, (uri) => mentioned.find((n) => n.id === uri && (n.title || '').trim() && !pinnedIds.has(n.id)), row),
     changes: await historyOf(id, self0), // the zoomed node's own history: written summaries, else the node's own record
