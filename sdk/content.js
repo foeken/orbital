@@ -902,6 +902,28 @@ function toggleCheckbox(document, id) {
   });
 }
 
+// ⌘↩ on one row or a selection of them, one step of the cycle no box → an empty box → a ticked one → no box, taken
+// by all of them at once and as one undo step. A mix takes the first step one of them still needs: rows without a
+// box get an empty one (the boxes already there are left as they are), then every box is ticked, then they all go.
+// Taking the box off leaves the listItem a plain bullet row, which is what a pasted list row without one is (insertBlocks).
+// Rows that cannot hold a box (code, an image, a divider) are passed over. Returns the step: 'unchecked' |
+// 'checked' | 'plain', or null when no row could take one.
+function cycleCheckboxes(document, ids) {
+  let step = null;
+  document.transact(() => {
+    const found = [...new Set(ids)].map((id) => must(document, id)).filter((f) => ['paragraph', 'heading'].includes(name(f.block)));
+    if (!found.length) return;
+    const state = (f) => f.item?.get('attributes')?.get('checked');
+    step = found.some((f) => typeof state(f) !== 'boolean') ? 'unchecked' : found.some((f) => state(f) === false) ? 'checked' : 'plain';
+    for (const f of found) {
+      if (step === 'unchecked' && typeof state(f) === 'boolean') continue;
+      const a = (f.item || wrap(f.block)).get('attributes');
+      if (step === 'plain') a.delete('checked'); else a.set('checked', step === 'checked');
+    }
+  });
+  return step;
+}
+
 // ---- block types
 
 // A block type is a container plus a leaf node name: bullet/numbered live in a listItem, quote in a blockquote,
@@ -1091,4 +1113,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertTable, insertAfter, insertBefore, insertChild, insertMention, insertBlocks, split, join, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertTable, insertAfter, insertBefore, insertChild, insertMention, insertBlocks, split, join, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, cycleCheckboxes, newId, BLOCK_TYPES };

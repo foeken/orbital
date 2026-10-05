@@ -1918,6 +1918,40 @@ async function main() {
   }
 
   {
+    // ⌘↩ cycles: no box → empty → ticked → no box, a selection taking one step together (a mix the first one any of
+    // them still needs), rows that cannot hold a box passed over, and the whole step one undo
+    const d = new Document(DOC, { peerId: '7101' }), mirror = new Document(DOC, { peerId: '7102' });
+    d.on('local-update', u => mirror.applyRemote([u]));
+    const a = outline.insertAfter(d, null, 'A');
+    const b = outline.insertAfter(d, a, 'B');
+    const code = outline.insertAfter(d, b, 'code');
+    outline.setBlockType(d, code, 'code');
+    const done = () => outline.readOutline(d).map(n => n.done);
+    assert.equal(outline.cycleCheckboxes(d, [a]), 'unchecked');
+    assert.deepEqual(done(), [0, undefined, undefined], 'one row: an empty box first');
+    assert.equal(outline.cycleCheckboxes(d, [a]), 'checked');
+    assert.deepEqual(done(), [1, undefined, undefined], 'then ticked');
+    assert.equal(outline.cycleCheckboxes(d, [a, b, code]), 'unchecked');
+    assert.deepEqual(done(), [1, 0, undefined], 'a mix: the row without a box gets one, the ticked box stays ticked, the code block is passed over');
+    assert.equal(outline.cycleCheckboxes(d, [a, b, code]), 'checked');
+    assert.deepEqual(done(), [1, 1, undefined], 'then every box is ticked');
+    assert.equal(outline.cycleCheckboxes(d, [a, b, code]), 'plain');
+    assert.deepEqual(done(), [undefined, undefined, undefined], 'then every box goes');
+    assert.deepEqual(outline.readOutline(d).map(n => n.id), [a, b, code], 'and the rows keep their ids and order');
+    assert.equal(outline.cycleCheckboxes(d, [code]), null, 'a selection of rows that cannot hold a box does nothing');
+    assert.equal(d.undo(), true);
+    assert.deepEqual(done(), [1, 1, undefined], 'one undo puts every box back at once');
+    assert.deepEqual(mirror.content.toJSON(), d.content.toJSON());
+    const backend = mainHelpers();
+    backend.testRuntime({ me: { userUri: ME }, client: { sync: { subscribe: async () => d, getDocument: () => d } } });
+    assert.equal(await backend.handlers.get('block:cycleCheckboxes')(null, DOC, [a, b]), 'plain');
+    assert.deepEqual(done(), [undefined, undefined, undefined]);
+    await backend.undo(); assert.deepEqual(done(), [1, 1, undefined]);
+    assert.equal(await backend.undo(), null, 'one main history entry for a whole selection');
+    console.log('ok  cycleCheckboxes: no box → empty → ticked → no box, a selection in one step and one undo');
+  }
+
+  {
     const d = new Document(DOC, { peerId: '73' });
     const parent = outline.insertAfter(d, null, 'Parent');
     outline.toggleCheckbox(d, parent);

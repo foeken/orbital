@@ -249,8 +249,23 @@ function toggleDone(item, direct) {
 }
 function toggleCheckbox(item) {
   if (!canEditItem(item) || item.node.kind !== 'block' || !tana.toggleCheckbox) return;
-  if (!item.node.done) popSound();
+  if (item.node.done === 0) popSound(); // ticking it; a box being added (done null) or unticked is silent
   run(async () => { await tana.toggleCheckbox(item.docId, item.node.id); await reload(item.docId); });
+}
+// ⌘↩ on a row, or on a selection of them: no box → an empty box → a ticked one → no box again, all at once and as one
+// undo step (sdk/content.js cycleCheckboxes, which holds the same rule). A mix takes the first step one of them still
+// needs: the rows without a box get one, then every box is ticked, then they all go. Rows that cannot hold a box (code,
+// an image, a divider, a table, a reference) and rows you cannot edit are passed over. The pop plays only for the tick.
+const checkable = (item) => item?.node.kind === 'block' && canEditItem(item) && !isAtomic(item.node) && item.node.block !== 'code' && item.node.type !== 'reference';
+function checkboxStep(nodes) {
+  return nodes.some((n) => n.done == null) ? 'unchecked' : nodes.some((n) => !n.done) ? 'checked' : 'plain';
+}
+function cycleCheckboxes(its) {
+  const docId = its[0]?.docId;
+  its = its.filter((it) => checkable(it) && it.docId === docId); // one document's rows: one write, one undo step
+  if (!its.length || !tana.cycleCheckboxes) return;
+  if (checkboxStep(its.map((it) => it.node)) === 'checked') popSound();
+  return run(async () => { await tana.cycleCheckboxes(docId, its.map((it) => it.node.id)); await reload(docId); });
 }
 async function inheritCheckbox(parent, nodeId) {
   if (!nodeId || parent.node?.kind !== 'block' || parent.node.done == null || !tana.toggleCheckbox) return;

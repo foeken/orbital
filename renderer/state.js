@@ -6,7 +6,7 @@ const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi())
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
 const DEMO_WRITES = new Set(['sendChat', 'askAgent', 'deleteAgentAsk', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
-  'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
+  'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox', 'cycleCheckboxes',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
   'insertImage', 'insertTable', 'insertAfter', 'insertBefore', 'split', 'join', 'insertChild', 'pasteMarkdown', 'removeMany', 'moveMany', 'indentMany',
   'outdentMany', 'remove', 'indent', 'outdent', 'move', 'moveTo', 'insertMention', 'pin', 'unpin', 'pinTo', 'unpinFrom', 'setSensitive',

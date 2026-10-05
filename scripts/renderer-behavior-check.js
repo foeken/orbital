@@ -1022,23 +1022,67 @@ async function runCheckboxCheck() {
     const editable = ${JSON.stringify(editable)};
     const node = { id: 'block', kind: 'block', editable, done: ${JSON.stringify(done)} };
     const item = { docId: 'doc', node };
-    const calls = [];
+    const calls = []; let pops = 0;
+    const popSound = () => { pops++; };
     const canEditItem = (candidate) => candidate.node.editable !== false;
     const tana = { toggleCheckbox: async (docId, id) => { calls.push([docId, id]); node.done = node.done == null ? 0 : node.done ? 0 : 1; } };
     const reload = async () => {};
     const run = async (fn) => fn();
     ${toggleCheckbox}
-    ({ toggle: () => toggleCheckbox(item), state: () => ({ done: node.done, calls }) });
+    ({ toggle: () => toggleCheckbox(item), state: () => ({ done: node.done, calls }), pops: () => pops });
   `);
   const fresh = makeHarness(undefined);
   await fresh.toggle();
   assert.deepEqual(plain(fresh.state()), { done: 0, calls: [['doc', 'block']] }, 'Cmd+Enter can convert an eligible plain block to an unchecked native checkbox');
+  assert.equal(fresh.pops(), 0, 'a box being added is silent: only a tick pops');
   const checked = makeHarness(0);
   await checked.toggle();
   assert.deepEqual(plain(checked.state()), { done: 1, calls: [['doc', 'block']] }, 'Cmd+Enter toggles an existing native checkbox');
+  assert.equal(checked.pops(), 1, 'and ticking it pops');
+  const unticked = makeHarness(1);
+  await unticked.toggle();
+  assert.equal(unticked.pops(), 0, 'unticking is silent');
   const readOnly = makeHarness(undefined, false);
   await readOnly.toggle();
   assert.deepEqual(plain(readOnly.state()), { calls: [] }, 'read-only block cannot become a checkbox');
+
+  // ⌘↩ on a row or a selection: no box → empty → ticked → no box, every row one step together, one call, the pop only
+  // for the tick, and the rows that cannot hold a box (an image, code, read-only) passed over
+  const cycle = vm.runInNewContext(`
+    const isAtomic = (node) => !!node.image;
+    const canEditItem = (candidate) => candidate.node.editable !== false;
+    const nodes = [
+      { id: 'a', kind: 'block' }, { id: 'b', kind: 'block', done: 1 }, { id: 'img', kind: 'block', image: {} },
+      { id: 'code', kind: 'block', block: 'code' }, { id: 'ro', kind: 'block', editable: false },
+    ];
+    const its = nodes.map((node) => ({ docId: 'doc', node }));
+    const calls = []; let pops = 0;
+    const popSound = () => { pops++; };
+    const tana = { cycleCheckboxes: async (docId, ids) => {
+      calls.push([docId, ids]);
+      const ns = ids.map((id) => nodes.find((n) => n.id === id));
+      const step = checkboxStep(ns);
+      for (const n of ns) { if (step === 'plain') delete n.done; else if (step === 'checked') n.done = 1; else if (n.done == null) n.done = 0; }
+    } };
+    const reload = async () => {};
+    const run = async (fn) => fn();
+    ${sourceLine('const checkable = ')}
+    ${functionSource('checkboxStep')}
+    ${functionSource('cycleCheckboxes')}
+    ({ press: (which) => cycleCheckboxes(which.map((i) => its[i])), done: () => nodes.map((n) => n.done ?? null), calls: () => calls, pops: () => pops });
+  `);
+  await cycle.press([0, 1, 2, 3, 4]);
+  assert.deepEqual(plain(cycle.calls()), [['doc', ['a', 'b']]], 'one call for the whole selection, with only the rows that can hold a box');
+  assert.deepEqual(plain(cycle.done()), [0, 1, null, null, null], 'a mix: the row without a box gets an empty one, the ticked one stays ticked');
+  assert.equal(cycle.pops(), 0, 'adding empty boxes is silent');
+  await cycle.press([0, 1, 2, 3, 4]);
+  assert.deepEqual(plain(cycle.done()), [1, 1, null, null, null], 'then every box is ticked');
+  assert.equal(cycle.pops(), 1, 'and that pops, once');
+  await cycle.press([0, 1, 2, 3, 4]);
+  assert.deepEqual(plain(cycle.done()), [null, null, null, null, null], 'then every box goes');
+  assert.equal(cycle.pops(), 1, 'silently');
+  await cycle.press([2, 3, 4]);
+  assert.equal(cycle.calls().length, 3, 'rows none of which can hold a box make no call');
 }
 
 async function runCheckboxInheritanceCheck() {
