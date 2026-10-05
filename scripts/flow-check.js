@@ -655,7 +655,10 @@ flow('golden path: "/" Task and Meeting, named, the meeting\u2019s time reviewed
   assert.ok(slots.includes(offered[0]) && offered[1] === 'Now, for 30 minutes', 'with nothing typed, now for half an hour is offered, as it would be made: ' + J(offered));
   await p.type('xyz'); await settle(p, 100);
   assert.deepEqual(await p.js('palRows.filter((r) => !r.disabled).map((r) => r.label)'), ['Read \u201Cxyz\u201D with AI'], 'words this page cannot read can only be handed to the AI');
-  await p.key('↩'); await p.waitFor('palRows.some((r) => r.label === "No day or time in those words")', 'the AI\u2019s answer that it is no time');
+  await p.js("const slow = tana.readMeetingTime; tana.readMeetingTime = (...a) => new Promise((r) => setTimeout(r, 500)).then(() => slow(...a)); 1"); // the AI takes a moment: the row reading the words thinks meanwhile, as every AI row in the palette does
+  await p.key('↩'); await p.waitFor('document.querySelector("#palette .row .ricon.thinking")', 'the reading row\u2019s thinking glyph');
+  await p.waitFor('palRows.some((r) => r.label === "No day or time in those words")', 'the AI\u2019s answer that it is no time');
+  assert.equal(await p.js('!!document.querySelector("#palette .ricon.thinking")'), false, 'and it stops once the AI has answered');
   assert.deepEqual([await p.js('palMode'), await p.js('__creates.length')], ['slashMeetingWhen', 1], 'and nothing is made');
   await p.key('esc'); await p.waitFor('palMode === "slashMeeting" && palInput.value === "Design review"', 'Escape back to the name, kept');
   await p.key('esc'); await p.waitFor('palMode === "slash"', 'Escape back to the menu');
@@ -694,8 +697,11 @@ flow('golden path: Edit meeting details reads "tomorrow from 3-5" and applies it
   await p.key('esc'); await p.waitFor('palMode === "cmd"', 'Escape back to the commands');
   await p.key('esc'); await p.waitFor('palette.hidden', 'and closed');
   await command(p, 'edit meeting details', 'Edit meeting details');
+  await p.js("const slow = tana.readMeetingTime; tana.readMeetingTime = (...a) => new Promise((r) => setTimeout(r, 500)).then(() => slow(...a)); 1");
   await p.type('tomorrow from 3-5'); await p.key('↩');
+  await p.waitFor('document.querySelector("#palette .row .ricon.thinking")', 'the reading row\u2019s thinking glyph');
   await p.waitFor('palRows[palIndex]?.hint === "\u21A9 Apply \u00B7 read by AI"', 'the AI\u2019s reading, to review');
+  assert.equal(await p.js('!!document.querySelector("#palette .ricon.thinking")'), false, 'nothing thinks once it has read');
   const start = await p.js('new Date(parseDay("tomorrow") + "T15:00").getTime()');
   assert.equal(await p.js('palRows[palIndex].label'), await p.js('meetingSpan(' + start + ', ' + (start + 72e5) + ')'), 'tomorrow from 3-5 is tomorrow afternoon');
   assert.deepEqual(await p.js('tana.meetingInfo("mockmeeting2").then((m) => [m.start, m.end, m.attendees.length])'), was, 'nothing changes while it is only shown');
@@ -932,8 +938,8 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   await pages(4);
   await p.key('⇧⌘N');
   await pages(5);
-  await p.waitFor(frame('5') + '.contentDocument.getElementById("title").textContent === "New note"', 'the new pane on its note');
-  assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['New note']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on a new note');
+  await p.waitFor(frame('5') + '.contentDocument.getElementById("title").textContent === "New Note"', 'the new pane on its note');
+  assert.deepEqual(await tabs(), [['Schedule something with Sam Okafor and Dana Brooks', 'Prepare the offsite agenda'], ['Library'], ['Book a room for the offsite'], ['New Note']], '⇧↩ opened a pane beside, ⇧⌘N a new pane on a new note');
   // the shell gives a new pane the keys once its frame has loaded (shell.js open), a moment after it is drawn
   await p.waitFor('new URL(document.activeElement.src).searchParams.get("side") === "5"', 'the keys to go with the new pane');
   await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret in the new note');
@@ -941,14 +947,14 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   // it opened on gets the caret back (renderer/edit.js caretBack)
   await p.jsIn('5', 'document.activeElement.blur(); dispatchEvent(new FocusEvent("focus")); 1');
   await p.waitFor(frame('5') + '.contentDocument.activeElement?.closest?.("#outline .node")', 'the caret back in the new note');
-  assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'New note' }, 'every page kept its own place');
+  assert.deepEqual(await places(), { '': 'Schedule something with Sam Okafor and Dana Brooks', 2: 'Library', 3: 'Prepare the offsite agenda', 4: 'Book a room for the offsite', 5: 'New Note' }, 'every page kept its own place');
   await p.key('⌘N', 4, true); // held: the first press and three repeats
   await pages(6); await p.sleep(800);
   assert.equal((await sides()).length, 6, 'a held ⌘N opens one tab');
-  assert.deepEqual((await tabs()).at(-1), ['New note', 'New note'], 'beside the page that asked, on a new note');
+  assert.deepEqual((await tabs()).at(-1), ['New Note', 'New Note'], 'beside the page that asked, on a new note');
   await p.key('⌥⌘N');
   await pages(7);
-  await p.waitFor(frame('7') + '.contentDocument.getElementById("title").textContent === "New note"', 'the floating pane on its note');
+  await p.waitFor(frame('7') + '.contentDocument.getElementById("title").textContent === "New Note"', 'the floating pane on its note');
   const notes = []; for (const s of ['5', '6', '7']) notes.push(await p.jsIn(s, 'zoom && zoom.docId'));
   assert.equal(new Set(notes).size, 3, 'each key made a note of its own');
   assert.ok(notes.every((id) => /^tana:text:/.test(id)), 'and opened its page on it');

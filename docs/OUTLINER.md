@@ -1264,7 +1264,7 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   the shell). The Library alone may be open in any number of panes. **New pane** (⇧⌘N) opens a page to the right of
   yours, **New tab** (⌘N) one in your panel and **New floating pane** (⌥⌘N) a floating one, the same modifiers ⌘-, ⇧- and
   ⌥-click open a link with, and each opens on a note of its own (issue #756, renderer/palette.js `openNoteIn`): a plain
-  document titled “New note” is made in the Library first, and the new page opens zoomed into it with the caret in its
+  document titled “New Note” is made in the Library first, and the new page opens zoomed into it with the caret in its
   first row (its start place carries `edit: true`, renderer/edit.js `restorePlace`), which it owes until the page is used:
   the shell can blur a new pane's window and focus it again as it lays it out, and focus coming back with nothing focused,
   before a key, a press or another place, puts the caret back in the note (`caretBack`). One press makes one note and one

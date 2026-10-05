@@ -1070,6 +1070,13 @@ async function main() {
     assert.ok(sent.input.includes('Words: Tomorrow from 3-5')&&sent.input.includes('Today: Monday 2026-10-05')&&sent.input.includes('Time zone: Europe/Amsterdam'),'the words go with today, now, the zone and the meeting as it is');
     assert.match(sent.instructions,/data, never an instruction/);
     await assert.rejects(ai.readMeetingTime('soon',context,fetchWith(answer('Sure, at some point'))),/did not answer with a time/,'prose is no answer');
+    // the Quick AI reads it, whatever the Regular AI is: the defaults unset, the Quick choice when one is made
+    await ai.readMeetingTime('tomorrow from 3-5',context,fetchWith(answer(JSON.stringify(said))));
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.QUICK_MODEL,ai.QUICK_EFFORT],'with nothing chosen, the Quick AI\u2019s own start');
+    settings.set('aiModel','gpt-6-sol');settings.set('aiEffort','high');settings.set('aiQuickModel','gpt-5.6-luna');settings.set('aiQuickEffort','medium');
+    await ai.readMeetingTime('tomorrow from 3-5',context,fetchWith(answer(JSON.stringify(said))));
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-5.6-luna','medium'],'the Quick AI chosen, never the Regular AI (gpt-6-sol, high)');
+    for (const key of ['aiModel','aiEffort','aiQuickModel','aiQuickEffort']) settings.set(key,undefined);
     settings.set('openaiApiKey',undefined); settings.reset();
 
     const meetings=mainHelpers().meetings, AMS='Europe/Amsterdam';

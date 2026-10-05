@@ -2883,9 +2883,11 @@ async function runSlashMeetingCheck() {
   ask.run(); ask.run();
   assert.deepEqual(plain(ai.calls()), [['readMeetingTime', 'tomorrow from 3-5', null]], 'one press, one reading, for a new meeting');
   assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-5')), [['Reading \u201Ctomorrow from 3-5\u201D\u2026', '', true], ['In your calendar \u00B7 nobody is invited', '', true]], 'the page says it is reading, with nothing to press');
+  assert.equal(ai.page().rows('', 'tomorrow from 3-5')[0].spin, true, 'its glyph is the palette\u2019s thinking one, as every row waiting on the AI');
   const from = new Date(2026, 9, 6, 15).getTime();
   await ai.answer({ start: from, end: from + 72e5, timeZone: 'Europe/Amsterdam' });
   assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-5')), [['Tue Oct 06 2026 15:00 for 120', '\u21A9 Create \u00B7 read by AI', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'what it read is shown, and said to be the AI\u2019s');
+  assert.equal(ai.page().rows('', 'tomorrow from 3-5').some((r) => r.spin), false, 'and nothing thinks once it has answered');
   assert.equal(ai.calls().some((c) => c[0] === 'createDocument'), false, 'and nothing is made until it is pressed');
   assert.deepEqual(plain(ai.rowsOf('tomorrow from 3-6')), [['Read \u201Ctomorrow from 3-6\u201D with AI', '\u21A9', false], ['In your calendar \u00B7 nobody is invited', '', true]], 'words typed since are not the ones it read');
   ai.page().rows('', 'tomorrow from 3-5')[0].run();
@@ -2983,20 +2985,20 @@ async function runNoteInPageCheck() {
   `, { Promise, setTimeout, JSON });
   api.open('right'); api.open('right'); api.open('tab');
   await api.tick();
-  assert.deepEqual(plain(api.calls()), [['createDocument', 'New note', { kind: 'doc' }]], 'presses while it is made are the same note');
-  await api.land({ id: 'tana:text:n1', title: 'New note', icon: 'doc' });
-  assert.deepEqual(plain(api.calls().slice(1)), [['splitWindow', 'right', { docId: 'tana:text:n1', nodeId: null, title: 'New note', icon: 'doc', edit: true }, 'library']],
+  assert.deepEqual(plain(api.calls()), [['createDocument', 'New Note', { kind: 'doc' }]], 'presses while it is made are the same note');
+  await api.land({ id: 'tana:text:n1', title: 'New Note', icon: 'doc' });
+  assert.deepEqual(plain(api.calls().slice(1)), [['splitWindow', 'right', { docId: 'tana:text:n1', nodeId: null, title: 'New Note', icon: 'doc', edit: true }, 'library']],
     'the new page opens on the note, with the caret in it');
-  for (const where of ['tab', 'float']) { api.open(where); await api.tick(); await api.land({ id: 'tana:text:' + where, title: 'New note', icon: 'doc' }); }
+  for (const where of ['tab', 'float']) { api.open(where); await api.tick(); await api.land({ id: 'tana:text:' + where, title: 'New Note', icon: 'doc' }); }
   assert.deepEqual(plain(api.calls().filter((c) => c[0] === 'splitWindow').map((c) => [c[1], c[2].docId])), [['right', 'tana:text:n1'], ['tab', 'tana:text:tab'], ['float', 'tana:text:float']],
     'each key keeps its place for the page, each with a note of its own');
-  api.noPage(); api.open('tab'); await api.tick(); await api.land({ id: 'tana:text:n4', title: 'New note', icon: 'doc' });
-  assert.deepEqual(plain(api.calls().slice(-1)), [['note', 'New note created', 'tana:text:n4']], 'no page could open: the note is kept and the toast opens it');
+  api.noPage(); api.open('tab'); await api.tick(); await api.land({ id: 'tana:text:n4', title: 'New Note', icon: 'doc' });
+  assert.deepEqual(plain(api.calls().slice(-1)), [['note', 'New Note created', 'tana:text:n4']], 'no page could open: the note is kept and the toast opens it');
   api.open('tab'); await api.tick(); await api.fail(new Error('Demo mode is on: nothing is saved to Tana'));
   assert.deepEqual(plain(api.calls().slice(-1)), [['error', 'Demo mode is on: nothing is saved to Tana']], 'a refused note opens no page');
   api.open('tab'); await api.tick();
   assert.equal(api.calls().filter((c) => c[0] === 'createDocument').length, 6, 'and the next press is a fresh try');
-  await api.land({ id: 'tana:text:n6', title: 'New note', icon: 'doc' });
+  await api.land({ id: 'tana:text:n6', title: 'New Note', icon: 'doc' });
   api.demo(); api.open('right'); await api.tick(); await api.tick();
   assert.deepEqual(plain(api.calls().slice(-1)), [['splitWindow', 'right', {}, 'library']], 'demo mode saves nothing: the page opens on the Library, as it did');
   assert.equal(api.calls().filter((c) => c[0] === 'createDocument').length, 6, 'and no note is asked for');
@@ -3033,6 +3035,7 @@ async function runMeetingDetailsCheck() {
       open: () => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2 } }; openMeetingDetails(); return [page.mode, page.placeholder]; },
       openKept: (timeZone) => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2, timeZone } }; openMeetingDetails(); },
       rows: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
+      spins: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => !!r.spin),
       press: (typed, i = 0) => { const r = page.rows(typed.toLowerCase(), typed)[i]; if (r && !r.disabled) r.run(); }, // as runRow: ↩ on a note does nothing
       row: (typed, i = 0) => page.rows(typed.toLowerCase(), typed)[i],
       answer: async (a) => { reads.shift().resolve(a); await settle(); },
@@ -3051,7 +3054,9 @@ async function runMeetingDetailsCheck() {
   api.press('tomorrow from 3-5'); api.press('tomorrow from 3-5');
   assert.deepEqual(plain(api.calls()), [['read', 'tomorrow from 3-5', 'tana:event:m']], 'one press, one reading, for this meeting');
   assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['Reading \u201Ctomorrow from 3-5\u201D\u2026', '', true], ['1-2', 'Now', true]], 'it says it is reading, with nothing to press');
+  assert.deepEqual(plain(api.spins('tomorrow from 3-5')), [true, false], 'the reading row thinks, as the palette\u2019s AI rows do');
   await api.answer({ start: 100, end: 200, timeZone: 'Europe/Amsterdam' });
+  assert.equal(api.spins('tomorrow from 3-5').some(Boolean), false, 'and stops once it has answered');
   assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['100-200', '\u21A9 Apply \u00B7 read by AI', false], ['1-2', 'Now', true]], 'what it read is shown beside what is, said to be the AI\u2019s');
   assert.equal(api.calls().some((c) => c[0] === 'edit'), false, 'and nothing is written until it is pressed');
   assert.deepEqual(plain(api.rows('tomorrow from 3-6')).slice(0, 1), [['Read \u201Ctomorrow from 3-6\u201D with AI', '\u21A9', false]], 'words typed since are not the ones it read');

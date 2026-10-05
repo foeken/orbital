@@ -673,7 +673,7 @@ function createNamed(choice, title) {
   }).finally(() => { creatingNamed = false; });
 }
 // New tab, New pane and New floating pane (⌘N, ⇧⌘N, ⌥⌘N, #756) each open a new page on a note of its own: a plain document
-// titled "New note", made in the Library first, then opened in the page with the caret in its first row (edit: true,
+// titled "New Note", made in the Library first, then opened in the page with the caret in its first row (edit: true,
 // renderer/edit.js restorePlace). One press makes one note and one page: a press while main answers is the same one, and
 // a held key repeats nothing (renderer/events.js). A note made where no page can open (signed out, a window closing) is
 // kept in the Library and the toast opens it here instead. Demo mode saves nothing, so there the page opens on the
@@ -684,10 +684,10 @@ function openNoteIn(where) {
   if (openingNote) return;
   openingNote = true;
   return run(async () => {
-    const n = await tana.createDocument('New note', { kind: 'doc' }), title = n.title ?? n.text ?? 'New note';
+    const n = await tana.createDocument('New Note', { kind: 'doc' }), title = n.title ?? n.text ?? 'New Note';
     extra.set(n.id, { ...n, text: title, hasChildren: true });
     const page = await tana.splitWindow(where, { view: 'library', place: JSON.stringify({ docId: n.id, nodeId: null, title, icon: n.icon, edit: true }) });
-    if (page === null) showNote('New note created', false, n.id);
+    if (page === null) showNote('New Note created', false, n.id);
   }).finally(() => { openingNote = false; });
 }
 // search result / pin: zoom into it wherever it lives (api.node shape -> extra); from = breadcrumb root when not opened in its view

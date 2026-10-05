@@ -439,7 +439,7 @@ function meetingWhen(item, choice, title) {
 // its question back, or why there is none. Shared by "/" Meeting's when page and Edit meeting details (renderer/meeting.js).
 // Only the reading of the words now in the field is shown: words typed since are asked again.
 function readRows(read, words, group, ask, timeRow) {
-  if (read && read.busy) return [{ group, icon: 'sparkle', label: 'Reading “' + read.words + '”…', disabled: true, note: true }];
+  if (read && read.busy) return [{ group, icon: 'sparkle', spin: true, label: 'Reading “' + read.words + '”…', disabled: true, note: true }]; // spin: the palette's thinking glyph, as Auto-pick type and Discuss with show while the AI reads
   const mine = read && read.words === words ? read : null, again = { group, icon: 'sparkle', label: tana.readMeetingTime ? 'Read “' + words + '” with AI' : 'No time in “' + words + '”', hint: tana.readMeetingTime ? '↩' : '', keepOpen: true, disabled: !tana.readMeetingTime, run: ask };
   if (mine && mine.answer && mine.answer.question) return [{ group, icon: 'sparkle', label: mine.answer.question, hint: 'Add it to your words', disabled: true, note: true }];
   if (mine && mine.answer) return [timeRow(mine.answer), ...zoneNote(mine.answer, group)];
