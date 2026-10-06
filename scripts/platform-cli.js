@@ -41,7 +41,7 @@ async function connect() {
   pins = require('../sdk/pins');
   const me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
-  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: 'Orbital-CLI/' + require('../package.json').version }); // told apart from the app in Tana's logs
+  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: require('../source').userAgent('Orbital-CLI') }); // told apart from the app in Tana's logs
   return me;
 }
 
@@ -568,7 +568,7 @@ commands.privatenotes = async () => {
     // two Macs at once: a second client (another peer, another storage) seeds the next place and writes its words while
     // this one does, neither having heard of the other
     const peer = { peerId: derivePeerId(me.userExternalId), storageId: require('node:crypto').randomUUID() };
-    const second = makeClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: 'Orbital-CLI/' + require('../package.json').version });
+    const second = makeClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: require('../source').userAgent('Orbital-CLI') });
     await second.sync.connect();
     raceId = notes.slotId(me.userUri, eventId, 2);
     const [ra, rb] = await Promise.all([client.sync.subscribe(raceId, notes.seed(me.userUri, eventId, 2, me.orgDocUri, me.userExternalId), { ifMissing: true }), second.sync.subscribe(raceId, notes.seed(me.userUri, eventId, 2, me.orgDocUri, me.userExternalId), { ifMissing: true })]);

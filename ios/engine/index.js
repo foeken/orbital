@@ -339,7 +339,7 @@ window.orbital = {
     S.me = me;
     if (!S.client) {
       // the whole client, sync stream included: a same-origin fetch stream here, as Tana's own client runs it
-      S.client = createTanaClient({ getAccessToken, orgId: S.me.orgId, peerId: derivePeerId(user), storageId: storageId(), clientName: 'orbital-ios' });
+      S.client = createTanaClient({ getAccessToken, orgId: S.me.orgId, peerId: derivePeerId(user), storageId: storageId(), clientName: process.env.ORBITAL_CLIENT }); // build.js
       // every list as the desktop's (listed.js): your hidden titles and Hide MCP applied, as main/views.js listFilter does
       listFilter(S.client.graph, settings);
       // what another device writes to the settings document (a mark made sensitive on the Mac) read in as it arrives, as

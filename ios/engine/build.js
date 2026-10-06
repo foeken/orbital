@@ -8,6 +8,9 @@ const DESKTOP = new Set(['../db', './pins', './rows', './documents']);
 
 const result = await Bun.build({
   entrypoints: [path.join(here, 'index.js')], target: 'browser', format: 'iife', minify: true,
+  // the repo and commit this was built from (source.js), as the desktop's user agent says them: a web view's fetch drops
+  // a user-agent header, so the phones send them in x-client-name
+  define: { 'process.env.ORBITAL_CLIENT': JSON.stringify(require('../../source').userAgent('orbital-ios')) },
   plugins: [{ name: 'phone', setup(b) {
     b.onResolve({ filter: /.*/ }, ({ path: p, importer }) => {
       if (p === 'node:crypto' || p === 'crypto') return { path: standIns };

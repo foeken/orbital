@@ -106,12 +106,24 @@ if (process.platform === 'darwin') {
   const shipped = (file) => !ignore.test('/' + path.relative(root, file).split(path.sep).join('/'));
   for (const file of [require.resolve('loro-crdt'), path.join(path.dirname(require.resolve('loro-crdt')), 'loro_wasm_bg.wasm'),
     'main.js', 'preload.js', 'canvas-preload.js', 'index.html', 'update.html', 'update.js', 'settings.html', 'settings.js', 'settings.css', 'shell.html', 'shell.js', 'shell.css', 'node_modules/@danfessler/trellis/dist/index.js',
-    'node_modules/@danfessler/trellis/dist/style.css', 'node_modules/@danfessler/trellis/LICENSE.md', 'build/nucleo-ui.json.gz', 'main/agents/index.js', 'main/agents/tana.js', 'main/agents/codex.js', 'main/agents/claude.js', 'scripts/platform-cli.js']) {
+    'node_modules/@danfessler/trellis/dist/style.css', 'node_modules/@danfessler/trellis/LICENSE.md', 'build/nucleo-ui.json.gz', 'main/agents/index.js', 'main/agents/tana.js', 'main/agents/codex.js', 'main/agents/claude.js', 'scripts/platform-cli.js', 'source.js', 'source.json']) {
     assert.ok(shipped(path.resolve(root, file)), file + ' is shipped: the app requires or runs it');
   }
   for (const file of ['node_modules/loro-crdt/web/index.js', 'node_modules/loro-crdt/base64', 'node_modules/loro-crdt/bundler/loro_wasm_bg.wasm',
     'node_modules/loro-crdt/browser', 'scripts/sdk-check.js', 'scripts/fixtures/task-snapshot.b64', 'ios/Orbital/Engine.swift', 'ios/engine/index.js']) {
     assert.ok(!shipped(path.resolve(root, file)), file + ' is left out of the package');
   }
+}
+// The repo and commit in the user agent (source.js): a fork's own origin, and in the package the source.json baked by prepackage.
+{
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), { repoOf } = require('../source');
+  for (const url of ['git@github.com:someone/orbital.git', 'https://github.com/someone/orbital', 'https://x:tok@github.com/someone/orbital.git/\n']) assert.equal(repoOf(url), 'someone/orbital', url);
+  const app = fs.mkdtempSync(path.join(os.tmpdir(), 'source-'));
+  fs.copyFileSync(path.join(__dirname, '../source.js'), path.join(app, 'source.js'));
+  fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify({ version: '1.2.3' }));
+  fs.writeFileSync(path.join(app, 'source.json'), JSON.stringify({ repo: 'someone/orbital', hash: 'abc1234' }));
+  assert.equal(require(path.join(app, 'source.js')).userAgent('Orbital'), 'Orbital/1.2.3 (someone/orbital@abc1234)', 'the package reads source.json');
+  assert.match(require('../source').userAgent('Orbital'), /^Orbital\/[\d.]+ \([^/ ]+\/[^@ ]+@[0-9a-f]{7,}\)$/, 'a checkout asks git');
+  fs.rmSync(app, { recursive: true });
 }
 console.log('updater ok');

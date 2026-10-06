@@ -9,7 +9,7 @@
     "modules": "sh scripts/modules.sh",
     "prestart": "sh scripts/modules.sh",
     "precheck": "sh scripts/modules.sh",
-    "prepackage": "sh scripts/modules.sh",
+    "prepackage": "sh scripts/modules.sh && node source.js",
     "start": "electron .",
     "tana": "electron scripts/platform-cli.js",
     "lint": "eslint .",

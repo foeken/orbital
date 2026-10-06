@@ -463,6 +463,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
   const token = 'x.' + b64({ exp: Math.floor(Date.now() / 1000) + 300, 'urn:tana:user:id': 'u1', org_id: 'org_1' }) + '.y';
   const source = fs.readFileSync(out, 'utf8');
+  assert.ok(source.includes('"' + require('../source').userAgent('orbital-ios') + '"'), 'the phones tell Tana the repo and commit they were built from (x-client-name)');
   // one page: a fresh vm, as a fresh web view, over the given storage
   const session = JSON.stringify({ authenticated: true, accessToken: token, userExternalId: 'u1', orgDocUri: 'tana:org:01aaaaaaaaaaaaaaaaaaaaaaaa', user: { email: 'a@b.c' } });
   // shown: what the page itself says, the session's answer as the app loads it (Engine.swift start); none, no document
