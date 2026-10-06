@@ -10789,6 +10789,23 @@ async function runEditorFixesCheck() {
   console.log('ok  editor: @ prefers a name that begins with the words, a mention and a space is a full reference, a selected reference is its task');
 }
 checks.push(runEditorFixesCheck);
+// The zoomed task's Assigned to field changes who has it; ⌘K Edit assignees adds or takes one off.
+async function runAssignReplaceCheck() {
+  const api = vm.runInNewContext(`
+    const written = [], members = [{ id: 'ann' }, { id: 'bo' }], taskMetaById = new Map([['t', { assignees: ['ann'] }]]);
+    const isTask = () => true, loadMembers = () => {}, loadTaskMeta = () => {}, memberName = (id) => id, isRealId = () => true;
+    const tana = {}, agentIds = new Set(), palDoc = null, setTaskAssignees = (doc, uris) => written.push(uris);
+    ${functionSource('memberRows')}
+    ${functionSource('assigneeRows')}
+    ({ pick: (label, replace) => { written.length = 0; assigneeRows('', { id: 't' }, replace).find((r) => r.label === label).run(); return written[0]; } });
+  `);
+  assert.deepEqual(plain(api.pick('bo', true)), ['bo'], 'from the field, a person replaces who has it');
+  assert.deepEqual(plain(api.pick('bo', false)), ['ann', 'bo'], 'Edit assignees adds them');
+  assert.deepEqual(plain(api.pick('ann', false)), [], 'and takes one off again');
+  assert.match(source, /openAssigneePalette\(node, null, true\)/, 'the field opens the replacing picker');
+  console.log('ok  the Assigned to field replaces the assignee; Edit assignees toggles one');
+}
+checks.push(runAssignReplaceCheck);
 
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

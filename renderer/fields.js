@@ -83,7 +83,8 @@ function assigneeFieldEl(parent) {
   // the people as mentions, drawn as a person in any other field is: a link, no chip behind it
   if (meta.assignees.length) { const who = document.createElement('span'); renderSegs(who, meta.assignees.flatMap((uri, i) => [...(i ? [{ text: ', ' }] : []), { mention: { uri, label: memberName(uri), icon: 'member' } }])); el.append(who); }
   if (!meta.assignees.length) { const hint = document.createElement('span'); hint.className = 'fhint'; hint.textContent = 'Unassigned'; el.append(hint); }
-  const open = canEditNode(node) && tana.setAssignees ? () => openAssigneePalette(node) : null;
+  // the field says who has it, so a pick there replaces them: adding a second person is ⌘K Edit assignees
+  const open = canEditNode(node) && tana.setAssignees ? () => openAssigneePalette(node, null, true) : null;
   // the people are the value being chosen, so a click on one opens the picker too; a page you cannot edit keeps them links
   el.onclick = (e) => { if (!open) return; e.preventDefault(); e.stopPropagation(); open(); };
   el.onkeydown = (e) => {
