@@ -1188,7 +1188,10 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     is transcribed (`data.transcriptionPaused` not set), or a video recording runs (Tana's activeRecording, an entry in the call's
     `recordings` with status `recording`; a Tana Meet call is transcribed without one), read from the `tana:call:` documents those meetings own, which a live query
     finds and main keeps live, so the mark comes and goes as people join and leave and the call goes on or off the record (main/timeline.js
-    `watchCalls`). A rule separates these blocks from the history (16px above, 8px below).
+    `watchCalls`). These blocks sit above the days, outside Today's section, with no time column ("Now" is not drawn):
+    their rail runs 73px further left, under the page's title, and curves in one S into the days' rail
+    (renderer/timeline.js `timelineBendEl`), where the first day's heading is a stop, a small ring with its words in
+    line with the entries' and its chevron in the time column while the pointer is on it, as on the phones.
   - **History**, newest first in day sections (Today, Yesterday, the date): the time in a column (24-hour), a rail, a
     20px marker per entry (a filled green circle with a white check for finished work, a grey pen for an edit, grey
     outline circles for other moves), then who, in plain text, what they did in bold, and the node: "Kevin Favier

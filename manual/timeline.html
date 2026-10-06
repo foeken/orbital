@@ -26,13 +26,15 @@
   /* hero: the top of the page (today's tasks, the free time counting down), then history arriving newest first */
   .timeline-hero { --loop: 9s; }
   .timeline-hero .win { width: 470px; padding: 16px 18px 14px; }
-  .timeline-now { display: grid; grid-template-columns: 44px 22px 1fr; column-gap: 8px; row-gap: 2px; font-size: 13.5px; color: var(--ink); align-items: center; }
-  .timeline-now .sub { grid-column: 3; display: flex; align-items: center; gap: 8px; height: 24px; color: var(--text); }
+  .timeline-now { display: grid; grid-template-columns: 22px 1fr; column-gap: 8px; row-gap: 2px; font-size: 13.5px; color: var(--ink); align-items: center; }
+  .timeline-now .sub { grid-column: 2; display: flex; align-items: center; gap: 8px; height: 24px; color: var(--text); }
   .timeline-now .sub .box { width: 13px; height: 13px; }
-  .timeline-free { grid-column: 3; color: var(--muted); height: 26px; display: flex; align-items: center; gap: 5px; }
+  .timeline-free { grid-column: 2; color: var(--muted); height: 26px; display: flex; align-items: center; gap: 5px; }
   .timeline-free b { color: var(--text); position: relative; display: inline-block; min-width: 1.2em; }
   .timeline-free .n2 { position: absolute; left: 0; opacity: 0; }
-  .timeline-rule { height: 1px; background: var(--line); margin: 10px 0 6px; }
+  /* the rail above the days curves into theirs: from the top block's markers to the history's */
+  .timeline-bend { display: block; width: 64px; height: 26px; margin: 4px 0 2px; overflow: visible; }
+  .timeline-bend path { fill: none; stroke: var(--line-strong); stroke-width: 1; }
   .timeline-in { overflow: hidden; }
   .mg.in .timeline-hero-a { animation: timeline-arrive var(--loop) infinite; }
   .mg.in .timeline-hero-b { animation: timeline-arrive2 var(--loop) infinite; }
@@ -98,12 +100,12 @@
       <div class="win">
         <div class="ttl">Timeline</div>
         <div class="timeline-now">
-          <span class="timeline-t">Now</span><span class="timeline-mk flat">✓</span><span>Today's Tasks</span>
+          <span class="timeline-mk flat">✓</span><span>Today's Tasks</span>
           <span class="sub"><span class="box tick"></span>Send the venue options</span>
           <span class="sub"><span class="box"></span>Draft the LT agenda</span>
-          <span></span><span class="timeline-mk flat">☺</span><span class="timeline-free">No meetings for <b><span class="n1">44</span><span class="n2">43</span></b> more minutes</span>
+          <span class="timeline-mk flat">☺</span><span class="timeline-free">No meetings for <b><span class="n1">44</span><span class="n2">43</span></b> more minutes</span>
         </div>
-        <div class="timeline-rule"></div>
+        <svg class="timeline-bend" viewBox="0 0 64 26"><path d="M11 0C11 14 63 12 63 26"/></svg>
         <div class="timeline-in timeline-hero-b"><div class="timeline-e"><span class="timeline-t new">11:52</span><span class="timeline-mk pen">✎</span><span>Sam Okafor <b>edited</b> Offsite plan</span></div></div>
         <div class="timeline-in timeline-hero-a"><div class="timeline-e"><span class="timeline-t new">11:13</span><span class="timeline-mk done"></span><span>Priya Raman <b>completed</b> <s>Book the room</s></span></div></div>
         <div class="timeline-e"><span class="timeline-t">10:47</span><span class="timeline-mk">+</span><span>Tomas Ilves <b>accepted</b> Guardrail sessions</span></div>
@@ -115,15 +117,15 @@
 
   <section class="topic">
     <h2 id="timeline" data-k="today tasks free time upcoming meetings join">The Timeline</h2>
-    <p>The Timeline is a page of Orbital's own. Open it from <kbd>⌘K</kbd> with the row <b>Timeline</b>, under Views. The top of the page is about now: what you plan to do today and what is coming up. Below a thin rule is the history, newest first.</p>
+    <p>The Timeline is a page of Orbital's own. Open it from <kbd>⌘K</kbd> with the row <b>Timeline</b>, under Views. The top of the page is about now: what you plan to do today and what is coming up, on a rail of its own with no times. That rail curves into the history below, newest first, where the times start and the first day's heading sits on the rail.</p>
     <figure class="anno wide">
       <img data-m="timeline-now" alt="The top of the Timeline: Today's Tasks, the free time and the upcoming meetings">
-      <span class="pin" style="--x:21%;--y:23.8%">1</span>
-      <span class="pin" style="--x:18.5%;--y:50%">2</span>
-      <span class="pin" style="--x:32%;--y:55.8%">3</span>
-      <span class="pin" style="--x:24%;--y:65%">4</span>
-      <span class="pin" style="--x:28%;--y:71.8%">5</span>
-      <span class="pin" style="--x:29%;--y:93.9%">6</span>
+      <span class="pin" style="--x:15.5%;--y:18.5%">1</span>
+      <span class="pin" style="--x:13%;--y:42.5%">2</span>
+      <span class="pin" style="--x:26.5%;--y:50.6%">3</span>
+      <span class="pin" style="--x:18.5%;--y:59.7%">4</span>
+      <span class="pin" style="--x:22%;--y:66.5%">5</span>
+      <span class="pin" style="--x:23.5%;--y:88.6%">6</span>
     </figure>
     <ol class="legend">
       <li><b>Today's Tasks</b> Tasks you pinned to today, plus open ones pinned to an earlier day, plus the tasks on today's page.</li>
@@ -154,17 +156,17 @@
 
 <section class="topic">
   <h2 id="history" data-short="History" data-k="completed accepted edited later inbox agent unread days">What happened, newest first</h2>
-  <p>Under the rule, the Timeline tells the story of the last days. Each entry has a time on the left, a marker on the rail and one sentence: who did what to which node. Entries are grouped by day: Today, Yesterday, then the date.</p>
+  <p>Where the rail curves in, the Timeline tells the story of the last days. Each entry has a time on the left, a marker on the rail and one sentence: who did what to which node. Entries are grouped by day: Today, Yesterday, then the date.</p>
   <figure class="anno wide">
     <img data-m="timeline-history" alt="The Timeline's history with completed, accepted and edited entries">
-    <span class="pin" style="--x:4.3%;--y:50%">1</span>
-    <span class="pin" style="--x:4.3%;--y:29.5%">2</span>
-    <span class="pin" style="--x:35.5%;--y:5.9%">3</span>
-    <span class="pin" style="--x:41.5%;--y:24.7%">4</span>
-    <span class="pin" style="--x:62.8%;--y:44.2%">5</span>
-    <span class="pin" style="--x:34.5%;--y:63.4%">6</span>
-    <span class="pin" style="--x:21%;--y:76%">7</span>
-    <span class="pin" style="--x:10.5%;--y:83.2%">8</span>
+    <span class="pin" style="--x:1.5%;--y:45.6%">1</span>
+    <span class="pin" style="--x:7.1%;--y:30.5%">2</span>
+    <span class="pin" style="--x:35.5%;--y:14.9%">3</span>
+    <span class="pin" style="--x:41.5%;--y:33.7%">4</span>
+    <span class="pin" style="--x:62.8%;--y:53.2%">5</span>
+    <span class="pin" style="--x:35.4%;--y:80.6%">6</span>
+    <span class="pin" style="--x:22.5%;--y:90.5%">7</span>
+    <span class="pin" style="--x:16.2%;--y:8.8%">8</span>
   </figure>
   <ol class="legend">
     <li><b>Time</b> When it happened, on a 24-hour clock.</li>

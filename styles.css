@@ -536,14 +536,24 @@ html.links .app { display: none; }
 .node.tl { position: relative; }
 /* a row's line starts 10px left of its node (the gutter's negative margin), so the rail is placed on the marker's centre */
 .node.tl::before { content: ''; position: absolute; left: 101px; top: 0; bottom: 0; border-left: 1px solid #e6e6e6; }
-.node.tl-today::before { top: 26px; }
-/* 16px between the end of today's rail and the line, 8px under it: the heading below brings its own room, so this
-   balances the line between the two */
-.tl-divider { position: relative; height: 25px; }
-.tl-divider::before { content: ''; position: absolute; inset: 16px 0 auto; border-top: 1px solid #e6e6e6; }
-/* the line is the space between today and the day before it: the heading under it gives up its own top margin, or the
-   line sits twice as far from the heading as from the rows above it (#190) */
-.tl-divider + .ghead { margin-top: 0; }
+/* above the days (renderer/timeline.js timelineTop): no time column, the rail 73px further left, under the page's
+   title, starting at the first marker; it curves into the days' rail (.tl-bend), as on the phones */
+.node.tl-top::before { left: 28px; }
+#outline > .node.tl-top:first-child::before { top: 26px; }
+.node.tl.tl-top > .line { padding-left: 29px; }
+.node.tl-top > .line > .body > .meta { display: none; }
+.node.block.t-bullet.tl.tl-top > .children { margin-left: 59px; }
+.tl-bend { height: 64px; }
+.tl-bend svg { display: block; width: 74px; height: 64px; margin-left: 28px; overflow: visible; }
+.tl-bend path { fill: none; stroke: #e6e6e6; }
+/* the first day's heading where the bend lands: a stop on the days' rail, a small ring, its words in line with the
+   entries' and its chevron in the time column, there while the pointer is on it */
+.tl-bend + .ghead { position: relative; margin-top: 0; padding-left: 127px; }
+.tl-bend + .ghead svg { position: absolute; left: 76px; opacity: 0; }
+.tl-bend + .ghead:is(:hover, :focus-visible) svg { opacity: 1; }
+.tl-bend + .ghead::before { content: ''; position: absolute; left: 101px; top: 0; bottom: -10px; border-left: 1px solid #e6e6e6; } /* on through the room under it to the first entry */
+.tl-bend + .ghead[aria-expanded="false"]::before { bottom: 50%; }
+.tl-bend + .ghead::after { content: ''; position: absolute; left: 96px; top: 50%; width: 11px; height: 11px; margin-top: -5.5px; box-sizing: border-box; border: 1.5px solid #c4c4c4; border-radius: 50%; background: #fff; }
 .ghead + .node.tl { margin-top: 10px; } /* room under a day's heading */
 .node.tl > .line { position: relative; padding: 14px 0 14px 102px; } /* room around each entry: inside it, so the rail runs on */
 .node.tl > .line > .chev { width: 0; }
@@ -614,7 +624,9 @@ html.links .app { display: none; }
 .node.opens > .line > .body > * { cursor: pointer; }
 .node.tl.unread > .line::after { content: ''; position: absolute; left: 84px; top: 23px; /* centred between the time and the marker, on the time's middle */ width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
-[data-theme="dark"] .tl-divider::before { border-top-color: #34373a; }
+[data-theme="dark"] .tl-bend + .ghead::before { border-left-color: #34373a; }
+[data-theme="dark"] .tl-bend path { stroke: #34373a; }
+[data-theme="dark"] .tl-bend + .ghead::after { border-color: #5a5d60; background: #1b1d1e; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }
 [data-theme="dark"] .node.tl-recording > .line > .bullet.icon svg { color: #3b9eff; background: transparent; }
 [data-theme="dark"] .node.tl-recording > .line > .bullet.icon::before { background: #1b1d1e; }

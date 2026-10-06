@@ -8,7 +8,8 @@ const tag = (rowText, sel, id) => ({ js: "[...document.querySelectorAll('.node')
 // a day with no meetings left: the mock's Timeline read without its free time and Upcoming meetings, as main sends it then
 const NO_MEETINGS = { js: "const all = tana.children; tana.children = async (id) => { const r = await all(id); return id === 'orbital:timeline' ? r.filter((n) => !n.timeline?.free && !n.timeline?.upcoming) : r; }; 1" };
 module.exports = [
-  { name: 'timeline-now', setup: open('orbital:timeline'), clip: [0, 40, 1280, 560] },
+  { name: 'timeline-page', url: 'manual/timeline.html', full: true, size: '1440x900' },
+ { name: 'timeline-now', setup: open('orbital:timeline'), clip: [0, 40, 1280, 560] },
   { name: 'timeline-nomeetings', setup: [W, NO_MEETINGS, ...open('orbital:timeline'), { js: "reload('orbital:timeline').then(() => render(true))" }, { wait: 900 }], clip: [0, 40, 1280, 470] },
   // its meetings include Travel to Utrecht, drawn with the route marker (main/timeline.js meetingIcon)
   { name: 'timeline-history', size: '1280x1500', setup: open('orbital:timeline'), clip: [0, 600, 1280, 880] },
