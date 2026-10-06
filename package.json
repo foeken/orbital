@@ -1,6 +1,6 @@
 {
   "name": "tana-tasks",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "description": "Orbital: an outliner over your Tana documents, kept live over Tana's platform sync",
