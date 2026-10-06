@@ -184,8 +184,9 @@ assert.match(source, /id: 'editPins', group: docGroup, icon: 'pinned', label: 'E
 assert.match(source, /function editPinRows\(q\)[\s\S]*pinAction\('unpin', 'sidebar'\)[\s\S]*pinAction\('unpin', 'today', date\)/, 'every pin the page lists can be taken off');
 assert.match(source, /isPinned\(n\.id\)/, 'a reused row is rebuilt when its pin state changes (rowSig)');
 assert.match(source, /\{ create: true, label: 'Create “' \+ title/);
-// linking preselects a result only when its title starts with the typed text; otherwise "Create" stays selected
-assert.match(source, /const starts = nodes\.findIndex\(\(n\) => \(n\.title \?\? n\.text \?\? ''\)\.toLowerCase\(\)\.startsWith\(q\.toLowerCase\(\)\)\);/);
+// linking preselects a result only when every typed word begins a word of its title; otherwise "Create" stays selected
+// (the rule itself: renderer-behavior-check.js runEditorFixesCheck)
+assert.match(source, /const starts = words \? nodes\.findIndex\(\(n\) => titleHits\(n\.title \?\? n\.text \?\? '', q\)\.starts === words\) : -1;/);
 assert.match(source, /palIndex = linkCtx && starts >= 0 && !\(palRows\[0\] && palRows\[0\]\.date\) \? starts \+ palRows\.filter\(\(r\) => r\.create\)\.length : 0;/);
 assert.match(source, /palRows\.find\(\(row\) => row\.create\)/);
 assert.match(source, /tana\.toggleCheckbox\(item\.docId, item\.node\.id\)/);

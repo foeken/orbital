@@ -295,11 +295,12 @@ function memberRows(q, pick, ticked) {
   for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: tick(member.id), keepOpen: true, run: () => pick(member.id) });
   return rows;
 }
-function assigneeRows(q, doc = palDoc) {
+// replace: a pick is the task's one assignee (the zoomed task's Assigned to field), where Edit assignees adds or takes one off
+function assigneeRows(q, doc = palDoc, replace = false) {
   if (!doc || !isTask(doc)) return [];
   loadMembers(); loadTaskMeta(doc.id);
   const meta = taskMetaById.get(doc.id), ids = meta ? meta.assignees : [];
-  const toggle = (uri) => ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri];
+  const toggle = (uri) => (replace ? [uri] : ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri]);
   const rows = memberRows(q, (uri) => setTaskAssignees(doc, uri ? toggle(uri) : []), (uri) => (uri ? ids.includes(uri) : !ids.length));
   // The agent belongs in the same list a person is chosen from — it is the same question. It is not a Tana assignee
   // though (those are user profiles), so choosing it goes into the one Agent flow: the prompt page and its model
@@ -309,19 +310,20 @@ function assigneeRows(q, doc = palDoc) {
   }
   return rows;
 }
-function openAssigneePalette(doc, ctx) {
+function openAssigneePalette(doc, ctx, replace = false) {
   palTaskCtx = ctx || null;
   palDoc = doc; loadMembers(); loadTaskMeta(doc.id);
-  openPage('assignees', 'Assign task to…', { rows: (q) => assigneeRows(q) });
+  openPage('assignees', replace ? 'Assign to…' : 'Assign task to…', { rows: (q) => assigneeRows(q, palDoc, replace) });
 }
 function taskActionContext() {
   const keys = selKeys(), fromSelection = keys.length > 0;
   const selected = fromSelection ? keys.map((key) => items.get(key)).filter(Boolean) : palDoc ? [{ node: palDoc, docId: palDoc.id }] : [];
   const docs = [], seen = new Set();
   for (const item of selected) {
-    const doc = item.node;
-    if (!doc || doc.draft || !isTask(doc) || !canEditNode(doc) || seen.has(item.docId)) continue;
-    seen.add(item.docId); docs.push(doc);
+    // a selected reference row acts on the task it stands in for, as ⌘K on it with a caret does (currentDoc)
+    const doc = item.node && (referenceTarget(item.node) || item.node), id = doc && (doc.kind === 'document' ? doc.id : item.docId);
+    if (!doc || doc.draft || !isTask(doc) || !canEditNode(doc) || seen.has(id)) continue;
+    seen.add(id); docs.push(doc);
   }
   if (!fromSelection && !docs.length) return null;
   return { docs, selected: selected.length, skipped: selected.length - docs.length, fromSelection, multi: keys.length > 1 };

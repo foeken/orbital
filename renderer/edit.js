@@ -9,15 +9,30 @@ function scheduleSave(item, segs) {
   pending.set(item.key, { item, segs, timer: setTimeout(() => flush(item.key), 400) });
 }
 function dropPending(key) { const p = pending.get(key); if (p) { clearTimeout(p.timer); pending.delete(key); } }
+// Renaming a full reference in place: the row draws its target's title as words (renderer/render.js shown), typing
+// saves that title (flush), and Enter, Escape or leaving the row ends it with the chip back. Nothing is written to the
+// block itself, so the line stays one mention and goes on standing in for the node.
+function startRename(item) {
+  renamingRef = item.key;
+  render(true);
+  placeCaret(item.key);
+}
+function endRename(key, leave) {
+  if (renamingRef !== key) return;
+  flush(key);
+  renamingRef = null;
+  render(true);
+  if (!leave) placeCaret(key); else textEl(key)?.blur();
+}
 function flush(key) {
   const p = pending.get(key);
   if (!p) return;
   dropPending(key);
   const { item, segs } = p, text = plainOf(segs);
   if (!canEditText(item)) return;
-  if (isReference(item.node)) { // the row edits the referenced document's title
+  if (isReference(item.node) || renamingRef === item.key) { // the row edits the referenced document's title (a full reference: while renamed)
     if (text === referenceLabel(item.node)) return;
-    item.node.reference.node.title = text;
+    Object.assign(item.node.reference.node, { title: text, text }); // the label reads .text: the row keeps the new name until Tana's answer lands
     return run(() => tana.setTitle(item.node.reference.uri, text, true)); // true: typed here, already on screen (#265)
   }
   if (text === item.node.text && JSON.stringify(segs) === JSON.stringify(segsOf(item.node))) return;

@@ -915,7 +915,8 @@ function nodeEl(node, docId, parent) {
     if (typesInto(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
-    const shown = (label) => (reference ? [{ text: label }] : fullref ? [{ mention: { uri: node.reference.uri, label } }] : null); // a translated reference keeps its chip
+    // a translated reference keeps its chip; a full reference being renamed is its target's title as words to type in
+    const shown = (label) => (reference || (fullref && renamingRef === item.key) ? [{ text: label }] : fullref ? [{ mention: { uri: node.reference.uri, label } }] : null);
     const own = shown(referenceLabel(node)) || (node.timeline?.free ? timelineFreeSegs(node.timeline.free) : segsOf(node)), segs = pending.has(item.key) ? pending.get(item.key).segs : english ? shown(english.text) || translatedSegs(node, english.text) : own;
     renderSegs(text, segs, display.id);
     text.classList.toggle('chiponly', chipOnly(text));
@@ -977,6 +978,9 @@ function nodeEl(node, docId, parent) {
   // into (its text is one chip), so the caret goes to the end, which is where Enter on the selection puts it too
   if (reference || fullref) line.onmousedown = (e) => {
     if (e.metaKey || e.shiftKey || e.target.closest('.check') || e.target.closest('.bullet') || e.target.closest('.chev')) return;
+    // the second click on a full reference renames what it points at, as a native reference's does (startRename,
+    // renderer/edit.js); one whose target cannot be renamed puts the caret after its chip, to type beside it
+    if (fullref && selKeys().includes(item.key) && canEditNode(target)) { e.preventDefault(); startRename(item); return; }
     if (selKeys().includes(item.key) && canEditText(item)) { if (fullref) { e.preventDefault(); setCaret(text, text.textContent.length); } return; }
     e.preventDefault(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key }; leaveText(); applySel();
   };
