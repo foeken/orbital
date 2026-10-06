@@ -207,6 +207,43 @@ flow('editing keeps the screen and the saved outline the same', async (p) => {
   assert.deepEqual(await same('⌘Z after the delete'), ['alpha', 'beta', '  gamma', 'delta']);
 });
 
+// 4b. A full reference made inline by Space (renderer/edit.js makeInline): the row is the node it points at until Space
+// is typed after it, from the caret after the chip (Enter on the selected row) or from a rename not yet typed in (a
+// second click). Then it is a line with the chip in its target's colour and glyph, and stays one once saved, though a
+// plain space beside the chip is how Tana's AI writes a full reference.
+flow('Space after a full reference makes it an inline reference in its colour', async (p) => {
+  await p.start();
+  const id = await p.js("tana.createDocument('Inline test').then((n) => { goTo(n.id); return n.id; })");
+  await p.waitFor('document.activeElement && document.activeElement.isContentEditable', 'the caret in the new page');
+  await p.type('x'); await p.js('flushAll()'); await settle(p, 450);
+  const row = await p.js('tana.children(' + J(id) + ').then((r) => r[0].id)');
+  const chip = [{ mention: { uri: 'tana:space:mock', label: 'Studio LT' } }, { text: ' ' }]; // as Tana's AI writes one
+  const full = async () => {
+    await p.js('tana.setText(' + J(id) + ', ' + J(row) + ', ' + J(chip) + ').then(() => reload(' + J(id) + ')).then(() => render(true))');
+    await p.waitFor('document.querySelector("#outline .node.fullref")', 'the line drawn as the node it points at');
+  };
+  const inline = async (how) => {
+    await p.waitFor('!document.querySelector("#outline .node.fullref")', 'the line an ordinary one after Space ' + how);
+    const m = await p.js('(() => { const a = document.querySelector("#outline .node .text .mention"); return a && { hue: a.classList.contains("hue") && a.dataset.hue, icon: a.dataset.icon, svg: !!a.querySelector("svg") }; })()');
+    assert.deepEqual(m, { hue: '150', icon: 'space', svg: true }, 'the chip is drawn in its target\u2019s colour and with its glyph, ' + how);
+    await p.js('flushAll()'); await settle(p, 450);
+    const saved = await p.js('tana.children(' + J(id) + ').then((r) => r[0])');
+    assert.deepEqual(saved.segments.map((s) => s.text ?? s.mention.uri), ['tana:space:mock', '\u00a0'], 'saved as the chip and a no-break space, ' + how);
+    assert.equal(saved.reference, undefined, 'which reads back as a line, not a full reference, ' + how);
+  };
+  await full();
+  await clickRow(p, 'Studio LT'); await settle(p, 150); await p.key('↩'); await settle(p, 150);
+  await p.key('Space');
+  await inline('after the chip');
+  await full();
+  await clickRow(p, 'Studio LT'); await settle(p, 150); await clickRow(p, 'Studio LT'); await settle(p, 150);
+  assert.equal(await p.js('renamingRef'), await p.js('keyOfEl(document.activeElement)'), 'the second click renames the space');
+  await p.key('Space');
+  assert.equal(await p.js('renamingRef'), null, 'Space at the end of an untouched title ends the rename');
+  await inline('from a rename');
+  assert.equal(await p.js('tana.node("tana:space:mock").then((n) => n.title)'), 'Studio LT', 'and the space keeps its name');
+});
+
 // ⌘↩ cycles a row's checkbox, no box → empty → ticked → no box, and on a selection every row takes the same step
 // (renderer/edit.js cycleCheckboxes), the boxes drawn as saved and one ⌘Z putting a whole step back
 flow('⌘↩ cycles a checkbox on a row and on a selection of rows', async (p) => {

@@ -272,8 +272,12 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   row carries `.chiponly`, and Backspace or Delete removes it as they remove an image. A read-only reference row, and
   a lone chip whose target could not be read, is outlined when focused.
 - **A full-line reference is the node it points at** (`isFullReference`, renderer/nodes.js; `.fullref`): a line that is
-  one mention and nothing but whitespace beside it (Tana's AI writes the goals and tasks it makes as a mention and a
-  space; `oneMention`, and main's `lone` in resolveReferences). Main resolves
+  one mention and nothing but plain spaces beside it (Tana's AI writes the goals and tasks it makes as a mention and a
+  space; `oneMention`, and main's `lone` in resolveReferences). Space typed after it makes it an inline reference
+  (`makeInline`, renderer/edit.js): from the caret after the chip, or at the end of a rename not yet typed in, which
+  ends the rename. It writes a no-break space, the one space that counts as text, so the line stays inline once saved;
+  the chip keeps its target's glyph and colour on it while drawn as plain words, so it turns into the coloured inline
+  chip at once, not a bare link until the next reload. Main resolves
   it like a native embed (`reference: { uri, label, node }`), and the row is built from the target: its bullet and
   hue, tags, subtext and checkbox (`toggleReference`), and its label, so a rename shows through (nothing is written
   back). The title reads as ordinary text; the blue chip is for a reference among text. The block keeps its own

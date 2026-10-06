@@ -24,6 +24,14 @@ function endRename(key, leave) {
   render(true);
   if (!leave) placeCaret(key); else textEl(key)?.blur();
 }
+// Space typed after a full reference makes it an inline reference: the line becomes its chip and a space, drawn in the
+// target's colour with its glyph (renderer/render.js keeps them on the chip). The space is a no-break one, because a
+// plain space beside the chip is how Tana's AI writes a full reference (oneMention), and would leave the row as it was.
+// From a rename not yet typed in, the rename ends first and the space goes after the chip, not into the title.
+function makeInline(item) {
+  if (renamingRef === item.key) endRename(item.key);
+  document.execCommand('insertText', false, '\u00a0'); // fires 'input': saved as typing is, and the row redrawn as a line
+}
 function flush(key) {
   const p = pending.get(key);
   if (!p) return;

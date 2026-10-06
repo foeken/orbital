@@ -1006,7 +1006,7 @@ function runEditabilityCheck() {
       ${withShims(source.slice(start, end))}
       Object.assign(globalThis, { mutation: () => mutation, state: () => ({ mutation, zoomed, opened, prevented }) });
     `, context);
-    const event = { key, metaKey: meta, ctrlKey: false, shiftKey: false, target: { closest: () => ({ textContent: 'Row' }) }, preventDefault: () => { context.prevented = true; } };
+    const event = { key, metaKey: meta, ctrlKey: false, shiftKey: false, target: { closest: () => ({ textContent: 'Row', closest: () => null }) }, preventDefault: () => { context.prevented = true; } };
     context.listener(event);
     return { ...context.state(), prevented: !!context.prevented };
   };
@@ -1335,7 +1335,7 @@ function runReferenceEmbedRenderCheck() {
     const toggleDone = () => { toggled = 'own task'; }, toggleCheckbox = () => { toggled = 'own checkbox'; };
     const document = { createElement: (tagName) => {
       const classes = new Set();
-      return { tagName, children: [], dataset: {}, classes, style: { setProperty() {} }, classList: {
+      return { tagName, children: [], dataset: {}, classes, style: { setProperty() {} }, querySelector: () => null, classList: {
         add: (...names) => names.forEach((name) => classes.add(name)),
         toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name),
       }, append(...children) { this.children.push(...children); } };
@@ -1924,6 +1924,7 @@ async function runSyncShortcutCheck() {
   assert.equal(live.liveTarget(full, { segs: chipSegs })?.id, 'tana:text:t1', 'an edit that is still just the chip leaves it standing in');
   assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: ' a' }] }), null, 'a word typed after the chip makes it an ordinary line at once, before the save goes out');
   assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: ' ' }] })?.id, 'tana:text:t1', 'a space alone does not: Tana writes its own references with one');
+  assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: '\u00a0' }] }), null, 'the no-break space Space types beside the chip does: the line is an inline reference at once');
   const inline = { kind: 'block', type: 'reference', segments: [{ text: 'Ship it' }], reference: { uri: 'tana:text:t1', node: { id: 'tana:text:t1', title: 'Ship it' } } };
   assert.equal(live.liveTarget(inline, { segs: [{ text: 'Ship it now' }] })?.id, 'tana:text:t1', 'typing in an inline reference edits the target title, so it keeps pointing at it');
   assert.match(source, /const target = gone \|\| field \? null : liveTarget\(node, pending\.get\(item\.key\)\)/,
@@ -10824,6 +10825,14 @@ async function runEditorFixesCheck() {
   assert.equal(pick('Sam Okafor', 'sam oka'), true, 'and every word typed has to');
   assert.equal(pick('Discuss Sam Okafor', 'kafor'), false, 'inside a word is no obvious choice: Create stays selected');
   assert.equal(api.oneMention([{ mention: { uri: 'tana:text:x', label: 'Goal' } }, { text: ' ' }]), true, 'a space beside the chip is still one mention');
+  assert.equal(api.oneMention([{ text: ' ' }, { mention: { uri: 'tana:text:x', label: 'Goal' } }, { text: ' ' }]), true, 'on either side');
+  assert.equal(api.oneMention([{ mention: { uri: 'tana:text:x', label: 'Goal' } }, { text: '\u00a0' }]), false, 'a no-break space, typed to make it inline, is not');
+  assert.ok(fs.readFileSync(__dirname + '/../main/documents.js', 'utf8').includes("const lone = n => { const kept = (n.segments || []).filter(s => s.mention || /[^ \\t\\r\\n]/.test(s.text));"),
+    'main reads a full reference as the renderer does: plain spaces beside the chip, and no no-break space');
+  assert.match(source, /function makeInline\(item\) \{\n\s*if \(renamingRef === item\.key\) endRename\(item\.key\);\n\s*document\.execCommand\('insertText', false, '\\u00a0'\);/,
+    'Space after a full reference writes a no-break space after the chip, so the row stays inline after the save');
+  assert.match(source, /if \(lone && target\.icon && !lone\.dataset\.icon\) lone\.dataset\.icon = target\.icon;\n\s*if \(lone && target\.hue != null && !lone\.dataset\.hue\) lone\.dataset\.hue = String\(target\.hue\);/,
+    'a full reference chip carries its target glyph and colour, so the inline reference it becomes is drawn in them');
   assert.equal(api.oneMention([{ mention: { uri: 'tana:text:x', label: 'Goal' } }, { text: ' and more' }]), false, 'words beside it are not');
   const task = { id: 'tana:text:task', kind: 'document', task: true };
   assert.deepEqual(plain(api.tasksFor([{ docId: 'tana:text:page', node: { kind: 'block', id: 'blk', target: task } }])), ['tana:text:task'], 'a selected full reference offers its task');
