@@ -3,7 +3,7 @@ const pins = require('../sdk/pins');
 const { readNode } = require('../sdk/node');
 const { isDateUri } = require('../sdk/dates');
 const { DOC_URI, NOT_CONNECTED, PIN_HUBS, S, deletedNodes, idKind, isDeleted, scheduleRefresh, send, today } = require('./state');
-const { canWriteDoc, createDocument, document, info, onChange } = require('./documents');
+const { canWriteDoc, createDocument, document, info, onChange, sensitiveIds } = require('./documents');
 
 // ---- pins (sdk/pins.js over the user's profile/collection/pin-map docs) and app-local icons ----
 
@@ -52,13 +52,52 @@ async function pinnedNode(uri) {
 }
 async function pinTree() {
   if (!S.client) return [];
+  const sensitive = new Set(sensitiveIds());
   const fill = async (entry) => {
     const node = entry.uri ? await pinnedNode(entry.uri) : undefined;
+    if (node && sensitive.has(entry.uri)) node.sensitive = true; // the window's sidebar blurs it as the pages do (shell.js)
     const children = (await Promise.all(entry.children.map(fill))).filter(Boolean);
     if (entry.uri && deletedNodes.has(entry.uri)) return children.length || entry.label ? { label: entry.label, children } : null;
     return { ...entry, node, children };
   };
-  return (await Promise.all((await pins.sidebarTree(S.client.sync, S.me.userUri)).map(fill))).filter(Boolean);
+  const tree = (await Promise.all((await pins.sidebarTree(S.client.sync, S.me.userUri)).map(fill))).filter(Boolean);
+  watchSidebar(tree);
+  return tree;
+}
+// The window's sidebar (shell.js) is told when what it draws moves: the collection (a pin or a section added, moved or
+// taken off, here or in Tana) or a pinned document (renamed, retyped, deleted). It reads the tree again then; the
+// profile is watched too, for the pointer to a collection made since. Told a beat later, so a burst is one read.
+const sidebarWatched = new Set(), sidebarClients = new WeakSet();
+let sidebarTold = null;
+function watchSidebar(tree) {
+  const profile = S.client.sync.getDocument && S.client.sync.getDocument(S.me.userUri), walk = (nodes) => nodes.flatMap((n) => [n.uri, ...walk(n.children || [])]);
+  sidebarWatched.clear();
+  for (const uri of [S.me.userUri, profile && profile.data.get('pinnedCollectionUri'), ...walk(tree)]) if (uri) sidebarWatched.add(uri);
+  const client = S.client;
+  if (sidebarClients.has(client) || typeof client.sync.on !== 'function') return; // a stand-in sync with no stream (scripts/sdk-check.js) has nothing to hear
+  sidebarClients.add(client);
+  client.sync.on('change', (id) => {
+    if (S.client !== client || !sidebarWatched.has(id) || sidebarTold) return;
+    sidebarTold = setTimeout(() => { sidebarTold = null; tellSidebars(); }, 300);
+  });
+}
+function tellSidebars() {
+  for (const w of S.windows || []) { const wc = w.shell && w.shell.webContents; if (wc && !wc.isDestroyed()) wc.send('pins:changed'); }
+}
+// The sections a pin can go in, for ⌘K Pin to sidebar … (renderer/document.js): top-level labels, with how many pins each holds.
+async function pinSections() {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  const tree = await pins.sidebarTree(S.client.sync, S.me.userUri).catch(() => []);
+  return tree.filter((n) => !n.uri && typeof n.label === 'string').map((n) => ({ id: n.id, label: n.label, count: n.children.filter((c) => c.uri).length }));
+}
+// A pin put in a section (null: the top level, under Pinned), or in a new one when a label comes instead; a document
+// already pinned moves there, as Tana's placePin does. The window's sidebar hears it through the change above.
+async function placeSidebarPin(id, section, label) {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  if (!DOC_URI.test(id || '')) throw new Error('Not a Tana document id');
+  const sync = S.client.sync, user = S.me.userUri;
+  if (typeof label === 'string' && label.trim()) section = await pins.addSection(sync, user, label.trim());
+  return pins.placePin(sync, user, id, { section: typeof section === 'string' ? section : null });
 }
 // The meetings and spaces this document is pinned *on*: the reverse of the hub's own pinnedItems, which the graph
 // derives as EDGE_TYPE_HAS_PIN (docs/PINNING.md §4). One ListEdges for the hubs and one ListNodes for their titles;
@@ -148,6 +187,9 @@ const ipc = {
   'pins:unpin': (_e, id, target, date) => setPin(id, target, false, date),
   'pins:pinTo': (_e, hubId, uri) => nodePin(hubId, uri, true), // pin a document on a meeting/space
   'pins:unpinFrom': (_e, hubId, uri) => nodePin(hubId, uri, false),
+  'pins:tree': () => pinTree(), // the window's sidebar (shell.js): [{ id, uri?, label?, node?, children }]
+  'pins:sections': () => pinSections(),
+  'pins:place': (_e, id, section, label) => placeSidebarPin(id, section, label),
   // The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
   // so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
   // A 'YYYY-MM-DD' day instead of the offset is the page a date mention opens.
@@ -155,4 +197,4 @@ const ipc = {
   'doc:weekNode': async (_e, findOnly) => (await weekNode(new Date(), findOnly === true))?.id ?? null,
 };
 
-module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinnedUris, pinnedDates, pinHubs, pinTree, pinState, setPin, nodePin, todayNode, ipc };
+module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinnedUris, pinnedDates, pinHubs, pinTree, pinSections, placeSidebarPin, tellSidebars, pinState, setPin, nodePin, todayNode, ipc };

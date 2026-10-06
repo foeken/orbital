@@ -262,7 +262,10 @@ ipcMain.on('settings:size', (e, height) => {
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
-  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: BACKGROUND.light });
+  // in the theme the pages drew in last (window:theme), so a dark window does not open light and flash until a page says so
+  const theme = Object.hasOwn(BACKGROUND, db.setting('windowTheme')) ? db.setting('windowTheme') : systemTheme();
+  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: BACKGROUND[theme] });
+  win.theme = theme; // what the shell starts in (shell:state), until a page says again
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
   const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed() && win.primary) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), doc: win.doc }); };
@@ -277,6 +280,7 @@ function createWindow() {
   if (front) setStart(win.pages[0], { view: null, place: null });
   // nodeIntegrationInSubFrames: preload.js runs in each page's iframe as well, which is what gives a page window.api
   win.shell = new WebContentsView({ webPreferences: { preload: PRELOAD, nodeIntegrationInSubFrames: true } });
+  win.shell.setBackgroundColor(BACKGROUND[theme]); // a view is white until its page paints
   keepHome(win.shell.webContents);
   win.contentView.addChildView(win.shell); fit(win);
   // a crash takes the pages with it; the reload that brings them back registers them again
@@ -422,7 +426,8 @@ ipcMain.on('shell:layout', (e, layout) => {
 ipcMain.on('window:theme', (e, theme) => {
   const win = pageOf(e)?.win;
   if (!win || !Object.hasOwn(BACKGROUND, theme)) return;
-  win.theme = theme; win.setBackgroundColor(BACKGROUND[theme]); tellShell(win, 'theme', theme);
+  win.theme = theme; win.setBackgroundColor(BACKGROUND[theme]); win.shell?.setBackgroundColor(BACKGROUND[theme]); tellShell(win, 'theme', theme);
+  db.setSetting('windowTheme', theme); // the next window opens in it (createWindow)
 });
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });

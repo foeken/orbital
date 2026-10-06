@@ -23,6 +23,11 @@ if (!chrome) { console.error('No chrome-headless-shell: run npx playwright insta
 const pair = { schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: [0.6, 0.4], children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
   floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2', ...(graph ? { links: true } : {}) } } } };
 if (graph) pair.root.weights = [0.72, 0.28];
+// the window sidebar's pins (main/pins.js pinTree's shape), on the mock's own documents so a click opens them
+const PINS = [{ id: 'p1', uri: 'mockdoc2', node: { title: 'Check out the new editor', icon: 'task' }, children: [] },
+  { id: 'p2', uri: 'mockmeeting2', node: { title: 'Leadership sync', icon: 'meeting' }, children: [] },
+  { id: 's1', label: 'Studio', children: [{ id: 'p3', uri: 'tana:space:mock', node: { title: 'Studio LT', icon: 'space' }, children: [] },
+    { id: 'p4', uri: 'mockspacedoc0', node: { title: 'Studio LT charter', icon: 'doc' }, children: [] }] }];
 const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -55,7 +60,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       if (script) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script });
       // what preload gives the shell in the app (window.shell): its layout and theme. The pages run the mock.
       const state = { doc: panes > 1 ? pair : null, theme };
-      script = (await send('Page.addScriptToEvaluateOnNewDocument', { source: 'if (window === top) window.shell = { state: () => (' + JSON.stringify(state) + '), onCommand() {}, layout() {} };' })).identifier;
+      script = (await send('Page.addScriptToEvaluateOnNewDocument', { source: 'if (window === top) window.shell = { state: () => (' + JSON.stringify(state) + '), onCommand() {}, layout() {}, onPins() {}, pins: async () => (' + JSON.stringify(PINS) + ') };' })).identifier;
       await send('Page.navigate', { url: 'http://127.0.0.1:' + server.address().port + '/shell.html' });
       await sleep(1500);
       if (arg('signed-out', false) !== true) { await inPages('document.getElementById("login")?.click()'); await sleep(1500); }

@@ -1741,7 +1741,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show graph', 'Smaller text', 'Open settings', 'Reset text size', 'Install mobile app', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show graph', 'Expand sidebar', 'Smaller text', 'Open settings', 'Reset text size', 'Install mobile app', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1816,7 +1816,7 @@ async function runSyncShortcutCheck() {
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home',
-    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Show graph', 'Window: Reload',
+    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Show graph', 'Window: Expand sidebar', 'Window: Reload',
     'Settings: Open settings', 'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
     'Help: Help', 'Help: Install mobile app',
   ], 'the palette lists its rows in one fixed, meaningful order');
@@ -1825,7 +1825,7 @@ async function runSyncShortcutCheck() {
   // A window of more pages (the shell's word, renderer/app.js) offers the workspace's moves, each a key's row asking
   // the shell to run Trellis's command.
   order.panes({ pages: 3 });
-  assert.deepEqual(plain(order.labels('').filter((l) => l.startsWith('Window: ')).slice(4, -2)), ['Window: Next pane', 'Window: Previous pane', 'Window: Next tab', 'Window: Previous tab',
+  assert.deepEqual(plain(order.labels('').filter((l) => l.startsWith('Window: ')).slice(4, -3)), ['Window: Next pane', 'Window: Previous pane', 'Window: Next tab', 'Window: Previous tab',
     'Window: Maximize or restore pane', 'Window: Show all panes', 'Window: Zoom back', 'Window: Zoom forward', 'Window: Close pane'], 'more pages: the pane rows');
   order.row('maximizePane').run(); order.row('otherPane').run(); order.row('overview').run();
   assert.deepEqual(plain(order.posted()), [{ orbital: 'run', command: 'frame.toggle' }, { orbital: 'run', command: 'panel.next' }, { orbital: 'run', command: 'navigation.overview' }], 'each asks the shell to run its command');
@@ -4906,6 +4906,41 @@ async function runHiddenItemsCheck() {
   assert.match(source, /id: 'hidden'[^}]*Edit hidden items/, 'Cmd+K carries the command that opens it');
 }
 
+// Pin to sidebar …: the window's sidebar sections to put a pin in, Pinned first, and a name typed that is no section yet
+// makes one (renderer/document.js pinSidebarRows, main/pins.js placeSidebarPin).
+async function runPinSidebarCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let answer = Promise.resolve([{ id: 's1', label: 'Studio', count: 2 }, { id: 's2', label: 'Reading', count: 1 }]);
+    let palMode = 'cmd', page = null;
+    const palette = { hidden: false }, renderPalette = () => {}, run = (fn) => fn(), loadPins = () => calls.push(['loadPins']);
+    const demoText = (v) => v, errorText = (e) => e.message, BACK_TO_COMMANDS = () => { palMode = 'cmd'; };
+    const openPage = (mode, placeholder, p) => { palMode = mode; page = { placeholder, ...p }; };
+    const tana = { pinSections: () => answer, placePin: async (...args) => { calls.push(['placePin', ...args]); } };
+    ${functionSource('fuzzyMatch')}
+    ${sourceBetween('const PIN_SIDEBAR_GROUP =', '// ---- Pin to date')}
+    ({
+      open: async (fail) => { if (fail) answer = Promise.reject(new Error(fail)); openPinSidebarPalette({ id: 'doc' }); const first = page.rows('', '').map((r) => r.label); await new Promise(setImmediate); return { mode: palMode, first }; },
+      rows: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
+      press: async (typed, label) => { calls.length = 0; page.rows(typed.toLowerCase(), typed).find((r) => r.label === label).run(); await new Promise(setImmediate); return [...calls]; },
+      back: () => { page.back(); return palMode; },
+    });
+  `, { setImmediate });
+  const opened = plain(await api.open());
+  assert.deepEqual(opened, { mode: 'pinSidebar', first: ['Loading…'] }, 'the page opens in its own mode and says it is reading the sections');
+  assert.deepEqual(plain(api.rows('')), [['Pinned', 'No section', false], ['Studio', '2 pins', false], ['Reading', '1 pin', false], ['New section …', 'Type its name', true]],
+    'Pinned is the top level, then each section with its count, and making one waits for its name');
+  assert.deepEqual(plain(await api.press('', 'Studio')), [['placePin', 'doc', 's1', null], ['loadPins']], 'a section puts the pin in it'); // plain(): no name is null
+  assert.deepEqual(plain(await api.press('', 'Pinned')), [['placePin', 'doc', null, null], ['loadPins']], 'Pinned puts it at the top level');
+  assert.deepEqual(plain(api.rows('Ideas')), [['New section \u201CIdeas\u201D', '', false]], 'a name that is no section offers to make it');
+  assert.deepEqual(plain(await api.press('Ideas', 'New section \u201CIdeas\u201D')), [['placePin', 'doc', null, 'Ideas'], ['loadPins']], 'and makes it with the pin in it');
+  assert.deepEqual(plain(api.rows('studio').map((r) => r[0])), ['Studio'], 'a name that is a section already is that section, not a second one');
+  assert.equal(api.back(), 'cmd', 'Escape goes back to the command page');
+  await api.open('Not connected');
+  assert.deepEqual(plain(api.rows('')), [['Not connected', '', true]], 'a failed read says why');
+  console.log('ok  Pin to sidebar …: Pinned or a section, or a new one named as you type');
+}
+
 // Edit pins: the page that says where this document is pinned and takes those pins off again, and the marks every
 // row draws from one api.pinIds read (renderer/document.js, renderer/nodes.js).
 async function runEditPinsCheck() {
@@ -4936,12 +4971,14 @@ async function runEditPinsCheck() {
       unpin: async (id, target, date) => { calls.push(['unpin', id, target, date]); },
       unpinFrom: async (hubId, id) => { calls.push(['unpinFrom', hubId, id]); },
       searchPreview: async () => [], pinTo: async () => {}, // enough for the meeting row to be offered
+      placePin: async () => {}, // and the sidebar row, which opens its own page (runPinSidebarCheck)
     };
     const refreshRelated = (id) => { calls.push(['refreshRelated', id]); };
     const isRealId = (id) => typeof id === 'string';
     let picker = null; // the meeting picker is its own page with its own check; here what matters is what opens it
     let slowA = null; const states = new Map(); // a read of one document that answers late, and answers per document
     const openMeetingPicker = (doc, back) => { picker = { doc: doc.id, back }; };
+    let sidebarPicker = null; const openPinSidebarPalette = (doc, back) => { sidebarPicker = { doc: doc.id, back }; };
     ${sourceLine('const localDate =')}
     ${functionSource('fuzzyMatch')}
     ${functionSource('loadPins')}
@@ -4959,6 +4996,8 @@ async function runEditPinsCheck() {
       tomorrow: () => localDate(1),
       picker: () => (picker ? { doc: picker.doc, back: typeof picker.back } : null),
       escape: () => { picker.back(); return palMode; },
+      sidebarPicker: () => (sidebarPicker ? { doc: sidebarPicker.doc, back: typeof sidebarPicker.back } : null),
+      sidebarEscape: () => { sidebarPicker.back(); return palMode; },
       openFor: (id, answer) => { states.set(id, answer); openPinsPalette({ id }); },
       answer: (next) => { state = next; },
       slow: () => { let go; slowA = new Promise((resolve) => { go = resolve; }); return () => go(); }, // the next read of A answers when released
@@ -4989,8 +5028,11 @@ async function runEditPinsCheck() {
   const none = plain(await api.open({ sidebar: false, dates: [] }, []));
   assert.equal(none.palMode, 'pins');
   assert.deepEqual(plain(api.page().map((r) => [r.label, !!r.disabled])),
-    [['Not pinned anywhere', true], ['Pin to sidebar', false], ['Pin to today', false], ['Pin to tomorrow', false], ['Pin to meeting …', false]], 'a node pinned nowhere says so, and every pin that can be made is offered');
-  assert.deepEqual(plain(await api.press('', 1)), [['pin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar pin is written from this page');
+    [['Not pinned anywhere', true], ['Pin to sidebar …', false], ['Pin to today', false], ['Pin to tomorrow', false], ['Pin to meeting …', false]], 'a node pinned nowhere says so, and every pin that can be made is offered');
+  assert.deepEqual(plain(await api.press('', 1)), [], 'the sidebar pin writes nothing yet: it asks which section first');
+  assert.deepEqual(plain(api.sidebarPicker()), { doc: 'doc', back: 'function' }, 'on the section picker, for this document');
+  assert.equal(api.sidebarEscape(), 'pins', 'and escaping it comes back to Edit pins');
+  await new Promise(setImmediate);
   assert.deepEqual(plain(await api.press('', 3)), [['pin', 'doc', 'today', api.tomorrow()], ['pinIds'], ['pinState', 'doc']], 'and tomorrow is written as that date, the way the ⌘K row does it');
   assert.deepEqual(plain(api.page('nothing here').map((r) => r.label)), ['Not pinned anywhere'], 'a query that matches nothing says so rather than listing rows that do not match it');
   // A meeting pin lives on the meeting's own document, so the page hands that one to the picker ⌘K already opens —
@@ -8363,7 +8405,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

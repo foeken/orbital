@@ -33,7 +33,13 @@ const seedFields = (id) => ({ js: "tana.related(" + J(id) + ").then((d) => { rel
 // Panes opened while a clip plays need main (window:split), which the runner's shell has none of. live() loads the
 // shell's module again under a bridge that keeps its commands and gives each page a splitWindow that asks it, as
 // main.js does: ⌘N, ⌘-click and Show graph then open real Trellis panes. doc: a Trellis layout to start from.
-const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (async (doc, REAL) => {
+// The window sidebar's pins (main/pins.js pinTree's shape), on the mock's own documents so a click opens them: what a
+// window draws in its sidebar in every picture (run.js and live() give them to the shell, shell.js sbLoad)
+const SIDEBAR_PINS = [{ id: 'p1', uri: 'mockdoc2', node: { title: 'Check out the new editor', icon: 'task' }, children: [] },
+  { id: 'p2', uri: 'mockmeeting2', node: { title: 'Leadership sync', icon: 'meeting' }, children: [] },
+  { id: 's1', label: 'Studio', children: [{ id: 'p3', uri: 'tana:space:mock', node: { title: 'Studio LT', icon: 'space' }, children: [] },
+    { id: 'p4', uri: 'mockspacedoc0', node: { title: 'Studio LT charter', icon: 'doc' }, children: [] }] }];
+const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (async (doc, REAL, PINS) => {
   const theme = document.documentElement.dataset.theme || 'light';
   const prep = (f) => { const w = f.contentWindow; if (REAL) w.eval(REAL); w.document.getElementById('login')?.click(); if (theme === 'dark') w.applyTheme('dark');
     w.eval("tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, new URLSearchParams(location.search).get('side') || '')"); };
@@ -41,11 +47,11 @@ const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (asyn
   document.getElementById('workspace').replaceChildren();
   for (const b of document.querySelectorAll('.head button, #create')) b.querySelector('svg')?.remove();
   let seq = 3;
-  window.shell = { state: () => ({ doc, theme }), onCommand: (cb) => { window.shellCmd = cb; }, layout() {} };
+  window.shell = { state: () => ({ doc, theme }), onCommand: (cb) => { window.shellCmd = cb; }, layout() {}, onPins() {}, pins: async () => PINS };
   window.orbOpen = (where, start, from) => { const id = String(++seq); localStorage.setItem('view', start.view || 'library'); localStorage.setItem('place', start.place || '{}'); window.shellCmd('open', { id, where, from, focus: true }); return id; };
   await import('/shell.js?live');
   await new Promise((r) => setTimeout(r, 1800));
-}) + ')(' + J(doc) + ',' + J(withReal ? REAL : '') + ')' });
+}) + ')(' + J(doc) + ',' + J(withReal ? REAL : '') + ',' + J(SIDEBAR_PINS) + ')' });
 // a Trellis layout of panels side by side: layout([0.6, 0.4], [panel('a', ['page']), panel('b', ['page2'])], { page: page(''), page2: page('2') })
 const panel = (id, views, selected = views[0]) => ({ kind: 'panel', id: 'panel-' + id, views, selected });
 const page = (side, links) => ({ type: 'page', params: links ? { side, links: true } : { side } });
@@ -68,5 +74,4 @@ const dropOnCreate = (type, name = 'receipt.png') => ({ page: 'shell', js: "(() 
 // Auto-translate on or off (renderer/translate.js): the Dutch note mocknl0 then reads in English
 const translate = (on) => ({ js: on ? "setPref('translateTo', 'English'); render(true)" : "setPref('translateTo', undefined); render(true)" });
 
-module.exports = { open, settle, palette, onlyPalette, NARROW, REAL, real, seedTaskMeta, seedFields, live, panel, page, layout, overlay, helpTour, quickAdd, dropOnCreate, translate };
-
+module.exports = { open, settle, palette, onlyPalette, NARROW, REAL, real, seedTaskMeta, seedFields, live, panel, page, layout, overlay, helpTour, quickAdd, dropOnCreate, translate, SIDEBAR_PINS };

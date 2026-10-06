@@ -143,6 +143,7 @@ function mockApi() {
   const settling = new Set(); // a brand-new document: the first taskMeta read fails while main is still subscribing it
   const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
   const sidebar = ['mockdoc2', 'mockmeeting2', space.id], datePins = { mockdoc2: [localDate()] }; // pins: sidebar order, personal date pins per doc
+  const sections = ['Studio'], pinSection = { [space.id]: 'Studio' }; // the sidebar's sections, and the section a pin is in (none: the top level)
   const hubPins = {}; // hub id -> the documents pinned on that meeting or space, which is where the real list lives too
   // Typed fields, so the page under the title can be tried without the main process: one holds two lines, because
   // a field holds what a node holds and the second line is the part that used to be invisible.
@@ -749,6 +750,14 @@ function mockApi() {
     pinDates: async () => Object.fromEntries(Object.entries(datePins).filter(([, dates]) => dates.length)),
     pin: async (docId, target, date = localDate()) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(date); emit(null); },
     unpin: async (docId, target, date = localDate()) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== date); emit(null); },
+    // the window's sidebar sections (Pin to sidebar …): the mock keeps which section each pin went in, by name
+    pinSections: async () => sections.map((label, i) => ({ id: 'mocksection' + i, label, count: Object.values(pinSection).filter((s) => s === label).length })),
+    placePin: async (docId, section, label) => {
+      if (label && !sections.includes(label)) sections.push(label);
+      if (!sidebar.includes(docId)) sidebar.push(docId);
+      pinSection[docId] = label || (section ? sections[Number(String(section).replace('mocksection', ''))] : null);
+      emit(null);
+    },
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
     // Recently deleted and Edit hidden items (main's deleted:list and filters:*), for the manual's Sharing chapter

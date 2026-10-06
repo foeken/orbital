@@ -16,6 +16,9 @@ if (file === 'shell.html') {
     // | 'theme' 'light' | 'dark' | 'auth' { signedOut }
     onCommand: (cb) => ipcRenderer.on('shell:command', (_e, cmd, arg) => cb(cmd, arg)),
     layout: (layout) => ipcRenderer.send('shell:layout', layout), // { doc, pages: [ids in doc] }: every committed change
+    // the window's sidebar: your sidebar pins as Tana keeps them, [{ id, uri?, label?, node?, children }], read again on onPins
+    pins: () => ipcRenderer.invoke('pins:tree'),
+    onPins: (cb) => ipcRenderer.on('pins:changed', () => cb()),
   });
   return;
 }
@@ -255,6 +258,8 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   pinDates: () => ipcRenderer.invoke('pins:dates'), // { docId: ['YYYY-MM-DD'] } for every document pinned to a date
   pin: (docId, target, date) => ipcRenderer.invoke('pins:pin', docId, target, date), // date: local YYYY-MM-DD for target 'today'; omitted = today
   unpin: (docId, target, date) => ipcRenderer.invoke('pins:unpin', docId, target, date),
+  pinSections: () => ipcRenderer.invoke('pins:sections'), // [{ id, label, count }]: the sidebar's sections, for Pin to sidebar …
+  placePin: (docId, section, label) => ipcRenderer.invoke('pins:place', docId, section, label), // into section (null: the top level), or a new one named label
   // items pinned on a meeting or a space (that node's own pinnedItems, docs/PINNING.md section 4); hubId comes from
   // api.related(id).pinHub, which is set only when this user may write that hub. Resolves to the hub's pinned uris.
   pinTo: (hubId, docId) => ipcRenderer.invoke('pins:pinTo', hubId, docId),

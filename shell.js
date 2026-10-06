@@ -4,10 +4,15 @@
 // itself for what needs no main: its tab's title, the Trellis commands its keys run, being laid over the whole window
 // while its palette is open (renderer/palette.js coverWindow) and flushing before its iframe goes (renderer/app.js leavePage).
 import { createWorkspace, createDocument, layout as L, DEFAULT_KEYMAP } from './node_modules/@danfessler/trellis/dist/index.js';
+/* global demoMode: writable, demoText */ // renderer/segments.js, loaded before this (shell.html): demo mode's masks for the sidebar's titles
 
 const bridge = window.shell || { state: () => ({ doc: null }), onCommand() {}, layout() {} }; // shell.html opened on its own
 const start = bridge.state();
 let theme = start.theme === 'dark' ? 'dark' : 'light', covering = null, last = '', many = null;
+// The sidebar's own state, kept on this machine as the pages keep the width they were dragged to (renderer/prefs.js):
+// whether it is open or its icons alone, its width, and the sections folded. Up here because tell() reads it from the load on.
+// ponytail: one width and one open-or-icons for every window; per window when someone wants two different ones.
+let sbOpen = localStorage.getItem('windowSidebar') !== '0', sbWidth = Number(localStorage.getItem('windowSidebarWidth')) || 236, sbTree = [], searchKey = '⌘S';
 const renamable = new Set(); // the pages whose title can be typed in (renderer/render.js tellTitle): Rename on their tab
 const linkable = new Set(); // the pages showing a node of Tana's: Copy link on their tab (#542)
 const refreshable = new Set(); // the saved searches that can be asked again: Refresh on their tab (renderer/pills.js offerRefresh)
@@ -61,7 +66,7 @@ const frames = () => [...ws.element.querySelectorAll('iframe')];
 const loaded = new WeakSet();
 const windowOf = (frame) => (frame && loaded.has(frame) ? frame.contentWindow : null);
 const sourceOf = (win) => pages().find((v) => windowOf(frameOf(v.id)) === win)?.id;
-const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length, links: !!linksView() }, '*');
+const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length, links: !!linksView(), sidebar: sbOpen }, '*'); // sidebar: ⌘K's Hide or Show sidebar
 // The Graph pane (issue #462, renderer/rail.js): one page per window opened with links=1, showing the links of the
 // document the page it follows is on. It follows the page that last took the keys, never itself; each page says which
 // document it is on (its row too, so the Graph pane opens it without asking main), and a row opened there opens in it.
@@ -196,10 +201,10 @@ function focusPage(viewId) {
   ws.focus(viewId);
   windowOf(frameOf(viewId))?.focus();
 }
-// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js); the house
-// runs Cmd+K's Work View row (renderer/palette.js, Saved views), so the window becomes the Work View, and the corner's
-// Create new runs Cmd+K Create new … there. The Graph switch is each page's own now (renderer/rail.js drawLinksBtn).
-for (const [id, icon, msg] of [['headHome', 'home', { orbital: 'action', id: 'workView' }], ['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['create', 'textPlus', { orbital: 'action', id: 'create' }]]) {
+// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js), and the
+// corner's Create new runs Cmd+K Create new … there. Home is the sidebar's now (below); the Graph switch is each page's
+// own (renderer/rail.js drawLinksBtn).
+for (const [id, icon, msg] of [['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['create', 'textPlus', { orbital: 'action', id: 'create' }]]) {
   const button = document.getElementById(id);
   if (icon) button.insertAdjacentHTML('afterbegin', window.ICONS?.[icon] || ''); // icons.js: our own markup, before a label the button has
   button.onmousedown = (e) => e.preventDefault();
@@ -234,9 +239,13 @@ function drawSensitive() {
   const on = localStorage.getItem('sensitiveVisible') === '1', button = document.getElementById('headSensitive'), label = on ? 'Hide sensitive items' : 'Show sensitive items';
   button.innerHTML = window.ICONS?.[on ? 'visible' : 'hidden'] || '';
   button.title = label; button.setAttribute('aria-label', label); button.setAttribute('aria-pressed', String(on));
+  document.body.classList.toggle('show-sensitive', on); // the sidebar's sensitive pins
 }
 drawSensitive();
-addEventListener('storage', (e) => { if (e.key === 'sensitiveVisible') drawSensitive(); });
+addEventListener('storage', (e) => {
+  if (e.key === 'sensitiveVisible') drawSensitive();
+  else if (e.key === 'demoMode' && (e.newValue === '1') !== demoMode) { demoMode = e.newValue === '1'; sbDraw(); } // demo mode's made-up titles (renderer/state.js, renderer/segments.js)
+});
 function rename(viewId) {
   const win = windowOf(frameOf(viewId));
   win?.focus();
@@ -296,6 +305,7 @@ bridge.onCommand((cmd, arg) => {
     document.body.classList.toggle('signed-out', !!arg?.signedOut);
     if (arg?.signedOut && !aside) { aside = ws.getDocument(); ws.setDocument(single(), { animate: false }); }
     else if (!arg?.signedOut && aside) { const doc = aside; aside = null; ws.setDocument(doc, { animate: false }); }
+    if (!arg?.signedOut) sbLoad(); // the pins of whoever signed in
   } else if (cmd === 'action') { // the app menu's Settings… (main.js createMenu): its row, run in the page in front
     const win = windowOf(frameOf(ws.getSnapshot().focusedView));
     win?.focus(); win?.postMessage({ orbital: 'action', id: String(arg) }, '*');
@@ -305,6 +315,109 @@ bridge.onCommand((cmd, arg) => {
     ws.update({ theme, tokens: tokens() });
   }
 });
+
+// ---- the window's sidebar: Search, Home and Today, then your sidebar pins as Tana keeps them (docs/OUTLINER.md §19) ----
+// Every row acts in the page the Graph pane would follow (the last to take the keys): a pin opens there, Search opens
+// its ⌘S, Home and Today run its Cmd+K rows. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
+// top level under Pinned, then each section with its pins, read from main (main/pins.js pinTree) and read again
+// whenever main says it moved (pins:changed). Its edge is the handle: dragged it resizes, and let go narrower than
+// SB_SHUT it is its icons alone (SB_RAIL wide), never less; ⌘K Collapse/Expand sidebar and ⌃⌘S switch the two.
+const sidebar = document.getElementById('sidebar'), edge = document.getElementById('sbEdge');
+const SB_RAIL = 48, SB_MIN = 180, SB_MAX = 420, SB_SHUT = 120;
+const sbFolded = new Set(JSON.parse(localStorage.getItem('windowSidebarFolded') || '[]')); // section ids, 'pinned' for the top level
+demoMode = localStorage.getItem('demoMode') === '1'; // renderer/segments.js: titles made up while demo mode is on
+// the row glyphs: a node's own where icons.js has it, the ones it names differently, else its kind's (tana:search: → a
+// search), else a document's. ponytail: an icon chosen with Set icon (a Nucleo one, "nc-…") is drawn as its kind here;
+// the pages draw it (renderer/nodes.js typeGlyph), and the shell would need main's Nucleo set to as well.
+const GLYPH = { meeting: 'calendar', event: 'calendar', chat: 'discuss', agent: 'robot', search: 'search', type: 'type' };
+const glyph = (name, uri) => window.ICONS?.[name] || window.ICONS?.[GLYPH[name]] || window.ICONS?.[GLYPH[String(uri || '').split(':')[1]] || String(uri || '').split(':')[1]] || window.ICONS?.doc || '';
+function toPage(msg) {
+  const id = following(), win = windowOf(frameOf(id));
+  if (!win) return;
+  focusPage(id);
+  win.postMessage(msg, '*');
+}
+function sbButton(cls, icon, words, run, uri) {
+  const b = document.createElement('button');
+  b.className = cls; b.tabIndex = -1;
+  b.insertAdjacentHTML('afterbegin', glyph(icon, uri)); // icons.js: our own markup
+  const t = document.createElement('span'); t.className = 't'; t.textContent = words; b.append(t);
+  b.title = words; // what an icon is, when the sidebar is its icons alone
+  b.onmousedown = (e) => e.preventDefault(); // the caret stays in the page
+  b.onclick = run;
+  return b;
+}
+function sbDraw() {
+  const rows = [];
+  const search = sbButton('sbrow', 'search', 'Search', () => toPage({ orbital: 'palette', mode: 'search' }));
+  if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
+  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
+  const pin = (n) => {
+    const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri);
+    b.dataset.uri = n.uri;
+    b.classList.toggle('sensitive', n.node.sensitive === true);
+    if (n.node.sensitive === true) b.removeAttribute('title'); // a blurred title is not told on hover either
+    return b;
+  };
+  const pinned = (list) => list.filter((n) => n.uri && n.node);
+  // the pins outside any section under Pinned, then each section; a section with nothing in it is not drawn
+  const sections = [{ id: 'pinned', label: 'Pinned', pins: pinned(sbTree) }, ...sbTree.filter((n) => !n.uri && n.label).map((n) => ({ id: n.id, label: n.label, pins: pinned(n.children || []) }))];
+  for (const s of sections.filter((x) => x.pins.length)) {
+    const shut = sbFolded.has(s.id), head = document.createElement('button');
+    head.className = 'sbsec' + (shut ? ' shut' : ''); head.tabIndex = -1; head.textContent = s.label;
+    head.setAttribute('aria-expanded', String(!shut));
+    if (shut) { const n = document.createElement('span'); n.className = 'n'; n.textContent = s.pins.length; head.append(n); }
+    else head.insertAdjacentHTML('beforeend', glyph('chevronRight'));
+    head.onmousedown = (e) => e.preventDefault();
+    head.onclick = () => { if (sbFolded.has(s.id)) sbFolded.delete(s.id); else sbFolded.add(s.id); localStorage.setItem('windowSidebarFolded', JSON.stringify([...sbFolded])); sbDraw(); };
+    rows.push(head, ...(shut ? [] : s.pins.map(pin)));
+  }
+  // nothing pinned yet: what would fill it, and how
+  if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
+  sidebar.replaceChildren(...rows);
+  sbMark();
+}
+// the pin of the page the rows act in, marked as the one on screen
+function sbMark() {
+  const on = docs.get(following())?.docId || '';
+  for (const b of sidebar.querySelectorAll('[data-uri]')) b.classList.toggle('on', b.dataset.uri === on);
+}
+let sbReading = 0;
+function sbLoad() {
+  if (!bridge.pins) return sbDraw(); // shell.html on its own, or an older main: the three rows alone
+  const mine = ++sbReading;
+  bridge.pins().then((tree) => { if (mine === sbReading) { sbTree = Array.isArray(tree) ? tree : []; sbDraw(); } }, () => {});
+}
+bridge.onPins?.(sbLoad);
+// The width it is drawn at: --sw for the sidebar, the panes beside it and the edge (shell.css); its icons alone below SB_SHUT.
+function sbApply(width = sbOpen ? sbWidth : SB_RAIL) {
+  document.body.style.setProperty('--sw', width + 'px');
+  document.body.classList.toggle('sb-rail', width < SB_SHUT);
+  requestAnimationFrame(() => { mark(); place(); });
+}
+function sbSet(open) {
+  sbOpen = open;
+  localStorage.setItem('windowSidebar', open ? '1' : '0'); localStorage.setItem('windowSidebarWidth', String(sbWidth));
+  sbApply();
+  frames().forEach((f) => tell(windowOf(f))); // ⌘K's row says Collapse or Expand
+}
+edge.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  edge.setPointerCapture(e.pointerId);
+  edge.classList.add('dragging'); document.body.classList.add('pressing'); // the pages let the pointer pass meanwhile
+  const x0 = e.clientX, w0 = sbOpen ? sbWidth : SB_RAIL;
+  let width = w0;
+  const move = (m) => { width = Math.max(SB_RAIL, Math.min(SB_MAX, w0 + m.clientX - x0)); sbApply(width); };
+  const end = () => {
+    edge.removeEventListener('pointermove', move); edge.removeEventListener('pointerup', end); edge.removeEventListener('pointercancel', end);
+    edge.classList.remove('dragging'); document.body.classList.remove('pressing');
+    if (width < SB_SHUT) sbSet(false); else { sbWidth = Math.max(SB_MIN, width); sbSet(true); }
+  };
+  edge.addEventListener('pointermove', move); edge.addEventListener('pointerup', end); edge.addEventListener('pointercancel', end);
+});
+sbApply();
+sbLoad();
 
 // ---- the palette over the whole window (issue #409) ----
 // The page asks, and its iframe is laid over the whole window, above the header and every other pane, docked or floating; the page
@@ -341,10 +454,12 @@ addEventListener('message', (e) => {
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
   else if (what === 'reload') reloadAll(); // Cmd+K Reload: the window, every page in it
   else if (what === 'navbtns') drawNav(sourceOf(e.source), String(e.data.html || ''), e.data.on === true);
-  else if (what === 'doc') { const id = sourceOf(e.source); if (!id) return; docs.set(id, { docId: typeof e.data.docId === 'string' ? e.data.docId : null, doc: e.data.doc || null }); if (id === following()) follow(); }
+  else if (what === 'doc') { const id = sourceOf(e.source); if (!id) return; docs.set(id, { docId: typeof e.data.docId === 'string' ? e.data.docId : null, doc: e.data.doc || null }); if (id === following()) { follow(); sbMark(); } }
   else if (what === 'place') { const id = sourceOf(e.source); if (!id) return; places.set(id, typeof e.data.key === 'string' ? e.data.key : null); tellPlaces(); }
   else if (what === 'focusPane') { if (others().includes(e.data.id)) focusPage(e.data.id); } // that place is on screen there already (#533)
-  else if (what === 'focus') { const id = sourceOf(e.source); if (id && id !== linksView() && id !== followed) { followed = id; follow(); } }
+  else if (what === 'focus') { const id = sourceOf(e.source); if (id && id !== linksView() && id !== followed) { followed = id; follow(); sbMark(); } }
+  else if (what === 'sidebar') sbSet(!sbOpen); // ⌘K Hide/Show sidebar and ⌃⌘S (renderer/palette.js)
+  else if (what === 'keys') { const key = typeof e.data.search === 'string' ? e.data.search : ''; if (key !== searchKey) { searchKey = key; sbDraw(); } } // the page's ⌘S, recorded or not (renderer/app.js)
   else if (what === 'open') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); if (typeof e.data.id === 'string' || typeof e.data.view === 'string') win.postMessage({ orbital: 'goto', id: e.data.id, view: e.data.view }, '*'); } // from the Graph pane
   else if (what === 'links') { const id = linksView(); if (id) ws.close(id); } // Cmd+K Hide graph
   else if (what === 'palette') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'palette', mode: e.data.mode }, '*'); } // Cmd+K or Cmd+S pressed in the Graph pane
