@@ -344,7 +344,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let kind: String
         let rows: [Row]
         let summary: [Row]? // a meeting Tana has written up: its summary's outline (ios/engine/index.js meeting)
-        let notes: [Row]? // ... and your notes', when you have them: Notes | Summary over them (MeetingSummary)
+        let notes: [Row]? // a meeting's notes of yours, when you have them: Notes | Summary over them once it is written up (MeetingPage)
+        let attendees: [Row.Person]? // a meeting's people, rooms left out
         let sensitive: Bool? // the node itself marked sensitive in Orbital: drawn blurred until a shake
     }
     func open(_ id: String) async throws -> Page {

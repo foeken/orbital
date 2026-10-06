@@ -43,8 +43,8 @@ struct ListRow: View {
     }
 }
 
-// Zoomed into a node: a chat as its conversation, a saved search as its results, a meeting as the documents it owns,
-// anything else as its outline. Read-only; a mention, a reference or a row opens the node it names.
+// Zoomed into a node: a chat as its conversation, a saved search as its results, a meeting as its attendees and your
+// notes or its summary, anything else as its outline. Read-only; a mention, a reference or a row opens the node it names.
 struct NodeScreen: View {
     let engine: Engine
     let id: String
@@ -71,10 +71,10 @@ struct NodeScreen: View {
                         .safeAreaInset(edge: .bottom) {
                             Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); waitingSince = .now; await load(); return sent.warning }
                         }
-                case "event" where page.summary != nil:
-                    MeetingSummary(summary: page.summary ?? [], notes: page.notes, engine: engine)
+                case "event":
+                    MeetingPage(page: page, engine: engine)
                         .refreshable { await load() }
-                case "search", "event":
+                case "search":
                     // in the sections the search was saved with (Row.group), as the desktop shows it: no lines between the
                     // rows or around a section, and the rows close together, closer still under headings, as the Timeline's
                     let sections = Self.sections(engine.shown(page.rows)), grouped = sections.contains { $0.title != nil }
@@ -93,7 +93,7 @@ struct NodeScreen: View {
                         .listStyle(.plain)
                         .environment(\.defaultMinListRowHeight, 0) // the rows as tall as their words, not the system's 44
                         .refreshable { await load() }
-                        .overlay { if page.rows.isEmpty { ContentUnavailableView(page.kind == "event" ? "No notes yet" : "Nothing found", image: "Glyphs/" + Glyph.of(page.kind)) } }
+                        .overlay { if page.rows.isEmpty { ContentUnavailableView("Nothing found", image: "Glyphs/" + Glyph.of(page.kind)) } }
                 default:
                     List {
                         if let access { NodeDetails(id: id, access: access, engine: engine, reload: load) }
@@ -161,23 +161,42 @@ struct NodeScreen: View {
     }
 }
 
-// A meeting Tana has written up, as the desktop's page has it (renderer/meetingnotes.js): its summary, and Notes | Summary
-// over it when you have notes for it too; with none, the summary alone. Read only, as every page here.
-struct MeetingSummary: View {
-    let summary: [Row]
-    let notes: [Row]?
+// A meeting, as the desktop's page has it (renderer/meetingnotes.js, renderer/fields.js attendeesFieldEl): its attendees,
+// five and "And n more" past that, then your notes; once Tana wrote it up its summary, and Notes | Summary over it when you
+// have notes too. Read only, as every page here.
+struct MeetingPage: View {
+    let page: Engine.Page
     let engine: Engine
     @State private var showNotes = false
+    @State private var everyone = false
 
     var body: some View {
+        let people = page.attendees ?? [], shown = everyone ? people : Array(people.prefix(5))
+        let rows = page.summary.map { showNotes ? page.notes ?? [] : $0 } ?? page.notes ?? []
         List {
-            if notes != nil {
+            if !people.isEmpty {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("Attendees").foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(shown.enumerated()), id: \.offset) { Text($0.element.name) }
+                        if shown.count < people.count {
+                            Button("And \(people.count - shown.count) more") { everyone = true }.buttonStyle(.plain).foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .modifier(FieldLine())
+            }
+            if page.summary != nil, page.notes != nil {
                 Picker("Notes or summary", selection: $showNotes) { Text("Notes").tag(true); Text("Summary").tag(false) }
                     .pickerStyle(.segmented)
                     .listRowSeparator(.hidden)
             }
-            ForEach(Array(NodeScreen.flat(showNotes ? notes ?? [] : summary).enumerated()), id: \.offset) {
+            ForEach(Array(NodeScreen.flat(rows).enumerated()), id: \.offset) {
                 OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal, engine: engine)
+            }
+            if NodeScreen.flat(rows).isEmpty {
+                Text("No notes yet").foregroundStyle(.secondary).listRowSeparator(.hidden)
             }
         }
         .listStyle(.plain)
