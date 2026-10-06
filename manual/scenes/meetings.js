@@ -27,6 +27,8 @@ module.exports = [
   // it opens on the write-up; Notes shows your notes, then Summary again (with no notes there is no switch)
   { name: 'meetings-notes', video: true, setup: [...real(), notes, { wait: 500 }, open(W), { wait: 1400 }], clip: [0, 0, 1280, 560],
     steps: [{ wait: 1200 }, { click: '.notes-switch button', text: 'Notes' }, { wait: 2000 }, { click: '.notes-switch button', text: 'Summary' }, { wait: 1600 }] },
+  // a person's page: your private notes about them, made as a meeting's are
+  { name: 'meetings-person', setup: [{ js: "tana.meetingNotes('tana:user-profile:sam', true, 'Prefers a written update before a review').then((n) => tana.insertAfter(n.id, n.blockId, 'Ask about the pilot in Utrecht'))" }, { wait: 500 }, open('tana:user-profile:sam'), { wait: 1400 }], clip: [0, 0, 1280, 380] },
   // Attendees: five lines, then And 3 more
   { name: 'meetings-attendees', video: true, setup: [...real(), open(M), { wait: 1200 }], clip: [0, 30, 720, 420],
     steps: [{ wait: 600 }, { click: '.fmore' }, { js: "document.querySelector('.fmore')?.click()" }, { wait: 800 }] },

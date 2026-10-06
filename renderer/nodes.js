@@ -104,7 +104,9 @@ const isReference = (node) => node.type === 'reference';
 // — its box, its status, its tags — and becomes an ordinary line with a link again the moment anything else is typed.
 // Children rule it out: the row stands in for another node, and expanding it opens that node's outline, so a block
 // with an outline of its own would have nowhere left to show it.
-const oneMention = (segs) => segs.length === 1 && !!segs[0].mention;
+// Whitespace beside the chip does not count: Tana's AI writes a goal it made as its mention and a space, which drew a
+// blue link where the row should have been the goal.
+const oneMention = (segs) => { const kept = segs.filter((s) => s.mention || /\S/.test(s.text)); return kept.length === 1 && !!kept[0].mention; };
 const isFullReference = (node) => node.kind === 'block' && !isReference(node) && !node.hasChildren && !node.children?.length && oneMention(segsOf(node));
 const referenceTarget = (node) => ((isReference(node) || isFullReference(node)) && node.reference?.node ? asDoc(node.reference.node) : null);
 // What the row stands in for *right now*. A save is debounced, so between the keystroke and the write the node still
@@ -113,7 +115,10 @@ const referenceTarget = (node) => ((isReference(node) || isFullReference(node)) 
 // judged by what is in the editor (the same pending segments the text is drawn from), so text beside the chip makes
 // it an ordinary line at once, and deleting that text makes it a full reference again. An inline reference (type
 // 'reference') is unaffected: typing there edits the target's title, so it never stops pointing at it.
-const liveTarget = (node, typing) => (typing && !isReference(node) && !oneMention(typing.segs) ? null : referenceTarget(node));
+// A full reference renamed in place (a second click on it, renderer/render.js) is the one exception: its words are the
+// target's title being typed, so it stands in for that node however they read.
+let renamingRef = null; // the key of the full-reference row whose target's title is being typed
+const liveTarget = (node, typing) => (typing && !isReference(node) && typing.item?.key !== renamingRef && !oneMention(typing.segs) ? null : referenceTarget(node));
 const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.label || node.text || node.reference?.uri || 'Unavailable reference';
 // A notice ("Link copied", "Type set to …") and an error from an action are both a toast at the foot of the window
 // that fades on its own; an error is red and stays longer. The line under the title is only the signed-out state
@@ -247,9 +252,9 @@ function quietButton(cls, label, onclick, opts) {
   return b;
 }
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
-// A member is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Open node). A type opens as
+// Everything opens: a member's page is your private notes about them (renderer/meetingnotes.js), and a type opens as
 // the list of its instances (renderer/render.js).
-const zoomable = (node) => !!node && !/^tana:user-profile:/.test(node.id || '');
+const zoomable = (node) => !!node;
 // A task put off is drawn with the zzz glyph instead of the task one: the row still is a task (its box, its
 // status, its metadata are unchanged), it only says at a glance that it is asleep.
 // A task keeps 'task' as its icon (that is what isTask reads), so its type's glyph — the one a typed document wears
@@ -278,7 +283,7 @@ const canEditStructure = (item) => canEditItem(item) || ((item.node.type === 're
 // an inline reference renders the referenced document's title: editing the row edits that document, and a read-only
 // target stays read-only. The containing document counts too: a chat's attachment row would otherwise offer to
 // rename the attached document (only a positively read-only container blocks, so ordinary embeds are unchanged).
-const canEditText = (item) => (isReference(item.node) ? canEditNode(referenceTarget(item.node)) && docOf(item.docId)?.editable !== false : canEditItem(item) || !!item.node.renamable); // renamable: a chat, agent, skill or type, whose title alone can be typed in (#540)
+const canEditText = (item) => (isReference(item.node) || renamingRef === item.key ? canEditNode(referenceTarget(item.node)) && docOf(item.docId)?.editable !== false : canEditItem(item) || !!item.node.renamable); // renamable: a chat, agent, skill or type, whose title alone can be typed in (#540)
 const chatIcon = (n) => n.icon || ((n.tags || []).some((t) => t.label === 'chat') ? 'chat' : undefined);
 const nodeIcon = (n) => chatIcon(n) || ((n.tags || []).some((t) => t.label === 'agent') ? 'agent' : undefined);
 const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: nodeIcon(n) }); // api.node / search / library result -> document Node

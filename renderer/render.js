@@ -431,7 +431,7 @@ function renderOutline() {
     list = withDraftTail(list, body); // an open node always has a row to type in; a read-only one (every chat) never does
     const chat = isChatPage(parent), stick = chat && chatStick(parent); // a chat is a conversation, not an outline (renderer/chat.js)
     outline.replaceChildren(...(chat ? chatEls(list, parent.docId) : groups
-      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [row(n), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
+      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.map(row)), ...(g.bend ? [timelineBendEl()] : []), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map(row)));
     const notesHead = notesHeadEl(parent); // who sees a meeting's notes, over them
     if (notesHead) outline.prepend(notesHead);
@@ -635,13 +635,15 @@ function renderFields(parent, force = false, el = $('fields')) {
   const assigned = parent && parent.node.kind === 'document' && isTask(parent.node) && tana.taskMeta ? assigneeFieldEl(parent) : null;
   const visible = parent && parent.node.kind === 'document' && tana.taskMeta && !isChatPage(parent) && !isSearchDoc(parent.node) ? visibilityFieldEl(parent) : null; // and who can see it, any document but a chat or a saved search (a conversation and a list, not a page)
   const attendees = parent && parent.node.kind === 'document' && tana.meetingInfo && !isChatPage(parent) && !isTask(parent.node) ? attendeesFieldEl(parent) : null; // a meeting's people, after who can see it; a task pinned to a meeting leaves them on the meeting
+  const pinnedHere = parent && parent.node.kind === 'document' && !isChatPage(parent) && !isTask(parent.node) ? pinnedFieldEl(parent) : null; // what is pinned on the meeting, under its people
   const chatLine = isChatPage(parent) ? chatContextEl(parent) : null; // a chat: who can see it and its meeting, one line (renderer/chat.js, #543)
-  el.hidden = !fields.length && !defs.length && !assigned && !visible && !attendees && !chatLine;
+  el.hidden = !fields.length && !defs.length && !assigned && !visible && !attendees && !pinnedHere && !chatLine;
   el.replaceChildren();
   for (const def of defs) el.append(definitionEl(parent, def));
   if (assigned) el.append(assigned);
   if (visible) el.append(visible);
   if (attendees) el.append(attendees);
+  if (pinnedHere) el.append(pinnedHere);
   if (chatLine) el.append(chatLine);
   for (const field of fields) {
     const row = document.createElement('div'); row.className = 'field';
@@ -834,7 +836,7 @@ function nodeEl(node, docId, parent) {
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   // an image draws a marker only where a list row would: on its own it is the picture and nothing else
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '') + (node.timeline?.upcoming ? ' tl-upcoming' : '') + (node.timeline?.recording ? ' tl-recording' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '') + (node.timeline?.upcoming ? ' tl-upcoming' : '') + (node.timeline && timelineTop(node) ? ' tl-top' : '') + (node.timeline?.recording ? ' tl-recording' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
@@ -846,7 +848,7 @@ function nodeEl(node, docId, parent) {
   // they are. A reference in one still opens what it points at — that is the chip's own click, not the bullet's.
   const opens = reference || fullref || (zoomable(node) && !field);
   const clickOpens = opensOnClick(item);
-  if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a member or a type has no page: the bullet is only a glyph
+  if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a field's value has no page here: the bullet is only a glyph
   const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) addIcon(bullet, bulletIcon).classList.add('icon', bulletIcon);
   if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike, a task's type glyph included
@@ -913,7 +915,8 @@ function nodeEl(node, docId, parent) {
     if (typesInto(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
-    const shown = (label) => (reference ? [{ text: label }] : fullref ? [{ mention: { uri: node.reference.uri, label } }] : null); // a translated reference keeps its chip
+    // a translated reference keeps its chip; a full reference being renamed is its target's title as words to type in
+    const shown = (label) => (reference || (fullref && renamingRef === item.key) ? [{ text: label }] : fullref ? [{ mention: { uri: node.reference.uri, label } }] : null);
     const own = shown(referenceLabel(node)) || (node.timeline?.free ? timelineFreeSegs(node.timeline.free) : segsOf(node)), segs = pending.has(item.key) ? pending.get(item.key).segs : english ? shown(english.text) || translatedSegs(node, english.text) : own;
     renderSegs(text, segs, display.id);
     text.classList.toggle('chiponly', chipOnly(text));
@@ -975,6 +978,9 @@ function nodeEl(node, docId, parent) {
   // into (its text is one chip), so the caret goes to the end, which is where Enter on the selection puts it too
   if (reference || fullref) line.onmousedown = (e) => {
     if (e.metaKey || e.shiftKey || e.target.closest('.check') || e.target.closest('.bullet') || e.target.closest('.chev')) return;
+    // the second click on a full reference renames what it points at, as a native reference's does (startRename,
+    // renderer/edit.js); one whose target cannot be renamed puts the caret after its chip, to type beside it
+    if (fullref && selKeys().includes(item.key) && canEditNode(target)) { e.preventDefault(); startRename(item); return; }
     if (selKeys().includes(item.key) && canEditText(item)) { if (fullref) { e.preventDefault(); setCaret(text, text.textContent.length); } return; }
     e.preventDefault(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key }; leaveText(); applySel();
   };

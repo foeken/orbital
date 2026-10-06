@@ -20,6 +20,8 @@ const scrollTo = (words, dy = 90) => ({ js: "T(" + JSON.stringify(words) + ").sc
 const row = (words, at = [0.99, 0.5]) => ({ click: '.node .text', text: words, at });
 
 module.exports = [
+  // the chapter as a reader sees it: drawn only when named with --only, into $TMPDIR/manual-check
+  { name: 'writing-page', url: 'manual/writing.html#linking', full: true, size: '1440x900' },
   // the block types, one of each
   { name: 'writing-blocks', size: '1100x860', setup: [...doc0, scrollTo('Walk through both'), { hover: '.node .text', text: 'Walk through both' }], clip: { page: '' } },
   // typing: Enter, Tab, ⇧Tab
@@ -59,6 +61,10 @@ module.exports = [
   { name: 'writing-link', video: true, size: '640x520', setup: [...doc0, scrollTo('Next steps', 120)], steps: [
     row('Send both slots'), { js: "selectRange(K('Send both slots'), 19, 22); 1" }, { wait: 700 },
     { type: '@' }, { wait: 1100 }, { hover: '#paletteList .row', text: 'Sam Okafor# member' }, { wait: 400 }, { click: '#paletteList .row', text: 'Sam Okafor# member' }, { wait: 600 },
+  ], clip: { page: '' } },
+  // # over selected words: what they can become
+  { name: 'writing-hash', size: '640x520', setup: [...doc0, scrollTo('Book a room', 70)], steps: [
+    row('Book a room'), { js: "selectRange(K('Book a room'), 0, 11); 1" }, { wait: 500 }, { type: '#' }, { wait: 900 },
   ], clip: { page: '' } },
   // references and mentions at the top of the page
   // (the Agenda folded and the picture set aside, so the four kinds of reference sit together)
@@ -100,8 +106,5 @@ module.exports = [
     { click: 'tr:last-child td:last-child' }, { type: 'Waiting', delay: 70 }, { key: '⌘K' }, { wait: 400 }, { type: 'row', delay: 80 },
   ], clip: { page: '' } },
 ];
-
-
-
 
 

@@ -93,6 +93,9 @@ const withShims = (src) => {
   if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
   // the rows a row lives among: its own container's, which in a harness with one container is texts()
   if (/\browsBeside\(/.test(src) && !/const rowsBeside =/.test(src)) src = 'globalThis.rowsBeside ??= (el) => texts();\n' + src;
+  // no full reference is being renamed in a harness unless it says so (renderer/edit.js startRename)
+  if (/\brenamingRef\b/.test(src) && !/let renamingRef/.test(src)) src = 'globalThis.renamingRef ??= null;\n' + src;
+  if (/\breferenceTarget\(/.test(src) && !/const referenceTarget =/.test(src)) src = 'globalThis.referenceTarget ??= (node) => (node && node.type === \'reference\' && node.reference && node.reference.node) || null;\n' + src;
   // the fields container, for the helpers that paint or leave a selection in both places rows live
   if (/\$\('fields'\)/.test(src) && !/const \$ =/.test(src)) src = "globalThis.$ ??= () => ({ contains: () => false, querySelectorAll: () => [], hidden: true });\n" + src;
   // finding a row: in a harness there is one place rows are drawn, so the family answers for the outline alone
@@ -1919,7 +1922,8 @@ async function runSyncShortcutCheck() {
   const full = { kind: 'block', segments: chipSegs, reference: { uri: 'tana:text:t1', node: { id: 'tana:text:t1', title: 'Ship it', done: 1 } } };
   assert.equal(live.liveTarget(full, undefined)?.id, 'tana:text:t1', 'a block whose only content is a mention stands in for that node');
   assert.equal(live.liveTarget(full, { segs: chipSegs })?.id, 'tana:text:t1', 'an edit that is still just the chip leaves it standing in');
-  assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: ' ' }] }), null, 'a space typed after the chip makes it an ordinary line at once, before the save goes out');
+  assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: ' a' }] }), null, 'a word typed after the chip makes it an ordinary line at once, before the save goes out');
+  assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: ' ' }] })?.id, 'tana:text:t1', 'a space alone does not: Tana writes its own references with one');
   const inline = { kind: 'block', type: 'reference', segments: [{ text: 'Ship it' }], reference: { uri: 'tana:text:t1', node: { id: 'tana:text:t1', title: 'Ship it' } } };
   assert.equal(live.liveTarget(inline, { segs: [{ text: 'Ship it now' }] })?.id, 'tana:text:t1', 'typing in an inline reference edits the target title, so it keeps pointing at it');
   assert.match(source, /const target = gone \|\| field \? null : liveTarget\(node, pending\.get\(item\.key\)\)/,
@@ -2413,6 +2417,7 @@ function runInlineFieldsCheck() {
     const kids = new Map(), loaded = [], built = [];
     let fieldsDeferred = false;
     const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false, tana = {}; // not a task, no metadata: neither Assigned to nor Visible to
+    const pinnedFieldEl = () => null; // no meeting here: no Pinned
     const typeGlyphs = new Map(), drawn = [], addIcon = (el, icon) => { drawn.push(icon); return el; }; // which glyph each field row is drawn with
     ${sourceLine('const fieldGlyph =')}
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
@@ -2671,9 +2676,10 @@ function runFormattingChecks() {
   ];
   const el = api.blank();
   api.renderSegs(el, segs);
-  assert.deepEqual(plain(api.tags(el)), ['STRONG', 'STRONG', 'EM', 'A.mention', 'S', 'CODE', 'A.link', 'A.url'],
+  assert.deepEqual(plain(api.tags(el)), ['STRONG', 'STRONG', 'EM', 'A.mention', 'SVG', 'SPAN.mlabel', 'S', 'CODE', 'A.link', 'A.url'],
     'every mark renders as its own element, a link mark as an anchor beside the bare-URL one');
-  assert.deepEqual(plain(api.readSegs(el)), segs, 'rendered marks read back as the same segments api.setText takes');
+  // a person says what it is by its id: its glyph is drawn before main has resolved it, and carried back like any icon
+  assert.deepEqual(plain(api.readSegs(el)), segs.map((s) => (s.mention ? { mention: { ...s.mention, icon: 'member' } } : s)), 'rendered marks read back as the same segments api.setText takes');
 
   // A reference written inside a line says what it points at: its target's icon in front of the label (main
   // resolves it, renderer/segments.js draws it), with the label in a span of its own so the underline runs under
@@ -3378,6 +3384,8 @@ async function runRailPinCheck() {
   const groups = vm.runInNewContext(functionSource('railGroups') + '; railGroups;');
   assert.deepEqual(plain(groups({ pinHub: 'event', pinned: [], outcomes: [], notes: [] })),
     [['Pinned', [], 'event']], 'a writable empty pin hub keeps the Pinned section');
+  assert.deepEqual(plain(groups({ hubKind: 'event', pinHub: 'tana:event:m', pinned: [{ id: 'a' }], outcomes: [], notes: [] })),
+    [], 'a meeting\'s pins are not in the Graph pane: they are listed under its title');
   assert.deepEqual(plain(groups({ pinned: [], outcomes: [], notes: [], backlinks: [{ label: 'Project › Owner', rows: [{ id: 'field' }] }, { label: 'Mentioned in', rows: [{ id: 'doc' }] }] })),
     [['Project › Owner', [{ id: 'field' }]], ['Mentioned in', [{ id: 'doc' }]]], 'backlinks arrive grouped: a section per typed field, then the mentions');
 
@@ -9917,9 +9925,13 @@ async function runPeopleFieldsCheck() {
     ${sourceLine('const ATTENDEES_SHOWN')}
     ${sourceLine('const attendeesOpen')}
     ${functionSource('attendeesFieldEl')}
+    const asDoc = (n) => ({ ...n, icon: 'doc' }), calls = [], togglePalette = (...args) => calls.push(args);
+    ${functionSource('pinnedFieldEl')}
     const page = { node: { id: 'tana:event:m', icon: 'meeting' } };
     const lines = (row) => row && row.childNodes[2].childNodes.map((l) => l.textContent);
     ({
+      pins: (data, docId = 'tana:event:m') => { relatedBy.set(docId, data); return lines(pinnedFieldEl({ node: { id: docId }, docId })); },
+      pinAdd: () => { relatedBy.set('tana:event:m', { hubKind: 'event', pinHub: 'tana:event:m', pinned: [] }); pinnedFieldEl({ ...page, docId: 'tana:event:m' }).childNodes[2].childNodes.at(-1).onclick(); return calls; },
       visible: (scope, word) => { summary = { scope, audience: { icon: 'lock', label: 'x', word }, people: [], peopleCount: 0 }; return visibilityFieldEl({ node: { id: 'tana:text:a' }, docId: 'tana:text:a' }).childNodes[2].textContent; },
       attendees: (list) => { info = list && { attendees: list }; return lines(attendeesFieldEl(page)); },
       more: () => { attendeesFieldEl(page).childNodes[2].childNodes.at(-1).onclick(); return [renders, lines(attendeesFieldEl(page)).length]; },
@@ -9937,6 +9949,12 @@ async function runPeopleFieldsCheck() {
   assert.deepEqual(plain(api.more()), [1, 7], 'a click shows them all');
   assert.deepEqual(plain(api.attendees([{ name: 'Sam Smith', email: 'Sam@X.nl' }, { name: '+Room 5', email: 'room5@x.nl' }])), ['@Sam', '+Room 5'], 'an attendee with only an address that is a member\'s is that member, as a mention; an unknown address stays its name');
   assert.deepEqual(plain(api.looks([{ identityUri: 'tana:user-profile:sam' }, { name: 'Leon', email: 'leon@x.nl' }])), [[false, '', 0], [true, 'Not in Tana', 1]], 'someone not in Tana: the member glyph, greyed, said on hover; a member stays a mention');
+  assert.deepEqual(plain(api.pins({ hubKind: 'event', pinned: [{ id: 'tana:text:a', title: 'Agenda' }] })), ['@Agenda'], 'a meeting\'s pins are listed under its title, one reference each');
+  assert.deepEqual(plain(api.pins({ hubKind: 'event', pinHub: 'tana:event:m', pinned: [{ id: 'tana:text:a', title: 'Agenda' }] })), ['@Agenda', 'Pin something \u2026'], 'where you may pin, Pin something … follows them');
+  assert.equal(api.pins({ hubKind: 'event', pinned: [] }), null, 'nothing pinned and no way to pin: no field');
+  assert.equal(api.pins({ hubKind: 'event', meeting: { id: 'tana:event:m' }, pinned: [{ id: 'tana:text:a', title: 'Agenda' }] }, 'tana:text:t'), null, 'a page in a meeting leaves its pins on the meeting');
+  assert.equal(api.pins({ hubKind: 'space', pinned: [{ id: 'tana:text:a', title: 'Agenda' }] }, 'tana:space:s'), null, 'a space keeps its pins in the Graph pane');
+  assert.deepEqual(plain(api.pinAdd()), [['search', null, { pinHub: 'tana:event:m', docId: 'tana:event:m' }]], 'Pin something … opens search with the pin context');
   console.log('ok  people fields: Private names you, Attendees shows five and And n more until clicked, without rooms');
 }
 checks.push(runPeopleFieldsCheck);
@@ -10395,8 +10413,11 @@ checks.push(async function runMarkdownCheck() {
     const dropPending = (key) => calls.push(['drop', key]), run = (fn) => fn(), reload = async () => {}, render = () => {};
     const placeCaret = (key, at) => calls.push(['caret', key, at]);
     const tana = { pasteMarkdown: async (...args) => { calls.push(['paste', ...args]); return { id: 'new', offset: 3 }; } };
+    const showError = (e) => calls.push(['error', e.message]);
+    let createFails = false;
+    const materialise = async (it) => { calls.push(['create', it.key]); if (createFails) { it.busy = false; return; } it.key = 'doc/made'; it.node = { id: 'made', kind: 'block', block: 'paragraph' }; delete it.busy; };
     ${functionSource('pasteMarkdown')}
-    ({ typedMark, lineMarker, looksMarkdown, calls, item, paste: async (text, range) => { calls.length = 0; collapsed = !range; sel = range || null; const took = pasteMarkdown(item, el, text); for (let i = 0; i < 5; i++) await Promise.resolve(); return took; } });
+    ({ typedMark, lineMarker, looksMarkdown, calls, item, failCreate: (v) => { createFails = v; }, paste: async (text, range, it = item) => { calls.length = 0; collapsed = !range; sel = range || null; const took = pasteMarkdown(it, el, text); for (let i = 0; i < 8; i++) await Promise.resolve(); return took; } });
   `);
   const typed = (text, off = text.length) => plain(api.typedMark([{ text }], off));
   assert.deepEqual(typed('a **b**'), { segs: [{ text: 'a ' }, { text: 'b', marks: { bold: true } }], caret: 3 }, '**b** is bold the moment it closes');
@@ -10412,6 +10433,15 @@ checks.push(async function runMarkdownCheck() {
   assert.equal(await api.paste('- a\n- b', [1, 3]), true, 'markdown is taken over');
   assert.deepEqual(plain(api.calls), [['drop', 'doc/row'], ['paste', 'doc', 'row', [{ text: 'a' }], [{ text: 'd', marks: { bold: true } }], '- a\n- b'], ['caret', 'doc/new', 3]],
     'the selection is replaced, the words either side go along with their marks, and the caret lands where main says');
+  // An empty page's only row is a draft with no Tana id: it is created first, and the paste written into it (left to
+  // the browser, the whole paste landed in that one row, "**" and "1." included).
+  const draft = () => ({ key: 'doc/draft:x', docId: 'doc', node: { id: 'draft:x', kind: 'block', block: 'paragraph', draft: true } });
+  assert.equal(await api.paste('**Goals**\n1. one\n   - under', null, draft()), true, 'markdown pasted into a draft row is taken over');
+  assert.deepEqual(plain(api.calls).map((c) => c.slice(0, 3)), [['create', 'doc/draft:x'], ['paste', 'doc', 'made'], ['caret', 'doc/new', 3]], 'the row is created, then the paste is written into it');
+  api.failCreate(true);
+  await api.paste('- a\n- b', null, draft());
+  assert.deepEqual(plain(api.calls), [['create', 'doc/draft:x']], 'a create that fails writes nothing (materialise shows its own error)');
+  api.failCreate(false);
   api.item.node.block = 'code';
   assert.equal(await api.paste('- a\n- b'), false, 'a code block takes a paste as its text');
   console.log('ok  markdown in the editor: typed marks and line markers, and pastes read as markdown');
@@ -10734,6 +10764,69 @@ async function runNewMeetingChoiceCheck() {
   assert.equal(await api.press([{ kind: 'doc', selectable: true }]), 'create new', 'and so does none at all');
   console.log('ok  New meeting on the Timeline goes where Create new goes when no meeting can be made');
 }
+
+// The editor list of 2026-10-06: "@Okafor" picks Sam Okafor over Create, a goal's mention with a space after it is
+// still a full reference, and a selected reference row's ⌘K task rows act on the task it stands in for.
+async function runEditorFixesCheck() {
+  const api = vm.runInNewContext(`
+    ${functionSource('titleHits')}
+    const oneMention = ${source.match(/const oneMention = ([^\n]*);\n/)[1]};
+    let sel = null, palDoc = null;
+    const rows = new Map(), selKeys = () => [...rows.keys()], items = { get: (k) => rows.get(k) };
+    const isTask = (n) => !!n.task, canEditNode = (n) => !!n && n.editable !== false, referenceTarget = (n) => n.target || null;
+    ${functionSource('taskActionContext')}
+    ({ titleHits, oneMention, tasksFor: (list) => { rows.clear(); list.forEach((item, i) => rows.set('k' + i, item)); return taskActionContext().docs.map((d) => d.id); } });
+  `);
+  const pick = (title, q) => api.titleHits(title, q).starts === q.split(/\s+/).filter(Boolean).length;
+  assert.equal(pick('Sam Okafor', 'Okafor'), true, 'a surname begins a word of the name');
+  assert.equal(pick('Sam Okafor', 'sam oka'), true, 'and every word typed has to');
+  assert.equal(pick('Discuss Sam Okafor', 'kafor'), false, 'inside a word is no obvious choice: Create stays selected');
+  assert.equal(api.oneMention([{ mention: { uri: 'tana:text:x', label: 'Goal' } }, { text: ' ' }]), true, 'a space beside the chip is still one mention');
+  assert.equal(api.oneMention([{ mention: { uri: 'tana:text:x', label: 'Goal' } }, { text: ' and more' }]), false, 'words beside it are not');
+  const task = { id: 'tana:text:task', kind: 'document', task: true };
+  assert.deepEqual(plain(api.tasksFor([{ docId: 'tana:text:page', node: { kind: 'block', id: 'blk', target: task } }])), ['tana:text:task'], 'a selected full reference offers its task');
+  assert.deepEqual(plain(api.tasksFor([{ docId: 'tana:text:page', node: { kind: 'block', id: 'blk' } }])), [], 'a plain row offers none');
+  console.log('ok  editor: @ prefers a name that begins with the words, a mention and a space is a full reference, a selected reference is its task');
+}
+checks.push(runEditorFixesCheck);
+// The zoomed task's Assigned to field changes who has it; ⌘K Edit assignees adds or takes one off.
+async function runAssignReplaceCheck() {
+  const api = vm.runInNewContext(`
+    const written = [], members = [{ id: 'ann' }, { id: 'bo' }], taskMetaById = new Map([['t', { assignees: ['ann'] }]]);
+    const isTask = () => true, loadMembers = () => {}, loadTaskMeta = () => {}, memberName = (id) => id, isRealId = () => true;
+    const tana = {}, agentIds = new Set(), palDoc = null, setTaskAssignees = (doc, uris) => written.push(uris);
+    ${functionSource('memberRows')}
+    ${functionSource('assigneeRows')}
+    ({ pick: (label, replace) => { written.length = 0; assigneeRows('', { id: 't' }, replace).find((r) => r.label === label).run(); return written[0]; } });
+  `);
+  assert.deepEqual(plain(api.pick('bo', true)), ['bo'], 'from the field, a person replaces who has it');
+  assert.deepEqual(plain(api.pick('bo', false)), ['ann', 'bo'], 'Edit assignees adds them');
+  assert.deepEqual(plain(api.pick('ann', false)), [], 'and takes one off again');
+  assert.match(source, /openAssigneePalette\(node, null, true\)/, 'the field opens the replacing picker');
+  console.log('ok  the Assigned to field replaces the assignee; Edit assignees toggles one');
+}
+checks.push(runAssignReplaceCheck);
+// The selection toolbar glides along the row it is in, and is put straight where it goes when it arrives or changes row:
+// a glide from its last place flew it across the screen.
+async function runToolbarPlaceCheck() {
+  const api = vm.runInNewContext(`
+    const classes = new Set(), moves = [];
+    const toolbarEl = { dataset: {}, get offsetWidth() { return 0; }, getBoundingClientRect: () => ({ width: 200 }),
+      classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)), remove: (c) => classes.delete(c) },
+      style: { set left(v) { moves.push(classes.has('jump') ? 'jump' : 'glide'); }, set top(v) {} } };
+    let toolCtx = null, at = 100;
+    const innerWidth = 1000, fitMenu = () => {};
+    const getSelection = () => ({ rangeCount: 1, getRangeAt: () => ({ getClientRects: () => [{ left: at, top: 300 }] }) });
+    ${functionSource('placeToolbar')}
+    ({ place: (key, x, arriving) => { toolCtx = { key }; at = x; placeToolbar(arriving); return [moves.at(-1), classes.has('jump')]; } });
+  `);
+  assert.deepEqual(plain(api.place('a', 100, true)), ['jump', false], 'arriving: put where it goes, and gliding again after');
+  assert.deepEqual(plain(api.place('a', 160, false)), ['glide', false], 'along the same row: a glide');
+  assert.deepEqual(plain(api.place('b', 700, false)), ['jump', false], 'to another row: put straight there');
+  console.log('ok  the selection toolbar glides within a row and is placed when it arrives or changes row');
+}
+checks.push(runToolbarPlaceCheck);
+
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

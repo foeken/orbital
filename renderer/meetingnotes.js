@@ -25,10 +25,13 @@ const summaryMeta = new Map(); // write-up id -> its own taskMeta (who sees it),
 const summarySeq = new Map(); // write-up id -> the newest ask: an older answer, landing after a live change asked again, is dropped
 const notesCaret = new Map(); // event id -> { key, offset }: where the caret was in the notes when Summary took their place
 
-// A meeting whose own outline is empty: every Tana event (its content is empty), never a page the mock gives content
+// A meeting whose own outline is empty: every Tana event (its content is empty), never a page the mock gives content.
+// And a person (a member's profile, which has no content either): their page's editor is your private notes about them,
+// made and checked as a meeting's (main/meeting-notes.js), with no write-up beside them.
+const personNotes = (id) => /^tana:user-profile:/.test(String(id));
 function notesPage(parent) {
   if (!parent || LINKS || (zoom && zoom.nodeId) || parent.node.kind !== 'document' || !tana.meetingNotes) return false;
-  if (parent.node.icon !== 'meeting' && !String(parent.docId).startsWith('tana:event:')) return false;
+  if (parent.node.icon !== 'meeting' && !String(parent.docId).startsWith('tana:event:') && !personNotes(parent.docId)) return false;
   const own = kids.get(parent.docId);
   return Array.isArray(own) && !own.length;
 }
@@ -41,7 +44,8 @@ function askNotes(eventId) {
   // being private (main/documents.js writeGuards), so nothing is written to them meanwhile
   if (!meetingNotes.get(eventId)) meetingNotes.set(eventId, null);
   const writeUp = (uri) => { if (asked === notesAsked) { notesWriteUps.set(eventId, uri || null); renderSoon(); } };
-  if (tana.summaryUri && !notesWriteUps.has(eventId)) tana.summaryUri(eventId).then(writeUp, () => writeUp(null));
+  if (personNotes(eventId)) notesWriteUps.set(eventId, null); // a person has no write-up: the notes alone
+  else if (tana.summaryUri && !notesWriteUps.has(eventId)) tana.summaryUri(eventId).then(writeUp, () => writeUp(null));
   tana.meetingNotes(eventId).then((answer) => {
     if (asked !== notesAsked || notesSeq.get(eventId) !== seq) return; // signed out or disconnected meanwhile, or asked again since
     if (answer && answer.id && who && answer.owner !== who) return meetingNotes.delete(eventId); // another account's
@@ -245,7 +249,7 @@ function meetingTanaButton(parent) {
   const head = titleEl.parentElement;
   if (!head) return;
   const old = head.querySelector(':scope > .meeting-tana-slot'), id = parent && parent.docId;
-  const show = !!id && !LINKS && !(zoom && zoom.nodeId) && !parent.node.draft && (String(id).startsWith('tana:event:') || parent.node.icon === 'meeting') && !!tana.nodeLink && !!tana.openExternal;
+  const show = !!id && !LINKS && !(zoom && zoom.nodeId) && !parent.node.draft && (String(id).startsWith('tana:event:') || parent.node.icon === 'meeting' || personNotes(id)) && !!tana.nodeLink && !!tana.openExternal;
   if (!show) { if (old) old.remove(); return; }
   if (old && old.dataset.doc === id) return;
   const slot = document.createElement('span'), b = quietButton('meeting-tana', 'Open in Tana', () => openInTana(id)), label = document.createElement('span'); // quiet: a click leaves the caret where it was

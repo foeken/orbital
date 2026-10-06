@@ -201,8 +201,8 @@ is a dozen lines ([updater.js](updater.js)).
 
 ## Development
 
-`npm run lint` and `npm run check` must both pass before a commit; there is no CI, so every check runs where the
-change is written. The linter is ESLint's recommended set and nothing else, no
+`npm run lint` and `npm run check` must both pass before a commit, and every check runs where the change is
+written; CI runs the desktop's and Android's again on every pull request, without blocking it. The linter is ESLint's recommended set and nothing else, no
 formatter; the checks run everything offline: the SQLite cache, the SDK against a fake sync service
 and a synthetic task snapshot, the renderer's auth and behaviour checks, the phones' engine bundle,
 and that the iPhone's and Android's row models and glyphs have not drifted apart. Every non-trivial

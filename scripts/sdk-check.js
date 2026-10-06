@@ -5388,6 +5388,22 @@ async function main() {
     assert.equal(raw()[2].nodeName, 'orderedList');
     assert.equal(read('r4hz3a0b').block, 'numbered');
     assert.deepEqual(read('r4hz3a0b').children.map((n) => n.id), [child], 'a numbered item keeps its children');
+    {
+      // Tab on a numbered row nests it as a numbered row under one with no children yet (beside existing children it
+      // joins their list), and ⇧Tab brings it back numbered; a bullet child outdented beside numbered rows is one too
+      const two = step(() => outline.insertAfter(a, 'r4hz3a0b', 'Two')), three = step(() => outline.insertAfter(a, two, 'Three'));
+      step(() => outline.indent(a, three));
+      assert.equal(read(three).block, 'numbered', 'indented from a numbered list: a numbered child');
+      step(() => outline.outdent(a, three));
+      assert.equal(read(three).block, 'numbered', 'outdented into a numbered list: numbered');
+      step(() => outline.outdent(a, child));
+      assert.equal(read(child).block, 'numbered', 'a bullet child outdented among numbered rows is numbered');
+      step(() => outline.removeMany(a, [two, three]));
+      step(() => outline.indent(a, child));
+      assert.equal(read(child).block, 'numbered', 'and Tab takes it back in as a numbered child');
+      step(() => outline.setBlockType(a, child, 'bullet'));
+      assert.deepEqual(read('r4hz3a0b').children.map((n) => n.id), [child], 'back as it was');
+    }
     step(() => outline.setBlockType(a, 'r4hz3a0b', 'heading1'));
     assert.equal(read('r4hz3a0b').block, 'heading1');
     assert.equal(read('r4hz3a0b').heading, 1);
@@ -6550,6 +6566,32 @@ async function main() {
     await assert.rejects(asked, /account changed|not connected/i, 'the answer is dropped');
     runtime(ME);
     console.log('ok  meeting notes (lazy, made unowned and private, one id and one seed per person and meeting, two Macs keep every word, shared by you kept and said, never-confirmed refused, per account)');
+
+    // Notes about a person (a member's profile): the same editor, made the same way, but in your Library: owned by
+    // nothing, pinned nowhere, the person given nothing, marked with them, their first row a link to their page in Tana.
+    const PERSON = 'tana:user-profile:' + ulid(), STRANGER = 'tana:user-profile:' + ulid();
+    rows.set(PERSON, { id: PERSON, title: 'Synthetic Colleague', userProfile: { name: 'Synthetic Colleague' } });
+    const personLink = 'https://home.tana.inc/o/' + ORGDOC.split(':').pop() + '/u/' + encodeURIComponent(PERSON);
+    const madeBefore = created.length;
+    assert.deepEqual(plain(await call(PERSON)), { id: null }, 'a person with no notes says so');
+    assert.equal(created.length, madeBefore, 'and opening their page made nothing');
+    await assert.rejects(call(STRANGER, true, 'not a member'), /This person cannot hold notes/, 'one Tana does not list gets none');
+    assert.equal(created.length, madeBefore, 'nothing made for them');
+    const about = await call(PERSON, true, 'Likes short meetings');
+    const pn = readNode(server.get(about.id));
+    assert.equal(about.id, slot(PERSON, 0), 'at an id derived from you and the person');
+    assert.ok(![0, 1, 2, 3].some((k) => slot(PERSON, k) === require('../sdk/events').notesSlotId(ME, PERSON, k)), 'never at a meeting’s places');
+    assert.deepEqual([pn.ownerUri, pn.restricted, Object.keys(pn.participants), pn.participants[ME].role, notes.markOf(server.get(about.id), PERSON), notes.markOf(server.get(about.id)), pn.title], [undefined, true, [ME], 'admin', PERSON, undefined, 'Private notes · Synthetic Colleague'], 'owned by nothing, you alone, marked with the person, named for them');
+    assert.deepEqual(plain(about.audience), { private: true, writable: true }, 'said to be only yours');
+    assert.deepEqual(readOutline(server.get(about.id))[0].segments, [{ text: notes.PERSON_REFERENCE, marks: { link: personLink } }], 'their page in Tana as a link: no mention, no edge');
+    assert.deepEqual(lines(about.id), [notes.PERSON_REFERENCE, 'Likes short meetings']);
+    assert.equal(server.get(about.id).loro.getMap(notes.MARK).get('pinned'), undefined, 'pinned nowhere');
+    assert.equal((await call(PERSON)).id, about.id, 'found again');
+    // given an owner in Tana, they are not these notes any more: left as they are, and the next words go to the next place
+    server.get(about.id).transact((l) => l.getMap('data').set('ownerUri', EV)); index(server.get(about.id));
+    assert.deepEqual(plain(await call(PERSON)), { id: null }, 'owned by something: not the person’s notes');
+    assert.equal((await call(PERSON, true, 'again')).id, slot(PERSON, 1), 'the next words make new ones at the next place');
+    console.log('ok  notes about a person (lazy, private, in your Library, unpinned, the person given nothing, marked and linked to them)');
   }
   {
     const backend = mainHelpers(), cache = require('../db');

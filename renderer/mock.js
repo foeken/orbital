@@ -203,7 +203,7 @@ function mockApi() {
     ['Cost tracking needs one owner', 'Finance wants a single shared sheet by the end of October, and Priya takes it'],
     ['The offsite has room for one big topic', 'the group picked the one-year roadmap over the org design'],
   ], ['Two pilots start in October, with Sam and Dana leading them', 'Tomas drafts the offsite agenda this week']);
-  content['tana:user-profile:sam'] = [block('Sam is a colleague')];
+  for (const m of members) content[m.id] = []; // a profile has no content of its own: its page is your notes about them
   content[space.id] = [...spaceDocs, dutch]; // the Dutch note lives in the space too: a list row to translate
   // Tana's notifications inbox as main/inbox.js hands it over: the page's rows, already phrased, newest first. The three
   // writes answer with the unread count and tell onInbox, which is what the inbox's live change does in main.
@@ -348,7 +348,7 @@ function mockApi() {
     readOnly: (eventId) => notesSet(eventId, { ...(notesAudience.get(notesOf[eventId]) || {}), writable: false }, true) };
   // as main writes them (main/meeting-notes.js seed and firstWords): a new note starts with a link to its meeting's page
   const notesRef = {}; // note id -> its seed's first row, as main/meeting-notes.js referenceOf names it
-  const firstWords = (id, text, eventId) => { const rows = content[id], only = rows.length === 1 && !rows[0].text ? rows[0] : null; if (only) { const title = 'Open the meeting in Tana', link = 'https://home.tana.inc/o/mock/e/' + eventId; Object.assign(only, { text: title, segments: [{ text: title, marks: { link } }] }); notesRef[id] = { id: only.id, text: title, link }; } const n = block(text); rows.push(n); return n.id; };
+  const firstWords = (id, text, eventId) => { const rows = content[id], only = rows.length === 1 && !rows[0].text ? rows[0] : null; if (only) { const person = /^tana:user-profile:/.test(eventId), title = person ? 'Open their profile in Tana' : 'Open the meeting in Tana', link = 'https://home.tana.inc/o/mock/' + (person ? 'u/' : 'e/') + eventId; Object.assign(only, { text: title, segments: [{ text: title, marks: { link } }] }); notesRef[id] = { id: only.id, text: title, link }; } const n = block(text); rows.push(n); return n.id; };
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
   const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me, ...(d.start ? { start: d.start, end: d.end } : {}), ...(d.meeting ? { meeting: d.meeting } : {}), ...(d.fields ? { fields: d.fields } : {}) });
   // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers).
@@ -428,7 +428,8 @@ function mockApi() {
     // block whose whole content is one mention is resolved the same way
     // a saved search's page is the rows its stored query finds, as main answers it
     children: async (docId) => { if (docId === 'orbital:timeline') readToday(); return String(docId).startsWith('tana:search:') ? structuredClone(preview((searchQueries[docId] || { filter: filters.library }).filter)).map((n) => ({ ...n, text: n.title, hasChildren: true })) : structuredClone(content[docId] || []).map((n) => {
-      const one = n.type !== 'reference' && !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
+      const kept = (n.segments || []).filter((s) => s.mention || /\S/.test(s.text)); // whitespace beside the chip does not count (main/documents.js lone)
+      const one = n.type !== 'reference' && !n.children?.length && kept.length === 1 && kept[0].mention;
       const ref = n.type === 'reference' ? n.reference : one ? { uri: one.uri, label: one.label } : null;
       const target = ref && [...all, ...members].find((d) => d.id === ref.uri);
       return target ? { ...n, reference: { ...ref, node: info(target) } } : n;
@@ -445,7 +446,8 @@ function mockApi() {
     // a meeting's private notes (main/meeting-notes.js): found, or made with the first words typed
     meetingNotes: async (eventId, create, first) => {
       globalThis.__notes.asked++;
-      if (!meetingEdits[eventId]) throw new Error('Not a meeting');
+      const person = members.find((m) => m.id === eventId); // notes about a person, made as a meeting's are
+      if (!meetingEdits[eventId] && !person) throw new Error('Not a meeting or a person');
       if (globalThis.__notes.delay) await new Promise((r) => setTimeout(r, globalThis.__notes.delay));
       let id = notesOf[eventId];
       if (!id && !create) return { id: null };
@@ -453,7 +455,7 @@ function mockApi() {
         if (globalThis.__notes.fail > 0) { globalThis.__notes.fail--; throw new Error('Tana refused these notes (mock)'); }
         if (globalThis.__notes.failKept > 0) { globalThis.__notes.failKept--; throw new Error('Tana has not said yet whether your private notes exist; what you typed is kept'); }
         id = notesOf[eventId] = 'tana:text:mocknotes' + (++seq); globalThis.__notes.made++;
-        notesDoc(id, 'Private notes · ' + meetingEdits[eventId].title); content[id] = [block('')];
+        notesDoc(id, 'Private notes · ' + (person ? person.text : meetingEdits[eventId].title)); content[id] = [block('')];
         notesChanged(eventId);
       }
       const blockId = create && first ? firstWords(id, first, eventId) : undefined;
@@ -505,6 +507,7 @@ function mockApi() {
       return {
         summary: 'Mock meeting summary for ' + doc.text,
         summaryUri: doc.id === 'mockmeeting4' ? 'tana:text:mockwriteup4' : undefined,
+        hubKind: 'event',
         call: { url: 'https://meet.google.com/klm-nopq-rst', label: 'meet.google.com/klm-nopq-rst' },
         pinned: [pick(all.find((d) => d.icon === 'doc')), pick(all.find((d) => d.icon === 'task'))].filter(Boolean),
         outcomes: all.filter((d) => d.icon === 'task').slice(1, 3).map(info),

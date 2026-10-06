@@ -763,7 +763,9 @@ function indentUnit(document, id) {
   const unit = li || block, target = prevSibling(unit);
   if (!target) return;
   const c = kids(target), last = c.get(c.length - 1);
-  const items = isList(last) ? kids(last) : kids(create(c, c.length, 'bulletList'));
+  // a new level of children is the kind of list the row came from, as Tana's own Tab does: a numbered row stays numbered
+  const from = li && li.parent().parent();
+  const items = isList(last) ? kids(last) : kids(create(c, c.length, from && isList(from) ? name(from) : 'bulletList'));
   if (li) copy(items, items.length, li); else copy(kids(create(items, items.length, 'listItem')), 0, block);
   const l = unit.parent();
   l.delete(indexOf(l, unit), 1);

@@ -459,6 +459,10 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   assert.equal(top[0], "Today's Tasks", 'Today\u2019s Tasks leads the page');
   assert.ok(top.includes('Upcoming meetings'), 'today\u2019s meetings to come are listed');
   assert.deepEqual(await p.js('[...document.querySelectorAll("#outline .ghead")].map((h) => h.textContent.trim())'), ['Today', 'Yesterday'], 'the history in day sections');
+  // as on the phones: the blocks above the days come before Today's heading, on their own rail, which curves into the
+  // days' where Today's heading is a stop (renderer/timeline.js timelineGroups)
+  assert.deepEqual(await p.js('[...document.querySelectorAll("#outline > *")].slice(0, 5).map((e) => e.classList.contains("tl-top") ? "top" : e.className)'),
+    ['top', 'top', 'top', 'tl-bend', 'ghead'], 'Today\u2019s Tasks, the free time and Upcoming meetings, then the bend, then Today');
   const back = async () => { await p.key('⌘['); await at(p, 'orbital:timeline'); };
   // a first click on an edit selects it and opens nothing; the next opens the task edited
   await clickWords(p, 'Sam Okafor edited');
@@ -1003,6 +1007,35 @@ flow('golden path: type under a meeting into notes only you can see', async (p) 
 // two) and makes no notes; with no notes of yours there is no switch, only the summary; a write-up found while your
 // first words are being made keeps you in them, with the switch; what was typed is saved to the document it was typed
 // in; a read-only write-up says so; an answer for a meeting you left draws nothing; a meeting without a write-up has no switch.
+// 17f. A person's page (a member's profile, which has no content of its own) is your private notes about them, as a
+// meeting's is (renderer/meetingnotes.js, main/meeting-notes.js, docs/MEETINGS.md "Notes about a person"): reached from
+// an @ mention, nothing made by opening it, its first words make notes only you can see, without the row naming them.
+flow('golden path: write private notes about a person', async (p) => {
+  await p.start();
+  const sam = 'tana:user-profile:sam', draft = '#outline .node.draft .text';
+  await p.js('goTo("mockdoc0")'); await at(p, 'mockdoc0'); await settle(p, 400);
+  await p.js('document.querySelector(\'#outline .mention[data-uri="' + sam + '"]\').click(); 1');
+  await at(p, sam); await settle(p, 400);
+  await p.waitFor('document.querySelector(".notes-head")', 'the line over the notes');
+  assert.match(await p.js('document.querySelector(".notes-head").textContent'), /only you can see them/, 'the notes say only you see them');
+  assert.deepEqual([await p.js('__notes.made'), await p.js('!!document.querySelector("#pagehead .meeting-tana")')], [0, true], 'opening their page made nothing, and their page in Tana is beside their name');
+  await p.waitFor('document.querySelector(' + J(draft) + ')', 'the row to type in');
+  await p.js('(() => { const el = document.querySelector(' + J(draft) + '); el.focus(); placeCaret(keyOfEl(el), 0); return 1; })()');
+  await p.type('Prefers written updates');
+  await p.waitFor('__notes.made === 1 && meetingNotes.get(' + J(sam) + ')?.id', 'the notes made');
+  await p.js('flushAll()'); await settle(p, 500);
+  const id = await p.js('meetingNotes.get(' + J(sam) + ').id');
+  assert.deepEqual([await p.js('zoom.docId'), await p.js('(docOf(' + J(id) + ') || {}).text')], [sam, 'Private notes \u00b7 Sam Okafor'], 'still their page, the notes named for them');
+  assert.deepEqual(await p.js('[...document.querySelectorAll("#outline .node .text")].map((e) => e.textContent)'), ['Prefers written updates'], 'your words, without the row that names them');
+  // found with ⌘S too: the person's page, with the notes just made
+  await p.js('goTo("orbital:timeline")'); await at(p, 'orbital:timeline');
+  await p.key('⌘s'); await p.type('Sam');
+  await p.waitFor('!palBusy && palRows.some((r) => r.label === "Sam Okafor")', 'Sam among the results'); await settle(p, 300);
+  for (let i = 0; i < 6 && (await p.js('palRows[palIndex]?.label')) !== 'Sam Okafor'; i++) await p.key('↓');
+  await p.key('↩');
+  await at(p, sam); await settle(p, 400);
+  assert.deepEqual(await p.js('[...document.querySelectorAll("#outline .node .text")].map((e) => e.textContent)'), ['Prefers written updates'], '⌘S opens their page at your notes');
+});
 flow('golden path: switch a meeting between your notes and its summary', async (p) => {
   await p.start();
   const open = async (id) => { await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 400); };
