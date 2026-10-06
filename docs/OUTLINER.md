@@ -1221,7 +1221,10 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     Leppers **edited** Risk register" with Tana's summary quoted under it (title in bold, then its description). The
     latest status move comes from the node's state, older ones from summaries that name the state. A run of new Inbox
     tasks from one source on one day is one quiet line marked by who put them there (a robot for an agent, Tana's
-    prism for Tana's AI, a dotted ring for a person), the tasks listed under it. Meetings you are in show at their
+    prism for Tana's AI, a dotted ring for a person), the tasks listed under it, dated when the task reached you: made
+    then, or handed to you as a task later by someone else (`state.enteredAt` when `state.changedBy` is not you,
+    main/state.js `handedAt`), so a draft written yesterday and given to you today is today's line, and its
+    "New in Inbox" banner (main/views.js announceNewInbox) counts its day from then too. Meetings you are in show at their
     start once started, with their length and others on the grey line ("45 min · …", four names then an ellipsis);
     all-day and future ones stay out; one over with no summary is drawn quiet (`faint`); the summary is Tana's own on
     the event (`calendarEvent.tagline`/`.summary`), part of the live signature. A live query over your meetings to the
