@@ -25,7 +25,7 @@
 const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates, todayNode } = require('./pins');
-const { NOT_CONNECTED, S, inboxFrom, iso, isMcp, send } = require('./state');
+const { NOT_CONNECTED, S, handedAt, inboxFrom, iso, isMcp, send } = require('./state');
 const { isAllDay } = require('../sdk/dates');
 const { graphRow, hm, members, rememberNodeHue, toNode } = require('./rows');
 const { announcedEdits, document, notifySilencedIds, notifyWatchedIds } = require('./documents');
@@ -244,11 +244,14 @@ async function rows(progress) {
     }
     return events;
   }
-  // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
+  // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in. Each is
+  // dated when it reached you: made then, or handed to you as a task later by someone else (state.js handedAt), so a
+  // draft written yesterday and given to you today is today's line. Read by last change, so such a task is in the read.
   async function inbox() {
-    const [names, { nodes: tasks }] = await Promise.all([namesP, graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) })]);
+    const [names, { nodes: tasks }] = await Promise.all([namesP, graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) })]);
     const who = whoOf(names), events = [];
-    const recent = tasks.filter((n) => Date.parse(n.createTime || '') > since);
+    const reached = (n) => Math.max(Date.parse(n.createTime || '') || 0, handedAt(n, me));
+    const recent = tasks.filter((n) => reached(n) > since);
     const mine = recent.filter((n) => !n.createdBy || n.createdBy === me).map((n) => n.id);
     const createdIn = new Map(mine.length ? ((await graph.listEdges({ fromNodeIds: mine, edgeTypes: ['EDGE_TYPE_CREATED_IN'] }).catch(() => ({}))).edges || []).map((e) => [e.fromNodeId, e.toNodeId]) : []);
     const chatIds = [...new Set(createdIn.values())];
@@ -260,7 +263,7 @@ async function rows(progress) {
       const actor = byHand ? 'You' : n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'An AI agent' : "Tana's AI";
       // the marker says who: a robot for an agent, Tana's prism for Tana's own AI, a dotted ring for a person
       const icon = actor === 'An AI agent' ? 'robot' : actor === "Tana's AI" ? 'tana' : 'tlNew';
-      events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
+      events.push({ kind: 'inbox', uri: n.id, title: n.title, at: reached(n), actor, icon, tone: 'new', node: n });
     }
     return events;
   }

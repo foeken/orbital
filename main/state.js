@@ -70,6 +70,9 @@ function inboxFrom(me, creator, chat, names) {
   const topic = /^MCP:\s*(.+)/i.exec(chat.title || '')?.[1]; // the chat's title names what the agent was doing
   return isMcp(chat) ? 'Via MCP' + (topic ? ': ' + topic : '') : "From Tana's AI";
 }
+// When someone else last gave a task its state (a graph node's state.enteredAt), in ms, or 0: a draft made days ago and
+// handed to you as a task today reaches your Inbox today, not when it was made. Your own moves are no arrival.
+const handedAt = (n, me) => (n && n.state && n.state.changedBy && n.state.changedBy !== me && Date.parse(n.state.enteredAt || '')) || 0;
 // every outliner page (issues #137, #159): what is pushed is shared state; a command for one page is sent to it directly.
 // A page is a handle over an iframe of a window's shell (main.js addPage): { id, frame, win, key, side, send, isDestroyed,
 // focus }, kept left to right in win.panes. A window without panes is a check's stand-in with a webContents of its own.
@@ -119,4 +122,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, inboxFrom, pageOf, pageKey, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, inboxFrom, handedAt, pageOf, pageKey, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };
