@@ -885,9 +885,9 @@ wrong twenty.
   OpenAI's Developer ID. Two synced choices, each a model and an effort (main/settings.js AI_KEYS): the Quick AI (`aiQuickModel`,
   `aiQuickEffort`) for Auto-translate, Discuss with, Auto-pick type and the icon pick, and the Regular AI (`aiModel`,
   `aiEffort`) for reading an image, starting on `gpt-6-luna` at low and `gpt-5.6-terra` at low (main/ai.js QUICK_MODEL, DEFAULT_MODEL), set in the Settings window.
-  With the Decisions API feature flag on (Cmd+K Enable feature flag) and an API key stored, Auto-pick type, Discuss with,
-  the icon pick and Auto-translate's language check ask OpenAI's Decisions API instead (main/decisions.js, `gpt-6-luna`,
-  the API key only: it refuses a ChatGPT sign-in); without a key every one keeps the way above.
+  With the Decisions API feature flag on (Cmd+K Enable feature flag) and an API key stored, Auto-pick type asks OpenAI's
+  Decisions API instead (main/decisions.js, `gpt-6-luna`, the API key only: it refuses a ChatGPT sign-in); without a key
+  it keeps the way above. The rest stay on the Quick AI: the Decisions API was slower or missed more for them (issue #807).
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
