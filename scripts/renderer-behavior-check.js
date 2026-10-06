@@ -10806,6 +10806,26 @@ async function runAssignReplaceCheck() {
   console.log('ok  the Assigned to field replaces the assignee; Edit assignees toggles one');
 }
 checks.push(runAssignReplaceCheck);
+// The selection toolbar glides along the row it is in, and is put straight where it goes when it arrives or changes row:
+// a glide from its last place flew it across the screen.
+async function runToolbarPlaceCheck() {
+  const api = vm.runInNewContext(`
+    const classes = new Set(), moves = [];
+    const toolbarEl = { dataset: {}, get offsetWidth() { return 0; }, getBoundingClientRect: () => ({ width: 200 }),
+      classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)), remove: (c) => classes.delete(c) },
+      style: { set left(v) { moves.push(classes.has('jump') ? 'jump' : 'glide'); }, set top(v) {} } };
+    let toolCtx = null, at = 100;
+    const innerWidth = 1000, fitMenu = () => {};
+    const getSelection = () => ({ rangeCount: 1, getRangeAt: () => ({ getClientRects: () => [{ left: at, top: 300 }] }) });
+    ${functionSource('placeToolbar')}
+    ({ place: (key, x, arriving) => { toolCtx = { key }; at = x; placeToolbar(arriving); return [moves.at(-1), classes.has('jump')]; } });
+  `);
+  assert.deepEqual(plain(api.place('a', 100, true)), ['jump', false], 'arriving: put where it goes, and gliding again after');
+  assert.deepEqual(plain(api.place('a', 160, false)), ['glide', false], 'along the same row: a glide');
+  assert.deepEqual(plain(api.place('b', 700, false)), ['jump', false], 'to another row: put straight there');
+  console.log('ok  the selection toolbar glides within a row and is placed when it arrives or changes row');
+}
+checks.push(runToolbarPlaceCheck);
 
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

@@ -1119,11 +1119,12 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 /* selection toolbar: floats over a non-empty selection inside an editable node (style dropdown, B I S code, @) */
 .toolbar { position: fixed; z-index: var(--z-toolbar); display: flex; align-items: center; gap: 2px; padding: 4px; background: var(--surface); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .06); }
 .toolbar[hidden] { display: none; }
-/* Surface: it rises in over a selection and sinks away; from one selection to the next it glides (Glide) rather than
-   jumping. A toolbar arriving from nothing starts where it is put, since there is no earlier place to glide from. */
+/* Surface: it rises in over a selection and sinks away; along the row it is in it glides (Glide) rather than jumping.
+   Arriving, or moving to another row, it starts where it is put (.jump): a glide from its last place crossed the screen. */
 .toolbar { transform-origin: 50% 100%; transition: opacity var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-out), display var(--dur-quick) allow-discrete,
   left var(--dur-quick) var(--ease-move), top var(--dur-quick) var(--ease-move); }
 .toolbar[hidden] { opacity: 0; transform: translateY(4px) scale(.96); pointer-events: none; transition-timing-function: var(--ease-in); }
+.toolbar.jump { transition-property: opacity, transform, display; } /* placed, not glided (renderer/toolbar.js placeToolbar) */
 @starting-style { .toolbar:not([hidden]) { opacity: 0; transform: translateY(4px) scale(.96); } }
 .tbtn { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #444; font-size: 15px; cursor: pointer; }
 .tbtn:hover { background: #f0f0f0; }

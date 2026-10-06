@@ -100,8 +100,9 @@ function renderToolbar() {
   at.type = 'button'; at.className = 'tbtn at'; at.dataset.id = 'link'; at.title = 'Link to a document (@)'; at.textContent = '@';
   at.onclick = linkSelection;
   toolbarEl.append(at);
+  const arriving = toolbarEl.hidden; // or still fading out from the last selection: hidden, though drawn a moment longer
   toolbarEl.hidden = false;
-  placeToolbar();
+  placeToolbar(arriving);
 }
 // Where the style menu opens and how tall it may be, from the room on each side of its button and the height it
 // wants. It stays under the button while it fits there, flips above when that side is roomier, and is capped to
@@ -120,14 +121,20 @@ function fitMenu() {
   menu.style.maxHeight = maxHeight + 'px';
   menu.querySelector('.mrow.active')?.scrollIntoView({ block: 'nearest' }); // arrowing past the fold brings the row with it
 }
-function placeToolbar() {
+// It glides only within the row it is in (a selection growing or moving along its words). Arriving, or moving to
+// another row, it is put straight there: gliding from where it last was flew it across the screen.
+function placeToolbar(arriving = false) {
   const sel = getSelection();
   if (!sel.rangeCount || !toolbarEl.getBoundingClientRect) return;
   const rects = sel.getRangeAt(0).getClientRects(), r = rects[0] || sel.getRangeAt(0).getBoundingClientRect();
   if (!r) return;
   const width = toolbarEl.getBoundingClientRect().width || 280;
+  const jump = arriving || toolbarEl.dataset.key !== toolCtx?.key;
+  toolbarEl.dataset.key = toolCtx?.key || '';
+  toolbarEl.classList.toggle('jump', jump);
   toolbarEl.style.left = Math.max(8, Math.min(innerWidth - width - 8, r.left)) + 'px';
   toolbarEl.style.top = Math.max(8, r.top - 44) + 'px';
+  if (jump) { void toolbarEl.offsetWidth; toolbarEl.classList.remove('jump'); } // placed with no glide; later moves glide again
   fitMenu();
 }
 // The one type a row can be refused: plain text for a child node (sdk/content.js atRoot).
