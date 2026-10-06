@@ -635,13 +635,15 @@ function renderFields(parent, force = false, el = $('fields')) {
   const assigned = parent && parent.node.kind === 'document' && isTask(parent.node) && tana.taskMeta ? assigneeFieldEl(parent) : null;
   const visible = parent && parent.node.kind === 'document' && tana.taskMeta && !isChatPage(parent) && !isSearchDoc(parent.node) ? visibilityFieldEl(parent) : null; // and who can see it, any document but a chat or a saved search (a conversation and a list, not a page)
   const attendees = parent && parent.node.kind === 'document' && tana.meetingInfo && !isChatPage(parent) && !isTask(parent.node) ? attendeesFieldEl(parent) : null; // a meeting's people, after who can see it; a task pinned to a meeting leaves them on the meeting
+  const pinnedHere = parent && parent.node.kind === 'document' && !isChatPage(parent) && !isTask(parent.node) ? pinnedFieldEl(parent) : null; // what is pinned on the meeting, under its people
   const chatLine = isChatPage(parent) ? chatContextEl(parent) : null; // a chat: who can see it and its meeting, one line (renderer/chat.js, #543)
-  el.hidden = !fields.length && !defs.length && !assigned && !visible && !attendees && !chatLine;
+  el.hidden = !fields.length && !defs.length && !assigned && !visible && !attendees && !pinnedHere && !chatLine;
   el.replaceChildren();
   for (const def of defs) el.append(definitionEl(parent, def));
   if (assigned) el.append(assigned);
   if (visible) el.append(visible);
   if (attendees) el.append(attendees);
+  if (pinnedHere) el.append(pinnedHere);
   if (chatLine) el.append(chatLine);
   for (const field of fields) {
     const row = document.createElement('div'); row.className = 'field';

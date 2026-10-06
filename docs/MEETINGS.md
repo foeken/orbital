@@ -21,11 +21,12 @@ The full edge vocabulary is in the descriptors: LINKS_TO, CREATED_IN, BELONGS_TO
 INSTANCE_OF, ASSIGNED_TO, SUBTASK_OF, PART_OF_WORKFLOW, HAS_PROPOSAL, CREATED_BY, EDITED_BY,
 UPDATED_IN, USES_AGENT, HAS_PIN, ATTENDEE_OF, ATTENDED, PROPOSES_CHANGE_TO, COMMENTS_ON.
 
-`main/related.js related(id)` returns `{ summary, tagline, call?, summaryUri, fields[], definitions?, pinHub?, pinned[], outcomes[], proposals[], notes[], backlinks[], changes[] }`
+`main/related.js related(id)` returns `{ summary, tagline, call?, summaryUri, fields[], definitions?, pinHub?, hubKind, pinned[], outcomes[], proposals[], notes[], backlinks[], changes[] }`
 for any node, so the same call works for documents that pin things or own documents, not only meetings. `fields`
 is the zoomed node's own typed fields, not the meeting hub's; `call` is the event's own join link (`{ url, label }`,
 the first http(s) url in the calendar location, else `calendarEvent.actionUrl`); `pinHub` is the event or space a
-new pin would go to, present only when this user may write it.
+new pin would go to, present only when this user may write it; `hubKind` is the kind of the hub `pinned` was read
+from, and `event` puts those pins under the meeting's title (Pinned, after Attendees) instead of the Graph pane.
 `scripts/platform-cli.js edges <id>` dumps both directions for exploring this by hand.
 
 ## Which document is the summary

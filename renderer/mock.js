@@ -505,6 +505,7 @@ function mockApi() {
       return {
         summary: 'Mock meeting summary for ' + doc.text,
         summaryUri: doc.id === 'mockmeeting4' ? 'tana:text:mockwriteup4' : undefined,
+        hubKind: 'event',
         call: { url: 'https://meet.google.com/klm-nopq-rst', label: 'meet.google.com/klm-nopq-rst' },
         pinned: [pick(all.find((d) => d.icon === 'doc')), pick(all.find((d) => d.icon === 'task'))].filter(Boolean),
         outcomes: all.filter((d) => d.icon === 'task').slice(1, 3).map(info),

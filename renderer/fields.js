@@ -179,6 +179,34 @@ function attendeesFieldEl(parent) {
   row.append(icon, label, values);
   return row;
 }
+// What is pinned on a meeting, drawn under Attendees on the meeting's own page (the event, its write-up, your notes),
+// not in the Graph pane: one reference per line, then "Pin something …" where you may pin, which opens search with
+// the pin context the Graph pane's action used (renderer/document.js pinResult). Taking one off is Edit pins.
+function pinnedFieldEl(parent) {
+  const data = relatedBy.get(parent.docId);
+  if (!data || data.hubKind !== 'event' || data.meeting || sensitiveHidden(parent.node.id)) return null; // data.meeting: a page in a meeting, not the meeting
+  const pinned = data.pinned || [];
+  if (!pinned.length && !data.pinHub) return null;
+  const row = document.createElement('div'); row.className = 'field';
+  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'pin');
+  const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Pinned';
+  const values = document.createElement('div'); values.className = 'fvalues fattendees';
+  for (const n of pinned) {
+    const line = document.createElement('div'); line.className = 'fvalue';
+    renderSegs(line, [{ mention: { uri: n.id, label: n.text || n.title || 'Untitled', icon: asDoc(n).icon, hue: n.hue } }]);
+    values.append(line);
+  }
+  if (data.pinHub) {
+    const add = document.createElement('div'); add.className = 'fvalue fhint fmore'; add.tabIndex = 0; add.setAttribute('role', 'button');
+    add.textContent = 'Pin something \u2026';
+    const open = () => togglePalette('search', null, { pinHub: data.pinHub, docId: parent.docId });
+    add.onclick = open;
+    add.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+    values.append(add);
+  }
+  row.append(icon, label, values);
+  return row;
+}
 // Written the way the field holds it: an options value as its labels (only those still offered, since Tana refuses
 // the rest), a link value as one reference per line.
 function writeChoice(ctx, values) {

@@ -2413,6 +2413,7 @@ function runInlineFieldsCheck() {
     const kids = new Map(), loaded = [], built = [];
     let fieldsDeferred = false;
     const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false, tana = {}; // not a task, no metadata: neither Assigned to nor Visible to
+    const pinnedFieldEl = () => null; // no meeting here: no Pinned
     const typeGlyphs = new Map(), drawn = [], addIcon = (el, icon) => { drawn.push(icon); return el; }; // which glyph each field row is drawn with
     ${sourceLine('const fieldGlyph =')}
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
@@ -3378,6 +3379,8 @@ async function runRailPinCheck() {
   const groups = vm.runInNewContext(functionSource('railGroups') + '; railGroups;');
   assert.deepEqual(plain(groups({ pinHub: 'event', pinned: [], outcomes: [], notes: [] })),
     [['Pinned', [], 'event']], 'a writable empty pin hub keeps the Pinned section');
+  assert.deepEqual(plain(groups({ hubKind: 'event', pinHub: 'tana:event:m', pinned: [{ id: 'a' }], outcomes: [], notes: [] })),
+    [], 'a meeting\'s pins are not in the Graph pane: they are listed under its title');
   assert.deepEqual(plain(groups({ pinned: [], outcomes: [], notes: [], backlinks: [{ label: 'Project › Owner', rows: [{ id: 'field' }] }, { label: 'Mentioned in', rows: [{ id: 'doc' }] }] })),
     [['Project › Owner', [{ id: 'field' }]], ['Mentioned in', [{ id: 'doc' }]]], 'backlinks arrive grouped: a section per typed field, then the mentions');
 
@@ -9917,9 +9920,13 @@ async function runPeopleFieldsCheck() {
     ${sourceLine('const ATTENDEES_SHOWN')}
     ${sourceLine('const attendeesOpen')}
     ${functionSource('attendeesFieldEl')}
+    const asDoc = (n) => ({ ...n, icon: 'doc' }), calls = [], togglePalette = (...args) => calls.push(args);
+    ${functionSource('pinnedFieldEl')}
     const page = { node: { id: 'tana:event:m', icon: 'meeting' } };
     const lines = (row) => row && row.childNodes[2].childNodes.map((l) => l.textContent);
     ({
+      pins: (data, docId = 'tana:event:m') => { relatedBy.set(docId, data); return lines(pinnedFieldEl({ node: { id: docId }, docId })); },
+      pinAdd: () => { relatedBy.set('tana:event:m', { hubKind: 'event', pinHub: 'tana:event:m', pinned: [] }); pinnedFieldEl({ ...page, docId: 'tana:event:m' }).childNodes[2].childNodes.at(-1).onclick(); return calls; },
       visible: (scope, word) => { summary = { scope, audience: { icon: 'lock', label: 'x', word }, people: [], peopleCount: 0 }; return visibilityFieldEl({ node: { id: 'tana:text:a' }, docId: 'tana:text:a' }).childNodes[2].textContent; },
       attendees: (list) => { info = list && { attendees: list }; return lines(attendeesFieldEl(page)); },
       more: () => { attendeesFieldEl(page).childNodes[2].childNodes.at(-1).onclick(); return [renders, lines(attendeesFieldEl(page)).length]; },
@@ -9937,6 +9944,12 @@ async function runPeopleFieldsCheck() {
   assert.deepEqual(plain(api.more()), [1, 7], 'a click shows them all');
   assert.deepEqual(plain(api.attendees([{ name: 'Sam Smith', email: 'Sam@X.nl' }, { name: '+Room 5', email: 'room5@x.nl' }])), ['@Sam', '+Room 5'], 'an attendee with only an address that is a member\'s is that member, as a mention; an unknown address stays its name');
   assert.deepEqual(plain(api.looks([{ identityUri: 'tana:user-profile:sam' }, { name: 'Leon', email: 'leon@x.nl' }])), [[false, '', 0], [true, 'Not in Tana', 1]], 'someone not in Tana: the member glyph, greyed, said on hover; a member stays a mention');
+  assert.deepEqual(plain(api.pins({ hubKind: 'event', pinned: [{ id: 'tana:text:a', title: 'Agenda' }] })), ['@Agenda'], 'a meeting\'s pins are listed under its title, one reference each');
+  assert.deepEqual(plain(api.pins({ hubKind: 'event', pinHub: 'tana:event:m', pinned: [{ id: 'tana:text:a', title: 'Agenda' }] })), ['@Agenda', 'Pin something \u2026'], 'where you may pin, Pin something … follows them');
+  assert.equal(api.pins({ hubKind: 'event', pinned: [] }), null, 'nothing pinned and no way to pin: no field');
+  assert.equal(api.pins({ hubKind: 'event', meeting: { id: 'tana:event:m' }, pinned: [{ id: 'tana:text:a', title: 'Agenda' }] }, 'tana:text:t'), null, 'a page in a meeting leaves its pins on the meeting');
+  assert.equal(api.pins({ hubKind: 'space', pinned: [{ id: 'tana:text:a', title: 'Agenda' }] }, 'tana:space:s'), null, 'a space keeps its pins in the Graph pane');
+  assert.deepEqual(plain(api.pinAdd()), [['search', null, { pinHub: 'tana:event:m', docId: 'tana:event:m' }]], 'Pin something … opens search with the pin context');
   console.log('ok  people fields: Private names you, Attendees shows five and And n more until clicked, without rooms');
 }
 checks.push(runPeopleFieldsCheck);

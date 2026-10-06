@@ -335,6 +335,7 @@ async function related(id, { lite = false } = {}) {
     fields: await fieldsOf(id), // the zoomed node's own fields, not the meeting hub's
     definitions: idKind(id) === 'type' ? await fieldDefs(id) : undefined, // a type's page lists the fields it defines
     pinHub: canPin ? hub : undefined, // where a new pin would go, when this user may write it
+    hubKind: idKind(hub), // 'event': the pins are a meeting's, listed under its title rather than in the Graph pane (renderer/fields.js pinnedFieldEl)
     pinned: pinned.filter((n) => !myNotes.has(n.id)).map(row),
     outcomes: owns.filter(stated).map(row),
     proposals: pendingProposals,

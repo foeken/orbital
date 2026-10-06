@@ -1505,6 +1505,11 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   out. Past five lines "And n more" shows the rest on a click, Enter or Space, for as long as the page is open. The
   answer is kept per meeting and read again when the event changes (renderer/meeting.js `meetingInfoOf`,
   renderer/fields.js `attendeesFieldEl`).
+- **Pinned** (a meeting's own page: the event, its write-up, your notes) follows Attendees: what is pinned on the meeting,
+  one reference per line, then "Pin something …" where you may pin (`related().pinHub`), which opens search to pin
+  another node there. A meeting's pins are listed here and not in the Graph pane, and a page that lives in a meeting
+  (a task, a note) leaves them on the meeting; a space's pins stay the Graph pane's Pinned section (renderer/fields.js
+  `pinnedFieldEl`, `related().hubKind`).
 - **A chat** has neither field: one grey line at the top right says who can see it ("Only you can see this chat", or
   the audience's glyph and words or faces as a row's subtext has them) and, for a meeting's chat, "about" the meeting as
   a link, and **Add participants** after who can see it, for whoever may share it (`access.sharing`), which opens
