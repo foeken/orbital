@@ -326,9 +326,8 @@ const sidebar = document.getElementById('sidebar'), edge = document.getElementBy
 const SB_RAIL = 48, SB_MIN = 180, SB_MAX = 420, SB_SHUT = 120;
 const sbFolded = new Set(JSON.parse(localStorage.getItem('windowSidebarFolded') || '[]')); // section ids, 'pinned' for the top level
 demoMode = localStorage.getItem('demoMode') === '1'; // renderer/segments.js: titles made up while demo mode is on
-// the row glyphs: a node's own where icons.js has it, the ones it names differently, else its kind's (tana:search: → a
-// search), else a document's. ponytail: an icon chosen with Set icon (a Nucleo one, "nc-…") is drawn as its kind here;
-// the pages draw it (renderer/nodes.js typeGlyph), and the shell would need main's Nucleo set to as well.
+// the row glyphs: one chosen with Set icon (a Nucleo "nc-…", its markup sent with the pin by main/pins.js pinTree), a
+// node's own where icons.js has it, the ones it names differently, else its kind's (tana:search: → a search), else a document's.
 const GLYPH = { meeting: 'calendar', event: 'calendar', chat: 'discuss', agent: 'robot', search: 'search', type: 'type' };
 const glyph = (name, uri) => window.ICONS?.[name] || window.ICONS?.[GLYPH[name]] || window.ICONS?.[GLYPH[String(uri || '').split(':')[1]] || String(uri || '').split(':')[1]] || window.ICONS?.doc || '';
 function toPage(msg) {
@@ -337,10 +336,10 @@ function toPage(msg) {
   focusPage(id);
   win.postMessage(msg, '*');
 }
-function sbButton(cls, icon, words, run, uri) {
+function sbButton(cls, icon, words, run, uri, svg) {
   const b = document.createElement('button');
   b.className = cls; b.tabIndex = -1;
-  b.insertAdjacentHTML('afterbegin', glyph(icon, uri)); // icons.js: our own markup
+  b.insertAdjacentHTML('afterbegin', svg || glyph(icon, uri)); // icons.js or the app's built-in Nucleo set: our own markup
   const t = document.createElement('span'); t.className = 't'; t.textContent = words; b.append(t);
   b.title = words; // what an icon is, when the sidebar is its icons alone
   b.onmousedown = (e) => e.preventDefault(); // the caret stays in the page
@@ -353,7 +352,7 @@ function sbDraw() {
   if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
   rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
   const pin = (n) => {
-    const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri);
+    const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri, n.node.svg);
     b.dataset.uri = n.uri;
     b.classList.toggle('sensitive', n.node.sensitive === true);
     if (n.node.sensitive === true) b.removeAttribute('title'); // a blurred title is not told on hover either

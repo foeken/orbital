@@ -17,7 +17,7 @@ const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = requi
 const { webLink, accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, fieldDefs, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
-const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
+const { nodePin, pinTree, tellSidebars, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
 const timelinePage = require('./main/timeline');
@@ -479,6 +479,7 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   const chosen = icons.setTypeIcon(typeUri, name ?? null);
   await refresh({ after: true }); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
   send('outline:changed', null);
+  tellSidebars(); // a pinned search or document wears it there too (shell.js)
   return chosen;
 });
 // After each start: the fast AI picks a glyph for every titled type and field that has none (issues #250, #606). In the
@@ -493,7 +494,7 @@ async function autoTypeIcons() {
     const fields = [];
     for (const t of types) for (const d of await fieldDefs(t.uri)) if ((d.title || '').trim()) fields.push({ uri: t.uri + '?attribute=' + d.key, title: t.title + ' › ' + d.title });
     const added = await icons.fillTypeIcons([...types, ...fields], (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, userData));
-    if (added) { await refresh({ after: true }); send('outline:changed', null); }
+    if (added) { await refresh({ after: true }); send('outline:changed', null); tellSidebars(); }
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
 ai.onSignedIn = autoTypeIcons; // and a ChatGPT sign-in the same
