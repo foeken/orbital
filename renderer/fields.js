@@ -83,8 +83,10 @@ function assigneeFieldEl(parent) {
   // the people as mentions, drawn as a person in any other field is: a link, no chip behind it
   if (meta.assignees.length) { const who = document.createElement('span'); renderSegs(who, meta.assignees.flatMap((uri, i) => [...(i ? [{ text: ', ' }] : []), { mention: { uri, label: memberName(uri), icon: 'member' } }])); el.append(who); }
   if (!meta.assignees.length) { const hint = document.createElement('span'); hint.className = 'fhint'; hint.textContent = 'Unassigned'; el.append(hint); }
-  const open = canEditNode(node) && tana.setAssignees ? () => openAssigneePalette(node) : null;
-  el.onclick = (e) => { if (open && !e.target.closest('.mention')) open(); }; // a chip is a link to the person, as anywhere else
+  // the field says who has it, so a pick there replaces them: adding a second person is ⌘K Edit assignees
+  const open = canEditNode(node) && tana.setAssignees ? () => openAssigneePalette(node, null, true) : null;
+  // the people are the value being chosen, so a click on one opens the picker too; a page you cannot edit keeps them links
+  el.onclick = (e) => { if (!open) return; e.preventDefault(); e.stopPropagation(); open(); };
   el.onkeydown = (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘K and the rest are the document's
     const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
@@ -175,6 +177,34 @@ function attendeesFieldEl(parent) {
     more.onclick = open;
     more.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     values.append(more);
+  }
+  row.append(icon, label, values);
+  return row;
+}
+// What is pinned on a meeting, drawn under Attendees on the meeting's own page (the event, its write-up, your notes),
+// not in the Graph pane: one reference per line, then "Pin something …" where you may pin, which opens search with
+// the pin context the Graph pane's action used (renderer/document.js pinResult). Taking one off is Edit pins.
+function pinnedFieldEl(parent) {
+  const data = relatedBy.get(parent.docId);
+  if (!data || data.hubKind !== 'event' || data.meeting || sensitiveHidden(parent.node.id)) return null; // data.meeting: a page in a meeting, not the meeting
+  const pinned = data.pinned || [];
+  if (!pinned.length && !data.pinHub) return null;
+  const row = document.createElement('div'); row.className = 'field';
+  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'pin');
+  const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Pinned';
+  const values = document.createElement('div'); values.className = 'fvalues fattendees';
+  for (const n of pinned) {
+    const line = document.createElement('div'); line.className = 'fvalue';
+    renderSegs(line, [{ mention: { uri: n.id, label: n.text || n.title || 'Untitled', icon: asDoc(n).icon, hue: n.hue } }]);
+    values.append(line);
+  }
+  if (data.pinHub) {
+    const add = document.createElement('div'); add.className = 'fvalue fhint fmore'; add.tabIndex = 0; add.setAttribute('role', 'button');
+    add.textContent = 'Pin something \u2026';
+    const open = () => togglePalette('search', null, { pinHub: data.pinHub, docId: parent.docId });
+    add.onclick = open;
+    add.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+    values.append(add);
   }
   row.append(icon, label, values);
   return row;

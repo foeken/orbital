@@ -84,7 +84,7 @@ final class WidgetTests: XCTestCase {
     }
 
     func testAMeetingOnTheTodayWidgetOpensInTheApp() throws {
-        try add(page: 4) // large: Design review, a meeting to come with a document, is on it
+        try add(page: 4) // large: Design review, a meeting to come with a summary, is on it
         XCTAssertFalse(springboard.buttons["Show documents"].exists, "nothing opens in place: a widget does not expand")
         found(springboard.buttons.containing(NSPredicate(format: "label CONTAINS 'Design review'")).firstMatch, "the meeting").tap()
         XCTAssert(app.wait(for: .runningForeground, timeout: 15))

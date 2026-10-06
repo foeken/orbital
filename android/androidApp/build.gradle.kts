@@ -16,6 +16,8 @@ abstract class OrbitalAssets @Inject constructor(private val exec: ExecOperation
     @get:InputFiles @get:PathSensitive(PathSensitivity.RELATIVE) abstract val sources: ConfigurableFileCollection
     @get:Internal abstract val repo: DirectoryProperty
     @get:Input abstract val bun: Property<String>
+    // the commit the engine names to Tana (source.js): a new one bundles it again, though no source changed
+    @get:Input abstract val commit: Property<String>
     @get:OutputDirectory abstract val output: DirectoryProperty
 
     @TaskAction fun bundle() {
@@ -35,8 +37,9 @@ val orbitalAssets = tasks.register<OrbitalAssets>("orbitalAssets") {
     val root = rootDir.parentFile
     repo.set(root)
     bun.set(providers.gradleProperty("orbital.bun").orElse("bun"))
+    commit.set(providers.exec { workingDir = root; commandLine("git", "rev-parse", "HEAD"); isIgnoreExitValue = true }.standardOutput.asText)
     sources.from(fileTree(root.resolve("ios/engine")), fileTree(root.resolve("sdk")), fileTree(root.resolve("main")),
-        root.resolve("renderer/segments.js"), root.resolve("ios/Orbital/timeline-sample.json"), root.resolve("ios/Orbital/pages-sample.json"),
+        root.resolve("renderer/segments.js"), root.resolve("source.js"), root.resolve("ios/Orbital/timeline-sample.json"), root.resolve("ios/Orbital/pages-sample.json"),
         root.resolve("package-lock.json"))
     // the Nucleo set behind Set icon, which the engine takes in when it is there (ios/engine/build.js; scripts/build-nucleo.js
     // makes it from the local Nucleo library): a tree, so its turning up later builds the engine again, and none is fine

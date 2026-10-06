@@ -147,6 +147,19 @@ final class SampleOpeningTests: SampleCase {
         app.buttons["Notes"].tap()
         XCTAssert(app.buttons["Ask about the pilot budget"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Ship the new onboarding in two steps"].exists)
+        XCTAssert(app.staticTexts["Priya Shah"].exists, "its attendees over it, as on the desktop")
+        XCTAssertFalse(app.staticTexts["Chris Doe"].exists, "five of them")
+        app.buttons["And 1 more"].tap()
+        XCTAssert(app.staticTexts["Chris Doe"].waitForExistence(timeout: 5), "and the rest when asked")
+    }
+
+    // not written up yet: its attendees and your notes, with no Notes | Summary
+    func testAMeetingNotWrittenUpShowsYourNotesAndItsAttendees() {
+        launch()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH '1:1 Sam'")).firstMatch.tap()
+        XCTAssert(app.buttons["Talk about the hiring plan"].waitForExistence(timeout: 15))
+        XCTAssert(app.staticTexts["Andre Foeken"].exists)
+        XCTAssertFalse(app.buttons["Summary"].exists)
     }
 
     func testAskTanaOpensTheChat() {

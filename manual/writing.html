@@ -112,7 +112,7 @@
       <li><b>Marks</b> Bold, italic, strikethrough, code and links, inside a row.</li>
       <li><b>Quote</b> A bar on the left, no marker.</li>
       <li><b>Code block</b> Monospace on a grey panel.</li>
-      <li><b>Numbered list</b> Counts itself.</li>
+      <li><b>Numbered list</b> Counts itself, and starts again at 1 after any other row, such as the next heading.</li>
       <li><b>Divider</b> A thin line across the page.</li>
     </ol>
     <p>A folded row keeps its dot, drawn on a soft halo, so you can see it has children. A web address in a row is a link: click it and it opens in your browser. The words in Tana stay exactly as you typed them.</p>
@@ -132,6 +132,7 @@
     </div>
     <h3>Tab nests, Shift-Tab comes back out <kbd>⇥</kbd></h3>
     <p><kbd>⇥</kbd> tucks the row under the row above it. <kbd>⇧⇥</kbd> moves it back out, to just after its parent. On a plain line of text, <kbd>⇥</kbd> first turns it into a bullet; <kbd>⇧⇥</kbd> on a top-level bullet takes the bullet off again.</p>
+    <p>A row keeps its list. A numbered row tucked under one with no children yet stays numbered and starts that level at 1; under a row that already has children it joins their list. Moved back out, a row takes the kind of the list it lands in, so a bullet brought out among numbered rows gets the next number.</p>
     <h3>Backspace at the start of a row <kbd>⌫</kbd></h3>
     <p>At the start of a row, <kbd>⌫</kbd> works in small steps. First it takes the bullet off. If the row above is empty, that empty row goes. Otherwise the row's words join the row above, with the caret where they meet. An empty row is removed and the caret goes up. Nothing joins across an image, a table, a divider or a reference.</p>
     <h3>Moving the caret</h3>
@@ -157,7 +158,7 @@
       <figure class="clip"><video data-m="writing-markdown"></video><figcaption><code>## </code> makes a heading, <code>**short**</code> turns bold, <code>~~formal~~</code> is struck, and <code>[] </code> makes a checkbox.</figcaption></figure>
     </div>
     <p>Inside a row, a mark lands the moment you type its closing characters: <code>**bold**</code>, <code>*italic*</code>, <code>~~strike~~</code>, <code>&#96;code&#96;</code> and <code>[label](https://…)</code> for a link. The caret stays just after the marked words, so what you type next is plain again.</p>
-    <p>Pasting works the same way. Paste several lines, or text with markdown in it, and it arrives as real rows: headings, nested bullets, numbered rows, checkboxes, quotes, code and dividers, with the marks kept. One <kbd>⌘Z</kbd> takes the whole paste back.</p>
+    <p>Pasting works the same way. Paste several lines, or text with markdown in it, and it arrives as real rows: headings, nested bullets, numbered rows, checkboxes, quotes, code and dividers, with the marks kept. That holds on an empty page too. One <kbd>⌘Z</kbd> takes the whole paste back.</p>
     <div class="tip">A code block keeps what you type as text, so <code>- </code> or <code>#</code> stay as characters there.</div>
   </section>
 
@@ -208,15 +209,25 @@
   </section>
 
   <section class="topic">
-    <h2 id="linking" data-short="@ links" data-k="at mention link paste tana link create">@ links</h2>
+    <h2 id="linking" data-short="@ and # links" data-k="at mention link paste tana link create hash task meeting type filter">@ and # links</h2>
     <div class="split">
       <div>
         <p>Select some words and type <kbd>@</kbd>. A small search drops down under them, already searching for your words. The <kbd>@</kbd> itself is not typed.</p>
-        <p>Pick a result with <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>↩</kbd>: your words become a link to that node. The first row is always <b>Create “…”</b>, which makes a new document with your words as its title and links to it (<kbd>⌘↩</kbd>). <kbd>esc</kbd> leaves your words as they were.</p>
+        <p>Pick a result with <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>↩</kbd>: your words become a link to that node. The first row is always <b>Create “…”</b>, which makes a new document with your words as its title and links to it (<kbd>⌘↩</kbd>). It is the highlighted row unless a result's name starts with every word you typed: “Okafor” highlights Sam Okafor. <kbd>esc</kbd> leaves your words as they were.</p>
+        <p>Add <b>#task</b> or <b>#meeting</b> to the search to see only tasks or only meetings, as the empty field reminds you. A <b>#</b> word is a filter, so <b>Create “…”</b> leaves it out of the title.</p>
         <p>Type <kbd>@</kbd> with nothing selected and the same search opens empty, with the nodes you viewed recently first. What you pick goes in at the caret.</p>
       </div>
       <figure class="clip"><video data-m="writing-link"></video><figcaption>“Sam” selected, <kbd>@</kbd>, a result picked: the word is now a link.</figcaption></figure>
     </div>
+    <div class="split">
+      <div>
+        <h3>Make it a task, a meeting or a type <kbd>#</kbd></h3>
+        <p>Where <kbd>@</kbd> links your words to something that exists, <kbd>#</kbd> makes the thing. Select some words and type <kbd>#</kbd>: a small list drops down with <b>Doc</b>, <b>Task</b>, <b>Meeting</b> and your workspace's own types.</p>
+        <p>Pick one and it is created with your words as its title, and a link to it takes their place. <b>Meeting</b> first asks when, on the same page “/” Meeting uses. <kbd>esc</kbd> leaves your words as they were.</p>
+      </div>
+      <figure class="shot"><img data-m="writing-hash" alt="“Book a room” selected in a row, with a list under it offering Doc, Task, Meeting and the workspace's types"><figcaption>“Book a room” selected, <kbd>#</kbd>: what the words can become.</figcaption></figure>
+    </div>
+    <div class="try"><span class="seq">Select a few words <i>→</i><kbd>#</kbd><i>→</i> <b>Task</b> <i>→</i><kbd>↩</kbd></span></div>
     <h3>Pasting a Tana link</h3>
     <p>Copy a node's link (<b>Copy link</b>, <kbd>⌘C</kbd> in <kbd>⌘K</kbd>, or a link from Tana itself) and paste it into a row. It lands as a mention of that node, named after it. If the link cannot be read, the row stays as it was and a red note says why. Pasted into a title, an image or a divider, a link stays plain text.</p>
     <div class="note">A page's title is plain text in Tana, so <kbd>@</kbd> in a title puts the linked node's name there as words, not as a link.</div>
@@ -230,7 +241,7 @@
       <p class="writing-ref-said"><span class="a">Words around it: a mention, a link you click</span><span class="b">Alone on its line: the node itself, box and all</span></p>
     </div>
     <p>A <b>mention</b> sits among words. It is a blue link with the target's icon, and a click opens the target.</p>
-    <p>A <b>full reference</b> is a row with nothing on it but the link. That row <em>is</em> the node it points at: it draws that node's bullet, tags and grey line, and a task shows its own checkbox, so you can tick it off right there. Rename the node anywhere and the row follows. Type anything else on the line and it becomes an ordinary row with a mention in it.</p>
+    <p>A <b>full reference</b> is a row with nothing on it but the link (a space after it does not count). That row <em>is</em> the node it points at: it draws that node's bullet, tags and grey line, and a task shows its own checkbox, so you can tick it off right there. Rename the node anywhere and the row follows. Type anything else on the line and it becomes an ordinary row with a mention in it.</p>
     <figure class="anno wide">
       <img data-m="writing-refs" alt="Full references to a task and a person, a folded row, mentions in a sentence and a full reference with a meeting glyph">
       <span class="pin" style="--x:42.5%;--y:20.3%">1</span>
@@ -248,7 +259,8 @@
       <li><b>A task from a meeting</b> The meeting glyph links back to where it was decided.</li>
       <li><b>Web links</b> Open in your browser.</li>
     </ol>
-    <p>Working with a full reference: a first click selects the row, a second click puts the caret in it, and <kbd>↩</kbd> on the selected row starts typing at the end. The bullet or <kbd>Space</kbd> opens the node. Unfold it with its chevron or <kbd>⌘↓</kbd> and you see the node's own outline under a dashed guide line; what you type there is written into that node.</p>
+    <p>Working with a full reference: a first click selects the row, and a second click lets you rename the node it points at, right there. Type the new name; <kbd>↩</kbd>, <kbd>esc</kbd> or clicking elsewhere finishes, and the line stays a reference. <kbd>↩</kbd> on the selected row starts typing at the end of the line instead. The bullet or <kbd>Space</kbd> opens the node. Unfold it with its chevron or <kbd>⌘↓</kbd> and you see the node's own outline under a dashed guide line; what you type there is written into that node.</p>
+    <p>With a reference to a task selected, <kbd>⌘K</kbd> offers that task's own rows: <b>Set status</b>, <b>Edit assignees</b> and <b>Assign to …</b>.</p>
     <p>When a node you link to is deleted, its links show it: a mention gets a trash glyph and a strike, and a full reference a trash bullet and a struck title. Neither opens. Undo the delete and they come back.</p>
   </section>
 
@@ -383,6 +395,7 @@
       <tr><td>Checkbox, ticked, no checkbox; complete a task</td><td><kbd>⌘↩</kbd></td></tr>
       <tr><td>Bold, italic, strikethrough, code</td><td><kbd>⌘B</kbd> <kbd>⌘I</kbd> <kbd>⇧⌘S</kbd> <kbd>⌘E</kbd></td></tr>
       <tr><td>Link to a node</td><td><kbd>@</kbd></td></tr>
+      <tr><td>Make the selected words a task, meeting or type</td><td><kbd>#</kbd></td></tr>
       <tr><td>Choose a block type</td><td><kbd>/</kbd> on an empty row</td></tr>
       <tr><td>Undo / redo</td><td><kbd>⌘Z</kbd> <kbd>⇧⌘Z</kbd></td></tr>
       <tr><td>Grow the selection</td><td><kbd>⇧↑</kbd> <kbd>⇧↓</kbd></td></tr>

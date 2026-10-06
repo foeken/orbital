@@ -85,7 +85,8 @@ module.exports = {
   hm: (ms) => require('../../sdk/chat').hm(ms),
   // the workspace's people, asked once per session (a chat on screen is read again as its answer is written); asked again after a failure
   members: () => (people ||= S.client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
-    .then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: memberTitle(n) })), (e) => { people = null; throw e; })),
+    // emails: the addresses their profile is known by (main/rows.js emailsOf), for a meeting's attendees (index.js meeting)
+    .then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: memberTitle(n), emails: Object.entries(n.externalIds || {}).filter(([, kind]) => kind === 'email').map(([a]) => a.toLowerCase()) })), (e) => { people = null; throw e; })),
   // ./documents
   announcedEdits: () => [],
   // the watch choices (settings key notify: node → true watched, false silenced), as main/documents.js reads them; the

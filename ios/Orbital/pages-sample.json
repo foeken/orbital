@@ -363,14 +363,7 @@
    "id": "tana:event:0000000000000000000000000d",
    "title": "Design review",
    "kind": "event",
-   "rows": [
-    {
-     "id": "tana:text:00000000000000000000000d01",
-     "title": "Offsite planning",
-     "icon": "text",
-     "createdAt": "2026-09-30T10:05:00Z"
-    }
-   ],
+   "rows": [],
    "summary": [
     {
      "id": "sum.0",
@@ -407,6 +400,51 @@
        "text": "Ask about the pilot budget"
       }
      ]
+    }
+   ],
+   "attendees": [
+    {
+     "name": "Priya Shah"
+    },
+    {
+     "name": "Sam Lee"
+    },
+    {
+     "name": "Jordan Park"
+    },
+    {
+     "name": "Alex Kim"
+    },
+    {
+     "name": "Maria Lopez"
+    },
+    {
+     "name": "Chris Doe"
+    }
+   ]
+  },
+  "tana:event:0000000000000000000000000e": {
+   "id": "tana:event:0000000000000000000000000e",
+   "title": "1:1 Sam / Andre",
+   "kind": "event",
+   "rows": [],
+   "notes": [
+    {
+     "id": "notes.0",
+     "text": "Talk about the hiring plan",
+     "segments": [
+      {
+       "text": "Talk about the hiring plan"
+      }
+     ]
+    }
+   ],
+   "attendees": [
+    {
+     "name": "Sam Lee"
+    },
+    {
+     "name": "Andre Foeken"
     }
    ]
   },

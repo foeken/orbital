@@ -31,7 +31,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    `npm run check` escalated, as it does `npm run flows`. The SDK against a fake SyncService, `main.js` and every
    `main/` module in one vm with a fake Electron, the renderer's load order, and about 160 behavior checks that each slice a
    renderer function and run it against a fake DOM. Most were written after one bug and guard that bug.
-   The scheduled checks run in UTC and a pull request is checked on a Mac in Amsterdam, which is coverage of two zones
+   CI runs in UTC and a pull request is checked on a Mac in Amsterdam, which is coverage of two zones
    worth keeping: a check about times reads the machine's zone (renderer-behavior-check.js `LOCAL_ZONE`) rather than
    naming one, since a check that named Amsterdam passed here and turned main red on GitHub (#776). Run
    `TZ=UTC npm run check` before a pull request that touches times.
@@ -142,9 +142,9 @@ From fastest to slowest. Each catches what the one before it cannot.
    eval.
 
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
-   It needs a loopback port and Chromium, so an agent runs it escalated; the scheduled checks run it on main (a pull request is tested on the machine that writes it, AGENTS.md).
+   It needs a loopback port and Chromium, so an agent runs it escalated; CI runs it again on every ready pull request and on main (`.github/workflows/ci.yml`), after the machine that writes it has (AGENTS.md).
 3. **iPhone UI tests** (about eight minutes here, `ios/OrbitalUITests`). The
-   app on `-sample`, driven by the labels VoiceOver reads; There is no CI, so they run only here: `npm run phones`, before a phone change merges and in `npm run release`, on a simulator of the checkout's own ("Orbital <hash of its path>", made once and reused): two
+   app on `-sample`, driven by the labels VoiceOver reads; CI runs none of them (GitHub's macOS runners took 12 to 22 minutes), so they run only here: `npm run phones`, before a phone change merges and in `npm run release`, on a simulator of the checkout's own ("Orbital <hash of its path>", made once and reused): two
    checkouts testing on one shared iPhone killed each other's tests ("Test crashed with signal kill"). Its build output stays in the checkout (`ios/.derived`), and `npm run done` deletes both when the worktree goes. It builds once, runs all but `WidgetTests` on two copies of that simulator at once (three were slower, each test waiting on the others) and then `WidgetTests` on the simulator itself, which keeps Orbital installed: a fresh copy's widget gallery took minutes to list it. The build is signed ad hoc, so the widgets can read what the app leaves them and `WidgetTests` runs to the end, and a failure collects no diagnostics, whose sysdiagnose held a run for ten minutes after its last test. `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
    build's stand-in for a Tana that never answers) with `-patience 3`, and expects Can't reach Tana in place of a Timeline
    that builds itself for good; Android's `EngineTest` drives the same on virtual time. `VisibleToTests` opens a note for

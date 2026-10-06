@@ -19,6 +19,13 @@
 // confirmation (by you, in Tana: the user asked for shared notes to stay the editor). A note that was never confirmed —
 // a create Tana answered as already shared — is not one you shared, and is left exactly as it is, as is anyone else's.
 // Every answer that is not proof (no row yet, a failed read) refuses.
+//
+// A person's page (a Tana member, tana:user-profile:) has the same editor: your private notes about them (docs/MEETINGS.md,
+// "Notes about a person"), made, confirmed and checked exactly as a meeting's. What differs is where they hang. A
+// profile owns nothing and takes no pins, and the person is never given a grant, so the notes are owned by nothing (in
+// your Library in Tana, titled "Private notes · <name>"), at ids derived from you and the person, marked with them
+// (key person), their first row a link to the person's page in Tana: a link, never an @ mention, which Tana could tell
+// them about. A note owned by anything is not one of these.
 const { createHash } = require('node:crypto');
 const { LoroDoc, LoroList, LoroMap } = require('loro-crdt');
 const { readNode, audienceMetadata } = require('../sdk/node');
@@ -35,7 +42,14 @@ const { nodePin } = require('./pins');
 // The link to the meeting, in a root container of Orbital's own, as the settings document carries its mark
 // (main/settings.js ext:orbital:doc, docs/SETTINGS.md): never one of Tana's keys, and never in the graph.
 const MARK = 'ext:orbital:notes';
-const markOf = (doc) => doc.loro.getMap(MARK).get('meeting');
+const isPerson = (id) => USER.test(id || '');
+const markOf = (doc, id) => doc.loro.getMap(MARK).get(isPerson(id) ? 'person' : 'meeting');
+// A person's places, beside a meeting's (sdk/events.js, which the phones share): the same derivation, its own name
+const personSlot = (me, id, k) => 'orbital:person-notes:' + me + ':' + id + ':' + k;
+const nameOf = (me, id, k) => (isPerson(id) ? personSlot(me, id, k) : slotName(me, id, k));
+const idOf = (me, id, k) => (isPerson(id) ? 'tana:text:' + deterministicId(personSlot(me, id, k)) : slotId(me, id, k));
+const ownerOk = (owner, id) => (isPerson(id) ? !owner : ownedOk(owner, id)); // a person's: owned by nothing
+const graphMine = (n, me, id) => (n ? graphOurs(n, me, id) && ownerOk(n.ownerUri, id) : undefined);
 const CONFIRM_MS = 20000, POLL_MS = 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const within = (p, ms) => Promise.race([p, sleep(ms).then(() => { throw Object.assign(new Error('Tana has not answered yet'), { lag: true }); })]);
@@ -50,7 +64,7 @@ function alone(participants, me) {
 const onlyMe = (participants, me) => alone(participants, me) && participants[me].role === 'admin';
 // The graph's row: Tana's own record of the note, who made it (sdk/events.js notesOurs, the phones' rule too)
 // ... and who it is for: you alone, with no public link (graphPrivate: as admin, the proof a new note needs)
-const graphAlone = (n, me, eventId) => (n ? graphOurs(n, me, eventId) && n.restricted === true && alone(n.participants, me) && !(n.linkSharing && n.linkSharing.mode) : undefined);
+const graphAlone = (n, me, eventId) => (n ? graphMine(n, me, eventId) && n.restricted === true && alone(n.participants, me) && !(n.linkSharing && n.linkSharing.mode) : undefined);
 const graphPrivate = (n, me, eventId) => (n ? graphAlone(n, me, eventId) && onlyMe(n.participants, me) : undefined);
 // The owner chain: the note itself first, readable; for private notes, the boundary too (the meeting above it gives it
 // nothing then). undefined when Tana has no chain yet.
@@ -62,7 +76,7 @@ const chainPrivate = (chain, id) => { const ours = chainOurs(chain, id); return 
 // The document as it is now, live updates included: still a note of this meeting's, owned by it (or by nothing), not deleted.
 function docOurs(doc, eventId) {
   const n = readNode(doc);
-  return n.type === 'text' && ownedOk(n.ownerUri, eventId) && markOf(doc) === eventId && !(n.deletedAt > 0) && !(n.archivedAt > 0) && !n.stateType;
+  return n.type === 'text' && ownerOk(n.ownerUri, eventId) && markOf(doc, eventId) === eventId && !(n.deletedAt > 0) && !(n.archivedAt > 0) && !n.stateType;
 }
 // ... and seen by you alone: restricted, your grant the only one, no public link. What the line over the notes calls
 // "only you"; a view-only grant of yours is still you alone, and read only (mayWrite).
@@ -101,7 +115,7 @@ async function verify(client, eventId, me, id, login) {
   try {
     [{ nodes: [row] = [] }, chain] = await Promise.all([client.graph.listNodes({ nodeIds: [id], limit: 1 }), client.graph.getOwnerChain(id)]);
   } catch { return 'lag'; }
-  const graph = graphOurs(row, me, eventId), boundary = chainOurs(chain, id);
+  const graph = graphMine(row, me, eventId), boundary = chainOurs(chain, id);
   if (graph === false || boundary === false) return 'refused';
   if (graph === undefined || boundary === undefined) return 'lag';
   let doc;
@@ -126,6 +140,7 @@ async function verify(client, eventId, me, id, login) {
 // be lost.
 const SEED_WAIT_MS = 2500; // the places (SLOTS, slotName, slotId) are sdk/events.js's
 const REFERENCE = 'Open the meeting in Tana';
+const PERSON_REFERENCE = 'Open their profile in Tana';
 // Its inputs are you (your profile and your login's id), the meeting, the place and your organization's document,
 // checked here, and nothing else: no clock, no title, nothing optional, so the same inputs always give the same bytes.
 // Its peer is yours as Tana reads peers (sdk/sync.js derivePeerId: your login's hash above, 16 bits below), so the
@@ -133,21 +148,21 @@ const REFERENCE = 'Open the meeting in Tana';
 // (0-32767) never uses, so the seed's peer is never one of your machines'.
 const LOGIN = /^[0-9A-Za-z_]{10,64}$/;
 function seedBytes(me, eventId, k, orgDocUri, login) {
-  if (!USER.test(me) || !EVENT.test(eventId) || !(k >= 0 && k < SLOTS) || !ORG.test(orgDocUri || '') || !LOGIN.test(login || '')) throw new Error('Private notes need you, the meeting and your organization');
-  const name = slotName(me, eventId, k), h = createHash('sha256').update(name).digest(), { id: refId, link } = referenceOf(me, eventId, k, orgDocUri);
+  if (!USER.test(me) || !(EVENT.test(eventId) || isPerson(eventId)) || !(k >= 0 && k < SLOTS) || !ORG.test(orgDocUri || '') || !LOGIN.test(login || '')) throw new Error('Private notes need you, the meeting and your organization');
+  const name = nameOf(me, eventId, k), h = createHash('sha256').update(name).digest(), { id: refId, text, link } = referenceOf(me, eventId, k, orgDocUri);
   const loro = new LoroDoc();
   loro.setPeerId(((userBits(login) << 16n) | 32768n | BigInt(h.readUInt16BE(0) & 32767)).toString(10)); // used for this seed alone
   const data = loro.getMap('data');
   data.set('type', 'text');
   data.set('title', 'Private notes');
   data.set('restricted', true);
-  data.set('ownerUri', eventId); // inside the meeting in Tana, for you alone: restricted is its own boundary
+  if (!isPerson(eventId)) data.set('ownerUri', eventId); // inside the meeting in Tana, for you alone: restricted is its own boundary
   const grant = data.setContainer('participants', new LoroMap()).setContainer(me, new LoroMap());
   grant.set('type', 'user'); grant.set('role', 'admin');
   data.setContainer('sharedPinDates', new LoroList());
   data.setContainer('attributes', new LoroMap());
   data.setContainer('assignedToUris', new LoroList());
-  loro.getMap(MARK).set('meeting', eventId);
+  loro.getMap(MARK).set(isPerson(eventId) ? 'person' : 'meeting', eventId);
   const content = loro.getMap('content');
   content.set('nodeName', 'doc');
   content.setContainer('attributes', new LoroMap());
@@ -158,7 +173,7 @@ function seedBytes(me, eventId, k, orgDocUri, login) {
   row.set('nodeName', 'paragraph');
   row.setContainer('attributes', new LoroMap()).set('blockId', refId);
   styleDoc({ loro });
-  writeInline(row.setContainer('children', new LoroList()), inlineGroups([{ text: REFERENCE, marks: { link } }]).groups, true);
+  writeInline(row.setContainer('children', new LoroList()), inlineGroups([{ text, marks: { link } }]).groups, true);
   loro.commit();
   return loro.export({ mode: 'update' });
 }
@@ -166,7 +181,7 @@ function seedBytes(me, eventId, k, orgDocUri, login) {
 // still exactly this (renderer/meetingnotes.js notesRows): there you are on the meeting already, and the row is for
 // whoever opens the notes on their own, in Tana or Orbital. One you changed is yours, and shows.
 function referenceOf(me, eventId, k, orgDocUri) {
-  return { id: deterministicId(slotName(me, eventId, k) + ':reference').slice(-8), text: REFERENCE, link: webLink(eventId, orgDocUri) };
+  return { id: deterministicId(nameOf(me, eventId, k) + ':reference').slice(-8), text: isPerson(eventId) ? PERSON_REFERENCE : REFERENCE, link: webLink(eventId, orgDocUri) };
 }
 const seed = (me, eventId, k, orgDocUri, login) => { const bytes = seedBytes(me, eventId, k, orgDocUri, login); return (loro) => loro.import(bytes); };
 // Ask Tana until it confirms the note, or the time is up ('lag'), or it answers otherwise.
@@ -187,7 +202,7 @@ const lag = (message) => Object.assign(new Error(message), { lag: true });
 // private: notes new to Tana are used only once it answers that they are.
 async function resolveNotes(client, eventId, me, { create = false, org, login, ...timing } = {}) {
   if (create && (!ORG.test(org || '') || !LOGIN.test(login || ''))) throw new Error('Private notes need your organization: sign in again'); // before anything is made
-  const ids = Array.from({ length: SLOTS }, (_, k) => slotId(me, eventId, k));
+  const ids = Array.from({ length: SLOTS }, (_, k) => idOf(me, eventId, k));
   let rows;
   try { ({ nodes: rows = [] } = await client.graph.listNodes({ nodeIds: ids, limit: SLOTS })); }
   catch { if (!create) return null; throw lag('Tana could not confirm your private notes just now; what you typed is kept'); }
@@ -213,7 +228,7 @@ async function resolveNotes(client, eventId, me, { create = false, org, login, .
     free = id;
     break;
   }
-  if (!free) throw new Error('Orbital cannot make private notes for this meeting: every place for them is taken');
+  if (!free) throw new Error('Orbital cannot make private notes for this ' + (isPerson(eventId) ? 'person' : 'meeting') + ': every place for them is taken');
   const answer = await confirm(client, eventId, me, free, login, timing);
   if (answer === 'private' || answer === 'shared') return { id: free, audience: answer }; // 'shared' only for a confirmed note
   if (answer === 'refused') throw new Error('Tana did not keep these notes private, so nothing was written to them');
@@ -269,7 +284,7 @@ const adopt = (id, eventId, me) => mut(id, (doc) => { if (adoptable(doc, eventId
 // opens nothing, since the note is restricted, its own boundary. Gated by nodePin on write access to the meeting.
 async function pinOnMeeting(id, eventId) {
   const doc = S.client && S.client.sync.getDocument(id);
-  if (!doc || doc.loro.getMap(MARK).get('pinned') !== undefined || readNode(doc).ownerUri !== eventId || !docOurs(doc, eventId)) return;
+  if (!doc || isPerson(eventId) || doc.loro.getMap(MARK).get('pinned') !== undefined || readNode(doc).ownerUri !== eventId || !docOurs(doc, eventId)) return;
   await nodePin(eventId, id, true);
   await mut(id, (d) => d.transact((l) => l.getMap(MARK).set('pinned', Date.now())), true);
 }
@@ -294,17 +309,32 @@ async function audienceFor(client, doc, s, me, audience) {
   return { private: false, scope, people: people.slice(0, 4), peopleCount: people.length, link: !!link, writable: mayWrite(doc, me) };
 }
 
+// What the notes are for, read before anything is made for them: { title }, or why none can be. A meeting that cannot be
+// read, is not a meeting or is deleted gets none; a person is one Tana's graph lists as a member's profile.
+async function meetingOf(client, id) {
+  const ev = await within(client.sync.subscribe(id), CONFIRM_MS).catch((e) => { throw e && e.lag ? lag('Tana has not answered about this meeting yet; what you typed is kept') : new Error('This meeting cannot hold notes'); });
+  const n = readNode(ev);
+  if (n.type !== 'event' || n.deletedAt > 0) throw new Error('This meeting cannot hold notes');
+  return { title: n.title };
+}
+async function personOf(client, id) {
+  let row;
+  try { ({ nodes: [row] = [] } = await client.graph.listNodes({ nodeIds: [id], limit: 1 })); } catch { throw lag('Tana has not answered about this person yet; what you typed is kept'); }
+  if (!row || row.id !== id || !row.userProfile) throw new Error('This person cannot hold notes');
+  return { title: row.userProfile.name || row.title || '' };
+}
+
 async function privateNotes(eventId, { create = false, first } = {}) {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
-  if (typeof eventId !== 'string' || !EVENT.test(eventId)) throw new Error('Not a meeting');
+  if (typeof eventId !== 'string' || !(EVENT.test(eventId) || isPerson(eventId))) throw new Error('Not a meeting or a person');
   const client = S.client, me = S.me.userUri, login = S.me.userExternalId, key = me + '|' + eventId;
   // An answer belongs to the session it was asked in: signed out, or another account, while Tana was asked, and it is dropped.
   const same = () => S.client === client && !!S.me && S.me.userUri === me;
   const run = (queues.get(key) || Promise.resolve()).catch(() => {}).then(async () => {
     if (!same()) throw new Error(NOT_CONNECTED);
-    // the meeting itself, before anything is made for it: one that cannot be read, is not a meeting or is deleted gets none
-    const ev = create ? await within(client.sync.subscribe(eventId), CONFIRM_MS).catch((e) => { throw e && e.lag ? lag('Tana has not answered about this meeting yet; what you typed is kept') : new Error('This meeting cannot hold notes'); }) : null;
-    if (create && (!ev || readNode(ev).type !== 'event' || readNode(ev).deletedAt > 0)) throw new Error('This meeting cannot hold notes');
+    // the meeting itself, before anything is made for it: one that cannot be read, is not a meeting or is deleted gets none;
+    // a person: a member of your organization as Tana's graph lists them (a profile document carries no type of its own)
+    const ev = create ? await (isPerson(eventId) ? personOf(client, eventId) : meetingOf(client, eventId)) : null;
     if (!same()) throw new Error('The account changed while Tana was asked');
     const found = await resolveNotes(client, eventId, me, { create, org: S.me.orgDocUri, login });
     if (!same()) throw new Error('The account changed while Tana was asked');
@@ -314,17 +344,17 @@ async function privateNotes(eventId, { create = false, first } = {}) {
     const said = found.audience === 'private' && doc && docAlone(doc, eventId, me) ? 'private' : 'shared';
     if (!doc || !docOurs(doc, eventId) || (!docPrivate(doc, eventId, me) && !confirmed(doc, me, login))) throw new Error('Tana did not keep these notes private, so nothing was written to them');
     serve(client, eventId, me, login, id, doc, said);
-    if (adoptable(doc, eventId, me)) await adopt(id, eventId, me).catch(() => {}); // not given to it this time: still your notes, asked again next open
+    if (!isPerson(eventId) && adoptable(doc, eventId, me)) await adopt(id, eventId, me).catch(() => {}); // not given to it this time: still your notes, asked again next open
     await pinOnMeeting(id, eventId).catch(() => {}); // not pinned this time (no write access to the meeting): asked again next open
     // made just now, or another than before: every other page on the meeting starts using it
     if (handed.get(key) !== id) { const changed = create || handed.has(key); handed.set(key, id); if (changed) sendChanged(eventId, { notes: true }); }
     // in the same turn as the create: two panes' first words both land, one after the other, and neither replaces the other
-    const meeting = ev ? readNode(ev).title : '';
+    const meeting = ev ? ev.title : '';
     const blockId = create && typeof first === 'string' && first ? await mut(id, (doc) => { settle(doc, meeting, eventId, me); return firstWords(doc, first); }) : undefined;
     const node = await op(id, info), audience = await audienceFor(client, doc, served.get(id), me, said);
     if (!same()) throw new Error('The account changed while Tana was asked');
     if (audience.writable === false) node.editable = false; // read only in Tana: read only here
-    const k = Array.from({ length: SLOTS }, (_, i) => i).find((i) => slotId(me, eventId, i) === id);
+    const k = Array.from({ length: SLOTS }, (_, i) => i).find((i) => idOf(me, eventId, i) === id);
     return { id, node, owner: me, blockId, audience, ...(ORG.test(S.me.orgDocUri || '') ? { reference: referenceOf(me, eventId, k, S.me.orgDocUri) } : {}) };
   });
   queues.set(key, run);
@@ -338,4 +368,4 @@ const ipc = {
   'meeting:privateNotes': (_e, id, create, first) => privateNotes(id, { create: create === true, first: typeof first === 'string' ? first : undefined }),
 };
 
-module.exports = { MARK, SLOTS, REFERENCE, markOf, slotId, onlyMe, graphOurs, graphAlone, graphPrivate, chainPrivate, docOurs, docAlone, docPrivate, confirmed, verify, confirm, resolveNotes, privateNotes, seed, seedBytes, referenceOf, firstWords, settle, forget: () => handed.clear(), ipc };
+module.exports = { MARK, SLOTS, REFERENCE, PERSON_REFERENCE, markOf, slotId: idOf, onlyMe, graphOurs: graphMine, graphAlone, graphPrivate, chainPrivate, docOurs, docAlone, docPrivate, confirmed, verify, confirm, resolveNotes, privateNotes, seed, seedBytes, referenceOf, firstWords, settle, forget: () => handed.clear(), ipc };

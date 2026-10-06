@@ -99,6 +99,18 @@ class ScreensTest {
         onNodeWithText("Notes").performClick()
         waitUntil(timeoutMillis = 3000) { onAllWithText("Ask about the pilot budget").isNotEmpty() }
         assertTrue(onAllWithText("Ship the new onboarding").isEmpty())
+        onNodeWithText("Priya Shah").assertExists() // its attendees over it, as on the desktop: five, then the rest when asked
+        assertTrue(onAllWithText("Chris Doe").isEmpty())
+        onNodeWithText("And 1 more").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Chris Doe").isNotEmpty() }
+    }
+
+    // not written up yet: its attendees and your notes, with no Notes | Summary
+    @Test fun aMeetingNotWrittenUpShowsYourNotesAndItsAttendees() = sample {
+        onNode(hasText("1:1 Sam", substring = true)).performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Talk about the hiring plan").isNotEmpty() }
+        onNodeWithText("Andre Foeken").assertExists()
+        assertTrue(onAllWithText("Summary").isEmpty())
     }
 
     @Test fun askTanaOpensTheChat() = sample {

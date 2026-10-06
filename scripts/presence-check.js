@@ -31,6 +31,7 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
   sync.emit('ephemeral', 'tana:text:01otherdoc0000000000000000', remote(peer(5, 5), { user: { name: 'Elsewhere' } }).out[0]);
   const looking = remote(MY_OTHER_TAB, { user: { name: 'Andre' } });
   sync.emit('ephemeral', DOC, looking.out[0]);
+  sync.emit('ephemeral', DOC, looking.out[0].slice(0, 3)); // a frame cut short is skipped, never a sync error
   assert.deepEqual(room.peers().map((p) => [p.user.name, p.userHash, p.hasCursor]), [['Stan', '7654321', true], ['Andre', '1234567', false]], 'this document only, each with the user it is');
   assert.deepEqual(room.editing().map((p) => [p.user.name, p.anchorBlock]), [['Stan', { blockId: 'blk1', offset: 4 }]], 'editing = a caret in it');
   assert.deepEqual(room.peers({ exceptUserHash: userHashOf(ME) }).map((p) => p.user.name), ['Stan'], 'and your own other tabs can be left out');

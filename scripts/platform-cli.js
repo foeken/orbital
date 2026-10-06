@@ -41,7 +41,7 @@ async function connect() {
   pins = require('../sdk/pins');
   const me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
-  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: 'Orbital-CLI/' + require('../package.json').version }); // told apart from the app in Tana's logs
+  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: require('../source').userAgent('Orbital-CLI') }); // told apart from the app in Tana's logs
   return me;
 }
 
@@ -568,7 +568,7 @@ commands.privatenotes = async () => {
     // two Macs at once: a second client (another peer, another storage) seeds the next place and writes its words while
     // this one does, neither having heard of the other
     const peer = { peerId: derivePeerId(me.userExternalId), storageId: require('node:crypto').randomUUID() };
-    const second = makeClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: 'Orbital-CLI/' + require('../package.json').version });
+    const second = makeClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console, clientName: 'orbital-cli', userAgent: require('../source').userAgent('Orbital-CLI') });
     await second.sync.connect();
     raceId = notes.slotId(me.userUri, eventId, 2);
     const [ra, rb] = await Promise.all([client.sync.subscribe(raceId, notes.seed(me.userUri, eventId, 2, me.orgDocUri, me.userExternalId), { ifMissing: true }), second.sync.subscribe(raceId, notes.seed(me.userUri, eventId, 2, me.orgDocUri, me.userExternalId), { ifMissing: true })]);
@@ -612,6 +612,40 @@ commands.privatenotes = async () => {
     assert.deepEqual([place(afterDelete), place(nextId)], [null, 1], 'deleted: none found, and the next words at place 1');
   } finally {
     for (const id of [raceId, nextId, noteId, eventId].filter(Boolean)) { await client.sync.softDelete(id).catch((e) => out('delete failed: ' + e.message)); out('deleted ' + id.split(':')[1]); }
+  }
+};
+
+// meetingnotes <event id>: opens a meeting's private notes as the app does (main/meeting-notes.js privateNotes), so it
+// personnotes [<user-profile id>]: WRITES one note, deleted in the same run (docs/MEETINGS.md "Notes about a person").
+// Notes about a person as the app makes them (main/meeting-notes.js privateNotes), by default about yourself, so no one
+// else is involved: opening writes nothing, the first words make them, and Tana's graph, owner chain and the document
+// read back owned by nothing, restricted to you as admin alone, no link, marked with the person, the first row a link
+// to their page, and the person given nothing. Every claim is asserted.
+commands.personnotes = async () => {
+  const me = await connect();
+  const main = backend(me), notes = require('../main/meeting-notes'), { readOutline } = require('../sdk/content'), assert = require('node:assert/strict');
+  await client.sync.connect();
+  const person = positional[0] || me.userUri;
+  const link = 'https://home.tana.inc/o/' + me.orgDocUri.split(':').pop() + '/u/' + encodeURIComponent(person);
+  let id = null;
+  try {
+    const opened = await notes.privateNotes(person);
+    assert.equal(opened.id, null, 'no notes about them yet (this run deletes its own): run it on someone you have none for');
+    const made = await notes.privateNotes(person, { create: true, first: 'Synthetic note (Orbital check, deleted in this run)' });
+    id = made.id;
+    const { nodes: [row] = [] } = await client.graph.listNodes({ nodeIds: [id], limit: 1 });
+    const chain = await client.graph.getOwnerChain(id), doc = await client.sync.subscribe(id), n = readNode(doc), rows = readOutline(doc);
+    out({ id, title: n.title, owner: row.ownerUri || null, restricted: row.restricted, grants: row.participants, linkSharing: row.linkSharing || null, chain: (chain.entries || []).map((e) => [e.uri.split(':')[1], e.restricted]), mark: notes.markOf(doc, person), first: rows[0]?.segments, audience: made.audience });
+    assert.equal(id, notes.slotId(me.userUri, person, 0), 'at place 0 of the person\u2019s places');
+    assert.deepEqual([row.ownerUri || null, row.restricted, Object.keys(row.participants || {}), row.participants[me.userUri].role, row.createdBy, row.linkSharing?.mode || null], [null, true, [me.userUri], 'admin', me.userUri, null], 'Tana\u2019s row: owned by nothing, restricted, you alone as admin, made by you, no link');
+    assert.deepEqual((chain.entries || []).map((e) => [e.uri, e.restricted]), [[id, true]], 'its own boundary, under nothing');
+    assert.deepEqual([notes.markOf(doc, person), rows[0]?.segments?.[0]?.marks?.link, made.audience.private], [person, link, true], 'marked with the person, linked to their page, said to be only yours');
+    assert.equal(rows.filter((b) => (b.segments || []).some((s) => s.mention)).length, 0, 'nobody mentioned');
+    assert.equal((await notes.privateNotes(person)).id, id, 'found again');
+    out('ok: notes about ' + (person === me.userUri ? 'yourself' : person) + ' made private in your Library, read back, and found again');
+  } finally {
+    if (id) { await client.sync.softDelete(id).catch((e) => out('delete failed: ' + e.message)); out('deleted ' + id); }
+    void main;
   }
 };
 

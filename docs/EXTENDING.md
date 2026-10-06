@@ -203,7 +203,7 @@ an entry in `main/documents.js` `creationOptions` and the mock's `creationOption
 
 ## The checks to extend
 
-`npm run lint` and `npm run check` must pass before every push; the scheduled checks run both on main, on Node 22.
+`npm run lint` and `npm run check` must pass before every push; CI runs both again on every pull request and on main, on Node 22.
 
 | You changed | Extend |
 |---|---|
