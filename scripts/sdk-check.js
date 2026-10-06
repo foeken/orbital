@@ -1101,10 +1101,16 @@ async function main() {
     const DOC='tana:text:'+'a'.repeat(26);
     assert.deepEqual(await decisions.suggestSensitive([{id:DOC,text:'Salary review Jan'},{id:'orbital:timeline',text:'Timeline'},{id:'tana:text:'+'b'.repeat(26),text:'  '}],decided([{type:'predicate',name:'n0',probability:0.93}])),[{id:DOC,p:0.93}]);
     assert.deepEqual(calls.at(-1).body.questions.map((x)=>x.type),['predicate']);
+    // The smart filter: what was typed as the shared input, a predicate per row with its facts; only Tana ids go
+    assert.deepEqual(await decisions.filterRows('waiting on someone',[{id:DOC,text:'Ask Kor for the numbers · in progress'},{id:'orbital:timeline',text:'Timeline'}],decided([{type:'predicate',name:'r0',probability:0.81}])),[{id:DOC,p:0.81}]);
+    assert.ok(calls.at(-1).body.input.includes('waiting on someone') && calls.at(-1).body.questions[0].instructions.includes('Ask Kor for the numbers'),'what was typed is the input, each row its own question');
+    const sentBefore=calls.length;
+    assert.deepEqual(await decisions.filterRows('   ',[{id:DOC,text:'x'}],decided([])),[]);
+    assert.equal(calls.length,sentBefore,'nothing typed, nothing sent');
     flags.set('decisions',false);
     assert.equal(decisions.usable(),false,'and off again');
     settings.set('openaiApiKey',undefined); settings.set('featureFlags',undefined); settings.reset();
-    console.log('ok  decisions API flag: off by default and without a key; Auto-pick type and Suggest sensitive marks as decisions, batched past 200');
+    console.log('ok  decisions API flag: off by default and without a key; Auto-pick type, Suggest sensitive marks and the smart filter as decisions, batched past 200');
   }
   // Edit meeting details and "/" Meeting's when page (#758): the model transcribes the words into a strict shape, and
   // main/meetings.js resolveTime decides what they come to, the same way every time, in the meeting's own time zone.

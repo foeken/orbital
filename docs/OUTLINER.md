@@ -157,7 +157,12 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   form ("Fri 11 Sep 9:00-10:00").
 - **Pills and the filter row.** On a page with pills (a view, a saved search, a type page) they sit under the title,
   folded behind the pills toggle per page ([VIEWS.md](VIEWS.md)); Cmd+K lists every pill either way. ⌘F shows the
-  filter row, focused: it filters the rows on the page by title substring, with "N items filtered out" under it;
+  filter row, focused: it filters the rows on the page by title substring, with "N items filtered out" under it.
+  With the Decisions API feature flag on it is the **smart filter** (placeholder "Filter by words or meaning",
+  renderer/flags.js): what the words find shows at once, and once typing pauses (400 ms, three letters or more) every
+  other row on the page goes to the Decisions API in one ask (its title, type tags, state and date; never a row marked
+  sensitive), and those it gives 50% or more join the list. It filters what the page has; it never searches further.
+  The field breathes while it asks; a failed ask shows the error once and matches nothing.
   Escape clears and hides it, and while it has text it stays visible. A page with no rows and no filter says
   "Nothing here yet". A pill's menu stops above the window's edge and scrolls inside, and the keyboard keeps its
   active option in view; a toggle carries `aria-pressed`.

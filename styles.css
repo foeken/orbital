@@ -282,6 +282,7 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 }
 .filter .clear:hover { background: #ddd; }
 .filter.empty .clear { display: none; }
+.filter.thinking input { animation: breathe 1.2s ease-in-out infinite; } /* the smart filter asking (renderer/flags.js) */
 /* ==== Header buttons (renderer/pills.js, app.js) ==== */
 /* The header buttons (back and forward, the page's switches, the sidebar toggle last): top right of the
    header band, absolute against .titlebar so they never shift as the crumbs, task meta or fields rows appear and
