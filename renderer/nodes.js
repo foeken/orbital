@@ -104,9 +104,11 @@ const isReference = (node) => node.type === 'reference';
 // — its box, its status, its tags — and becomes an ordinary line with a link again the moment anything else is typed.
 // Children rule it out: the row stands in for another node, and expanding it opens that node's outline, so a block
 // with an outline of its own would have nowhere left to show it.
-// Whitespace beside the chip does not count: Tana's AI writes a goal it made as its mention and a space, which drew a
-// blue link where the row should have been the goal.
-const oneMention = (segs) => { const kept = segs.filter((s) => s.mention || /\S/.test(s.text)); return kept.length === 1 && !!kept[0].mention; };
+// Plain spaces beside the chip do not count: Tana's AI writes a goal it made as its mention and a space, which drew a
+// blue link where the row should have been the goal. A no-break space does: it is what Space typed beside the chip of
+// a full reference writes (renderer/events.js), the way to make it an inline reference, which a plain one could not
+// say. main/documents.js resolveReferences (lone) reads a row the same way.
+const oneMention = (segs) => { const kept = segs.filter((s) => s.mention || /[^ \t\r\n]/.test(s.text)); return kept.length === 1 && !!kept[0].mention; };
 const isFullReference = (node) => node.kind === 'block' && !isReference(node) && !node.hasChildren && !node.children?.length && oneMention(segsOf(node));
 const referenceTarget = (node) => ((isReference(node) || isFullReference(node)) && node.reference?.node ? asDoc(node.reference.node) : null);
 // What the row stands in for *right now*. A save is debounced, so between the keystroke and the write the node still

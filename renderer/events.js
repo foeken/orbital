@@ -65,6 +65,8 @@ onRows('keydown', (e) => {
     if (e.key === 'Tab' || (e.key === 'Backspace' && off === 0 && collapsed) || (e.key === 'Delete' && off === len && collapsed)) return e.preventDefault();
     if (mod && (MARK_KEYS[e.key.toLowerCase()] || (e.shiftKey && e.key.toLowerCase() === 's'))) return e.preventDefault(); // a title holds no marks
     if (vert && atEdge(el, e.key === 'ArrowUp' ? 'up' : 'down')) { e.preventDefault(); return moveTo(el, e.key === 'ArrowUp' ? -1 : 1, off); }
+    // Space at the end of a title not typed in yet: the line becomes an inline reference, as it does after the chip
+    if (e.key === ' ' && !mod && !e.altKey && !e.isComposing && collapsed && off === len && !pending.has(item.key)) { e.preventDefault(); return makeInline(item); }
     return; // typing, and the ⌘ combos for the document handler
   }
   if (!canEditItem(item) || opensOnClick(item)) {
@@ -103,6 +105,8 @@ onRows('keydown', (e) => {
   }
   // a row that is only a mention chip deletes like an image: the caret beside the chip can remove nothing (chipOnly)
   if (!isDoc && !mod && (e.key === 'Backspace' || e.key === 'Delete') && chipOnly(el)) { e.preventDefault(); return removeNode(item, el); }
+  // Space beside a full reference's chip makes the line an inline reference (renderer/edit.js makeInline)
+  if (e.key === ' ' && !mod && !e.altKey && !e.isComposing && el.closest('.node')?.classList.contains('fullref')) { e.preventDefault(); return makeInline(item); }
   // formatting: the toolbar's toggles from the keyboard, and Tab/Escape into and out of the toolbar itself
   if (e.key === 'Escape' && !toolbarEl.hidden) { e.preventDefault(); returnToSelection(); }
   else if (e.key === 'Tab' && !e.shiftKey && !toolbarEl.hidden) { e.preventDefault(); focusToolbar(); }

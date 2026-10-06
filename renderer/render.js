@@ -919,6 +919,12 @@ function nodeEl(node, docId, parent) {
     const shown = (label) => (reference || (fullref && renamingRef === item.key) ? [{ text: label }] : fullref ? [{ mention: { uri: node.reference.uri, label } }] : null);
     const own = shown(referenceLabel(node)) || (node.timeline?.free ? timelineFreeSegs(node.timeline.free) : segsOf(node)), segs = pending.has(item.key) ? pending.get(item.key).segs : english ? shown(english.text) || translatedSegs(node, english.text) : own;
     renderSegs(text, segs, display.id);
+    // A full reference's chip is drawn as plain words, but it keeps its target's glyph and colour on it (not drawn:
+    // no .hue, no svg), so what the row reads back once typed into becomes an inline reference in that colour and
+    // with that glyph, rather than a bare blue link until the next reload.
+    const lone = fullref && text.querySelector('.mention');
+    if (lone && target.icon && !lone.dataset.icon) lone.dataset.icon = target.icon;
+    if (lone && target.hue != null && !lone.dataset.hue) lone.dataset.hue = String(target.hue);
     text.classList.toggle('chiponly', chipOnly(text));
     if (english) originalOnFocus(text, () => renderSegs(text, own, display.id), fullref && (() => renderSegs(text, segs, display.id))); // the caret going in finds the original: that is what an edit saves; a full reference's chip is translated again as it leaves
     const translatable = !fullref && translatableOf(item, display); // and leaving it, the translation again, once there is one (a chip is drawn again instead)

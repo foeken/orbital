@@ -429,7 +429,7 @@ function mockApi() {
     // block whose whole content is one mention is resolved the same way
     // a saved search's page is the rows its stored query finds, as main answers it
     children: async (docId) => { if (docId === 'orbital:timeline') readToday(); return String(docId).startsWith('tana:search:') ? structuredClone(preview((searchQueries[docId] || { filter: filters.library }).filter)).map((n) => ({ ...n, text: n.title, hasChildren: true })) : structuredClone(content[docId] || []).map((n) => {
-      const kept = (n.segments || []).filter((s) => s.mention || /\S/.test(s.text)); // whitespace beside the chip does not count (main/documents.js lone)
+      const kept = (n.segments || []).filter((s) => s.mention || /[^ \t\r\n]/.test(s.text)); // plain spaces beside the chip do not count, a no-break space does (main/documents.js lone)
       const one = n.type !== 'reference' && !n.children?.length && kept.length === 1 && kept[0].mention;
       const ref = n.type === 'reference' ? n.reference : one ? { uri: one.uri, label: one.label } : null;
       const target = ref && [...all, ...members].find((d) => d.id === ref.uri);
