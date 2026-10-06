@@ -3558,7 +3558,7 @@ async function main() {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const COLLEAGUE = 'tana:user-profile:01examplex0000000000000000';
     // a live query row (sdk/livequery.js): no creator, which the graph answers, and no creating chat, which the document does
-    const task = (title, createdBy, createdInUri, msAgo = 60000) => ({ uri: 'tana:text:' + ulid(), title, createdAt: Date.now() - msAgo, createdBy, createdInUri });
+    const task = (title, createdBy, createdInUri, msAgo = 60000, state) => ({ uri: 'tana:text:' + ulid(), title, createdAt: Date.now() - msAgo, createdBy, createdInUri, state });
     const rows = () => inbox.map(({ uri, title, createdAt }) => ({ uri, title, createdAt }));
     const MCP_CHAT = 'tana:chat:' + ulid(), MEETING_CHAT = 'tana:chat:' + ulid();
     const chats = new Map([[MCP_CHAT, { id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }],
@@ -3568,7 +3568,7 @@ async function main() {
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
       client: {
         graph: { listNodes: async (p) => {
-          if (p.nodeIds) return { nodes: p.nodeIds.map((id) => chats.get(id) || inbox.filter((n) => n.uri === id).map((n) => ({ id, createdBy: n.createdBy }))[0]).filter(Boolean) };
+          if (p.nodeIds) return { nodes: p.nodeIds.map((id) => chats.get(id) || inbox.filter((n) => n.uri === id).map((n) => ({ id, createdBy: n.createdBy, state: n.state }))[0]).filter(Boolean) };
           if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Rob Jansen', userProfile: {} }] };
           throw new Error('the Inbox is a live query, not a listing: ' + JSON.stringify(p));
         } },
@@ -3587,6 +3587,12 @@ async function main() {
     ], 'your agent, a colleague and Tana\'s AI are announced; what you made by hand and an old task back in the Inbox are not');
     await backend.announceNewInbox(rows());
     assert.equal(notified.length, 3, 'and each once');
+    // a draft a colleague wrote weeks ago and handed to you as a task a minute ago reached your Inbox now
+    const handed = { type: 'proposed', enteredAt: new Date(Date.now() - 60000).toISOString(), changedBy: COLLEAGUE };
+    inbox = [...inbox, task('Handed over today', COLLEAGUE, undefined, 40 * 24 * 60 * 60 * 1000, handed), task('Back in the Inbox by you', COLLEAGUE, undefined, 40 * 24 * 60 * 60 * 1000, { ...handed, changedBy: ME })];
+    await backend.announceNewInbox(rows());
+    assert.deepEqual(notified.slice(3), [['Handed over today', 'New in Inbox · From Rob Jansen']], 'a task handed to you today is new today; one you moved back yourself is not');
+    notified.length = 3;
     inbox = [...inbox, ...[1, 2, 3, 4].map((i) => task('Mail ' + i, COLLEAGUE, undefined))];
     await backend.announceNewInbox(rows());
     assert.equal(notified.length, 6, 'a burst is capped at three banners');
@@ -3629,6 +3635,7 @@ async function main() {
     const viaAi = { id: id(), title: 'Share the transcript', createdBy: ME, createTime: ago(30 * H) };
     const byHand = { id: id(), title: 'Typed it myself', createdBy: ME, createTime: ago(0.5 * H) };
     const old = { id: id(), title: 'Last month', createdBy: COLLEAGUE, createTime: ago(40 * 24 * H) };
+    const handedOver = { id: id(), title: 'Handed over today', createdBy: COLLEAGUE, createTime: ago(40 * 24 * H), state: { type: 'proposed', enteredAt: ago(0.3 * H), changedBy: COLLEAGUE } }; // a draft made last month, given to you as a task now
     const person = (displayName, extra = {}) => ({ displayName, email: displayName.split(' ')[0].toLowerCase() + '@example.com', role: 'required', ...extra });
     const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync ', /* a calendar's trailing space, drawn without it */ calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H), roster: [
       person('Me Myself', { identityUri: ME }), person('Board Room', { role: 'resource' }), person('Groenlo Room', { cutype: 'room' }), person('Ann Bakker'), person('Bo Smit'), person('Cas de Vries'), person('Dee Jansen'), person('Eva Mol')] } };
@@ -3663,7 +3670,7 @@ async function main() {
             if (p.nodeIds) return { nodes: [] };
             if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [...(soonToo ? [soon] : []), going, meeting, summed, allDay] }; }
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
-            if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old] };
+            if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old, handedOver] };
             return { nodes: [] };
           },
           listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaMcpToo.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
@@ -3684,6 +3691,7 @@ async function main() {
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['An AI agent completed Order more canisters', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
+      ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Handed over today']], // when it was handed over, not when it was made
       ['You added a task', null, 'tlNew', 'new', false, ['Typed it myself']], // yours by hand: added, not put in your Inbox, and no news; the one for Rob is not yours, so not listed
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
@@ -3766,9 +3774,9 @@ async function main() {
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
     assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
     assert.equal(rows[1].timeline.uri, watched.id, 'and each row opens the node it is about');
-    assert.equal(rows[5].timeline.uri, null, 'except a group, whose tasks open themselves');
+    assert.equal(rows[6].timeline.uri, null, 'except a group, whose tasks open themselves');
     assert.deepEqual(JSON.parse(JSON.stringify(rows[0].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, false], [false, true]], 'timeline task text is read-only, and a box ticks unless the task is known read-only: unknown access ticks, as everywhere else (#545)');
-    assert.deepEqual(JSON.parse(JSON.stringify(rows[5].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'inbox task words are read-only there and their boxes tick');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[6].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'inbox task words are read-only there and their boxes tick');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');

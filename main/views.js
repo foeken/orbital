@@ -6,7 +6,7 @@ const { createTanaClient, takeCalls } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, addMeetingChats } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView, rowLimit } = require('../sdk/node');
-const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, inboxFrom, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, inboxFrom, handedAt, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { agentIds, createDocument, creatorOf, document, forgetOwners, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, reliveRefs, subscribe, workflowTypes } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
@@ -332,8 +332,10 @@ async function refreshWatched() {
 // nothing polls. Its rows carry no creator, which creatorOf answers from the graph (cached).
 // ponytail: seen = the newest 50 Inbox ids of the last answer; a task leaving and re-entering the Inbox within its
 // first day is announced twice. Keep a dated set if that ever happens in practice.
+// "New" is when it reached your Inbox: made then, or handed to you as a task by someone since (handedAt), so a draft a
+// colleague wrote yesterday and gives you today is announced today. Newest change first, so such a task is among the 50.
 const NEW_TASK_MS = 24 * 60 * 60 * 1000, NEW_TASK_MAX = 3;
-const INBOX_QUERY = (me) => ({ types: ['text'], stateTypes: ['proposed'], assignedTo: [me], orderBy: ['-createdAt'], limit: 50 });
+const INBOX_QUERY = (me) => ({ types: ['text'], stateTypes: ['proposed'], assignedTo: [me], orderBy: ['-updatedAt'], limit: 50 });
 async function watchInbox() {
   const client = S.client, me = S.me && S.me.userUri;
   if (!client || !me) return;
@@ -388,7 +390,11 @@ async function announceNewInbox(rows) {
   db.setSetting('inboxSeen', rows.map((r) => r.uri)); // before any wait: a second answer arriving meanwhile compares against this one
   if (!Array.isArray(stored)) return;
   const seen = new Set(stored);
-  const fresh = rows.filter((r) => !seen.has(r.uri) && Date.now() - r.createdAt < NEW_TASK_MS).map((r) => ({ id: r.uri, title: r.title }));
+  const unseen = rows.filter((r) => !seen.has(r.uri));
+  if (!unseen.length) return;
+  // the rows carry no state: one graph read says who last moved each, and when
+  const graph = new Map((await S.client.graph.listNodes({ nodeIds: unseen.map((r) => r.uri), limit: unseen.length }).catch(() => ({ nodes: [] }))).nodes.map((n) => [n.id, n]));
+  const fresh = unseen.filter((r) => Date.now() - Math.max(r.createdAt, handedAt(graph.get(r.uri), me)) < NEW_TASK_MS).map((r) => ({ id: r.uri, title: r.title }));
   let shown = 0; // counts banners, not candidates: your own quiet tasks do not use up the cap
   for (const n of fresh) try {
     if (shown >= NEW_TASK_MAX) break;
