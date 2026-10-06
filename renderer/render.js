@@ -846,7 +846,7 @@ function nodeEl(node, docId, parent) {
   // they are. A reference in one still opens what it points at — that is the chip's own click, not the bullet's.
   const opens = reference || fullref || (zoomable(node) && !field);
   const clickOpens = opensOnClick(item);
-  if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a member or a type has no page: the bullet is only a glyph
+  if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a field's value has no page here: the bullet is only a glyph
   const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) addIcon(bullet, bulletIcon).classList.add('icon', bulletIcon);
   if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike, a task's type glyph included

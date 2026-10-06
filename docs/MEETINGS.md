@@ -189,6 +189,32 @@ admin alone, and read back so in a fresh session; asked again, nothing more was 
 `ifMissing` lines in the sync checks; scripts/flow-check.js, "type under a meeting") cover the rest with a second user,
 a second machine, independent Loro documents and a fake Tana whose graph answers only what it has indexed.
 
+## Notes about a person
+
+A member's page (`tana:user-profile:`, reached from an @ mention, ⌘S or a member row) has the same editor: your private
+notes about them, made, confirmed and checked by the same code as a meeting's (main/meeting-notes.js, with the person
+where the meeting was), so everything above holds for them — nothing written by opening, made on the first word,
+private before a word is written, shared by you kept and said, every write checked again, per account. Tana has no
+private-notes-about-someone concept either: its People page opens what you share *with* a person, and its "+" there
+makes a meeting, note, task or chat with them as a participant. So where a meeting's notes hang differs:
+
+| What | A person's notes | Why |
+|------|------------------|-----|
+| owner | none: in your Library | a profile owns nothing and takes no pins; a note owned by anything is not one of these |
+| pinned | nowhere | the same |
+| the person | never a participant, never mentioned | the reference row is a link to their page (`/o/<org>/u/<id>`, `webLink`), not an @ mention, which adds an edge and could reach them |
+| found again | `tana:text:` + `createDeterministicId` of `orbital:person-notes:<you>:<person>:<place>`, place 0 to 3 | never one of a meeting's places |
+| marked | root `ext:orbital:notes`, key `person` = the profile | a meeting's key is `meeting` |
+| named | "Private notes · <their name>", their first row "Open their profile in Tana" | |
+| for whom | a profile Tana's graph lists (`userProfile` on its row); anything else gets none | read before anything is made (`personOf`) |
+
+**Live proof** (`node scripts/platform-cli.js personnotes [<user-profile id>]`, escalated, 2026-10-06; notes about
+yourself by default, so nobody else is involved, deleted at the end): opening wrote nothing; the first words made
+"Private notes · <name>" at place 0, Tana's row owned by nothing, restricted, your grant alone as admin, made by you, no
+link sharing; the owner chain the note alone, restricted; marked with the person; the first row a link to their page
+and no mention; said to be only yours; found again. Each is asserted. The offline checks ("notes about a person",
+scripts/sdk-check.js; "write private notes about a person", scripts/flow-check.js) cover the rest.
+
 ## Typed fields
 
 A field value is a ProseMirror-style tree in the document own data map under the key
