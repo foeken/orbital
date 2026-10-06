@@ -30,17 +30,25 @@ final class VisibleToTests: XCTestCase {
         return row
     }
 
-    func testGlyphSitsByItsWord() {
-        for size in [nil, "UICTContentSizeCategoryAccessibilityL"] {
-            for (id, word) in Self.audiences {
-                let row = open(id, textSize: size)
-                XCTAssertEqual(row.label, "Visible to, " + word, "VoiceOver reads the word, not the glyph")
-                let gap = Self.glyphGap(row)
-                XCTAssertNotNil(gap, "a glyph and a word after the field's name: \(word), \(size ?? "default size")")
-                // no wider than the field's own 12 pt between its name and its value, and not touching
-                XCTAssert((3...12).contains(gap ?? 0), "\(word) at \(size ?? "default size"): the glyph is \(gap ?? 0) pt from its word")
-                app.terminate()
-            }
+    func testGlyphSitsByItsWord() { glyphsSitByTheirWords(textSize: nil) }
+    func testGlyphSitsByItsWordInLargeText() { glyphsSitByTheirWords(textSize: "UICTContentSizeCategoryAccessibilityL") }
+
+    // One launch per text size, each audience then opened by its orbital: link, as a widget opens a node (Shell.swift
+    // open), in place of the last. A launch each took 12 to the 3 minutes a test may run. Not -zoom: XCTest delivers
+    // the link by launching again with the same arguments, and -zoom would open the first audience over it.
+    private func glyphsSitByTheirWords(textSize size: String?) {
+        app = XCUIApplication()
+        app.launchArguments = ["-sample", "-demoMode", "NO"] + (size.map { ["-UIPreferredContentSizeCategoryName", $0] } ?? [])
+        app.launch()
+        for (id, word) in Self.audiences {
+            app.open(URL(string: "orbital:" + id)!)
+            // its own row, by what VoiceOver reads (the word, not the glyph), so the page it replaced is never measured
+            let row = app.buttons["Visible to, " + word]
+            XCTAssert(row.waitForExistence(timeout: 15), "VoiceOver reads the word, not the glyph: \(word)\n" + app.debugDescription)
+            let gap = Self.glyphGap(row)
+            XCTAssertNotNil(gap, "a glyph and a word after the field's name: \(word), \(size ?? "default size")")
+            // no wider than the field's own 12 pt between its name and its value, and not touching
+            XCTAssert((3...12).contains(gap ?? 0), "\(word) at \(size ?? "default size"): the glyph is \(gap ?? 0) pt from its word")
         }
     }
 
@@ -77,4 +85,3 @@ final class VisibleToTests: XCTestCase {
         return runs.first { $0.from >= glyphEnd }.map { $0.from - glyphEnd }
     }
 }
-

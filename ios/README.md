@@ -61,9 +61,11 @@ it to Tana at once (`Engine.tick`); run in the widget's process, which has no en
 Keychain group for the app to take as it comes forward. The extension's glyphs are its own catalog, made with the app's
 (`node scripts/build-ios-glyphs.js`). A device build needs the `com.dreetje.orbital.widgets` id registered for the team,
 and a profile for it: with no Apple account in Xcode, automatic signing falls back to the team's wildcard profile, whose
-older app id prefix makes iOS leave the widgets out. `WidgetTests` adds them on the simulator's home screen and uses them;
-built with signing off (`CODE_SIGNING_ALLOWED=NO`, as CI builds) the widgets have no Keychain group to read, so it skips
-once it has seen a widget added.
+older app id prefix makes iOS leave the widgets out. `WidgetTests` adds them on the simulator's home screen and uses them.
+`npm run phones` signs the simulator build ad hoc (`CODE_SIGN_IDENTITY=-`, no certificate), which gives the widgets the
+Keychain group to read; built with signing off (`CODE_SIGNING_ALLOWED=NO`) they have none, so it skips once it has seen a
+widget added. A simulator lists a newly installed app's widgets in the gallery only minutes later, so the test opens the
+gallery again until Orbital is in it.
 
 ## Siri, Shortcuts and Spotlight
 

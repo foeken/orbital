@@ -8,13 +8,15 @@ final class WidgetTests: XCTestCase {
     private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     private var app: XCUIApplication!
     // Set by the first test that finds this build cannot show what a widget holds (add): the rest skip at once, before
-    // launching the app or adding a widget, where each took a minute on CI to reach the same skip
+    // launching the app or adding a widget, where each took a minute to reach the same skip (npm run phones signs ad hoc,
+    // so it runs them; a build with signing off still skips)
     private static var unsigned = false
-    private static let why = "the widget is added and drawn; what it shows needs a signed build (Keychain group), which CODE_SIGNING_ALLOWED=NO has not"
+    private static let why = "the widget is added and drawn; what it shows needs a signed build (Keychain group), which one with signing off has not"
 
     override func setUpWithError() throws {
         if Self.unsigned { throw XCTSkip(Self.why) }
         continueAfterFailure = false
+        executionTimeAllowance = 240 // the gallery's first listing on a new simulator (add) on top of the minute a test takes
         XCUIDevice.shared.orientation = .portrait
         app = XCUIApplication()
         app.launchArguments = ["-sample", "-demoMode", "NO"]
@@ -32,13 +34,24 @@ final class WidgetTests: XCTestCase {
     // edit the home screen, Add Widget, Orbital, the gallery's page for the widget (Today's Tasks small, medium and large,
     // then Today's Tasks and Upcoming Meetings medium and large, then Activity medium and large), Add Widget, Done
     private func add(page: Int) throws {
-        springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).press(forDuration: 1.6)
-        found(springboard.buttons["Edit"], "Edit").tap()
-        found(springboard.buttons["Add Widget"], "Add Widget in the Edit menu").tap()
-        let search = found(springboard.searchFields.firstMatch, "the widget search")
-        search.tap()
-        search.typeText("Orbital")
-        found(springboard.cells.containing(.staticText, identifier: "Orbital").firstMatch, "Orbital among the widgets").tap()
+        // A new simulator's gallery lists a newly installed app's widgets only minutes later (npm run phones runs these
+        // on the checkout's own simulator, which keeps Orbital, for that), and a gallery once open does not update:
+        // closed and opened again until Orbital is in it
+        let orbital = springboard.cells.containing(.staticText, identifier: "Orbital").firstMatch
+        let until = Date.now.addingTimeInterval(150)
+        while true {
+            springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).press(forDuration: 1.6)
+            found(springboard.buttons["Edit"], "Edit").tap()
+            found(springboard.buttons["Add Widget"], "Add Widget in the Edit menu").tap()
+            let search = found(springboard.searchFields.firstMatch, "the widget search")
+            search.tap()
+            search.typeText("Orbital")
+            if orbital.waitForExistence(timeout: 10) || Date.now > until { break }
+            XCUIDevice.shared.press(.home) // the gallery closed
+            XCUIDevice.shared.press(.home) // and the home screen's editing
+            sleep(5)
+        }
+        found(orbital, "Orbital among the widgets").tap()
         let preview = found(springboard.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Orbital,'")).firstMatch, "the widget's preview")
         for _ in 0..<page { preview.swipeLeft() }
         found(springboard.buttons.matching(NSPredicate(format: "label CONTAINS 'Add Widget'")).firstMatch, "the gallery's Add Widget").tap()

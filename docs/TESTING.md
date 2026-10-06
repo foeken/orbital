@@ -143,12 +143,13 @@ From fastest to slowest. Each catches what the one before it cannot.
 
    The first two scan the whole page rather than one element, so a new surface is covered the day the mock reaches it.
    It needs a loopback port and Chromium, so an agent runs it escalated; the scheduled checks run it on main (a pull request is tested on the machine that writes it, AGENTS.md).
-3. **iPhone UI tests** (about five minutes of tests here, a quarter of an hour on GitHub's runner, `ios/OrbitalUITests`). The
+3. **iPhone UI tests** (about eight minutes here, `ios/OrbitalUITests`). The
    app on `-sample`, driven by the labels VoiceOver reads; There is no CI, so they run only here: `npm run phones`, before a phone change merges and in `npm run release`, on a simulator of the checkout's own ("Orbital <hash of its path>", made once and reused): two
-   checkouts testing on one shared iPhone killed each other's tests ("Test crashed with signal kill"). Its build output stays in the checkout (`ios/.derived`), and `npm run done` deletes both when the worktree goes. `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
+   checkouts testing on one shared iPhone killed each other's tests ("Test crashed with signal kill"). Its build output stays in the checkout (`ios/.derived`), and `npm run done` deletes both when the worktree goes. It builds once, runs all but `WidgetTests` on two copies of that simulator at once (three were slower, each test waiting on the others) and then `WidgetTests` on the simulator itself, which keeps Orbital installed: a fresh copy's widget gallery took minutes to list it. The build is signed ad hoc, so the widgets can read what the app leaves them and `WidgetTests` runs to the end, and a failure collects no diagnostics, whose sysdiagnose held a run for ten minutes after its last test. `LoadingTests` launches on `-stall page` or `-stall read` (a Debug
    build's stand-in for a Tana that never answers) with `-patience 3`, and expects Can't reach Tana in place of a Timeline
    that builds itself for good; Android's `EngineTest` drives the same on virtual time. `VisibleToTests` opens a note for
-   each audience in `pages-sample.json` (`-zoom`), at the default and an accessibility text size, and measures the gap
+   each audience in `pages-sample.json` by its `orbital:` link, one launch per text size (a launch each was twelve in one
+   test, close to its time limit), at the default and an accessibility text size, and measures the gap
    between the Visible to glyph and its word in the row as drawn: a SwiftUI `Label` in a List row had put the glyph in the
    list's icon column, about 20 pt from its word (#753). `scripts/ios-engine-check.js`
    covers the engine, and the desktop code it bundles, in `npm run check`, among it every list the phones ask for (ios/engine/listed.js): your hidden titles, Hide MCP and the settings document stay out of it, as main/views.js listFilter keeps them out on the Mac, where the phones once showed Block and Lunch in Upcoming meetings.
