@@ -295,6 +295,47 @@ function linkSelection() { // the @ button runs the same linking flow as typing 
   if (item && el) startLink(item, el, [ctx.start, ctx.end]);
 }
 
+// ---- "#" over a selection: the words become a new task, meeting, doc or workspace type, linked where they stood ----
+// The way "@" over a selection links it to something that exists, "#" makes the thing: a page of what can be created
+// (api.creationOptions, as "/" and Create new list it), dropped down at the selection, and the pick replaces the words
+// with a mention of what it made. A meeting asks when first ("/" Meeting's page, meetingWhen); nothing is made before.
+let hashBusy = false; // one node per pick
+function startHashCreate(item, el, [start, end]) {
+  if (item.node.kind !== 'block' || item.node.draft || item.busy || typeof item.node.id !== 'string' || !tana.createDocument) return false;
+  flush(item.key);
+  const segs = readSegs(el), title = plainOf(segs).slice(start, end).trim();
+  if (!title) return false;
+  const rects = getSelection().rangeCount ? getSelection().getRangeAt(0).getClientRects() : [];
+  const link = { item, segs, start, end, back: () => open() };
+  const open = () => {
+    openPage('hashCreate', 'Make “' + title + '” a…', { rows: (q) => hashRows(link, title, q) });
+    if (rects.length) anchorPalette({ left: rects[0].left, top: rects[0].top, bottom: rects[rects.length - 1].bottom });
+    loadCreationChoices();
+  };
+  open();
+  return true;
+}
+function hashRows(link, title, q) {
+  if (palBusy && !creationChoices.length) return [{ group: 'Create', label: 'Loading choices…', disabled: true }];
+  const made = creationChoices.filter((c) => ['doc', 'task', 'meeting', 'custom'].includes(c.kind));
+  const choices = made.some((c) => c.kind === 'doc') ? made : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...made];
+  return choices.filter((c) => fuzzyMatch(c.title, q)).map((c) => ({
+    group: c.kind === 'custom' ? 'Workspace types' : 'Create', icon: c.icon, label: c.title, hint: hashBusy ? 'Creating…' : c.selectable ? '' : c.reason || 'Unavailable',
+    disabled: !c.selectable || hashBusy, keepOpen: true,
+    run: () => (c.kind === 'meeting' ? meetingWhen(link.item, c, title, link) : hashMake(link, c, title)),
+  }));
+}
+function hashMake(link, choice, title) {
+  if (hashBusy) return;
+  hashBusy = true; renderPalette();
+  tana.createDocument(title, { kind: choice.kind, ...(choice.typeUri ? { typeUri: choice.typeUri } : {}) }).then((n) => {
+    extra.set(n.id, { ...n, text: n.title || '', hasChildren: true });
+    closePalette();
+    if (items.get(link.item.key) !== link.item) return showNote('“' + (n.title || title) + '” created', false, n.id); // the row went meanwhile
+    return linkTo(link, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}), ...(n.hue != null ? { hue: n.hue } : {}) });
+  }).catch(showError).finally(() => { hashBusy = false; });
+}
+
 // ---- "/" at the start of an empty node: block types, a divider, a table, an image, then what api.creationOptions offers ----
 let slashCtx = null; // { key } the node holding the "/"; kept until another palette mode opens
 function slashTarget() { return slashCtx ? items.get(slashCtx.key) : null; }
@@ -420,15 +461,15 @@ function meetingName(item, choice, name) {
   namePage('slashMeeting', 'Name the new meeting…', { group: 'New meeting', icon: choice.icon, back: () => togglePalette('slash') },
     (title) => ({ label: 'Choose when for “' + title + '”', keepOpen: true, run: () => meetingWhen(item, choice, title) }), name);
 }
-function meetingWhen(item, choice, title) {
+function meetingWhen(item, choice, title, link) { // link: the selection "#" makes into this meeting (hashCreate)
   const slot = Math.floor(Date.now() / 6e4) * 6e4, group = 'New meeting · ' + title; // now, to the minute, read once: the row offered does not move under the press
   slashMeetingRead = null;
-  openPage('slashMeetingWhen', 'When? 14:00, tomorrow 9:30, fri 10:00-11:30', { back: () => (item ? meetingName(item, choice, title) : openNamePage(choice, title)), typed: true, rows: (q, typed) => {
+  openPage('slashMeetingWhen', 'When? 14:00, tomorrow 9:30, fri 10:00-11:30', { back: () => (link ? link.back() : item ? meetingName(item, choice, title) : openNamePage(choice, title)), typed: true, rows: (q, typed) => {
     if (slashMeetingBusy) return [{ group, icon: choice.icon, label: 'Creating “' + title + '”…', disabled: true, note: true }];
     const words = String(typed || '').trim(), when = words ? parseMeetingTime(words, slot, SLASH_MEETING_LENGTH) : { start: slot, end: slot + SLASH_MEETING_LENGTH };
     const invite = { group, label: 'In your calendar · nobody is invited', disabled: true, note: true };
-    if (when) return [{ group, icon: 'calendar', label: meetingSpan(when.start, when.end), hint: words ? '↩ Create' : 'Now, for 30 minutes', keepOpen: true, run: () => meetingHere(item, title, when) }, invite];
-    return [...readRows(slashMeetingRead, words, group, () => readWhen(words), (t) => ({ group, icon: 'calendar', label: meetingSpan(t.start, t.end), hint: '↩ Create · read by AI', keepOpen: true, run: () => meetingHere(item, title, t) })), invite];
+    if (when) return [{ group, icon: 'calendar', label: meetingSpan(when.start, when.end), hint: words ? '↩ Create' : 'Now, for 30 minutes', keepOpen: true, run: () => meetingHere(item, title, when, link) }, invite];
+    return [...readRows(slashMeetingRead, words, group, () => readWhen(words), (t) => ({ group, icon: 'calendar', label: meetingSpan(t.start, t.end), hint: '↩ Create · read by AI', keepOpen: true, run: () => meetingHere(item, title, t, link) })), invite];
   } });
 }
 // The AI's reading of a when page's words, as rows: a row to ask it, a note while it reads, then the time it read to press,
@@ -464,7 +505,7 @@ function readWords(current, set, words, docId, mode) {
     .then(() => { mine.busy = false; if (seq === palSeq && palMode === mode && !palette.hidden) renderPalette(); });
 }
 const readWhen = (words) => readWords(slashMeetingRead, (r) => { slashMeetingRead = r; }, words, null, 'slashMeetingWhen');
-function meetingHere(item, title, when) {
+function meetingHere(item, title, when, link) {
   if (slashMeetingBusy) return;
   slashMeetingBusy = true;
   renderPalette();
@@ -479,7 +520,7 @@ function meetingHere(item, title, when) {
     const segs = readSegs(el), words = plainOf(segs), at = words.trim() === '/' || !words.trim() ? 0 : words.length;
     // The meeting exists either way: a reference that could not be written puts the row back as it was and says so, with
     // the meeting a click away. Nothing offers to make it again; a new "/" Meeting is a new meeting, asked for again.
-    return linkTo({ item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }, (e, linked) => {
+    return linkTo(link || { item, segs: at ? segs : [], start: at, end: at }, { label: n.title || title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }, (e, linked) => {
       // Put back only a row that still shows just that link, on this page, with nothing typed waiting to be saved: words
       // typed since the link went in, or a row or page that has gone, are left exactly as they are; the toast says it all.
       const el = items.get(item.key) === item && textEl(item.key);

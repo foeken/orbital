@@ -936,6 +936,8 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text a.link:hover { color: #3a75a3; }
 /* block types (api.setBlockType). A bullet row keeps the plain bullet; a numbered row counts in the same gutter. */
 #outline, .children { counter-reset: ol; }
+/* any other row between them ends the list: numbering starts again under the next heading, as in Tana */
+.node:not(.t-numbered) { counter-reset: ol; }
 .node.t-numbered { counter-increment: ol; }
 .node.t-numbered > .line > .bullet::before {
   content: counter(ol) "."; left: 0; top: 0; width: 18px; height: 24px; border-radius: 0;

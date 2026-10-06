@@ -319,9 +319,10 @@ function taskActionContext() {
   const selected = fromSelection ? keys.map((key) => items.get(key)).filter(Boolean) : palDoc ? [{ node: palDoc, docId: palDoc.id }] : [];
   const docs = [], seen = new Set();
   for (const item of selected) {
-    const doc = item.node;
-    if (!doc || doc.draft || !isTask(doc) || !canEditNode(doc) || seen.has(item.docId)) continue;
-    seen.add(item.docId); docs.push(doc);
+    // a selected reference row acts on the task it stands in for, as ⌘K on it with a caret does (currentDoc)
+    const doc = item.node && (referenceTarget(item.node) || item.node), id = doc && (doc.kind === 'document' ? doc.id : item.docId);
+    if (!doc || doc.draft || !isTask(doc) || !canEditNode(doc) || seen.has(id)) continue;
+    seen.add(id); docs.push(doc);
   }
   if (!fromSelection && !docs.length) return null;
   return { docs, selected: selected.length, skipped: selected.length - docs.length, fromSelection, multi: keys.length > 1 };

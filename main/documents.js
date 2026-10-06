@@ -69,7 +69,8 @@ function keepLive(uris) {
 const isLiveRef = (uri) => liveRefs.has(uri); // a view's sweep leaves these alone (main/views.js viewRows)
 async function resolveReferences(nodes) {
   const refs = [], mentions = [];
-  const lone = n => !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
+  // one mention and nothing else but whitespace (renderer/nodes.js oneMention): Tana's AI leaves a space after it
+  const lone = n => { const kept = (n.segments || []).filter(s => s.mention || /\S/.test(s.text)); return !n.children?.length && kept.length === 1 && kept[0].mention; };
   const visit = rows => { for (const n of rows) {
     if (n.type === 'reference') refs.push(n.reference);
     else { const one = lone(n); if (one) refs.push(n.reference = { uri: one.uri, label: one.label }); }

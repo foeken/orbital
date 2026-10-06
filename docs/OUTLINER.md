@@ -233,7 +233,9 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   (`AUDIENCES` `word`, `audienceInfo`); the page's Visible to field says the same, and Lives in leaves the space out
   of a line that already leads with it.
 - **Block rows: a marker belongs to a list row.** The dot is drawn for `.t-bullet` and the counter for
-  `.t-numbered`; text, headings, quotes and code have none, on hover too. A collapsed row keeps its dot, on its halo,
+  `.t-numbered`; text, headings, quotes and code have none, on hover too. Any other row between numbered ones starts
+  the count again (`.node:not(.t-numbered)` resets it), so a list under a new heading counts from 1, as Tana's
+  separate lists do. A collapsed row keeps its dot, on its halo,
   because that says it has children. A row with no marker is not indented for one: its text starts where the title
   starts (`.scroll`'s 16px + an 11px gutter + the body's 5px = the 32px `.titlebar` reserves; renderer-check asserts
   the sum). The gutter is narrowed, never `display: none`, and stays the row's zoom target; a row with children keeps
@@ -270,7 +272,9 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   strips it. Typing either side makes it text plus a mention (Tana's inline presentation, the same data shape). The
   row carries `.chiponly`, and Backspace or Delete removes it as they remove an image. A read-only reference row, and
   a lone chip whose target could not be read, is outlined when focused.
-- **A full-line reference is the node it points at** (`isFullReference`, renderer/nodes.js; `.fullref`). Main resolves
+- **A full-line reference is the node it points at** (`isFullReference`, renderer/nodes.js; `.fullref`): a line that is
+  one mention and nothing but whitespace beside it (Tana's AI writes the goals and tasks it makes as a mention and a
+  space; `oneMention`, and main's `lone` in resolveReferences). Main resolves
   it like a native embed (`reference: { uri, label, node }`), and the row is built from the target: its bullet and
   hue, tags, subtext and checkbox (`toggleReference`), and its label, so a rename shows through (nothing is written
   back). The title reads as ordinary text; the blue chip is for a reference among text. The block keeps its own
@@ -278,7 +282,11 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   on the keystroke from the edit in flight (`liveTarget(node, pending.get(item.key))`), except mid-composition. Such a
   row cannot have children of its own: expanding it opens the target's outline (`childHost`, loaded on demand,
   editing edits that document, drawn under a dashed guide), and it opens only when asked. It offers no draft tail. A
-  click selects it and a second click places the caret; the chip does not navigate — the bullet and Space do. Enter on
+  click selects it and a second click renames the node it points at in place (`startRename`, renderer/edit.js): the
+  title is drawn as words, typing saves it to the target (`flush`, as a native reference does), the block itself is
+  not written, and Enter, Escape or leaving ends it with the chip back; Tab and Backspace at the start do nothing
+  meanwhile. A target that cannot be renamed puts the caret after the chip instead. The chip does not navigate — the
+  bullet and Space do. Enter on
   the selected row starts editing at the end. The focus ring is drawn from `> .line:focus-within`, so a caret in the
   rows it opened is not a caret on the reference. A block that already holds an outline stays a line with a link.
   Inside a field a lone reference stays a line with a chip: a field is a list of names.
@@ -313,7 +321,7 @@ debounce flushes it. Read-only rows ignore every edit key.
 |---|---|
 | Enter | Split at the caret (`api.split`, one undo step). The new row is the first child when the row is expanded with children, else the next sibling. At the very start of a row with text, an empty row goes in front instead (`api.insertBefore`) and the caret moves to it. On an editable document row, a first content child. Undoing an Enter puts the caret back where Enter ran. |
 | ⇧Enter | A soft line break inside the row. |
-| Tab / ⇧Tab | Indent under the previous sibling / outdent to after the parent (block rows; document rows ignore them). On a plain line Tab makes it a bullet, and indents it under the row above when that is a list row (a plain line is never made a parent); at the start of a plain line it starts a list there, as "- " does. ⇧Tab takes the marker off a top-level bullet. |
+| Tab / ⇧Tab | Indent under the previous sibling / outdent to after the parent (block rows; document rows ignore them). A row keeps its list's kind: Tab on a numbered row under one with no children yet nests it numbered (beside existing children it joins their list), and ⇧Tab takes the kind of the list it lands in. On a plain line Tab makes it a bullet, and indents it under the row above when that is a list row (a plain line is never made a parent); at the start of a plain line it starts a list there, as "- " does. ⇧Tab takes the marker off a top-level bullet. |
 | Backspace at the start | First takes the row's bullet off (`unbullet`); a row with children keeps it, and so does a child (`nestedRow`), because a paragraph cannot own an outline or sit under a listItem. Then, if the row above is an empty plain row, that row goes and the caret stays (`removeEmptyAbove`). Otherwise the row's words join the row above, marks and mentions included, the caret where they meet (`joinAbove`, `api.join`, one undo step, #125). An empty row is removed and the caret goes to the end of the row above. None of this reaches past a row with children, an image, a divider, a table, a reference, a draft or a row of another document. |
 | ↑ / ↓ | The previous / next row, keeping the horizontal offset where possible, once the caret is on a row's first / last line (`atEdge`, measured inside the row's padding, so a code block's first and last lines count). The caret walks title → fields → outline (`caretRows()`), and ↑ past the top field reaches the title even when it is read-only or hidden (`focusAbove`, #764); anything that changes what a row belongs to works in `rowsBeside(el)`, the list that row lives in. |
 | ← / → at an edge | The previous / next row. |
@@ -383,12 +391,21 @@ made in Tana into your own calendar ([MEETINGS.md](MEETINGS.md)); people are inv
 ### @ linking
 
 With text selected in a block, "@" opens the search palette with the selection as the query (the "@" is not typed).
-The first row is always `Create "<selected text>"` (⌘↩); below it the results. Enter on a result, or ⌘↩ to create a
+The first row is always `Create "<selected text>"` (⌘↩); below it the results. Create is the highlighted row unless a
+result's title has every typed word at the start of one of its words ("Okafor" highlights Sam Okafor). The empty
+field says "#task or #meeting narrows it", the search's own filters, which the Create title leaves out. Enter on a result, or ⌘↩ to create a
 document with that title, replaces the selection with a mention (`api.setText` with segments) and puts the caret
 after it; Escape leaves the text as it was. "@" at a caret opens the same palette empty (recently viewed first) and
 inserts the chosen mention at the caret. For @ linking the palette is a dropdown (`anchorPalette`): no scrim, a
 440px card at most 360px tall, hanging under the selection or caret, flipped above when there is more room there. An
 Enter pressed while results are still loading is kept and applied when they land.
+
+"#" over a selection makes the thing instead of finding it (`startHashCreate`, renderer/toolbar.js): a dropdown of
+Doc, Task, Meeting and the workspace types (`api.creationOptions`), and the pick creates it titled with the selected
+words and puts its mention in their place. Meeting asks when first, on "/" Meeting's page; nothing is made before.
+
+A person or a meeting mention draws its glyph from its id (`MENTION_KIND_ICON`, renderer/segments.js), so a member
+just linked has it before main resolves the target.
 
 ### Pasting a Tana link
 
@@ -1499,7 +1516,8 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   row's height.
 - **No Details section.** What it listed lives with the page: who it is for and who can see it are the first fields
   under the title, and Open in Tana, Join call and Edit pins are Cmd+K rows under Current node. **Assigned to** (a task) is a mention per
-  person, drawn as a person in any other field is (no chip), or "Unassigned", and opens the assignee picker; **Visible to** (any document with a known audience) is the
+  person, drawn as a person in any other field is (no chip), or "Unassigned", and a click anywhere on it, a person
+  included, opens the assignee picker (where it cannot be edited the people stay links); **Visible to** (any document with a known audience) is the
   audience's glyph with a bubble per person as a list row's subtext has them, "Everyone" or the space's name for those audiences, you as a mention for a private page, one person as a mention drawn as Assigned to draws one (or the audience's words where it names
   nobody), "Anyone with the link" when Tana's link sharing is on, each assignee it shuts out as a dashed "+ Name" pill after who can see it, in a soft rose with the lock left grey — a click shares the page with that person as an editor where the page's own people are its audience and you may change them, and otherwise the pill only says so (`fghost`, issue #622) —, and assigning such a person from the assignee picker asks there and then, as Tana does: "Priya Raman can't see this", with Grant access (the pill's share; Enter), Keep private (or Escape) and Cancel (the assignment taken back), Tana's sentence under them (`openShareAsk`, renderer/access.js) — and opens the visibility picker, on a meeting's
   write-up the event's; a sensitive page, a chat and a saved search have none. Both open on a click, Enter or Space (renderer/fields.js

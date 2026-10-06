@@ -726,7 +726,7 @@ function resultRows(nodes, group) {
   if (field && group === undefined && choiceValues(field).length && fuzzyMatch('Clear value', palInput.value.trim())) rows.push({ group: field.field.label || 'Value', icon: 'none', label: 'Clear value', run: () => writeChoice(field, []) });
   if (!ctx) return rows;
   if (ctx.composer) rows.unshift(...tanaMentionRows(palInput.value.trim(), ctx), ...agentMentionRows(palInput.value.trim(), ctx)); // a chat's "@" can ask Tana itself, or an agent on this device (renderer/chat.js)
-  const title = ctx.text || palInput.value.trim(); // "@" at a caret has no selection: what is typed becomes the new document's title
+  const title = ctx.text || palInput.value.replace(/(^|\s)#\S+/g, ' ').trim(); // "@" at a caret has no selection: what is typed becomes the new document's title, its #filters left out
   if (!title) return rows;
   // words that read as a day ("friday", "12 oct", "tomorrow": parseDay) also offer that date, first, as Tana's "@" does
   const day = parseDay(title);
@@ -1069,10 +1069,11 @@ function searchNow() {
     const nodes = found.map((n, i) => ({ n, i })).sort((a, b) => score.get(b.n).hits - score.get(a.n).hits || score.get(b.n).starts - score.get(a.n).starts || a.i - b.i).map(({ n }) => n);
     palRows = [...resultRows(nodes), ...resultRows(related, 'RELATED').filter((row) => row.node)] // its documents only: the date and Create rows lead once
       .map((row) => (row.node ? { ...row, match: titleHits(row.label ?? '', q) } : row));
-    // Linking: a result is only the obvious choice when its title starts with what was typed. A full-text hit
-    // that merely mentions the words is not, so "Create" stays selected and Enter creates. Words that read as a
-    // day are that date before anything else.
-    const starts = nodes.findIndex((n) => (n.title ?? n.text ?? '').toLowerCase().startsWith(q.toLowerCase()));
+    // Linking: a result is the obvious choice when every typed word begins a word of its title ("Okafor" is Sam
+    // Okafor). A full-text hit that merely mentions the words is not, so "Create" stays selected and Enter creates.
+    // Words that read as a day are that date before anything else.
+    const words = q.split(/\s+/).filter((w) => w && !w.startsWith('#')).length;
+    const starts = words ? nodes.findIndex((n) => titleHits(n.title ?? n.text ?? '', q).starts === words) : -1;
     palIndex = linkCtx && starts >= 0 && !(palRows[0] && palRows[0].date) ? starts + palRows.filter((r) => r.create).length : 0;
     palBusy = false;
     renderPalette();
@@ -1181,7 +1182,8 @@ function togglePalette(mode, link, pin) {
   pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
   // ⌘K over the prompt page leaves it, without assigning
-  showPage(mode, mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command',
+  // "@" says what narrows it: the #filters the search reads (sdk/query.js parseQuery)
+  showPage(mode, mode === 'search' ? (link ? 'Link to… #task or #meeting narrows it' : 'Search Tana') : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command',
     { cmd: { rows: paletteRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;

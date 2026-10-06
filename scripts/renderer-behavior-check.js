@@ -93,6 +93,9 @@ const withShims = (src) => {
   if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
   // the rows a row lives among: its own container's, which in a harness with one container is texts()
   if (/\browsBeside\(/.test(src) && !/const rowsBeside =/.test(src)) src = 'globalThis.rowsBeside ??= (el) => texts();\n' + src;
+  // no full reference is being renamed in a harness unless it says so (renderer/edit.js startRename)
+  if (/\brenamingRef\b/.test(src) && !/let renamingRef/.test(src)) src = 'globalThis.renamingRef ??= null;\n' + src;
+  if (/\breferenceTarget\(/.test(src) && !/const referenceTarget =/.test(src)) src = 'globalThis.referenceTarget ??= (node) => (node && node.type === \'reference\' && node.reference && node.reference.node) || null;\n' + src;
   // the fields container, for the helpers that paint or leave a selection in both places rows live
   if (/\$\('fields'\)/.test(src) && !/const \$ =/.test(src)) src = "globalThis.$ ??= () => ({ contains: () => false, querySelectorAll: () => [], hidden: true });\n" + src;
   // finding a row: in a harness there is one place rows are drawn, so the family answers for the outline alone
@@ -1919,7 +1922,8 @@ async function runSyncShortcutCheck() {
   const full = { kind: 'block', segments: chipSegs, reference: { uri: 'tana:text:t1', node: { id: 'tana:text:t1', title: 'Ship it', done: 1 } } };
   assert.equal(live.liveTarget(full, undefined)?.id, 'tana:text:t1', 'a block whose only content is a mention stands in for that node');
   assert.equal(live.liveTarget(full, { segs: chipSegs })?.id, 'tana:text:t1', 'an edit that is still just the chip leaves it standing in');
-  assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: ' ' }] }), null, 'a space typed after the chip makes it an ordinary line at once, before the save goes out');
+  assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: ' a' }] }), null, 'a word typed after the chip makes it an ordinary line at once, before the save goes out');
+  assert.equal(live.liveTarget(full, { segs: [...chipSegs, { text: ' ' }] })?.id, 'tana:text:t1', 'a space alone does not: Tana writes its own references with one');
   const inline = { kind: 'block', type: 'reference', segments: [{ text: 'Ship it' }], reference: { uri: 'tana:text:t1', node: { id: 'tana:text:t1', title: 'Ship it' } } };
   assert.equal(live.liveTarget(inline, { segs: [{ text: 'Ship it now' }] })?.id, 'tana:text:t1', 'typing in an inline reference edits the target title, so it keeps pointing at it');
   assert.match(source, /const target = gone \|\| field \? null : liveTarget\(node, pending\.get\(item\.key\)\)/,
@@ -2672,9 +2676,10 @@ function runFormattingChecks() {
   ];
   const el = api.blank();
   api.renderSegs(el, segs);
-  assert.deepEqual(plain(api.tags(el)), ['STRONG', 'STRONG', 'EM', 'A.mention', 'S', 'CODE', 'A.link', 'A.url'],
+  assert.deepEqual(plain(api.tags(el)), ['STRONG', 'STRONG', 'EM', 'A.mention', 'SVG', 'SPAN.mlabel', 'S', 'CODE', 'A.link', 'A.url'],
     'every mark renders as its own element, a link mark as an anchor beside the bare-URL one');
-  assert.deepEqual(plain(api.readSegs(el)), segs, 'rendered marks read back as the same segments api.setText takes');
+  // a person says what it is by its id: its glyph is drawn before main has resolved it, and carried back like any icon
+  assert.deepEqual(plain(api.readSegs(el)), segs.map((s) => (s.mention ? { mention: { ...s.mention, icon: 'member' } } : s)), 'rendered marks read back as the same segments api.setText takes');
 
   // A reference written inside a line says what it points at: its target's icon in front of the label (main
   // resolves it, renderer/segments.js draws it), with the label in a span of its own so the underline runs under
@@ -10759,6 +10764,32 @@ async function runNewMeetingChoiceCheck() {
   assert.equal(await api.press([{ kind: 'doc', selectable: true }]), 'create new', 'and so does none at all');
   console.log('ok  New meeting on the Timeline goes where Create new goes when no meeting can be made');
 }
+
+// The editor list of 2026-10-06: "@Okafor" picks Sam Okafor over Create, a goal's mention with a space after it is
+// still a full reference, and a selected reference row's ⌘K task rows act on the task it stands in for.
+async function runEditorFixesCheck() {
+  const api = vm.runInNewContext(`
+    ${functionSource('titleHits')}
+    const oneMention = ${source.match(/const oneMention = ([^\n]*);\n/)[1]};
+    let sel = null, palDoc = null;
+    const rows = new Map(), selKeys = () => [...rows.keys()], items = { get: (k) => rows.get(k) };
+    const isTask = (n) => !!n.task, canEditNode = (n) => !!n && n.editable !== false, referenceTarget = (n) => n.target || null;
+    ${functionSource('taskActionContext')}
+    ({ titleHits, oneMention, tasksFor: (list) => { rows.clear(); list.forEach((item, i) => rows.set('k' + i, item)); return taskActionContext().docs.map((d) => d.id); } });
+  `);
+  const pick = (title, q) => api.titleHits(title, q).starts === q.split(/\s+/).filter(Boolean).length;
+  assert.equal(pick('Sam Okafor', 'Okafor'), true, 'a surname begins a word of the name');
+  assert.equal(pick('Sam Okafor', 'sam oka'), true, 'and every word typed has to');
+  assert.equal(pick('Discuss Sam Okafor', 'kafor'), false, 'inside a word is no obvious choice: Create stays selected');
+  assert.equal(api.oneMention([{ mention: { uri: 'tana:text:x', label: 'Goal' } }, { text: ' ' }]), true, 'a space beside the chip is still one mention');
+  assert.equal(api.oneMention([{ mention: { uri: 'tana:text:x', label: 'Goal' } }, { text: ' and more' }]), false, 'words beside it are not');
+  const task = { id: 'tana:text:task', kind: 'document', task: true };
+  assert.deepEqual(plain(api.tasksFor([{ docId: 'tana:text:page', node: { kind: 'block', id: 'blk', target: task } }])), ['tana:text:task'], 'a selected full reference offers its task');
+  assert.deepEqual(plain(api.tasksFor([{ docId: 'tana:text:page', node: { kind: 'block', id: 'blk' } }])), [], 'a plain row offers none');
+  console.log('ok  editor: @ prefers a name that begins with the words, a mention and a space is a full reference, a selected reference is its task');
+}
+checks.push(runEditorFixesCheck);
+
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

@@ -84,7 +84,8 @@ function assigneeFieldEl(parent) {
   if (meta.assignees.length) { const who = document.createElement('span'); renderSegs(who, meta.assignees.flatMap((uri, i) => [...(i ? [{ text: ', ' }] : []), { mention: { uri, label: memberName(uri), icon: 'member' } }])); el.append(who); }
   if (!meta.assignees.length) { const hint = document.createElement('span'); hint.className = 'fhint'; hint.textContent = 'Unassigned'; el.append(hint); }
   const open = canEditNode(node) && tana.setAssignees ? () => openAssigneePalette(node) : null;
-  el.onclick = (e) => { if (open && !e.target.closest('.mention')) open(); }; // a chip is a link to the person, as anywhere else
+  // the people are the value being chosen, so a click on one opens the picker too; a page you cannot edit keeps them links
+  el.onclick = (e) => { if (!open) return; e.preventDefault(); e.stopPropagation(); open(); };
   el.onkeydown = (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘K and the rest are the document's
     const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';

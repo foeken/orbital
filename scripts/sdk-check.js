@@ -5388,6 +5388,22 @@ async function main() {
     assert.equal(raw()[2].nodeName, 'orderedList');
     assert.equal(read('r4hz3a0b').block, 'numbered');
     assert.deepEqual(read('r4hz3a0b').children.map((n) => n.id), [child], 'a numbered item keeps its children');
+    {
+      // Tab on a numbered row nests it as a numbered row under one with no children yet (beside existing children it
+      // joins their list), and ⇧Tab brings it back numbered; a bullet child outdented beside numbered rows is one too
+      const two = step(() => outline.insertAfter(a, 'r4hz3a0b', 'Two')), three = step(() => outline.insertAfter(a, two, 'Three'));
+      step(() => outline.indent(a, three));
+      assert.equal(read(three).block, 'numbered', 'indented from a numbered list: a numbered child');
+      step(() => outline.outdent(a, three));
+      assert.equal(read(three).block, 'numbered', 'outdented into a numbered list: numbered');
+      step(() => outline.outdent(a, child));
+      assert.equal(read(child).block, 'numbered', 'a bullet child outdented among numbered rows is numbered');
+      step(() => outline.removeMany(a, [two, three]));
+      step(() => outline.indent(a, child));
+      assert.equal(read(child).block, 'numbered', 'and Tab takes it back in as a numbered child');
+      step(() => outline.setBlockType(a, child, 'bullet'));
+      assert.deepEqual(read('r4hz3a0b').children.map((n) => n.id), [child], 'back as it was');
+    }
     step(() => outline.setBlockType(a, 'r4hz3a0b', 'heading1'));
     assert.equal(read('r4hz3a0b').block, 'heading1');
     assert.equal(read('r4hz3a0b').heading, 1);
