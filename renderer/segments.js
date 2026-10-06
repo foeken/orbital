@@ -81,6 +81,7 @@ function demoSegments(segs, identity) {
   });
 }
 const MARK_TAGS = { code: 'code', strike: 's', underline: 'u', italic: 'em', bold: 'strong' }; // innermost first: the order a run is wrapped in
+const MENTION_KIND_ICON = { 'user-profile': 'member', event: 'meeting' }; // the glyph an id's kind alone tells (renderSegs)
 // The caret anchor is a placeholder, not content: readSegs strips it and every offset helper counts it as nothing,
 // so what is stored and what the caret reports are the same with it as without it.
 const CARET_ANCHOR = '\u200b';
@@ -109,11 +110,14 @@ function renderSegs(el, segs, identity) {
     // A mention of a node that is gone keeps its words — that is what was written — but takes the trash glyph, the
     // strike and the plain text colour: it is no longer somewhere to go, and the click is refused as well.
     const gone = markGone(s.mention.uri, s.mention.deleted);
-    const icon = gone ? 'trash' : s.mention.icon || (dayOfUri(s.mention.uri) ? 'today' : undefined);
+    // A person and a meeting say what they are by their id alone, so their glyph does not wait for main to resolve the
+    // target: a member just linked with "@" drew without one until the row was drawn again.
+    const own = s.mention.icon || MENTION_KIND_ICON[(/^tana:([a-z-]+):/.exec(s.mention.uri || '') || [])[1]];
+    const icon = gone ? 'trash' : own || (dayOfUri(s.mention.uri) ? 'today' : undefined);
     if (gone) a.classList.add('gone');
     // dataset.icon is what readSegs carries back, so it stays the kind the target is: the trash glyph belongs to the
     // state the app found it in, not to the mention that was written.
-    if (s.mention.icon) a.dataset.icon = s.mention.icon;
+    if (own) a.dataset.icon = own;
     // its type's colour, the way its row and chip are; carried on the element like the icon so it survives an edit
     if (!gone && s.mention.hue != null) { a.dataset.hue = String(s.mention.hue); a.classList.add('hue'); a.style.setProperty('--hue', String(s.mention.hue)); }
     if (icon) {

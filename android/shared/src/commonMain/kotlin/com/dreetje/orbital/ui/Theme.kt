@@ -85,6 +85,10 @@ object Rail {
     val time = 42.dp
     val marker = 24.dp
     val gap = 10.dp
+    // above the days: no time column, the markers centred under the menu button (the top bar's 4 dp in, then half its
+    // 48 dp button: 28 dp); the iPhone's is under its own (Timeline.swift Rail.left)
+    val left = 17.dp
+    val leftMarker = 22.dp
 }
 
 // the time column as wide as "00:00" is at this phone's font size, the iPhone's 42 at least: at Android's larger

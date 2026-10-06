@@ -59,6 +59,14 @@ onRows('keydown', (e) => {
     else if (mod) return; // ⌘K / ⌘S / ⌘Z … reach the document handler
     return e.preventDefault();
   }
+  if (renamingRef === item.key) { // a full reference being renamed (renderer/edit.js startRename): words only, no structure
+    const vert = (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !mod && !e.shiftKey;
+    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); return endRename(item.key, e.key === 'Escape'); }
+    if (e.key === 'Tab' || (e.key === 'Backspace' && off === 0 && collapsed) || (e.key === 'Delete' && off === len && collapsed)) return e.preventDefault();
+    if (mod && (MARK_KEYS[e.key.toLowerCase()] || (e.shiftKey && e.key.toLowerCase() === 's'))) return e.preventDefault(); // a title holds no marks
+    if (vert && atEdge(el, e.key === 'ArrowUp' ? 'up' : 'down')) { e.preventDefault(); return moveTo(el, e.key === 'ArrowUp' ? -1 : 1, off); }
+    return; // typing, and the ⌘ combos for the document handler
+  }
   if (!canEditItem(item) || opensOnClick(item)) {
     if (isReference(item.node) && canEditStructure(item)) {
       const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? 'up' : 'down';
@@ -110,6 +118,7 @@ onRows('keydown', (e) => {
   else if (e.key === 'Escape') { e.preventDefault(); if (item.node.draft && isDoc) el.textContent = ''; flush(item.key); el.blur(); } // a new document not created yet: Escape throws it away
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); } // multi-select over siblings
   else if (e.key === '@' && (!collapsed || !isDoc)) { const range = collapsed ? [off, off] : selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // a selection links it; a caret in a block inserts a reference there (a title cannot hold one, so "@" is typed)
+  else if (e.key === '#' && !collapsed && !isDoc) { const range = selectionOffsets(el); if (range && startHashCreate(item, el, range)) e.preventDefault(); } // a selection becomes a new task, meeting or type, linked in its place (renderer/toolbar.js)
   else if (combo === hotkeyFor('toggleDone')) { e.preventDefault(); if (isDoc) toggleDone(item); else cycleCheckboxes([item]); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
   else if (e.key === 'Enter' && isDoc && collapsed && (off ?? len) === len && groupDraft(item)) e.preventDefault(); // My Tasks by Responsibility: a new task in this row's section (#548)
@@ -145,6 +154,7 @@ onRows('input', (e) => {
   if (!el) return;
   const item = items.get(keyOfEl(el));
   if (!canEditText(item)) return;
+  if (renamingRef === item.key) return scheduleSave(item, readSegs(el)); // its target's title: no chip to flip, no markdown to read
   // the caret was parked below the fold when the node opened: typing is the moment to scroll to it, once, and
   // "nearest" is the smallest move that shows it (and nothing at all when the row is already on screen)
   if (scrollOnType) { scrollOnType = false; el.scrollIntoView({ block: 'nearest' }); }
@@ -172,7 +182,6 @@ onRows('input', (e) => {
 // leaves the row as it was and only shows the error. Everything else — prose around a url, another host, a broken
 // id, no clipboard text — pastes the browser's way. linkTo is the same path "@" uses, so the surrounding text,
 // the replaced selection and the caret behave exactly as they do there, and the url never lands as text beside it.
-// ponytail: a draft row pastes as text — it has no Tana id yet, so setText has nothing to write to
 onRows('paste', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el || !e.clipboardData || !tana.node) return;
@@ -214,6 +223,7 @@ onRows('paste', (e) => {
 onRows('focusout', (e) => {
   const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));
   if (!item) return;
+  if (renamingRef === item.key) { flush(item.key); renamingRef = null; renderSoon(); return; } // a renamed full reference, left: saved, the chip again
   if (!item.node.draft) flush(item.key);
   else if (item.node.kind === 'document' && el.textContent.trim() && !item.busy) { item.busy = true; materialise(item, el).then(() => renderSoon()); } // left with words: now it is created (#549)
   // left empty by the user: no node is created. Deferred one microtask because during focusout nothing is focused yet,

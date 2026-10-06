@@ -9,15 +9,30 @@ function scheduleSave(item, segs) {
   pending.set(item.key, { item, segs, timer: setTimeout(() => flush(item.key), 400) });
 }
 function dropPending(key) { const p = pending.get(key); if (p) { clearTimeout(p.timer); pending.delete(key); } }
+// Renaming a full reference in place: the row draws its target's title as words (renderer/render.js shown), typing
+// saves that title (flush), and Enter, Escape or leaving the row ends it with the chip back. Nothing is written to the
+// block itself, so the line stays one mention and goes on standing in for the node.
+function startRename(item) {
+  renamingRef = item.key;
+  render(true);
+  placeCaret(item.key);
+}
+function endRename(key, leave) {
+  if (renamingRef !== key) return;
+  flush(key);
+  renamingRef = null;
+  render(true);
+  if (!leave) placeCaret(key); else textEl(key)?.blur();
+}
 function flush(key) {
   const p = pending.get(key);
   if (!p) return;
   dropPending(key);
   const { item, segs } = p, text = plainOf(segs);
   if (!canEditText(item)) return;
-  if (isReference(item.node)) { // the row edits the referenced document's title
+  if (isReference(item.node) || renamingRef === item.key) { // the row edits the referenced document's title (a full reference: while renamed)
     if (text === referenceLabel(item.node)) return;
-    item.node.reference.node.title = text;
+    Object.assign(item.node.reference.node, { title: text, text }); // the label reads .text: the row keeps the new name until Tana's answer lands
     return run(() => tana.setTitle(item.node.reference.uri, text, true)); // true: typed here, already on screen (#265)
   }
   if (text === item.node.text && JSON.stringify(segs) === JSON.stringify(segsOf(item.node))) return;
@@ -42,19 +57,24 @@ function insertAtCaret(el, str) {
   document.execCommand('insertText', false, str); // keeps mention anchors intact and fires 'input'
 }
 // Pasted markdown (#598, looksMarkdown): main writes the rows and marks it describes in one undo step, replacing the
-// selection, and the caret lands where the pasted text ends. A plain line pastes the browser's way, and so does a
-// draft row (no Tana id yet) and a code block, whose text is its content.
+// selection, and the caret lands where the pasted text ends. A plain line pastes the browser's way, and so does a code
+// block, whose text is its content. A draft row (an empty page's only row) has no Tana id yet: it is created first, by
+// the materialise its first typed character would run, and the paste is written into the row it became; left to the
+// browser, the whole paste landed in that one row, markers and all.
 function pasteMarkdown(item, el, text) {
-  if (!looksMarkdown(text) || item.node.draft || blockTypeOf(item.node) === 'code' || !tana.pasteMarkdown) return false;
+  if (!looksMarkdown(text) || blockTypeOf(item.node) === 'code' || !tana.pasteMarkdown) return false;
   const off = caretOffset(el), range = getSelection().isCollapsed ? (off == null ? null : [off, off]) : selectionOffsets(el);
   if (!range) return false;
   const [before, rest] = splitSegs(readSegs(el), range[0]), after = splitSegs(rest, range[1] - range[0])[1];
-  dropPending(item.key); // the paste writes the whole row, what was typed before it included
-  run(async () => {
+  const write = () => run(async () => {
     const at = await tana.pasteMarkdown(item.docId, item.node.id, before, after, text);
     await reload(item.docId); render(true);
     placeCaret(item.docId + '/' + at.id, at.offset);
   });
+  if (!item.node.draft) { dropPending(item.key); write(); return true; } // the paste writes the whole row, what was typed before it included
+  // outside run: materialise queues its own create there, and the paste follows it (a failed create shows its error)
+  item.busy = true;
+  materialise(item, el).then(() => { if (!item.node.draft) write(); }, showError);
   return true;
 }
 

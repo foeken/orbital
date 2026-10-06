@@ -42,7 +42,9 @@ function route(sync) {
 async function openPresence(sync, documentId, { timeout = TIMEOUT_MS, viewing = false } = {}) {
   const store = new EphemeralStore(timeout), handle = new EventEmitter(), me = String(sync.peerId);
   let local = null, refresh = null, beat = null;
-  const room = { onMessage: (data) => { if (data && data.length) store.apply(data); }, onConnected: () => {} };
+  // A frame Loro cannot read (another client's newer encoding, a cut-off message) is dropped: presence is best effort,
+  // and a throw here surfaced as "sync: Failed to decode data: Hit the end of buffer" on selecting text.
+  const room = { onMessage: (data) => { if (data && data.length) try { store.apply(data); } catch { /* unreadable: skipped */ } }, onConnected: () => {} };
   const unsubscribe = store.subscribe((e) => { if (e.by !== 'local') handle.emit('change', { added: e.added, updated: e.updated, removed: e.removed, by: e.by }); });
   const offLocal = store.subscribeLocalUpdates((bytes) => { sync.sendEphemeral(documentId, bytes); });
   // after a reconnect the others no longer have our entry: set it again, which sends it

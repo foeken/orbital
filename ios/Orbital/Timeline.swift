@@ -144,8 +144,9 @@ struct Redacted: TextRenderer {
 }
 
 // The Timeline as the desktop draws it (styles.css .node.tl): the time on the left, a marker on a thin rail that runs
-// the length of the page, what happened to the right. Today's tasks, the free time and Upcoming meetings sit on the same rail above the days,
-// each only when it has something in it. Colour only where it means something (orbital-design, Grey unless colour
+// the length of the page, what happened to the right. Above the days, Today's tasks, the free time and Upcoming meetings
+// sit on a rail of their own with no time column, under the menu button, each only when it has something in it; it
+// curves into the days' rail (Bend), where the times are. Colour only where it means something (orbital-design, Grey unless colour
 // means something): Orbital's green for done, blue for new and for a meeting under way.
 struct TimelineScreen: View {
     let engine: Engine
@@ -154,37 +155,27 @@ struct TimelineScreen: View {
     var body: some View {
         List {
             if hasToday {
-                // one stop on the rail, as the desktop's: Now, the Today glyph, its words, the tasks hanging under them; with none, a
-                // line saying so, as the desktop keeps the block
-                RailRow(time: "Now", railTop: 24, bottom: 0) { Marker(icon: "todayTasks", tone: "new", now: false) } content: { Text("Today's Tasks") }
+                // one stop on the rail: the Today glyph, its words, the tasks hanging under them; with none, a line saying so
+                RailRow(time: nil, railTop: 24, bottom: 0) { Marker(icon: "todayTasks", tone: "new", now: false) } content: { Text("Today's Tasks") }
                 if today.isEmpty {
-                    RailRow(time: "", top: 30, bottom: 16) { Color.clear.frame(height: 1) } content: { // as much room under it as over it (measured)
+                    RailRow(time: nil, top: 30, bottom: 16) { Color.clear.frame(height: 1) } content: { // as much room under it as over it (measured)
                         Text("Nothing pinned to today. Long-press a task to pin it.").font(.subheadline).foregroundStyle(.secondary)
                     }
                 } else {
-                    TaskLines(tasks: today, engine: engine)
+                    TaskLines(tasks: today, engine: engine, left: true)
                 }
             }
-            // as the desktop has it: the free time, then one stop for the meetings still to come, each hanging under it like
-            // a task, its start time on its right (the rail's own time column says only Now)
-            if let free { FreeLine(free: free, time: hasToday ? "" : "Now", bottom: upcoming.isEmpty ? 0 : 14) } // flush on the line under it, as the last meeting is
+            // the free time, then one stop for the meetings still to come, each hanging under it like a task
+            if let free { FreeLine(free: free, time: nil, bottom: upcoming.isEmpty ? 0 : 14, railTop: hasToday ? 0 : 24) }
             if !upcoming.isEmpty {
-                RailRow(time: "", top: 14, bottom: 0) { Marker(icon: "meeting", tone: nil, now: false) } content: { Text("Upcoming meetings") }
-                // the last one as far from the line under it as the first is from the heading (measured)
-                ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, m in Meeting(row: m, engine: engine, top: i == 0 ? 28 : 14, bottom: 0) }
+                RailRow(time: nil, railTop: hasToday || free != nil ? 0 : 24, top: 14, bottom: 0) { Marker(icon: "meeting", tone: nil, now: false) } content: { Text("Upcoming meetings") }
+                ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, m in Meeting(row: m, engine: engine, top: i == 0 ? 28 : 14, bottom: 0, left: true) }
             }
-            if !upcoming.isEmpty || free != nil {
-                // a line across under what is still to come, before what has happened
-                if !days.isEmpty {
-                    Color(.separator).frame(maxWidth: .infinity).frame(height: 1) // a List row lays a Divider out upright
-                        .padding(.top, 28).padding(.bottom, 19) // as far from what is above as from the day under it (measured)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .accessibilityHidden(true)
-                }
-            }
-            ForEach(days, id: \.0) { title, rows in
-                Heading(title: title)
+            // what is still to come curves into what has happened, and the first day's heading is a stop where it lands
+            if hasTop && !days.isEmpty { Bend() }
+            ForEach(Array(days.enumerated()), id: \.element.0) { d, day in
+                let (title, rows) = day
+                if d == 0 && hasTop { Junction(title: title) } else { Heading(title: title) }
                 ForEach(rows) { row in
                     Entry(row: row, engine: engine)
                     TaskLines(tasks: row.children ?? [], engine: engine)
@@ -244,6 +235,7 @@ struct TimelineScreen: View {
     // connecting and the first read are one build (Building)
     private var building: Bool { engine.rows.isEmpty && (engine.loading || engine.phase == .starting) }
     private var hasToday: Bool { engine.rows.contains { $0.timeline?.today == true } }
+    private var hasTop: Bool { hasToday || free != nil || !upcoming.isEmpty }
     private var today: [Row] { engine.shown(engine.rows.first { $0.timeline?.today == true }?.children).filter { !engine.unpinned.contains($0.id) } }
     private var upcoming: [Row] { engine.shown(engine.rows.first { $0.timeline?.upcoming == true }?.children) }
     private var free: Row.Free? { engine.rows.first { $0.timeline?.free != nil }?.timeline?.free }
@@ -268,6 +260,41 @@ struct Heading: View {
     }
 }
 
+// Where the rail above the days curves into the days' rail: one S, 64 pt tall
+struct Bend: View {
+    var body: some View {
+        Color.clear.frame(height: 64)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(BendShape().stroke(Color(.separator), lineWidth: 1))
+            .accessibilityHidden(true)
+    }
+}
+
+struct BendShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        // vertical at both ends, so it leaves one line and joins the other without a corner
+        let a = Rail.leftLine + 0.5, b = Rail.inset + Rail.line + 0.5, h = rect.height
+        var p = Path()
+        p.move(to: CGPoint(x: a, y: 0))
+        p.addCurve(to: CGPoint(x: b, y: h), control1: CGPoint(x: a, y: h * 0.55), control2: CGPoint(x: b, y: h * 0.45))
+        return p
+    }
+}
+
+// The first day's heading where the bend lands: a stop on the days' rail, a small ring for its marker
+struct Junction: View {
+    let title: String
+    var body: some View {
+        RailRow(time: "", top: 0, bottom: 2) {
+            Circle().fill(Color(.systemBackground)).overlay(Circle().strokeBorder(.tertiary, lineWidth: 1.5)).frame(width: 11, height: 11)
+                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+        } content: {
+            Text(title).font(.headline).foregroundStyle(.secondary).accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
 // The rail's geometry: the time column, the marker's column, and where the line runs (through the markers' middle)
 enum Rail {
     static let inset: CGFloat = 12
@@ -275,12 +302,17 @@ enum Rail {
     static let marker: CGFloat = 24
     static let gap: CGFloat = 10
     static let line = time + gap + marker / 2 - 0.5
+    // above the days: no time column, the markers centred under the menu button (37.7 pt in, measured); Android's is
+    // under its own (Theme.kt Rail.left)
+    static let left: CGFloat = 27
+    static let leftMarker: CGFloat = 22
+    static let leftLine = left + leftMarker / 2 - 0.5
 }
 
 // One stop on the rail. The line is the row's background, which fills the whole row, so each row's piece meets the
 // next and the rail reads as one line down the section; rows carry no separators.
 struct RailRow<Dot: View, Content: View>: View {
-    let time: String
+    let time: String? // the time, or nothing; nil: above the days, no time column and the rail under the menu button
     var railTop: CGFloat = 0 // where the line starts: the first stop's starts at its marker, as the desktop's does
     var top: CGFloat = 14, bottom: CGFloat = 14 // room above and below; an entry's tasks are rows of their own (TaskLines)
     @ViewBuilder let marker: Dot
@@ -288,16 +320,16 @@ struct RailRow<Dot: View, Content: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Rail.gap) {
-            Text(time).font(.footnote).monospacedDigit().foregroundStyle(.secondary).frame(width: Rail.time, alignment: .trailing)
-            marker.frame(width: Rail.marker)
+            if let time { Text(time).font(.footnote).monospacedDigit().foregroundStyle(.secondary).frame(width: Rail.time, alignment: .trailing) }
+            marker.frame(width: time == nil ? Rail.leftMarker : Rail.marker)
             content.frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.top, top)
         .padding(.bottom, bottom)
         .contentShape(Rectangle())
-        .listRowInsets(EdgeInsets(top: 0, leading: Rail.inset, bottom: 0, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 0, leading: time == nil ? Rail.left : Rail.inset, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
-        .listRowBackground(HStack(spacing: 0) { Color.clear.frame(width: Rail.inset + Rail.line); Color(.separator).frame(width: 1).padding(.top, railTop); Spacer(minLength: 0) })
+        .listRowBackground(HStack(spacing: 0) { Color.clear.frame(width: time == nil ? Rail.leftLine : Rail.inset + Rail.line); Color(.separator).frame(width: 1).padding(.top, railTop); Spacer(minLength: 0) })
     }
 }
 
@@ -368,11 +400,12 @@ struct TaskBox: View {
 struct TaskLines: View {
     let tasks: [Row]
     let engine: Engine
+    var left = false // above the days
 
     var body: some View {
         let tasks = engine.shown(tasks)
         ForEach(Array(tasks.enumerated()), id: \.element.id) { i, task in
-            TaskLine(task: task, engine: engine, top: i == 0 ? 30 : 16, bottom: i == tasks.count - 1 ? 16 : 0)
+            TaskLine(task: task, engine: engine, top: i == 0 ? 30 : 16, bottom: i == tasks.count - 1 ? 16 : 0, left: left)
         }
     }
 }
@@ -382,10 +415,11 @@ struct TaskLine: View {
     let engine: Engine
     let top: CGFloat
     let bottom: CGFloat
+    var left = false
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        RailRow(time: "", top: top, bottom: bottom) { Color.clear.frame(height: 1) } content: {
+        RailRow(time: left ? nil : "", top: top, bottom: bottom) { Color.clear.frame(height: 1) } content: {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 TaskBox(task: task, engine: engine)
                 Button { openURL.zoom(task.id) } label: { TaskWords(row: task, engine: engine).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
@@ -449,10 +483,11 @@ struct Meeting: View {
     let engine: Engine
     let top: CGFloat
     let bottom: CGFloat
+    var left = false // above the days
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        RailRow(time: "", top: top, bottom: bottom) { Color.clear.frame(height: 1) } content: {
+        RailRow(time: left ? nil : "", top: top, bottom: bottom) { Color.clear.frame(height: 1) } content: {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 // a calendar, or a route for Travel (main/timeline.js meetingIcon)
                 Image(row.icon == "pinRoute" ? "Glyphs/pinRoute" : "Glyphs/calendar").resizable().frame(width: 18, height: 18).foregroundStyle(.secondary)
@@ -480,11 +515,12 @@ struct Meeting: View {
 // The free time before the next meeting, counted down while it shows (renderer/timeline.js timelineFreeSegs)
 struct FreeLine: View {
     let free: Row.Free
-    var time = "Now"
+    var time: String? = "Now"
     var bottom: CGFloat = 14
+    var railTop: CGFloat = 0
 
     var body: some View {
-        RailRow(time: time, bottom: bottom) { Marker(icon: "free", tone: "new", now: false) } content: {
+        RailRow(time: time, railTop: railTop, bottom: bottom) { Marker(icon: "free", tone: "new", now: false) } content: {
             TimelineView(.periodic(from: .now, by: 15)) { context in Text(Self.text(free, now: context.date)).foregroundStyle(.secondary) }
         }
     }

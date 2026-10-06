@@ -21,11 +21,12 @@ The full edge vocabulary is in the descriptors: LINKS_TO, CREATED_IN, BELONGS_TO
 INSTANCE_OF, ASSIGNED_TO, SUBTASK_OF, PART_OF_WORKFLOW, HAS_PROPOSAL, CREATED_BY, EDITED_BY,
 UPDATED_IN, USES_AGENT, HAS_PIN, ATTENDEE_OF, ATTENDED, PROPOSES_CHANGE_TO, COMMENTS_ON.
 
-`main/related.js related(id)` returns `{ summary, tagline, call?, summaryUri, fields[], definitions?, pinHub?, pinned[], outcomes[], proposals[], notes[], backlinks[], changes[] }`
+`main/related.js related(id)` returns `{ summary, tagline, call?, summaryUri, fields[], definitions?, pinHub?, hubKind, pinned[], outcomes[], proposals[], notes[], backlinks[], changes[] }`
 for any node, so the same call works for documents that pin things or own documents, not only meetings. `fields`
 is the zoomed node's own typed fields, not the meeting hub's; `call` is the event's own join link (`{ url, label }`,
 the first http(s) url in the calendar location, else `calendarEvent.actionUrl`); `pinHub` is the event or space a
-new pin would go to, present only when this user may write it.
+new pin would go to, present only when this user may write it; `hubKind` is the kind of the hub `pinned` was read
+from, and `event` puts those pins under the meeting's title (Pinned, after Attendees) instead of the Graph pane.
 `scripts/platform-cli.js edges <id>` dumps both directions for exploring this by hand.
 
 ## Which document is the summary
@@ -188,6 +189,32 @@ notes on a real meeting where you are an attendee, the notes were pinned on the 
 admin alone, and read back so in a fresh session; asked again, nothing more was written.
 `ifMissing` lines in the sync checks; scripts/flow-check.js, "type under a meeting") cover the rest with a second user,
 a second machine, independent Loro documents and a fake Tana whose graph answers only what it has indexed.
+
+## Notes about a person
+
+A member's page (`tana:user-profile:`, reached from an @ mention, ⌘S or a member row) has the same editor: your private
+notes about them, made, confirmed and checked by the same code as a meeting's (main/meeting-notes.js, with the person
+where the meeting was), so everything above holds for them — nothing written by opening, made on the first word,
+private before a word is written, shared by you kept and said, every write checked again, per account. Tana has no
+private-notes-about-someone concept either: its People page opens what you share *with* a person, and its "+" there
+makes a meeting, note, task or chat with them as a participant. So where a meeting's notes hang differs:
+
+| What | A person's notes | Why |
+|------|------------------|-----|
+| owner | none: in your Library | a profile owns nothing and takes no pins; a note owned by anything is not one of these |
+| pinned | nowhere | the same |
+| the person | never a participant, never mentioned | the reference row is a link to their page (`/o/<org>/u/<id>`, `webLink`), not an @ mention, which adds an edge and could reach them |
+| found again | `tana:text:` + `createDeterministicId` of `orbital:person-notes:<you>:<person>:<place>`, place 0 to 3 | never one of a meeting's places |
+| marked | root `ext:orbital:notes`, key `person` = the profile | a meeting's key is `meeting` |
+| named | "Private notes · <their name>", their first row "Open their profile in Tana" | |
+| for whom | a profile Tana's graph lists (`userProfile` on its row); anything else gets none | read before anything is made (`personOf`) |
+
+**Live proof** (`node scripts/platform-cli.js personnotes [<user-profile id>]`, escalated, 2026-10-06; notes about
+yourself by default, so nobody else is involved, deleted at the end): opening wrote nothing; the first words made
+"Private notes · <name>" at place 0, Tana's row owned by nothing, restricted, your grant alone as admin, made by you, no
+link sharing; the owner chain the note alone, restricted; marked with the person; the first row a link to their page
+and no mention; said to be only yours; found again. Each is asserted. The offline checks ("notes about a person",
+scripts/sdk-check.js; "write private notes about a person", scripts/flow-check.js) cover the rest.
 
 ## Typed fields
 

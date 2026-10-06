@@ -194,7 +194,8 @@ function toggleRailSection(label) {
 }
 function railGroups(data) {
   return data ? [
-    ['Pinned', data.pinned || [], data.pinHub],
+    // a meeting's pins are listed under its title (renderer/fields.js pinnedFieldEl), a space's here
+    ...(data.hubKind === 'event' ? [] : [['Pinned', data.pinned || [], data.pinHub]]),
     ['Outcomes', data.outcomes],
     ['Proposals', data.proposals],
     ['References', data.notes],
