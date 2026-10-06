@@ -48,18 +48,28 @@ android_checks() {
 
 # iPhone: the UI tests on this checkout's simulator (name, above), made once on the newest iOS runtime as its first iPhone
 # and reused: two checkouts testing at once on one shared iPhone killed each other's tests ("Test crashed with signal
-# kill"). The tests run on three copies of it at once, which Xcode makes for the run and deletes after. Its build output
-# stays in the checkout (ios/.derived), so both go with it.
+# kill"). Built once, then tested twice: all but the widgets on two copies of it at once, which Xcode makes for the run
+# and deletes after (three were slower than two, each test waiting on the others), and WidgetTests on the simulator
+# itself, which keeps Orbital installed between runs: a copy is made fresh each run, and a fresh simulator's widget
+# gallery took minutes to list Orbital. Its build output stays in the checkout (ios/.derived), so both go with it.
+# Signed ad hoc (-, no certificate needed): the simulator then has the entitlements, and the widgets the Keychain group
+# the app leaves what they show in, so WidgetTests runs to the end instead of skipping. No diagnostics on a failure:
+# Xcode's sysdiagnose of the simulator held a failed run for ten minutes after its last test.
 ios_checks() {
   # Xcode's own components, CoreSimulator among them, come with its first launch; without them no simulator starts
   xcodebuild -checkFirstLaunchStatus || { echo "phones: Xcode needs its first-launch install: sudo xcodebuild -runFirstLaunch"; return 1; }
   sim=$(xcrun simctl list devices available -j | NAME="$name" node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices; const rt=Object.keys(d).filter(k=>k.includes('iOS')).sort().reverse()[0]; const mine=d[rt].find(x=>x.name===process.env.NAME); console.log(mine ? mine.udid : 'new '+d[rt].find(x=>x.name.startsWith('iPhone')).deviceTypeIdentifier+' '+rt)")
   case "$sim" in new\ *) set -- $sim; sim=$(xcrun simctl create "$name" "$2" "$3"); echo "phones: made the simulator $name";; esac
-  (cd ios && xcodebuild test -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$sim" -derivedDataPath .derived \
-    -parallel-testing-enabled YES -parallel-testing-worker-count 3 \
-    -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300 \
-    -retry-tests-on-failure -test-iterations 2 \
-    CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO -quiet)
+  cd ios
+  set -- -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$sim" -derivedDataPath .derived -quiet
+  xcodebuild build-for-testing "$@" CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual COMPILER_INDEX_STORE_ENABLE=NO || { cd ..; return 1; }
+  set -- "$@" -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300 \
+    -retry-tests-on-failure -test-iterations 2 -collect-test-diagnostics never
+  status=0
+  xcodebuild test-without-building "$@" -parallel-testing-enabled YES -parallel-testing-worker-count 2 -skip-testing:OrbitalUITests/WidgetTests || status=$?
+  [ "$status" != 0 ] || xcodebuild test-without-building "$@" -parallel-testing-enabled NO -only-testing:OrbitalUITests/WidgetTests || status=$?
+  cd ..
+  return "$status"
 }
 
 # One phone, or both one after the other: at once, the emulator, Gradle and the simulator copies starved each other

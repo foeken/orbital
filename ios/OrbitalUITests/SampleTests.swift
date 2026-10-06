@@ -302,7 +302,11 @@ final class SampleSettingsTests: SampleCase {
         XCUIDevice.shared.orientation = .landscapeRight
         XCTAssert(app.buttons["Ask Tana"].exists)
 
-        app.buttons["Quick Add Task"].tap()
+        // just after the turn the bar is still being laid out, and its + had no point to tap ("hit point {-1, -1}"): the
+        // tap went nowhere and Quick Add never came
+        let add = app.buttons["Quick Add Task"]
+        _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: add)], timeout: 5)
+        add.tap()
         let quickAdd = app.navigationBars["Quick Add"]
         XCTAssert(quickAdd.waitForExistence(timeout: 15))
         let title = app.textFields["New task"]
@@ -326,10 +330,11 @@ final class SampleSettingsTests: SampleCase {
     func testSettingsShowSensitiveItems() {
         launch(["-settings"])
         let show = app.switches["Show sensitive items"]
-        XCTAssert(show.waitForExistence(timeout: 5))
+        XCTAssert(show.waitForExistence(timeout: 15))
         show.switches.firstMatch.tap()
+        wait(show, value: "1") // on before Settings closes: with simulators testing at once, 5 s was once not enough
         app.buttons["Close"].tap()
-        XCTAssert(app.buttons.matching(NSPredicate(format: "label CONTAINS 'offsite agenda'")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssert(app.buttons.matching(NSPredicate(format: "label CONTAINS 'offsite agenda'")).firstMatch.waitForExistence(timeout: 15))
     }
 
     // Settings' Agents has Connect your personal agent (Agents.swift): the ? beside Add both plugins opens the help with
