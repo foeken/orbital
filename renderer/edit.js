@@ -42,19 +42,24 @@ function insertAtCaret(el, str) {
   document.execCommand('insertText', false, str); // keeps mention anchors intact and fires 'input'
 }
 // Pasted markdown (#598, looksMarkdown): main writes the rows and marks it describes in one undo step, replacing the
-// selection, and the caret lands where the pasted text ends. A plain line pastes the browser's way, and so does a
-// draft row (no Tana id yet) and a code block, whose text is its content.
+// selection, and the caret lands where the pasted text ends. A plain line pastes the browser's way, and so does a code
+// block, whose text is its content. A draft row (an empty page's only row) has no Tana id yet: it is created first, by
+// the materialise its first typed character would run, and the paste is written into the row it became; left to the
+// browser, the whole paste landed in that one row, markers and all.
 function pasteMarkdown(item, el, text) {
-  if (!looksMarkdown(text) || item.node.draft || blockTypeOf(item.node) === 'code' || !tana.pasteMarkdown) return false;
+  if (!looksMarkdown(text) || blockTypeOf(item.node) === 'code' || !tana.pasteMarkdown) return false;
   const off = caretOffset(el), range = getSelection().isCollapsed ? (off == null ? null : [off, off]) : selectionOffsets(el);
   if (!range) return false;
   const [before, rest] = splitSegs(readSegs(el), range[0]), after = splitSegs(rest, range[1] - range[0])[1];
-  dropPending(item.key); // the paste writes the whole row, what was typed before it included
-  run(async () => {
+  const write = () => run(async () => {
     const at = await tana.pasteMarkdown(item.docId, item.node.id, before, after, text);
     await reload(item.docId); render(true);
     placeCaret(item.docId + '/' + at.id, at.offset);
   });
+  if (!item.node.draft) { dropPending(item.key); write(); return true; } // the paste writes the whole row, what was typed before it included
+  // outside run: materialise queues its own create there, and the paste follows it (a failed create shows its error)
+  item.busy = true;
+  materialise(item, el).then(() => { if (!item.node.draft) write(); }, showError);
   return true;
 }
 

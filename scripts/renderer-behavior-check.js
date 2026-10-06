@@ -10395,8 +10395,11 @@ checks.push(async function runMarkdownCheck() {
     const dropPending = (key) => calls.push(['drop', key]), run = (fn) => fn(), reload = async () => {}, render = () => {};
     const placeCaret = (key, at) => calls.push(['caret', key, at]);
     const tana = { pasteMarkdown: async (...args) => { calls.push(['paste', ...args]); return { id: 'new', offset: 3 }; } };
+    const showError = (e) => calls.push(['error', e.message]);
+    let createFails = false;
+    const materialise = async (it) => { calls.push(['create', it.key]); if (createFails) { it.busy = false; return; } it.key = 'doc/made'; it.node = { id: 'made', kind: 'block', block: 'paragraph' }; delete it.busy; };
     ${functionSource('pasteMarkdown')}
-    ({ typedMark, lineMarker, looksMarkdown, calls, item, paste: async (text, range) => { calls.length = 0; collapsed = !range; sel = range || null; const took = pasteMarkdown(item, el, text); for (let i = 0; i < 5; i++) await Promise.resolve(); return took; } });
+    ({ typedMark, lineMarker, looksMarkdown, calls, item, failCreate: (v) => { createFails = v; }, paste: async (text, range, it = item) => { calls.length = 0; collapsed = !range; sel = range || null; const took = pasteMarkdown(it, el, text); for (let i = 0; i < 8; i++) await Promise.resolve(); return took; } });
   `);
   const typed = (text, off = text.length) => plain(api.typedMark([{ text }], off));
   assert.deepEqual(typed('a **b**'), { segs: [{ text: 'a ' }, { text: 'b', marks: { bold: true } }], caret: 3 }, '**b** is bold the moment it closes');
@@ -10412,6 +10415,15 @@ checks.push(async function runMarkdownCheck() {
   assert.equal(await api.paste('- a\n- b', [1, 3]), true, 'markdown is taken over');
   assert.deepEqual(plain(api.calls), [['drop', 'doc/row'], ['paste', 'doc', 'row', [{ text: 'a' }], [{ text: 'd', marks: { bold: true } }], '- a\n- b'], ['caret', 'doc/new', 3]],
     'the selection is replaced, the words either side go along with their marks, and the caret lands where main says');
+  // An empty page's only row is a draft with no Tana id: it is created first, and the paste written into it (left to
+  // the browser, the whole paste landed in that one row, "**" and "1." included).
+  const draft = () => ({ key: 'doc/draft:x', docId: 'doc', node: { id: 'draft:x', kind: 'block', block: 'paragraph', draft: true } });
+  assert.equal(await api.paste('**Goals**\n1. one\n   - under', null, draft()), true, 'markdown pasted into a draft row is taken over');
+  assert.deepEqual(plain(api.calls).map((c) => c.slice(0, 3)), [['create', 'doc/draft:x'], ['paste', 'doc', 'made'], ['caret', 'doc/new', 3]], 'the row is created, then the paste is written into it');
+  api.failCreate(true);
+  await api.paste('- a\n- b', null, draft());
+  assert.deepEqual(plain(api.calls), [['create', 'doc/draft:x']], 'a create that fails writes nothing (materialise shows its own error)');
+  api.failCreate(false);
   api.item.node.block = 'code';
   assert.equal(await api.paste('- a\n- b'), false, 'a code block takes a paste as its text');
   console.log('ok  markdown in the editor: typed marks and line markers, and pastes read as markdown');
