@@ -308,8 +308,9 @@ function startHashCreate(item, el, [start, end]) {
   const rects = getSelection().rangeCount ? getSelection().getRangeAt(0).getClientRects() : [];
   const link = { item, segs, start, end, back: () => open() };
   const open = () => {
+    // anchored first, as "@" is (togglePalette): a dropdown at its words, not a card over the whole window (coverWindow)
+    anchorPalette(rects.length ? { left: rects[0].left, top: rects[0].top, bottom: rects[rects.length - 1].bottom } : null);
     openPage('hashCreate', 'Make “' + title + '” a…', { rows: (q) => hashRows(link, title, q) });
-    if (rects.length) anchorPalette({ left: rects[0].left, top: rects[0].top, bottom: rects[rects.length - 1].bottom });
     loadCreationChoices();
   };
   open();
