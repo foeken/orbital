@@ -1067,6 +1067,60 @@ async function main() {
     settings.set('openaiApiKey',undefined); settings.reset();
     console.log('ok  discuss suggestion: nothing sent without a key or a title, model and effort are settings, and only a name comes back');
   }
+  // The Decisions API experiment (main/decisions.js, its flag main/flags.js): off until switched on, on this Mac only,
+  // and only with an API key. Each feature's question goes as decisions, and comes back in main/ai.js's own shape.
+  {
+    const decisions=require('../main/decisions'), flags=require('../main/flags'), settings=require('../main/settings'), cache=require('../db');
+    cache.open(':memory:'); settings.reset();
+    const calls=[];
+    const decided=(answers)=>async(url,init)=>{const body=JSON.parse(init.body);calls.push({url,body,auth:init.headers.authorization});return {ok:true,status:200,json:async()=>({answers:typeof answers==='function'?answers(body):answers})};};
+    assert.equal(decisions.usable(),false,'off until switched on');
+    assert.throws(()=>flags.set('nope',true),/No feature flag/);
+    assert.throws(()=>flags.set('decisions','yes'),/No feature flag/,'a flag is on or off, nothing else');
+    flags.set('decisions',true);
+    assert.equal(decisions.usable(),false,'on, but with no API key there is nothing to send with: every feature keeps main/ai.js');
+    assert.equal(flags.list().find((f)=>f.id==='decisions').hint,'Needs an OpenAI API key','and Cmd+K says so');
+    await assert.rejects(decisions.suggestSensitive([{id:'tana:text:'+'a'.repeat(26),text:'Salary review'}],decided([])),/feature flag/);
+    assert.equal(calls.length,0);
+    settings.set('openaiApiKey','sk-local-only');
+    assert.equal(decisions.usable(),true);
+    assert.equal(settings.isSynced('featureFlags'),false,'a flag stays on this Mac, beside the key');
+    // Auto-pick type: one choice, every type numbered with its own words, the odds read back as classifyType gives them
+    const doc={title:'Postgres over Mongo',text:'Agreed: we use Postgres',current:'tana:type:b',types:[{uri:'tana:type:a',title:'Decision Record',instructions:'Return exactly one decision'},{uri:'tana:type:b',title:'Project',description:'A piece of work with an end'}]};
+    const typed=await decisions.classifyType(doc,decided([{type:'choice',name:'type',choice:'1',probabilities:[{value:'1',probability:0.85},{value:'2',probability:0.05},{value:'none',probability:0.1}]}]));
+    assert.deepEqual([typed.current,typed.choices.map((c)=>[c.uri,Math.round(c.p*100)])],['tana:type:b',[['tana:type:a',85],[null,10],['tana:type:b',5]]],'every option with its odds, No type among them, most likely first');
+    const asked=calls.at(-1), q=asked.body.questions[0];
+    assert.deepEqual([asked.url,asked.auth,asked.body.model,q.type,q.choices.map((c)=>c.value)],[decisions.ENDPOINT,'Bearer sk-local-only','gpt-6-luna','choice',['1','2','none']]);
+    assert.ok(q.choices[0].description.includes('Return exactly one decision') && q.choices[1].description.includes('A piece of work') && asked.body.input.includes('Agreed: we use Postgres'),'each type described by its own words, the document as the input');
+    await assert.rejects(decisions.classifyType(doc,async()=>({ok:false,status:401,json:async()=>({})})),/401: check the API key/);
+    // Discuss with: the title's own runs of words to choose from, or nobody
+    assert.equal(await decisions.suggestDiscussWith('Budget: discuss with Stan and Peter',decided([{type:'choice',name:'who',choice:'Stan and Peter'}])),'Stan and Peter');
+    const runs=calls.at(-1).body.questions[0].choices.map((c)=>c.value);
+    assert.ok(runs.includes('Budget') && runs.includes('Stan and Peter') && !runs.includes('Budget:'),'runs of one to four words, their edges trimmed');
+    assert.equal(runs.at(-1),'(nobody)');
+    assert.equal(await decisions.suggestDiscussWith('Plan the offsite',decided([{type:'choice',name:'who',choice:'(nobody)'}])),null,'a title naming nobody suggests nobody');
+    const sent=calls.length;
+    assert.equal(await decisions.suggestDiscussWith('   ',decided([])),null);
+    assert.equal(calls.length,sent,'an empty title sends nothing');
+    // Auto-translate's language check: a question per text, read back as main/ai.js detectLanguages answers
+    assert.deepEqual(await decisions.detectLanguages(['Terugblik offsite','Review the contract','Martijn - Andre'],decided([{name:'t0',choice:'nl',probabilities:[{value:'nl',probability:0.9}]},{name:'t1',choice:'en',probabilities:[{value:'en',probability:0.97}]},{name:'t2',choice:'none',probabilities:[]}])),
+      [{lang:'nl',p:0.9},{lang:'en',p:0.97},null],'names alone are in no language');
+    const before=calls.length;
+    const lots=await decisions.detectLanguages(Array.from({length:250},(_,i)=>'text '+i),decided((body)=>body.questions.map((x)=>({name:x.name,choice:'en',probabilities:[{value:'en',probability:1}]}))));
+    assert.deepEqual([calls.length-before,calls.at(-2).body.questions.length,lots.length,lots.every(Boolean)],[2,200,250,true],'200 questions a request: more go as another, answered by name');
+    // Icons: 255 choices a question, so the best of each part, then the best of those
+    const labels=Array.from({length:300},(_,i)=>'icon'+i);
+    assert.deepEqual(await decisions.pickTypeIcons([{uri:'tana:type:a',title:'Meeting'}],labels,decided((body)=>body.questions.map((x)=>({type:'choice',name:x.name,choice:x.choices.at(-1).value})))),{'tana:type:a':'icon299'});
+    assert.deepEqual(calls.slice(-2).map((c)=>c.body.questions.map((x)=>x.choices.length)),[[255,45],[2]]);
+    // Suggest sensitive marks: a predicate per document that has words; nothing else goes
+    const DOC='tana:text:'+'a'.repeat(26);
+    assert.deepEqual(await decisions.suggestSensitive([{id:DOC,text:'Salary review Jan'},{id:'orbital:timeline',text:'Timeline'},{id:'tana:text:'+'b'.repeat(26),text:'  '}],decided([{type:'predicate',name:'n0',probability:0.93}])),[{id:DOC,p:0.93}]);
+    assert.deepEqual(calls.at(-1).body.questions.map((x)=>x.type),['predicate']);
+    flags.set('decisions',false);
+    assert.equal(decisions.usable(),false,'and off again');
+    settings.set('openaiApiKey',undefined); settings.set('featureFlags',undefined); settings.reset();
+    console.log('ok  decisions API flag: off by default and without a key; types, Discuss with, languages, icons and sensitive marks as decisions');
+  }
   // Edit meeting details and "/" Meeting's when page (#758): the model transcribes the words into a strict shape, and
   // main/meetings.js resolveTime decides what they come to, the same way every time, in the meeting's own time zone.
   {

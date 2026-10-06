@@ -12,6 +12,11 @@ const { isId } = require('./sdk/ids');
 const updater = require('./updater');
 const agents = require('./main/agents');
 const ai = require('./main/ai');
+// The Decisions API experiment (main/decisions.js): while its feature flag is on with an API key, the questions with a
+// fixed set of answers go to it instead of main/ai.js. Every switch is one of these two lines' callers.
+const decisions = require('./main/decisions');
+const viaDecisions = (name) => (decisions.usable() ? decisions[name] : ai[name]);
+const detectVia = () => (decisions.usable() ? { detect: decisions.detectLanguages } : {}); // Auto-translate's language check
 const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { webLink, accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, mut, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
@@ -52,7 +57,7 @@ function keepHome(wc) {
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
 // sent to the other pages; plus outline:children, which routes between several modules.
-for (const m of [require('./main/documents'), agents, require('./main/chatagents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/meeting-notes'), require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, updater]) {
+for (const m of [require('./main/documents'), agents, require('./main/chatagents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/meeting-notes'), require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, require('./main/flags'), decisions, updater]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -492,20 +497,20 @@ async function autoTypeIcons() {
     // at a time, each read released by the on-demand sweep like any other (main/related.js fieldDefs).
     const fields = [];
     for (const t of types) for (const d of await fieldDefs(t.uri)) if ((d.title || '').trim()) fields.push({ uri: t.uri + '?attribute=' + d.key, title: t.title + ' › ' + d.title });
-    const added = await icons.fillTypeIcons([...types, ...fields], (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, userData));
+    const added = await icons.fillTypeIcons([...types, ...fields], (missing, labels) => viaDecisions('pickTypeIcons')(missing, labels, globalThis.fetch, userData));
     if (added) { await refresh({ after: true }); send('outline:changed', null); tellSidebars(); }
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
 ai.onSignedIn = autoTypeIcons; // and a ChatGPT sign-in the same
 ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(pageOf(e)); return stored; });
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
-ipcMain.handle('ai:translate', (_e, texts, to, opts) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'), { local: !!(opts && opts.local) })); // a note shown in English, never saved (renderer/translate.js); local: this Mac's answers only
-ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
+ipcMain.handle('ai:translate', (_e, texts, to, opts) => ai.translate(texts, to, globalThis.fetch, app.getPath('userData'), { local: !!(opts && opts.local), ...detectVia() })); // a note shown in English, never saved (renderer/translate.js); local: this Mac's answers only
+ipcMain.handle('ai:discussWith', (_e, title) => viaDecisions('suggestDiscussWith')(title, globalThis.fetch, app.getPath('userData')));
 // The Settings page's Quick and Regular AI (renderer/settings.js): the synced settings.AI_KEYS, only from main's own lists
 ipcMain.handle('ai:options', () => ai.options(S.userData));
 ipcMain.handle('ai:setOption', async (e, key, value) => { const next = await ai.setOption(key, value, S.userData); tellOthers(pageOf(e)); return next; });
 // "Auto-pick type": the types this document may have, weighed by the model; the write stays doc:setType's
-ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
+ipcMain.handle('ai:classifyType', async (_e, id) => viaDecisions('classifyType')(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
 // Process image (issue #507): an image read by the model into a task or a note, made with what it read as its lines
 // and the image under them. Returns the Node for the page to open. The image is a file dropped on Create new
 // (shell.js) { bytes, filename, mimeType }, or from Cmd+K the clipboard's { clipboard: true } or an image row's { uri }.
@@ -653,7 +658,7 @@ if (process.env.TANA_MAIN_TEST) {
       // banner as written when the answer does not come within 15 s (main/ai.js translate: this Mac detects, the model translates)
       const to = settings.prefs().translateTo;
       if (to && !sensitiveIds().includes(docId)) {
-        const found = await ai.translate([title, subtitle || '', body || ''], to, globalThis.fetch, S.userData, { timeout: 15000 }).catch(() => []);
+        const found = await ai.translate([title, subtitle || '', body || ''], to, globalThis.fetch, S.userData, { timeout: 15000, ...detectVia() }).catch(() => []);
         [title, subtitle, body] = [title, subtitle, body].map((t, i) => found[i]?.text || t);
       }
       const id = kind ? 'edit:' + docId : undefined; // undefined: a fresh random id, as before

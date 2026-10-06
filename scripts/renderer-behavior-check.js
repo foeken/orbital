@@ -90,6 +90,8 @@ const withShims = (src) => {
   if (/\bpalSeq\b/.test(src)) src = 'globalThis.palSeq ??= 0;\n' + src;
   // fields that hold choices or links (renderer/fields.js): a palette harness without that file has no field focused
   if (/\bfieldRows\(/.test(src) && !/function fieldRows\(/.test(src)) src = 'globalThis.fieldRows ??= () => [];\n' + src;
+  // feature flags (renderer/flags.js): a palette harness without that file has every flag off
+  if (/\b(flagRows|suggestSensitiveRows)\(/.test(src) && !/function flagRows\(/.test(src)) src = 'globalThis.flagRows ??= () => []; globalThis.suggestSensitiveRows ??= () => [];\n' + src;
   if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
   // the rows a row lives among: its own container's, which in a harness with one container is texts()
   if (/\browsBeside\(/.test(src) && !/const rowsBeside =/.test(src)) src = 'globalThis.rowsBeside ??= (el) => texts();\n' + src;
@@ -8433,7 +8435,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSuggestedCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runFeatureFlagCheck, runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSuggestedCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -8935,6 +8937,38 @@ async function runClassifyTypeCheck() {
   console.log('ok  Auto-pick type: offered where a type goes, a sure answer applied and said, otherwise every option with its odds, "No type" never applied on its own');
 }
 
+// Feature flags (renderer/flags.js): Enable lists the flags that are off and Disable the ones on, each naming its flags;
+// Suggest sensitive marks is there only while the Decisions API flag is on, and offers the likely ones, never one marked.
+async function runFeatureFlagCheck() {
+  const api = vm.runInNewContext(`
+    const tana = { setFeatureFlag: async (id, on) => [{ id, label: 'Decisions API', hint: '', on }], suggestSensitive: async (nodes) => nodes.map((n, i) => ({ id: n.id, p: [0.9, 0.2, 0.7][i] })) };
+    const notes = [], marked = [], queue = [], sensitiveIds = new Set(['tana:text:marked']), zoom = { docId: 'tana:text:page' }, titleEl = { textContent: 'Salary review' };
+    const rendered = new Set(['a', 'b', 'c']), items = new Map([['a', { key: 'a', node: { kind: 'document', id: 'tana:text:lunch', text: 'Lunch plans' } }],
+      ['b', { key: 'b', node: { kind: 'document', id: 'tana:text:sick', text: 'Sick leave Jan' } }], ['c', { key: 'c', node: { kind: 'document', id: 'tana:text:marked', text: 'Marked already' } }]]);
+    const run = (fn) => { queue.push(fn()); }, closePalette = () => {}, showNote = (t) => notes.push(t), renderPalette = () => {}, openPage = () => {};
+    const matchRows = (rows) => rows, BACK_TO_COMMANDS = null, isRealId = (id) => id.startsWith('tana:'), demoText = (t) => t;
+    const setSensitiveMark = (ids) => { for (const id of ids) { marked.push(id); sensitiveIds.add(id); } };
+    let listed = null; const loadList = (mode, read, keep) => { keep(null); listed = read().then(keep); };
+    const listRows = (group, list, q, empty, toRows) => (list ? toRows(list) : []);
+    ${sourceBetween('let featureFlags =', '// ---- Suggest sensitive marks')}
+    ${sourceBetween('const SENSITIVE_GROUP', 'function openSensitivePalette')}
+    ${functionSource('openSensitivePalette')}
+    ({ rows: () => flagRows(), suggest: () => suggestSensitiveRows(), set: (list) => { featureFlags = list; }, notes, marked, queue, listed: () => listed, sensitive: () => sensitiveRows('') })`, {});
+  api.set([{ id: 'decisions', label: 'Decisions API', hint: 'h', on: false }]);
+  assert.deepEqual(plain(api.rows().map((r) => r.label)), ['Enable feature flag'], 'only Enable while every flag is off');
+  const choices = await api.rows()[0].sub();
+  assert.deepEqual(plain(choices.map((r) => r.label)), ['Decisions API'], 'naming the flags it would switch on');
+  assert.equal(api.suggest().length, 0, 'Suggest sensitive marks only with the Decisions API flag on');
+  choices[0].run(); await Promise.all(api.queue);
+  assert.deepEqual(plain([api.rows().map((r) => r.label), api.notes]), [['Disable feature flag'], ['Decisions API on']], 'once on, Disable is what is offered');
+  assert.equal(api.suggest()[0].label, 'Suggest sensitive marks');
+  api.suggest()[0].run(); await api.listed();
+  assert.deepEqual(plain(api.sensitive().map((r) => [r.label, r.hint])), [['Salary review', '90%'], ['Sick leave Jan', '70%']],
+    'the page and its documents, the likely ones most likely first; one at 20% and one already marked are not offered');
+  api.sensitive()[0].run(); await Promise.all(api.queue);
+  assert.deepEqual(plain([api.marked, api.sensitive().map((r) => r.label)]), [['tana:text:page'], ['Sick leave Jan']], 'Enter marks it, and it leaves the list');
+  console.log('ok  feature flags: Enable and Disable name their flags; Suggest sensitive marks only with the Decisions API on, the likely ones, never one marked');
+}
 // Cmd+K "Set icon": the row on a type, and the page that searches the Nucleo set built into the app. The set itself
 // is main's (main/icons.js) — what is checked here is that the row is offered to a type and nothing else, that the
 // page draws what main answers and registers those glyphs so the rows can show them, that the type it already wears

@@ -609,7 +609,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
   Filter rows by text, Switch to table/outliner and Column widths ….
-- **Actions**: Log in (signed out), Create new …, Quick Add Task, New canvas, Search Tana, Undo, Redo, Mark all as read, Sync.
+- **Actions**: Log in (signed out), Create new …, Quick Add Task, New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
@@ -624,7 +624,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
-  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect your personal agent …, ChatGPT sign-in, Set OpenAI API
+  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose models …, Enable feature flag / Disable feature flag (each a page of the flags it would switch, on this Mac only, main/flags.js; typing on names one: "Enable feature flag Decisions API"), Choose agents …, Connect your personal agent …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android with Obtainium" once the latest release has the APK, "…, Android coming soon" before: the Help tour opened on its last page, the
   choice of phone: the one place the phone apps are installed from), Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
@@ -885,6 +885,9 @@ wrong twenty.
   OpenAI's Developer ID. Two synced choices, each a model and an effort (main/settings.js AI_KEYS): the Quick AI (`aiQuickModel`,
   `aiQuickEffort`) for Auto-translate, Discuss with, Auto-pick type and the icon pick, and the Regular AI (`aiModel`,
   `aiEffort`) for reading an image, starting on `gpt-6-luna` at low and `gpt-5.6-terra` at low (main/ai.js QUICK_MODEL, DEFAULT_MODEL), set in the Settings window.
+  With the Decisions API feature flag on (Cmd+K Enable feature flag) and an API key stored, Auto-pick type, Discuss with,
+  the icon pick and Auto-translate's language check ask OpenAI's Decisions API instead (main/decisions.js, `gpt-6-luna`,
+  the API key only: it refuses a ChatGPT sign-in); without a key every one keeps the way above.
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
@@ -1491,6 +1494,9 @@ structure; an unsandboxed `electron scripts/pdf-check.js --render` writes three 
   documents render blurred on every surface (rows, title, chips, sidebar, tooltips). Cmd+K Toggle sensitive visibility
   (and the header button) lifts the blur, remembered on this machine only (localStorage `sensitiveVisible`): showing
   them on your laptop should not unblur them on a shared one. The marks themselves follow you (docs/SETTINGS.md).
+  With the Decisions API feature flag on, Cmd+K Suggest sensitive marks sends the titles of the page and the documents
+  it lists, never one already marked, to OpenAI's Decisions API (main/decisions.js) and lists those it gives 50% or more,
+  most likely first, with the odds; Enter marks one. It suggests and never marks on its own.
 - **Demo mode** (issue #156; Cmd+K Toggle demo mode, hint On/Off) swaps what came from Tana for made-up words on screen,
   for showing the app to someone. Every word of a title, row, sidebar row, table cell or Timeline change becomes a
   made-up word, one for one (a short word from `DEMO_SHORT` for short ones, the rest from `DEMO_WORDS`), capitals kept,
