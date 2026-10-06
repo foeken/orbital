@@ -258,7 +258,7 @@ async function start() {
   if (!callLog) { callLog = true; setTimeout(logCalls, 60000); }
   S.me = await S.session.info();
   const peer = peerIdentity({ file: path.join(S.userData, 'peer.json'), userExternalId: S.me.userExternalId });
-  S.client = createTanaClient({ getAccessToken: (o) => S.session.getAccessToken(o), orgId: S.me.orgId, ...peer, logger: console, userAgent: 'Orbital/' + require('../package.json').version });
+  S.client = createTanaClient({ getAccessToken: (o) => S.session.getAccessToken(o), orgId: S.me.orgId, ...peer, logger: console, userAgent: require('../source').userAgent('Orbital') });
   listFilter(S.client);
   S.client.sync.on('connected', () => setStatus({ connected: true, error: null }));
   S.client.sync.on('disconnected', () => setStatus({ connected: false }));

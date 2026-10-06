@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.sqlite
+source.json
 tana-auth.json
 .DS_Store
 *.log
