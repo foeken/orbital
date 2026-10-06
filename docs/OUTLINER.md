@@ -502,6 +502,11 @@ Cmd+K leads with a Selection group for it (§8).
   until it knows); words typed as they are shared are kept and saved once it does. Notes Tana answered as shared before
   they were ever private are not used, and new words start new private notes. A meeting that does have content of its own (the mock's) keeps showing it. In demo mode notes are found,
   never made.
+- **A person's editor is your private notes about them** (renderer/meetingnotes.js `personNotes`, [MEETINGS.md](MEETINGS.md)
+  Notes about a person). A member's profile has no content of its own, so their page — reached from an @ mention, ⌘S,
+  or a member row's bullet — is their name, the same line ("Your notes · only you can see them"), the Tana glyph opening
+  their page in Tana, and your notes about them, made on your first word exactly as a meeting's. No write-up, no
+  Notes | Summary switch.
 - **A canvas opens in a window of its own** (issue #611). A canvas is a tldraw board with no outline, and tldraw needs a
   licence Orbital does not have, so `openDoc` and `zoomTo` hand a `tana:canvas:` id to main (`api.openCanvas`,
   main.js `canvas:open`): a window on Tana's own page for it (`doc:link`), in the `persist:tana` session, with

@@ -79,8 +79,8 @@ the node itself, so you can tick it off there (row 289). One field and Enter bea
 Tab switches what a field does rather than adding a control (the chat composer's human and AI modes, #446).
 
 **Gestures carry meaning.** Dropping a task into a group writes whatever puts it in that group (#169). ⌘ opens a
-node in a new pane and ⌥ in a new tab, the same from a click, ⌘K or ⌘S (#443). A member or a type is not
-zoomable, so its bullet does nothing and looks it (row 331).
+node in a new pane and ⌥ in a new tab, the same from a click, ⌘K or ⌘S (#443). A type opens as the list of its
+instances, and a member as your private notes about them, as a meeting is (docs/MEETINGS.md).
 
 **Show every option, and say why one can't run.** Greyed with a reason beats hidden. A palette row that cannot
 run stays in place, greyed, with its hint saying why (#459). Opening ⌘K over a selection offers the actions that

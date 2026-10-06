@@ -247,9 +247,9 @@ function quietButton(cls, label, onclick, opts) {
   return b;
 }
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
-// A member is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Open node). A type opens as
+// Everything opens: a member's page is your private notes about them (renderer/meetingnotes.js), and a type opens as
 // the list of its instances (renderer/render.js).
-const zoomable = (node) => !!node && !/^tana:user-profile:/.test(node.id || '');
+const zoomable = (node) => !!node;
 // A task put off is drawn with the zzz glyph instead of the task one: the row still is a task (its box, its
 // status, its metadata are unchanged), it only says at a glance that it is asleep.
 // A task keeps 'task' as its icon (that is what isTask reads), so its type's glyph — the one a typed document wears
