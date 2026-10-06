@@ -27,7 +27,7 @@ security find-identity -v -p codesigning | grep -q 'Developer ID Application' \
 xcrun notarytool history --keychain-profile "$profile" >/dev/null \
   || { echo "notarytool profile '$profile' cannot authenticate; create it with: xcrun notarytool store-credentials"; exit 1; }
 [ "$android" = 0 ] || sh scripts/android-release.sh --check
-# Every check runs here and nowhere else (there is no CI): lint, the offline checks, the user flows and both phones'
+# Every check runs here (CI's are a second opinion, and run no iPhone tests): lint, the offline checks, the user flows and both phones'
 # tests on this Mac before the version is bumped, so a failure leaves nothing to undo (escalated, with an emulator
 # running for Android's device tests)
 npm run lint
