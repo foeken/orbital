@@ -8,7 +8,7 @@ const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:', search: 'tana:search:', type: 'tana:type:', canvas: 'tana:canvas:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type', 'search']); // tana:<kind>: ids listed read-only: kind icon + kind tag
 const PIN_HUBS = new Set(['event', 'space']); // the only schemas with a pinnedItems container (docs/PINNING.md section 4)
-const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer draft keeps a local id until it materialises (#112)
+const { DOC_URI } = require('../sdk/ids'); // a real document id (any kind; sdk/ids.js); a renderer draft keeps a local id until it materialises (#112)
 // How many rows of a list are kept live. A subscription is a bootstrap RPC and a LoroDoc of its own, and every
 // bootstrap lands as a change the renderer redraws on, so subscribing a whole list (the Library lists hundreds)
 // flooded the one sync connection and the outline with it: the page lagged and the read for whatever you opened
@@ -61,6 +61,15 @@ const isSearch = (id) => id.startsWith('tana:search:'); // a saved search: its "
 const idKind = (id) => id.split(':')[1];
 const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
 const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
+// Where a new Inbox task came from, in the words a banner (main/views.js) and the Timeline (main/timeline.js, on the
+// phones too) both use; null when it is yours by hand. chat: the node the task was created in, {} when that chat cannot
+// be read, null when there is none.
+function inboxFrom(me, creator, chat, names) {
+  if (creator && creator !== me) return 'From ' + (names.get(creator) || 'someone else');
+  if (!chat) return null;
+  const topic = /^MCP:\s*(.+)/i.exec(chat.title || '')?.[1]; // the chat's title names what the agent was doing
+  return isMcp(chat) ? 'Via MCP' + (topic ? ': ' + topic : '') : "From Tana's AI";
+}
 // every outliner page (issues #137, #159): what is pushed is shared state; a command for one page is sent to it directly.
 // A page is a handle over an iframe of a window's shell (main.js addPage): { id, frame, win, key, side, send, isDestroyed,
 // focus }, kept left to right in win.panes. A window without panes is a check's stand-in with a webContents of its own.
@@ -110,4 +119,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, pageOf, pageKey, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, inboxFrom, pageOf, pageKey, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };

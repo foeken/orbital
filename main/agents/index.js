@@ -9,12 +9,12 @@ require('./tana');
 require('./codex');
 require('./claude');
 const linked = require('./linked'); // the agents linked through orbital.md/mcp (your Dot), one plugin each, as they come and go
-const { agentIds, setAgentMark, agentPrompt, agentStatus, writeAgentStatus, dropAgentMark } = require('../documents');
+const { agentIds, setAgentMark, agentPrompt, agentStatus, dropAgentMark, mut } = require('../documents');
+const relay = require('../relay'); // the node put back as an earlier handoff left it (putBack)
 const { readNode } = require('../../sdk/node');
-const { S, pageOf } = require('../state');
+const { DOC_URI: NODE, S, pageOf } = require('../state');
 const settings = require('../settings');
 
-const NODE = /^tana:[a-z-]+:[0-9a-z]{26}$/;
 const ready = (id) => { const a = agent.get(id); if (!a || !agent.usable(id)) throw new Error('That agent is not switched on'); return a; };
 
 // Handing a node to an agent. A node already linked to a task of this agent hands that task the new request; anything
@@ -38,7 +38,7 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
     if (link && link.agent === agentId && a.resume && !agent.elsewhere(link)) await a.resume(link.taskId, prompt);
     else {
       started = true;
-      const taskId = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData });
+      const taskId = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData, was: before });
       // the task this node had with another agent is let go once the new one exists; never the same agent's, whose
       // plugin now holds the new task under this node's key
       if (link && link.agent !== agentId) await releaseLink(id, link);
@@ -47,17 +47,17 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
     return result;
   } catch (error) {
     if (started && a.release) await a.release(id).catch(() => {});
-    if (!was && agentIds().includes(id)) { await setAgentMark(id, false); agent.clearTask(id); }
-    else if (before) await restore(id, before).catch(() => {});
+    // an agent linked through orbital.md has put the node back itself (main/relay.js handOver): only its marks are left
+    if (!was && agentIds().includes(id)) { if (a.linked) dropAgentMark(id); else await setAgentMark(id, false); agent.clearTask(id); }
+    else if (before) await restore(id, before, !a.linked).catch(() => {});
     throw error;
   }
 }
-// The node as its earlier handoff left it: that request, as an Agent context block or, for an agent linked through
-// orbital.md, in the mark alone, with the status line that agent last wrote
-async function restore(id, { prompt, linked, status }) {
-  await setAgentMark(id, false);
-  await setAgentMark(id, true, prompt, !linked);
-  if (linked && status) await writeAgentStatus(id, status[0].toUpperCase() + status.slice(1));
+// The node as its earlier handoff left it: the mark and that request in the settings, and node: the node itself, its
+// Agent context block or the status line an agent linked through orbital.md last wrote (main/relay.js putBack)
+async function restore(id, before, node) {
+  await setAgentMark(id, true, before.prompt, false);
+  if (node) await mut(id, (doc) => relay.putBack(doc, before));
 }
 // What a plugin still holds for a node's previous task (a Codex writer) is let go before the link moves on: a later
 // unassign releases only the agent the link then names (#671 review)

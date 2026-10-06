@@ -10,7 +10,7 @@ const COMPLETED_WINDOWS = [3, 7, 30, 'all']; // days a completed task stays list
 const ROW_LIMITS = [50, 100, 200, 500, 1000];
 const rowLimit = (limit) => (ROW_LIMITS.includes(limit) ? limit : 200);
 const B32 = '0123456789abcdefghjkmnpqrstvwxyz'; // Crockford base32, lowercase as in Tana ids
-const USER_URI = /^tana:user-profile:[0-9a-z]{26}$/;
+const { USER_URI, TYPE_URI, SPACE_URI, WORKFLOW_URI } = require('./ids');
 // Audience classification only: a guest profile is an external person with an explicit participant grant, never me.
 // Write paths keep USER_URI; guest ACL semantics are not part of the verified sharing subset.
 const PERSON_URI = /^tana:(?:user|guest)-profile:[0-9a-z]{26}$/;
@@ -30,8 +30,8 @@ function ulid(now = Date.now()) {
 // the next half hour for 30 minutes.
 function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri, query, view, states } = {}) {
   if (!['doc', 'task', 'meeting', 'chat', 'search', 'type', 'canvas', 'workflow'].includes(kind)) throw new Error('unknown kind ' + kind);
-  if (entityTypeUri !== undefined && (!/^tana:type:[0-9a-z]{26}$/.test(entityTypeUri) || kind === 'chat' || kind === 'canvas')) throw new Error('Invalid custom type');
-  if (ownerUri !== undefined && !/^tana:space:[0-9a-z]{26}$/.test(ownerUri)) throw new Error('Invalid type home space');
+  if (entityTypeUri !== undefined && (!TYPE_URI.test(entityTypeUri) || kind === 'chat' || kind === 'canvas')) throw new Error('Invalid custom type');
+  if (ownerUri !== undefined && !SPACE_URI.test(ownerUri)) throw new Error('Invalid type home space');
   const data = loro.getMap('data');
   data.set('type', kind === 'meeting' ? 'event' : ['chat', 'search', 'type', 'canvas', 'workflow'].includes(kind) ? kind : 'text');
   if (entityTypeUri) data.set('entityTypeUri', entityTypeUri);
@@ -208,8 +208,6 @@ function taskMeta(document) {
 // document with no state at all enters the first one. Which types those are is the caller's to read (the type's own
 // `workflowUri`), and the scope rules — what a type applies to, and the space it keeps its documents in — belong
 // there too, beside the type node they are read from.
-const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
-const WORKFLOW_URI = /^tana:workflow:[0-9a-z]{26}$/;
 function setEntityType(document, typeUri, { workflow = false, byUri } = {}) {
   const uri = typeUri == null ? null : typeUri;
   if (uri !== null && !TYPE_URI.test(uri)) throw new Error('Select a workspace type');

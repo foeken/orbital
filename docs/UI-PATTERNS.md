@@ -25,6 +25,11 @@ Everything the palette lists is a plain object. The full field list and ordering
 - `fuzzyMatch(label, q)` (renderer/palette.js) is the palette's matcher: filter a page's list with it, as in
   `list.filter((x) => fuzzyMatch(x.title, q))`, and the bold letters agree with ⌘K. It filters only: a page keeps
   its rows in the order it returns them, and only the command page ranks by match (`rankRows`).
+- `matchRows(rows, q)` (renderer/palette.js) is that filter for a page that is a fixed list of rows (Choose agents,
+  Choose models, Log out): `rows: (q) => matchRows(rows, q)`.
+- `errorText(e)` (renderer/nodes.js) is what a failure says. `showError` and `listRows` read it; a page that keeps a
+  failure to show it in a row stores `errorText(e)`. What main threw arrives as main said it: preload.js takes off the
+  "Error invoking remote method '…': Error: " Electron puts round every refused call, for every page.
 - `memberRows(q, pick, ticked)` (renderer/tasks.js) makes a list of people plus Unassigned, each row calling
   `pick(uri)` and ticked where `ticked(uri)` says so. It lists the members already read, so the page's opener calls
   `loadMembers()` first; the palette is drawn again when they arrive.

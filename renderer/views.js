@@ -739,8 +739,9 @@ function pageRows(list, q) {
 // so Tab reaches it and Enter or Space folds its section away, with the disclosure triangle drawn in CSS from
 // aria-expanded; mousedown is swallowed like a row's chevron does, so clicking a heading cannot take a selection away.
 function groupHeadEl(g) {
-  const el = document.createElement('button');
-  el.type = 'button'; el.className = 'ghead';
+  // a page with sections of its own folds them itself (renderer/proposals.js); the rows close up or open out either way
+  const el = quietButton('ghead', null, () => foldSection(el, () => (g.toggle ? g.toggle() : toggleGroup(g.id)), () => [...outline.querySelectorAll('.ghead')].find((h) => h.dataset.group === g.id)),
+    { title: g.collapsed ? 'Expand' : 'Collapse' }); // the words the row chevrons already use
   el.dataset.group = g.id; // what a task dropped under it joins (renderer/drag.js groupAt)
   const chev = iconNode('chevronRight'); // the icon set's own chevron, turned a quarter down by CSS while the section is open
   // a field's heading is one of its values, which demo mode masks on the rows too (subtextEl), and which is blurred
@@ -750,10 +751,6 @@ function groupHeadEl(g) {
   if (value && g.nodes.length && g.nodes.every((n) => sensitiveIds === null || sensitiveIds.has(n.id))) blurSensitive(words, ...g.nodes.map((n) => n.id));
   el.append(...(chev ? [chev] : []), words);
   el.setAttribute('aria-expanded', g.collapsed ? 'false' : 'true');
-  el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use
-  el.onmousedown = (e) => e.preventDefault();
-  // a page with sections of its own folds them itself (renderer/proposals.js); the rows close up or open out either way
-  el.onclick = () => foldSection(el, () => (g.toggle ? g.toggle() : toggleGroup(g.id)), () => [...outline.querySelectorAll('.ghead')].find((h) => h.dataset.group === g.id));
   return el;
 }
 // A saved search or a type's page draws its rows twenty at a time: the first twenty in the order shown, sorted and
@@ -781,12 +778,9 @@ let searchMoreNext = null;
 const searchEnd = typeof IntersectionObserver === 'function'
   ? new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting) && searchMoreNext) searchMoreNext(); }, { root: outline.parentElement, rootMargin: '0px 0px 100% 0px' }) : null;
 function searchMoreEl(id, rest) {
-  const el = document.createElement('button');
-  el.type = 'button'; el.className = 'gmore search-more';
-  el.textContent = 'Show ' + Math.min(rest, SEARCH_STEP) + ' more';
-  el.onmousedown = (e) => e.preventDefault();
   const more = () => { searchMoreNext = null; searchShown.set(id, (searchShown.get(id) || SEARCH_STEP) + SEARCH_STEP); renderSoon(true); };
-  el.onclick = more;
+  const el = quietButton('gmore search-more', null, more);
+  el.textContent = 'Show ' + Math.min(rest, SEARCH_STEP) + ' more';
   if (searchEnd) { searchEnd.disconnect(); searchMoreNext = more; searchEnd.observe(el); }
   return el;
 }
@@ -794,10 +788,7 @@ function searchMoreEl(id, rest) {
 // nodeEls() passes it by, so it is not somewhere the keyboard can land; mousedown is swallowed the same way, so
 // clicking it cannot take a selection away.
 function groupMoreEl(g) {
-  const el = document.createElement('button');
-  el.type = 'button'; el.className = 'gmore';
+  const el = quietButton('gmore', null, () => showAllTracking(g.id));
   el.textContent = 'Show ' + g.more + ' more task' + (g.more === 1 ? '' : 's');
-  el.onmousedown = (e) => e.preventDefault();
-  el.onclick = () => showAllTracking(g.id);
   return el;
 }

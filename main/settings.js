@@ -152,7 +152,11 @@ function use(doc) {
   if (!holdsSettings(doc)) { try { doc.transact((loro) => loro.getMap(MARK).set('app', 'orbital')); } catch (e) { report(e); } }
   return doc;
 }
+// Whether the last search for the document finished and found none (false when it failed): the phones, which never
+// make one, tell "this account never used Orbital on a Mac" from "Tana did not answer" by it (ios/engine/index.js settled)
+let noDocument = false;
 async function discover(skip = new Set()) {
+  noDocument = false;
   try {
     // past hidden titles and Hide MCP: those keep it out of the lists, and must not make a second one
     const listNodes = S.client.graph.listNodesUnhidden || S.client.graph.listNodes;
@@ -174,6 +178,7 @@ async function discover(skip = new Set()) {
         if (doc && !had) S.client.sync.unsubscribe(node.id).catch(() => {}); // not ours: no live copy of it for the session
       }
     }
+    noDocument = true;
   } catch (e) { report(e); }
   return null;
 }
@@ -267,6 +272,7 @@ const PREF = 'pref:';
 const prefs = () => Object.fromEntries(Object.entries(load()).filter(([key]) => key.startsWith(PREF)).map(([key, value]) => [key.slice(PREF.length), value]));
 const setPref = (key, value) => { if (typeof key !== 'string' || !key || key.includes(':')) throw new Error('Not a preference name'); return set(PREF + key, value); };
 const settingsDocId = () => docId;
+const hasNoDocument = () => noDocument;
 // Every settings document of yours the lists must leave out: the one in use and those it took over from (open).
 const appDocIds = () => {
   const doc = docId && S.client && S.client.sync.getDocument(docId);
@@ -292,4 +298,4 @@ function tellOthers(from, docId) { // from: the page handle that wrote it (main/
 // the preferences now, asked for once the page listens for settings:changed (renderer/app.js; preload's prefs:snapshot is the load-time copy)
 const ipc = { 'prefs:now': () => prefs() };
 
-module.exports = { get, set, stateName, waitingWorkflow, WAITING_STATE, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, appDocIds, isSynced, reset, AI_KEYS, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };
+module.exports = { get, set, stateName, waitingWorkflow, WAITING_STATE, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, hasNoDocument, appDocIds, isSynced, reset, AI_KEYS, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };

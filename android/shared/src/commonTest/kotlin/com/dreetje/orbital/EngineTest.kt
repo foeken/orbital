@@ -119,6 +119,186 @@ class EngineTest {
         assertEquals("Tana refused the change: this task is read-only to you", engine.error)
     }
 
+    // What ChatGPT is asked with and the models' names come from the engine (orbital.prompts, main/prompts.js): read after
+    // a Timeline read and again when Auto-translate changes; Process image reads the image with its words
+    @Test fun chatGPTsWordsAndTheModelsNamesComeFromTheEngine() = runTest {
+        val asked = mutableListOf<String>()
+        val platform = FakePlatform(chatgpt = object : ChatGPT by FakeChatGPT(signedIn = true) {
+            override suspend fun respond(instructions: String, content: List<kotlinx.serialization.json.JsonObject>, model: String, effort: String, schema: kotlinx.serialization.json.JsonObject?): String? {
+                asked += instructions; return "{\"kind\":\"task\",\"title\":\"Call Priya\"}"
+            }
+        })
+        val host = page()
+        val base = host.answer
+        host.answer = { body, args ->
+            when {
+                "orbital.prompts" in body -> text("""{"translate":${if (args["to"] == null) "null" else "{\"instructions\":\"into ${args["to"]}\",\"schema\":{}}"},"image":{"instructions":"read it in ${args["to"]}"},"models":{"gpt-6-sol":"Sol 6"},"efforts":{"xhigh":"Extra high"}}""")
+                "orbital.fromImage" in body -> text("\"tana:text:img\"")
+                else -> base(body, args)
+            }
+        }
+        val engine = ready(host, platform)
+        assertEquals("Sol 6", engine.translator.label("gpt-6-sol"))
+        assertEquals("gpt-5.5", engine.translator.label("gpt-5.5"), "a model the engine did not name goes by its id")
+        assertEquals("Extra high", engine.translator.effortLabel("xhigh"))
+        assertNull(engine.translator.prompts!!.translate, "Auto-translate off: nothing to translate with")
+        engine.translate("Dutch")
+        assertEquals("into Dutch", engine.translator.prompts!!.translate!!.instructions)
+        engine.processImage(byteArrayOf(1))
+        assertEquals("read it in Dutch", asked.last())
+    }
+
+    // Android ended the app with an add, an image and a request on their way: the next launch sends the add again by
+    // itself, as the same task (its id), and offers the image and the request, to the account they were for and no other
+    // (Engine.fly)
+    @Test fun whatWasOnItsWayWhenOrbitalClosedIsOfferedAgainForItsAccount() = runTest {
+        val platform = FakePlatform(chatgpt = object : ChatGPT by FakeChatGPT(signedIn = true) {
+            override suspend fun respond(instructions: String, content: List<kotlinx.serialization.json.JsonObject>, model: String, effort: String, schema: kotlinx.serialization.json.JsonObject?): String? = awaitCancellation()
+        })
+        val first = page()
+        val answers = first.answer
+        first.answer = { body, args ->
+            when {
+                "orbital.createTask" in body || "orbital.handTo" in body -> awaitCancellation()
+                "orbital.prompts" in body -> text("""{"image":{"instructions":"read it"}}""") // the image is read, and its answer never comes
+                else -> answers(body, args)
+            }
+        }
+        val engine = ready(first, platform)
+        engine.add(Engine.Draft("Book the venue", null, null, null, emptyMap()))
+        engine.handOff(Engine.Handing("tana:text:a", Agent("dot", "Dot"), {}), "Look at this")
+        engine.addImage { byteArrayOf(1, 2, 3) }
+        runCurrent()
+        // someone else signs in on this phone first: nothing of it for them, and it stays for its own account
+        val elsewhere = page()
+        val theirs = elsewhere.answer
+        elsewhere.answer = { body, args -> if ("orbital.account()" in body) text("tana:user-profile:else@org_2") else theirs(body, args) }
+        val other = ready(elsewhere, platform)
+        assertTrue(other.unsent.isEmpty() && other.unhanded.isEmpty() && other.shared == null)
+        val sent = first.calls.single { "orbital.createTask" in it.first }.second["id"] as String
+        assertTrue(Regex("tana:text:[0-9a-z]{26}").matches(sent), "an add has its task's id from the start")
+        val host = page()
+        val again = ready(host, platform)
+        runCurrent()
+        assertTrue(again.unsent.isEmpty(), "the add is not offered: it is sent again")
+        assertEquals(listOf(sent), host.calls.filter { "orbital.createTask" in it.first }.map { it.second["id"] }, "once, with the same id")
+        assertEquals("Look at this", again.unhanded["tana:text:a"])
+        assertTrue(again.shared!!.image!!.contentEquals(byteArrayOf(1, 2, 3)))
+        assertNull(platform.files.get(Engine.PENDING), "offered once, and the add landed")
+    }
+
+    // an add kept before adds had ids cannot be told from a second one: it is offered in Quick Add, saying so
+    @Test fun anAddKeptWithoutAnIdIsOfferedAgain() = runTest {
+        val platform = FakePlatform()
+        platform.files.set(Engine.PENDING, """{"1@1":{"account":"$ME","draft":{"title":"Book the venue","type":null,"search":null,"assignee":null,"values":{}}}}""")
+        val host = page()
+        val engine = ready(host, platform)
+        runCurrent()
+        assertEquals("Book the venue", engine.unsent.single().title)
+        assertTrue(engine.unsent.single().why!!.startsWith("Orbital closed before Tana said it was added"))
+        assertTrue(host.calls.none { "orbital.createTask" in it.first })
+    }
+
+    // what Tana answered is let go of: an add that landed is not offered again
+    @Test fun anAddTanaAnsweredIsNotKept() = runTest {
+        val platform = FakePlatform()
+        val engine = ready(page(), platform)
+        engine.add(Engine.Draft("Book the venue", null, null, null, emptyMap()))
+        runCurrent()
+        assertNull(platform.files.get(Engine.PENDING))
+        assertTrue(ready(page(), platform).unsent.isEmpty())
+    }
+
+    // a change told while a Timeline read is under way is read after it: one more read, however many came (59a7983b;
+    // Engine.swift refresh the same)
+    @Test fun aChangeToldDuringAReadIsReadAfterIt() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var reads = 0
+        val host = page()
+        val base = host.answer
+        host.answer = { body, args -> if ("orbital.timeline" in body && ++reads == 2) gate.await(); base(body, args) }
+        val engine = ready(host)
+        assertEquals(1, reads)
+        launch { engine.refresh() }
+        runCurrent()
+        repeat(3) { launch { engine.refresh() } } // told meanwhile
+        runCurrent()
+        assertEquals(2, reads, "nothing read while a read is under way")
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals(3, reads, "one more read after it, for all three")
+    }
+
+    // a zoomed node's Pin to Today (and the long press's): pinned on screen at once, and back as it was if Tana says no
+    @Test fun aPinShowsAtOnceAndGoesBackWhenTanaRefusesIt() = runTest {
+        val answer = CompletableDeferred<JsonElement>()
+        val host = page()
+        val base = host.answer
+        host.answer = { body, args -> if ("orbital.pin" in body) answer.await() else base(body, args) }
+        val engine = ready(host)
+        launch { engine.pin("tana:text:a", true) }
+        runCurrent()
+        assertTrue("tana:text:a" in engine.pinned)
+        answer.completeExceptionally(Exception("Tana refused the pin"))
+        runCurrent()
+        assertFalse("tana:text:a" in engine.pinned)
+        assertEquals("Tana refused the pin", engine.error)
+    }
+
+    // the launcher's tasks (Engine.keepTasks): read after a Timeline read at most once in five minutes, a sensitive one
+    // without its words, and gone with the account
+    @Test fun theTasksGoToTheLauncherAtMostOnceInFiveMinutesAndGoWithTheAccount() = runTest {
+        val platform = FakePlatform()
+        var reads = 0
+        val host = page()
+        val base = host.answer
+        host.answer = { body, args ->
+            if ("orbital.tasks()" in body) { reads++; text("""[{"id":"tana:text:t1","title":"Book the venue","stateType":"open"},{"id":"tana:text:t2","title":"Salary review","stateType":"open","sensitive":true}]""") }
+            else base(body, args)
+        }
+        val engine = ready(host, platform)
+        assertEquals(1, reads)
+        assertEquals(listOf("Book the venue", ""), platform.tasks.last()!!.map { it.words })
+        engine.refresh()
+        assertEquals(1, reads, "not again within five minutes")
+        clock += 301.seconds
+        engine.refresh()
+        assertEquals(2, reads)
+        engine.signOut()
+        assertNull(platform.tasks.last())
+    }
+
+    // Move to Inbox, then the read its write sets off while Tana's graph still says open: the Inbox stays until Tana agrees
+    @Test fun aTaskMovedToTheInboxStaysThereThroughTheNextRead() = runTest {
+        val engine = ready(page(toggle = { "\"proposed\"" }))
+        val task = engine.rows.single().children!!.single()
+        engine.moveToInbox(task.id)
+        clock += 2.seconds
+        engine.refresh()
+        assertEquals("proposed", engine.state(task))
+    }
+
+    // A task's Status set on its own page, the task on no Timeline row: its page's read of it (orbital.access) settles the
+    // tick, so a change made elsewhere later shows there too
+    @Test fun aStatusSetOnItsPageGoesBackToTanaOnceItsPageReadsIt() = runTest {
+        var state = "open"
+        val host = page()
+        val timelinePage = host.answer
+        host.answer = { body, args -> if ("orbital.access" in body) text("""{"title":"Off the Timeline","me":"$ME","task":true,"audience":"only-me","state":"$state"}""") else timelinePage(body, args) }
+        val engine = ready(host)
+        engine.tick("tana:text:off", "closed")
+        assertEquals("closed", engine.states["tana:text:off"])
+        state = "closed" // Tana agrees: the page reads Tana from now on
+        engine.access("tana:text:off")
+        assertNull(engine.states["tana:text:off"])
+        // set again, then changed back on the Mac: half a minute on, the page shows the Mac's
+        engine.tick("tana:text:off", "not_now")
+        state = "open"
+        clock += 30.seconds
+        assertEquals("open", engine.access("tana:text:off")?.state)
+        assertNull(engine.states["tana:text:off"])
+    }
+
     // the screen that asked for a read went away halfway through it (a LaunchedEffect restarted, a row left the list):
     // the next refresh still reads, where a loading flag left set made every later one only say "again"
     @Test fun aReadCutOffMidwayLeavesTheNextOneFree() = runTest {
@@ -246,10 +426,14 @@ class EngineTest {
         val platform = FakePlatform()
         val engine = ready(host, platform)
         assertTrue(SavedTimeline.load(platform.files, clock) != null)
+        engine.unsent.add(Engine.Draft("Not taken", null, null, null, emptyMap()))
+        engine.unhanded["tana:text:a"] = "Look at this"
         engine.signOut()
         assertEquals(1, host.cookiesForgotten)
         assertTrue(engine.rows.isEmpty())
         assertNull(engine.email)
+        assertTrue(engine.unsent.isEmpty() && engine.unhanded.isEmpty(), "nothing of this account's is offered to the next")
+        assertTrue(engine.sensitiveIds.isEmpty())
         assertNull(SavedTimeline.load(platform.files, clock), "the saved Timeline goes with the session")
         assertNull(platform.glimpses.last(), "and the widgets' copy with it")
         assertEquals(Engine.SESSION, host.loaded.last())

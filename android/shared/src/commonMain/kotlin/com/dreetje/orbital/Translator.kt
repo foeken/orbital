@@ -35,6 +35,18 @@ class Translator(private val store: Store, private val chatgpt: ChatGPT, private
     var problem by mutableStateOf<String?>(null) // why the last question to ChatGPT got no answer
         private set
 
+    // What ChatGPT is asked with and how Settings names the models, from the engine as the Mac has them (main/prompts.js,
+    // orbital.prompts; Translator.swift Prompts): read again when the language or the models change (Engine.loadPrompts).
+    // None in the sample, which has no engine: nothing is translated there, and a model goes by its id.
+    @Serializable class Prompts(val translate: Translate? = null, val image: Image, val models: Map<String, String> = emptyMap(), val efforts: Map<String, String> = emptyMap()) {
+        @Serializable class Translate(val instructions: String, val schema: kotlinx.serialization.json.JsonObject)
+        @Serializable class Image(val instructions: String)
+        var to: String? = null // the language they were asked for
+    }
+    var prompts by mutableStateOf<Prompts?>(null)
+    fun label(model: String) = prompts?.models?.get(model) ?: model
+    fun effortLabel(effort: String) = prompts?.efforts?.get(effort) ?: effort
+
     fun use(to: String?, ai: Map<String, String> = emptyMap()) {
         this.to = to
         this.ai = this.ai + ai
@@ -86,8 +98,13 @@ class Translator(private val store: Store, private val chatgpt: ChatGPT, private
         for (text in batch) if (!foreign(text, to)) answers[to + "\n" + text] = none
         val ask = batch.filter { answers[to + "\n" + it] == null }
         if (ask.isEmpty()) return save()
+        // the engine's words for this language not read yet (or the sample, which has none): asked again another time
+        val words = prompts?.takeIf { it.to == to }?.translate ?: run {
+            ask.forEach { asked.remove(to + "\n" + it) }
+            return save()
+        }
         val found = try {
-            ChatGPT.translate(chatgpt, ask, to, ai.getValue("quickModel"), ai.getValue("quickEffort")) ?: run {
+            ChatGPT.translate(chatgpt, ask, words.instructions, words.schema, ai.getValue("quickModel"), ai.getValue("quickEffort")) ?: run {
                 problem = "Sign in with ChatGPT"
                 ask.forEach { asked.remove(to + "\n" + it) } // asked again once signed in
                 return save()

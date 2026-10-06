@@ -34,16 +34,10 @@ function load() {
   });
 }
 agent.addSource(load);
+// a new agent chosen, and the nodes of one the relay no longer lists let go (main/agent.js storeLinked), then registered
 function store(list) {
-  const fresh = relayApi.remember(list);
+  agent.storeLinked(list, (nodeId) => { documents.dropAgentMark(nodeId); agent.clearTask(nodeId); });
   load();
-  // a new agent is on, once, and the default: linking your Dot is choosing it (switched off or another picked later, that stays)
-  for (const a of fresh) { agent.setEnabled(ID + a.id, true); agent.setDefault(ID + a.id); }
-  // an agent the relay no longer lists (unlinked elsewhere, or linked to another Orbital) leaves its nodes: the local
-  // mark and the link go, so no badge waits for it; the node itself is left as it is
-  const listed = new Set(list.map((a) => ID + a.id));
-  // (the stored links: agent.links() leaves out those of an agent no longer registered, which is what these are)
-  for (const [nodeId, stored] of Object.entries(agent.tasks())) if (stored && typeof stored.agent === 'string' && stored.agent.startsWith(ID) && !listed.has(stored.agent)) { documents.dropAgentMark(nodeId); agent.clearTask(nodeId); }
 }
 async function refresh() { if (orbitalKey(false)) store(await relayApi.agentsAt()); }
 // Cmd+K and Settings read the list often: the relay is asked at most once a minute, and the pages hear of a change
@@ -60,14 +54,10 @@ function linkedOf(id) {
   return a;
 }
 
-// ---- a node handed over: one event, the whole package (main/relay.js deliver) ----
-// Its one last line is the status, which Orbital writes first, before the event: a node that cannot be written is
-// handed to nobody, and one the agent does not take has assign() take the status line back out (main/agents/index.js).
-async function send(a, { nodeUri, prompt }) {
-  const text = relayApi.request(a, prompt);
-  await documents.writeAgentStatus(nodeUri, 'Assigned'); // first, and not quietly: a node that will not take it is not handed over
-  return relayApi.deliver(a, nodeUri, text); // the task id the node is linked to (main/agent.js setTask)
-}
+// ---- a node handed over: one event, the whole package (main/relay.js handOver, as the phones hand it over) ----
+// Its one last line is the status, written first, through the outliner's own write: a node that cannot be written is
+// handed to nobody, and one the agent does not take is put back as it was (was: main/agents/index.js assign).
+const send = (a, { nodeUri, prompt, was }) => relayApi.handOver(a, nodeUri, prompt, (fn) => documents.mut(nodeUri, fn), was);
 // The badge follows the node's last status line: Assigned (or none) is waiting for the agent, Working, Completed and
 // Failed are working, done and broken; a node that cannot be read needs you
 const { BADGE } = relayApi;

@@ -26,6 +26,9 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
         private set
     var problem by mutableStateOf<String?>(null) // why listening or writing down did not work, to show under the box
         private set
+    var settling by mutableStateOf(false) // Add, Send or Assign pressed while dictating: the words are being waited for
+        private set
+    val busy: Boolean get() = recording || transcribing // listening, or writing down what was said
     private var heard: Deferred<Boolean>? = null
     private var meter: Job? = null
     private var wanted = false // listening asked for and not cancelled since: Android's question can outlast the page
@@ -74,6 +77,15 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
         return heard?.await() ?: true
     }
 
+    // Quick Add's Add, the composer's Send and Assign to's Assign (ios/Orbital/Dictation.swift the same): pressed while
+    // listening or writing down, the words are waited for and added to what is typed (into), and settling says so
+    // meanwhile; false when they did not come, so what was said is never sent without it. At once when nothing is dictated.
+    suspend fun settled(into: (String) -> Unit): Boolean {
+        if (!busy) return true
+        settling = true
+        try { return settle(into) } finally { settling = false }
+    }
+
     private fun stop(): ByteArray? {
         if (!recording) return null
         val audio = platform.recorder?.stop()
@@ -93,5 +105,9 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
         levels = List(DOTS) { 0f }
     }
 
-    companion object { const val DOTS = 28 }
+    companion object {
+        const val DOTS = 28
+        // dictated words after what is typed, a space between
+        fun join(typed: String, said: String) = if (typed.isEmpty()) said else "$typed $said"
+    }
 }

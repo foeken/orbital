@@ -6,6 +6,7 @@ const palette = $('palette'), palInput = $('paletteInput'), palText = $('palette
 let palMode = 'cmd', palPage = {}, palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: { create, where }, applied when the rows land
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
+let meetingLinks = null; // Copy link's meeting as last read: { id, pending, notes, summary, start, end }, reset at every open
 let meetingList = null, pinMeetingDoc = null; // the meeting picker: loadList's answer, and the node being pinned
 let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
@@ -90,6 +91,8 @@ function fuzzyMatch(label, q) {
   }
   return null;
 }
+// A page that is a fixed list of rows, narrowed to what was typed (q lowercased, as every page's rows get it)
+const matchRows = (rows, q) => rows.filter((r) => fuzzyMatch(r.label, q));
 // Rows that open a second level carry `sub`, the rows of that level, and every choice is offered as one row of its
 // own: "Move to …" + "Foundry" → "Move to Foundry", so "mtf" reaches it without going down a level (paletteRows
 // decides when a level is loaded).
@@ -210,10 +213,21 @@ function paletteRows(q, typed = q) {
   // the node's web link, for pasting into Slack or a doc; on a Timeline row, the link of the node it is about
   const tlUri = timelineUriAt(), linkId = tlUri || (palDoc && isRealId(palDoc.id) ? palDoc.id : null);
   if (linkId && tana.nodeLink) {
-    rows.push({ id: 'copyLink', group: tlUri && selKeys().length ? 'Selection' : docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(linkId), 'Link copied')) });
+    const group = tlUri && selKeys().length ? 'Selection' : docGroup, copy = (uri) => () => copyNodeLink(uri);
+    const isMeeting = /^tana:event:/.test(linkId) || (palDoc && palDoc.id === linkId && palDoc.icon === 'meeting');
+    // On a meeting's page ⌘C copies what the page shows: its summary, or your notes (renderer/meetingnotes.js), read
+    // from the page itself so a key with ⌘K closed does the same; with neither on screen, the meeting.
+    const onPage = isMeeting && !tlUri && zoom && zoom.docId === linkId;
+    const summary = onPage ? summaryShown(linkId) : null, seen = onPage ? meetingShown(linkId) : null;
+    // with ⌘K open the meeting's other links are offered too (meetingLinkRows), each named after what it copies
+    const more = isMeeting && !palette.hidden && tana.meetingNotes && tana.summaryUri && tana.meetingInfo;
+    const label = seen ? (summary ? 'Copy link to summary' : 'Copy link to notes') : more ? 'Copy link to meeting' : 'Copy link';
+    rows.push({ id: 'copyLink', group, icon: 'link', label, run: copy(seen || linkId) });
+    if (more) rows.push(...(seen ? [{ rank: 'copyLink', group, icon: 'link', label: 'Copy link to meeting', run: copy(linkId) }] : []),
+      ...meetingLinkRows(loadMeetingLinks(linkId), group).filter((r) => r.label !== label));
   }
   // the node in Tana's own web app (what Show in Tana in the Graph pane's Details did)
-  if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ id: 'openInTana', group: docGroup, icon: 'tana', label: 'Open in Tana', run: () => run(async () => tana.openExternal(await tana.nodeLink(doc.id))) }); }
+  if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ id: 'openInTana', group: docGroup, icon: 'tana', label: 'Open in Tana', run: () => openInTana(doc.id) }); }
   // a meeting's call, on the meeting and on its write-up: its related read carries the link (callRow)
   if (palDoc && isRealId(palDoc.id)) { const call = callRow(relatedBy.get(palDoc.id)); if (call) rows.push({ ...call, group: docGroup }); }
   // Open in <agent>: a new task in that agent's app with the node's link, nothing tracked (Assign to Agent is the
@@ -524,6 +538,15 @@ function showPage(mode, placeholder, page, value = '') {
 // showPage, drawn, with the field focused: the whole of opening most pages, once their context is set. A page that
 // starts something the first draw depends on (Set icon's busy search) calls showPage and draws itself.
 function openPage(mode, placeholder, page, value) { showPage(mode, placeholder, page, value); renderPalette(); palInput.focus(); }
+// A page that asks for a name (Create new …, "/" Task and Meeting, renaming a linked agent): what is typed, trimmed, is
+// the one row to press, rowFor(title) giving its words and what it does; with nothing typed the row says what to type.
+function namePage(mode, placeholder, page, rowFor, value) { // page: { group, icon, back, empty? }
+  const { group, icon, back, empty = 'Type a name' } = page;
+  openPage(mode, placeholder, { back, typed: true, rows: (q, typed) => {
+    const title = String(typed || '').trim();
+    return [{ group, icon, ...(title ? rowFor(title) : { label: empty, disabled: true, note: true }) }];
+  } }, value);
+}
 const BACK_TO_COMMANDS = () => openCommandPalette(); // a page opened from the command page steps back to it
 // Logging out ends the session for every window on this Mac, so the row asks once more; Escape or Cancel steps back.
 function confirmLogout() {
@@ -531,7 +554,7 @@ function confirmLogout() {
     { group: 'Log out of Tana?', icon: 'tana', label: 'Log out', hint: 'Every window, until you log in again', run: () => tana.logout().catch(showError) },
     { group: 'Log out of Tana?', label: 'Cancel', keepOpen: true, run: BACK_TO_COMMANDS },
   ];
-  openPage('logout', 'Log out of Tana?', { back: BACK_TO_COMMANDS, rows: (q) => (q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows) });
+  openPage('logout', 'Log out of Tana?', { back: BACK_TO_COMMANDS, rows: (q) => matchRows(rows, q) });
 }
 // About Orbital: what it is (the field's placeholder), its links first so the first row is one you can run, the big
 // dependencies with their licences, then Orbital's own licence in three lines (the README's License section and
@@ -574,7 +597,7 @@ function loadList(mode, read, keep) {
 function listRows(group, list, q, empty, toRows) {
   const note = (label) => [{ group, label, disabled: true, note: true }]; // says why there are no rows, so no "No results" under it
   if (!list) return note('Loading…');
-  if (list instanceof Error) return note(list.message);
+  if (list instanceof Error) return note(errorText(list));
   const rows = toRows(list);
   return rows.length || q || !empty ? rows : note(empty);
 }
@@ -657,12 +680,9 @@ function startCreation(choice) {
 // keeps its draft on the page (startCreation), where the words go on being typed.
 let creatingNamed = false; // one create per Enter: a second press while main answers makes no second node
 function openNamePage(choice, name) {
-  const group = 'New ' + choice.title;
-  openPage('createName', 'Name the new ' + choice.title + '…', { back: openCreationPalette, typed: true, rows: (q, typed) => {
-    const title = String(typed || '').trim();
-    if (title && choice.kind === 'meeting') return [{ group, icon: choice.icon, label: 'Choose when for “' + title + '”', keepOpen: true, run: () => meetingWhen(null, choice, title) }];
-    return [title ? { group, icon: choice.icon, label: 'Create “' + title + '”', run: () => createNamed(choice, title) } : { group, icon: choice.icon, label: 'Type a name', disabled: true, note: true }];
-  } }, name);
+  namePage('createName', 'Name the new ' + choice.title + '…', { group: 'New ' + choice.title, icon: choice.icon, back: openCreationPalette }, (title) => (choice.kind === 'meeting'
+    ? { label: 'Choose when for “' + title + '”', keepOpen: true, run: () => meetingWhen(null, choice, title) }
+    : { label: 'Create “' + title + '”', run: () => createNamed(choice, title) }), name);
 }
 function createNamed(choice, title) {
   if (creatingNamed) return;
@@ -734,8 +754,34 @@ function loadClipImage() {
 function loadMeeting() {
   if (!tana.currentMeeting || meetingNow !== undefined) return;
   meetingNow = { meeting: null, pending: true }; // asked: the row says Checking… until this is replaced
-  tana.currentMeeting().then((meeting) => { meetingNow = { meeting }; }, (e) => { meetingNow = { meeting: null, error: (e && e.message) || String(e) }; })
+  tana.currentMeeting().then((meeting) => { meetingNow = { meeting }; }, (e) => { meetingNow = { meeting: null, error: errorText(e) }; })
     .then(() => { if (palMode === 'cmd' && !palette.hidden) renderPalette(); });
+}
+// Copy link on a meeting: your notes on it (found, never made: main/meeting-notes.js), its summary (the write-up,
+// main/related.js summaryUri) and its time, asked once per open of ⌘K. A lookup that fails reads as none.
+function loadMeetingLinks(id) {
+  if (meetingLinks && meetingLinks.id === id) return meetingLinks;
+  const mine = meetingLinks = { id, pending: true }, none = () => null;
+  Promise.all([
+    tana.meetingNotes(id).then((a) => (a && a.id && a.owner === myUri() ? a.id : null), none), // another account's are not yours (askNotes)
+    tana.summaryUri(id).catch(none),
+    tana.meetingInfo(id).catch(none),
+  ]).then(([notes, summary, info]) => {
+    Object.assign(mine, { pending: false, notes, summary: summary || null, start: info && info.start, end: info && info.end });
+    if (meetingLinks === mine && palMode === 'cmd' && !palette.hidden) renderPalette();
+  });
+  return mine;
+}
+// The notes are offered until the meeting has finished, or once there are some; the summary once it has started, or
+// once Tana has written one. Offered before the document exists, the row says so and copies nothing.
+function meetingLinkRows(m, group, now = Date.now()) {
+  const at = (t) => (t ? new Date(t).getTime() : NaN);
+  const row = (label, uri, hint) => ({ rank: 'copyLink', group, icon: 'link', label, hint: uri ? '' : hint, disabled: !uri, run: () => copyNodeLink(uri) });
+  if (m.pending) return [row('Copy link to notes', null, 'Checking\u2026'), row('Copy link to summary', null, 'Checking\u2026')];
+  return [
+    ...(m.notes || !(at(m.end) <= now) ? [row('Copy link to notes', m.notes, 'No notes yet')] : []),
+    ...(m.summary || at(m.start) <= now ? [row('Copy link to summary', m.summary, 'No summary yet')] : []),
+  ];
 }
 // Pin the node onto the meeting, looking the meeting up again first: the palette may have been open for minutes and
 // "the meeting I am in" outlives that by not much. A lookup that fails is reported like any other failed action
@@ -788,7 +834,7 @@ function loadTypeList(doc) {
   typeList = null; typeListError = null;
   return tana.docTypes(doc.id).then(
     (list) => { typeList = list && Array.isArray(list.options) ? list : { current: null, options: [] }; },
-    (e) => { typeListError = (e && e.message) || String(e); },
+    (e) => { typeListError = errorText(e); },
   ).then(() => { if (palMode === 'setType') renderPalette(); });
 }
 // the list as a promise, so the folded level under "Set type" can show it before the page is opened
@@ -827,7 +873,7 @@ function openClassifyPalette(doc) {
   const mine = classifyAI = { state: 'thinking' };
   tana.classifyType(doc.id).then(
     (answer) => { mine.state = 'ready'; mine.current = (answer && answer.current) || null; mine.choices = (answer && answer.choices) || []; },
-    (e) => { mine.state = 'failed'; mine.error = (e && e.message) || String(e); },
+    (e) => { mine.state = 'failed'; mine.error = errorText(e); },
   ).then(() => {
     if (classifyAI !== mine || palMode !== 'classify') return; // a page left in the meantime is neither redrawn nor written
     const best = mine.state === 'ready' && mine.choices[0];
@@ -873,7 +919,7 @@ function loadDiscussSuggestion(doc) {
   const mine = discussAI;
   tana.suggestDiscussWith(title).then(
     (value) => { mine.state = 'ready'; mine.value = typeof value === 'string' ? value.trim() : ''; mine.arriving = true; },
-    (e) => { mine.state = 'failed'; mine.error = (e && e.message) || String(e); mine.arriving = true; },
+    (e) => { mine.state = 'failed'; mine.error = errorText(e); mine.arriving = true; },
   ).then(() => { if (discussAI === mine && palMode === 'discuss') renderPalette(); }); // a page left in the meantime is not redrawn
 }
 function discussRows(q, typed) {
@@ -1139,7 +1185,7 @@ function togglePalette(mode, link, pin) {
     { cmd: { rows: paletteRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
-  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); loadClipImage(); }
+  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingLinks = null; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); loadClipImage(); }
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }

@@ -63,6 +63,8 @@ class FakePlatform(
     override fun hasClipboardImage() = false
     val glimpses = mutableListOf<Glimpse?>() // what the widgets were given (Engine.keepTimeline), null when it was forgotten
     override suspend fun keepGlimpse(read: Glimpse?) { glimpses += read }
+    val tasks = mutableListOf<List<Row>?>() // what the launcher was given (Engine.keepTasks), null when it was forgotten
+    override suspend fun keepTasks(tasks: List<Row>?, pinned: Set<String>) { this.tasks += tasks }
     @Composable override fun rememberPhotoPicker(picked: (ByteArray) -> Unit): () -> Unit = {}
     @Composable override fun EngineView(modifier: Modifier) {}
     @Composable override fun ChatGPTSignIn(done: () -> Unit, failed: (String) -> Unit) {}

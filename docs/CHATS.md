@@ -170,7 +170,7 @@ Meetings link chats with `EDGE_TYPE_HAS_PIN` and `EDGE_TYPE_BELONGS_TO`, as `doc
   the event). Tana's own chat search (`inspectChats`, bundle of 2026-09-23) keeps a chat whose intent is absent or
   outside its background set `$c`, which is every intent but `meeting`. Orbital adds those meeting chats to every list
   that includes chats and lists the unowned ones as before (MCP chats under their own switch, below):
-  `main/views.js` `listFilter` sends a second query, `includeOwnedChats: true` with
+  `sdk/query.js` `addMeetingChats`, wrapping `main/views.js` `listFilter`'s call and the phones' engine's, sends a second query, `includeOwnedChats: true` with
   `chatInvocationIntents: ['meeting']` under the list's own filters, and merges it in by update time (after the rest
   when the server ranked by text). It cannot be one query: `chatInvocationIntents` drops every node without that
   intent, other kinds included, and no value matches a chat without one. Adding the flag and filtering afterwards

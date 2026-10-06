@@ -5,7 +5,7 @@ const js = require('@eslint/js');
 const globals = require('globals');
 
 module.exports = [
-  { ignores: ['node_modules/**', 'dist/**', 'build/**', 'android/**/build/**', 'android/.gradle/**', '.tana-log/**', 'sdk/proto/descriptors.js', 'icons.js'] },
+  { ignores: ['node_modules/**', 'dist/**', 'build/**', 'android/**/build/**', 'android/.gradle/**', 'ios/.derived/**', '.tana-log/**', 'sdk/proto/descriptors.js', 'icons.js'] },
   js.configs.recommended,
   {
     // main.js, main/, sdk/, scripts/, db.js, userdata.js, updater.js, tana-session.js: plain CommonJS on node.
@@ -37,7 +37,7 @@ module.exports = [
   },
   {
     // The Help tour, Quick Add Task, the update card and the Settings window are pages of their own, each its own scope
-    // (index.html does not load them; settings.html borrows renderer/segments.js, named in settings.js's global comment).
+    // (index.html does not load them; settings.html borrows renderer/segments.js and renderer/settings.js, named in settings.js's global comment).
     files: ['help.js', 'task.js', 'update.js', 'settings.js'],
     languageOptions: { sourceType: 'script', globals: globals.browser },
     rules: { 'no-unused-vars': ['error', { vars: 'local', args: 'none' }] },

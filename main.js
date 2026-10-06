@@ -8,6 +8,7 @@ const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const { userDataDir } = require('./userdata');
+const { isId } = require('./sdk/ids');
 const updater = require('./updater');
 const agents = require('./main/agents');
 const ai = require('./main/ai');
@@ -215,7 +216,7 @@ function closeOverlay(win, result = {}) {
   const main = win.panes.find((p) => !p.side) || win.panes[0]; // page '' when it is open: the tour's own
   const help = !!pending && !win.isDestroyed() && !!main && firstHelp(main, pending.theme);
   const note = typeof result.note === 'string' ? result.note.slice(0, 200) : undefined;
-  const open = typeof result.open === 'string' && /^tana:[a-z-]+:[0-9a-z]{26}$/.test(result.open) ? result.open : undefined; // the node the note is about, which its toast opens
+  const open = isId(result.open) ? result.open : undefined; // the node the note is about, which its toast opens
   if (opener && !opener.isDestroyed()) {
     if (!help) opener.focus(); // the tour has the keys now
     opener.send('overlay:closed', { palette: result.palette === true && !help, chatgpt: result.chatgpt === true && !help, note: help ? undefined : note, open: help ? undefined : open });
@@ -545,7 +546,7 @@ body:has(.tl-container) :is(.tl-container, .tl-container *, [data-radix-popper-c
 :has(.tl-container) { transform: none !important; contain: none !important; filter: none !important; }`;
 const canvasWindows = new Map(); // canvas id -> its window
 ipcMain.handle('canvas:open', (_e, id) => {
-  if (!/^tana:canvas:[0-9a-z]{26}$/.test(String(id))) throw new Error('Not a canvas');
+  if (!isId(id, 'canvas')) throw new Error('Not a canvas');
   const open = canvasWindows.get(id);
   if (open && !open.isDestroyed()) return open.focus();
   const url = webLink(id);
@@ -582,8 +583,23 @@ ipcMain.handle('sync:logout', async () => {
   await S.session.logout();
 });
 
+// orbital:<id> (orbital:tana:text:…), clicked anywhere on this Mac, opens that node here, as it does on the phones
+// (ios Shell.swift open, android MainActivity). Only a node id is taken; any page can open such a link, and opening is all
+// it does. A link heard before a window can open it (the one that launched the app comes before 'ready') waits for it.
+const nodeLinks = { open: null, waiting: null };
+function heardLink(url) {
+  const id = /^orbital:(tana:[a-z-]+:[0-9a-z]{26})$/.exec(String(url))?.[1];
+  if (!id) return;
+  if (nodeLinks.open) nodeLinks.open(id); else nodeLinks.waiting = id;
+}
+function linksReady(open) {
+  const id = nodeLinks.waiting;
+  nodeLinks.open = open; nodeLinks.waiting = null;
+  if (id) open(id);
+}
+
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, reliveRefs: require('./main/documents').reliveRefs, rememberEdit: require('./main/documents').rememberEdit, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, weekTitle, weekNode,
+  module.exports = { resolveInitialAuth, heardLink, linksReady, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, reliveRefs: require('./main/documents').reliveRefs, rememberEdit: require('./main/documents').rememberEdit, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, savedDoc, closeFront, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
     nodePin, dropSearchHeads,
@@ -601,16 +617,8 @@ if (process.env.TANA_MAIN_TEST) {
   // folder is named after the app, so an install still carrying the old name is moved here once (userdata.js).
   app.setPath('userData', userDataDir(app.getPath('appData'), { migrate: true }));
 
-  // orbital:<id> (orbital:tana:text:…), clicked anywhere on this Mac, opens that node here, as it does on the phones
-  // (ios Shell.swift open, android MainActivity). Heard before 'ready': the link that launched the app comes before it.
-  // Only a node id is taken; any page can open such a link, and opening is all it does.
-  let openNode = null, linked = null;
-  app.on('open-url', (e, url) => {
-    e.preventDefault();
-    const id = String(url).slice('orbital:'.length);
-    if (!/^orbital:tana:[a-z-]+:[0-9a-z]{26}$/.test(url)) return;
-    if (openNode) openNode(id); else linked = id;
-  });
+  // heard before 'ready': the link that launched the app comes before it (heardLink, above)
+  app.on('open-url', (e, url) => { e.preventDefault(); heardLink(url); });
   if (app.isPackaged) app.setAsDefaultProtocolClient('orbital'); // a dev run would take the links from the installed app
 
   app.whenReady().then(async () => {
@@ -627,7 +635,7 @@ if (process.env.TANA_MAIN_TEST) {
     const onScreen = new Map();
     // A node opened in the page used last, not all of them; a new window when the last one was closed, or the first
     // page when it has not loaded yet (a link that launched the app): told once it has, and so listens.
-    openNode = (docId) => {
+    const openNode = (docId) => {
       const page = frontPane();
       if (page) { S.win.show(); S.win.focus(); page.focus(); return page.send('notify:open', docId); }
       if (!S.windows.size) createWindow();
@@ -662,7 +670,7 @@ if (process.env.TANA_MAIN_TEST) {
     S.session = createTanaSession();
     createMenu();
     createWindow();
-    if (linked) openNode(linked);
+    linksReady(openNode);
     // Closing the last window keeps the app in the Dock, as a Mac app does (Cmd+Q quits); the Dock icon opens a new
     // one, and brings the window forward while there is one. Registered once the first window exists, so a click
     // during launch cannot open a window before the database is.

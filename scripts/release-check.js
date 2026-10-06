@@ -21,13 +21,12 @@ function release(env = {}) {
     stub(path.join(bin, 'git'), '[ "$1" = status ] && exit 0\nexit 0\n');
     stub(path.join(bin, 'security'), 'echo \'  1) ABC "Developer ID Application: Orbital (TEAM)"\'\n');
     for (const name of ['xcrun', 'spctl']) stub(path.join(bin, name));
-    // MAIN_RED: the scheduled checks on main are failing (an open "Scheduled checks failed", checks.yml)
-    stub(path.join(bin, 'gh'), '[ "$1 $2" = "issue list" ] && [ -n "$MAIN_RED" ] && echo "Scheduled checks failed"\nexit 0\n');
+    stub(path.join(bin, 'gh'));
     stub(path.join(bin, 'npm'), '[ "$1" = version ] && node -e "const f = \'package.json\', p = JSON.parse(require(\'fs\').readFileSync(f)); p.version = \'0.10.1\'; require(\'fs\').writeFileSync(f, JSON.stringify(p))"\n[ "$1" = run ] && mkdir -p dist/Orbital-darwin-arm64/Orbital.app\nexit 0\n');
     stub(path.join(bin, 'ditto'), 'for last; do :; done; touch "$last"\n');
     stub(path.join(dir, 'scripts', 'android-release.sh'), '[ "$1" = --check ] && { [ -z "$ANDROID_REFUSES" ] || exit 1; exit 0; }\ntouch "$1"\n');
     const run = spawnSync('sh', [path.join(dir, 'scripts', 'release.sh'), 'patch'], { cwd: dir, encoding: 'utf8',
-      env: { ...process.env, ORBITAL_ANDROID: '', ANDROID_REFUSES: '', MAIN_RED: '', ...env, PATH: bin + path.delimiter + process.env.PATH, RELEASE_LOG: log } });
+      env: { ...process.env, ORBITAL_ANDROID: '', ANDROID_REFUSES: '', ...env, PATH: bin + path.delimiter + process.env.PATH, RELEASE_LOG: log } });
     return { status: run.status, calls: fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n') : [] };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -39,6 +38,9 @@ const releases = (calls, repo) => calls.filter((c) => c.startsWith('gh release c
   assert.equal(status, 0, 'a release with Android runs to the end');
   assert.ok(at(calls, 'android-release.sh --check') > at(calls, 'xcrun notarytool history') && at(calls, 'android-release.sh --check') < at(calls, 'npm version'),
     'the Android key is checked with the Mac credentials, before the version is bumped');
+  const checks = ['npm run lint', 'npm run check', 'npm run flows', 'npm run phones'].map((c) => at(calls, c));
+  assert.ok(checks.every((i, n) => i > at(calls, 'android-release.sh --check') && i < at(calls, 'npm version') && (n === 0 || i > checks[n - 1])),
+    'every local check, then both phones, runs before the version is bumped');
   const build = at(calls, 'android-release.sh dist/Orbital-android.apk');
   assert.ok(build > at(calls, 'npm run package') && build < at(calls, 'git push'), 'the APK is built from the bumped commit, before anything is pushed');
   const [main] = releases(calls, 'foeken/orbital ');
@@ -57,15 +59,5 @@ const releases = (calls, repo) => calls.filter((c) => c.startsWith('gh release c
   const { status, calls } = release({ ANDROID_REFUSES: '1' });
   assert.notEqual(status, 0, 'a release key that is missing, unpinned or a debug key stops the release');
   assert.equal(at(calls, 'npm version'), -1, 'before the version is bumped, so there is nothing to undo');
-}
-{
-  const { status, calls } = release({ MAIN_RED: '1' });
-  assert.notEqual(status, 0, 'the scheduled checks failing on main hold the release');
-  assert.equal(at(calls, 'security'), -1, 'asked first, before the credentials, the bump or the build');
-}
-{
-  const { calls } = release();
-  assert.ok(at(calls, 'gh pr checks --required --watch') > at(calls, 'gh pr create') && at(calls, 'gh pr checks --required --watch') < at(calls, 'gh pr merge'),
-    'the bump merges once the checks main requires have passed (main-green.yml)');
 }
 console.log('release ok');

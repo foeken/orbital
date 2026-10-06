@@ -4,7 +4,8 @@
 // ---- segments: [{ text, marks? } | { mention: { label, uri } }] <-> plain text <-> DOM ----
 // marks = { bold, italic, strike, code, link: href } on one text run: exactly the shape api.setText takes back.
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const localDate = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // local YYYY-MM-DD, N days on (1 = tomorrow)
+const isoDay = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); // a Date's local YYYY-MM-DD: the one way the app writes a day
+const localDate = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return isoDay(d); }; // today's, N days on (1 = tomorrow)
 // this week's node's title, "Week 38 (2026)" (ISO week), as main/pins.js weekTitle makes it
 const weekTitle = () => { const d = new Date(), t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7)); return 'Week ' + Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7) + ' (' + t.getUTCFullYear() + ')'; };
 // A date mention (sdk/dates.js): tana:plaindate:YYYY-MM-DD, or tana:zoneddate:… with a time and a zone. dayOfUri is
@@ -258,4 +259,4 @@ function typedMark(segs, off) {
 // inline mark or link. A plain line pastes as it is.
 const looksMarkdown = (text) => /\S[^\S\n]*\n\s*\S|^\s*(?:[-*+] |\d+[.)] |#{1,6} |> |```|-{3,}\s*$)|\*\*[^*\n]+\*\*|~~[^~\n]+~~|`[^`\n]+`|\[[^\]\n]*\]\((?:https?:|tana:)[^)\s]+\)|(?<![*\w])\*[^*\s][^*\n]*\*/m.test(text);
 // The iPhone app's demo mode masks with these same words (ios/engine/demo.js); in the window there is no module
-if (typeof module === 'object') module.exports = { demoText, demoSegments, demoPersonName, demoWordCount, setDemo: (on) => { demoMode = on; } };
+if (typeof module === 'object') module.exports = { demoText, demoSegments, demoPersonName, demoWordCount, isoDay, setDemo: (on) => { demoMode = on; } };

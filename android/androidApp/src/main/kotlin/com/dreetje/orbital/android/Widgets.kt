@@ -68,7 +68,7 @@ import kotlin.time.Instant
 // docs/ANDROID.md Review guidelines): Today's Tasks across the widget's whole width, and the Timeline on its rail in two,
 // scrolled as the app's is: what is ahead today (today's tasks and the meetings to come) and Activity, what happened. A row
 // opens its node in the app, + opens Quick Add, the title the Timeline; a task's box opens the app too, which ticks it
-// and writes it to Tana at once (MainActivity tick), as the iPhone's does.
+// and writes it to Tana at once (orbital:check:<id>, ui/Shell.kt Link), as the iPhone's does.
 object Widgets {
     private const val KEY = "glimpse"
     private val glimpse = MutableStateFlow<Glimpse?>(null)
@@ -218,7 +218,7 @@ private fun Frame(title: String, plus: Boolean = true, content: @Composable () -
     Column(GlanceModifier.fillMaxSize().appWidgetBackground().cornerRadius(android.R.dimen.system_app_widget_background_radius).background(Glass.back)) {
         Row(GlanceModifier.fillMaxWidth().height(48.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, GlanceModifier.defaultWeight().clickable(openApp(context)), style = TextStyle(Glass.ink, 17.sp, FontWeight.Bold), maxLines = 1)
-            if (plus) Box(GlanceModifier.size(44.dp).clickable(openApp(context, "add") { putExtra("add", true) }), contentAlignment = Alignment.Center) {
+            if (plus) Box(GlanceModifier.size(44.dp).clickable(openApp(context, "add")), contentAlignment = Alignment.Center) {
                 Image(ImageProvider(R.drawable.add), "Quick Add Task", GlanceModifier.size(22.dp), colorFilter = ColorFilter.tint(Glass.ink))
             }
         }
@@ -280,7 +280,7 @@ private fun TaskBox(state: String?) {
     }
 }
 
-// a task's box on a widget: a tap opens the app, which writes it to Tana at once (MainActivity tick), by the app's own
+// a task's box on a widget: a tap opens the app, which writes it to Tana at once (orbital:check:<id>), by the app's own
 // rule (Engine.toggle): an Inbox task is accepted and a done one ticked back on (open), any other ticked off; the row
 // around it opens the task
 @Composable
@@ -288,7 +288,7 @@ private fun Tick(task: Row, modifier: GlanceModifier) {
     val state = task.stateType
     val opens = state == "closed" || state == "proposed"
     val context = LocalContext.current
-    val tick = openApp(context, (if (opens) "uncheck:" else "check:") + task.id) { putExtra("tick", task.id); putExtra("to", if (opens) "open" else "closed") }
+    val tick = openApp(context, (if (opens) "uncheck:" else "check:") + task.id)
     val said = (if (state == "closed") "Mark as not done" else if (state == "proposed") "Accept" else "Mark as done") +
         if (task.sensitive == true) "" else ", " + task.words // never a sensitive one's words
     Box(modifier.clickable(tick).semantics { contentDescription = said }, contentAlignment = Alignment.Center) { TaskBox(task.stateType) }
@@ -306,9 +306,12 @@ private fun Words(words: String, quiet: Boolean = false, done: Boolean = false) 
 // Glimpse the app kept)
 @Composable
 private fun Words(row: Row, quiet: Boolean = false) {
-    if (row.sensitive != true) return Words(row.segments?.joinToString("") { it.text ?: it.mention?.label ?: "" }?.takeIf { it.isNotBlank() } ?: row.words, quiet, done = row.stateType == "closed")
+    if (row.sensitive != true) return Words(sentence(row).ifBlank { row.words }, quiet, done = row.stateType == "closed")
     Box(GlanceModifier.width((72 + (row.id.hashCode() and 63)).dp).height(9.dp).cornerRadius(3.dp).background(Glass.rule).semantics { contentDescription = "Sensitive" }) {}
 }
+
+// a row's segments as one line of words, a mention by its name
+private fun sentence(row: Row) = row.segments.orEmpty().joinToString("") { it.text ?: it.mention?.label ?: "" }
 
 // an Activity line: its sentence (main/timeline.js "Sam edited Onboarding flow") cut to the node's title, as the marker
 // beside it says what happened. TalkBack still reads the whole sentence.
@@ -317,7 +320,7 @@ private fun Brief(row: Row, quiet: Boolean) {
     val segments = row.segments.orEmpty() // Row is another module's: no smart cast on its fields
     val title = segments.lastOrNull { it.content == true }?.text
     if (row.sensitive == true || title == null) return Words(row, quiet)
-    val said = segments.joinToString("") { it.text ?: it.mention?.label ?: "" }
+    val said = sentence(row)
     Box(GlanceModifier.semantics { contentDescription = said }) { Words(title, quiet) }
 }
 
@@ -334,8 +337,8 @@ private fun Divider() =
 private fun Note(words: String, modifier: GlanceModifier = GlanceModifier) =
     Text(words, modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = TextStyle(Glass.grey, 14.sp))
 
-// a node opened in the app (MainActivity's zoom), or the app itself; each intent made unique by what it opens, as a
-// pending intent ignores the extras
-private fun open(context: Context, id: String) = openApp(context, id) { putExtra("zoom", id) }
-private fun openApp(context: Context, what: String = "timeline", extras: Intent.() -> Unit = {}): Action =
-    actionStartActivity(Intent(context, MainActivity::class.java).setData(Uri.fromParts("orbital", what, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply(extras))
+// the iPhone widgets' orbital: links (MainActivity link, ui/Shell.kt Link): a node opened in the app, Quick Add, a task
+// ticked, or the Timeline; each intent unique by its link, through Orbital's own way in, so a box ticks at once
+private fun open(context: Context, id: String) = openApp(context, id)
+private fun openApp(context: Context, what: String = "timeline"): Action =
+    actionStartActivity(Intent(context, FromOrbital::class.java).setData(Uri.fromParts("orbital", what, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

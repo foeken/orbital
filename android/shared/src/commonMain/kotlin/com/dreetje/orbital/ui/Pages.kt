@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
@@ -78,6 +79,8 @@ import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Failure
 import com.dreetje.orbital.Lists
 import com.dreetje.orbital.Member
+import com.dreetje.orbital.Phrases
+import com.dreetje.orbital.matching
 import com.dreetje.orbital.Row as Node
 import com.dreetje.orbital.Times
 import com.dreetje.orbital.kindOf
@@ -144,7 +147,10 @@ fun NodeScreen(
         delay((since + 120.seconds - engine.now()).coerceAtLeast(Duration.ZERO))
         waitOver = true
     }
-    LaunchedEffect(engine.sensitiveIds) { if (page != null) load() } // marked or unmarked on another device: drawn again
+    // marked or unmarked on another device: drawn again; only on a change, as the iPhone's onChange, or a page opened from
+    // its last read was read twice over
+    var readSensitive by remember(id) { mutableStateOf(engine.sensitiveIds) }
+    LaunchedEffect(engine.sensitiveIds) { if (engine.sensitiveIds != readSensitive) { readSensitive = engine.sensitiveIds; if (page != null) load() } }
     // Demo mode turned on or off with this page open: read again, and none of the words read before it shown meanwhile
     var readInDemo by remember(id) { mutableStateOf(engine.demo) }
     LaunchedEffect(engine.demo) { if (engine.demo != readInDemo) { readInDemo = engine.demo; page = null; load() } }
@@ -348,9 +354,9 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
             val now = engine.states[id] ?: access.state ?: "open"
             var menu by remember { mutableStateOf(false) }
             Column {
-                Field("Status", { menu = true }) { Text(STATES.firstOrNull { it.first == now }?.second ?: "In Progress", color = c.text) }
+                Field("Status", { menu = true }) { Text(Phrases.state(now), color = c.text) }
                 DropdownMenu(menu, { menu = false }) {
-                    STATES.forEach { (state, word) ->
+                    Phrases.states.forEach { (state, word) ->
                         DropdownMenuItem({ Text(word, color = c.text) }, { menu = false; engine.scope.launch { engine.tick(id, state); reload() } },
                             trailingIcon = if (state == now) ({ Icon(Icons.Outlined.Check, null, tint = c.text) }) else null)
                     }
@@ -363,6 +369,15 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
         Field("Visible to", open) {
             if (access.audience == "people" && access.people.isNotEmpty()) Faces(access.people.persons) else AudienceLabel(access.audience, access.space)
         }
+        // pinned to today, or the pin taken off whatever day it is on, as the long press does it (Engine.pin): an outside
+        // orbital:pin: link opens the node here (ui/Shell.kt Link), so the pin is made where you see it
+        val pinned = id in engine.pinned
+        Row(Modifier.fillMaxWidth().clickable { engine.scope.launch { engine.pin(id, !pinned) } }.semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Outlined.PushPin, null, Modifier.size(18.dp), c.text)
+            Text(if (pinned) "Remove Pin" else "Pin to Today", color = c.text)
+        }
+        HorizontalDivider(color = c.separator)
         // handed to your Dot (Agents.kt): its name and its last Agent status line; a tap asks it again or takes it back
         access.agent?.let { held ->
             var menu by remember { mutableStateOf(false) }
@@ -384,8 +399,6 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
         }
     }
 }
-
-private val STATES = listOf("proposed" to "Inbox", "open" to "In Progress", "closed" to "Completed", "not_now" to "Later")
 
 // a field as the desktop draws one: its name in grey, its value after it, a line under it, the whole row the button
 // that changes it
@@ -418,13 +431,7 @@ fun Dots(still: Boolean, modifier: Modifier = Modifier) {
 @Composable
 fun AudienceLabel(scope: String, space: String?, glyphs: Boolean = true) {
     val c = Theme.colors
-    val (word, glyph) = when (scope) {
-        "only-me" -> "Only you" to "lock"
-        "people" -> "Selected people" to "userLock"
-        "space" -> (space?.let { "Members of $it" } ?: "Space members") to "houseLock"
-        "everyone" -> "Everyone" to "users"
-        else -> "Unknown" to "hidden"
-    }
+    val (word, glyph) = Phrases.audience(scope, space)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         if (glyphs) Glyph(glyph, Modifier.size(18.dp), c.secondary)
         Text(word, style = Type.body, color = c.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -478,7 +485,7 @@ fun PeoplePicker(access: Access, engine: Engine, back: () -> Unit, apply: (List<
     }
     SheetBar("Select people", back = back, action = "Apply", enabled = picked.isNotEmpty()) { apply(picked.toList()) }
     SearchField(query, { query = it })
-    val shown = people.filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
+    val shown = people.matching(query)
     LazyColumn {
         item {
             if (shown.isNotEmpty()) Group {

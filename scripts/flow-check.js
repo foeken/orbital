@@ -363,6 +363,32 @@ flow('Copy link on a Timeline meeting copies the meeting', async (p) => {
   assert.equal(await p.js('window.__copied'), await p.js('tana.nodeLink(' + J(uri) + ')'), 'Copy link copied the meeting\u2019s link');
   await p.key('esc');
 });
+// 8b. Copy link on a meeting's page: the meeting, your notes and its summary, each while it exists or may still come
+flow('Copy link on a meeting offers the meeting, your notes and its summary, and ⌘C copies the one on screen', async (p) => {
+  await p.start({ real: true }); // Copy link needs a real id
+  await p.js('window.copyText = (text) => { window.__copied = text; }');
+  const open = async (id) => { await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 300); };
+  // ⌘K's Copy link rows, sorted, the one ⌘C runs marked; then ⌘C with ⌘K closed, and the link it copied
+  const links = async () => {
+    await p.key('\u2318K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type('copy link');
+    await p.waitFor('palRows.filter((r) => /^Copy link/.test(r.label)).length > 1 && !palRows.some((r) => r.hint === "Checking\u2026")', 'the meeting\u2019s links');
+    const rows = await p.js('palRows.filter((r) => /^Copy link/.test(r.label)).map((r) => (r.id === "copyLink" ? "\u2318C " : "") + r.label + (r.disabled ? " (" + r.hint + ")" : "")).sort()');
+    await closePalette(p);
+    await p.js('window.__copied = null; document.activeElement.blur(); 1'); await p.key('\u2318C');
+    await p.waitFor('window.__copied', 'the link \u2318C copied');
+    return [rows, await p.js('window.__copied')];
+  };
+  const link = (uri) => p.js('tana.nodeLink(' + J(uri) + ')');
+  await open('tana:event:mockmeeting4');
+  await p.waitFor('summaryShown(zoom.docId) && __screen().length', 'its summary on screen'); // no notes: the summary alone, no switch
+  assert.deepEqual(await links(), [['Copy link to meeting', 'Copy link to notes (No notes yet)', '\u2318C Copy link to summary'], await link('tana:text:mockwriteup4')], 'tomorrow, its summary shown: \u2318C copies the summary');
+  await open('tana:event:mockmeeting5');
+  await p.waitFor('meetingNotes.get("tana:event:mockmeeting5")?.id', 'its notes on screen');
+  assert.deepEqual(await links(), [['Copy link to meeting', '\u2318C Copy link to notes'], await link('tana:text:mocknotes5')], 'in three days, its notes shown: \u2318C copies them, no summary yet');
+  await open('tana:event:mockmeeting1');
+  assert.deepEqual(await links(), [['Copy link to summary (No summary yet)', '\u2318C Copy link to meeting'], await link('tana:event:mockmeeting1')], 'two days ago, nothing written: no notes row, \u2318C copies the meeting');
+  assert.equal(await p.js('__notes.made'), 0, 'asking made no notes');
+});
 // 9. The Settings window (settings.html): each control makes its call, an answer older than a newer one is dropped
 // (#673 review), the keyboard stays on the control that had it, and demo mode masks your email and hidden titles
 const SETTINGS_API = String.raw`(() => {
@@ -1309,6 +1335,12 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   const notes = []; for (const s of ['5', '6', '7']) notes.push(await p.jsIn(s, 'zoom && zoom.docId'));
   assert.equal(new Set(notes).size, 3, 'each key made a note of its own');
   assert.ok(notes.every((id) => /^tana:text:/.test(id)), 'and opened its page on it');
+  // Copy link in a tab's menu (shell.js) on a meeting copies what its page shows, as ⌘C does: here its summary
+  await p.jsIn('2', 'window.copyText = (text) => { window.__copied = text; }; goTo("mockmeeting4"); 1');
+  await p.waitFor(frame('2') + '.contentDocument.querySelector(".notes-head")?.textContent.includes("isible to") && ' + frame('2') + '.contentDocument.getElementById("title").textContent === "1-1 with Sam"', 'the meeting\u2019s summary on screen');
+  await p.js(frame('2') + '.contentWindow.postMessage({ orbital: "copyLink" }, "*")');
+  await p.waitFor(frame('2') + '.contentWindow.__copied', 'the tab\u2019s Copy link');
+  assert.equal(await p.jsIn('2', 'window.__copied'), await p.jsIn('2', 'tana.nodeLink("tana:text:mockwriteup4")'), 'the tab\u2019s Copy link copied the summary');
   for (const s of await sides()) assert.deepEqual(await p.jsIn(s, 'window.__errors'), [], 'page ' + s + ' reported errors');
 });
 

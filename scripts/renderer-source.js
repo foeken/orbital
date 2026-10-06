@@ -18,4 +18,18 @@ const tops = files.map((file, i) => {
   // every top-level binding, destructured ones included; through: the references the file leaves to other files
   return { file, ast, scope, names: scope.variables.map((v) => v.name) };
 });
-module.exports = { files, source: texts.join('\n'), tops };
+const source = texts.join('\n');
+// One renderer function as written, async or not, from its declaration to its closing brace: what both renderer checks
+// slice and run. ponytail: braces are counted, so a "{" or "}" inside a string or regex of that function cuts it short,
+// which the vm running it then fails on loudly; parse with espree (above) if that ever bites.
+function functionSource(name) {
+  const asyncStart = source.indexOf('async function ' + name + '(');
+  const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
+  if (start === -1) throw new Error('renderer function ' + name + ' is present');
+  for (let end = start, depth = 0; end < source.length; end++) {
+    if (source[end] === '{') depth++;
+    if (source[end] === '}' && --depth === 0) return source.slice(start, end + 1);
+  }
+  throw new Error('renderer function ' + name + ' is complete');
+}
+module.exports = { files, source, tops, functionSource };

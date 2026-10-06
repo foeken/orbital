@@ -63,13 +63,10 @@ function proposalButtonsEl(node, answer = answerProposal) {
   const el = document.createElement('span');
   el.className = 'pbuttons';
   for (const [approve, kind, label, icon] of [[true, 'approve', 'Approve', 'approve'], [false, 'reject', 'Reject', 'trash']]) { // reject is a plain trash can, as in Tana
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'pbutton ' + kind; b.tabIndex = -1;
-    b.disabled = approve && !node.proposal.approvable;
-    b.title = b.disabled ? node.proposal.reason || 'Approve it in Tana' : label;
-    b.setAttribute('aria-label', label);
-    b.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as every other row control does
-    b.onclick = (e) => { e.stopPropagation(); answer(node, approve); };
+    const disabled = approve && !node.proposal.approvable;
+    // the caret stays where it is, as every other row control does; a disabled Approve says why in its tooltip
+    const b = quietButton('pbutton ' + kind, label, (e) => { e.stopPropagation(); answer(node, approve); }, { tabIndex: -1, title: disabled ? node.proposal.reason || 'Approve it in Tana' : null });
+    b.disabled = disabled;
     el.append(addIcon(b, icon));
   }
   // an action's approve runs it, so it says where, as Tana's own button does: "Send to Slite" (or Run)

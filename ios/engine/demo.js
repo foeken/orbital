@@ -6,6 +6,8 @@ const { demoText, demoSegments, demoPersonName, demoWordCount, setDemo } = requi
 
 let on = false;
 const person = (name) => demoPersonName(name, demoWordCount(name));
+// Tana's words for a change, masked; a meeting's note is its length ("45 min"), the app's own words, kept (renderer/views.js subtextOf)
+const noted = (t) => (t.note && !['meeting', 'faint'].includes(t.tone) ? demoText(t.note, t.uri) : t.note);
 const masked = (r) => ({
   ...r,
   ...(r.title != null ? { title: demoText(r.title, r.id) } : {}),
@@ -13,7 +15,7 @@ const masked = (r) => ({
   ...(r.segments ? { segments: demoSegments(r.segments, r.id) } : {}),
   ...(r.reference ? { reference: { ...r.reference, label: demoText(r.reference.label, r.reference.uri) } } : {}),
   ...(r.people ? { people: r.people.map((p) => ({ ...p, name: person(p.name) })) } : {}),
-  ...(r.timeline ? { timeline: { ...r.timeline, change: r.timeline.change && demoText(r.timeline.change, r.timeline.uri), detail: r.timeline.detail && demoText(r.timeline.detail, r.timeline.uri) } } : {}),
+  ...(r.timeline ? { timeline: { ...r.timeline, note: noted(r.timeline), change: r.timeline.change && demoText(r.timeline.change, r.timeline.uri), detail: r.timeline.detail && demoText(r.timeline.detail, r.timeline.uri) } } : {}),
   ...(r.children ? { children: r.children.map(masked) } : {}),
   image: undefined, // an image's pixels are never shown: the row says Image, as the desktop draws its place (demoImageEl)
 });

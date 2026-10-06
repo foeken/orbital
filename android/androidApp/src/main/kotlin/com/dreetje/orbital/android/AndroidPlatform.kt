@@ -29,6 +29,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.webkit.ProfileStore
 import androidx.webkit.WebViewFeature
 import com.dreetje.orbital.ChatGPT
@@ -36,6 +39,7 @@ import com.dreetje.orbital.Glimpse
 import com.dreetje.orbital.Platform
 import com.dreetje.orbital.Recorder
 import com.dreetje.orbital.Store
+import com.dreetje.orbital.shortcuts
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -143,6 +147,22 @@ class AndroidPlatform(private val context: Context) : Platform {
     override fun hasClipboardImage(): Boolean = clipboard?.primaryClipDescription?.hasMimeType("image/*") == true
     override suspend fun keepGlimpse(read: Glimpse?) = Widgets.keep(context, read) // the widgets' Timeline (Engine.keepTimeline)
 
+    // The launcher's shortcuts for your tasks (the iPhone's Siri tasks, Intents.swift; Engine.keepTasks): the newest still
+    // to do, beside Quick Add and Today's Tasks (res/xml/shortcuts.xml), each opened, checked off and pinned or unpinned
+    // through Orbital's own way in (FromOrbital, Glimpse.kt shortcuts); all of them gone once forgotten. A launcher that
+    // refuses (too many updates) keeps the last ones.
+    override suspend fun keepTasks(tasks: List<com.dreetje.orbital.Row>?, pinned: Set<String>) {
+        runCatching {
+            if (tasks == null) return ShortcutManagerCompat.removeAllDynamicShortcuts(context)
+            val room = (ShortcutManagerCompat.getMaxShortcutCountPerActivity(context) - 2).coerceAtLeast(0)
+            ShortcutManagerCompat.setDynamicShortcuts(context, tasks.shortcuts(room, pinned).mapIndexed { i, s ->
+                ShortcutInfoCompat.Builder(context, s.id).setShortLabel(s.label.take(25)).setLongLabel(s.label.take(80)).setRank(i)
+                    .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
+                    .setIntent(FromOrbital.open(context, s.link).setAction(Intent.ACTION_VIEW)).build()
+            })
+        }
+    }
+
     // the clip read where the tap was (Android lets the app in front read it), the image made smaller off the main thread
     override suspend fun pasteImage(): ByteArray? {
         val uri = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri ?: return null
@@ -241,13 +261,34 @@ private class Prefs(context: Context) : Store {
 
 // Files as the shared module's Platform.files: a file a key, written whole beside it first and moved over it, so a value
 // is never half written. SharedPreferences rewrites and reads every key at once, where the translations grow for ever.
-internal class Files(context: Context) : Store {
-    private val dir = File(context.filesDir, "store").apply { mkdirs() }
-    override fun get(key: String): String? = File(dir, key).takeIf { it.exists() }?.let { runCatching { it.readText() }.getOrNull() }
+// Every write goes to one thread of its own, in the order asked (the saved Timeline, the widgets' copy, what is on its way
+// to Tana, the translations), so the screen never waits on the disk; until it is there the value is kept in memory, so a
+// read right after a write has it, and a write a newer one has already replaced is skipped.
+internal class Files(private val dir: File) : Store {
+    constructor(context: Context) : this(File(context.filesDir, "store"))
+    init { dir.mkdirs() }
+
+    override fun get(key: String): String? {
+        val file = File(dir, key)
+        synchronized(waiting) { if (file.path in waiting) return waiting[file.path] }
+        return file.takeIf { it.exists() }?.let { runCatching { it.readText() }.getOrNull() }
+    }
+
     override fun set(key: String, value: String?) {
-        if (value == null) { File(dir, key).delete(); return }
-        val next = File(dir, "$key.next")
-        next.writeText(value)
-        if (!next.renameTo(File(dir, key))) next.delete()
+        val file = File(dir, key)
+        synchronized(waiting) { waiting[file.path] = value }
+        writer.execute {
+            if (synchronized(waiting) { waiting[file.path] !== value }) return@execute // replaced since: the newer one writes
+            runCatching {
+                if (value == null) file.delete() else File(dir, "$key.next").let { next -> next.writeText(value); if (!next.renameTo(file)) next.delete() }
+            }
+            synchronized(waiting) { if (waiting[file.path] === value) waiting.remove(file.path) }
+        }
+    }
+
+    companion object {
+        private val waiting = HashMap<String, String?>() // file -> the value on its way to it
+        internal val writer: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "orbital-files").apply { isDaemon = true } }
+        internal fun flush() { writer.submit {}.get() } // every write asked so far on disk (tests)
     }
 }

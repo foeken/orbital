@@ -145,9 +145,8 @@ function drawTranslatedLine(page, docId) {
   if (!page) return;
   if (page.pending) return line.replaceChildren(...translatingEls());
   const typing = !page.original && document.activeElement === titleEl, original = page.original || typing;
-  const back = document.createElement('button'); back.type = 'button'; back.textContent = original ? 'Show translation' : 'Show original';
-  back.onmousedown = (e) => e.preventDefault(); // the caret stays in the title until the click, so the click is not lost to a redraw
-  back.onclick = () => (typing ? titleEl.blur() : toggleOriginal(docId));
+  // quiet: the caret stays in the title until the click, so the click is not lost to a redraw
+  const back = quietButton('', null, () => (typing ? titleEl.blur() : toggleOriginal(docId))); back.textContent = original ? 'Show translation' : 'Show original';
   line.replaceChildren(sparkleEl(), (original ? 'Original, in ' : 'Translated from ') + page.lang + ' · ', back);
 }
 titleEl.addEventListener('focus', () => { if (linePage) drawTranslatedLine(linePage, lineDoc); });

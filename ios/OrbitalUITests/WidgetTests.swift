@@ -7,8 +7,13 @@ import XCTest
 final class WidgetTests: XCTestCase {
     private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     private var app: XCUIApplication!
+    // Set by the first test that finds this build cannot show what a widget holds (add): the rest skip at once, before
+    // launching the app or adding a widget, where each took a minute on CI to reach the same skip
+    private static var unsigned = false
+    private static let why = "the widget is added and drawn; what it shows needs a signed build (Keychain group), which CODE_SIGNING_ALLOWED=NO has not"
 
-    override func setUp() {
+    override func setUpWithError() throws {
+        if Self.unsigned { throw XCTSkip(Self.why) }
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
         app = XCUIApplication()
@@ -42,7 +47,8 @@ final class WidgetTests: XCTestCase {
         // (CODE_SIGNING_ALLOWED=NO, as CI builds) has none of: the widget is there and drawn, saying where to start
         if springboard.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Open Orbital to see'")).firstMatch.waitForExistence(timeout: 5),
            !springboard.buttons.containing(NSPredicate(format: "label CONTAINS 'Draft the Q4 hiring plan'")).firstMatch.exists {
-            throw XCTSkip("the widget is added and drawn; what it shows needs a signed build (Keychain group), which CODE_SIGNING_ALLOWED=NO has not")
+            Self.unsigned = true
+            throw XCTSkip(Self.why)
         }
     }
 
@@ -69,6 +75,9 @@ final class WidgetTests: XCTestCase {
         XCTAssertFalse(springboard.buttons["Show documents"].exists, "nothing opens in place: a widget does not expand")
         found(springboard.buttons.containing(NSPredicate(format: "label CONTAINS 'Design review'")).firstMatch, "the meeting").tap()
         XCTAssert(app.wait(for: .runningForeground, timeout: 15))
-        XCTAssert(app.staticTexts["Offsite planning"].waitForExistence(timeout: 15), "the meeting open in the app, its documents on its page")
+        // the meeting's own page: written up, it opens on its Summary (Pages.swift), with Notes beside it
+        if !app.navigationBars["Design review"].waitForExistence(timeout: 15) || !app.buttons["Summary"].exists {
+            XCTFail("the meeting open in the app, on its page:\n" + app.debugDescription)
+        }
     }
 }

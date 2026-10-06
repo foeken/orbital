@@ -57,8 +57,8 @@ class Engine(
         private set
     var email by mutableStateOf<String?>(null) // the Tana account signed in, for Settings
         private set
-    val states = mutableStateMapOf<String, String>() // task id -> the stateType ticked here, until a read of Tana agrees with it
-    private val ticked = mutableMapOf<String, Instant>() // task id -> when it was ticked here
+    val ticks = Ticks() // the boxes ticked here, until a read of Tana agrees (Ticks.kt)
+    val states get() = ticks.states
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value. A line is added only
     // when it differs from the one before.
     val log = mutableStateListOf<String>()
@@ -82,7 +82,9 @@ class Engine(
     var assigning by mutableStateOf<Assigning?>(null) // Assign to …: the task whose picker is open
     var asking by mutableStateOf<ShareAsk?>(null) // someone just assigned who cannot open it: Grant access or Keep private
     var shared by mutableStateOf<Shared?>(null) // shared to Orbital from another app: Quick Add opens with it
-    var widget by mutableStateOf<String?>(null) // a widget's tap with the app already open: a node's id to open, or "add" for Quick Add
+    var link by mutableStateOf<Opened?>(null) // an orbital: link the app was opened with, for the Shell to follow (ui/Shell.kt Link)
+    // own: it came through Orbital's own way in (its widgets, tile, shortcuts), whose writes are made at once
+    data class Opened(val link: String, val own: Boolean)
 
     // Settings' Demo mode, as the desktop's: made-up words and names on screen, nothing saved (ios/engine/demo.js); kept on this phone
     private var demoOn by mutableStateOf(demoMode ?: (platform.store.get("demoMode") == "true"))
@@ -94,6 +96,7 @@ class Engine(
             opened.clear() // a page read before it was turned on or off shows its words as they were then
             partsFor = null // what a read under way brings is the other mode's
             if (on && !isSample) rows = emptyList() // the real words go at once, rather than staying until the masked read lands, or for good with Tana out of reach
+            tasksRead = Instant.DISTANT_PAST // the launcher's tasks read again in this mode (keepTasks)
             scope.launch { refresh() }
         }
 
@@ -123,6 +126,12 @@ class Engine(
     // the last read of each node opened, newest last: a page gone back to shows it at once while it is read again, as
     // the iPhone's NavigationStack keeps the page under the one on top (NodeScreen starts from cached(id))
     private val opened = LinkedHashMap<String, Page>()
+    // declared before init, which in the sample keeps the Timeline at once (keepTimeline, keepTasks); on the Activity's
+    // immediate Main dispatcher a field declared after it was still null there
+    private var tasksRead = Instant.DISTANT_PAST // when the launcher's tasks were last read (keepTasks)
+    private val flying = mutableMapOf<String, Flying>() // on its way to Tana, kept on the phone (fly)
+    private val others = mutableMapOf<String, Flying>() // another account's, left on the phone for when it signs in again
+    private var flights = 0
 
     init {
         host?.listener = this
@@ -206,8 +215,9 @@ class Engine(
                     val was = savedFor ?: account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
                     account = maybe { host.run("return orbital.account()").jsonPrimitive.contentOrNull }
                     // another account's, or another workspace's: off the screen and off the phone, with the pages read for it
-                    if (was != null && was != account) { rows = emptyList(); opened.clear(); images.clear(); forgetTimeline() }
+                    if (was != null && was != account) { rows = emptyList(); opened.clear(); images.clear(); forgetAccount(); forgetTimeline() }
                     savedFor = null
+                    takeFlights() // what was on its way when Android last ended the app, for this account
                     host.keepCookies() // at once: the refresh may not finish
                     phase = Phase.Ready
                     refresh()
@@ -307,6 +317,7 @@ class Engine(
             maybe { call<Setup>("return await orbital.setup()") }?.let { setup ->
                 translator.use(setup.to, setup.ai)
                 if (translator.catalogue.isEmpty()) maybe { platform.chatgpt.models() }?.takeIf { it.isNotEmpty() }?.let { translator.catalogue = it } // once: what this account may ask
+                loadPrompts()
                 sensitiveIds = setup.sensitive.toSet()
                 pinned = setup.pinned.toSet()
                 setup.agents?.let { agents = it }
@@ -350,9 +361,16 @@ class Engine(
         maybe { host.run("await orbital.signOut()") }
         host.forgetCookies()
         forgetTimeline()
-        rows = emptyList(); states.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear(); images.clear()
+        rows = emptyList(); ticks.clear(); removed = emptySet(); email = null; account = null; pages = 1; opened.clear(); images.clear()
+        forgetAccount()
         note("signed out")
         start()
+    }
+
+    // what was the last account's and would otherwise be offered to the next: a task Tana did not take (Quick Add would
+    // make it in the other account), a request your agent did not take, the agents and their nodes, the marks and pins
+    private fun forgetAccount() {
+        unsent.clear(); unhanded.clear(); agents = emptyList(); handed = emptyMap(); sensitiveIds = emptySet(); pinned = emptySet(); unpinned = emptySet()
     }
 
     // Your saved searches, those pinned to your sidebar first (orbital.searches)
@@ -397,11 +415,24 @@ class Engine(
     suspend fun keepTimeline(raw: String? = null) {
         if (raw != null && !demo && pages == 1) account?.let { SavedTimeline.save(platform.files, raw, it, now()) }
         platform.keepGlimpse(glimpse())
+        keepTasks()
     }
 
     suspend fun forgetTimeline() {
         SavedTimeline.forget(platform.files)
         platform.keepGlimpse(null) // nothing of the account left on a widget
+        platform.keepTasks(null); tasksRead = Instant.DISTANT_PAST // nor on the launcher (keepTasks)
+    }
+
+    // The tasks assigned to you (orbital.tasks), for the launcher's shortcuts on Android as for Siri on the iPhone
+    // (Engine.swift keepTasks): after a read, asked of Tana at most once in five minutes, a sensitive one without its
+    // words and a box ticked here ticked; the sample's from its own rows
+    private suspend fun keepTasks() {
+        if (now() - tasksRead < 300.seconds) return
+        val list = if (isSample) buildList { fun walk(rows: List<Row>) { for (r in rows) { if (r.id.startsWith("tana:text:") && r.stateType != null) add(r); walk(r.children.orEmpty()) } }; walk(rows) }
+            else maybe { call<List<Row>>("return await orbital.tasks()") } ?: return
+        tasksRead = now()
+        platform.keepTasks(list.map { r -> (if (r.sensitive == true) r.copy(text = null, title = null, segments = null) else r).copy(stateType = ticks.on(r.id) ?: r.stateType) }, pinned)
     }
 
     fun glimpse(): Glimpse {
@@ -409,17 +440,20 @@ class Engine(
             val words = if (r.sensitive == true) r.copy(text = null, title = null, segments = null, subtext = null, people = null, reference = r.reference?.copy(label = null),
                 timeline = r.timeline?.copy(note = null, change = null, detail = null)) else r
             // a tick made here: on the task, and on an Activity line about it (its uri), which the widget draws as the task
-            words.copy(stateType = states[r.id] ?: r.timeline?.uri?.let { states[it] } ?: r.stateType,
+            words.copy(stateType = ticks.on(r.id, r.timeline?.uri) ?: r.stateType,
                 children = keep(if (r.timeline?.today == true) r.children?.filter { it.id !in unpinned } else r.children))
         }
         return Glimpse(now().toEpochMilliseconds(), keep(rows)!!)
     }
 
-    // Long press: Pin to Today and Mark as Sensitive, then the Timeline read again. Remove Pin takes the task out of
-    // Today's Tasks at once; the read after says where it is now.
+    // Long press, or a zoomed node's control: Pin to Today and Mark as Sensitive, then the Timeline read again. The pin
+    // shows at once and goes back if Tana says no; Remove Pin takes the task out of Today's Tasks at once, and the read
+    // after says where it is now.
     suspend fun pin(id: String, on: Boolean) {
+        val was = pinned
+        pinned = if (on) pinned + id else pinned - id
         if (!on) unpinned = unpinned + id
-        act("return await orbital.pin(id, on)", mapOf("id" to id, "on" to on))
+        if (!act("return await orbital.pin(id, on)", mapOf("id" to id, "on" to on))) pinned = was
         unpinned = unpinned - id
     }
 
@@ -429,6 +463,18 @@ class Engine(
         translator.use(to)
         if (isSample) return
         try { call<String?>("return await orbital.translateTo(to)", mapOf("to" to to)) } catch (e: Failure) { translator.use(was); error = e.message }
+        loadPrompts()
+    }
+
+    // ChatGPT's words for the language Auto-translate is in, and the names of the models this account has, from the engine
+    // (orbital.prompts, main/prompts.js; Engine.swift loadPrompts). Not refused in demo mode; none in the sample.
+    suspend fun loadPrompts() {
+        if (isSample) return
+        val to = translator.to
+        val models = translator.catalogue
+        val prompts = maybe { reply("return orbital.prompts(to, models, efforts)", mapOf("to" to to, "models" to models.map { it.id }, "efforts" to models.flatMap { it.levels }.distinct())) {
+            json.decodeFromString<Translator.Prompts>(it) } } ?: return
+        translator.prompts = prompts.apply { this.to = to }
     }
 
     // Settings' Quick and Regular AI: used at once, kept if Tana takes it (orbital.aiChoice)
@@ -441,7 +487,7 @@ class Engine(
 
     suspend fun markSensitive(id: String, on: Boolean) = act("return await orbital.sensitive(id, on)", mapOf("id" to id, "on" to on))
 
-    suspend fun members(): List<Member> = if (isSample) emptyList() else maybe { call<List<Member>>("return await orbital.members()") } ?: emptyList()
+    suspend fun members(): List<Member> = list("return await orbital.members()")
 
     // Someone just assigned who cannot open the task: asked there and then, Grant access or Keep private
     suspend fun assign(id: String, uri: String?, then: suspend () -> Unit = {}) {
@@ -453,7 +499,10 @@ class Engine(
         } catch (e: Failure) { error = e.message }
     }
 
-    suspend fun access(id: String): Access? = if (isSample) pagesSample?.access?.get(id) else maybe { call<Access>("return await orbital.access(id)", mapOf("id" to id)) }
+    // a task's state read here settles a tick made on it as a Timeline read does: a task off the Timeline (its Status set on
+    // its own page) kept the tick for good, its Status never showing a change made anywhere else
+    suspend fun access(id: String): Access? = if (isSample) pagesSample?.access?.get(id) else
+        maybe { call<Access>("return await orbital.access(id)", mapOf("id" to id)) }?.also { a -> a.state?.let { s -> ticks.settle(now()) { if (it == id) s else null } } }
 
     // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, linking one with a code as the
     // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
@@ -496,23 +545,29 @@ class Engine(
     suspend fun share(id: String, rule: String, uris: List<String> = emptyList(), token: String? = null) =
         act("return await orbital.share(id, rule, uris, token)", mapOf("id" to id, "rule" to rule, "uris" to uris, "token" to token))
 
-    private suspend fun act(body: String, args: Map<String, Any?>) {
-        if (isSample) return
-        try { call<Boolean>(body, args); refresh() } catch (e: Failure) { error = e.message }
+    // a write, then the Timeline read again; false when Tana refused it, said in error
+    private suspend fun act(body: String, args: Map<String, Any?>): Boolean {
+        if (isSample) return true
+        return try { call<Boolean>(body, args); refresh(); true } catch (e: Failure) { error = e.message; false }
     }
 
+    // a list read for a sheet: none in the sample, and none when the read failed
+    private suspend inline fun <reified T> list(body: String, args: Map<String, Any?> = emptyMap()): List<T> =
+        if (isSample) emptyList() else maybe { call<List<T>>(body, args) } ?: emptyList()
+
     // Quick Add Task: the types to pick from, a type's fields, what a person or link field can take, a saved search's preset
-    suspend fun typeFields(type: String): List<Field> = if (isSample) emptyList() else maybe { call<List<Field>>("return await orbital.typeFields(type)", mapOf("type" to type)) } ?: emptyList()
-    suspend fun fieldChoices(key: String, query: String): List<Member> = if (isSample) emptyList() else maybe { call<List<Member>>("return await orbital.fieldChoices(key, query)", mapOf("key" to key, "query" to query)) } ?: emptyList()
+    suspend fun typeFields(type: String): List<Field> = list("return await orbital.typeFields(type)", mapOf("type" to type))
+    suspend fun fieldChoices(key: String, query: String): List<Member> = list("return await orbital.fieldChoices(key, query)", mapOf("key" to key, "query" to query))
     suspend fun searchPreset(id: String): Preset? = if (isSample) null else maybe { call<Preset?>("return await orbital.searchPreset(id)", mapOf("id" to id)) }
-    suspend fun taskTypes(): List<TaskType> = if (isSample) emptyList() else maybe { call<List<TaskType>>("return await orbital.taskTypes()") } ?: emptyList()
+    suspend fun taskTypes(): List<TaskType> = list("return await orbital.taskTypes()")
 
     // today: Quick Add's Pin to today, the made task pinned as a long press pins one; a task made but not pinned is not
     // made again, it says so
-    suspend fun createTask(title: String, type: String?, search: String? = null, assignee: String? = null, values: Map<String, Value> = emptyMap(), today: Boolean = false): String {
+    // id: the task's own, chosen here (Draft.id), so the same add sent again is one task (ios/engine/index.js create)
+    suspend fun createTask(title: String, type: String?, search: String? = null, assignee: String? = null, values: Map<String, Value> = emptyMap(), today: Boolean = false, id: String? = null): String {
         if (isSample) throw Failure("The sample saves nothing")
-        val id: String = call("return await orbital.createTask(title, type, search, assignee, values)",
-            mapOf("title" to title, "type" to type, "search" to search, "assignee" to assignee, "values" to values.mapValues { it.value.asJson() }))
+        val id: String = call("return await orbital.createTask(title, type, search, assignee, values, id)",
+            mapOf("title" to title, "type" to type, "search" to search, "assignee" to assignee, "values" to values.mapValues { it.value.asJson() }, "id" to id))
         var notPinned: String? = null // said after the refresh below, which clears what was said before it
         if (today) try { call<Boolean>("return await orbital.pin(id, on)", mapOf("id" to id, "on" to true)) } catch (e: Failure) {
             notPinned = "“$title” was added, but not pinned to today: ${e.message}"
@@ -527,7 +582,9 @@ class Engine(
     // The image, already a JPEG of 2048 px at most, read by ChatGPT, then made into its node (orbital.fromImage)
     suspend fun processImage(jpeg: ByteArray): String {
         if (isSample) throw Failure("The sample saves nothing")
-        val read = ChatGPT.readImage(platform.chatgpt, jpeg, translator.to, translator.ai.getValue("model"), translator.ai.getValue("effort"))
+        loadPrompts() // in the language Auto-translate shows notes in now
+        val instructions = translator.prompts?.image?.instructions ?: throw Failure("Tana's page is not ready to read images yet")
+        val read = ChatGPT.readImage(platform.chatgpt, jpeg, instructions, translator.ai.getValue("model"), translator.ai.getValue("effort"))
         val id: String = call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
             mapOf("kind" to (read.kind ?: "doc"), "title" to (read.title ?: ""), "notes" to (read.notes ?: emptyList()), "image" to Base64.encode(jpeg)))
         refresh()
@@ -537,15 +594,21 @@ class Engine(
     // Quick Add closes the moment you press Add: what it asked for is made here while you go on, and the + in the bar turns
     // while anything is on its way (Shell), so another can be added meanwhile. A task Tana did not take is kept as unsent,
     // and the next Quick Add opens with it and says why; an image's node opens once it is made, as the desktop opens it.
+    // Each add has its task's id from the start (newTaskId), so one Android ended the app on is sent again at the next
+    // launch by itself (takeFlights): Tana makes it only if it has no task of that id.
     var adding by mutableStateOf(0)
         private set
     val unsent = mutableStateListOf<Draft>()
     var made by mutableStateOf<String?>(null)
-    data class Draft(val title: String, val type: String?, val search: String?, val assignee: Member?, val values: Map<String, Value>, val today: Boolean = false, val why: String? = null)
-    fun add(draft: Draft) {
+    @kotlinx.serialization.Serializable
+    data class Draft(val title: String, val type: String?, val search: String?, val assignee: Member?, val values: Map<String, Value>, val today: Boolean = false, val why: String? = null, val id: String? = null)
+    fun add(asked: Draft) {
+        val draft = if (asked.id == null) asked.copy(id = newTaskId(now())) else asked
         adding++
+        val key = fly(Flying(account ?: savedFor, draft = draft))
         scope.launch {
-            try { createTask(draft.title, draft.type, draft.search, draft.assignee?.id, draft.values, draft.today) } catch (e: Failure) {
+            try { createTask(draft.title, draft.type, draft.search, draft.assignee?.id, draft.values, draft.today, draft.id); landed(key) } catch (e: Failure) {
+                landed(key)
                 unsent.add(draft.copy(why = e.message))
                 error = "“${draft.title}” was not added: ${e.message}"
             } finally { adding-- }
@@ -555,15 +618,18 @@ class Engine(
     fun addImage(load: suspend () -> ByteArray?) {
         adding++
         scope.launch {
+            var key: String? = null
             try {
                 val jpeg = load() ?: throw Failure("The image could not be read")
+                key = fly(Flying(account ?: savedFor, image = Base64.encode(jpeg)))
                 // shared while Orbital was not running: Tana connects first; signed out or failed, it says so rather than waiting for ever
                 while (phase != Phase.Ready) {
                     if (phase != Phase.Starting) throw Failure("Sign in to Tana first, then share it again")
                     delay(200)
                 }
                 made = processImage(jpeg)
-            } catch (e: Failure) { error = e.message } finally { adding-- }
+                landed(key)
+            } catch (e: Failure) { landed(key); error = e.message } finally { adding-- }
         }
     }
     // Assign to <its name> …: the form closes the moment you press Assign and the request is handed over here while you go
@@ -572,12 +638,50 @@ class Engine(
     val unhanded = mutableStateMapOf<String, String>()
     fun handOff(handing: Handing, request: String) {
         adding++
+        val key = fly(Flying(account ?: savedFor, node = handing.id, request = request))
         scope.launch {
-            try { hand(handing.id, handing.agent, request); unhanded.remove(handing.id); handing.then() } catch (e: Failure) {
+            try { hand(handing.id, handing.agent, request); landed(key); unhanded.remove(handing.id); handing.then() } catch (e: Failure) {
+                landed(key)
                 unhanded[handing.id] = request
                 error = "${handing.agent.name} did not get it: ${e.message}"
             } finally { adding-- }
         }
+    }
+
+    // What Quick Add and Assign to <its name> … handed over and Tana has not answered yet, kept on this phone until it has
+    // (Platform.files): Android may end the app on the way, where the iPhone's background task (Engine.swift Background)
+    // buys it time. What was on its way then comes back at the next launch, to the account it was for: a task is sent
+    // again by itself (its id makes a second send the same task), an image is offered as one shared (read once tapped), a
+    // request in its node's form; a task kept before adds had ids is offered in Quick Add, saying so. A cancelled add
+    // (the screen's scope ended) stays kept for the same reason.
+    @kotlinx.serialization.Serializable
+    data class Flying(val account: String?, val draft: Draft? = null, val image: String? = null, val node: String? = null, val request: String? = null)
+
+    private fun fly(f: Flying): String? {
+        if (isSample) return null
+        val key = "${++flights}@${now().toEpochMilliseconds()}"
+        flying[key] = f
+        keepFlights()
+        return key
+    }
+
+    private fun landed(key: String?) { if (key != null && flying.remove(key) != null) keepFlights() }
+
+    private fun keepFlights() = (others + flying).let { platform.files.set(PENDING, if (it.isEmpty()) null else json.encodeToString(it)) }
+
+    // at connect: what an earlier run left on its way (never this run's own), for the account signed in or for nobody's;
+    // another account's stays on the phone for it
+    private fun takeFlights() {
+        val left = platform.files.get(PENDING)?.let { runCatching { json.decodeFromString<Map<String, Flying>>(it) }.getOrNull() } ?: return
+        others.clear()
+        val again = mutableListOf<Draft>()
+        for ((key, f) in left) if (key in flying) continue else if (f.account != null && f.account != account) others[key] = f else {
+            f.draft?.let { if (it.id != null) again += it else unsent.add(it.copy(why = "Orbital closed before Tana said it was added. Check your Inbox before adding it again.")) }
+            f.image?.let { runCatching { Base64.decode(it) }.getOrNull() }?.let { shared = Shared(null, it) }
+            if (f.node != null && f.request != null) unhanded[f.node] = f.request
+        }
+        keepFlights()
+        again.forEach(::add)
     }
 
     // Long press, Delete (orbital.remove): to Tana's trash; the row goes at once and comes back if Tana says no
@@ -614,65 +718,43 @@ class Engine(
     suspend fun toggle(task: Row) {
         if (demo) return // a box does nothing in demo mode, as the desktop's is disabled
         val before = state(task)
-        states[task.id] = if (before == "proposed" || before == "closed") "open" else "closed"
-        ticked[task.id] = now()
+        ticks.tap(task.id, before, now())
         try {
             if (isSample) return // the sample writes nothing
             try {
-                states[task.id] = call<String>("return await orbital.toggle(id)", mapOf("id" to task.id))
+                ticks.answer(task.id, call<String>("return await orbital.toggle(id)", mapOf("id" to task.id)))
             } catch (e: Failure) {
-                states[task.id] = before
+                ticks.refuse(task.id, before)
                 error = e.message
             }
         } finally { keepTimeline() } // the widgets show it ticked too
     }
 
-    // Long press, Move to Inbox: the task back to Tana's Inbox state (proposed)
-    suspend fun moveToInbox(id: String) {
-        if (demo || isSample) return
-        val before = states[id]
-        states[id] = "proposed"
-        try {
-            try {
-                states[id] = call<String>("return await orbital.toggle(id, 'proposed')", mapOf("id" to id))
-            } catch (e: Failure) {
-                if (before == null) states.remove(id) else states[id] = before
-                error = e.message
-            }
-        } finally { keepTimeline() } // the widgets show it in the Inbox too
-    }
+    // Long press, Move to Inbox: the task back to Tana's Inbox state (proposed), set outright as a widget's box sets it, so
+    // the read its own write sets off, Tana's graph still trailing, does not put the old state back
+    suspend fun moveToInbox(id: String) = tick(id, "proposed")
 
-    fun state(task: Row): String = states[task.id] ?: task.stateType ?: if (task.done == true) "closed" else "open"
+    fun state(task: Row): String = ticks.state(task.id, task.stateType, task.done)
 
     // A widget's box (Widgets.kt; Engine.swift tick): the task set to what the widget showed it becoming, drawn so at once
     // and written as soon as the engine has connected (a cold start waits for it), put back with the reason if Tana
     // refuses. Set outright, so a second tap on a widget not yet drawn again does not undo the first.
     suspend fun tick(id: String, to: String) {
         if (demo) return
-        val before = states[id]
-        states[id] = to
-        ticked[id] = now()
+        val before = ticks.set(id, to, now())
         try {
             if (isSample) return
             try {
-                states[id] = call<String>("return await orbital.toggle(id, to)", mapOf("id" to id, "to" to to))
+                ticks.answer(id, call<String>("return await orbital.toggle(id, to)", mapOf("id" to id, "to" to to)))
             } catch (e: Failure) {
-                if (before == null) states.remove(id) else states[id] = before
+                ticks.refuse(id, before)
                 error = e.message
             }
         } finally { keepTimeline() } // the widgets drawn again with it
     }
 
-    // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
-    // minute on: the graph can trail a write by seconds, never by that long. One not in the rows read keeps its tick.
-    private fun settle(rows: List<Row>) {
-        val at = now()
-        for ((id, state) in states.toMap()) {
-            val read = stateType(id, rows) ?: continue
-            if (read == state || at - (ticked[id] ?: Instant.DISTANT_PAST) >= 30.seconds) states.remove(id)
-        }
-        ticked.keys.retainAll(states.keys)
-    }
+    // a read of Tana settles the boxes ticked here (Ticks.settle)
+    private fun settle(rows: List<Row>) = ticks.settle(now()) { stateType(it, rows) }
 
     private fun stateType(id: String, rows: List<Row>): String? {
         for (row in rows) {
@@ -716,6 +798,9 @@ class Engine(
     companion object {
         const val SESSION = "https://home.tana.inc/api/auth/session"
         const val HOME = "https://home.tana.inc"
+        // the engine's words when this account has no settings document yet (ios/engine/index.js MAC_FIRST, word for word)
+        const val MAC_FIRST = "Open Orbital on your Mac once to set it up for this account, then check again here."
+        const val PENDING = "pending" // Platform.files' key for what is on its way to Tana (fly)
         // how long Tana's page has to connect, and a first Timeline read with nothing on screen to answer, before the app
         // says so (Engine.swift patience)
         val PATIENCE = 30.seconds
@@ -742,6 +827,16 @@ class Engine(
 
 // a set value as the engine takes it ({ ref, label } or { text })
 fun Value.asJson(): Map<String, String> = listOfNotNull(ref?.let { "ref" to it }, label?.let { "label" to it }, text?.let { "text" to it }).toMap()
+
+// A new task's id, as Tana makes one (sdk/node.js ulid): its time in ten characters, then sixteen at random, in Tana's
+// lowercase Crockford base32. Quick Add's (Engine.add), so an add can be sent again as the same task.
+private const val B32 = "0123456789abcdefghjkmnpqrstvwxyz"
+fun newTaskId(at: Instant): String {
+    var t = at.toEpochMilliseconds()
+    val time = CharArray(10) { ' ' }
+    for (i in 9 downTo 0) { time[i] = B32[(t % 32).toInt()]; t /= 32 }
+    return "tana:text:" + time.concatToString() + CharArray(16) { B32[kotlin.random.Random.nextInt(32)] }.concatToString()
+}
 
 // The last Timeline read, kept on this phone (Platform.files: never in a backup) and drawn at launch while Tana connects,
 // as the desktop draws its cached rows before its sync client exists; the read that follows takes its place (Engine.swift

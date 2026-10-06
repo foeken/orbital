@@ -20,6 +20,13 @@ function parseDateUri(uri) {
   return m ? { type: 'zoneddate', date: m[1], ...(m[2] ? { time: m[2] } : {}), timezone: zone[1] } : undefined;
 }
 const isDateUri = (uri) => parseDateUri(uri) !== undefined;
+// A calendar event that takes whole days: Tana says so now (calendarEvent.allDay); older events only by starting at
+// midnight (UTC or local) and spanning whole days. main/rows.js words it, main/timeline.js leaves it off the rail.
+function isAllDay(start, end, allDayFlag) {
+  const s = new Date(start), e = end ? new Date(end) : null;
+  const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
+  return allDayFlag === true || !!(e && midnight && (e - s) % 864e5 === 0);
+}
 function dateUri(date) {
   if (!DAY.test(date)) throw new Error('not a YYYY-MM-DD date: ' + date);
   return PLAIN + date;
@@ -31,4 +38,27 @@ function dateLabel(uri) {
   return d ? LABEL.format(new Date(d.date + 'T00:00:00')) : uri;
 }
 
-module.exports = { parseDateUri, isDateUri, dateUri, dateLabel };
+// ---- a wall clock in a time zone: a time said in words (main/meetings.js), a reminder's due time (sdk/inbox.js) ----
+// The wall clock in a zone at t, { y, mo, d, h, mi, s, weekday }; no zone is this machine's own, asked afresh each time
+// (it changes when you travel). An unknown zone throws, as Intl does.
+const formats = new Map();
+function partsIn(timeZone, t) {
+  let f = timeZone && formats.get(timeZone);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'long' });
+    if (timeZone) formats.set(timeZone, f);
+  }
+  const p = Object.fromEntries(f.formatToParts(t).map(({ type, value }) => [type, value]));
+  return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour % 24, mi: +p.minute, s: +p.second, weekday: p.weekday };
+}
+// Epoch ms of a wall-clock time in a zone, or NaN when the clocks skip it that day (the hour summer time starts); in the
+// hour a clock turns back, the later of the two
+function wallTime(timeZone, y, mo, d, h, mi) {
+  const want = Date.UTC(y, mo - 1, d, h, mi);
+  let t = want;
+  for (let i = 0; i < 3; i++) { const p = partsIn(timeZone, t); t += want - Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi); }
+  const p = partsIn(timeZone, t), n = new Date(want);
+  return p.y === n.getUTCFullYear() && p.mo === n.getUTCMonth() + 1 && p.d === n.getUTCDate() && p.h === h && p.mi === mi ? t : NaN;
+}
+
+module.exports = { parseDateUri, isDateUri, dateUri, dateLabel, partsIn, wallTime, isAllDay };

@@ -38,9 +38,14 @@ function deferred() {
 
 // peerId = (first 48 bits of sha256(userExternalId) << 16) | a random nonce, as a decimal string (§1.1).
 // The nonce is 15 bits (0..32767): the server only reads the top 48 bits as peerUserHash, the rest is per-process entropy.
+// userBits: those 48 bits, which Tana reads as the user (main/meeting-notes.js tells your machines' peers by them). Read
+// through a DataView, since the phones' engine hashes with ios/engine/stand-ins.js, whose digest is a plain Uint8Array.
+const userBits = (userExternalId) => {
+  const d = createHash('sha256').update(userExternalId.trim().toLowerCase()).digest();
+  return new DataView(d.buffer, d.byteOffset, d.byteLength).getBigUint64(0) >> 16n;
+};
 function derivePeerId(userExternalId) {
-  const userHash = createHash('sha256').update(userExternalId.trim().toLowerCase()).digest().readBigUInt64BE(0) >> 16n;
-  return ((userHash << 16n) | BigInt(Math.floor(Math.random() * 32768))).toString(10);
+  return ((userBits(userExternalId) << 16n) | BigInt(Math.floor(Math.random() * 32768))).toString(10);
 }
 
 // "fetch failed" says nothing on its own: the reason (ECONNRESET, a timeout, DNS) is the innermost cause.
@@ -518,4 +523,4 @@ class SyncConnection extends EventEmitter {
   }
 }
 
-module.exports = { SyncConnection, derivePeerId };
+module.exports = { SyncConnection, derivePeerId, userBits };

@@ -154,7 +154,7 @@ cd android
 ./gradlew :androidApp:installDebug                # build and install on a connected phone or emulator
 ./gradlew :shared:jvmTest                         # the shared module's tests, its screens drawn headless
 ./gradlew :androidApp:connectedDebugAndroidTest   # on a device: the journeys, Back, rotation, sharing, the engine
-adb shell am start -n com.dreetje.orbital/com.dreetje.orbital.android.MainActivity --ez sample true   # invented content, no Tana
+adb shell am start -n com.dreetje.orbital/com.dreetje.orbital.android.MainActivity --ez sample true   # invented content, no Tana (debug builds only)
 ```
 
 [docs/ANDROID.md](docs/ANDROID.md) records the research behind the Android choices (the web view bridge,
@@ -201,8 +201,8 @@ is a dozen lines ([updater.js](updater.js)).
 
 ## Development
 
-`npm run lint` and `npm run check` must both pass before a commit, and GitHub runs them, the user
-flows and both phones on main every six hours when it has moved (pull requests are checked where they are written). The linter is ESLint's recommended set and nothing else, no
+`npm run lint` and `npm run check` must both pass before a commit; there is no CI, so every check runs where the
+change is written. The linter is ESLint's recommended set and nothing else, no
 formatter; the checks run everything offline: the SQLite cache, the SDK against a fake sync service
 and a synthetic task snapshot, the renderer's auth and behaviour checks, the phones' engine bundle,
 and that the iPhone's and Android's row models and glyphs have not drifted apart. Every non-trivial

@@ -128,8 +128,14 @@ function showNote(note, error = false, open = null) {
   el.onclick = open ? () => { el.classList.remove('show'); goTo(open); } : null;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), error ? 6000 : open ? 5000 : 2500); // a newer toast gets its own time
 }
-const showError = (e) => { if (e && !signedOut) showNote(String(e.message || e), true); }; // signed out, what still fails is the old session's
+// What a failure says: every toast and every palette note that shows an error reads it through here. What main threw
+// arrives as main said it: preload.js takes off the wrapper Electron puts round a refused call.
+const errorText = (e) => String((e && e.message) || e);
+const showError = (e) => { if (e && !signedOut) showNote(errorText(e), true); }; // signed out, what still fails is the old session's
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
+// A node's web link: opened in Tana in the browser, or copied for pasting elsewhere
+const openInTana = (uri) => run(async () => tana.openExternal(await tana.nodeLink(uri)));
+const copyNodeLink = (uri) => run(async () => copyText(await tana.nodeLink(uri), 'Link copied'));
 // A row on its way out is not a keyboard stop.
 // A field that holds choices (renderer/fields.js) is one stop, and a caret stop all the same.
 // (not a row leaving, nor one in a block or section that is closing up: inert, renderer/motion.js foldRow/foldSection)
@@ -224,6 +230,22 @@ function iconNode(icon) {
 // this way or through iconNode (scripts/renderer-check.js): a new span is addIcon(span, 'field'), a button that
 // swaps its glyph is b.replaceChildren() and then addIcon(b, name).
 function addIcon(el, icon) { const svg = icon ? iconNode(icon) : null; if (svg) el.append(svg); return el; }
+// A button that leaves the caret where it is: a press takes no focus, the click still runs. label, when given, is its
+// tooltip and its name for a screen reader (an icon-only button has no other); its words or glyph are the caller's.
+// opts.tabIndex: -1 for a row's own glyph (a meeting link, Join), which the row's keys reach, never Tab.
+// opts.title: a tooltip other than its name (a section heading's Collapse, a disabled Approve saying why).
+// A button that takes focus on purpose (the rail's section heads, Clear filters, the text toolbar) is not quiet and is
+// made as any button is.
+function quietButton(cls, label, onclick, opts) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = cls;
+  if (opts && opts.tabIndex != null) b.tabIndex = opts.tabIndex;
+  if (label) { b.title = label; b.setAttribute('aria-label', label); }
+  if (opts && opts.title) b.title = opts.title;
+  b.onmousedown = (e) => e.preventDefault();
+  b.onclick = onclick;
+  return b;
+}
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
 // A member is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Open node). A type opens as
 // the list of its instances (renderer/render.js).

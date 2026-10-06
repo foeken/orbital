@@ -19,6 +19,7 @@ import androidx.compose.ui.test.DesktopComposeUiTest
 import com.dreetje.orbital.ui.OrbitalApp
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -185,6 +186,33 @@ class ScreensTest {
         assertTrue(onAllNodes(hasContentDescription("Menu")).fetchSemanticsNodes().isEmpty())
     }
 
+    // A zoomed task's Status (fc0baea0; the iPhone's SampleTests the same): Tana's four, the one it is in ticked; one picked
+    // shows at once, set outright as a widget's box sets it. Opened by its orbital: link, Orbital's own.
+    @Test fun aZoomedTasksStatusIsSetFromItsField() = sample { engine ->
+        val task = "tana:text:000000000000000000000000v6" // Interview loop, In Progress
+        engine.link = Engine.Opened("orbital:$task", own = true)
+        waitUntil(timeoutMillis = 5000) { onAllWithText("Interview loop").isNotEmpty() && onAllWithText("In Progress").isNotEmpty() }
+        onNodeWithText("Status").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Later").isNotEmpty() }
+        listOf("Inbox", "Completed").forEach { onNodeWithText(it, useUnmergedTree = true).assertExists() }
+        onNodeWithText("Completed", useUnmergedTree = true).performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Later").isEmpty() && onAllWithText("Completed").isNotEmpty() }
+        assertTrue(onAllWithText("In Progress").isEmpty())
+        kotlin.test.assertEquals("closed", engine.states[task])
+    }
+
+    // a zoomed node's Pin to Today, where an outside orbital:pin: link now lands: pinned at once, then Remove Pin
+    @Test fun aZoomedNodePinsToTodayAndBack() = sample { engine ->
+        val task = "tana:text:000000000000000000000000v6"
+        engine.link = Engine.Opened("orbital:$task", own = true)
+        waitUntil(timeoutMillis = 5000) { onAllWithText("Pin to Today").isNotEmpty() }
+        onNodeWithText("Pin to Today").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Remove Pin").isNotEmpty() }
+        assertTrue(task in engine.pinned)
+        onNodeWithText("Remove Pin").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Pin to Today").isNotEmpty() }
+    }
+
     // the saved Timeline at launch, Tana not connected yet: more days wait for it, greyed rather than a tap that does nothing
     @Test fun moreDaysWaitUntilTanaConnects() = runDesktopComposeUiTest(412, 915) {
         val scope = MainScope()
@@ -200,6 +228,36 @@ class ScreensTest {
             engine.failed("net::ERR_INTERNET_DISCONNECTED")
             waitUntil(timeoutMillis = 3000) { onAllWithText("Can't reach Tana").isNotEmpty() }
             onNodeWithText("Can't reach Tana").assertIsNotEnabled()
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    // a page gone back to, drawn at once from its last read, is read once again, not once for every effect that starts
+    @Test fun aPageOpenedBeforeIsReadOnceMore() = runDesktopComposeUiTest(412, 915) {
+        val scope = MainScope()
+        try {
+            val host = FakeHost { body, _ ->
+                when {
+                    "orbital.connect()" in body -> kotlinx.serialization.json.JsonPrimitive(true)
+                    "orbital.timeline" in body -> text("[]")
+                    "orbital.setup()" in body -> text("""{"sensitive":["tana:text:other"]}""")
+                    "orbital.open" in body -> text("""{"title":"Plan","kind":"text","rows":[]}""")
+                    else -> kotlinx.serialization.json.JsonNull
+                }
+            }
+            val engine = Engine(host, FakePlatform(), scope, demoMode = false)
+            engine.start()
+            host.listener!!.said("ready")
+            waitUntil(timeoutMillis = 5000) { engine.phase == Engine.Phase.Ready && engine.sensitiveIds.isNotEmpty() }
+            scope.launch { engine.open("tana:text:plan") }
+            waitUntil(timeoutMillis = 5000) { engine.cached("tana:text:plan") != null }
+            val before = host.calls.count { "orbital.open" in it.first }
+            setContent { com.dreetje.orbital.ui.OrbitalTheme { com.dreetje.orbital.ui.NodeScreen(engine, "tana:text:plan") } }
+            waitForIdle()
+            Thread.sleep(300)
+            waitForIdle()
+            kotlin.test.assertEquals(1, host.calls.count { "orbital.open" in it.first } - before)
         } finally {
             scope.cancel()
         }

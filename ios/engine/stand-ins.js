@@ -4,7 +4,7 @@
 // come from the settings document (main/settings.js). Live queries and call state are the SDK's own (sdk/livequery.js,
 // sdk/calls.js), so a meeting being recorded pulses as on the desktop. The banner edits never reach the phone: they are
 // kept on the Mac that announced them.
-const { isMcp, memberTitle, S, today } = require('../../main/state');
+const { memberTitle, S, today } = require('../../main/state');
 const pins = require('../../sdk/pins');
 
 const issues = []; // a part that failed, for the app's Details log (index.js orbital.issues)
@@ -81,22 +81,11 @@ module.exports = {
   },
   toNode: (row) => row,
   rememberNodeHue() {},
-  hm: (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }, // sdk/chat.js hm
-  isAllDay(start, end, allDayFlag) { // main/rows.js isAllDay
-    const s = new Date(start), e = end ? new Date(end) : null;
-    const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
-    return allDayFlag === true || !!(e && midnight && (e - s) % 864e5 === 0);
-  },
+  // sdk/chat.js hm, required when first asked: sdk/chat requires crypto, which the bundle makes this file (build.js)
+  hm: (ms) => require('../../sdk/chat').hm(ms),
   // the workspace's people, asked once per session (a chat on screen is read again as its answer is written); asked again after a failure
   members: () => (people ||= S.client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
     .then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: memberTitle(n) })), (e) => { people = null; throw e; })),
-  // ./views inboxFrom
-  inboxFrom(me, creator, chat, names) {
-    if (creator && creator !== me) return 'From ' + (names.get(creator) || 'someone else');
-    if (!chat) return null;
-    const topic = /^MCP:\s*(.+)/i.exec(chat.title || '')?.[1];
-    return isMcp(chat) ? 'Via MCP' + (topic ? ': ' + topic : '') : "From Tana's AI";
-  },
   // ./documents
   announcedEdits: () => [],
   // the watch choices (settings key notify: node → true watched, false silenced), as main/documents.js reads them; the

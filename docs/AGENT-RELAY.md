@@ -45,9 +45,11 @@ with a new code moves it.
 
 ## From a phone
 
-The iPhone and Android apps link and hand over exactly as the Mac does, through the same code (main/relay.js: the relay
-client, the link message, the event's words and the status line) run in the phones' engine (ios/engine/agents.js), and the
-same synced settings: `relayKey`, `agents` and `defaultAgent`, and each node's `codex`, `codexPrompt` and `codexTask`.
+The iPhone and Android apps link and hand over exactly as the Mac does, through the same code run in the phones' engine
+(ios/engine/agents.js): main/relay.js (the relay client, the link message, the event's words, the status line, and the
+handover itself, `handOver`: Assigned written, the event sent, the node put back as the earlier handoff left it when the
+agent does not take it) and main/agent.js (which agents are on, the default, and the relay's list kept: `storeLinked`), with
+the same synced settings: `relayKey`, `agents` and `defaultAgent`, and each node's `codex`, `codexPrompt` and `codexTask`.
 So a Dot linked on the phone is in the Mac's Choose agents, and a node handed over from the phone has the Mac's badge.
 **Settings → Agents → Connect your personal agent** is the Connect page (the two plugins with the ? for the steps, the
 instructions with their code, the wait), and an agent there swipes right to Make Default and left to Unlink (linked.js unlink: its nodes unassigned too).
@@ -145,8 +147,9 @@ reads the folder once, as it starts.
 - **Limits**: 32 KB a request, 16 KB of data an event (in UTF-8 bytes, as it goes over the wire), 50 agents, ten
   subscriptions a connection, five open codes, 120 calls a minute per caller. What writes a row a caller could make
   up is counted by the address the proxy saw: twenty registrations, thirty sign-in pages (each writes a grant) and five
-  new Orbitals (each new key is one) a minute. And whatever the address, in all, a day, counted in the database: 1,000
-  registrations, 1,000 new connections and 200 new Orbitals. The caps on codes, agents and subscriptions are counted
+  new Orbitals (each new key is one) a minute. And a day, counted in the database per network
+  (an IPv4 address, or an IPv6 /64): 1,000 registrations, 1,000 new connections and 200 new Orbitals, so one that makes
+  them all day uses up its own day and nobody else's. The caps on codes, agents and subscriptions are counted
   and written in one step per Orbital or connection (`serial`: a queue per key, and in PostgreSQL a transaction holding
   an advisory lock on it), so twin requests cannot pass one together.
 - **Calling a callback is bounded**: each call, the answer included, ends within ten seconds and 64 KB of answer, cut

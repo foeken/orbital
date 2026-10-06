@@ -15,7 +15,7 @@ const TASK_GLYPHS = window.ICONS || {}; // icons.js: our own markup
 let taskTypes = [{ uri: null, title: 'Task' }], taskAt = 0, taskBusy = false, clipImage = false; // clipImage: the clipboard holds an image (main.js clipboard:hasImage)
 let taskMode = 'title', taskTitle = '', people = [], peopleAt = 0, assignee = null; // null: you, the creator
 const closeTask = (result = {}) => { if (taskApi && taskApi.closeOverlay) taskApi.closeOverlay(result); };
-const errorText = (e) => String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+const errorText = (e) => String((e && e.message) || e); // as main said it: preload.js takes off Electron's wrapper
 function rowEl(glyph, label, active, hue, onPick) {
   const row = document.createElement('div');
   row.className = 'row' + (active ? ' active' : '');

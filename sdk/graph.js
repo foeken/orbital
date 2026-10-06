@@ -5,6 +5,7 @@ const { createClient } = require('@connectrpc/connect');
 const { fromJson, toJson } = require('@bufbuild/protobuf');
 const { GraphService } = require('./proto/descriptors');
 const { unary } = require('./transport');
+const { isId } = require('./ids');
 
 // What this app may ask of GraphService, agreed with Tana after one week of ListEdges bursts of ~117/s (#579): a token
 // bucket per limit, calls per second and the burst allowed above it. A call past a limit waits its turn; none fails.
@@ -45,7 +46,7 @@ class GraphClient {
   async listAttendeeSuggestions({ limit } = {}) {
     const { suggestions = [] } = await this._unary('listAttendeeSuggestions', limit == null ? {} : { limit });
     return suggestions.map((s) => ({ email: s.email || '', displayName: s.displayName || undefined, lastSeenAt: Number(s.lastSeenAt || 0),
-      eventCount: s.eventCount || 0, nextMeetingAt: Number(s.nextMeetingAt || 0), identityUri: /^tana:[a-z-]+:[0-9a-z]{26}$/.test(s.identityUri || '') ? s.identityUri : undefined }));
+      eventCount: s.eventCount || 0, nextMeetingAt: Number(s.nextMeetingAt || 0), identityUri: isId(s.identityUri) ? s.identityUri : undefined }));
   }
   async *traverse(params) {
     const m = GraphService.methods.find((x) => x.localName === 'traverse');

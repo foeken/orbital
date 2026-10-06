@@ -1,0 +1,592 @@
+{
+ "_about": [
+  "What both phones do alike without the engine, as one spec both run: the iPhone in ios/OrbitalUITests/SpecTests.swift, Android in android/shared/src/jvmTest SpecTest.kt.",
+  "Each phone keeps its own copy of these rules (a tap must answer without a round trip through the page, and the widgets and the sample run without the engine); the copies are held to this file.",
+  "ticks: a task's box ticked on the phone (ios/Common/Ticks.swift, Ticks.kt), times in seconds. activity: the Activity widget's lines (Glimpse.activity) and a status line drawn as its task (asTask). phrases: the app's words (ios/Common/Phrases.swift, Phrases.kt) and the kinds' glyphs (Glyph, Glyphs)."
+ ],
+ "ticks": [
+  {
+   "name": "a tap answers at once by the desktop's rule",
+   "steps": [
+    {
+     "tap": "a",
+     "shown": "proposed",
+     "at": 0,
+     "gives": "open"
+    },
+    {
+     "tap": "b",
+     "shown": "open",
+     "at": 0,
+     "gives": "closed"
+    },
+    {
+     "tap": "c",
+     "shown": "closed",
+     "at": 0,
+     "gives": "open"
+    },
+    {
+     "tap": "d",
+     "shown": "not_now",
+     "at": 0,
+     "gives": "closed"
+    },
+    {
+     "ticks": {
+      "a": "open",
+      "b": "closed",
+      "c": "open",
+      "d": "closed"
+     }
+    }
+   ]
+  },
+  {
+   "name": "the engine's answer stands until a read agrees",
+   "steps": [
+    {
+     "tap": "a",
+     "shown": "open",
+     "at": 0,
+     "gives": "closed"
+    },
+    {
+     "answer": "a",
+     "state": "closed"
+    },
+    {
+     "settle": {
+      "a": "open"
+     },
+     "at": 5
+    },
+    {
+     "ticks": {
+      "a": "closed"
+     }
+    },
+    {
+     "settle": {
+      "a": "closed"
+     },
+     "at": 6
+    },
+    {
+     "ticks": {
+      "a": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "a refused tap goes back to what the box showed",
+   "steps": [
+    {
+     "tap": "a",
+     "shown": "open",
+     "at": 0,
+     "gives": "closed"
+    },
+    {
+     "refuse": "a",
+     "back": "open"
+    },
+    {
+     "ticks": {
+      "a": "open"
+     }
+    },
+    {
+     "settle": {
+      "a": "open"
+     },
+     "at": 1
+    },
+    {
+     "ticks": {
+      "a": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "a state set outright answers the tick it replaced, and a refusal puts that back",
+   "steps": [
+    {
+     "set": "a",
+     "to": "closed",
+     "at": 0,
+     "gives": null
+    },
+    {
+     "set": "a",
+     "to": "open",
+     "at": 1,
+     "gives": "closed"
+    },
+    {
+     "refuse": "a",
+     "back": "closed"
+    },
+    {
+     "ticks": {
+      "a": "closed"
+     }
+    },
+    {
+     "set": "b",
+     "to": "proposed",
+     "at": 0,
+     "gives": null
+    },
+    {
+     "refuse": "b",
+     "back": null
+    },
+    {
+     "ticks": {
+      "b": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "a task the read does not show keeps its tick; one that still disagrees half a minute on goes",
+   "steps": [
+    {
+     "tap": "a",
+     "shown": "open",
+     "at": 0,
+     "gives": "closed"
+    },
+    {
+     "settle": {},
+     "at": 100
+    },
+    {
+     "ticks": {
+      "a": "closed"
+     }
+    },
+    {
+     "tap": "b",
+     "shown": "open",
+     "at": 0,
+     "gives": "closed"
+    },
+    {
+     "settle": {
+      "b": "open"
+     },
+     "at": 29
+    },
+    {
+     "ticks": {
+      "b": "closed"
+     }
+    },
+    {
+     "settle": {
+      "b": "open"
+     },
+     "at": 30
+    },
+    {
+     "ticks": {
+      "b": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "what a box shows, and a Timeline line about a ticked task",
+   "steps": [
+    {
+     "state": "a",
+     "row": "not_now",
+     "done": null,
+     "gives": "not_now"
+    },
+    {
+     "state": "a",
+     "row": null,
+     "done": true,
+     "gives": "closed"
+    },
+    {
+     "state": "a",
+     "row": null,
+     "done": null,
+     "gives": "open"
+    },
+    {
+     "tap": "a",
+     "shown": "not_now",
+     "at": 0,
+     "gives": "closed"
+    },
+    {
+     "state": "a",
+     "row": "not_now",
+     "done": null,
+     "gives": "closed"
+    },
+    {
+     "on": "line",
+     "uri": "a",
+     "gives": "closed"
+    },
+    {
+     "on": "line",
+     "uri": null,
+     "gives": null
+    },
+    {
+     "on": "a",
+     "uri": null,
+     "gives": "closed"
+    }
+   ]
+  }
+ ],
+ "activity": {
+  "now": "2026-10-05T10:00:00Z",
+  "rows": [
+   {
+    "id": "free",
+    "timeline": {
+     "free": {
+      "from": 0,
+      "until": 1
+     }
+    }
+   },
+   {
+    "id": "e:completed",
+    "icon": "apply",
+    "segments": [
+     {
+      "text": "Priya Shah ",
+      "person": true
+     },
+     {
+      "text": "completed"
+     },
+     {
+      "text": " "
+     },
+     {
+      "text": "Plan the offsite",
+      "content": true
+     }
+    ],
+    "timeline": {
+     "uri": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa1",
+     "day": "2026-09-02",
+     "dayTitle": "Wednesday 2 September",
+     "time": "12:00"
+    }
+   },
+   {
+    "id": "e:added",
+    "segments": [
+     {
+      "text": "An AI agent added 2 tasks"
+     }
+    ],
+    "timeline": {
+     "day": "2026-09-02",
+     "dayTitle": "Wednesday 2 September",
+     "time": "12:00"
+    },
+    "children": [
+     {
+      "id": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa1",
+      "title": "Plan the offsite",
+      "stateType": "open"
+     },
+     {
+      "id": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa2",
+      "title": "Book the venue",
+      "stateType": "open"
+     }
+    ]
+   },
+   {
+    "id": "e:meeting",
+    "timeline": {
+     "uri": "tana:event:01aaaaaaaaaaaaaaaaaaaaaaa3",
+     "day": "2026-09-01",
+     "dayTitle": "Tuesday 1 September",
+     "time": "12:00"
+    },
+    "children": [
+     {
+      "id": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa4",
+      "title": "Notes"
+     }
+    ]
+   },
+   {
+    "id": "e:edited",
+    "icon": "updated",
+    "timeline": {
+     "uri": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa2",
+     "day": "2026-09-01",
+     "dayTitle": "Tuesday 1 September",
+     "time": "12:00"
+    }
+   },
+   {
+    "id": "e:added again",
+    "timeline": {
+     "day": "2026-09-01",
+     "dayTitle": "Tuesday 1 September",
+     "time": "12:00"
+    },
+    "children": [
+     {
+      "id": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa1",
+      "title": "Plan the offsite"
+     }
+    ]
+   },
+   {
+    "id": "e:other",
+    "icon": "updated",
+    "timeline": {
+     "uri": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa5",
+     "day": "2026-08-31",
+     "dayTitle": "Monday 31 August",
+     "time": "12:00"
+    }
+   },
+   {
+    "id": "e:only seen",
+    "icon": "tlAccepted",
+    "timeline": {
+     "uri": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa1",
+     "day": "2026-08-30",
+     "dayTitle": "Sunday 30 August",
+     "time": "12:00"
+    }
+   }
+  ],
+  "days": [
+   {
+    "title": "Wednesday 2 September",
+    "lines": [
+     {
+      "id": "e:completed",
+      "added": []
+     },
+     {
+      "id": "e:added",
+      "added": [
+       "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa2"
+      ]
+     }
+    ]
+   },
+   {
+    "title": "Tuesday 1 September",
+    "lines": [
+     {
+      "id": "e:meeting",
+      "added": [
+       "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa4"
+      ]
+     }
+    ]
+   },
+   {
+    "title": "Monday 31 August",
+    "lines": [
+     {
+      "id": "e:other",
+      "added": []
+     }
+    ]
+   }
+  ],
+  "tasks": [
+   {
+    "line": "e:completed",
+    "gives": {
+     "id": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa1",
+     "title": "Plan the offsite",
+     "stateType": "closed"
+    }
+   },
+   {
+    "line": "e:completed",
+    "stateType": "open",
+    "gives": {
+     "id": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa1",
+     "title": "Plan the offsite",
+     "stateType": "open"
+    }
+   },
+   {
+    "line": "e:only seen",
+    "gives": {
+     "id": "tana:text:01aaaaaaaaaaaaaaaaaaaaaaa1",
+     "title": "",
+     "stateType": "open"
+    }
+   },
+   {
+    "line": "e:edited",
+    "gives": null
+   },
+   {
+    "line": "e:meeting",
+    "gives": null
+   }
+  ]
+ },
+ "phrases": {
+  "states": [
+   [
+    "proposed",
+    "Inbox"
+   ],
+   [
+    "open",
+    "In Progress"
+   ],
+   [
+    "closed",
+    "Completed"
+   ],
+   [
+    "not_now",
+    "Later"
+   ]
+  ],
+  "state": {
+   "proposed": "Inbox",
+   "open": "In Progress",
+   "closed": "Completed",
+   "not_now": "Later",
+   "waiting": "In Progress"
+  },
+  "audience": [
+   {
+    "scope": "only-me",
+    "space": null,
+    "gives": [
+     "Only you",
+     "lock"
+    ]
+   },
+   {
+    "scope": "people",
+    "space": null,
+    "gives": [
+     "Selected people",
+     "userLock"
+    ]
+   },
+   {
+    "scope": "space",
+    "space": "Design",
+    "gives": [
+     "Members of Design",
+     "houseLock"
+    ]
+   },
+   {
+    "scope": "space",
+    "space": null,
+    "gives": [
+     "Space members",
+     "houseLock"
+    ]
+   },
+   {
+    "scope": "everyone",
+    "space": null,
+    "gives": [
+     "Everyone",
+     "users"
+    ]
+   },
+   {
+    "scope": "inherit",
+    "space": null,
+    "gives": [
+     "Unknown",
+     "hidden"
+    ]
+   }
+  ],
+  "agent": {
+   "assigned": "Assigned",
+   "working": "Working",
+   "completed": "Completed",
+   "failed": "Failed",
+   "paused": "Assigned"
+  },
+  "free": [
+   {
+    "from": 0,
+    "until": 2640000,
+    "now": 0,
+    "gives": [
+     "No meetings for ",
+     "44 more min",
+     ""
+    ]
+   },
+   {
+    "from": 60000,
+    "until": 5460000,
+    "now": 0,
+    "gives": [
+     "No meetings for ",
+     "1 h 30 min",
+     " after this one"
+    ]
+   },
+   {
+    "from": 0,
+    "until": 7200000,
+    "now": 0,
+    "gives": [
+     "No meetings for ",
+     "2 h",
+     ""
+    ]
+   },
+   {
+    "from": 0,
+    "until": 1,
+    "now": 0,
+    "gives": [
+     "No meetings for ",
+     "1 more min",
+     ""
+    ]
+   }
+  ],
+  "glyphs": {
+   "event": "calendar",
+   "space": "space",
+   "user-profile": "member",
+   "chat": "discuss",
+   "search": "search",
+   "text": "doc",
+   "canvas": "doc"
+  },
+  "markers": {
+   "tlAccepted": "tlAccepted",
+   "free": "free",
+   "robot": "robot",
+   "apply": "calendar",
+   "updated": "updated",
+   "meeting": "calendar"
+  }
+ }
+}

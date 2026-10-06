@@ -12,7 +12,7 @@ function openOpenAIKeyPalette() {
 function refreshChatGPTStatus() {
   if (!tana.chatgptStatus || chatgptAuthLoading) return;
   const asked = chatgptPushes; // a read that answers after main announced a change is older than it, and must not undo it
-  chatgptAuthLoading = Promise.resolve(tana.chatgptStatus()).then((status) => { if (asked === chatgptPushes) chatgptAuth = status; }, (error) => { chatgptAuth = { available: false, signedIn: false, error: error.message }; })
+  chatgptAuthLoading = Promise.resolve(tana.chatgptStatus()).then((status) => { if (asked === chatgptPushes) chatgptAuth = status; }, (error) => { chatgptAuth = { available: false, signedIn: false, error: errorText(error) }; })
     .then(() => { chatgptAuthLoading = null; if (!palette.hidden && (palMode === 'cmd' || palMode === 'chatgpt')) renderPalette(); });
 }
 function startChatGPTLogin() {
@@ -46,7 +46,7 @@ function chatgptRows(q) {
     { group: 'ChatGPT', icon: 'chatgpt', label: chatgptAuth.available === false ? 'Sign-in unavailable' : 'Not signed in', hint: chatgptAuth.available === false ? (chatgptAuth.error || 'Codex CLI unavailable') : (chatgptAuth.apiKey ? 'Preferred over API key' : ''), disabled: true },
     { group: 'Actions', icon: 'chatgpt', label: 'Sign in with ChatGPT', run: startChatGPTLogin },
   ];
-  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
+  return matchRows(rows, q);
 }
 if (tana.onChatGPTStatus) tana.onChatGPTStatus((status) => {
   chatgptPushes++;
@@ -87,7 +87,7 @@ function agentsRows(q) {
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
     rows.push({ group: AGENTS_GROUP, icon: 'mcp', label: 'Connect your personal agent …', hint: 'Two plugins, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
   }
-  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
+  return matchRows(rows, q);
 }
 function openAgentsPalette() {
   loadAgentList().then(() => { if (palMode === 'agents') renderPalette(); });
@@ -96,7 +96,7 @@ function openAgentsPalette() {
 function defaultAgentRows(q) {
   const rows = agentsOn().map((a) => ({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
     run: () => agentsApply(() => tana.setDefaultAgent(a.id)) }));
-  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
+  return matchRows(rows, q);
 }
 function openDefaultAgentPalette() {
   loadAgentList().then(() => { if (palMode === 'defaultAgent') renderPalette(); });
@@ -113,7 +113,6 @@ const CHATGPT_PLUGINS = 'https://chatgpt.com/plugins';
 const LINK_TITLE = 'Connect your personal agent';
 let relayCtx = null; // { state: asking|waiting|expired|failed, code, prompt, expiresAt, error, back } while the page is up
 let relayTimer = null;
-const unwrapError = (e) => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 function openLinkPalette(back = BACK_TO_COMMANDS) {
   // a code still waiting is the page you left: shown again, rather than another code (the relay holds five at most)
   const open = relayCtx && relayCtx.state === 'waiting' && relayCtx.expiresAt > Date.now() ? relayCtx : null;
@@ -121,7 +120,7 @@ function openLinkPalette(back = BACK_TO_COMMANDS) {
   const ctx = relayCtx = { state: 'asking', back };
   openPage('linkAgent', LINK_TITLE, { rows: relayRows, back, typed: true });
   Promise.resolve(tana.relayLink()).then((r) => { if (relayCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawRelay(); pollRelay(ctx); },
-    (e) => { if (relayCtx !== ctx) return; ctx.state = 'failed'; ctx.error = unwrapError(e); drawRelay(); });
+    (e) => { if (relayCtx !== ctx) return; ctx.state = 'failed'; ctx.error = errorText(e); drawRelay(); });
 }
 const drawRelay = () => { if (palMode === 'linkAgent' && !palette.hidden) renderPalette(); };
 function pollRelay(ctx) {
@@ -201,13 +200,11 @@ function linkedAgentRows(q) {
     { group, icon: 'trash', label: 'Unlink', hint: 'It can no longer take tasks from Orbital', keepOpen: true,
       run: () => run(async () => { agentList = await tana.relayUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) }, // its nodes were unassigned too
   ];
-  return q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows;
+  return matchRows(rows, q);
 }
 function openRenameAgent(a) {
-  const group = 'Rename ' + a.label + ' · ↩ saves';
-  openPage('renameAgent', 'Its name in Orbital', { typed: true, back: () => openLinkedAgent(a.id), rows: (q, typed) => (typed.trim()
-    ? [{ group, icon: 'field', label: 'Rename to “' + typed.trim() + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.relayRename(a.id, typed.trim()); openLinkedAgent(a.id); }) }]
-    : [{ group, icon: 'field', label: 'Type its new name', disabled: true, match: [] }]) }, a.label);
+  namePage('renameAgent', 'Its name in Orbital', { group: 'Rename ' + a.label + ' · ↩ saves', icon: 'field', back: () => openLinkedAgent(a.id), empty: 'Type its new name' },
+    (name) => ({ label: 'Rename to “' + name + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.relayRename(a.id, name); openLinkedAgent(a.id); }) }), a.label);
 }
 // ---- linking a node to a task that already exists in an agent's app (#143) ----
 // Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, Claude's session is its id. Main reads the

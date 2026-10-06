@@ -7,8 +7,8 @@ import WidgetKit
 // happened. A widget does not scroll, so each draws as much as fits. They draw what the app last read
 // (Engine.swift keepTimeline), left in the Keychain in Orbital's own access group as the Share extension leaves what it
 // shares: a widget cannot run the engine. A row opens its node in the app (orbital:<id>, Shell.swift), + Quick Add.
-// A task's box opens the app too (orbital:check:<id>, orbital:uncheck:<id>), which ticks it and writes it to Tana at once:
-// a widget's own button runs in this extension, which has no engine to write with. On the Lock Screen, Quick Add.
+// A task's box opens the app too (TickTaskIntent, Orbital's own: a link ticks nothing), which ticks it and writes it to
+// Tana at once: this extension has no engine to write with. On the Lock Screen, Quick Add.
 @main
 struct OrbitalWidgets: WidgetBundle {
     var body: some Widget {
@@ -48,8 +48,8 @@ struct ActivityWidget: Widget {
     }
 }
 
-// Quick Add on the Lock Screen: a round + that opens Quick Add in the app (orbital:add), as the widgets' + does. Android
-// has no such place: a phone's lock screen there takes no widgets of an app's own.
+// Quick Add on the Lock Screen: a round + that opens Quick Add in the app (orbital:add), as the widgets' + does. Android's
+// lock screen takes no widgets of an app's own; its place there is a Quick Settings tile (QuickAddTile.kt).
 struct QuickAddWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "QuickAdd", provider: Still()) { _ in QuickAddButton() }
@@ -93,116 +93,8 @@ struct Provider: TimelineProvider {
     // it drawn again after every read (WidgetCenter)
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
         let glimpse = Glimpse.read(), now = Date.now
-        let starts = glimpse?.upcoming(now).compactMap { $0.start.flatMap(Glimpse.parse) } ?? []
+        let starts = glimpse?.upcoming(now).compactMap { $0.start.flatMap(Date.tana) } ?? []
         completion(Timeline(entries: ([now] + starts).map { Entry(date: $0, glimpse: glimpse) }, policy: .after(now.addingTimeInterval(1800))))
-    }
-}
-
-// What the app keeps for the widgets (Engine.swift Glimpse, Glimpse.kt): only what is drawn here of each row
-struct Glimpse: Decodable {
-    let read: Double
-    let rows: [Row]
-
-    struct Row: Decodable {
-        let id: String
-        let text: String?
-        let title: String?
-        let segments: [Segment]?
-        let icon: String?
-        let stateType: String?
-        let subtext: String?
-        let start: String?
-        let sensitive: Bool?
-        let children: [Row]?
-        let timeline: Info?
-
-        struct Segment: Decodable { let text: String?; let mention: Mention?; let content: Bool?; let person: Bool? }
-        struct Mention: Decodable { let label: String? }
-        struct Free: Decodable { let until: Double }
-        struct Info: Decodable {
-            let uri: String?
-            let tone: String?
-            let today: Bool?
-            let upcoming: Bool?
-            let free: Free?
-            let recording: Bool?
-            let time: String?
-            let day: String?
-            let dayTitle: String?
-        }
-
-        var words: String {
-            let said = (segments ?? []).map { $0.text ?? $0.mention?.label ?? "" }.joined()
-            return said.isEmpty ? (title ?? text ?? "") : said
-        }
-        var top: Bool { timeline?.today == true || timeline?.upcoming == true || timeline?.free != nil }
-    }
-
-    // where the app leaves it: a Keychain item in Orbital's own access group (Widgets.entitlements, as Share.entitlements)
-    private static let group = "6DA7MK99T2.com.dreetje.orbital"
-    static func read() -> Glimpse? {
-        let query: [CFString: Any] = [kSecClass: kSecClassGenericPassword, kSecAttrService: "com.dreetje.orbital", kSecAttrAccount: "glimpse",
-                                      kSecAttrAccessGroup: group, kSecReturnData: true, kSecMatchLimit: kSecMatchLimitOne]
-        var out: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
-        return try? JSONDecoder().decode(Glimpse.self, from: data)
-    }
-
-    var today: [Row]? { rows.first { $0.timeline?.today == true }.map { $0.children ?? [] } }
-    // drawn later than it was read: free time that has ended is gone, and a meeting that has started is no longer to come
-    func free(_ now: Date) -> Date? {
-        rows.compactMap(\.timeline?.free).first.map { Date(timeIntervalSince1970: $0.until / 1000) }.flatMap { $0 > now ? $0 : nil }
-    }
-    func upcoming(_ now: Date) -> [Row] {
-        (rows.first { $0.timeline?.upcoming == true }?.children ?? []).filter { ($0.start.flatMap(Self.parse) ?? now) > now }
-    }
-    // what happened, under each day (Timeline.swift days): Today and Yesterday against this phone's date
-    func days(_ now: Date) -> [(title: String, rows: [Row])] {
-        var out: [(key: String, title: String, rows: [Row])] = []
-        for row in rows where !row.top {
-            let key = row.timeline?.day ?? ""
-            if out.last?.key == key { out[out.count - 1].rows.append(row) } else { out.append((key, Self.day(key, row.timeline?.dayTitle, now), [row])) }
-        }
-        return out.map { ($0.title, $0.rows) }
-    }
-    private static func day(_ key: String, _ title: String?, _ now: Date) -> String {
-        let format = Date.ISO8601FormatStyle(timeZone: .current).year().month().day()
-        if key == now.formatted(format) { return "Today" }
-        if let before = Calendar.current.date(byAdding: .day, value: -1, to: now), key == before.formatted(format) { return "Yesterday" }
-        return title ?? key
-    }
-    // What happened, under each day, for the Activity widget, each task once: at the latest thing that happened to it
-    // (the rows come newest first), so a task added and then completed is the completion alone. A line of tasks added
-    // keeps the ones nothing happened to since, and goes when none is left; a day left empty goes too; a meeting is
-    // always itself. With each line, the tasks it brought. Android's Glimpse.activity (GlimpseTest) is the same.
-    func activity(_ now: Date) -> [(title: String, lines: [(row: Row, added: [Row])])] {
-        var seen = Set<String>()
-        return days(now).map { day in
-            (day.title, day.rows.compactMap { e -> (row: Row, added: [Row])? in
-                let added = e.children ?? []
-                if Self.kind(e.timeline?.uri) == "event" { return (e, added) }
-                if added.isEmpty { return e.timeline?.uri.map { seen.insert($0).inserted } == false ? nil : (e, added) }
-                let fresh = added.filter { seen.insert($0.id).inserted }
-                return fresh.isEmpty ? nil : (e, fresh)
-            })
-        }.filter { !$0.lines.isEmpty }
-    }
-    static func parse(_ s: String) -> Date? {
-        (try? Date(s, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true))) ?? (try? Date(s, strategy: .iso8601))
-    }
-    static func kind(_ uri: String?) -> String? { uri?.split(separator: ":").dropFirst().first.map(String.init) }
-}
-
-// An Activity line about a task's state ("completed Plan the offsite"), drawn as the task itself: its box in the state
-// the line left it in (the line's icon, main/timeline.js ICON) or a tick made since (Engine.keepTimeline keeps it on the
-// line), and its title. Nil for any other line: an edit, a meeting.
-// Android's Row.asTask (GlimpseTest) is the same.
-extension Glimpse.Row {
-    private static let stateOfIcon = ["apply": "closed", "tlAccepted": "open", "tlLater": "not_now", "tlInbox": "proposed"]
-    func asTask() -> Glimpse.Row? {
-        guard let uri = timeline?.uri, Glimpse.kind(uri) == "text", let state = Self.stateOfIcon[icon ?? ""] else { return nil }
-        return Glimpse.Row(id: uri, text: nil, title: segments?.last { $0.content == true }?.text ?? words, segments: nil, icon: nil, stateType: stateType ?? state,
-                           subtext: nil, start: nil, sensitive: sensitive, children: nil, timeline: nil)
     }
 }
 
@@ -269,9 +161,9 @@ struct RailTimeline: View {
             for (title, entries) in g.activity(now) {
                 out.append(Stop(heading: title))
                 for (e, added) in entries {
-                    let mark = (Self.marker(e.icon), e.timeline?.recording == true ? "live" : e.timeline?.tone)
+                    let mark = (Glyph.marker(e.icon), e.timeline?.recording == true ? "live" : e.timeline?.tone)
                     let time = e.timeline?.time ?? ""
-                    if Glimpse.kind(e.timeline?.uri) == "event" { meeting(e, label: time, mark: mark, glyph: nil); tasks(added) }
+                    if Glyph.kind(of: e.timeline?.uri) == "event" { meeting(e, label: time, mark: mark, glyph: nil); tasks(added) }
                     else if let first = added.first {
                         // tasks added: the first on the time's line, its marker saying who added it, the rest under it
                         rail(Stop(label: time, mark: mark, task: first, opens: link(first.id)))
@@ -308,13 +200,6 @@ struct RailTimeline: View {
         return Array(stops.prefix { stop in used += stop.heading != nil ? 18 : stop.line ? 13 : 24; return used <= height })
     }
 
-    // the rail's marker for a row's icon (main/timeline.js ICON, Timeline.swift Marker): a meeting by its calendar
-    static func marker(_ icon: String?) -> String {
-        switch icon {
-        case "tlAccepted", "tlLater", "tlInbox", "tlNew", "updated", "robot", "tana", "free", "todayTasks", "pinRoute": icon ?? "calendar"
-        default: "calendar"
-        }
-    }
 }
 
 // One stop on the rail, a day's heading, or the line under what is still to come: the time, the marker on a line through
@@ -390,17 +275,19 @@ struct Rail: View {
     }
 }
 
-// a task's box: a tap opens the app, which writes it to Tana at once (Shell.swift), by the app's own rule (Engine.toggle):
-// an Inbox task is accepted and a done one ticked back on (open, orbital:uncheck), any other ticked off (orbital:check)
+// a task's box: a tap opens the app, which writes it to Tana at once (TickTaskIntent, Orbital's own: no link another app
+// could send ticks anything), by the app's own rule (Engine.toggle): an Inbox task is accepted and a done one ticked back
+// on (open), any other ticked off (closed)
 struct Tick: View {
     let task: Glimpse.Row
     let room: CGFloat // between the box and the words, part of what a finger can tap
 
     var body: some View {
         let state = task.stateType, opens = state == "closed" || state == "proposed"
-        Link(destination: URL(string: (opens ? "orbital:uncheck:" : "orbital:check:") + task.id)!) {
+        Button(intent: TickTaskIntent(id: task.id, to: opens ? "open" : "closed")) {
             TaskBox(state: task.stateType).frame(width: 16 + room, height: 30, alignment: .leading).contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityLabel((state == "closed" ? "Mark as not done" : state == "proposed" ? "Accept" : "Mark as done")
                             + (task.sensitive == true ? "" : ", " + task.words)) // never a sensitive one's words
     }
@@ -519,17 +406,12 @@ struct GlyphImage: View {
     var body: some View { Image("Glyphs/" + name).resizable().frame(width: size, height: size) }
 }
 
-// the app's colours, light and dark (Timeline.swift Color.pair, the desktop's styles.css)
+// the app's colours, light and dark (Color.pair, ios/Common; the desktop's styles.css)
 extension Color {
-    static func pair(_ light: UInt32, _ dark: UInt32) -> Color {
-        let rgb = { (v: UInt32) in UIColor(red: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1) }
-        return Color(UIColor { $0.userInterfaceStyle == .dark ? rgb(dark) : rgb(light) })
-    }
     static let page = pair(0xffffff, 0x1b1d1e)
     static let ink = pair(0x1a1a1a, 0xe3e4e5)
     static let grey = pair(0x666666, 0xa0a5a8)
     static let faint = pair(0xa3a3a8, 0x6b7073)
     static let rule = pair(0xe2e2e4, 0x34383a)
-    static let done = Color(red: 0x5a / 255, green: 0x96 / 255, blue: 0x70 / 255)
     static let barred = pair(0x696d73, 0x8c9196).opacity(0.18)
 }

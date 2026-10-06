@@ -2,7 +2,7 @@
 'use strict';
 // Every pull request says, for each place a change can have to land, whether it landed there or why not (AGENTS.md,
 // Every platform): the desktop app, the iPhone app, the Android app and the manual. This holds the description's
-// Platforms lines to the diff, in CI (.github/workflows/platforms.yml) and by hand:
+// Platforms lines to the diff, by hand before pushing:
 //   node scripts/platform-check.js [--base origin/main] [--body-file pr.md]   (PR_BODY in the environment otherwise)
 // It fails on a missing line, on an answer the diff contradicts, and on "not needed" with no reason given. It warns,
 // without failing, where something usually follows: one phone changed and not the other, or a desktop feature the
@@ -20,7 +20,7 @@ const AREAS = {
 
 // What both phones run (ios/engine/build.js bundles these desktop modules and the SDK into the engine): a change here
 // changes both phones at once
-const SHARED = /^(ios\/engine\/|sdk\/|main\/timeline\.js$|main\/settings\.js$|renderer\/segments\.js$)/;
+const SHARED = /^(ios\/engine\/|sdk\/|main\/(timeline|settings|state|relay)\.js$|renderer\/segments\.js$)/;
 
 // The desktop features the phones carry too: when one changes on the desktop, the phones usually follow. A new desktop
 // feature is not here, and does not come to the phones by itself.
@@ -34,6 +34,9 @@ const MIRRORED = [
   [/^(settings\.(js|html)|main\/settings\.js|main\/ai\.js|renderer\/settings\.js)$/, 'settings and the AI models', 'Settings.swift and Translator.swift, Settings.kt and ChatGPT.kt'],
   [/^(renderer\/translate\.js)$/, 'Auto-translate', 'Translator.swift, Translator.kt'],
   [/^(main\/pins\.js|sdk\/pins\.js)$/, 'pins and Today', 'Engine.swift pin, Engine.kt pin'],
+  [/^(renderer\/meetingnotes\.js|main\/meeting-notes\.js)$/, 'meeting pages', 'Pages.swift, Pages.kt (MeetingSummary)'],
+  [/^(renderer\/agent\.js|main\/agents\/linked\.js)$/, 'your personal agent', 'Agents.swift, Agents.kt'],
+  [/^renderer\/pills\.js$/, 'a task\'s Status', 'Pages.swift, Pages.kt (NodeDetails)'],
 ];
 
 const LINE = /^\s*[-*]?\s*\**\s*(Desktop|iOS|Android|Manual)\s*\**\s*:\s*\**\s*(.*)$/i;

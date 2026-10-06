@@ -8,7 +8,7 @@
 const { openLiveQuery } = require('../../sdk/livequery');
 const { STATE_TYPES } = require('../../sdk/node');
 
-const PAGES = 12; // the pages heard, the newest opened: as many as index.js holds (KEEP)
+const PAGES = 12; // the pages heard, the newest opened: as many as held.js keeps (KEEP)
 const LISTS = 4; // of those, the newest whose list is kept live by a query of its own
 const SETTLE = 300; // ms: a burst of changes (an answer being written) is one read
 // what of a task the Timeline shows: its words and its state (an edit's own words come from Tana's summaries, written

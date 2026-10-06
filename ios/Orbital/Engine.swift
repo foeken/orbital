@@ -10,6 +10,8 @@ import WidgetKit
 @MainActor @Observable
 final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     enum Phase: Equatable { case starting, signedOut, ready, failed(String) }
+    // the engine's words when this account has no settings document yet (ios/engine/index.js MAC_FIRST, word for word)
+    static let macFirst = "Open Orbital on your Mac once to set it up for this account, then check again here."
 
     var phase = Phase.starting
     var rows: [Row] = []
@@ -17,8 +19,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var error: String?
     var pages = 1
     var email: String? // the Tana account signed in, for Settings
-    var states: [String: String] = [:] // task id -> the stateType ticked here, until a read of Tana agrees with it
-    @ObservationIgnored private var ticked: [String: Date] = [:] // task id -> when it was ticked here
+    var ticks = Ticks() // the boxes ticked here, until a read of Tana agrees (ios/Common/Ticks.swift)
+    var states: [String: String] { ticks.states }
     // What sign-in and the session did, newest last, for Details: cookie names only, never a value (#658). A line is
     // added only when it differs from the one before, so the screen is redrawn only when something moved.
     var log: [String] = []
@@ -35,6 +37,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         didSet {
             UserDefaults.standard.set(demo, forKey: "demoMode")
             partsFor = nil // what a read under way brings is the other mode's
+            tasksRead = .distantPast // Siri's and Spotlight's tasks read again in this mode, not left as the other's for minutes (keepTasks)
             if demo, !Self.isSample { rows = [] } // the real words go at once, rather than staying until the masked read lands, or for good with Tana out of reach
             Task { await refresh() }
         }
@@ -49,6 +52,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     @ObservationIgnored private var partsFor: Int? // the session whose Timeline read is under way, taking its first part (show(part:))
 
     static let session = URL(string: "https://home.tana.inc/api/auth/session")!
+    // the app's one engine, for what Siri and Shortcuts do in the app (Intents.swift)
+    static weak var current: Engine?
     static let home = URL(string: "https://home.tana.inc")!
     // -sample: invented content in place of Tana (timeline-sample.json, pages-sample.json), for design shots; writes nothing
     static let isSample = CommandLine.arguments.contains("-sample")
@@ -80,6 +85,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         web.isInspectable = true // Safari's Web Inspector; never in a release, where the page holds a live Tana token
         #endif
         web.navigationDelegate = self
+        Self.current = self
+        Writes.tick = { [weak self] id, to in await self?.tick(id, to: to) } // a widget's box, run in the app (TickTaskIntent)
         if Self.isSample { showSample(); return }
         // the last Timeline read, on screen at once while Tana connects (SavedTimeline); never in demo mode
         if !demo, Self.stall == nil, let saved = SavedTimeline.load() { rows = saved.rows; savedFor = saved.account }
@@ -182,7 +189,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 email = try? await engineJS("return orbital.email()") as? String
                 let was = savedFor ?? account // whose rows are on screen: the saved Timeline's, or the session's before this one ran out
                 account = try? await engineJS("return orbital.account()") as? String
-                if let was, was != account { rows = []; forgetTimeline() } // another account's, or another workspace's: off the screen and off the phone
+                if let was, was != account { rows = []; forgetTimeline(); forgetAccount() } // another account's, or another workspace's: off the screen and off the phone
                 savedFor = nil
                 // the cookies kept at once, as the refresh may not finish, and beside it: the Timeline waits on no Keychain
                 Task { await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) }
@@ -217,8 +224,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 guard host == "home.tana.inc" else { note("\(host) · cookies: \(cookies.joined(separator: ", "))"); continue }
                 var answer = "no answer"
                 do {
+                    // given up after 10 s, as Android's probe is (Engine.kt): a request that never answers would stop the watch
                     answer = try await web.callAsyncJavaScript(
-                        "const r = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' }); const j = await r.json().catch(() => ({})); return r.status + ' ' + (j.authenticated === true ? 'signed in' : 'signed out' + (j.reason ? ' (' + j.reason + ')' : ''))",
+                        "const r = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(10000) }); const j = await r.json().catch(() => ({})); return r.status + ' ' + (j.authenticated === true ? 'signed in' : 'signed out' + (j.reason ? ' (' + j.reason + ')' : ''))",
                         contentWorld: .page) as? String ?? answer
                 } catch {
                     answer = Self.message(error)
@@ -276,6 +284,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 if let agents = setup.agents { self.agents = agents }
                 if let handed = setup.handed { self.handed = handed }
             }
+            await loadPrompts()
             keepTimeline(read: json)
             for issue in (try? await engineJS("return orbital.issues()")) as? [String] ?? [] { note(issue) }
             await SavedSession.save(from: web.configuration.websiteDataStore.httpCookieStore) // Tana rotates the session: keep the newest
@@ -309,9 +318,18 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         for cookie in await store.allCookies() where cookie.domain.hasSuffix("tana.inc") { await store.deleteCookie(cookie) }
         SavedSession.forget()
         forgetTimeline()
-        rows = []; states = [:]; removed = []; email = nil; account = nil; pages = 1
+        forgetAccount()
+        rows = []; email = nil; account = nil; pages = 1
         note("signed out")
         start()
+    }
+
+    // What the last account's session knew, gone with it: a refused draft or request (made again, it would go to the next
+    // account), its ticks, its agents and marks, and the images fetched with its token
+    private func forgetAccount() {
+        ticks = Ticks(); removed = []; unpinned = []; unsent = []; unhanded = [:]
+        agents = []; handed = [:]; sensitiveIds = []; pinned = []
+        images.removeAllObjects()
     }
 
     // Your saved searches, those pinned to your sidebar first (orbital.searches)
@@ -424,8 +442,10 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // Remove Pin takes the task out of Today's Tasks at once, collapsing as a deleted row does; the read after says where it
     // is now (still on today's node, it comes back)
     func pin(_ id: String, _ on: Bool) async {
-        if !on { withAnimation(Self.collapse) { _ = unpinned.insert(id) } }
-        await act("return await orbital.pin(id, on)", ["id": id, "on": on])
+        // pinned or not at once (a node's Pin to Today, the long press's words), put back when Tana says no
+        let was = pinned.contains(id)
+        if on { pinned.insert(id) } else { pinned.remove(id); withAnimation(Self.collapse) { _ = unpinned.insert(id) } }
+        if !(await act("return await orbital.pin(id, on)", ["id": id, "on": on])) { if was { pinned.insert(id) } else { pinned.remove(id) } }
         unpinned.remove(id)
     }
     var unpinned: Set<String> = [] // pins being taken off here, out of Today's Tasks before Tana answers
@@ -436,6 +456,14 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         translator.use(to: to)
         guard !Self.isSample else { return }
         do { let _: String? = try await call("return await orbital.translateTo(to)", ["to": to ?? NSNull()]) } catch { translator.use(to: was); self.error = error.localizedDescription }
+        await loadPrompts()
+    }
+    // ChatGPT's words for the language Auto-translate is in, and the names of the models this account has (Translator.Prompts)
+    func loadPrompts() async {
+        let to = translator.to, models = translator.catalogue.map(\.id), efforts = Array(Set(translator.catalogue.flatMap(\.levels)))
+        guard !Self.isSample, let json = try? await call("return orbital.prompts(to, models, efforts)", ["to": to ?? NSNull(), "models": models, "efforts": efforts], decode: { $0 }),
+              let read = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any], let prompts = Translator.Prompts(read, to: to) else { return }
+        translator.prompts = prompts
     }
     // Settings' Quick and Regular AI: used at once, kept if Tana takes it (orbital.aiChoice), as the Mac's Settings page sets them
     func aiChoice(_ key: String, _ value: String) async {
@@ -451,7 +479,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     struct Assigning: Identifiable { let id: String; let current: [String]?; var people = true; let then: () async -> Void }
     var assigning: Assigning?
     struct Member: Decodable, Identifiable { let id: String; let name: String }
-    func members() async -> [Member] { Self.isSample ? [] : (try? await call("return await orbital.members()", [:])) ?? [] }
+    func members() async -> [Member] { await lookup("return await orbital.members()", or: []) }
     // Someone just assigned who cannot open the task: asked there and then, Grant access or Keep private (renderer/access.js
     // openShareAsk), by the alert Shell lays over everything
     func assign(_ id: String, to uri: String?, then done: @escaping () async -> Void = {}) async {
@@ -478,16 +506,21 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         // the rule it is shared by now, as the visibility picker ticks it
         var rule: String { !restricted ? "inherit" : participants.isEmpty ? "me" : "people" }
     }
+    // a task's state read here settles a tick made on it as a Timeline read does: a task off the Timeline (its Status set on
+    // its own page) kept the tick for good, its Status never showing a change made anywhere else (Engine.kt access)
     func access(_ id: String) async -> Access? {
         if let s = Self.sample { return s.access?[id] } // -sample: the invented audiences of pages-sample.json
-        return try? await call("return await orbital.access(id)", ["id": id])
+        let got: Access? = try? await call("return await orbital.access(id)", ["id": id])
+        if let state = got?.state { ticks.settle { $0 == id ? state : nil } }
+        return got
     }
     func share(_ id: String, _ rule: String, _ uris: [String] = [], token: String? = nil) async {
         await act("return await orbital.share(id, rule, uris, token)", ["id": id, "rule": rule, "uris": uris, "token": token ?? NSNull()])
     }
-    private func act(_ js: String, _ arguments: [String: Any]) async {
-        guard !Self.isSample else { return }
-        do { let _: Bool = try await call(js, arguments); await refresh() } catch { self.error = error.localizedDescription }
+    // false when Tana did not take it, which it says
+    @discardableResult private func act(_ js: String, _ arguments: [String: Any]) async -> Bool {
+        guard !Self.isSample else { return true }
+        do { let _: Bool = try await call(js, arguments); await refresh(); return true } catch { self.error = error.localizedDescription; return false }
     }
 
     // Quick Add Task (QuickAdd.swift): the types to pick from, a task made with one, an image made into a task or a note
@@ -499,16 +532,20 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     struct Value: Decodable, Equatable { var ref: String?; var label: String?; var text: String?
         var json: [String: String] { ["ref": ref, "label": label, "text": text].compactMapValues { $0 } } }
     func typeFields(_ type: String) async -> [Field] {
-        Self.isSample ? [] : (try? await call("return await orbital.typeFields(type)", ["type": type])) ?? []
+        await lookup("return await orbital.typeFields(type)", ["type": type], or: [])
     }
     func fieldChoices(_ key: String, _ query: String) async -> [Member] {
-        Self.isSample ? [] : (try? await call("return await orbital.fieldChoices(key, query)", ["key": key, "query": query])) ?? []
+        await lookup("return await orbital.fieldChoices(key, query)", ["key": key, "query": query], or: [])
     }
     func searchPreset(_ id: String) async -> Preset? {
-        Self.isSample ? nil : (try? await call("return await orbital.searchPreset(id)", ["id": id])) ?? nil
+        await lookup("return await orbital.searchPreset(id)", ["id": id], or: nil)
     }
     func taskTypes() async -> [TaskType] {
-        Self.isSample ? [] : (try? await call("return await orbital.taskTypes()", [:])) ?? []
+        await lookup("return await orbital.taskTypes()", or: [])
+    }
+    // a read for a picker: what engine.js answers, or the empty answer on -sample or when it cannot be had
+    private func lookup<T: Decodable>(_ js: String, _ arguments: [String: Any] = [:], or empty: T) async -> T {
+        Self.isSample ? empty : (try? await call(js, arguments)) ?? empty
     }
     // today: Quick Add's Pin to today, the made task pinned as a long press pins one; a task made but not pinned is not
     // made again, it says so
@@ -531,7 +568,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func processImage(_ image: UIImage) async throws -> String {
         guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
         guard let jpeg = image.fitted(2048).jpegData(compressionQuality: 0.9) else { throw Failure(errorDescription: "The image could not be read") }
-        let read = try await ChatGPT.readImage(jpeg, to: translator.to, model: translator.ai["model"]!, effort: translator.ai["effort"]!)
+        await loadPrompts() // in the language Auto-translate shows notes in now
+        guard let instructions = translator.prompts?.image else { throw Failure(errorDescription: "Tana's page is not ready to read images yet") }
+        let read = try await ChatGPT.readImage(jpeg, instructions: instructions, model: translator.ai["model"]!, effort: translator.ai["effort"]!)
         let id: String = try await call("return await orbital.fromImage(kind, title, notes, image, 'image/jpeg')",
                                         ["kind": read.kind ?? "doc", "title": read.title ?? "", "notes": read.notes ?? [], "image": jpeg.base64EncodedString()])
         await refresh()
@@ -694,44 +733,35 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func toggle(_ task: Row) async {
         guard !demo else { return } // a box does nothing in demo mode, as the desktop's is disabled
         let before = state(of: task)
-        states[task.id] = before == "proposed" || before == "closed" ? "open" : "closed"
-        ticked[task.id] = .now
+        ticks.tap(task.id, shown: before)
         defer { keepTimeline() } // the widgets show it ticked too
         guard !Self.isSample else { return } // the sample writes nothing
         do {
-            states[task.id] = try await call("return await orbital.toggle(id)", ["id": task.id]) as String
+            ticks.answer(task.id, try await call("return await orbital.toggle(id)", ["id": task.id]) as String)
         } catch {
-            states[task.id] = before
+            ticks.refuse(task.id, back: before)
             self.error = error.localizedDescription
         }
     }
 
-    // Long press, Move to Inbox: the task back to Tana's Inbox state (proposed), drawn so at once and put back if Tana refuses
-    func moveToInbox(_ id: String) async {
-        guard !demo, !Self.isSample else { return }
-        let before = states[id]
-        states[id] = "proposed"
-        defer { keepTimeline() } // the widgets show it in the Inbox too
-        do { states[id] = try await call("return await orbital.toggle(id, 'proposed')", ["id": id]) as String }
-        catch { states[id] = before; self.error = error.localizedDescription }
-    }
+    // Long press, Move to Inbox: the task back to Tana's Inbox state (proposed), drawn so at once and put back if Tana
+    // refuses; a tick like any other, so a read of a graph still behind the write does not put it back meanwhile (settle)
+    func moveToInbox(_ id: String) async { await tick(id, to: "proposed") }
 
     // A widget's box (ios/Widgets): the task set to what the widget showed it becoming, drawn so at once and written as soon
     // as the engine has connected (a cold start waits for it), put back with the reason if Tana refuses. Set outright,
     // so a second tap on a widget not yet drawn again does not undo the first.
     func tick(_ id: String, to next: String) async {
         guard !demo else { return }
-        let before = states[id]
-        states[id] = next
-        ticked[id] = .now
+        let before = ticks.set(id, to: next)
         defer { keepTimeline() } // the widgets drawn again with it
         guard !Self.isSample else { return }
-        do { states[id] = try await call("return await orbital.toggle(id, to)", ["id": id, "to": next]) as String }
-        catch { states[id] = before; self.error = error.localizedDescription }
+        do { ticks.answer(id, try await call("return await orbital.toggle(id, to)", ["id": id, "to": next]) as String) }
+        catch { ticks.refuse(id, back: before); self.error = error.localizedDescription }
     }
 
     func state(of task: Row) -> String {
-        states[task.id] ?? task.stateType ?? (task.done == true ? "closed" : "open")
+        ticks.state(task.id, row: task.stateType, done: task.done)
     }
 
     // The Timeline is kept on this phone twice, both written here and nowhere else (Android's Engine.kt the same):
@@ -756,7 +786,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                     r.timeline?.note = nil; r.timeline?.change = nil; r.timeline?.detail = nil
                 }
                 // a tick made here: on the task, and on an Activity line about it (its uri), which the widget draws as the task
-                r.stateType = states[r.id] ?? r.timeline?.uri.flatMap { states[$0] } ?? r.stateType
+                r.stateType = ticks.on(r.id, uri: r.timeline?.uri) ?? r.stateType
                 r.children = kept(r.children, today: r.timeline?.today == true)
                 return r
             } }
@@ -787,7 +817,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let kept = list.map { row in
             var r = row
             if r.sensitive == true { r.text = nil; r.title = nil; r.segments = nil }
-            r.stateType = states[r.id] ?? r.stateType
+            r.stateType = ticks.on(r.id) ?? r.stateType
             return r
         }
         if let data = try? JSONEncoder().encode(kept) { Keychain.save(data, "tasks") }
@@ -801,16 +831,8 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         Task { await Tasks.index(demo: true) } // nor in Spotlight (Intents.swift)
     }
 
-    // A box ticked here goes back to reading Tana once a read shows it as ticked, or once a read still disagrees half a
-    // minute on (Tana refused it later than toggle waits for, or someone changed it back): the graph can trail a write by
-    // seconds, never by that long. One that is not in the rows read keeps its tick.
-    private func settle(_ rows: [Row]) {
-        states = states.filter { id, state in
-            guard let read = Self.stateType(id, in: rows) else { return true }
-            return read != state && Date.now.timeIntervalSince(ticked[id] ?? .distantPast) < 30
-        }
-        ticked = ticked.filter { states[$0.key] != nil }
-    }
+    // a read of Tana settles the boxes ticked here (Ticks.settle)
+    private func settle(_ rows: [Row]) { ticks.settle { Self.stateType($0, in: rows) } }
 
     private static func stateType(_ id: String, in rows: [Row]) -> String? {
         for row in rows {
@@ -832,7 +854,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             let filled = switch match.1 {
             case "ms": String(Int(at.timeIntervalSince1970 * 1000))
             case "hm": "\"" + at.formatted(gb.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)) + "\""
-            case "day": "\"" + TimelineScreen.key(at) + "\""
+            case "day": "\"" + Day.key(at) + "\""
             case "date": "\"" + at.formatted(gb.weekday(.wide).day().month(.wide)) + "\""
             default: "\"" + at.ISO8601Format(.iso8601.year().month().day().time(includingFractionalSeconds: true)) + "\""
             }
@@ -909,44 +931,10 @@ enum SavedSession {
     }
 }
 
-// What the app keeps secret, on this phone only (never synced, never in a backup to another device)
-enum Keychain {
-    private static func item(_ account: String) -> [CFString: Any] { [kSecClass: kSecClassGenericPassword, kSecAttrService: "com.dreetje.orbital", kSecAttrAccount: account] }
-
-    static func save(_ data: Data, _ account: String) {
-        SecItemDelete(item(account) as CFDictionary)
-        var add = item(account)
-        add[kSecValueData] = data
-        add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
-    }
-
-    static func load(_ account: String) -> Data? {
-        var query = item(account)
-        query[kSecReturnData] = true
-        query[kSecMatchLimit] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        return SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess ? out as? Data : nil
-    }
-
-    static func delete(_ account: String) { SecItemDelete(item(account) as CFDictionary) }
-}
-
 struct WebHost: UIViewRepresentable {
     let web: WKWebView
     func makeUIView(context: Context) -> WKWebView { web }
     func updateUIView(_ view: WKWebView, context: Context) {}
-}
-
-extension UIImage {
-    // At most side pixels on its longest side, drawn in pixels: a renderer's default is the screen's scale (3x on an
-    // iPhone), which blew a shrunk screenshot back up three times over, blurred, before the model read it
-    func fitted(_ side: CGFloat) -> UIImage {
-        let pixels = CGSize(width: size.width * scale, height: size.height * scale), k = min(1, side / max(pixels.width, pixels.height))
-        let target = CGSize(width: (pixels.width * k).rounded(), height: (pixels.height * k).rounded()), format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: target, format: format).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
-    }
 }
 
 // A UIKit background task (Engine.awake): begun, and ended when the work is done, or by iOS's own deadline

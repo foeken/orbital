@@ -2,8 +2,7 @@
 const { LoroMap } = require('loro-crdt');
 const { createHash } = require('node:crypto');
 const { readNode } = require('./node');
-const USER = /^tana:user-profile:[0-9a-z]{26}$/;
-const SPACE = /^tana:space:[0-9a-z]{26}$/;
+const { USER_URI: USER, SPACE_URI: SPACE } = require('./ids');
 // 'search' is a document kind like text or chat (Tana's own client groups it there): a saved search is owned,
 // renamed and deleted through the same ACL, so leaving it out made every search report unknown write permission.
 const KINDS = new Set(['text', 'event', 'space', 'chat', 'canvas', 'agent', 'skill', 'type', 'artifact', 'image', 'video', 'audio', 'workflow', 'search']);
@@ -227,4 +226,4 @@ async function everyoneOnly(graph, nodes) {
   return nodes.filter((_, i) => keep[i]);
 }
 
-module.exports = { capabilities, setSharing, setLinkSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, canEditEvent, audienceOf, everyoneOnly, LIBRARY };
+module.exports = { capabilities, setSharing, setLinkSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, canEditEvent, audienceOf, everyoneOnly, LIBRARY, WRITERS };

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.MoveToInbox
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Schedule
@@ -97,6 +98,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dreetje.orbital.Engine
 import com.dreetje.orbital.Lists
+import com.dreetje.orbital.Phrases
 import com.dreetje.orbital.Row as Node
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -184,7 +186,11 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
         AnimatedVisibility(building, enter = fadeIn(tween(0)), exit = fadeOut(tween(if (still) 0 else 150))) { Building(still) }
         if (!building && rows.isEmpty()) {
             val error = engine.error
-            if (error != null) Empty("Timeline didn't load", error, icon = Icons.Outlined.ErrorOutline)
+            // this account never used Orbital on a Mac, which makes its settings document (#751)
+            if (error == Engine.MAC_FIRST) Empty("Set up Orbital on a Mac first", error, icon = Icons.Outlined.Laptop) {
+                TextButton({ engine.scope.launch { engine.refresh() } }) { Text("Check again") }
+            }
+            else if (error != null) Empty("Timeline didn't load", error, icon = Icons.Outlined.ErrorOutline)
             else Empty("Nothing yet", "Changes to your tasks, new Inbox tasks and your meetings show up here.", icon = Icons.Outlined.Schedule)
         }
         val error = engine.error
@@ -326,7 +332,7 @@ fun FreeLine(free: Node.Free, time: String, bottom: Dp, engine: Engine) {
     val c = Theme.colors
     var now by remember { mutableStateOf(engine.now()) }
     LaunchedEffect(Unit) { while (true) { delay(15_000); now = engine.now() } }
-    val (before, bold, after) = Lists.free(free, now.toEpochMilliseconds().toDouble())
+    val (before, bold, after) = Phrases.free(free.from, free.until, now.toEpochMilliseconds().toDouble())
     RailRow(time, bottom = bottom, marker = { Marker("free", "new", false, engine.platform.reduceMotion) }) {
         Text(buildAnnotatedString { append(before); withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(bold) }; append(after) }, style = Type.body, color = c.secondary)
     }
