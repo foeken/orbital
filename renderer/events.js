@@ -172,7 +172,6 @@ onRows('input', (e) => {
 // leaves the row as it was and only shows the error. Everything else — prose around a url, another host, a broken
 // id, no clipboard text — pastes the browser's way. linkTo is the same path "@" uses, so the surrounding text,
 // the replaced selection and the caret behave exactly as they do there, and the url never lands as text beside it.
-// ponytail: a draft row pastes as text — it has no Tana id yet, so setText has nothing to write to
 onRows('paste', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el || !e.clipboardData || !tana.node) return;
