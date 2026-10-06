@@ -1,7 +1,8 @@
 #!/bin/sh
 # Both phones' checks on this Mac (npm run phones [android|ios|clean]; escalated: Gradle's cache, the
 # emulator and the simulator live outside the checkout).
-# The only place the iPhone's tests run (there is no CI): before a phone change merges, and in npm run release.
+# The only place the iPhone's tests run (CI runs Android's build and JVM tests, not these): before a phone change merges,
+# and in npm run release.
 set -e
 cd "$(dirname "$0")/.."
 which=${1:-both}
