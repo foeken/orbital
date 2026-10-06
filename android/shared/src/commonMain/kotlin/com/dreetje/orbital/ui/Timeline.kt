@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -107,8 +108,9 @@ import kotlinx.coroutines.launch
 // faces, the long-press menu)
 
 // The Timeline as the desktop draws it (styles.css .node.tl): the time on the left, a marker on a thin rail that runs
-// the length of the page, what happened to the right. Today's tasks, the free time and Upcoming meetings sit on the
-// same rail above the days, each only when it has something in it.
+// the length of the page, what happened to the right. Above the days, Today's tasks, the free time and Upcoming meetings
+// sit on a rail of their own with no time column, under the menu button, each only when it has something in it; it
+// curves into the days' rail (Bend), where the times are.
 @Composable
 fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
     val c = Theme.colors
@@ -142,26 +144,25 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
             LazyColumn(Modifier.fillMaxSize().alpha(shown), contentPadding = PaddingValues(bottom = 12.dp + LocalBottomInset.current)) {
                 val key = uniqueKeys()
                 if (hasToday) {
-                    // one stop on the rail: Now, the Today glyph, its words, the tasks hanging under them
-                    item("today") { RailRow("Now", railTop = 24.dp, bottom = 0.dp, marker = { Marker("todayTasks", "new", false, still) }) { Text("Today's Tasks", style = Type.body, color = c.text) } }
+                    // one stop on the rail: the Today glyph, its words, the tasks hanging under them
+                    item("today") { RailRow(null, railTop = 24.dp, bottom = 0.dp, marker = { Marker("todayTasks", "new", false, still) }) { Text("Today's Tasks", style = Type.body, color = c.text) } }
                     if (today.isEmpty()) item("today-empty") {
-                        RailRow("", top = 30.dp, bottom = 16.dp, marker = { Spacer(Modifier.height(1.dp)) }) {
+                        RailRow(null, top = 30.dp, bottom = 16.dp, marker = { Spacer(Modifier.height(1.dp)) }) {
                             Text("Nothing pinned to today. Long-press a task to pin it.", style = Type.subheadline, color = c.secondary)
                         }
-                    } else taskLines(today, engine, "today", key)
+                    } else taskLines(today, engine, "today", key, left = true)
                 }
                 // the free time, then one stop for the meetings still to come, each hanging under it like a task
-                if (free != null) item("free") { FreeLine(free, if (hasToday) "" else "Now", if (upcoming.isEmpty()) 0.dp else 14.dp, engine) }
+                if (free != null) item("free") { FreeLine(free, null, if (upcoming.isEmpty()) 0.dp else 14.dp, engine, railTop = if (hasToday) 0.dp else 24.dp) }
                 if (upcoming.isNotEmpty()) {
-                    item("upcoming") { RailRow("", top = 14.dp, bottom = 0.dp, marker = { Marker("meeting", null, false, still) }) { Text("Upcoming meetings", style = Type.body, color = c.text) } }
-                    upcoming.forEachIndexed { i, m -> item(key("up:" + m.id)) { Meeting(m, engine, if (i == 0) 28.dp else 14.dp, 0.dp) } }
+                    item("upcoming") { RailRow(null, railTop = if (hasToday || free != null) 0.dp else 24.dp, top = 14.dp, bottom = 0.dp, marker = { Marker("meeting", null, false, still) }) { Text("Upcoming meetings", style = Type.body, color = c.text) } }
+                    upcoming.forEachIndexed { i, m -> item(key("up:" + m.id)) { Meeting(m, engine, if (i == 0) 28.dp else 14.dp, 0.dp, left = true) } }
                 }
-                // a line across under what is still to come, before what has happened
-                if ((upcoming.isNotEmpty() || free != null) && days.isNotEmpty()) item("line") {
-                    HorizontalDivider(Modifier.padding(start = 20.dp, end = 16.dp, top = 28.dp, bottom = 19.dp), color = c.separator)
-                }
-                days.forEach { (title, list) ->
-                    item(key("day:$title")) { Heading(title) }
+                // what is still to come curves into what has happened, and the first day's heading is a stop where it lands
+                val ahead = hasToday || free != null || upcoming.isNotEmpty()
+                if (ahead && days.isNotEmpty()) item("bend") { Bend() }
+                days.forEachIndexed { d, (title, list) ->
+                    item(key("day:$title")) { if (d == 0 && ahead) Junction(title) else Heading(title) }
                     list.forEach { row ->
                         item(key("entry:" + row.id)) { Entry(row, engine) }
                         taskLines(row.children ?: emptyList(), engine, "entry:" + row.id, key)
@@ -204,10 +205,11 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
 private val TimeStyle = Type.footnote.copy(fontFeatureSettings = "tnum")
 
 // One stop on the rail. The line is drawn behind each row, through the markers' middle, so each row's piece meets the
-// next and the rail reads as one line down the section.
+// next and the rail reads as one line down the section. With no label (null) there is no time column, and the rail is
+// the one above the days, under the menu button.
 @Composable
 fun RailRow(
-    label: String, // the time, or Now, or nothing
+    label: String?, // the time, or nothing; null: above the days
     modifier: Modifier = Modifier,
     railTop: Dp = 0.dp, // where the line starts: the first stop's starts at its marker, as the desktop's does
     top: Dp = 14.dp,
@@ -217,20 +219,50 @@ fun RailRow(
 ) {
     val c = Theme.colors
     val time = LocalRailTime.current
+    val left = label == null
     Row(
         modifier.fillMaxWidth()
             .drawBehind {
-                val x = (Rail.inset + time + Rail.gap + Rail.marker / 2 - 0.5.dp).toPx() + 0.5f
+                val x = railX(left, time).toPx() + 0.5f
                 drawLine(c.separator, Offset(x, railTop.toPx()), Offset(x, size.height), 1.dp.toPx())
             }
-            .padding(start = Rail.inset, end = 16.dp, top = top, bottom = bottom),
+            .padding(start = if (left) Rail.left else Rail.inset, end = 16.dp, top = top, bottom = bottom),
         horizontalArrangement = Arrangement.spacedBy(Rail.gap),
     ) {
-        Text(label, Modifier.width(time).alignByBaseline(), style = TimeStyle, color = c.secondary, textAlign = TextAlign.End, maxLines = 1)
+        if (label != null) Text(label, Modifier.width(time).alignByBaseline(), style = TimeStyle, color = c.secondary, textAlign = TextAlign.End, maxLines = 1)
         // centred on the first line's lower-case letters, as the markers are on the desktop
-        Box(onBaseline(4.dp, Modifier.width(Rail.marker)), contentAlignment = Alignment.Center) { marker() }
+        Box(onBaseline(4.dp, Modifier.width(if (left) Rail.leftMarker else Rail.marker)), contentAlignment = Alignment.Center) { marker() }
         Box(Modifier.weight(1f).alignByBaseline(), content = content)
     }
+}
+
+// where a rail's line runs, its left edge: the one above the days, or the days' own
+private fun railX(left: Boolean, time: Dp) = if (left) Rail.left + Rail.leftMarker / 2 - 0.5.dp else Rail.inset + time + Rail.gap + Rail.marker / 2 - 0.5.dp
+
+// Where the rail above the days curves into the days' rail: one S, upright at both ends so it leaves one line and joins
+// the other without a corner
+@Composable
+fun Bend() {
+    val c = Theme.colors
+    val time = LocalRailTime.current
+    Canvas(Modifier.fillMaxWidth().height(64.dp).clearAndSetSemantics {}) {
+        val a = railX(true, time).toPx() + 0.5f
+        val b = railX(false, time).toPx() + 0.5f
+        val h = size.height
+        val p = Path().apply { moveTo(a, 0f); cubicTo(a, h * 0.55f, b, h * 0.45f, b, h) }
+        drawPath(p, c.separator, style = Stroke(1.dp.toPx()))
+    }
+}
+
+// The first day's heading where the bend lands: a stop on the days' rail, a small ring for its marker
+@Composable
+fun Junction(title: String) {
+    val c = Theme.colors
+    RailRow("", top = 0.dp, bottom = 2.dp, marker = {
+        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(11.dp).background(c.page, CircleShape).border(1.5.dp, c.tertiary, CircleShape))
+        }
+    }) { Text(title, Modifier.semantics { heading() }, style = Type.headline, color = c.secondary) }
 }
 
 // What happened: the sentence with its verb in bold, Tana's words about it under that, faces for a meeting, the tasks
@@ -262,17 +294,17 @@ fun Entry(row: Node, engine: Engine) {
 // The tasks an entry lists, hanging under its words, each a row of its own on the rail, so a long press is about that
 // task alone: as much room above the first as under the last, more between them. Keyed under their entry: one task
 // can hang under two.
-fun LazyListScope.taskLines(tasks: List<Node>, engine: Engine, parent: String, key: (String) -> String) {
+fun LazyListScope.taskLines(tasks: List<Node>, engine: Engine, parent: String, key: (String) -> String, left: Boolean = false) {
     val shown = engine.shown(tasks)
     shown.forEachIndexed { i, task ->
-        item(key("$parent/" + task.id)) { TaskLine(task, engine, if (i == 0) 30.dp else 16.dp, if (i == shown.size - 1) 16.dp else 0.dp) }
+        item(key("$parent/" + task.id)) { TaskLine(task, engine, if (i == 0) 30.dp else 16.dp, if (i == shown.size - 1) 16.dp else 0.dp, left) }
     }
 }
 
 @Composable
-fun TaskLine(task: Node, engine: Engine, top: Dp, bottom: Dp) {
+fun TaskLine(task: Node, engine: Engine, top: Dp, bottom: Dp, left: Boolean = false) { // left: above the days
     val zoom = LocalZoom.current
-    RailRow("", top = top, bottom = bottom, marker = { Spacer(Modifier.height(1.dp)) }) {
+    RailRow(if (left) null else "", top = top, bottom = bottom, marker = { Spacer(Modifier.height(1.dp)) }) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             TaskBox(task, engine, onBaseline(4.dp))
             NodeMenu(task.id, engine, Modifier.weight(1f).alignByBaseline(), task = engine.state(task), assignees = task.assignees, onClick = { zoom(task.id) }) {
@@ -302,12 +334,12 @@ fun TaskWords(row: Node, engine: Engine, globe: Boolean = true, modifier: Modifi
 // A meeting still to come today, under Upcoming meetings: its glyph, its name, and a grey line with when it is and who
 // else is on it
 @Composable
-fun Meeting(row: Node, engine: Engine, top: Dp, bottom: Dp) {
+fun Meeting(row: Node, engine: Engine, top: Dp, bottom: Dp, left: Boolean = false) {
     val c = Theme.colors
     val zoom = LocalZoom.current
     // no long press (null): a meeting is not a task (the Timeline's long press is for its tasks alone)
     NodeMenu(null, engine, Modifier.semantics { role = Role.Button }, onClick = { zoom(row.id) }) {
-        RailRow("", top = top, bottom = bottom, marker = { Spacer(Modifier.height(1.dp)) }) {
+        RailRow(if (left) null else "", top = top, bottom = bottom, marker = { Spacer(Modifier.height(1.dp)) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 // a calendar, or a route for Travel (main/timeline.js meetingIcon)
                 Glyph(if (row.icon == "pinRoute") "pinRoute" else "calendar", onBaseline(3.dp, Modifier.size(18.dp)), c.secondary)
@@ -328,12 +360,12 @@ fun Meeting(row: Node, engine: Engine, top: Dp, bottom: Dp) {
 
 // The free time before the next meeting, counted down while it shows
 @Composable
-fun FreeLine(free: Node.Free, time: String, bottom: Dp, engine: Engine) {
+fun FreeLine(free: Node.Free, time: String?, bottom: Dp, engine: Engine, railTop: Dp = 0.dp) {
     val c = Theme.colors
     var now by remember { mutableStateOf(engine.now()) }
     LaunchedEffect(Unit) { while (true) { delay(15_000); now = engine.now() } }
     val (before, bold, after) = Phrases.free(free.from, free.until, now.toEpochMilliseconds().toDouble())
-    RailRow(time, bottom = bottom, marker = { Marker("free", "new", false, engine.platform.reduceMotion) }) {
+    RailRow(time, railTop = railTop, bottom = bottom, marker = { Marker("free", "new", false, engine.platform.reduceMotion) }) {
         Text(buildAnnotatedString { append(before); withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(bold) }; append(after) }, style = Type.body, color = c.secondary)
     }
 }
