@@ -143,6 +143,7 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   setFeatureFlag: (id, on) => ipcRenderer.invoke('flags:set', id, on),
   onFeatureFlags: (cb) => ipcRenderer.on('flags:changed', (_e, list) => cb(list)),
   suggestSensitive: (nodes) => ipcRenderer.invoke('decisions:sensitive', nodes), // [{ id, text }] -> [{ id, p }]: how likely each is sensitive (the Decisions API flag)
+  rankChoices: (context, options) => ipcRenderer.invoke('decisions:rank', context, options), // what the page and line say, [label] -> [p]: how likely each is the one wanted (the Decisions API flag)
   smartFilter: (query, rows) => ipcRenderer.invoke('decisions:filter', query, rows), // what ⌘F has, [{ id, text }] -> [{ id, p }]: how likely each row is what it means (the Decisions API flag)
   activateWindow: () => ipcRenderer.send('window:activate'), // bring this page's window forward with the keys, as a left click would (a right-click does not)
   translate: (texts, to, opts) => ipcRenderer.invoke('ai:translate', texts, to, opts), // [text], a language -> [{ lang, text } | null]: shown translated, never saved; opts { local: true }: this Mac's answers now, { ask: true } for each the model is still to translate

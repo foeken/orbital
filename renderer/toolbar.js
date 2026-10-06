@@ -327,7 +327,7 @@ function hashRows(link, title, q) {
   if (palBusy && !creationChoices.length) return [{ group: 'Create', label: 'Loading choices…', disabled: true }];
   const made = creationChoices.filter((c) => ['doc', 'task', 'meeting', 'custom'].includes(c.kind));
   const choices = made.some((c) => c.kind === 'doc') ? made : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...made];
-  return choices.filter((c) => fuzzyMatch(c.title, q)).map((c) => ({
+  return rankHashChoices(link, title, choices).filter((c) => fuzzyMatch(c.title, q)).map((c) => ({ // most likely first, with the Decisions API flag (renderer/flags.js)
     group: c.kind === 'custom' ? 'Workspace types' : 'Create', icon: c.icon, label: c.title, hint: hashBusy ? 'Creating…' : c.selectable ? '' : c.reason || 'Unavailable',
     disabled: !c.selectable || hashBusy, keepOpen: true,
     run: () => (c.kind === 'meeting' ? meetingWhen(link.item, c, title, link) : hashMake(link, c, title)),

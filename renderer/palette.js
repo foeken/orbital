@@ -1096,7 +1096,7 @@ function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
   palTimer = null; palBusy = !!q;
   const scope = fieldLinkCtx ? linkScope(fieldLinkCtx.field) : undefined; // a link field lists what it may link to, typed or not
-  if (!q && !scope) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); return renderPalette(); }
+  if (!q && !scope) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); renderPalette(); return rankLinkRows(seq); } // what you probably want first, with the Decisions API flag (renderer/flags.js)
   // A pasted Tana link (or bare id) is that node, read directly: a search for a url finds nothing. Unreadable, it is
   // searched for as text. Not in a link field, whose scope a node from anywhere could step outside of.
   const uri = !scope && tanaNodeUri(q);
@@ -1120,6 +1120,7 @@ function searchNow() {
     palBusy = false;
     renderPalette();
     settleEnter();
+    rankLinkRows(seq);
   }, showError);
 }
 function todayPickerRows(q) {

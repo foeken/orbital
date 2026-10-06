@@ -412,6 +412,13 @@ Enter pressed while results are still loading is kept and applied when they land
 Doc, Task, Meeting and the workspace types (`api.creationOptions`), and the pick creates it titled with the selected
 words and puts its mention in their place. Meeting asks when first, on "/" Meeting's page; nothing is made before.
 
+With the Decisions API feature flag on, both menus put what you most likely want first (renderer/flags.js, ranked
+menus): once the @ menu's results or recently viewed are there, its documents go to the Decisions API with the page's
+title and the line around the "@" (and what was typed), and come back reordered, Create and a date still leading and
+RELATED left as it was; when the top one is 60% or more and the selection has not moved, it is selected, so Enter
+takes it. The # menu's choices are ranked the same way for the selected words, asked once per open. Nothing is asked
+on a page marked sensitive, a sensitive result is never sent, and an answer for what is no longer typed is dropped.
+
 A person or a meeting mention draws its glyph from its id (`MENTION_KIND_ICON`, renderer/segments.js), so a member
 just linked has it before main resolves the target.
 
