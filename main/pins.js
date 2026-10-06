@@ -4,6 +4,7 @@ const { readNode } = require('../sdk/node');
 const { isDateUri } = require('../sdk/dates');
 const { DOC_URI, NOT_CONNECTED, PIN_HUBS, S, deletedNodes, idKind, isDeleted, scheduleRefresh, send, today } = require('./state');
 const { canWriteDoc, createDocument, document, info, onChange, sensitiveIds } = require('./documents');
+const { svgOf } = require('./icons');
 
 // ---- pins (sdk/pins.js over the user's profile/collection/pin-map docs) and app-local icons ----
 
@@ -56,6 +57,7 @@ async function pinTree() {
   const fill = async (entry) => {
     const node = entry.uri ? await pinnedNode(entry.uri) : undefined;
     if (node && sensitive.has(entry.uri)) node.sensitive = true; // the window's sidebar blurs it as the pages do (shell.js)
+    if (node && svgOf(node.icon)) node.svg = svgOf(node.icon); // a glyph chosen with Set icon: the shell has only icons.js, not the Nucleo set
     const children = (await Promise.all(entry.children.map(fill))).filter(Boolean);
     if (entry.uri && deletedNodes.has(entry.uri)) return children.length || entry.label ? { label: entry.label, children } : null;
     return { ...entry, node, children };
