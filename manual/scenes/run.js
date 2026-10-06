@@ -227,7 +227,7 @@ function parseKey(combo) {
         const state = { doc: shot.layout || (panes > 1 ? pair(shot.graph) : null), theme };
         // every shot starts from a fresh window: nothing a page stored in an earlier shot (its place, a fold, a pref)
         await send('Storage.clearDataForOrigin', { origin: 'http://127.0.0.1:' + server.address().port, storageTypes: 'local_storage,session_storage,indexeddb' });
-        const { identifier } = await send('Page.addScriptToEvaluateOnNewDocument', { source: 'if (window === top) window.shell = { state: () => (' + JSON.stringify(state) + '), onCommand() {}, layout() {} };' });
+        const { identifier } = await send('Page.addScriptToEvaluateOnNewDocument', { source: 'if (window === top) window.shell = { state: () => (' + JSON.stringify(state) + '), onCommand() {}, layout() {}, onPins() {}, pins: async () => (' + JSON.stringify(require('./kit').SIDEBAR_PINS) + ') };' });
         await send('Page.navigate', { url: 'http://127.0.0.1:' + server.address().port + '/shell.html' });
         await sleep(1500);
         await send('Page.removeScriptToEvaluateOnNewDocument', { identifier });

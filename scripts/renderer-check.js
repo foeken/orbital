@@ -483,7 +483,7 @@ const DEMO_SAFE = new Set([
   'accessOptions', 'androidRelease', 'activateWindow', 'addFilter', 'agentIds', 'agentList', 'agentReplies', 'agentStatus',
   'agentTasks', 'aiOptions', 'archivedTypes', 'attendeeSuggestions', 'cancelUpload', 'chatAgents', 'chatAnswers',
   'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
-  'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList', 'meetingNotes', // meetingNotes: found only, never made (renderer/state.js)
+  'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList', 'meetingNotes', 'pinSections', // meetingNotes: found only, never made (renderer/state.js)
   'docTypes', 'enableAgent', 'exportPdf', 'filters', 'image', 'inboxUnread', 'installUpdate', 'login', 'logout',
   'mcpHidden', 'meetingInfo', 'members', 'readMeetingTime', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
   'onChatGPTStatus', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',

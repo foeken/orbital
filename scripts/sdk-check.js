@@ -6687,6 +6687,32 @@ async function main() {
     console.log('ok  remote unpin/deletion invalidation, stale graph suppression, restore and agent cache icon');
   }
   {
+    // The window's sidebar (shell.js): the tree it draws, the sections ⌘K Pin to sidebar … offers, and a pin put in a
+    // section or a new one, through the IPC handlers (main/pins.js).
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const colId = 'tana:collection:' + ulid(), pinA = 'tana:text:' + ulid(), pinB = 'tana:text:' + ulid();
+    const profile = new Document(ME), collection = new Document(colId), docA = new Document(pinA), docB = new Document(pinB);
+    profile.transact(l => l.getMap('data').set('pinnedCollectionUri', colId));
+    docA.transact(l => initDocument(l, 'Budget proposal', ME)); docB.transact(l => initDocument(l, 'Hiring plan', ME));
+    collection.transact(l => l.getTree('tree').createNode().data.set('uri', pinA));
+    const documents = new Map([[ME, profile], [colId, collection], [pinA, docA], [pinB, docB]]), heard = [];
+    backend.testRuntime({ me: { userUri: ME }, client: { sync: { getDocument: id => documents.get(id), subscribe: async id => documents.get(id), on: (ev, fn) => heard.push(ev) } }, win: { isDestroyed: () => false, webContents: { send() {} } } });
+    const handler = (name) => backend.handlers.get(name), plain = (value) => JSON.parse(JSON.stringify(value));
+    const tree = await handler('pins:tree')();
+    assert.deepEqual(plain(tree.map((n) => [n.uri, n.node.title])), [[pinA, 'Budget proposal']], 'the tree carries each pin with its node');
+    assert.deepEqual(plain(heard), ['change'], 'and the sidebar listens for changes once read');
+    assert.deepEqual(plain(await handler('pins:sections')()), [], 'no sections yet');
+    await handler('pins:place')(null, pinB, null, 'Foundry');
+    const [foundry] = await handler('pins:sections')();
+    assert.deepEqual([foundry.label, foundry.count], ['Foundry', 1], 'a name makes a section with the pin in it');
+    await handler('pins:place')(null, pinA, foundry.id);
+    assert.deepEqual((await handler('pins:sections')())[0].count, 2, 'a pin already in the sidebar moves into the section picked');
+    await handler('pins:place')(null, pinB, null);
+    assert.deepEqual(plain((await handler('pins:tree')()).map((n) => n.uri || n.label)), ['Foundry', pinB], 'and back to the top level');
+    await assert.rejects(handler('pins:place')(null, 'not an id', null), /Not a Tana document id/, 'the id is checked');
+    console.log('ok  the window sidebar: pin tree, sections, and pins placed into a section or a new one');
+  }
+  {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const host = new Document(DOC), targetUri = 'tana:text:01examplek0000000000000000';
     host.transact(l => initDocument(l, 'reference host', ME));

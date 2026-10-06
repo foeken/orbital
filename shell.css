@@ -1,6 +1,10 @@
 /* The window's shell (shell.html, shell.js): the pages fill it edge to edge with a hairline between them, as one
    page did before Trellis; its own tokens are set from shell.js because they follow the page's theme. */
 html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
+/* Until shell.js has set the theme (once Trellis has loaded) nothing is drawn: the window behind, already in the theme
+   the pages drew in last (main.js createWindow), shows instead of a light header and sidebar flashing at boot. */
+html:not([data-theme]), html:not([data-theme]) body { background: transparent; }
+html:not([data-theme]) body { visibility: hidden; }
 [data-theme="dark"] { color-scheme: dark; } /* as the page's own (styles.css): an iframe whose color-scheme differs is drawn opaque, and a covering page must be see-through */
 [data-theme="dark"] body { background: #1b1d1e; }
 /* The header holds the traffic lights and, on the right, the app's own switches (sensitive items, ⌘K, Help, Graph) and drags the window; the panes fill the rest, their tab bars the
@@ -27,7 +31,50 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
 body.signed-out .head button { display: none; } /* signed out, none of them does anything: the login is the whole window */
 body.signed-out .head { background: #fff; } /* and the header is the page's own white, one surface with it */
 [data-theme="dark"] body.signed-out .head { background: #1b1d1e; }
-#workspace { position: fixed; inset: 38px 0 0; z-index: 1; }
+#workspace { position: fixed; inset: 38px 0 0 var(--sw, 0px); z-index: 1; }
+/* The window's sidebar (shell.js): under the header, in the header's grey, as wide as --sw (0 while it is shut). Its
+   rows are the app's grey glyphs and words; a section's heading folds it, showing how many pins it holds. */
+.sidebar { position: fixed; top: 38px; bottom: 0; left: 0; width: var(--sw, 0px); box-sizing: border-box; padding: 8px 10px 16px; overflow: hidden auto;
+  background: #f6f6f6; color: #1a1a1a; font: 13.5px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; user-select: none; } /* the page's words and smoothing (styles.css body) */
+body.signed-out .sidebar, body.signed-out .sbedge, body.signed-out .sbcorner { display: none; }
+body.signed-out #workspace { left: 0; }
+.sbrow { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; cursor: default; }
+.sbrow:hover { background: #ececec; }
+.sbrow.on { background: #e4e4e4; }
+.sbrow svg { flex: none; display: block; width: 16px; height: 16px; color: #8a8a8a; }
+.sbrow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sbrow kbd, .sbsec .n { margin-left: auto; font: inherit; font-size: 12px; color: #666; }
+.sbrow.sensitive .t { filter: blur(4px); } /* blurred as the pages blur it, until the header's eye shows sensitive items */
+body.show-sensitive .sbrow.sensitive .t { filter: none; }
+.sbsec { display: flex; align-items: center; gap: 4px; width: 100%; height: 26px; margin-top: 14px; padding: 0 8px; border: 0; background: none; color: #666; font: inherit; font-size: 12px; font-weight: 600; text-align: left; cursor: default; }
+.sbsec svg { width: 12px; height: 12px; margin-left: auto; color: #8a8a8a; opacity: 0; transform: rotate(90deg); }
+.sbsec:hover svg { opacity: 1; }
+.sbsec.shut svg { display: none; }
+.sbempty { margin: 14px 8px 0; color: #666; font-size: 12px; line-height: 17px; }
+[data-theme="dark"] .sidebar { background: #232627; color: #c9c9c9; }
+[data-theme="dark"] .sbrow:hover { background: #2d3133; }
+[data-theme="dark"] .sbrow.on { background: #353a3c; }
+[data-theme="dark"] :is(.sbrow svg, .sbsec svg) { color: #8d9295; }
+[data-theme="dark"] :is(.sbrow kbd, .sbsec, .sbsec .n, .sbempty) { color: #a0a5a8; }
+/* At its narrowest it is its icons (body.sb-rail, shell.js SB_RAIL): each row its glyph alone, named on hover, and a
+   section's heading a hairline between them. It never goes further. */
+body.sb-rail .sidebar { padding: 8px; }
+body.sb-rail .sbrow { justify-content: center; padding: 0; }
+body.sb-rail :is(.sbrow .t, .sbrow kbd, .sbempty) { display: none; }
+body.sb-rail .sbsec { width: 16px; height: 1px; margin: 10px auto; padding: 0; overflow: hidden; background: #e2e2e2; font-size: 0; pointer-events: none; }
+[data-theme="dark"] body.sb-rail .sbsec { background: #33383a; }
+/* Its edge is the handle: the panes' divider (below), 1px in the accent while hovered or dragged. Above the panes, and
+   under a page covering the window. */
+.sbedge { position: fixed; top: 48px; bottom: 0; left: calc(var(--sw, 0px) - 4px); width: 8px; z-index: 3; cursor: col-resize; }
+.sbedge::before { content: ''; position: absolute; top: 0; bottom: 0; left: 3.25px; width: 1.5px; }
+.sbedge:hover::before, .sbedge.dragging::before { background: #2f8cf6; }
+[data-theme="dark"] :is(.sbedge:hover, .sbedge.dragging)::before { background: #5aa8ff; }
+/* The page's corner where the sidebar and the header meet it, rounded: the header's grey drawn over it. With tabs the
+   first tab starts flush with the pane, and its own rounded top is that corner. */
+.sbcorner { --r: 12px; position: fixed; top: 38px; left: var(--sw, 0px); width: var(--r); height: var(--r); z-index: 2; pointer-events: none; background: radial-gradient(circle at 100% 100%, transparent calc(var(--r) - .5px), #f6f6f6 var(--r)); }
+body.many .sbcorner { display: none; }
+[data-theme="dark"] .sbcorner { background: radial-gradient(circle at 100% 100%, transparent calc(var(--r) - .5px), #232627 var(--r)); }
+body.covered :is(.sbedge, .sbcorner) { display: none; }
 body.covered .trellis { overflow: visible; contain: none; }
 /* The hairline between the pages is Trellis's divider (8px wide, on the seam), drawn 1px in the line's colour; hovered
    or dragged, the same 1px turns the app's blue (the accent, shell.js tokens). */
@@ -54,7 +101,8 @@ body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag
 .trellis :is([data-trellis-part="panel"], [data-trellis-part="tabbar"])[data-focused] [data-trellis-part="tab"][data-selected] { background: var(--trellis-tab-active); color: var(--trellis-text); font-weight: 650; }
 .trellis [data-trellis-part="tab"][data-selected]::before, .trellis [data-trellis-part="tab"][data-selected]::after { display: none; } /* rounded on top only: no flared corners where the tab meets the page */
 .trellis [data-trellis-part="tabs"] { padding-left: 0; gap: 6px; } /* the first tab starts at the pane's edge, against the divider line, now no flare covers Trellis's 4px inset; tabs 6px apart (Trellis's 2px) */
-.trellis [data-trellis-part="tabbar"][data-left] [data-trellis-part="tabs"] { padding-left: 8px; } /* no divider on the window's edge: the first tab stands off it (shell.js mark) */
+/* no divider on the window's edge: the first tab stands off it (shell.js mark); beside the sidebar it is not the window's edge, and the first tab starts flush with its pane */
+body.signed-out .trellis [data-trellis-part="tabbar"][data-left] [data-trellis-part="tabs"] { padding-left: 8px; }
 /* a tab's glyph (shell.js drawTabIcons): the tab's own colour, whatever hue the type has in the page, and a little smaller than the title */
 .trellis [data-trellis-part="tab-icon"] { color: var(--trellis-text-muted); } /* never bold: the focused tab's title darkens and thickens, its glyph stays as it is */
 .trellis [data-trellis-part="tab-icon"] svg { width: 14px; height: 14px; color: inherit; }

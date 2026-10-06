@@ -114,7 +114,7 @@ function editPinRows(q) {
   // and the other direction from the same page: the sidebar pin is asked for nowhere else, and the two days are the
   // ones ⌘K offers. A day it is already pinned to is listed above instead, so it is not offered twice.
   const adds = [];
-  if (!pinInfo.sidebar) adds.push({ group: 'Pin it', icon: 'pinned', label: 'Pin to sidebar', keepOpen: true, run: () => pinAction('pin', 'sidebar') });
+  if (!pinInfo.sidebar && tana.placePin) adds.push({ group: 'Pin it', icon: 'pinned', label: 'Pin to sidebar …', hint: 'Choose a section', keepOpen: true, run: () => openPinSidebarPalette(palDoc, () => openPinsPalette(palDoc)) });
   for (const [offset, label] of [[0, 'Pin to today'], [1, 'Pin to tomorrow']]) {
     const date = localDate(offset); // the day is computed here, as the ⌘K rows do it: main defaults to today when none comes with the call
     if (!pinInfo.dates.includes(date)) adds.push({ group: 'Pin it', icon: 'pinDate', label, keepOpen: true, run: () => pinAction('pin', 'today', date) });
@@ -135,6 +135,30 @@ function editPinRows(q) {
 function openPinsPalette(doc) {
   palDoc = doc; pinInfo = null; pinFailed = null; loadPins();
   openPage('pins', 'Edit pins', { rows: editPinRows, back: BACK_TO_COMMANDS });
+}
+// ---- Pin to sidebar …: which of the window's sidebar sections it goes in (shell.js draws them) ----
+// Pinned is the top level, then your sections as Tana keeps them (main/pins.js pinSections), and a name typed that is
+// no section yet makes one. A document already in the sidebar moves to the one picked, as Tana's own placePin does.
+const PIN_SIDEBAR_GROUP = 'Pin to sidebar';
+let pinSidebarDoc = null, pinSidebarSections = null, pinSidebarFailed = '';
+function pinSidebarRows(q, typed) {
+  const doc = pinSidebarDoc, words = (typed || '').trim();
+  if (!doc) return [];
+  if (pinSidebarFailed) return [{ group: PIN_SIDEBAR_GROUP, label: pinSidebarFailed, disabled: true, note: true }];
+  if (!pinSidebarSections) return [{ group: PIN_SIDEBAR_GROUP, label: 'Loading…', disabled: true, note: true }];
+  const place = (section, label) => () => run(async () => { await tana.placePin(doc.id, section, label); loadPins(); });
+  const rows = [{ group: PIN_SIDEBAR_GROUP, icon: 'pinned', label: 'Pinned', hint: 'No section', run: place(null) },
+    ...pinSidebarSections.map((s) => ({ group: PIN_SIDEBAR_GROUP, icon: 'group', label: demoText(s.label, 'section'), hint: s.count === 1 ? '1 pin' : s.count + ' pins', run: place(s.id) }))]
+    .filter((row) => fuzzyMatch(row.label, q));
+  if (words && !pinSidebarSections.some((s) => s.label.toLowerCase() === words.toLowerCase())) rows.push({ group: 'Add', icon: 'createNew', label: 'New section \u201C' + words + '\u201D', run: place(null, words) });
+  else if (!words) rows.push({ group: 'Add', icon: 'createNew', label: 'New section …', hint: 'Type its name', disabled: true });
+  return rows;
+}
+function openPinSidebarPalette(doc, back) {
+  pinSidebarDoc = doc; pinSidebarSections = null; pinSidebarFailed = '';
+  tana.pinSections().then((sections) => { if (pinSidebarDoc !== doc) return; pinSidebarSections = sections; if (!palette.hidden && palMode === 'pinSidebar') renderPalette(); },
+    (e) => { if (pinSidebarDoc !== doc) return; pinSidebarFailed = errorText(e); if (!palette.hidden && palMode === 'pinSidebar') renderPalette(); });
+  openPage('pinSidebar', 'Pin to sidebar: pick a section, or type a new one', { rows: pinSidebarRows, back: back || BACK_TO_COMMANDS });
 }
 // ---- Pin to date: a day typed in words, read by a fixed set of rules rather than a model ----
 // The page shows the day it read before Enter, so what gets pinned is always what was on screen, with no key, no

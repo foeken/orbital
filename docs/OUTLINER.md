@@ -97,10 +97,9 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   right the app's own switches, **sensitive items** (the eye), **⌘K** and **?**. It drags the window, and each button
   acts in the page in front, which takes the keys first (shell.js posts `sensitive`, `palette` or `help`;
   renderer/app.js runs `toggleSensitiveVisibility`, `togglePalette('cmd')` or `openHelp`). The eye is drawn from the
-  pages' `sensitiveVisible` storage and follows a switch from any page. The panes sit below it, so every tab bar has the
-  full width. The house before the eye opens the **Work View** (issue #529): it runs Cmd+K's Work View row (Saved views)
-  in the page in front, whatever Home is set to; Home itself stays Cmd+K Go to Home (⇧⌘H), which the Help tour teaches (issue
-  #444). There are no breadcrumbs: the title says where you are and Back walks the history.
+  pages' `sensitiveVisible` storage and follows a switch from any page. The panes sit below it and beside the window's
+  sidebar (§19), which took the house that stood before the eye: it is the sidebar's Home row now, Cmd+K Go to Home
+  (⇧⌘H), which the Help tour teaches (issue #444). There are no breadcrumbs: the title says where you are and Back walks the history.
 - **Create new** (shell.html `#create`, issue #499): a round button in the window's bottom-right corner with the
   text-plus glyph; on hover the words "Create new" slide out beside it. A click runs Cmd+K Create new … in the page in
   front (shell.js posts `action` `create`, renderer/palette.js `runAction`). It sits under a covering palette's scrim
@@ -657,6 +656,7 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Today | ⌃⇧D |
 | Reload (the window, every pane) | ⌘R |
 | Go to Home | ⇧⌘H |
+| Collapse sidebar / Expand sidebar | ⌃⌘S |
 | New window | ⌃⌘N |
 | New tab / New pane (to the right) / New floating pane, each on a new note | ⌘N / ⇧⌘N / ⌥⌘N (the modifiers that open a link there) |
 | Next / Previous pane | ⌘/ / ⇧⌘/ |
@@ -731,7 +731,12 @@ Pins are stored as [PINNING.md](PINNING.md) describes; this is what the outliner
   next-first at the moment it opens (`byNextFirst`: meetings on now or to come, soonest first, then those over, most
   recent first, from `start`/`end`, a stable sort). Enter pins and closes; an empty window, no match and a failed read
   each say so. Both meeting rows end in `pinDocToMeeting`.
-- **Edit pins** (`editPins`; also a click on the tack or the sidebar's Pinned row) opens `palMode = 'pins'`: everywhere
+- **Pin to sidebar …** (`pinSidebar`) opens `palMode = 'pinSidebar'` (renderer/document.js `openPinSidebarPalette`):
+  Pinned (the top level), then the window sidebar's sections with how many pins each holds (`api.pinSections`), and a
+  name typed that is no section yet offers New section "…". Enter writes `api.placePin(doc, section, name)` (main/pins.js
+  `placeSidebarPin`: a new section is made first; a document already in the sidebar moves to the one picked, as Tana's
+  placePin does) and closes. Edit pins offers the same page for a document not in the sidebar, with Escape back to it.
+- **Edit pins** (`editPins`; also a click on the tack) opens `palMode = 'pins'`: everywhere
   this document is pinned, from `api.pinState` → `{ sidebar, dates, hubs }` (hubs read back through `pinHubs`: the
   reverse `EDGE_TYPE_HAS_PIN` edges plus one `ListNodes` for titles). Enter takes one off and the page stays open: a
   sidebar or date pin through `pinAction`, a hub pin through `api.unpinFrom` (a write to that meeting's own
@@ -1569,3 +1574,29 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   any way into the pane: ⌘/, a click on its tab), ↑/↓ move, Enter opens, Space toggles a task, ← folds the focused
   row's section and → unfolds it, Escape or ⌘← gives the keys back to the page it follows. **Show/Hide graph**
   (`railToggle`) records a key the same way.
+
+## 19. The window's sidebar
+
+Each window has a sidebar on its left (shell.html `#sidebar`, shell.js), under the header and in its grey, with the
+panes beside it; where the panes meet the header and the sidebar, the page's corner is rounded (`.sbcorner`). Its
+rows are grey glyphs and words, and each acts in the page the Graph pane would follow (§18, `following`): the last to
+take the keys.
+
+- **Search** (with the page's ⌘S, which the page tells the shell on every layout message, `{ orbital: 'keys' }`),
+  **Home** (Cmd+K Go to Home) and **Today** (Cmd+K Today) run those rows there.
+- Then **your sidebar pins as Tana keeps them** (docs/PINNING.md §1): the pins at the top level under **Pinned**, then
+  each section with its pins, in Tana's order; a click opens the pin in that page (`goto`), and the pin of the page on
+  screen is marked. A section's heading folds it and shows its count while folded (kept on this machine,
+  `windowSidebarFolded`); a section with nothing in it is not drawn, and with no pins at all one line says how to add one.
+  Titles are masked in demo mode (renderer/segments.js `demoText`) and a sensitive pin is blurred until the header's
+  eye shows sensitive items.
+- **Where it comes from**: `window.shell.pins()` → main/pins.js `pinTree` (each pin with its node and `sensitive`), read
+  when the window loads, on a sign-in, and whenever main says `pins:changed`: main watches the collection, the profile
+  and every pinned document once read (`watchSidebar`), here or in Tana, and tells every window's shell a beat later
+  (`tellSidebars`, also once the login connects).
+- **Its edge is the handle** (`#sbEdge`): the panes' 1px divider, in the accent while hovered or dragged. Dragged, it
+  resizes the sidebar (180–420px); released narrower than 120px it is its **icons alone** (48px, `body.sb-rail`): each
+  row its glyph, named on hover (a sensitive pin's title is not), and a section's heading a hairline. It never goes
+  further: there is no shut sidebar. Cmd+K **Collapse sidebar** / **Expand sidebar** (`toggleSidebar`, ⌃⌘S) switches the
+  two; the shell tells each page which it is on the layout message (`windowPanes.sidebar`). Whether it is open, the width
+  and the folded sections are kept in the shell's localStorage, one for every window. Signed out there is none.

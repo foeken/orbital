@@ -36,7 +36,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status',
   'assign', 'assignTo', 'discussWith', 'addToChat',
   'meetingTime', 'meetingDetails', 'meetingLocation', 'meetingAttendee',
-  'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
+  'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'pinSidebar', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
   'codex', 'codexTo', 'codexUnassign', 'codexOpen', 'codexLink', 'sendToAgent',
@@ -197,6 +197,11 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'meetingPin', label: 'Pin to meeting …', hint: 'Choose a meeting',
       keepOpen: true, run: () => openMeetingPicker(doc) });
+  }
+  // And into the window's sidebar, in a section you pick or make (renderer/document.js openPinSidebarPalette)
+  if (palDoc && tana.placePin && isRealId(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'pinSidebar', group: docGroup, icon: 'pinned', label: 'Pin to sidebar …', hint: 'Choose a section', keepOpen: true, run: () => openPinSidebarPalette(doc) });
   }
   // Everywhere this node is pinned, on one page, with each of them one press from being taken off. Offered whether
   // or not it is pinned: "Edit pins" is also where you find out that it is not. The hint is the state pinInfo
@@ -406,6 +411,8 @@ function paletteRows(q, typed = q) {
   if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, ...(id === 'closePane' ? { kbd: '⌘W' } : {}), run: () => shellRun(command) }); // ⌘W: the File menu's Close
   // The window's Graph pane (issue #462, renderer/rail.js): opened beside this page on this place, or closed by the shell
   rows.push({ id: 'railToggle', group: 'Window', icon: 'graph', label: windowPanes.links ? 'Hide graph' : 'Show graph', run: () => (windowPanes.links ? toShell({ orbital: 'links' }) : run(() => tana.splitWindow('links', { view, place: placeJSON() }))) });
+  // the window's sidebar (shell.js): its icons alone or open, as dragging its edge does; ⌃⌘S
+  rows.push({ id: 'toggleSidebar', group: 'Window', icon: 'sidebar', label: windowPanes.sidebar ? 'Collapse sidebar' : 'Expand sidebar', run: () => toShell({ orbital: 'sidebar' }) });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', hint: 'Every pane', run: () => (window.frameElement ? window.parent.postMessage({ orbital: 'reload' }, '*') : location.reload()) }); // the shell reloads, and every page with it (shell.js)
   if (tana.windowLayout) {
     rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view\u2026', keepOpen: true, run: openSaveViewPalette });
