@@ -96,9 +96,9 @@ import kotlinx.coroutines.launch
 // The iPhone's ios/Orbital/Pages.swift: a node zoomed into (an outline, a saved search, a meeting, a chat) and who
 // has it and who sees it
 
-// Zoomed into a node: a chat as its conversation, a saved search as its results, a meeting as its summary once Tana
-// wrote it up (Notes | Summary over it when you have notes too) and as the documents it owns until then, anything else
-// as its outline. A mention, a reference or a row opens the node it names.
+// Zoomed into a node: a chat as its conversation, a saved search as its results, a meeting as its attendees and your
+// notes, its summary once Tana wrote it up (Notes | Summary over it when you have notes too), anything else as its
+// outline. A mention, a reference or a row opens the node it names.
 @Composable
 fun NodeScreen(
     engine: Engine,
@@ -120,6 +120,7 @@ fun NodeScreen(
     var refreshing by remember { mutableStateOf(false) }
     var assigningVisibility by remember { mutableStateOf(false) }
     var showNotes by remember(id) { mutableStateOf(false) } // a meeting's Notes | Summary: Summary first
+    var everyone by remember(id) { mutableStateOf(false) } // a meeting's attendees past the first five shown
 
     // A read keeps what is on screen when it fails, and says why only while there is nothing to show
     suspend fun load() {
@@ -163,13 +164,26 @@ fun NodeScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 current != null && hiddenPage -> Empty("Hidden", "You marked this sensitive in Orbital. Shake your phone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.", glyph = "hidden")
-                // a meeting Tana wrote up, read only, as the desktop's meeting page (renderer/meetingnotes.js)
-                current?.summary != null -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
+                // a meeting, read only, as the desktop's meeting page (renderer/meetingnotes.js, renderer/fields.js
+                // attendeesFieldEl): its attendees, five and "And n more" past that, then your notes or its summary
+                current?.kind == "event" -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                     val notes = current.notes
-                    val flat = Lists.flat(if (showNotes && notes != null) notes else current.summary)
+                    val people = current.attendees ?: emptyList()
+                    val summary = current.summary
+                    val flat = Lists.flat(if (summary == null || (showNotes && notes != null)) notes ?: emptyList() else summary)
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp + LocalBottomInset.current)) {
                         val key = uniqueKeys()
-                        if (notes != null) item("switch") {
+                        if (people.isNotEmpty()) item("attendees") {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("Attendees", Modifier.width(100.dp), color = c.secondary, maxLines = 1)
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    val shown = if (everyone) people else people.take(5)
+                                    shown.forEach { Text(it.name, color = c.text) }
+                                    if (shown.size < people.size) Text("And ${people.size - shown.size} more", Modifier.clickable { everyone = true }, color = c.secondary)
+                                }
+                            }
+                        }
+                        if (summary != null && notes != null) item("switch") {
                             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                                 listOf(true to "Notes", false to "Summary").forEachIndexed { i, (n, label) ->
                                     SegmentedButton(showNotes == n, { showNotes = n }, SegmentedButtonDefaults.itemShape(i, 2)) { Text(label) }
@@ -177,6 +191,7 @@ fun NodeScreen(
                             }
                         }
                         flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine) } }
+                        if (flat.isEmpty()) item("empty") { Text("No notes yet", Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = c.secondary) }
                     }
                 }
                 current != null -> when (current.kind) {
@@ -185,7 +200,7 @@ fun NodeScreen(
                         // sent is sent: the read after it is the chat's own change's job, so a failed read never offers to send it twice
                         Composer(engine, "Follow up", note) { text -> val sent = engine.send(text, id); waitingSince = engine.now(); load(); sent.warning }
                     }
-                    "search", "event" -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
+                    "search" -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                         val rows = engine.shown(current.rows)
                         // in the sections the search was saved with (Row.group), as the desktop shows it: no lines, and the
                         // rows closer together under headings (the iPhone's Pages.swift)
@@ -198,7 +213,7 @@ fun NodeScreen(
                                 list.forEach { row -> item(key("row:" + row.id)) { ListRow(row, engine, tight = grouped) { load() } } }
                             }
                         }
-                        if (current.rows.isEmpty()) Empty(if (current.kind == "event") "No notes yet" else "Nothing found", glyph = Glyphs.of(current.kind))
+                        if (current.rows.isEmpty()) Empty("Nothing found", glyph = Glyphs.of(current.kind))
                     }
                     else -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                         val flat = Lists.flat(current.rows)

@@ -13,7 +13,7 @@ import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
 import { completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { dateLabel, isDateUri } from '../../sdk/dates';
-import { NOTES_SLOTS, notesOurs, notesSlotId, writeUpOf } from '../../sdk/events';
+import { NOTES_SLOTS, attendees, notesOurs, notesSlotId, writeUpOf } from '../../sdk/events';
 import { canDelete, canWrite, everyoneOnly } from '../../sdk/access';
 import { arrange } from './arrange';
 import { listFilter } from './listed';
@@ -25,7 +25,7 @@ import { mark } from './sensitive';
 import { times } from './labels';
 import { read } from './read';
 import { createHeld } from './held';
-import { demo, demoOn, demoTitle, isDemo } from './demo';
+import { demo, demoName, demoOn, demoTitle, isDemo } from './demo';
 import { agents, handed, linked, refreshSoon } from './agents';
 import { createLive } from './live';
 import { createTasks } from './tasks';
@@ -92,26 +92,30 @@ const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DE
 const named = (rows, at = 'row') => rows.map((r, i) => ({ ...r, id: r.id || at + '.' + i, children: named(r.children || [], r.id || at + '.' + i) }));
 const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', ...(secret().has(n.id) ? { sensitive: true } : {}), icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
 
-// A meeting's page, as the desktop's (renderer/meetingnotes.js), read only here: written up by Tana (sdk/events.js
-// writeUpOf), its summary's outline, and your notes' too when you have them (one of the places made for them that is
-// yours, sdk/events.js notesOurs, as main/meeting-notes.js reads them), for Notes | Summary over them.
-// Not written up yet: the documents it owns (rows), as before.
-async function meeting(id) {
+// A meeting's page, as the desktop's (renderer/meetingnotes.js, renderer/fields.js attendeesFieldEl), read only here: its
+// attendees, your notes when you have them (one of the places made for them that is yours, sdk/events.js notesOurs, as
+// main/meeting-notes.js reads them), and once Tana wrote it up (sdk/events.js writeUpOf) its summary's outline too, for
+// Notes | Summary over them.
+async function meeting(id, doc) {
   const me = S.me.userUri, places = Array.from({ length: NOTES_SLOTS }, (_, k) => notesSlotId(me, id, k));
-  const [{ nodes: self = [] }, { nodes: owned = [] }, { nodes: found = [] }] = await Promise.all([
+  const [{ nodes: self = [] }, { nodes: owned = [] }, { nodes: found = [] }, people] = await Promise.all([
     S.client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({})),
     S.client.graph.listNodes({ ownerIds: [id], limit: 100, sortOptions: newest }),
     S.client.graph.listNodes({ nodeIds: places, limit: NOTES_SLOTS }).catch(() => ({})),
+    members().catch(() => []),
   ]);
-  const rows = owned.map(listRow), writeUp = writeUpOf(self[0], owned);
-  if (!writeUp) return { rows };
+  const writeUp = writeUpOf(self[0], owned);
   const mine = places.map((p) => found.find((n) => n.id === p)).find((n) => notesOurs(n, me, id));
   const outline = async (docId) => named(readOutline(await hold(docId)));
-  const [summary, notes] = await Promise.all([outline(writeUp.id), mine ? outline(mine.id) : null]);
+  const [summary, notes] = await Promise.all([writeUp ? outline(writeUp.id) : null, mine ? outline(mine.id) : null]);
   // the notes' first row names the meeting for whoever opens them on their own (main/meeting-notes.js referenceOf):
   // left out while it is still only that link, as on the desktop, where you are on the meeting already
   const naming = (r) => !(r.children || []).length && (r.segments || []).length === 1 && String((r.segments[0].marks || {}).link || '').endsWith('/e/' + encodeURIComponent(id));
-  return { rows, summary, notes: notes && notes.filter((r, i) => i || !naming(r)) };
+  // a member by the calendar's profile id, else by address; anyone else by the calendar's name or address; rooms left out
+  const member = (a) => people.find((m) => m.id === a.identityUri || (a.email && (m.emails || []).includes(a.email.toLowerCase())));
+  const attending = attendees(doc).filter((a) => a.role !== 'resource' && !['room', 'resource'].includes(a.cutype))
+    .map((a) => ({ name: demoName((member(a) || {}).title || a.name || a.email || 'Guest') }));
+  return { summary, notes: notes && notes.filter((r, i) => i || !naming(r)), attendees: attending };
 }
 
 // What you marked sensitive in Orbital (the settings document's sensitive: node ids), drawn blurred (sensitive.js)
@@ -379,18 +383,18 @@ window.orbital = {
   email: () => (last && last.user && last.user.email) || null,
   account: () => (S.me ? S.me.userUri + '@' + S.me.orgId : null), // who in which workspace, as the settings mirror keys it (stand-ins.js ns): what the app keeps its saved Timeline for
   // Zooming into a node: what it holds, as the desktop's page for it shows. A chat is its conversation (sdk/chat.js,
-  // docs/CHATS.md), a saved search its results, a meeting the documents it owns (its write-up, its outcomes), anything
-  // else its outline (sdk/content.js).
+  // docs/CHATS.md), a saved search its results, a meeting its attendees, your notes and its summary, anything else its
+  // outline (sdk/content.js).
   async open(id) {
     await settled();
     const kind = id.split(':')[1];
     const doc = await hold(id), n = readNode(doc);
-    let rows, summary, notes;
+    let rows = [], summary, notes, attendees;
     if (kind === 'chat') {
       const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), messages = doc.data.get('messages');
       rows = chatRows(messages ? messages.toJSON() : [], { authorName: (uri) => names.get(uri), me: S.me.userUri, streamingId: doc.data.get('streamingMessageId') });
     } else if (kind === 'search') rows = await searchRows(doc);
-    else if (kind === 'event') ({ rows, summary, notes } = await meeting(id));
+    else if (kind === 'event') ({ summary, notes, attendees } = await meeting(id, doc));
     else rows = named(readOutline(doc));
     // heard from now on (live.js): its own document, and for a saved search or a meeting the list its rows come from,
     // the search as it is saved now (a Save while it is open listens with the new query). A meeting's notes and write-up
@@ -399,7 +403,7 @@ window.orbital = {
     live?.page(id, kind === 'search' ? () => { const { query } = readSearch(doc); return query && Object.keys(query).length ? liveTrigger(searchQueryParams(query, S.me.userUri)) : null; }
       : kind === 'event' ? () => ({ types: ['text'], ownerUris: [id], orderBy: ['-updatedAt'], limit: 100 }) : undefined);
     const outline = async (list) => (list ? redact(await titled(list)) : undefined); // undefined: left out of the JSON
-    return JSON.stringify({ title: demoTitle(n.title || 'Untitled', id), kind, rows: redact(await titled(rows)), summary: await outline(summary), notes: await outline(notes), sensitive: secret().has(id) });
+    return JSON.stringify({ title: demoTitle(n.title || 'Untitled', id), kind, rows: redact(await titled(rows)), summary: await outline(summary), notes: await outline(notes), attendees, sensitive: secret().has(id) });
   },
   // An outline's image (Row.image), fetched by the app itself as main/images.js does (sdk/assets.js fetchImage): the
   // redirect and the CDN's cookie it needs are out of a page's reach. refresh: Tana refused the last one.

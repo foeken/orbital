@@ -85,7 +85,7 @@ fun parseTime(s: String): Instant? = runCatching { Instant.parse(s) }.getOrNull(
 // A node zoomed into (orbital.open): its title, its kind and what it holds; a meeting Tana wrote up also its summary's
 // outline, and your private notes' when you have them
 @Serializable data class Page(val title: String, val kind: String, val rows: List<Row> = emptyList(), val sensitive: Boolean? = null,
-                              val summary: List<Row>? = null, val notes: List<Row>? = null)
+                              val summary: List<Row>? = null, val notes: List<Row>? = null, val attendees: List<Row.Person>? = null)
 
 // What a refresh reads besides the rows (orbital.setup)
 @Serializable data class Setup(val to: String? = null, val ai: Map<String, String> = emptyMap(), val sensitive: List<String> = emptyList(), val pinned: List<String> = emptyList(),
