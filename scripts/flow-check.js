@@ -459,6 +459,10 @@ flow('golden path: the Timeline opens first and leads to what each row is about'
   assert.equal(top[0], "Today's Tasks", 'Today\u2019s Tasks leads the page');
   assert.ok(top.includes('Upcoming meetings'), 'today\u2019s meetings to come are listed');
   assert.deepEqual(await p.js('[...document.querySelectorAll("#outline .ghead")].map((h) => h.textContent.trim())'), ['Today', 'Yesterday'], 'the history in day sections');
+  // as on the phones: the blocks above the days come before Today's heading, on their own rail, which curves into the
+  // days' where Today's heading is a stop (renderer/timeline.js timelineGroups)
+  assert.deepEqual(await p.js('[...document.querySelectorAll("#outline > *")].slice(0, 5).map((e) => e.classList.contains("tl-top") ? "top" : e.className)'),
+    ['top', 'top', 'top', 'tl-bend', 'ghead'], 'Today\u2019s Tasks, the free time and Upcoming meetings, then the bend, then Today');
   const back = async () => { await p.key('⌘['); await at(p, 'orbital:timeline'); };
   // a first click on an edit selects it and opens nothing; the next opens the task edited
   await clickWords(p, 'Sam Okafor edited');

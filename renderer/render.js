@@ -431,7 +431,7 @@ function renderOutline() {
     list = withDraftTail(list, body); // an open node always has a row to type in; a read-only one (every chat) never does
     const chat = isChatPage(parent), stick = chat && chatStick(parent); // a chat is a conversation, not an outline (renderer/chat.js)
     outline.replaceChildren(...(chat ? chatEls(list, parent.docId) : groups
-      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [row(n), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
+      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.map(row)), ...(g.bend ? [timelineBendEl()] : []), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map(row)));
     const notesHead = notesHeadEl(parent); // who sees a meeting's notes, over them
     if (notesHead) outline.prepend(notesHead);
@@ -834,7 +834,7 @@ function nodeEl(node, docId, parent) {
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   // an image draws a marker only where a list row would: on its own it is the picture and nothing else
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '') + (node.timeline?.upcoming ? ' tl-upcoming' : '') + (node.timeline?.recording ? ' tl-recording' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '') + (node.timeline?.upcoming ? ' tl-upcoming' : '') + (node.timeline && timelineTop(node) ? ' tl-top' : '') + (node.timeline?.recording ? ' tl-recording' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';

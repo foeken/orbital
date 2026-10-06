@@ -38,15 +38,18 @@ function timelineDay(key) {
   if (key === dayKey(yesterday)) return 'Yesterday';
   return new Date(key + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 }
+// Above the days, with no heading and no time column, on a rail of their own under the page's title: Today's Tasks,
+// then the free time and Upcoming meetings when there are any. That rail curves into the days' (timelineBendEl), and
+// the first day's heading is a stop where it lands (styles.css .tl-bend + .ghead), as on the phones (Timeline.swift Bend).
+const timelineTop = (n) => !!(n.timeline?.today || n.timeline?.free || n.timeline?.upcoming);
 function timelineGroups(list) {
   list = timelineNoMeetings(list);
-  const days = [];
-  for (const n of list) { const key = dayKey(n.createdAt); const last = days.at(-1); if (last && last.id === key) last.nodes.push(n); else days.push({ id: key, nodes: [n] }); }
-  return days.map((g) => ({ ...g, title: timelineDay(g.id), collapsed: timelineFolded.has(g.id),
+  const top = list.filter(timelineTop), days = [];
+  for (const n of list) { if (timelineTop(n)) continue; const key = dayKey(n.createdAt); const last = days.at(-1); if (last && last.id === key) last.nodes.push(n); else days.push({ id: key, nodes: [n] }); }
+  const groups = days.map((g) => ({ ...g, title: timelineDay(g.id), collapsed: timelineFolded.has(g.id),
     toggle: () => { if (!timelineFolded.delete(g.id)) timelineFolded.add(g.id); render(true); } }));
+  return top.length ? [{ id: 'top', nodes: top, bend: groups.length > 0 }, ...groups] : groups;
 }
-// The rule closes the blocks at the top — Today's Tasks, then the free time and Upcoming meetings when there are any — before the history
-const timelineTopEnds = (n, next) => !!(n.timeline?.today || n.timeline?.free || n.timeline?.upcoming) && !(next?.timeline?.free || next?.timeline?.upcoming);
 // No meetings left today: main sends neither the free time nor Upcoming meetings, so the page says so itself under
 // Today's Tasks, with Plan one after it (timelinePlanEl). The desktop's own row: the phones read the same page from
 // main/timeline.js and leave the day without one.
@@ -75,8 +78,11 @@ function timelineJoinEl(node) {
   // icon only, so its name comes from the label
   return addIcon(quietButton('tl-join', 'Join in Tana', (ev) => { ev.stopPropagation(); openInTana(node.join); }, { tabIndex: -1 }), 'tana');
 }
-function timelineDividerEl() {
-  const el = document.createElement('div'); el.className = 'tl-divider'; el.setAttribute('aria-hidden', 'true'); return el;
+// One S from the rail above the days to theirs, vertical at both ends so it joins each without a corner
+function timelineBendEl() {
+  const el = document.createElement('div'); el.className = 'tl-bend'; el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '<svg viewBox="0 0 74 64"><path d="M.5 0C.5 35.2 73.5 28.8 73.5 64"/></svg>';
+  return el;
 }
 // Three days a page (main/timeline.js setPages): opening the page starts at the first (renderer/edit.js), and nearing
 // its end reads three days more, as the button there does when pressed; it says Loading… while it does. The count is
