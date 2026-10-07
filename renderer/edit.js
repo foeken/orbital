@@ -421,7 +421,8 @@ const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([
 const isPlaceId = (id) => isRealId(id) || String(id || '').startsWith('orbital:');
 function placeJSON() { // what rememberPlace stores, and what a pane or window opened from here starts on
   const doc = zoom ? docOf(zoom.docId) : null; // a row the app does not have simply stores no title: the next launch opens on the view, as before
-  if (zoom && isPlaceId(zoom.docId)) return JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined });
+  // notes: a meeting showing your notes over its write-up (renderer/meetingnotes.js notesOn), so a reload stays on them
+  if (zoom && isPlaceId(zoom.docId)) return JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined, notes: notesOn.has(zoom.docId) || undefined });
   return '{}'; // the view itself (view + SIDE holds which one)
 }
 function rememberPlace() {

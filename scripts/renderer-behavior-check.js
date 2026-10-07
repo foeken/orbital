@@ -114,6 +114,9 @@ const withShims = (src) => {
   if (/\bnamePage\(/.test(src) && !/function namePage\(/.test(src)) src = functionSource('namePage').replace('function namePage', 'globalThis.namePage ??= function namePage') + ';\n' + src;
   // a meeting whose notes could not be checked, asked again on arrival (renderer/meetingnotes.js): no meeting in a harness without it
   if (/\bnotesArrived\(/.test(src) && !/function notesArrived\(/.test(src)) src = 'globalThis.notesArrived ??= () => {};\n' + src;
+  // a meeting showing your notes over its write-up (renderer/meetingnotes.js), stored in the place: none in a harness without it
+  if (/\bnotesOn\b/.test(src) && !/const notesOn\b/.test(src)) src = 'globalThis.notesOn ??= new Set();\n' + src;
+  if (/\bsavedPlace\b/.test(src) && !/let savedPlace\b/.test(src)) src = 'globalThis.savedPlace ??= null;\n' + src;
   // a node's link opened in Tana or copied (renderer/nodes.js), over the harness's own run, tana and copyText
   if (/\bopenInTana\(/.test(src) && !/const openInTana =/.test(src)) src = sourceLine('const openInTana').replace('const openInTana =', 'globalThis.openInTana ??=') + '\n' + src;
   if (/\bcopyNodeLink\(/.test(src) && !/const copyNodeLink =/.test(src)) src = sourceLine('const copyNodeLink').replace('const copyNodeLink =', 'globalThis.copyNodeLink ??=') + '\n' + src;
@@ -1561,6 +1564,7 @@ async function runLinkPaletteCheck() {
 
   const resultRows = functionSource('resultRows');
   const searchNow = functionSource('searchNow');
+  const LINK_SRC = sourceLine('const TANA_URI_RE') + '\n' + functionSource('tanaNodeUri'); // a pasted Tana link is that node (searchNow)
   const start = source.indexOf("palInput.addEventListener('keydown', (e) => {");
   const end = source.indexOf("palette.addEventListener", start);
   assert.notEqual(start, -1, '@ palette keyboard handler is present');
@@ -1585,6 +1589,7 @@ async function runLinkPaletteCheck() {
     ${functionSource('settleEnter')}
     ${resultRows}
     ${functionSource('titleHits')}
+    ${LINK_SRC}
     ${searchNow}
     ${withShims(source.slice(start, end))}
     searchNow();
@@ -1614,13 +1619,14 @@ async function runLinkPaletteCheck() {
     let palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null, palMode = 'search';
     let searchResolve, created = null, linked = null;
     const palInput = { value: '' };
-    const tana = { search: () => new Promise((resolve) => { searchResolve = resolve; }) };
+    const tana = { search: () => new Promise((resolve) => { searchResolve = resolve; }), node: async (uri) => { if (uri.endsWith('0')) throw new Error('No access'); return { title: 'Roadmap' }; } };
     const asDoc = (node) => ({ ...node, text: node.text || node.title, kind: 'document' });
     const docRow = (node, hint, run) => ({ label: node.text, node, hint, run });
     const createAndLink = (ctx, title) => { created = title; }, linkTo = (ctx, mention) => { linked = mention; }, openResult = () => {};
     const renderPalette = () => {}, showError = (error) => { throw error; }, recentRows = () => [{ id: 'r', title: 'Recent' }];
     ${resultRows}
     ${functionSource('titleHits')}
+    ${LINK_SRC}
     ${searchNow}
     ({ type: (q) => { palInput.value = q; searchNow(); }, resolve: (rows) => searchResolve(rows), state: () => ({ palIndex, rows: palRows.map((row) => row.label) }), groups: () => palRows.map((row) => row.group || null), bold: () => palRows.map((row) => (row.match ? row.match.map((i) => row.label[i]).join('') : null)), create: () => { palRows[0].run(); return created; },
       pick: () => { palRows[palIndex].run(); return linked; }, tomorrow: () => ({ label: dayLabel(localDate(1)), uri: dayUri(localDate(1)) }) });
@@ -1643,6 +1649,16 @@ async function runLinkPaletteCheck() {
   caret.type('Dan'); caret.resolve([{ id: 'x', title: 'Dana Brooks' }]); await Promise.resolve(); await Promise.resolve();
   assert.deepEqual(plain(caret.state()), { palIndex: 1, rows: ['Create “Dan”', 'Dana Brooks'] }, 'typing offers to create what was typed and still selects the matching result');
   assert.equal(caret.create(), 'Dan', 'and Create uses the typed title');
+  // A pasted Tana link, or its bare id, is that node, selected; one that cannot be read is searched for as text
+  const ROADMAP = 'tana:text:01jabcdefghjkmnpqrstvwxyz1';
+  caret.type('https://home.tana.inc/somewhere/' + encodeURIComponent(ROADMAP)); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(plain(caret.state()).rows.at(-1), 'Roadmap', 'a pasted link finds its node');
+  assert.deepEqual(plain(caret.pick()), { label: 'Roadmap', uri: ROADMAP }, 'selected: Enter links that node');
+  caret.type(ROADMAP); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  assert.equal(plain(caret.state()).rows.at(-1), 'Roadmap', 'and so does its bare id');
+  caret.type('tana:text:01jabcdefghjkmnpqrstvwxyz0'); await Promise.resolve(); await Promise.resolve();
+  caret.resolve([]); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(plain(caret.state()).rows, ['Create “tana:text:01jabcdefghjkmnpqrstvwxyz0”'], 'unreadable: searched for as text');
   caret.type('tomorrow'); caret.resolve([{ id: 'p', title: 'Tomorrow plan' }]); await Promise.resolve(); await Promise.resolve();
   const tomorrow = plain(caret.tomorrow());
   assert.deepEqual(plain(caret.state()), { palIndex: 0, rows: [tomorrow.label, 'Create “tomorrow”', 'Tomorrow plan'] }, 'a typed day is offered first, and selected over a title that starts with the word');
@@ -10877,6 +10893,51 @@ async function runToolbarPlaceCheck() {
   console.log('ok  the selection toolbar glides within a row and is placed when it arrives or changes row');
 }
 checks.push(runToolbarPlaceCheck);
+// ⌘C on selected rows copies them as markdown that a paste reads back the same: marks, mentions, block types, open
+// children nested under their parent's words, a numbered list counted.
+async function runSelectionMarkdownCheck() {
+  const chat = require('../sdk/chat');
+  const api = vm.runInNewContext(`
+    ${sourceLine('const segsOf')} ${sourceLine('const plainOf')} ${sourceLine('const isDivider')} ${sourceLine('const isTask')}
+    ${sourceLine('const BLOCK_TYPES')} ${source.match(/^  \['bullet'.*$/m)[0]} ${sourceLine('const BLOCK_LABEL')} ${sourceLine('const blockTypeOf')} ${sourceLine('const headingOf')}
+    const items = new Map(), shown = new Set();
+    const nodeElOf = (key) => shown.has(key);
+    ${functionSource('inlineMarkdown')} ${functionSource('selectionMarkdown')}
+    const add = (key, node, parent = null, hidden = false) => { const item = { key, node, parent: parent && items.get(parent) }; items.set(key, item); if (!hidden) shown.add(key); };
+    add('a', { kind: 'block', block: 'heading2', heading: 2, segments: [{ text: 'Plan' }] });
+    add('b', { kind: 'block', block: 'bullet', segments: [{ text: 'see ' }, { mention: { label: 'Roadmap', uri: 'tana:text:01jabcdefghjkmnpqrstvwxyz0' } }, { text: ' bold ', marks: { bold: true } }, { text: 'x', marks: { link: 'https://x.io' } }] });
+    add('c', { kind: 'block', block: 'numbered', segments: [{ text: 'one' }] }, 'b');
+    add('d', { kind: 'block', block: 'numbered', segments: [{ text: 'two' }] }, 'b');
+    add('e', { kind: 'block', block: 'bullet', done: 1, segments: [{ text: 'done' }] }, 'd');
+    add('f', { kind: 'block', block: 'bullet', segments: [{ text: 'folded' }] }, 'd', true);
+    add('g', { kind: 'block', block: 'paragraph', segments: [{ text: 'not picked' }] });
+    ({ md: (keys) => selectionMarkdown(keys) });
+  `);
+  const md = api.md(['a', 'b', 'c']);
+  assert.equal(md, '## Plan\n- see [Roadmap](tana:text:01jabcdefghjkmnpqrstvwxyz0) **bold** [x](https://x.io)\n  1. one\n  2. two\n     - [x] done', 'what is drawn, nested, once each');
+  assert.deepEqual(plain(chat.blocks(md).map((b) => [b.block, b.depth ?? 0])), [['heading2', 0], ['bullet', 0], ['numbered', 1], ['numbered', 1], ['bullet', 2]], 'a paste reads it back nested');
+  console.log('ok  ⌘C on selected rows copies them as markdown a paste reads back');
+}
+checks.push(runSelectionMarkdownCheck);
+// A meeting showing your notes over its write-up is stored so in its place, and a reload reopens it on them, not on Summary.
+async function runNotesPlaceCheck() {
+  const make = (saved) => vm.runInNewContext(`
+    const savedPlace = ${JSON.stringify(saved)};
+    ${source.match(/^const notesOn = .*$/m)[0]}
+    let zoom = { docId: 'tana:event:m', nodeId: null };
+    const isPlaceId = () => true, docOf = () => null;
+    ${functionSource('placeJSON')}
+    ({ place: () => JSON.parse(placeJSON()), on: (id) => notesOn.add(id), shows: (id) => notesOn.has(id) });
+  `);
+  const page = make(null);
+  assert.equal(page.place().notes, undefined, 'Summary, the default: nothing stored');
+  page.on('tana:event:m');
+  assert.equal(page.place().notes, true, 'Notes: stored with the place');
+  assert.equal(make(page.place()).shows('tana:event:m'), true, 'reloaded: on the notes again');
+  assert.equal(make({ docId: 'tana:event:m' }).shows('tana:event:m'), false, 'reloaded on Summary: Summary');
+  console.log('ok  a meeting showing your notes reopens on them after a reload');
+}
+checks.push(runNotesPlaceCheck);
 
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

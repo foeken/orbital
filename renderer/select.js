@@ -149,7 +149,43 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   else if (e.key === 'Enter' && !mod && keys.length === 1 && canEditText(items.get(keys[0])) && !timelineRow(items.get(keys[0])) && (!topListRow(items.get(keys[0])) || typesInto(items.get(keys[0])))) clearSel(keys[0]); // Enter starts editing the selected row, caret at the end — the way a second click on it does
   else if (e.key === 'Enter' && !mod && keys.length === 1 && (topListRow(items.get(keys[0])) || timelineRow(items.get(keys[0])))) openSelectedRow(items.get(keys[0])); // a list or Timeline row that cannot be typed in: Enter goes in, as a second click on it does
   else if (comboOf(e) === hotkeyFor('toggleDone') && keys.every((k) => items.get(k)?.node.kind === 'block')) cycleSel(keys); // a selection of tasks leaves ⌘↩ to its own row (renderer/tasks.js)
+  // ⌘C: the rows as text to paste elsewhere; a Timeline row has no text of its own, so there ⌘C stays Copy link
+  else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c' && !keys.some((k) => timelineRow(items.get(k)))) copyText(selectionMarkdown(keys), keys.length === 1 ? 'Row copied' : keys.length + ' rows copied').catch(showError);
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;
+}
+// One row's words as markdown: the marks around the words they cover (spaces outside, or the markdown breaks), a
+// mention as [label](uri), the form a paste reads back as a mention (renderer/edit.js pasteMarkdown, sdk/chat.js).
+// ponytail: a literal * or ` in the words is not escaped; add it when a copy pastes back with a stray mark.
+function inlineMarkdown(segs) {
+  return segs.map((s) => {
+    if ('mention' in s) return '[' + s.mention.label + '](' + s.mention.uri + ')';
+    const m = s.marks || {}, [, lead, core, trail] = s.text.match(/^(\s*)([\s\S]*?)(\s*)$/);
+    if (!core) return s.text;
+    let t = m.code ? '`' + core + '`' : core;
+    for (const [mark, d] of [['italic', '*'], ['bold', '**'], ['strike', '~~']]) if (m[mark]) t = d + t + d;
+    return lead + (m.link ? '[' + t + '](' + m.link + ')' : t) + trail;
+  }).join('');
+}
+// The selected rows as markdown, each with the rows open under it, as they are drawn: a child indented to its
+// parent's words (a numbered parent's are wider than a bullet's), so the list nests wherever it is pasted.
+function selectionMarkdown(keys) {
+  const picked = new Set(keys), pads = new Map(), count = new Map(), lines = [];
+  for (const item of items.values()) {
+    let top = null;
+    for (let p = item; p; p = p.parent) if (picked.has(p.key)) top = p;
+    if (!top || !nodeElOf(item.key)) continue;
+    const node = item.node, type = blockTypeOf(node), parent = item === top ? null : item.parent.key;
+    const pad = parent ? pads.get(parent) ?? '' : '', n = type === 'numbered' ? (count.get(parent) || 0) + 1 : 0;
+    count.set(parent, n);
+    if (type === 'code') { lines.push(pad + '```', ...plainOf(node).split('\n').map((l) => pad + l), pad + '```'); continue; }
+    if (isDivider(node)) { lines.push(pad + '---'); continue; }
+    const mark = node.done != null || isTask(node) ? (node.done ? '- [x] ' : '- [ ] ') : n ? n + '. ' : type === 'bullet' ? '- '
+      : type === 'quote' ? '> ' : headingOf(node) ? '#'.repeat(headingOf(node)) + ' ' : '';
+    const inner = pad + ' '.repeat(n ? mark.length : 2);
+    pads.set(item.key, inner);
+    lines.push(pad + mark + inlineMarkdown(segsOf(node)).replace(/\n/g, '\n' + inner));
+  }
+  return lines.join('\n');
 }

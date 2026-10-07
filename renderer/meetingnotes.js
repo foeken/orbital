@@ -20,7 +20,9 @@ const notesHeld = new Map(); // row key -> { item, segs }: a save main refused w
 // the write-up's own rows in the notes' place, with its own audience and permissions read from it, never from the
 // meeting or the notes. Summary is the default: once Tana has written a meeting up, that is what its page shows, and
 // with no notes of yours it is all the page shows.
-const notesOn = new Set(); // event ids showing your notes over their write-up, chosen with Notes, kept per meeting for the session
+// event ids showing your notes over their write-up, chosen with Notes, kept per meeting for the session; the page's own
+// meeting across a reload too, in its stored place (renderer/edit.js placeJSON)
+const notesOn = new Set(savedPlace?.notes ? [savedPlace.docId] : []);
 const summaryMeta = new Map(); // write-up id -> its own taskMeta (who sees it), null while asked
 const summarySeq = new Map(); // write-up id -> the newest ask: an older answer, landing after a live change asked again, is dropped
 const notesCaret = new Map(); // event id -> { key, offset }: where the caret was in the notes when Summary took their place
@@ -112,7 +114,7 @@ const meetingShown = (eventId) => summaryShown(eventId) || (meetingNotes.get(eve
 function noteWriteUp(eventId, uri) {
   if (!notesWriteUps.has(eventId) || notesWriteUps.get(eventId) === uri) return;
   if (zoom && zoom.docId === eventId && editingRow()) notesOn.add(eventId);
-  notesWriteUps.set(eventId, uri); patchNotesHead(eventId); renderSoon(); // the switch at once, a row being typed in or not
+  notesWriteUps.set(eventId, uri); patchNotesHead(eventId); renderSoon(); rememberPlace(); // the switch at once, a row being typed in or not
 }
 // Whether the meeting has a write-up is known: until then neither the notes nor their line are drawn, as it may be the summary
 const writeUpKnown = (eventId) => !tana.summaryUri || notesWriteUps.has(eventId);
@@ -121,6 +123,7 @@ function showSummary(eventId, on) {
   if (on && key) notesCaret.set(eventId, { key, offset: caretOffset(el) }); // the tabs take no focus on a click: the caret is still in the row
   flushAll(); // what was typed is saved to the document it was typed in, before the other one takes its place
   if (on) notesOn.delete(eventId); else notesOn.add(eventId);
+  rememberPlace(); // Notes or Summary, as a reload finds it
   render(true);
   const back = !on && notesCaret.get(eventId);
   if (back && textEl(back.key)) placeCaret(back.key, back.offset); // back in the notes where you were

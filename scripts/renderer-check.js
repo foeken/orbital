@@ -186,7 +186,8 @@ assert.match(source, /isPinned\(n\.id\)/, 'a reused row is rebuilt when its pin 
 assert.match(source, /\{ create: true, label: 'Create “' \+ title/);
 // linking preselects a result only when every typed word begins a word of its title; otherwise "Create" stays selected
 // (the rule itself: renderer-behavior-check.js runEditorFixesCheck)
-assert.match(source, /const starts = words \? nodes\.findIndex\(\(n\) => titleHits\(n\.title \?\? n\.text \?\? '', q\)\.starts === words\) : -1;/);
+// (a pasted Tana link's node is selected outright: renderer-behavior-check.js)
+assert.match(source, /const starts = uri && nodes\.length \? 0 : words \? nodes\.findIndex\(\(n\) => titleHits\(n\.title \?\? n\.text \?\? '', q\)\.starts === words\) : -1;/);
 assert.match(source, /palIndex = linkCtx && starts >= 0 && !\(palRows\[0\] && palRows\[0\]\.date\) \? starts \+ palRows\.filter\(\(r\) => r\.create\)\.length : 0;/);
 assert.match(source, /palRows\.find\(\(row\) => row\.create\)/);
 assert.match(source, /tana\.toggleCheckbox\(item\.docId, item\.node\.id\)/);

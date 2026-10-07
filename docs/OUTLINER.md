@@ -489,6 +489,9 @@ row itself, children and all. ⇧↓ on a parent ⇧↑ climbed to gives back th
 step by step.
 ⇧⌘⌫ removes the selected blocks and focuses the row before the range; ⇧⌘↑/↓ and Tab/⇧Tab move the whole range, the
 selection kept; Escape or a plain arrow clears it. Documents in a selection are not deleted or moved by these keys.
+⌘C copies the selected rows as markdown, with the rows open under them nested (renderer/select.js `selectionMarkdown`):
+marks, `[label](uri)` mentions, headings, lists, checkboxes, quotes, code and dividers, which a paste reads back as the
+same rows. On the Timeline ⌘C stays Copy link.
 Cmd+K leads with a Selection group for it (§8).
 
 ## 7. Navigation
@@ -552,7 +555,7 @@ Cmd+K leads with a Selection group for it (§8).
   `goHome`; Cmd+K "Go to Home" names it, and stays listed, disabled with "Current", where you already are. A Home whose saved search is gone from `api.searches()` falls back
   to the Library and the preference is repaired (`repairHome`), but only from a list that could have named it:
   `searchesLoaded` is set only by an answer that lands while connected.
-- **Reopening where you left off.** `rememberPlace` stores `{ docId, nodeId, from, title, icon }` under `place` (per
+- **Reopening where you left off.** `rememberPlace` stores `{ docId, nodeId, from, title, icon, notes }` (notes: a meeting showing your notes over its write-up, so a reload reopens on them; renderer/meetingnotes.js `notesOn`) under `place` (per
   split side) in localStorage; a view with nothing zoomed is stored as `{}`, a place too. Main keeps a copy of each
   page's `view` and `place` in SQLite beside the layout (`page:place`), and preload fills a key localStorage no longer
   has from it: Chromium has lost a profile's localStorage whole, and every tab then opened on My Tasks (#636). Boot seeds the page from it
@@ -701,6 +704,9 @@ search found follow under "Related" in its order (issue #20). `#task`, `#meeting
 tokens anywhere in the query become filters (an unknown type gives no results); an event's meta shows its date. A
 query with a filter lists newest first: `#meeting` by the meeting's start time, any other by when the node was made
 (sdk/query.js `searchParams`), and the title re-sort below keeps that order among equals.
+A pasted Tana link (a home.tana.inc url or a bare `tana:` id, segments.js `tanaNodeUri`) lists that node alone, read
+with `api.node` and selected, in every use of this list (search, "@", Pin something …); one that cannot be read is
+searched for as text. A link field's picker keeps to its scope and searches.
 Tana's order does not weigh the title, so `searchNow` re-sorts by `titleHits`: most typed words in the title first
 (filter tokens left out), then most that begin a word, then Tana's order; only those words are bold. Enter opens the
 result wherever it lives. ⌘S toggles it and opening one palette closes the other. An empty query shows Recently

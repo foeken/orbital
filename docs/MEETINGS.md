@@ -119,6 +119,10 @@ owner, no `linkSharing`, no task state), the owner chain (the note itself the re
 (the same, plus the mark). Only then are the title, the `confirmed` mark and the words written, in one write (one
 `mut` and one undo step; the title and mark in one Loro transaction, the words in the next), the words as a row of
 their own after the last one.
+Notes Tana lists that cannot be checked just now (their document reconnecting after a resync or a dropped stream, a
+graph or owner-chain read failing) are never answered as none: an open waits up to 5 s for them, then says they could
+not be checked, and arriving at the meeting again asks again. Answered as none, the page showed them empty until the
+connection dropped and came back.
 
 **How a note is made, safely and once.** The seed — type, the title "Private notes", access, the mark, the reference
 row — is the same on every machine, byte for byte: written by a peer that is yours as Tana reads peers (sdk/sync.js

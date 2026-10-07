@@ -6424,10 +6424,11 @@ async function main() {
     const own = await call(EV6, true, 'new private words');
     assert.deepEqual([own.id, version(ownedNote)], [slot(EV6, 0), ownedBefore], 'a note of its own instead; the owned one untouched');
 
-    // Your note is there but cannot be checked just now (its owner chain does not answer): an open shows none, and the
-    // first words wait instead of starting a second note; once it answers, it is the one used.
+    // Your note is there but cannot be checked just now (its owner chain does not answer): an open says so rather than
+    // showing none (which the page kept, empty notes on a return to the meeting), and the first words wait instead of
+    // starting a second note; once it answers, it is the one used.
     chainDown = true;
-    assert.deepEqual(plain(await call(EV6)), { id: null }, 'unverifiable: not used');
+    await assert.rejects(notes.resolveNotes(client, EV6, ME, fast), (e) => e.lag === true, 'unverifiable: not none');
     const countBefore = created.length;
     await assert.rejects(call(EV6, true, 'typed while Tana is slow'), (e) => /could not confirm/.test(e.message), 'and no new note over it');
     assert.equal(created.length, countBefore);
@@ -6443,6 +6444,14 @@ async function main() {
     assert.equal(created.length, countPartial, 'nothing new');
     server.set(full.id, full); states.delete(full.id);
     assert.equal((await notes.resolveNotes(client, EV7, ME, { create: true, org: ORGDOC, login: LOGIN, ...fast })).id, full.id, 'loaded: the same note');
+    // Back on the meeting while Tana resyncs them: an open waits, and is not answered "none"; read only, they are loaded
+    states.set(full.id, 'resyncing');
+    await assert.rejects(notes.resolveNotes(client, EV7, ME, fast), (e) => e.lag === true, 'resyncing: not none');
+    let polls = 0;
+    assert.equal((await notes.resolveNotes(client, EV7, ME, { ...fast, timeout: 3, wait: async () => { if (++polls === 1) states.delete(full.id); } })).id, full.id, 'live again within the wait: the notes');
+    states.set(full.id, 'write-denied');
+    assert.equal((await notes.resolveNotes(client, EV7, ME, fast)).id, full.id, 'write denied: still the notes');
+    states.delete(full.id);
 
     // Two Macs, as two independent Loro documents of one id. The seed is the same on both, byte for byte, so it is one
     // seed to Loro: Mac B seeding before its copy has heard of Mac A's note (a bootstrap still out) adds no operation to
