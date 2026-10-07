@@ -60,18 +60,4 @@ function report(name, old, now, agree, notes = []) {
   const likely = flagged.map((x, i) => [titles[i], x.p]).filter(([, p]) => p >= 0.5).sort((x, y) => y[1] - x[1]);
   report('Suggest sensitive marks: ' + titles.length + ' titles, one call (median of ' + REPEAT + ')', 'none: a new feature', ms(median(odds)) + ', ' + likely.length + ' at 50% or more', '',
     likely.map(([t, p]) => Math.round(p * 100) + '% ' + JSON.stringify(t)));
-  // Ranked menus: the @ menu's documents for a line being written, and the # menu's choices for selected words
-  const offered = titles.slice(0, 40);
-  for (const line of ['Follow up on the Datadog cost growth with @', 'Prepare the NLT discussion on the hardware direction, see @', 'Ask about the Works Council reply in @']) {
-    const times = [];
-    let odds = [];
-    for (let i = 0; i < REPEAT; i++) { const [t, v] = await timed(() => decisions.rankChoices('Page: Today\nWriting: ' + line, offered)); times.push(t); odds = v; }
-    report('Ranked @ menu "' + line + '": ' + offered.length + ' documents (median of ' + REPEAT + ')', 'the order the search gives', ms(median(times)), '',
-      odds.map((p, i) => [offered[i], p]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([t, p]) => Math.round(p * 100) + '% ' + JSON.stringify(t)));
-  }
-  const kinds = ['Doc', 'Task', 'Meeting', 'Project Task', 'Discussion Task', 'Decision Record', 'Goal'];
-  for (const words of ['Review Q3 hiring plan with Kor', 'We move to Postgres for Penny', 'Weekly sync with the heads of tech']) {
-    const [t, odds] = await timed(() => decisions.rankChoices('Page: Today\nWriting: ' + words + '\nTyped in the menu: Make "' + words + '" a…', kinds));
-    report('Ranked # menu "' + words + '"', 'Doc, Task, Meeting, then the types', ms(t), '', [odds.map((p, i) => [kinds[i], p]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, p]) => k + ' ' + Math.round(p * 100) + '%').join(', ')]);
-  }
 })().catch((e) => { console.error(e.message); process.exitCode = 1; }).finally(() => fs.rmSync(dir, { recursive: true, force: true }));

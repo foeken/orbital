@@ -314,7 +314,7 @@ function mockApi() {
   const mockRelay = { polls: 0 }; // how often the Connect your personal agent page has asked, since its code was made
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
-  let flags = [{ id: 'decisions', label: 'Decisions API', hint: 'Auto-pick type, sensitive marks, @ and # order', on: false }]; const flagCbs = []; // main/flags.js
+  let flags = [{ id: 'decisions', label: 'Decisions API', hint: 'Auto-pick type and sensitive marks', on: false }]; const flagCbs = []; // main/flags.js
   const hiddenTitles = new Set(['Daily Brief Delivery', 'Private AI chat for*']); // Edit hidden items: an exact title and a prefix
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
@@ -775,8 +775,6 @@ function mockApi() {
     setFeatureFlag: async (id, on) => { flags = flags.map((f) => (f.id === id ? { ...f, on } : f)); for (const cb of flagCbs) cb(flags); return flags; },
     onFeatureFlags: (cb) => { flagCbs.push(cb); },
     suggestSensitive: async (nodes) => nodes.map((n) => ({ id: n.id, p: /salary|salaris|health|review|contract/i.test(n.text) ? 0.9 : 0.1 })),
-    // its ranked menus: what the line names first
-    rankChoices: async (context, options) => options.map((o) => (String(context).toLowerCase().includes(String(o).toLowerCase().split(' ')[0]) ? 0.8 : 0.1)),
     agentIds: async () => [...codexAssigned],
     setAgent: async (docId, on, prompt) => {
       if (on) { codexAssigned.add(docId); if (typeof prompt === 'string' && prompt.trim()) codexPrompts.set(docId, prompt.trim()); }

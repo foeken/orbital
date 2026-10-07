@@ -1114,16 +1114,10 @@ async function main() {
     const DOC='tana:text:'+'a'.repeat(26);
     assert.deepEqual(await decisions.suggestSensitive([{id:DOC,text:'Salary review Jan'},{id:'orbital:timeline',text:'Timeline'},{id:'tana:text:'+'b'.repeat(26),text:'  '}],decided([{type:'predicate',name:'n0',probability:0.93}])),[{id:DOC,p:0.93}]);
     assert.deepEqual(calls.at(-1).body.questions.map((x)=>x.type),['predicate']);
-    // Ranked menus: one choice over what the menu offers, by index, the page and the line as the input
-    assert.deepEqual(await decisions.rankChoices('Page: Budget\nWriting: Send it to @',['Anne','Kevin','Anne'],decided([{type:'choice',name:'pick',choice:'1',probabilities:[{value:'0',probability:0.2},{value:'1',probability:0.7},{value:'2',probability:0.1}]}])),[0.2,0.7,0.1]);
-    assert.deepEqual(calls.at(-1).body.questions[0].choices.map((c)=>[c.value,c.description]),[['0','Anne'],['1','Kevin'],['2','Anne']],'by index, so two documents of one name stay two');
-    const ranked=calls.length;
-    assert.deepEqual(await decisions.rankChoices('x',['Only one'],decided([])),[1]);
-    assert.equal(calls.length,ranked,'one option has nothing to rank');
     flags.set('decisions',false);
     assert.equal(decisions.usable(),false,'and off again');
     settings.set('openaiApiKey',undefined); settings.set('featureFlags',undefined); settings.reset();
-    console.log('ok  decisions API flag: off by default and without a key; Auto-pick type, Suggest sensitive marks and the ranked menus as decisions, batched past 200');
+    console.log('ok  decisions API flag: off by default and without a key; Auto-pick type and Suggest sensitive marks as decisions, batched past 200');
   }
   // Edit meeting details and "/" Meeting's when page (#758): the model transcribes the words into a strict shape, and
   // main/meetings.js resolveTime decides what they come to, the same way every time, in the meeting's own time zone.
