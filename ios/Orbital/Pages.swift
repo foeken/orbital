@@ -403,10 +403,16 @@ struct NodeDetails: View {
         }
         .sheet(isPresented: $picking) { VisibilitySheet(id: id, access: access, engine: engine, done: reload) }
         // pinned to today, or to any day: the long press's Pin to Today and Remove Pin, here too (an outside pin: link opens
-        // the node, where it is done)
+        // the node, where it is done); the desktop's pin-to-a-day glyph in the text colour, by its word as Android draws it
+        // (a Label puts a system symbol, in the accent blue, in the list's icon column)
         let pinned = engine.pinned.contains(id)
         Button { Task { await engine.pin(id, !pinned); await reload() } } label: {
-            Label(pinned ? "Remove Pin" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            HStack(spacing: 12) {
+                Image("Glyphs/pinDate").resizable().frame(width: 18, height: 18).accessibilityHidden(true)
+                Text(pinned ? "Remove Pin" : "Pin to Today")
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.primary).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .modifier(FieldLine())
