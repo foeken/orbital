@@ -8981,12 +8981,12 @@ async function runSmartFilterCheck() {
     const sensitiveIds = new Set(['tana:text:secret']), filterEl = { value: 'leave ' }, filterRow = { classList: { add() {}, remove() {} } };
     let featureFlags = [{ id: 'decisions', on: true }];
     const flagOn = (id) => featureFlags.some((f) => f.id === id && f.on), isRealId = (id) => id.startsWith('tana:');
-    const setTimeout = (fn) => timers.push(fn), clearTimeout = () => {}, renderSoon = () => {}, showError = (e) => errors.push(e.message);
+    const setTimeout = (fn) => timers.push(fn), clearTimeout = () => {}, renderSoon = () => {}, showError = (e) => errors.push(e.message), visibleTags = (n) => n.tags || [];
     ${sourceBetween('const SMART_LIKELY', '// the field says what it does')}
     ${sourceLine('const filterHit =')}
     const rows = [{ id: 'tana:text:a', text: 'Annual leave plan' }, { id: 'tana:text:b', text: 'Sick days Jan', stateType: 'open' }, { id: 'tana:text:c', text: 'Budget' }, { id: 'tana:text:secret', text: 'Salary' }];
     const works = answer;
-    ({ shown: (q) => rows.filter((n) => filterHit(n, q)).map((n) => n.text), asked, timers, errors, type: (v) => { filterEl.value = v; }, off: () => { featureFlags = []; }, fail: () => { answer = () => { throw new Error('OpenAI Decisions answered 500'); }; }, heal: () => { answer = works; } })`, {});
+    ({ hit: (n, q) => filterHit(n, q), shown: (q) => rows.filter((n) => filterHit(n, q)).map((n) => n.text), asked, timers, errors, type: (v) => { filterEl.value = v; }, off: () => { featureFlags = []; }, fail: () => { answer = () => { throw new Error('OpenAI Decisions answered 500'); }; }, heal: () => { answer = works; } })`, {});
   assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan'], 'the words find what they find at once');
   assert.equal(api.asked.length, 0, 'nothing is asked while typing goes on');
   api.timers.splice(0).pop()(); await new Promise((done) => setImmediate(done));
@@ -9004,6 +9004,8 @@ async function runSmartFilterCheck() {
   assert.deepEqual(plain([api.asked.at(-1).q, api.shown('time off')]), ['time off', ['Sick days Jan']], 'a failed ask is not kept once other words were typed: the same words ask again');
   api.off();
   assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan'], 'with the flag off, the words alone');
+  assert.deepEqual([api.hit({ id: 'tana:text:t', text: 'Budget', tags: [{ label: 'task' }] }, 'task'), api.hit({ id: 'tana:text:t', text: 'Budget', tags: [{ label: 'task' }] }, 'meeting')], [true, false],
+    'and a chip on the row is words on it too: "task" finds the rows tagged #task');
   console.log('ok  smart filter: the words at once, the rest asked once typing pauses, never a sensitive row, a failure matches nothing');
 }
 // Ranked menus (renderer/flags.js): the @ menu's documents reorder by the answer with Create still leading and a sure
