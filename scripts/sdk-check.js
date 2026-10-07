@@ -1115,6 +1115,9 @@ async function main() {
     assert.equal(calls.length,ranked,'one option has nothing to rank');
     flags.set('decisions',false);
     assert.equal(decisions.usable(),false,'and off again');
+    const offCalls=calls.length;
+    assert.deepEqual(await decisions.filterRows('waiting on someone',[{id:DOC,text:'Ask Kor'}],decided([])),[],'off, the smart filter finds nothing by meaning and says nothing: the words alone filter');
+    assert.equal(calls.length,offCalls,'and sends nothing');
     settings.set('openaiApiKey',undefined); settings.set('featureFlags',undefined); settings.reset();
     console.log('ok  decisions API flag: off by default and without a key; Auto-pick type, Suggest sensitive marks, the smart filter and the ranked menus as decisions, batched past 200');
   }
