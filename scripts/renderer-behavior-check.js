@@ -10664,8 +10664,14 @@ checks.push(async function runHiddenFromFixCheck() {
   api.calls.length = 0; api.taskMetaById.set(DOC, { ...own([{ uri: ME, type: 'user', role: 'admin' }]), hiddenFrom: [PETER, SAM] }); api.accessById.set(DOC, { rules: ['people'] }); // a share forgets what it knew of the page's access
   api.fix(DOC)([SAM]); await Promise.resolve();
   assert.deepEqual(plain(api.calls), [[DOC, { rule: 'people', participants: [{ uri: SAM, role: 'editor' }] }]], 'a pill shares the page with that one person');
-  api.taskMetaById.set('tana:text:inherit', { restricted: undefined, hiddenFrom: [PETER], participants: [] }); api.accessById.set('tana:text:inherit', { rules: ['me', 'people', 'inherit'] });
-  assert.equal(api.fix('tana:text:inherit'), null, 'an audience taken from where the page lives is not narrowed to fix it');
+  api.taskMetaById.set('tana:text:inherit', { restricted: undefined, hiddenFrom: [PETER], participants: [] }); api.accessById.set('tana:text:inherit', { rules: ['me', 'people', 'inherit'], audience: { scope: 'everyone', participants: [] } });
+  assert.equal(api.fix('tana:text:inherit'), null, 'an audience of everyone taken from where the page lives is not narrowed to fix it');
+  // a task in a meeting: the attendees it takes from the meeting become its own list, with the assignee added
+  api.calls.length = 0; api.taskMetaById.set('tana:text:inmeeting', { restricted: undefined, hiddenFrom: [PETER], participants: [] });
+  api.accessById.set('tana:text:inmeeting', { rules: ['me', 'people', 'inherit'], audience: { scope: 'people', boundaryUri: 'tana:event:m', participants: [ME, SAM] } });
+  api.fix('tana:text:inmeeting')([PETER]); await Promise.resolve();
+  assert.deepEqual(plain(api.calls), [['tana:text:inmeeting', { rule: 'people', participants: [{ uri: SAM, role: 'editor' }, { uri: PETER, role: 'editor' }] }]],
+    'everyone who sees it now keeps it, and the assignee is added');
   api.taskMetaById.set('tana:text:ro', own([{ uri: ME, type: 'user', role: 'editor' }])); api.accessById.set('tana:text:ro', { rules: [] });
   assert.equal(api.fix('tana:text:ro'), null, 'nor is a page you may not share');
   api.taskMetaById.set('tana:text:fine', { restricted: true, participants: [] }); api.accessById.set('tana:text:fine', { rules: ['people'] });

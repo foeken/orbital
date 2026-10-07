@@ -29,10 +29,17 @@ function applySharing(doc, selection) {
 // own list is its audience and you may change it: an audience taken from a space is that space's to widen.
 function hiddenFromFix(node) {
   const meta = taskMetaById.get(node.id), mine = (loadMembers(), me()?.id);
-  if (!meta || meta.restricted !== true || !meta.hiddenFrom?.length || !tana.setSharing || !mine) return null;
+  if (!meta || !meta.hiddenFrom?.length || !tana.setSharing || !mine) return null;
   loadAccess(node.id);
-  if (!accessById.get(node.id)?.rules?.includes('people')) return null;
-  const kept = meta.participants.filter((p) => p.uri !== mine).map((p) => ({ uri: p.uri, role: p.role }));
+  const access = accessById.get(node.id);
+  if (!access?.rules?.includes('people')) return null;
+  // Its own people keep their roles. Named people it takes from where it lives (a task in a meeting: its attendees)
+  // become its own list, the same people, so nobody loses it; only a later change to the meeting's people no longer
+  // reaches it. An audience of everyone or of a space is not narrowed to fix it.
+  const now = meta.restricted === true ? meta.participants.map((p) => ({ uri: p.uri, role: p.role }))
+    : access.audience?.scope === 'people' ? (access.audience.participants || []).map((uri) => ({ uri, role: 'editor' })) : null;
+  if (!now) return null;
+  const kept = now.filter((p) => p.uri !== mine);
   // the people named (a pill on the page, the assign prompt) or everyone the page shuts out
   return (uris = meta.hiddenFrom) => applySharing(node, { rule: 'people', participants: [...kept, ...uris.map((uri) => ({ uri, role: 'editor' }))] });
 }
