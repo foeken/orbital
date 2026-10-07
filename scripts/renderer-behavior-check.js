@@ -90,6 +90,11 @@ const withShims = (src) => {
   if (/\bpalSeq\b/.test(src)) src = 'globalThis.palSeq ??= 0;\n' + src;
   // fields that hold choices or links (renderer/fields.js): a palette harness without that file has no field focused
   if (/\bfieldRows\(/.test(src) && !/function fieldRows\(/.test(src)) src = 'globalThis.fieldRows ??= () => [];\n' + src;
+  // feature flags (renderer/flags.js): a palette harness without that file has every flag off
+  // the @ and # menus' pick counts (renderer/palette.js): a harness without them has learned nothing
+  if (/\b(linkScorer|noteLinkUse|byHashUse|noteUse)\(/.test(src) && !/function linkScorer\(/.test(src)) src = 'globalThis.linkScorer ??= () => () => 0; globalThis.noteLinkUse ??= () => {}; globalThis.byHashUse ??= (c) => c; globalThis.noteUse ??= () => {}; globalThis.hashKey ??= (c) => c.kind;\n' + src;
+  if (/\b(flagRows|suggestSensitiveRows)\(/.test(src) && !/function flagRows\(/.test(src)) src = 'globalThis.flagRows ??= () => []; globalThis.suggestSensitiveRows ??= () => [];\n' + src;
+  if (/\bfilterHit\(/.test(src) && !/const filterHit =/.test(src)) src = source.match(/^const chipHit =.*$/m)[0].replace('const chipHit =', 'globalThis.chipHit ??=') + '\n' + source.match(/^const filterHit =.*$/m)[0].replace('const filterHit =', 'globalThis.filterHit ??=') + '\n' + src;
   if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
   // the rows a row lives among: its own container's, which in a harness with one container is texts()
   if (/\browsBeside\(/.test(src) && !/const rowsBeside =/.test(src)) src = 'globalThis.rowsBeside ??= (el) => texts();\n' + src;
@@ -8433,7 +8438,38 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSuggestedCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+// ⌘F's filter (renderer/views.js filterHit): a row's chips are words on it too, "task" and "tasks" finding #task
+function runFilterChipCheck() {
+  const api = vm.runInNewContext(`
+    const visibleTags = (n) => n.tags || [];
+    ${sourceLine('const chipHit =')}${sourceLine('const filterHit =')}
+    ({ hit: filterHit })`, {});
+  const row = { text: 'Budget', tags: [{ label: 'task' }] };
+  assert.deepEqual([api.hit(row, 'budg'), api.hit(row, 'task'), api.hit(row, 'tasks'), api.hit(row, 'meeting')], [true, true, true, false],
+    'the title, a chip, and a chip named in the plural; nothing else');
+}
+// The @ and # menus learn (renderer/palette.js linkScorer, byHashUse): a node you link to often first, then the kinds
+// you link to more (people before docs before meetings, if that is how you write), and what you make rows into
+function runLinkUseCheck() {
+  const store = {};
+  const api = vm.runInNewContext(`
+    const localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
+    const visibleTags = (n) => n.tags || [];
+    ${sourceBetween('function paletteUse()', '// The ⌘K page')}
+    ({ link: noteLinkUse, order: (list) => { const s = linkScorer(); return list.map((n, i) => ({ n, i })).sort((a, b) => s(b.n) - s(a.n) || a.i - b.i).map(({ n }) => n.id); },
+       make: (c) => noteUse('hash', hashKey(c)), hash: (list) => byHashUse(list).map((c) => c.title) })`, { store });
+  const sam = { id: 'tana:user-profile:sam' }, kim = { id: 'tana:user-profile:kim' }, plan = { id: 'tana:text:plan', tags: [{ label: 'doc' }] },
+    sync = { id: 'tana:event:sync', tags: [{ label: 'meeting' }] }, notes = { id: 'tana:text:notes', tags: [{ label: 'doc' }] };
+  assert.deepEqual(plain(api.order([sync, notes, kim])), ['tana:event:sync', 'tana:text:notes', 'tana:user-profile:kim'], 'nothing picked: the order as found');
+  for (let i = 0; i < 3; i++) api.link(sam);
+  api.link(plan);
+  assert.deepEqual(plain(api.order([sync, notes, plan, kim, sam])), ['tana:user-profile:sam', 'tana:text:plan', 'tana:user-profile:kim', 'tana:text:notes', 'tana:event:sync'],
+    'the node you link to most first, then each kind as often as you link to it: a person you never linked before a doc, a doc before a meeting');
+  const doc = { title: 'Doc', kind: 'doc' }, task = { title: 'Task', kind: 'task' }, risk = { title: 'Risk', kind: 'custom', typeUri: 'tana:type:risk' };
+  api.make(risk); api.make(risk); api.make(task);
+  assert.deepEqual(plain(api.hash([doc, task, risk])), ['Risk', 'Task', 'Doc'], 'the # menu: what you make rows into most first, the rest as they were');
+}
+const checks = [runFeatureFlagCheck, runFilterChipCheck, runLinkUseCheck, runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSuggestedCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -8935,6 +8971,38 @@ async function runClassifyTypeCheck() {
   console.log('ok  Auto-pick type: offered where a type goes, a sure answer applied and said, otherwise every option with its odds, "No type" never applied on its own');
 }
 
+// Feature flags (renderer/flags.js): Enable lists the flags that are off and Disable the ones on, each naming its flags;
+// Suggest sensitive marks is there only while the Decisions API flag is on, and offers the likely ones, never one marked.
+async function runFeatureFlagCheck() {
+  const api = vm.runInNewContext(`
+    const tana = { setFeatureFlag: async (id, on) => [{ id, label: 'Decisions API', hint: '', on }], suggestSensitive: async (nodes) => nodes.map((n, i) => ({ id: n.id, p: [0.9, 0.2, 0.7][i] })) };
+    const notes = [], marked = [], queue = [], sensitiveIds = new Set(['tana:text:marked']), zoom = { docId: 'tana:text:page' }, titleEl = { textContent: 'Salary review' };
+    const rendered = new Set(['a', 'b', 'c']), items = new Map([['a', { key: 'a', node: { kind: 'document', id: 'tana:text:lunch', text: 'Lunch plans' } }],
+      ['b', { key: 'b', node: { kind: 'document', id: 'tana:text:sick', text: 'Sick leave Jan' } }], ['c', { key: 'c', node: { kind: 'document', id: 'tana:text:marked', text: 'Marked already' } }]]);
+    const run = (fn) => { queue.push(fn()); }, closePalette = () => {}, showNote = (t) => notes.push(t), renderPalette = () => {}, openPage = () => {};
+    const matchRows = (rows) => rows, BACK_TO_COMMANDS = null, isRealId = (id) => id.startsWith('tana:'), demoText = (t) => t;
+    const setSensitiveMark = (ids) => { for (const id of ids) { marked.push(id); sensitiveIds.add(id); } };
+    let listed = null; const loadList = (mode, read, keep) => { keep(null); listed = read().then(keep); };
+    const listRows = (group, list, q, empty, toRows) => (list ? toRows(list) : []);
+    ${sourceBetween('let featureFlags =', '// ---- Suggest sensitive marks')}
+    ${sourceBetween('const SENSITIVE_GROUP', 'function openSensitivePalette')}
+    ${functionSource('openSensitivePalette')}
+    ({ rows: () => flagRows(), suggest: () => suggestSensitiveRows(), set: (list) => { featureFlags = list; }, notes, marked, queue, listed: () => listed, sensitive: () => sensitiveRows('') })`, {});
+  api.set([{ id: 'decisions', label: 'Decisions API', hint: 'h', on: false }]);
+  assert.deepEqual(plain(api.rows().map((r) => r.label)), ['Enable feature flag'], 'only Enable while every flag is off');
+  const choices = await api.rows()[0].sub();
+  assert.deepEqual(plain(choices.map((r) => r.label)), ['Decisions API'], 'naming the flags it would switch on');
+  assert.equal(api.suggest().length, 0, 'Suggest sensitive marks only with the Decisions API flag on');
+  choices[0].run(); await Promise.all(api.queue);
+  assert.deepEqual(plain([api.rows().map((r) => r.label), api.notes]), [['Disable feature flag'], ['Decisions API on']], 'once on, Disable is what is offered');
+  assert.equal(api.suggest()[0].label, 'Suggest sensitive marks');
+  api.suggest()[0].run(); await api.listed();
+  assert.deepEqual(plain(api.sensitive().map((r) => [r.label, r.hint])), [['Salary review', '90%'], ['Sick leave Jan', '70%']],
+    'the page and its documents, the likely ones most likely first; one at 20% and one already marked are not offered');
+  api.sensitive()[0].run(); await Promise.all(api.queue);
+  assert.deepEqual(plain([api.marked, api.sensitive().map((r) => r.label)]), [['tana:text:page'], ['Sick leave Jan']], 'Enter marks it, and it leaves the list');
+  console.log('ok  feature flags: Enable and Disable name their flags; Suggest sensitive marks only with the Decisions API on, the likely ones, never one marked');
+}
 // Cmd+K "Set icon": the row on a type, and the page that searches the Nucleo set built into the app. The set itself
 // is main's (main/icons.js) — what is checked here is that the row is offered to a type and nothing else, that the
 // page draws what main answers and registers those glyphs so the rows can show them, that the type it already wears
@@ -9986,7 +10054,7 @@ async function runPeopleFieldsCheck() {
     const renderSegs = (el, segs) => el.append(...segs.map((s) => (s.mention ? '@' + s.mention.label : s.text)));
     const addIcon = () => {}, facesEls = () => [], sensitiveHidden = () => false, isGuest = (uri) => uri.startsWith('tana:guest-profile:'), demoText = (v) => v;
     const iconNode = (name) => Object.assign(document.createElement('svg'), { dataset: { icon: name } });
-    const relatedBy = new Map(), tana = { accessOptions: null }, openVisibility = () => {}, moveTo = () => {};
+    const opened = [], relatedBy = new Map(), tana = { accessOptions: null }, openVisibility = (doc) => opened.push(doc.id), moveTo = () => {};
     let renders = 0; const render = () => { renders++; };
     let summary = null; const taskSummary = () => summary, documentSummary = () => null;
     let info = null; const meetingOf = (node) => (node.icon === 'meeting' ? { id: node.id } : null), meetingInfoOf = () => info;
@@ -10003,6 +10071,8 @@ async function runPeopleFieldsCheck() {
       pins: (data, docId = 'tana:event:m') => { relatedBy.set(docId, data); return lines(pinnedFieldEl({ node: { id: docId }, docId })); },
       pinAdd: () => { relatedBy.set('tana:event:m', { hubKind: 'event', pinHub: 'tana:event:m', pinned: [] }); pinnedFieldEl({ ...page, docId: 'tana:event:m' }).childNodes[2].childNodes.at(-1).onclick(); return calls; },
       visible: (scope, word) => { summary = { scope, audience: { icon: 'lock', label: 'x', word }, people: [], peopleCount: 0 }; return visibilityFieldEl({ node: { id: 'tana:text:a' }, docId: 'tana:text:a' }).childNodes[2].textContent; },
+      opens: (data) => { relatedBy.set('tana:text:a', data); summary = { scope: 'people', audience: { icon: 'lock', label: 'x' }, people: [], peopleCount: 0 }; tana.accessOptions = () => {};
+        visibilityFieldEl({ node: { id: 'tana:text:a' }, docId: 'tana:text:a' }).childNodes[2].childNodes[0].onclick({ target: { closest: () => null } }); tana.accessOptions = null; return opened.at(-1); },
       attendees: (list) => { info = list && { attendees: list }; return lines(attendeesFieldEl(page)); },
       more: () => { attendeesFieldEl(page).childNodes[2].childNodes.at(-1).onclick(); return [renders, lines(attendeesFieldEl(page)).length]; },
       notMeeting: () => attendeesFieldEl({ node: { id: 'tana:text:a' } }),
@@ -10011,6 +10081,9 @@ async function runPeopleFieldsCheck() {
   `, {});
   assert.equal(api.visible('only-me', 'Private'), '@Robin Vega', 'Private names you, as a mention');
   assert.equal(api.visible('everyone', 'Everyone'), 'Everyone', 'the other audiences keep their word');
+  assert.equal(api.opens({ pinHub: 'tana:event:m', summaryUri: 'tana:text:a' }), 'tana:event:m', 'a meeting\'s write-up opens the meeting\'s visibility');
+  assert.equal(api.opens({ pinHub: 'tana:event:m', summaryUri: 'tana:text:other' }), 'tana:text:a',
+    'a task inside the meeting opens its own: the meeting\'s said only its organizer may change it, where the task\'s own may be changed');
   assert.equal(api.notMeeting(), null, 'no Attendees on a page that is no meeting');
   assert.equal(api.attendees(null), null, 'nor while its info is on its way');
   const people = [{ identityUri: 'tana:user-profile:sam' }, { name: 'Room 4', cutype: 'room' }, { name: 'Board', role: 'resource' }, ...['A', 'B', 'C', 'D', 'E', 'F'].map((name) => ({ name, email: name + '@x.nl' }))];
@@ -10591,8 +10664,14 @@ checks.push(async function runHiddenFromFixCheck() {
   api.calls.length = 0; api.taskMetaById.set(DOC, { ...own([{ uri: ME, type: 'user', role: 'admin' }]), hiddenFrom: [PETER, SAM] }); api.accessById.set(DOC, { rules: ['people'] }); // a share forgets what it knew of the page's access
   api.fix(DOC)([SAM]); await Promise.resolve();
   assert.deepEqual(plain(api.calls), [[DOC, { rule: 'people', participants: [{ uri: SAM, role: 'editor' }] }]], 'a pill shares the page with that one person');
-  api.taskMetaById.set('tana:text:inherit', { restricted: undefined, hiddenFrom: [PETER], participants: [] }); api.accessById.set('tana:text:inherit', { rules: ['me', 'people', 'inherit'] });
-  assert.equal(api.fix('tana:text:inherit'), null, 'an audience taken from where the page lives is not narrowed to fix it');
+  api.taskMetaById.set('tana:text:inherit', { restricted: undefined, hiddenFrom: [PETER], participants: [] }); api.accessById.set('tana:text:inherit', { rules: ['me', 'people', 'inherit'], audience: { scope: 'everyone', participants: [] } });
+  assert.equal(api.fix('tana:text:inherit'), null, 'an audience of everyone taken from where the page lives is not narrowed to fix it');
+  // a task in a meeting: the attendees it takes from the meeting become its own list, with the assignee added
+  api.calls.length = 0; api.taskMetaById.set('tana:text:inmeeting', { restricted: undefined, hiddenFrom: [PETER], participants: [] });
+  api.accessById.set('tana:text:inmeeting', { rules: ['me', 'people', 'inherit'], audience: { scope: 'people', boundaryUri: 'tana:event:m', participants: [ME, SAM] } });
+  api.fix('tana:text:inmeeting')([PETER]); await Promise.resolve();
+  assert.deepEqual(plain(api.calls), [['tana:text:inmeeting', { rule: 'people', participants: [{ uri: SAM, role: 'editor' }, { uri: PETER, role: 'editor' }] }]],
+    'everyone who sees it now keeps it, and the assignee is added');
   api.taskMetaById.set('tana:text:ro', own([{ uri: ME, type: 'user', role: 'editor' }])); api.accessById.set('tana:text:ro', { rules: [] });
   assert.equal(api.fix('tana:text:ro'), null, 'nor is a page you may not share');
   api.taskMetaById.set('tana:text:fine', { restricted: true, participants: [] }); api.accessById.set('tana:text:fine', { rules: ['people'] });

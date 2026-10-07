@@ -894,7 +894,17 @@ async function main() {
     assert.equal(await ai.suggestDiscussWith('   ',fetchWith(answer('Stan'))),null,'an untitled document has nothing to read');
     assert.equal(calls.length,0,'and still nothing is sent');
     assert.equal(await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan'))),'Stan');
-    assert.deepEqual([calls[0].url,calls[0].init.headers.authorization],[ai.ENDPOINT,'Bearer sk-local-only']);
+    assert.deepEqual([calls[0].url,calls[0].init.headers.authorization],['https://eu.api.openai.com/v1/responses','Bearer sk-local-only'],'the key goes to Europe until another region is chosen');
+    // The region is the key's project's: each sends it to its own address, and a stray value is Europe
+    for (const [id,url] of [['us','https://us.api.openai.com/v1/responses'],['global','https://api.openai.com/v1/responses']]) {
+      ai.setRegion(id); await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
+      assert.equal(calls.at(-1).url,url,id+' sends it to its own address');
+    }
+    assert.throws(() => ai.setRegion('mars'),/Unknown OpenAI region/);
+    settings.set('openaiRegion','mars'); assert.equal(ai.region(),'europe','a stored value that names no region is Europe');
+    ai.setRegion('global');
+    assert.equal((await ai.chatgptStatus(undefined)).region,'global','every status says the region, so the pages show it');
+    settings.set('openaiRegion',undefined);
     assert.deepEqual([calls[0].init.body.model,calls[0].init.body.reasoning.effort],[ai.QUICK_MODEL,ai.QUICK_EFFORT]);
     assert.deepEqual([ai.QUICK_MODEL,ai.QUICK_EFFORT,ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-6-luna','low','gpt-5.6-terra','low'],'the Quick AI starts on Luna 6 at low, the Regular AI on Terra at low');
     assert.deepEqual([calls[0].init.body.input,calls[0].init.body.instructions],['Discuss this with Stan',ai.INSTRUCTIONS],'the title is the input; the rule is the instructions, so a title cannot be one');
@@ -902,7 +912,7 @@ async function main() {
     settings.set('aiModel','gpt-6-sol'); settings.set('aiEffort','high');
     const tinyPng={bytes:new Uint8Array([137,80,78,71]),mimeType:'image/png'}, imageAnswer=answer('{"kind": "task", "title": "Reply to Stan"}');
     await ai.readImage(tinyPng,fetchWith(imageAnswer));
-    assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-6-sol','high'],'reading an image follows the settings, changeable without a release');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-6-sol','high'],'reading an image follows the settings, changeable without a release');
     await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
     assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.QUICK_MODEL,ai.QUICK_EFFORT],'the quick jobs ask the Quick AI, which the Regular AI does not change');
     settings.set('aiQuickModel','gpt-5.6-luna'); settings.set('aiQuickEffort','medium');
@@ -937,7 +947,10 @@ async function main() {
     assert.deepEqual([calls.at(-1).init.body.input,calls.at(-1).init.body.instructions],['Icons: calendar, user\n\n1: Meeting\n2: Person',ai.ICON_INSTRUCTIONS],'the names and the titles are the input, and nothing else about a type');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('This title does not name anyone to discuss it with, so there is nobody to suggest here.'))),null,'a sentence is the model explaining itself: not a name');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
-    await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
+    await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/refused the OpenAI API key: it may be invalid, or belong to a project in another region than Europe, where Orbital sends it/,'a rejected key says so, and that the region may be the cause, rather than looking like an empty title');
+    ai.setRegion('us');
+    await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:403,json:async()=>({})})),/another region than the United States/,'naming the region it was sent to');
+    settings.set('openaiRegion',undefined);
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:500,json:async()=>({})})),/OpenAI answered 500/);
     // Auto-pick type: the same call, the types described by their own words beside the document, every option back with odds.
     const types=[{uri:'tana:type:a',title:'Decision Record',hue:143,description:'',instructions:'Return exactly one decision'},{uri:'tana:type:b',title:'Project',description:'A piece of work with an end'}];
@@ -1066,6 +1079,45 @@ async function main() {
     } finally { ai.stop(); agent.appServerRpc=originalRpc; agent.codexBin=originalBin; fs.rmSync(userData,{recursive:true,force:true}); }
     settings.set('openaiApiKey',undefined); settings.reset();
     console.log('ok  discuss suggestion: nothing sent without a key or a title, model and effort are settings, and only a name comes back');
+  }
+  // The Decisions API experiment (main/decisions.js, its flag main/flags.js): off until switched on, on this Mac only,
+  // and only with an API key. Each feature's question goes as decisions, and comes back in main/ai.js's own shape.
+  {
+    const decisions=require('../main/decisions'), flags=require('../main/flags'), settings=require('../main/settings'), cache=require('../db');
+    cache.open(':memory:'); settings.reset();
+    const calls=[];
+    const decided=(answers)=>async(url,init)=>{const body=JSON.parse(init.body);calls.push({url,body,auth:init.headers.authorization});return {ok:true,status:200,json:async()=>({answers:typeof answers==='function'?answers(body):answers})};};
+    assert.equal(decisions.usable(),false,'off until switched on');
+    assert.throws(()=>flags.set('nope',true),/No feature flag/);
+    assert.throws(()=>flags.set('decisions','yes'),/No feature flag/,'a flag is on or off, nothing else');
+    flags.set('decisions',true);
+    assert.equal(decisions.usable(),false,'on, but with no API key there is nothing to send with: every feature keeps main/ai.js');
+    assert.equal(flags.list().find((f)=>f.id==='decisions').hint,'Needs an OpenAI API key','and Cmd+K says so');
+    await assert.rejects(decisions.suggestSensitive([{id:'tana:text:'+'a'.repeat(26),text:'Salary review'}],decided([])),/feature flag/);
+    assert.equal(calls.length,0);
+    settings.set('openaiApiKey','sk-local-only');
+    assert.equal(decisions.usable(),true);
+    assert.equal(settings.isSynced('featureFlags'),false,'a flag stays on this Mac, beside the key');
+    // Auto-pick type: one choice, every type numbered with its own words, the odds read back as classifyType gives them
+    const doc={title:'Postgres over Mongo',text:'Agreed: we use Postgres',current:'tana:type:b',types:[{uri:'tana:type:a',title:'Decision Record',instructions:'Return exactly one decision'},{uri:'tana:type:b',title:'Project',description:'A piece of work with an end'}]};
+    const typed=await decisions.classifyType(doc,decided([{type:'choice',name:'type',choice:'1',probabilities:[{value:'1',probability:0.85},{value:'2',probability:0.05},{value:'none',probability:0.1}]}]));
+    assert.deepEqual([typed.current,typed.choices.map((c)=>[c.uri,Math.round(c.p*100)])],['tana:type:b',[['tana:type:a',85],[null,10],['tana:type:b',5]]],'every option with its odds, No type among them, most likely first');
+    const asked=calls.at(-1), q=asked.body.questions[0];
+    assert.deepEqual([asked.url,asked.auth,asked.body.model,q.type,q.choices.map((c)=>c.value)],['https://eu.api.openai.com/v1/decisions','Bearer sk-local-only','gpt-6-luna','choice',['1','2','none']],'at the region\'s address, Europe until chosen');
+    assert.ok(q.choices[0].description.includes('Return exactly one decision') && q.choices[1].description.includes('A piece of work') && asked.body.input.includes('Agreed: we use Postgres'),'each type described by its own words, the document as the input');
+    await assert.rejects(decisions.classifyType(doc,async()=>({ok:false,status:401,json:async()=>({})})),/The Decisions API refused the OpenAI API key: it may be invalid, or belong to a project in another region than Europe/);
+    // more than 200 questions go as more requests at once, answered by name
+    const before=calls.length;
+    const many=await decisions.decide('x',Array.from({length:250},(_,n)=>({type:'predicate',name:'q'+n,instructions:'?'})),decided((body)=>body.questions.map((x)=>({name:x.name,probability:1}))));
+    assert.deepEqual([calls.length-before,calls.at(-2).body.questions.length,many.size],[2,200,250]);
+    // Suggest sensitive marks: a predicate per document that has words; nothing else goes
+    const DOC='tana:text:'+'a'.repeat(26);
+    assert.deepEqual(await decisions.suggestSensitive([{id:DOC,text:'Salary review Jan'},{id:'orbital:timeline',text:'Timeline'},{id:'tana:text:'+'b'.repeat(26),text:'  '}],decided([{type:'predicate',name:'n0',probability:0.93}])),[{id:DOC,p:0.93}]);
+    assert.deepEqual(calls.at(-1).body.questions.map((x)=>x.type),['predicate']);
+    flags.set('decisions',false);
+    assert.equal(decisions.usable(),false,'and off again');
+    settings.set('openaiApiKey',undefined); settings.set('featureFlags',undefined); settings.reset();
+    console.log('ok  decisions API flag: off by default and without a key; Auto-pick type and Suggest sensitive marks as decisions, batched past 200');
   }
   // Edit meeting details and "/" Meeting's when page (#758): the model transcribes the words into a strict shape, and
   // main/meetings.js resolveTime decides what they come to, the same way every time, in the meeting's own time zone.

@@ -122,7 +122,7 @@
       </div>
       <figure class="shot"><img data-m="ai-signin" alt="The ChatGPT account page in Cmd+K, asking you to enter a code in your browser"><figcaption>The code to type in your browser, with <b>Copy code</b> under it.</figcaption></figure>
     </div>
-    <div class="note">Saved an OpenAI API key before? It keeps working, and <b>Set OpenAI API key</b> stays in <kbd>⌘K</kbd> while it is stored. On that page, <b>Save OpenAI API key</b> replaces it with a key you paste, and <b>Clear OpenAI API key</b> removes it, taking the row with it: Sign in with ChatGPT is the way in.</div>
+    <div class="note">Saved an OpenAI API key before? It keeps working. <b>Set OpenAI API key</b> and <b>Set OpenAI region …</b> are in <kbd>⌘K</kbd> while the Decisions API feature flag is on, the one feature that needs a key. On that page, <b>Save OpenAI API key</b> replaces it with a key you paste, and <b>Clear OpenAI API key</b> removes it, taking the row with it: Sign in with ChatGPT is the way in. A key works only in the region of the OpenAI project it belongs to: <b>Set OpenAI region …</b> (and Settings › AI, with the flag on) sends it to <b>Europe</b>, the <b>United States</b> or <b>Global</b>, Europe until you choose. If OpenAI refuses the key, the message says it may be invalid or set to the wrong region, and names the region Orbital sent it to.</div>
     <h3>What each part needs</h3>
     <table class="keys">
       <tr><th>Feature</th><th>Needs</th></tr>
@@ -210,6 +210,20 @@
     <figure class="clip wide"><video data-m="ai-translate-into"></video><figcaption><b>Translate into English</b> on one Dutch row: the row is rewritten in Tana.</figcaption></figure>
     <div class="note">Which language a text is in is decided on this Mac, so only text in another language goes to the model. Sensitive nodes are never sent, and a names-only title like “Sam - Priya” is left alone.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>auto-translate</b> <i>→</i><kbd>↩</kbd></span> and pick <b>Into English</b>.</div>
+  </section>
+
+  <section class="topic">
+    <h2 id="flags" data-short="Experiments" data-k="feature flag enable disable experiment decisions api suggest sensitive marks openai region api key europe united states global">Try an experiment: feature flags</h2>
+    <div class="split">
+      <div>
+        <p>Some things are still being tried out. They stay off until you switch them on, on this Mac only: <b>Enable feature flag</b> in <kbd>⌘K</kbd> lists what you can switch on, and <b>Disable feature flag</b> what is on.</p>
+        <p><b>Decisions API</b> lets OpenAI's Decisions API answer two questions: <b>Auto-pick type</b> gets its odds from it, and <b>Suggest sensitive marks</b> (under Actions) lists the page and the documents on it that look like something to blur, most likely first, with the odds. <kbd>↩</kbd> marks one; nothing is marked on its own.</p>
+        <p>It needs an OpenAI API key, because the Decisions API does not take a ChatGPT sign-in. While the flag is on, <b>Set OpenAI API key</b> and <b>Set OpenAI region …</b> are in <kbd>⌘K</kbd> and in Settings › AI. Pick the region of the OpenAI project your key belongs to: <b>Europe</b> (the default), the <b>United States</b> or <b>Global</b>. If OpenAI refuses the key, the message says it may be invalid or set to the wrong region.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-flags" alt="Cmd+K with Enable feature flag and its Decisions API choice"><figcaption><b>Enable feature flag</b>, with <b>Decisions API</b> folded in.</figcaption></figure>
+    </div>
+    <div class="note">Titles marked sensitive are never sent. Without a key the features work as before, without the Decisions API.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>enable feature</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
 
   <section class="topic">

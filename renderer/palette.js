@@ -21,6 +21,7 @@ function chooseRow(create, where) {
 }
 function openRow(r, where) {
   if (r && !r.disabled && palMode === 'cmd') notePaletteUse(r);
+  else if (r && !r.disabled && r.node && linkCtx) noteLinkUse(r.node); // the @ menu learns what you link to
   if (r && where && !linkCtx && r.opens && !r.disabled) { closePalette(); run(async () => openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens)); }
   else if (r) runRow(r);
 }
@@ -383,6 +384,7 @@ function paletteRows(q, typed = q) {
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
   // ⌘K New canvas (#620): named as Tana names one ("Canvas Sep 30, 2026, 2:05 PM") and opened in its window (#611)
   if (tana.createDocument && tana.openCanvas) rows.push({ id: 'newCanvas', group: 'Actions', icon: 'canvas', label: 'New canvas', hint: 'A board, drawn by Tana', run: () => run(async () => { const now = new Date(); opensCanvas((await tana.createDocument('Canvas ' + now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }), { kind: 'canvas' })).id); }) });
+  rows.push(...suggestSensitiveRows()); // the Decisions API flag's (renderer/flags.js)
   if (tana.newChat && tana.inviteToChat) rows.push({ id: 'newChatWith', group: 'Actions', icon: 'chat', label: 'New chat with …', hint: 'Someone from the workspace', keepOpen: true, run: () => openNewChatWith() }); // renderer/chat.js
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
@@ -439,6 +441,7 @@ function paletteRows(q, typed = q) {
   if (tana.translate) rows.push({ id: 'autoTranslate', group: 'Settings', icon: 'sparkle', label: 'Auto-translate …', hint: translateTo() ? 'Into ' + translateTo() : 'Off', run: openTranslatePage }); // renderer/translate.js
   rows.push({ id: 'demoMode', group: 'Settings', icon: 'demo', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
   if (tana.aiOptions) rows.push({ id: 'models', group: 'Settings', icon: 'brain', label: 'Choose models …', hint: 'Quick and Regular AI', keepOpen: true, run: openModelsPalette }); // renderer/settings.js
+  rows.push(...flagRows()); // Enable feature flag, Disable feature flag (renderer/flags.js)
   if (tana.agentList) rows.push({ id: 'agents', group: 'Settings', icon: 'robot', label: 'Choose agents …', hint: agentsOn().map((a) => a.label).join(', '), keepOpen: true, run: openAgentsPalette });
   if (tana.agentList && tana.setDefaultAgent) { const d = agentsOn().find((x) => x.isDefault) || agentNamed('tana'); rows.push({ id: 'defaultAgent', group: 'Settings', icon: (d && d.icon) || 'robot', label: 'Set default agent …', hint: (d && d.label) || 'Tana', keepOpen: true, run: openDefaultAgentPalette }); } // renderer/agent.js
   // a new key for your Orbital at orbital.md, when the old one may have been seen: the agents stay linked (main/agents/linked.js resetKey)
@@ -449,7 +452,10 @@ function paletteRows(q, typed = q) {
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Turns on translation, Discuss with and more' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
   // Sign in with ChatGPT is the way in (issue #669): the key is offered only to whoever already stored one, until it is cleared
-  if (tana.setOpenAIKey && chatgptAuth?.apiKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
+  // The key and its region are the Decisions API flag's (renderer/flags.js, main/decisions.js), which takes an API key
+  // only: offered while it is on, hidden while it is off. A key stored before still answers as the fallback (main/ai.js).
+  if (tana.setOpenAIKey && flagOn('decisions')) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: chatgptAuth?.apiKey ? 'Stored locally' : 'For the Decisions API, stored locally', keepOpen: true, run: openOpenAIKeyPalette });
+  if (tana.setOpenAIRegion && flagOn('decisions')) rows.push({ id: 'openaiRegion', group: 'Settings', icon: 'globe', label: 'Set OpenAI region …', hint: openaiRegionName(), keepOpen: true, subAlways: true, sub: async () => openaiRegionRows(), run: openOpenAIRegionPalette });
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
   rows.push({ id: 'installMobile', group: 'Help', icon: 'mobile', label: 'Install mobile app', hint: androidDownload ? 'iPhone from TestFlight, Android with Obtainium' : 'iPhone from TestFlight, Android coming soon', run: () => openHelp('mobile') }); // the tour's phone page: the iPhone's code and link, Android's download once a release has it (help.html)
@@ -484,20 +490,34 @@ function paletteRows(q, typed = q) {
 let palFrom = 'cmd'; // how the open ⌘K was opened: 'cmd', or 'context' for a right-click
 const useKey = (r) => r.id || r.rank;
 function paletteUse() { try { return JSON.parse(localStorage.getItem('paletteUse')) || {}; } catch { return {}; } }
-function notePaletteUse(r) {
-  const id = useKey(r);
-  if (!id) return;
-  const all = paletteUse(), use = all[palFrom] || {};
+const usesOf = (kind) => paletteUse()[kind] || {};
+// one pick of id among a kind of choice ('cmd', 'context', 'link', 'linkKind', 'hash'): the older ones of that kind fade
+function noteUse(kind, id) {
+  const all = paletteUse(), use = all[kind] || {};
   for (const k of Object.keys(use)) if ((use[k] *= 0.97) < 0.1) delete use[k];
   use[id] = (use[id] || 0) + 1;
-  all[palFrom] = use;
+  all[kind] = use;
   try { localStorage.setItem('paletteUse', JSON.stringify(all)); } catch { /* no storage: nothing learned */ }
 }
+function notePaletteUse(r) { const id = useKey(r); if (id) noteUse(palFrom, id); }
 function suggestedRows(rows) {
-  const use = paletteUse()[palFrom] || {}, seen = new Set(), score = (r) => use[useKey(r)] || 0;
+  const use = usesOf(palFrom), seen = new Set(), score = (r) => use[useKey(r)] || 0;
   return rows.filter((r) => !r.disabled && score(r) >= 1.5 && !seen.has(useKey(r)) && seen.add(useKey(r)))
     .sort((a, b) => score(b) - score(a)).slice(0, 5).map((r) => ({ ...r, group: 'Suggested' }));
 }
+// ---- The @ and # menus learn the same way: what you link to, and what you make a row into ----
+// A pick in the @ menu counts for the node and for its kind (a person, a doc, a task, a meeting, a type of yours), so
+// in Recently viewed and among results that match the typed words equally well, the ones you link to most come first,
+// and the kinds you link to most before the rest: people before docs before meetings, if that is how you write. The #
+// menu counts the kind or type you make a row into. On this Mac, fading as Suggested does; no model is asked.
+const linkKind = (n) => (String(n.id).startsWith('tana:user-profile:') ? 'member' : String((visibleTags(n)[0] || {}).label || String(n.id).split(':')[1] || '').toLowerCase());
+function linkScorer() {
+  const items = usesOf('link'), kinds = usesOf('linkKind'), all = Object.values(kinds).reduce((s, v) => s + v, 0) || 1;
+  return (n) => (items[n.id] || 0) + 2 * (kinds[linkKind(n)] || 0) / all; // ponytail: a kind's share weighs at most two picks of one node; raise it if kinds should lead more
+}
+function noteLinkUse(n) { noteUse('link', n.id); noteUse('linkKind', linkKind(n)); }
+const hashKey = (c) => c.typeUri || c.kind;
+const byHashUse = (choices) => { const use = usesOf('hash'); return [...choices].sort((a, b) => (use[hashKey(b)] || 0) - (use[hashKey(a)] || 0)); };
 // The ⌘K page's rows: paletteRows, with Suggested on top while nothing is typed (a query ranks by the match alone). A
 // choice folded from a short fixed list (Set status to Completed, loaded as ⌘K opens) can be suggested too.
 const commandRows = (q, typed) => {
@@ -1094,7 +1114,7 @@ function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
   palTimer = null; palBusy = !!q;
   const scope = fieldLinkCtx ? linkScope(fieldLinkCtx.field) : undefined; // a link field lists what it may link to, typed or not
-  if (!q && !scope) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); return renderPalette(); }
+  if (!q && !scope) { const recent = recentRows(), use = linkCtx && linkScorer(); palRows = resultRows(use ? recent.map((n, i) => ({ n, i })).sort((a, b) => use(b.n) - use(a.n) || a.i - b.i).map(({ n }) => n) : recent, 'RECENTLY VIEWED'); return renderPalette(); } // the @ menu: what you link to most first
   // A pasted Tana link (or bare id) is that node, read directly: a search for a url finds nothing. Unreadable, it is
   // searched for as text. Not in a link field, whose scope a node from anywhere could step outside of.
   const uri = !scope && tanaNodeUri(q);
@@ -1105,8 +1125,9 @@ function searchNow() {
     // Tana's order does not weigh the title: a document that only mentions the words in its body can lead one titled
     // with them. The titles holding the most typed words come first, then those where more of them begin a word, and
     // Tana's order among equals. Only those words are bold, not the looser Cmd+K letter match.
-    const score = new Map(found.map((n) => [n, titleHits(n.title ?? n.text ?? '', q)]));
-    const nodes = found.map((n, i) => ({ n, i })).sort((a, b) => score.get(b.n).hits - score.get(a.n).hits || score.get(b.n).starts - score.get(a.n).starts || a.i - b.i).map(({ n }) => n);
+    // In the @ menu, among titles that match equally, what you link to most, and the kinds you link to most, first.
+    const score = new Map(found.map((n) => [n, titleHits(n.title ?? n.text ?? '', q)])), use = linkCtx ? linkScorer() : () => 0;
+    const nodes = found.map((n, i) => ({ n, i })).sort((a, b) => score.get(b.n).hits - score.get(a.n).hits || score.get(b.n).starts - score.get(a.n).starts || use(b.n) - use(a.n) || a.i - b.i).map(({ n }) => n);
     palRows = [...resultRows(nodes), ...resultRows(related, 'RELATED').filter((row) => row.node)] // its documents only: the date and Create rows lead once
       .map((row) => (row.node ? { ...row, match: titleHits(row.label ?? '', q) } : row));
     // Linking: a result is the obvious choice when every typed word begins a word of its title ("Okafor" is Sam

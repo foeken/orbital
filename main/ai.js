@@ -29,7 +29,24 @@ const DEFAULT_MODEL = 'gpt-5.6-terra', DEFAULT_EFFORT = 'low';
 const QUICK_MODEL = 'gpt-6-luna', QUICK_EFFORT = 'low';
 // Both the Quick AI (Auto-translate, Discuss with, Classify type, the icon pick) and the Regular AI (reading an image)
 // start here until the Settings page names others (chosen below; the iPhone the same: ios/Orbital/Translator.swift)
-const ENDPOINT = 'https://api.openai.com/v1/responses';
+// An API key is answered only at its project's own address (OpenAI's data residency): Europe's, the United States', or
+// the global one for a project with no region. Elsewhere it is refused (401 "incorrect regional hostname", or "outside
+// project geography"). Chosen in Cmd+K Set OpenAI region … and Settings › AI, kept on this Mac beside the key (it is the
+// key's project that decides); Europe until chosen. A ChatGPT sign-in goes through Codex and is not affected.
+const REGIONS = { europe: 'https://eu.api.openai.com/v1', us: 'https://us.api.openai.com/v1', global: 'https://api.openai.com/v1' };
+const region = () => (Object.hasOwn(REGIONS, settings.get('openaiRegion')) ? settings.get('openaiRegion') : 'europe');
+const apiUrl = (path) => REGIONS[region()] + path; // main/decisions.js too
+function setRegion(id) {
+  if (!Object.hasOwn(REGIONS, id)) throw new Error('Unknown OpenAI region');
+  settings.set('openaiRegion', id);
+  return id;
+}
+const REGION_NAMES = { europe: 'Europe', us: 'the United States', global: 'Global' };
+// What a refused key says (401 or 403, main/decisions.js too): OpenAI answers a wrong region the way it answers a wrong
+// key, so both are named, with the region the key went to and where to change it.
+const refused = (status) => status === 401 || status === 403;
+const keyRefusedText = (what) => what + ' refused the OpenAI API key: it may be invalid, or belong to a project in another region than '
+  + REGION_NAMES[region()] + ', where Orbital sends it. Check the key, or change it in ⌘K Set OpenAI region …';
 const TIMEOUT_MS = 20000;
 const INSTRUCTIONS = [
   'You extract who a task should be discussed with from its title.',
@@ -117,7 +134,7 @@ function authView(response) {
 }
 // Every status carries whether an OpenAI API key is stored: the pages replace theirs with each one they hear, and a
 // status without it made Set OpenAI API key disappear after any sign-in event (#671 review)
-const withKey = (status) => ({ ...status, apiKey: !!settings.get('openaiApiKey') });
+const withKey = (status) => ({ ...status, apiKey: !!settings.get('openaiApiKey'), region: region() });
 
 // A device sign-in ends when Codex says so (account/login/completed) or when a read finds the account signed in,
 // whichever comes first: Codex's own log has that notification reaching no connection at all (2026-09-23,
@@ -268,7 +285,7 @@ async function ask(instructions, input, fetchImpl, userData, image, only = {}) {
   if (signedIn) return askChatGPT(instructions, input, userData, use, image, only.timeout); // a signed-in ChatGPT account always wins
   const key = settings.get('openaiApiKey');
   if (!key) return null;
-  const response = await fetchImpl(ENDPOINT, {
+  const response = await fetchImpl(apiUrl('/responses'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
     body: JSON.stringify({
@@ -280,7 +297,7 @@ async function ask(instructions, input, fetchImpl, userData, image, only = {}) {
     }),
     signal: AbortSignal.timeout(only.timeout || TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error('OpenAI answered ' + response.status + (response.status === 401 ? ': check the API key' : ''));
+  if (!response.ok) throw new Error(refused(response.status) ? keyRefusedText('OpenAI') : 'OpenAI answered ' + response.status);
   return answerText(await response.json());
 }
 
@@ -512,4 +529,4 @@ async function setOption(key, value, userData) {
   return options(userData);
 }
 
-module.exports = { fromCatalogue, options, setOption, suggestDiscussWith, classifyType, readMeetingTime, MEETING_TIME_INSTRUCTIONS, MEETING_TIME_SCHEMA, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, QUICK_MODEL, QUICK_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, ENDPOINT };
+module.exports = { fromCatalogue, options, setOption, suggestDiscussWith, classifyType, readMeetingTime, MEETING_TIME_INSTRUCTIONS, MEETING_TIME_SCHEMA, pickTypeIcons, readImage, translate, detectLanguages, TRANSLATE_INSTRUCTIONS, answerText, cleanName, chatgptStatus, startChatGPTLogin, cancelChatGPTLogin, logoutChatGPT, stop, DEFAULT_MODEL, DEFAULT_EFFORT, QUICK_MODEL, QUICK_EFFORT, INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, ICON_INSTRUCTIONS, IMAGE_INSTRUCTIONS, REGIONS, region, apiUrl, setRegion, refused, keyRefusedText };

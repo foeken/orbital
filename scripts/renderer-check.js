@@ -123,7 +123,7 @@ assert.deepEqual(state({ authenticated: null, authChecking: false, error: 'tempo
 assert.match(source, /if \(signedOut\) rows\.unshift\(\{ id: 'login'/, 'signed out, logging in is the first ⌘K row');
 assert.match(source, /s\.authChecking === false && s\.authenticated === false/);
 assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
-assert.match(source, /if \(tana\.setOpenAIKey && chatgptAuth\?\.apiKey\) rows\.push\(\{ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key'/, 'the key row is offered only while a key is stored (issue #669)');
+assert.match(source, /if \(tana\.setOpenAIKey && flagOn\('decisions'\)\) rows\.push\(\{ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key'/, 'the key row is offered only while the Decisions API flag, which needs a key, is on');
 assert.match(source, /id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth/);
 assert.match(source, /function openOpenAIKeyPalette\(\)[\s\S]*palInput\.type = 'password'/);
 assert.match(source, /function openAIKeyRows\(\)[\s\S]*tana\.setOpenAIKey\(key\)/);
@@ -485,17 +485,17 @@ const DEMO_SAFE = new Set([
   'agentTasks', 'aiOptions', 'archivedTypes', 'attendeeSuggestions', 'cancelUpload', 'chatAgents', 'chatAnswers',
   'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
   'classifyType', 'clipboardHasImage', 'closeOverlay', 'creationOptions', 'currentMeeting', 'deletedList', 'meetingNotes', 'pinSections', // meetingNotes: found only, never made (renderer/state.js)
-  'docTypes', 'enableAgent', 'exportPdf', 'filters', 'image', 'inboxUnread', 'installUpdate', 'login', 'logout',
+  'docTypes', 'enableAgent', 'exportPdf', 'featureFlags', 'filters', 'image', 'inboxUnread', 'installUpdate', 'login', 'logout',
   'mcpHidden', 'meetingInfo', 'members', 'readMeetingTime', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
-  'onChatGPTStatus', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
+  'onChatGPTStatus', 'onFeatureFlags', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
   'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
   'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',
   'pinState', 'prefs', 'prefsNow', 'presenceClose', 'presenceOpen', 'presenceSet', 'presenceView', 'previewMove',
   'refresh', 'related', 'relatedWatch', 'relayLink', 'relayLinkCancel', 'relayLinkStatus', 'relayRefresh', 'relayRename', 'relayReset',
   'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
-  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'settingsSize',
-  'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
-  'status', 'suggestDiscussWith', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
+  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'setFeatureFlag', 'settingsSize',
+  'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setOpenAIRegion', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
+  'status', 'suggestDiscussWith', 'suggestSensitive', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
   'translate', 'typeIcons', 'typeList', 'updateInfo', 'viewFilter', 'viewList', 'weekNode', 'windowLayout',
   'windowTheme', 'zoom']);
 // Electron's own (windows, overlays, updates, PDF, the zoom), what only main can tell (settings, releases, presence

@@ -157,7 +157,7 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   form ("Fri 11 Sep 9:00-10:00").
 - **Pills and the filter row.** On a page with pills (a view, a saved search, a type page) they sit under the title,
   folded behind the pills toggle per page ([VIEWS.md](VIEWS.md)); Cmd+K lists every pill either way. ⌘F shows the
-  filter row, focused: it filters the rows on the page by title substring, with "N items filtered out" under it;
+  filter row, focused: it filters the rows on the page by title or chip substring (#task, a type; "tasks" names the chip too, renderer/views.js chipHit), with "N items filtered out" under it.
   Escape clears and hides it, and while it has text it stays visible. A page with no rows and no filter says
   "Nothing here yet". A pill's menu stops above the window's edge and scrolls inside, and the keyboard keeps its
   active option in view; a toggle carries `aria-pressed`.
@@ -407,6 +407,14 @@ Enter pressed while results are still loading is kept and applied when they land
 Doc, Task, Meeting and the workspace types (`api.creationOptions`), and the pick creates it titled with the selected
 words and puts its mention in their place. Meeting asks when first, on "/" Meeting's page; nothing is made before.
 
+Both menus learn from what you pick, as Cmd+K's Suggested does (renderer/palette.js, the same `paletteUse` store on
+this machine, ×0.97 per pick): the @ menu counts the node you link to (`link`) and its kind (`linkKind`: `member`
+for a person, else its first chip, doc, task, meeting or a type's name), and orders Recently viewed, and results that
+match the typed words equally well, by the node's own picks plus its kind's share of all picks (worth up to two picks,
+`linkScorer`); a better title match still leads, Create and a date still come first. The # menu is one list without
+sections, the kind or type you make rows into most first (`byHashUse`, `hash`). No model is asked: ranking the
+menus with the Decisions API was tried in #806 and taken out.
+
 A person or a meeting mention draws its glyph from its id (`MENTION_KIND_ICON`, renderer/segments.js), so a member
 just linked has it before main resolves the target.
 
@@ -609,7 +617,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
   Filter rows by text, Switch to table/outliner and Column widths ….
-- **Actions**: Log in (signed out), Create new …, Quick Add Task, New canvas, Search Tana, Undo, Redo, Mark all as read, Sync.
+- **Actions**: Log in (signed out), Create new …, Quick Add Task, New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
@@ -624,7 +632,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
-  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose agents …, Connect your personal agent …, ChatGPT sign-in, Set OpenAI API
+  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose models …, Enable feature flag / Disable feature flag (each a page of the flags it would switch, on this Mac only, main/flags.js; typing on names one: "Enable feature flag Decisions API"), Choose agents …, Connect your personal agent …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android with Obtainium" once the latest release has the APK, "…, Android coming soon" before: the Help tour opened on its last page, the
   choice of phone: the one place the phone apps are installed from), Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
@@ -878,13 +886,16 @@ wrong twenty.
   nobody is referenced twice; no match or no member list writes the plain string.
 - **The model.** `main/ai.js` is the only place the app talks to a model. Sign in with ChatGPT (Cmd+K Sign in
   with ChatGPT / Sign out of ChatGPT, with the account status) is the way in (issue #669). An OpenAI API key stored before
-  then still works as the fallback, and Cmd+K offers **Set OpenAI API key** only while one is stored: an empty field on
-  that page clears it, and the row goes. Both stay on this machine. ChatGPT sign-in uses the Codex app-server in its own auth directory
+  then still works as the fallback, and Cmd+K offers **Set OpenAI API key** only while the Decisions API flag (its one user) is on: an empty field on
+  that page clears it, and the row goes. Beside it, and like it only with the flag on, **Set OpenAI region …** (also Settings › AI) picks the address the key goes to, its project's data residency: Europe (`eu.api.openai.com`, the default), United States (`us.api.openai.com`) or Global (`api.openai.com`), stored as `openaiRegion` (main/ai.js `REGIONS` and `apiUrl`, which main/decisions.js uses too). A 401 or 403 says the key may be invalid or in another region, naming the one it was sent to (`keyRefusedText`). All stay on this machine. ChatGPT sign-in uses the Codex app-server in its own auth directory
   under userData, separate from the user's Codex login, from this Mac's `codex` (`codexBin` in main/agents/codex.js) or,
   failing that, a standalone `codex-app-server` downloaded on first sign-in and kept only when `codesign` shows
   OpenAI's Developer ID. Two synced choices, each a model and an effort (main/settings.js AI_KEYS): the Quick AI (`aiQuickModel`,
   `aiQuickEffort`) for Auto-translate, Discuss with, Auto-pick type and the icon pick, and the Regular AI (`aiModel`,
   `aiEffort`) for reading an image, starting on `gpt-6-luna` at low and `gpt-5.6-terra` at low (main/ai.js QUICK_MODEL, DEFAULT_MODEL), set in the Settings window.
+  With the Decisions API feature flag on (Cmd+K Enable feature flag) and an API key stored, Auto-pick type asks OpenAI's
+  Decisions API instead (main/decisions.js, `gpt-6-luna`, the API key only: it refuses a ChatGPT sign-in); without a key
+  it keeps the way above. The rest stay on the Quick AI: the Decisions API was slower or missed more for them (issue #807).
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
@@ -1491,6 +1502,9 @@ structure; an unsandboxed `electron scripts/pdf-check.js --render` writes three 
   documents render blurred on every surface (rows, title, chips, sidebar, tooltips). Cmd+K Toggle sensitive visibility
   (and the header button) lifts the blur, remembered on this machine only (localStorage `sensitiveVisible`): showing
   them on your laptop should not unblur them on a shared one. The marks themselves follow you (docs/SETTINGS.md).
+  With the Decisions API feature flag on, Cmd+K Suggest sensitive marks sends the titles of the page and the documents
+  it lists, never one already marked, to OpenAI's Decisions API (main/decisions.js) and lists those it gives 50% or more,
+  most likely first, with the odds; Enter marks one. It suggests and never marks on its own.
 - **Demo mode** (issue #156; Cmd+K Toggle demo mode, hint On/Off) swaps what came from Tana for made-up words on screen,
   for showing the app to someone. Every word of a title, row, sidebar row, table cell or Timeline change becomes a
   made-up word, one for one (a short word from `DEMO_SHORT` for short ones, the rest from `DEMO_WORDS`), capitals kept,
@@ -1549,7 +1563,7 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
   included, opens Assign to…: the person picked replaces who has it (`openAssigneePalette(doc, ctx, true)`; adding a
   second one is ⌘K Edit assignees), with the same Grant access ask; where it cannot be edited the people stay links; **Visible to** (any document with a known audience) is the
   audience's glyph with a bubble per person as a list row's subtext has them, "Everyone" or the space's name for those audiences, you as a mention for a private page, one person as a mention drawn as Assigned to draws one (or the audience's words where it names
-  nobody), "Anyone with the link" when Tana's link sharing is on, each assignee it shuts out as a dashed "+ Name" pill after who can see it, in a soft rose with the lock left grey — a click shares the page with that person as an editor where the page's own people are its audience and you may change them, and otherwise the pill only says so (`fghost`, issue #622) —, and assigning such a person from the assignee picker asks there and then, as Tana does: "Priya Raman can't see this", with Grant access (the pill's share; Enter), Keep private (or Escape) and Cancel (the assignment taken back), Tana's sentence under them (`openShareAsk`, renderer/access.js) — and opens the visibility picker, on a meeting's
+  nobody), "Anyone with the link" when Tana's link sharing is on, each assignee it shuts out as a dashed "+ Name" pill after who can see it, in a soft rose with the lock left grey — a click shares the page with that person as an editor where the page's own people are its audience, or named people it takes from where it lives (a task in a meeting: the attendees, made its own list with that person added, so nobody loses it), and you may change them; otherwise (everyone, a space) the pill only says so (`fghost`, issue #622) —, and assigning such a person from the assignee picker asks there and then, as Tana does: "Priya Raman can't see this", with Grant access (the pill's share; Enter), Keep private (or Escape) and Cancel (the assignment taken back), Tana's sentence under them (`openShareAsk`, renderer/access.js) — and opens the visibility picker, on a meeting's
   write-up the event's; a sensitive page, a chat and a saved search have none. Both open on a click, Enter or Space (renderer/fields.js
   `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a
   Graph pane beside it.

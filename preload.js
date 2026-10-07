@@ -138,6 +138,11 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   // on this machine or the title names nobody. Rejects when the call itself failed.
   suggestDiscussWith: (title) => ipcRenderer.invoke('ai:discussWith', title),
   classifyType: (id) => ipcRenderer.invoke('ai:classifyType', id), // {current, choices:[{uri|null,title,hue?,p}]}, most likely first
+  // Feature flags (main/flags.js), on this Mac only: [{ id, label, hint, on }], and the same list after a switch
+  featureFlags: () => ipcRenderer.invoke('flags:list'),
+  setFeatureFlag: (id, on) => ipcRenderer.invoke('flags:set', id, on),
+  onFeatureFlags: (cb) => ipcRenderer.on('flags:changed', (_e, list) => cb(list)),
+  suggestSensitive: (nodes) => ipcRenderer.invoke('decisions:sensitive', nodes), // [{ id, text }] -> [{ id, p }]: how likely each is sensitive (the Decisions API flag)
   activateWindow: () => ipcRenderer.send('window:activate'), // bring this page's window forward with the keys, as a left click would (a right-click does not)
   translate: (texts, to, opts) => ipcRenderer.invoke('ai:translate', texts, to, opts), // [text], a language -> [{ lang, text } | null]: shown translated, never saved; opts { local: true }: this Mac's answers now, { ask: true } for each the model is still to translate
   processImage: (source) => ipcRenderer.invoke('ai:processImage', source), // { bytes, filename, mimeType } | { clipboard: true } | { uri: tana:image: }: the model makes it a task or a note, the image inside; returns the Node to open
@@ -182,6 +187,7 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   openSettings: () => ipcRenderer.invoke('settings:open'), // Orbital's Settings window (settings.html): opened, or brought forward
   settingsSize: (height) => ipcRenderer.send('settings:size', height), // the Settings window's page, measured: the window takes its height
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
+  setOpenAIRegion: (id) => ipcRenderer.invoke('openai:setRegion', id), // 'europe' | 'us' | 'global': where the API key is sent
   aiOptions: () => ipcRenderer.invoke('ai:options'), // { model, effort, efforts, quickModel, quickEffort, quickEfforts, models }: the Quick and Regular AI, and the choices
   setAiOption: (key, value) => ipcRenderer.invoke('ai:setOption', key, value), // 'model' | 'effort' | 'quickModel' | 'quickEffort', one of the choices -> the options again
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),

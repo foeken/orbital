@@ -100,11 +100,13 @@ function assigneeFieldEl(parent) {
 // Who can see the page, drawn under its title as a field after Assigned to (renderer/render.js renderFields): the
 // audience's glyph, a bubble per person as a list row's subtext has them (facesEls), or the audience's words where it
 // names nobody, whether anyone with the link can read it, and who is assigned but shut out. It opens the visibility
-// picker, on a meeting's write-up the event's.
+// picker, on a meeting's write-up the event's. Only the write-up (summaryUri): a task or a note inside the meeting has a
+// pinHub of that event too, and opening the event's said "Only the event organizer can change access" for a task
+// whose own audience you may change, as Tana lets you.
 function visibilityFieldEl(parent) {
   const node = parent.node, summary = taskSummary(node) || documentSummary(node); // either asks for the metadata
   if (!summary || !summary.audience || sensitiveHidden(node.id)) return null; // a sensitive page says nothing about who
-  const data = relatedBy.get(parent.docId), access = data && typeof data.pinHub === 'string' && data.pinHub.startsWith('tana:event:') ? { id: data.pinHub } : node;
+  const data = relatedBy.get(parent.docId), access = data && data.summaryUri === parent.docId && typeof data.pinHub === 'string' && data.pinHub.startsWith('tana:event:') ? { id: data.pinHub } : node;
   const row = document.createElement('div'); row.className = 'field';
   const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, summary.audience.icon);
   const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Visible to';

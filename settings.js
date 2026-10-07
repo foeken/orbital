@@ -30,13 +30,14 @@ function load(part, call) {
     (e) => { if (asked[part] === n) { failure = String(e?.message || e); draw(); } }); // as main said it (preload.js unwraps it)
 }
 function reload() {
-  for (const [part, call] of [['ai', 'aiOptions'], ['chatgpt', 'chatgptStatus'], ['agents', 'agentList'], ['hidden', 'filters'], ['mcpHidden', 'mcpHidden']]) if (host[call]) load(part, host[call]);
+  for (const [part, call] of [['ai', 'aiOptions'], ['chatgpt', 'chatgptStatus'], ['agents', 'agentList'], ['hidden', 'filters'], ['mcpHidden', 'mcpHidden'], ['flags', 'featureFlags']]) if (host[call]) load(part, host[call]);
 }
 function start(handed) {
   host = handed;
   st.prefs = { ...(host.prefs || {}) };
   host.onSettings?.((prefs) => { st.prefs = { ...prefs }; reload(); draw(); }); // another page, window or Mac changed one
   host.onChatGPTStatus?.((status) => { asked.chatgpt = (asked.chatgpt || 0) + 1; st.chatgpt = status; draw(); }); // a sign-in finishing in the browser
+  host.onFeatureFlags?.((list) => { asked.flags = (asked.flags || 0) + 1; st.flags = list; draw(); }); // the API key and region follow the Decisions flag
   reload(); draw();
 }
 function setPref(key, value) {
@@ -148,10 +149,14 @@ const SECTIONS = {
   ],
   ai: () => {
     const c = st.chatgpt, ai = st.ai, out = [];
+    const decisions = (st.flags || []).some((f) => f.id === 'decisions' && f.on); // the key and its region are the Decisions API flag's, as in ⌘K
     out.push(...group('Account', null, host.chatgptStatus ? [chatgptRow(c),
-      // only for whoever already has a key, as ⌘K offers Set OpenAI API key: ChatGPT is the way in
-      ...(c?.apiKey && host.setOpenAIKey ? [row('openaiKey', 'OpenAI API key', button('removeKey', 'Remove', () => load('chatgpt', async () => { await host.setOpenAIKey(''); return { ...st.chatgpt, apiKey: false }; })),
+      // a stored key, while the Decisions flag is on, as ⌘K offers Set OpenAI API key: ChatGPT is the way in
+      ...(decisions && c?.apiKey && host.setOpenAIKey ? [row('openaiKey', 'OpenAI API key', button('removeKey', 'Remove', () => load('chatgpt', async () => { await host.setOpenAIKey(''); return { ...st.chatgpt, apiKey: false }; })),
         (c.signedIn ? 'ChatGPT is asked first' : 'Asked for every AI answer') + ' · ' + HERE)] : [])] : []));
+    // where the key is sent: its project's region (main/ai.js REGIONS)
+    if (decisions && c?.apiKey && host.setOpenAIRegion) out.push(...group('OpenAI region', 'where your API key\'s project keeps its data', [row('globe', 'Region', segmented('openaiRegion', 'OpenAI region', c.region || 'europe',
+      [['europe', 'Europe'], ['us', 'United States'], ['global', 'Global']], (v) => load('chatgpt', async () => ({ ...st.chatgpt, region: await host.setOpenAIRegion(v) }))), HERE)]));
     if (ai) for (const [head, note, k] of [['Quick AI', 'translating, Discuss with, types and icons', (w) => 'quick' + w], ['Regular AI', 'reading images', (w) => w.toLowerCase()]]) {
       const set = (key) => (v) => load('ai', () => host.setAiOption(key, v));
       out.push(...group(head, note, [

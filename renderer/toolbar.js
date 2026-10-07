@@ -324,13 +324,15 @@ function startHashCreate(item, el, [start, end]) {
   return true;
 }
 function hashRows(link, title, q) {
-  if (palBusy && !creationChoices.length) return [{ group: 'Create', label: 'Loading choices…', disabled: true }];
+  if (palBusy && !creationChoices.length) return [{ label: 'Loading choices…', disabled: true }];
   const made = creationChoices.filter((c) => ['doc', 'task', 'meeting', 'custom'].includes(c.kind));
   const choices = made.some((c) => c.kind === 'doc') ? made : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...made];
-  return choices.filter((c) => fuzzyMatch(c.title, q)).map((c) => ({
-    group: c.kind === 'custom' ? 'Workspace types' : 'Create', icon: c.icon, label: c.title, hint: hashBusy ? 'Creating…' : c.selectable ? '' : c.reason || 'Unavailable',
+  // one list without sections, what you make rows into most first (renderer/palette.js byHashUse): a type and a kind
+  // interleave, and grouped they showed each heading twice
+  return byHashUse(choices).filter((c) => fuzzyMatch(c.title, q)).map((c) => ({
+    icon: c.icon, label: c.title, hint: hashBusy ? 'Creating…' : c.selectable ? '' : c.reason || 'Unavailable',
     disabled: !c.selectable || hashBusy, keepOpen: true,
-    run: () => (c.kind === 'meeting' ? meetingWhen(link.item, c, title, link) : hashMake(link, c, title)),
+    run: () => { noteUse('hash', hashKey(c)); return c.kind === 'meeting' ? meetingWhen(link.item, c, title, link) : hashMake(link, c, title); }, // the # menu learns what you make rows into
   }));
 }
 function hashMake(link, choice, title) {

@@ -27,6 +27,8 @@ module.exports = [
   { name: 'ai-process-drop', video: true, size: '760x480', setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ hover: '#create', page: 'shell', at: [0.14, 0.8] }, { caption: 'receipt.png, dragged from the Finder' }, drag('dragenter'), drag('dragover'), { wait: 1400 }, drag('drop'), { caption: '' }, { wait: 2600 }] },
   // ---- translation ----
   { name: 'ai-autotranslate', setup: [translateOn, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'auto-translate' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, blank], clip: pal },
+  // ---- experiments: Enable feature flag, the Decisions API folded in ----
+  { name: 'ai-flags', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'feature flag' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-translate', video: true, size: NARROW, setup: [translateOn, open(NOTE), { wait: 600 }], steps: [open('mocknl0'), { wait: 2600 }, { click: '#translated button' }, { wait: 1300 }, { click: '#translated button' }, { wait: 600 }], clip: [0, 0, 1000, 300] },
   { name: 'ai-translate-list', size: '900x560', setup: [translateOn, open('tana:space:mock'), { wait: 2600 }], clip: [0, 30, 620, 190] },
   { name: 'ai-replace', setup: [translateOn, open('mocknl0'), { wait: 2600 }], steps: [{ key: '⌘K' }, { type: 'translation' }, { wait: 400 }, blank], clip: pal },

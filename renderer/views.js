@@ -209,7 +209,11 @@ function needsCleanup(list) {
 // applied): a view's own rows, or the ones a saved search's query returned. Clean up is about the list on screen, so
 // on a search page this must not answer with the view waiting behind it.
 const pageDocs = () => (onSearchPage() || onTypePage() ? kids.get(zoom.docId) : (viewOf() || {}).nodes) || [];
-const shownDocs = () => { const docs = pageDocs(), q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
+// what ⌘F's filter keeps: a row whose title or one of its chips (#task, a type) has what was typed in it. The chips are
+// words on the row too: "task" found none; "tasks" or "meetings" name a chip as well.
+const chipHit = (label, q) => { const l = String(label || '').toLowerCase(); return l.includes(q) || (q.endsWith('s') && l === q.slice(0, -1)); };
+const filterHit = (n, q) => String(n.text || '').toLowerCase().includes(q) || visibleTags(n).some((t) => chipHit(t.label, q));
+const shownDocs = () => { const docs = pageDocs(), q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => filterHit(n, q)) : docs; };
 // Forced, like setDisplay: choosing an arrangement is an explicit action whose whole point is to redraw, so it must
 // not be deferred because a caret happens to sit in an editable title — which on a saved search page it often does,
 // since the title is renameable and there is no draft row to take the focus.
@@ -737,7 +741,7 @@ function subtextOf(node, taskInfo) {
 // branches of renderOutline go through here rather than repeating it — and this is the part of drawing a page that
 // can be checked without a DOM, which is why it is a function rather than three lines inlined twice.
 function pageRows(list, q) {
-  const found = q ? list.filter((n) => String(n.text || '').toLowerCase().includes(q)) : list;
+  const found = q ? list.filter((n) => filterHit(n, q)) : list;
   const sorted = keepDrafts(sortRows(found));
   const groups = groupsOf(sorted); // null when the page is not grouped: one flat list
   // a folded section's rows are not drawn, so they leave the keyboard order too — Down from the heading above lands
