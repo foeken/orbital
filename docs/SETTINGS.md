@@ -43,7 +43,7 @@ the third catches up on the next connect.
 | Agent assignments, their prompts, which agents are on and the default (`agents`, `defaultAgent`), and the tasks they became (`codexTask`: node → agent and task id) | The row cache, which is a mirror of Tana and is rebuilt by any refresh |
 | Your Orbital's key at the agent relay (`relayKey`, docs/AGENT-RELAY.md), and the linked agents already switched on once (`relaySeen`) | The linked agents as the relay last listed them (`relayAgents`), asked for again when Cmd+K or Settings shows them |
 | Which saved search is the Work View's My Tasks (`myTasks`, its id: a rename keeps it, two machines share it) | |
-| Renderer preferences (`pref:*`): Home, recorded hotkeys, theme, sort, grouping, which facts a row shows, folded sections, the sidebar's open/closed state, saved views (`savedViews`: a window's layout and each page's view and place, under a name) | Recently viewed, the sidebar's width, the row cache, and ChatGPT auth in its isolated local Codex home |
+| Renderer preferences (`pref:*`): Home, recorded hotkeys, theme, sort, grouping, which facts a row shows, folded sections, the sidebar's open/closed state, saved views (`savedViews`: a window's layout and each page's view and place, under a name) | Recently viewed, what you pick most in Cmd+K (`paletteUse`, Suggested), the sidebar's width, the row cache, and ChatGPT auth in its isolated local Codex home |
 
 The rule is the purpose: a choice about your content is the same choice wherever you open the app; a choice about
 *this screen* is not. `notifySeen` — what has already been announced — stays local for a different reason: it changes

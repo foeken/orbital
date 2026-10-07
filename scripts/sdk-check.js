@@ -1435,7 +1435,7 @@ async function main() {
     const moved = own(shown.doc);
     assert.deepEqual([own(shown.pages), Object.keys(moved.views), moved.views.page3.params.side, moved.root.children[1].views, moved.root.children[1].selected], [['', '3'], ['page', 'page3'], '3', ['page3'], 'page3'],
       'a page id another window has open is not reused');
-    assert.deepEqual([ask('window:getSide', leftPage), ask('window:getSide', frame('moved', '3'))], [{ side: '', start: { place: 'timeline' } }, { side: '3', start: { place: 'mine', as: '2' } }], 'each page starts on its own keys, a moved one knowing its id in the view');
+    assert.deepEqual([ask('window:getSide', leftPage), ask('window:getSide', frame('moved', '3'))], [{ side: '', start: { place: 'timeline' } }, { side: '3', start: { place: 'mine' } }], 'each page starts on its own keys, a moved one on the keys of its id in the view');
     ask('shell:state', null); toShell.splice(0);
     backend.S.windows.delete(elsewhere); shown.panes = shown.panes.filter((p) => p.frame.frameToken !== 'moved');
     delete shown.saveBounds;
@@ -5058,6 +5058,15 @@ async function main() {
     const recent = searchQueryParams({ types: ['event'], eventTime: { preset: 'recent' } }, ME, 200, noon);
     assert.equal(recent.eventStartTimeMax, new Date(new Date(2026, 8, 24).getTime() - 1).toISOString(), 'recent runs to the end of tomorrow');
     assert.deepEqual(recent.sortOptions, [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], 'newest first');
+    // This week: Orbital's own preset, Monday to the end of Sunday around the day it is run (noon is a Tuesday)
+    const week = searchQueryParams({ types: ['event'], eventTime: { preset: 'thisWeek' } }, ME, 200, noon);
+    assert.deepEqual([week.eventStartTimeMin, week.eventStartTimeMax, week.sortOptions[0].direction],
+      [new Date(2026, 8, 21).toISOString(), new Date(new Date(2026, 8, 28).getTime() - 1).toISOString(), 'SORT_DIRECTION_ASCENDING'], 'this week runs Monday to Sunday, Monday first');
+    assert.equal(searchQueryParams({ types: ['event'], eventTime: { preset: 'thisWeek' } }, ME, 200, new Date(2026, 8, 27, 23).getTime()).eventStartTimeMin,
+      new Date(2026, 8, 21).toISOString(), 'and on a Sunday it is still the week that began on Monday');
+    const savedWeek = filterToSearchQuery({ types: ['meetings'], window: 'thisWeek' }, ME);
+    assert.deepEqual([savedWeek.eventTime, searchQueryToFilter(savedWeek, ME).window], [{ preset: 'thisWeek' }, 'thisWeek'],
+      'saved, it stays a preset, so the search keeps meaning the week it is run in');
     // "Save this query as a search" is the inverse of the above, so the pair round-trips: what the pills show
     // becomes a stored query, and that stored query asks the graph the same thing the view was asking.
     const libFilter = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: ' dpa ' };

@@ -260,7 +260,7 @@ onRows('contextmenu', (e) => {
   if (!text) return;
   e.preventDefault();
   if (!selKeys().includes(key) && !e.target.closest('.cell')) setCaret(text, caretAt(text, e.clientX, e.clientY)); // a table cell already has the caret
-  togglePalette('cmd');
+  togglePalette('cmd', null, null, 'context'); // its picks are counted apart from ⌘K's (Suggested, renderer/palette.js)
   tana.activateWindow?.(); // a right-click leaves a background window where it is: forward, so the field has the keys
 });
 onRows('focusin', () => { // the caret is back in a node

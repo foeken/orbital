@@ -2,7 +2,7 @@
 const pins = require('../sdk/pins');
 const { readNode } = require('../sdk/node');
 const { isDateUri } = require('../sdk/dates');
-const { DOC_URI, NOT_CONNECTED, PIN_HUBS, S, deletedNodes, idKind, isDeleted, scheduleRefresh, send, today } = require('./state');
+const { DOC_URI, NOT_CONNECTED, PIN_HUBS, S, deletedNodes, idKind, isDeleted, report, scheduleRefresh, send, today } = require('./state');
 const { canWriteDoc, createDocument, document, info, onChange, sensitiveIds } = require('./documents');
 const { svgOf } = require('./icons');
 
@@ -190,6 +190,13 @@ const ipc = {
   'pins:pinTo': (_e, hubId, uri) => nodePin(hubId, uri, true), // pin a document on a meeting/space
   'pins:unpinFrom': (_e, hubId, uri) => nodePin(hubId, uri, false),
   'pins:tree': () => pinTree(), // the window's sidebar (shell.js): [{ id, uri?, label?, node?, children }]
+  // a right-click on a sidebar pin (shell.js): the Mac's own menu, Remove pin unpinning it as ⌘K's Edit pins does; the
+  // sidebar redraws from Tana's change (tellSidebars). Greyed in demo mode, which writes nothing (renderer/state.js).
+  'pins:menu': (e, uri) => {
+    const { BrowserWindow, Menu } = require('electron');
+    Menu.buildFromTemplate([{ label: 'Remove pin', enabled: !S.demo, click: () => setPin(uri, 'sidebar', false).catch(report) }])
+      .popup({ window: BrowserWindow.fromWebContents(e.sender) });
+  },
   'pins:sections': () => pinSections(),
   'pins:place': (_e, id, section, label) => placeSidebarPin(id, section, label),
   // The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,

@@ -326,26 +326,11 @@ const homeId = () => (home === HOME_VIEW && !homeView() ? 'workView' : homeIsSea
 // What Go to Home names: the search's current title, so a rename in Tana shows through. null while a Home search
 // is still unknown — the anchor waits for its name rather than borrowing the Library's.
 const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : { library: 'Library', workView: 'Work View', [HOME_VIEW]: 'Home' }[homeId()] || null; };
-// In the Work View a half is Home on its own page: the Timeline on the left, My Tasks on the right: the search the
-// synced setting names (renderer/app.js asks once connected), so a rename keeps it; until then the search of that title
-let myTasksId = null;
-const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).startsWith(SEARCH_ID) && (myTasksId ? zoom.docId === myTasksId : /^my tasks$/i.test(String((docOf(zoom.docId) || {}).text || '').trim())) : zoom.docId === TIMELINE_PAGE);
-// In a saved view a page is Home on the place that view keeps for it ('place', 'place:2', …; {} is its view)
-function atSavedView(v) {
-  let p = null;
-  const as = typeof window !== 'undefined' && window.api && window.api.savedAs ? ':' + window.api.savedAs : SIDE; // a page given another id than the view's (main.js adoptLayout)
-  try { p = JSON.parse(v.keys['place' + as] || 'null'); } catch { /* not a place */ }
-  // a saved view's Today or This week (#639): the page of that title now, matched as main/pins.js ownNode does. By title,
-  // as this is only the Home mark drawn on every render: ids would need a cache kept right across midnight and renames
-  if (p && (p.today || p.week)) return !!zoom && !zoom.nodeId && String((docOf(zoom.docId) || {}).text || '').trim().toLowerCase() === (p.today ? localDate() : weekTitle().toLowerCase());
-  return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === v.keys['view' + as]);
-}
-// the Work View as installed ('workView' its layout) or as updated from Save view, which is judged by its own keys
-const workViewNow = () => savedViews().find((v) => v.id === WORK_VIEW.id);
-const atHome = () => (homeId() === 'workView' ? (workViewNow().doc === 'workView' ? atWorkView() : atSavedView(workViewNow())) : homeId() === HOME_VIEW ? atSavedView(homeView()) : zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() === view);
 function setHome(id) { home = id; setPref('home', id); render(true); }
 // Going Home opens a window, as a saved view is opened, a saved search is a document you open, the Library is a view you switch to.
 // A Library or saved-search Home, chosen before Home was a window, is a window of one pane on it (issue #444).
+// It always runs: Home is the whole window and a page sees only itself. Each page judging "already Home" by its own
+// place left Home dead from the right half on My Tasks while the left half was elsewhere.
 function goHome() {
   const id = homeId();
   if (id === 'workView') return run(openWorkView);

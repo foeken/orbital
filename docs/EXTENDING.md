@@ -102,7 +102,7 @@ kbd? }`.
   renderer/table.js, `notificationRows` in inbox.js, `meetingRows` in meeting.js, `fieldRows` in fields.js),
   called from `paletteRows` (renderer/palette.js); app-wide rows are pushed in `paletteRows` itself. Groups appear
   in push order: Selection or Current node, Table, Views, Searches, Types, View options, Actions, Navigate, Window,
-  Settings, Help.
+  Settings, Help. Suggested, the rows you pick most, is laid over them by `commandRows` and needs nothing from a row.
 - **Order**: a row about the current node gets a place in `NODE_ROW_ORDER`, a view row in `VIEW_ORDER` (both
   renderer/palette.js); an app row is pushed where it belongs in its group.
 - **A built-in key**: an entry `<row id>: '⌘X'` in `DEFAULT_HOTKEYS` (renderer/state.js), keyed by the row's id as

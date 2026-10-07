@@ -354,6 +354,7 @@ function sbDraw() {
   const pin = (n) => {
     const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri, n.node.svg);
     b.dataset.uri = n.uri;
+    b.oncontextmenu = (e) => { e.preventDefault(); bridge.pinMenu?.(n.uri); }; // Remove pin (main/pins.js)
     b.classList.toggle('sensitive', n.node.sensitive === true);
     if (n.node.sensitive === true) b.removeAttribute('title'); // a blurred title is not told on hover either
     return b;

@@ -1431,7 +1431,7 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   await new Promise((r) => server.once('listening', r));
   const base = 'http://127.0.0.1:' + server.address().port;
   const port = 9900 + Math.floor(Math.random() * 90);
-  const ch = spawn(chrome, ['--headless=new', '--remote-debugging-port=' + port, '--no-first-run', '--no-sandbox', '--window-size=1280,860',
+  const ch = spawn(chrome, ['--headless=new', '--mute-audio', '--remote-debugging-port=' + port, '--no-first-run', '--no-sandbox', '--window-size=1280,860',
     '--user-data-dir=' + fs.mkdtempSync(path.join(os.tmpdir(), 'orbflow-')), 'about:blank'], { stdio: 'ignore' });
   let failed = 0;
   try {

@@ -38,7 +38,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }); }).listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
   const port = 9300 + Math.floor(Math.random() * 500);
-  const ch = spawn(chrome, ['--remote-debugging-port=' + port, '--hide-scrollbars', '--user-data-dir=' + fs.mkdtempSync(path.join(os.tmpdir(), 'orbshot-')), 'about:blank'], { stdio: 'ignore' });
+  const ch = spawn(chrome, ['--mute-audio', '--remote-debugging-port=' + port, '--hide-scrollbars', '--user-data-dir=' + fs.mkdtempSync(path.join(os.tmpdir(), 'orbshot-')), 'about:blank'], { stdio: 'ignore' });
   try {
     let t; for (let i = 0; i < 50 && !t; i++) { await sleep(200); try { t = (await (await fetch('http://127.0.0.1:' + port + '/json')).json()).find((x) => x.type === 'page'); } catch { /* not up yet */ } }
     if (!t) throw new Error('Chromium did not start: ' + chrome);

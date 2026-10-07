@@ -1865,16 +1865,16 @@ async function runSyncShortcutCheck() {
     'a query nothing matches offers the Tana search with what was typed');
   const SAVED = 'tana:search:01j0myt00000000000000000';
   order.choose(SAVED, [{ id: SAVED, text: 'My Tasks' }]);
-  // Go to Home is the other half: always listed, honest about where it goes, and disabled only where it would do nothing.
-  assert.deepEqual(plain([order.row('goHome').hint, order.row('goHome').disabled]), ['My Tasks', false],
+  // Go to Home is the other half: always listed, naming where it goes, and never disabled: Home is the whole window, and
+  // a page judging "already Home" by its own place left the sidebar's Home dead while another pane was elsewhere.
+  assert.deepEqual(plain([order.row('goHome').hint, !!order.row('goHome').disabled]), ['My Tasks', false],
     'Go to Home names the Home it would open, read live from the saved search');
   order.choose('library', []);
-  assert.deepEqual(plain([order.row('goHome').hint, order.row('goHome').disabled]), ['Current', true],
-    'standing on Home the row stays, disabled and saying so, rather than disappearing from the list it can be recorded from');
+  assert.deepEqual(plain([order.row('goHome').hint, !!order.row('goHome').disabled]), ['Library', false],
+    'a page on Home itself still runs it: it cannot see the window\u2019s other panes');
   order.choose('tana:search:01j0gone0000000000000000', []);
-  assert.deepEqual(plain([order.row('goHome').hint, order.row('goHome').disabled]), ['Current', true],
-    'and a Home whose search nothing lists any more is the Library, which is the page this is: it falls back rather than offering a dead target');
-  assert.equal(order.row('goHome').id, 'goHome', 'and it keeps its id while disabled, which is what ⇧⌘K records a key against');
+  assert.equal(order.row('goHome').hint, 'Library',
+    'and a Home whose search nothing lists any more is the Library: it falls back rather than offering a dead target');
   // With a query the best match leads, whichever group it is in: Inbox starts with "in", Zoom in only has it as a word.
   const inRows = plain(order.labels('in'));
   assert.equal(inRows[0], 'Views: Inbox', 'a label that starts with the query comes first');
@@ -2639,7 +2639,7 @@ function runPaletteSkipCheck() {
   const page = vm.runInNewContext(`
     let palTimer = 7, palSeq = 3, palEnter = 'pick', palBusy = true, palRows = [{}], palIndex = 2, palMode = 'setIcon', pillCtx = 'x';
     const cleared = [], clearTimeout = (id) => cleared.push(id), promptEditor = () => {}, palette = { hidden: false }, palInput = { value: 'st', placeholder: '', focus() {} };
-    const refreshChatGPTStatus = () => {}, renderPalette = () => {}, paletteRows = () => [];
+    const refreshChatGPTStatus = () => {}, renderPalette = () => {}, paletteRows = () => [], commandRows = paletteRows;
     ${functionSource('showPage')}
     ${functionSource('openCommandPalette')}
     openCommandPalette();
@@ -3571,6 +3571,7 @@ async function runUnifiedViewsCheck() {
     const render = () => {}, showError = (error) => { throw error; };
     // a view whose stored grouping is Responsibility: loadView widens its query through the real helper
     const groupPref = { grouped: 'responsibility', plain: 'assignee' };
+    const meetingSort = () => false; // renderer/views.js: Meeting date is offered where only meetings are listed
     ${sourceBetween('const GROUPS =', 'const FALLBACK =')}${sourceBetween('const VIEW_ARRANGEMENT =', 'const groupBy =')}
     ${sourceBetween('const needsAnyone =', '// Group by Updated')}
     for (const id of ['grouped', 'plain']) {
@@ -3648,6 +3649,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const agentIds = new Set(['ta1', 'ta2', 'ta3']);
     // your date pins (renderer/state.js, api.pinDates): tp1 is Sam's task on a third person, pinned to a day
     ${sourceLine('const localDate =')}
+    ${sourceLine('const WD')}${sourceLine('const MONTHS')}${sourceLine('const meetingDay')} // renderer/meeting.js: the day a Meeting date heading reads
     // tq*: pinned relative to today, for the Pinned section opening on the coming week
     const datePinsById = new Map([['tp1', ['2026-09-23']], ['tp2', ['2026-09-20', '2026-10-01']], ['tp3', ['2026-09-25']],
       ['tq1', [localDate(3)]], ['tq2', [localDate(10)]], ['tq3', [localDate(-1)]], ['tq4', [localDate(9), localDate(7)]], ['tq5', [localDate(8)]]]);
@@ -3681,7 +3683,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     ${functionSource('sensitiveHidden')}
     ${functionSource('blurSensitive')}
     ${definitions}
-    ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
+    ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup, meetingDay,
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
        RESPONSIBILITY, groupList, list: (nodes) => { viewOf().nodes = nodes; }, loaded: () => loaded,
        dragging: (on) => { taskDragging = on; },
@@ -3702,6 +3704,18 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 'd1', text: 'echo', icon: 'doc', tags: [{ label: 'doc' }] },
   ];
   const titles = (list, by) => plain(api.groupRows(list, by)).map((g) => [g.title, g.nodes.map((n) => n.id)]);
+  // Group by Meeting date: a section per day, Today and Tomorrow by name, a row without a window under No date; latest
+  // day first, as Meeting time sorts, unless the list looks ahead; offered only where meetings are all it lists
+  const at = (offset, h) => { const d = new Date(); d.setDate(d.getDate() + offset); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+  const meets = [{ id: 'm1', start: at(1, 9) }, { id: 'm2', start: at(0, 15) }, { id: 'm3', start: at(1, 14) }, { id: 'm4' }, { id: 'm5', start: at(0, 8) }, { id: 'm6', start: at(40, 10) }];
+  const later = api.meetingDay(at(40, 12)); // "Tue 22 Sep", as a meeting's own day reads (renderer/meeting.js)
+  assert.deepEqual(titles(meets, 'meeting'), [[later, ['m6']], ['Tomorrow', ['m1', 'm3']], ['Today', ['m2', 'm5']], ['No date', ['m4']]],
+    'meetings fall under the day they start, latest day first, the ones with no time last');
+  api.stage({ types: ['meetings'], window: 'upcoming' });
+  assert.deepEqual(titles(meets, 'meeting').map(([t]) => t), ['Today', 'Tomorrow', later, 'No date'], 'a list of upcoming meetings runs soonest first');
+  assert.ok(plain(api.groupList()).some(([id]) => id === 'meeting'), 'Meeting date is offered where only meetings are listed');
+  api.stage({ types: ['tasks'], states: ['open'], assignee: 'me' });
+  assert.ok(!plain(api.groupList()).some(([id]) => id === 'meeting'), 'and nowhere else');
   // The Tasks view lists several types and docs: the choice fields of the types its rows are now are offered by name,
   // one Priority over both types that have one as a choice, and a row without a value is under No value.
   const tag = (t) => [{ label: t, uri: 'tana:type:' + t }];
@@ -3981,9 +3995,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   api.set('library', 'none', 'meeting');
   api.stage({ types: ['meetings'], window: 'upcoming' });
   const when = api.pillDefs().find((d) => d.id === 'when');
-  assert.deepEqual(plain([when.value, when.rows().map((r) => [r.label, !!r.checked])]), ['Upcoming', [['Any time', false], ['Recent', false], ['Today', false], ['Upcoming', true], ['Past', false]]], 'the When pill names the window and offers Tana\'s presets');
+  assert.deepEqual(plain([when.value, when.rows().map((r) => [r.label, !!r.checked])]), ['Upcoming', [['Any time', false], ['Recent', false], ['Today', false], ['This week', false], ['Upcoming', true], ['Past', false]]], 'the When pill names the window and offers Tana\'s presets');
   assert.deepEqual(order(meetings), ['m2', 'm1', 'm3'], 'Meeting time lists what is to come soonest first');
-  when.rows()[4].run();
+  when.rows()[5].run();
   assert.deepEqual(plain(api.savedPatch()), { window: 'past' }, 'picking Past writes the window to the filter');
   assert.deepEqual(order(meetings), ['m3', 'm1', 'm2'], 'and what is over latest first');
   api.stage({ types: ['meetings', 'tasks'], window: 'past' });
@@ -4498,7 +4512,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const closePalette = () => {}; // the real runRow closes the palette before it runs a row
     const setViewF = (patch) => { filters.set(view, { ...filters.get(view), ...patch }); render(); };
     const palInput = { value: '', placeholder: '', focus() {} };
-    const renderPalette = () => { renders++; }, paletteRows = () => [];
+    const renderPalette = () => { renders++; }, paletteRows = () => [], commandRows = paletteRows;
     ${definitions}
     ${functionSource('pillRows')}
     ${functionSource('pillRowsFor')}
@@ -5521,14 +5535,13 @@ async function runRestorePlaceCheck() {
     ${sourceBetween('const isRealId =', '\n')}
     ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation')}
     ${functionSource('readStoredPlace')}
-    let myTasksId = null; // renderer/nodes.js: the search the Home check knows My Tasks by
     ${functionSource('restorePlace')}
     ({
       remember: (z) => { zoom = z; rememberPlace(); return storage.has('place') ? storage.get('place') : null; },
       store: (value) => { storage.set('place', value); savedPlace = readStoredPlace(); }, // left by the last session, read at load
       firstRight: () => { savedPlace = { myTasks: true }; }, // renderer/edit.js: a first launch's right half
       concept: (c) => { savedPlace = { [c]: true }; }, // a saved view's Today or This week (renderer/palette.js saveView)
-      myTasks: () => ({ asked, added: [...added], id: myTasksId }),
+      myTasks: () => ({ asked, added: [...added] }),
       seedPlace: () => { ${seed[0]} },
       clear: () => { storage.delete('place'); savedPlace = readStoredPlace(); },
       firstPaint: () => { zoom = null; rememberPlace(); }, // what the boot render records: the view it drew, with no zoom
@@ -5592,7 +5605,7 @@ async function runRestorePlaceCheck() {
   assert.deepEqual(plain([api.state().docId, api.myTasks().asked]), [null, 0], 'the right half of a first launch waits for the connection before asking for My Tasks');
   api.online();
   await api.start();
-  assert.deepEqual(plain([api.state().docId, api.myTasks()]), ['tana:search:mine', { asked: 1, added: ['tana:search:mine'], id: 'tana:search:mine' }],
+  assert.deepEqual(plain([api.state().docId, api.myTasks()]), ['tana:search:mine', { asked: 1, added: ['tana:search:mine'] }],
     'then opens the search main found or made, listed in Cmd+K at once');
   await api.start();
   assert.equal(api.myTasks().asked, 1, 'once per launch');
@@ -6434,6 +6447,38 @@ function runPopSoundCheck() {
   assert.equal(started.length, 2, 'the click that follows does not play it again');
   now = 1000; api.popSound();
   assert.equal(started.length, 4, 'a tick with no press before it still pops');
+}
+
+// Suggested (renderer/palette.js): what you pick leads ⌘K once picked twice, most picked first, counted apart for ⌘K
+// and a right-click; never a greyed row, never more than five, and gone once something is typed.
+function runSuggestedCheck() {
+  const store = {};
+  const api = vm.runInNewContext(`
+    const localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
+    let signedOut = false, list = [];
+    const paletteRows = () => list, subRowsFor = (r) => r.kids || [];
+    ${sourceBetween('// ---- Suggested: the rows you pick most', '// a hotkey, recorded or default')}
+    ({ pick: (from, id) => { palFrom = from; notePaletteUse({ id }); }, rows: (from, rows, q = '') => { palFrom = from; list = rows; return commandRows(q, q); } });
+  `, { store });
+  const row = (id, more) => ({ id, group: 'Actions', label: id, ...more });
+  const all = [row('sync'), row('undo'), row('newChat', { disabled: true }), ...'abcdef'.split('').map((id) => row(id)), row('status', { subAlways: true, kids: [row('status>Completed')] })];
+  const top = (from, q) => plain(api.rows(from, all, q).filter((r) => r.group === 'Suggested').map((r) => r.id));
+  assert.deepEqual(top('cmd'), [], 'nothing picked, nothing suggested');
+  api.pick('cmd', 'sync');
+  assert.deepEqual(top('cmd'), [], 'one pick is not yet a habit');
+  api.pick('cmd', 'sync'); api.pick('cmd', 'undo'); api.pick('cmd', 'undo'); api.pick('cmd', 'undo');
+  assert.deepEqual(top('cmd'), ['undo', 'sync'], 'picked twice it leads, the most picked first');
+  assert.equal(api.rows('cmd', all).length, all.length + 2, 'and it stays in its own group too');
+  assert.deepEqual(top('context'), [], 'a right-click keeps its own count');
+  api.pick('context', 'status>Completed'); api.pick('context', 'status>Completed');
+  assert.deepEqual(top('context'), ['status>Completed'], 'a folded choice is suggested on a right-click without being typed');
+  api.pick('cmd', 'newChat'); api.pick('cmd', 'newChat');
+  assert.ok(!top('cmd').includes('newChat'), 'a row that cannot run here is not suggested');
+  for (const id of 'abcdef') for (let i = 0; i < 4; i++) api.pick('cmd', id);
+  assert.equal(top('cmd').length, 5, 'five at most');
+  assert.deepEqual(top('cmd', 'un'), [], 'typing ranks by the match alone');
+  for (let i = 0; i < 200; i++) api.pick('cmd', 'f');
+  assert.ok(!top('cmd').includes('sync'), 'an old habit fades as new picks come in');
 }
 
 function runSearchTabDeleteCheck() {
@@ -7335,7 +7380,7 @@ async function runHomeCheck() {
     ${functionSource('navigate')}
     ${functionSource('loadSearches')}
     ({
-      id: () => homeId(), name: () => homeName(), at: () => atHome(), views: (list) => { savedList = list; },
+      id: () => homeId(), name: () => homeName(), views: (list) => { savedList = list; },
       stored: () => ({ ...stored }), set: (id) => setHome(id), went: () => { const out = [...went]; went.length = 0; return out; },
       list: (rows, online = true) => { listed = rows; connected = online; return loadSearches(); },
       drop: (id) => { searches = searches.filter((s) => s.id !== id); repairHome(); },
@@ -7353,15 +7398,6 @@ async function runHomeCheck() {
   assert.deepEqual([api.id(), api.name(), plain(api.stored())], ['workView', 'Work View', {}], 'with no preference Home is the Work View, and nothing is stored until something is chosen');
   api.home();
   assert.deepEqual(plain(api.went()), ['workView'], 'going Home opens the Work View, as its Cmd+K row does');
-  api.go({ docId: 'orbital:timeline', nodeId: null });
-  assert.equal(api.at(), true, 'and the left half is Home on the Timeline');
-  api.go({ docId: OTHER, nodeId: null });
-  assert.equal(api.at(), false, 'and not anywhere else');
-  // The Work View updated from Save view is judged by the place it now keeps for this page
-  api.views([{ id: 'workView', name: 'Work View', doc: { schema: 1 }, keys: { place: JSON.stringify({ docId: OTHER, nodeId: null }) } }]);
-  assert.equal(api.at(), true, 'an updated Work View is Home on the place it keeps');
-  api.go({ docId: 'orbital:timeline', nodeId: null });
-  assert.equal(api.at(), false, 'and no longer on the Timeline it replaced');
   api.views([]);
   api.view('library');
   await api.list([{ id: SEARCH, text: 'My Tasks' }]);
@@ -7408,36 +7444,11 @@ async function runHomeCheck() {
   api.home();
   assert.deepEqual([plain(api.went()), plain(api.opened())], [['view Library'], { view: 'library', place: '{}' }], 'and once it has fallen back, Home is a window on the Library view — no dead saved search is opened');
 
-  // Set as Home keeps the window as it is: the saved view 'homeView', opened as saved views are; a page is Home on the
-  // place that view keeps for it; removed from the list, Home is the Work View again
+  // Set as Home keeps the window as it is: the saved view 'homeView', opened as saved views are; removed from the list,
+  // Home is the Work View again
   api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ docId: OTHER, nodeId: null }), view: 'library' } }]);
   api.set('homeView');
   assert.deepEqual([api.id(), api.name()], ['homeView', 'Home'], 'Home reads as the window kept');
-  api.go({ docId: OTHER, nodeId: null });
-  assert.equal(api.at(), true, 'a page on the place Home keeps for it is Home');
-  api.go({ docId: SEARCH, nodeId: null });
-  assert.equal(api.at(), false, 'and anywhere else it is not');
-  // A Home with Today in it is Home on your day node as it is now: not another day, a node inside it, or someone else's
-  api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ today: true }), view: 'library' } }]);
-  api.titles({ 'tana:text:today': '2026-09-30', 'tana:text:yesterday': '2026-09-29', 'tana:text:week': 'Week 40 (2026)' });
-  api.go({ docId: 'tana:text:today', nodeId: null });
-  assert.equal(api.at(), true, 'a Today pane is Home on the day node you have today');
-  for (const [place, why] of [[{ docId: 'tana:text:yesterday', nodeId: null }, 'an older day'], [{ docId: 'tana:text:today', nodeId: 'n1' }, 'a node inside it'], [{ docId: 'tana:text:week', nodeId: null }, 'this week']]) {
-    api.go(place);
-    assert.equal(api.at(), false, 'a Today pane is not Home on ' + why);
-  }
-  api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ week: true }), view: 'library' } }]);
-  api.go({ docId: 'tana:text:week', nodeId: null });
-  assert.equal(api.at(), true, 'a This week pane is Home on this week\u2019s node');
-  api.titles({ 'tana:text:today': '2026-09-30', 'tana:text:yesterday': '2026-09-29', 'tana:text:week': ' week 40 (2026) ' });
-  assert.equal(api.at(), true, 'whatever its case and spaces, as main finds your week node by it');
-  api.day('2026-10-01');
-  assert.equal(api.at(), true, 'past midnight in the same week, This week is still Home');
-  api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ today: true }), view: 'library' } }]);
-  api.go({ docId: 'tana:text:today', nodeId: null });
-  assert.equal(api.at(), false, 'while yesterday\u2019s day node is no longer Today');
-  api.day('2026-09-30');
-  api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ docId: OTHER, nodeId: null }), view: 'library' } }]);
   api.home();
   assert.deepEqual(plain(api.went()), ['view Home'], 'going Home opens the window it keeps');
   api.views([]);
@@ -8422,7 +8433,7 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+const checks = [runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSuggestedCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

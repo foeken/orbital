@@ -18,6 +18,7 @@ if (file === 'shell.html') {
     layout: (layout) => ipcRenderer.send('shell:layout', layout), // { doc, pages: [ids in doc] }: every committed change
     // the window's sidebar: your sidebar pins as Tana keeps them, [{ id, uri?, label?, node?, children }], read again on onPins
     pins: () => ipcRenderer.invoke('pins:tree'),
+    pinMenu: (uri) => ipcRenderer.invoke('pins:menu', uri), // a right-click on a pin: Remove pin
     onPins: (cb) => ipcRenderer.on('pins:changed', () => cb()),
   });
   return;
@@ -51,7 +52,6 @@ const unwrapped = (api) => Object.fromEntries(Object.entries(api).map(([key, val
   : (...args) => { const answer = value(...args); return answer && typeof answer.then === 'function' ? answer.catch(unwrap) : answer; }]));
 contextBridge.exposeInMainWorld('api', unwrapped({
   side: pane.side, // this page's id, fixed for its life: '' the first page, then '2', '3', ... (renderer/state.js SIDE)
-  savedAs: pane.start && pane.start.as, // the id it has in the saved view it opened in, when another window had that one (renderer/nodes.js)
   rememberPlace: (view, place) => ipcRenderer.send('page:place', view, place), // main's copy of this page's view and place (#636)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
