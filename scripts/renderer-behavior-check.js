@@ -8985,7 +8985,8 @@ async function runSmartFilterCheck() {
     ${sourceBetween('const SMART_LIKELY', '// the field says what it does')}
     ${sourceLine('const filterHit =')}
     const rows = [{ id: 'tana:text:a', text: 'Annual leave plan' }, { id: 'tana:text:b', text: 'Sick days Jan', stateType: 'open' }, { id: 'tana:text:c', text: 'Budget' }, { id: 'tana:text:secret', text: 'Salary' }];
-    ({ shown: (q) => rows.filter((n) => filterHit(n, q)).map((n) => n.text), asked, timers, errors, type: (v) => { filterEl.value = v; }, off: () => { featureFlags = []; }, fail: () => { answer = () => { throw new Error('OpenAI Decisions answered 500'); }; } })`, {});
+    const works = answer;
+    ({ shown: (q) => rows.filter((n) => filterHit(n, q)).map((n) => n.text), asked, timers, errors, type: (v) => { filterEl.value = v; }, off: () => { featureFlags = []; }, fail: () => { answer = () => { throw new Error('OpenAI Decisions answered 500'); }; }, heal: () => { answer = works; } })`, {});
   assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan'], 'the words find what they find at once');
   assert.equal(api.asked.length, 0, 'nothing is asked while typing goes on');
   api.timers.splice(0).pop()(); await new Promise((done) => setImmediate(done));
@@ -8997,6 +8998,10 @@ async function runSmartFilterCheck() {
   api.fail(); api.type('time off'); api.shown('time off'); api.timers.splice(0).pop()();
   await new Promise((done) => setImmediate(done));
   assert.deepEqual(plain([api.shown('time off'), api.errors, api.timers.length]), [[], ['OpenAI Decisions answered 500'], 0], 'a failed ask says so once and matches nothing, rather than asking again');
+  // fixed meanwhile (a key added): once something else was typed, the same words ask again
+  api.heal(); api.type('time'); api.shown('time'); api.timers.splice(0); api.type('time off'); api.shown('time off'); api.timers.splice(0).pop()();
+  await new Promise((done) => setImmediate(done));
+  assert.deepEqual(plain([api.asked.at(-1).q, api.shown('time off')]), ['time off', ['Sick days Jan']], 'a failed ask is not kept once other words were typed: the same words ask again');
   api.off();
   assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan'], 'with the flag off, the words alone');
   console.log('ok  smart filter: the words at once, the rest asked once typing pauses, never a sensitive row, a failure matches nothing');

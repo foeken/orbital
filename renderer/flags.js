@@ -55,6 +55,9 @@ let smartAsking = 0;
 const rowFacts = (n) => [n.text, ...(n.tags || []).map((t) => '#' + t.label), SMART_STATES[n.stateType], n.start && 'on ' + String(n.start).slice(0, 10)].filter(Boolean).join(' · ');
 function smartFilterHit(node, q) {
   if (q.length < 3 || !tana.smartFilter || !flagOn('decisions') || !isRealId(node.id) || !sensitiveIds || sensitiveIds.has(node.id)) return false; // one or two letters mean nothing yet
+  // a failed ask (no key yet, the network) holds for what was typed then, not for good: once something else is typed,
+  // those words ask again. Kept, it made "events" match nothing for the rest of the session after a key was added.
+  for (const [k, v] of smartFilters) if (v.failed && k !== q) smartFilters.delete(k);
   let s = smartFilters.get(q);
   if (!s) smartFilters.set(q, s = { odds: new Map(), asked: new Set(), waiting: new Map(), timer: null });
   if (s.odds.has(node.id)) return s.odds.get(node.id) >= SMART_LIKELY;
@@ -69,7 +72,7 @@ function askSmartFilter(q, s) {
   smartAsking++; filterRow.classList.add('thinking');
   tana.smartFilter(q, rows).then(
     (odds) => { for (const o of odds) s.odds.set(o.id, o.p); },
-    (e) => { for (const r of rows) s.odds.set(r.id, 0); showError(e); }, // a failed ask matches nothing rather than asking again
+    (e) => { s.failed = true; for (const r of rows) s.odds.set(r.id, 0); showError(e); }, // a failed ask matches nothing rather than asking again while these words stay
   ).finally(() => { if (!--smartAsking) filterRow.classList.remove('thinking'); for (const r of rows) if (!s.odds.has(r.id)) s.odds.set(r.id, 0); renderSoon(); });
 }
 // the field says what it does while the flag is on
@@ -111,4 +114,3 @@ function rankHashChoices(link, title, choices) {
   }
   return hashRank.odds ? [...choices].sort((a, b) => (hashRank.odds.get(b.title) || 0) - (hashRank.odds.get(a.title) || 0)) : choices;
 }
-
