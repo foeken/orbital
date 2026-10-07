@@ -495,7 +495,7 @@ const DEMO_SAFE = new Set([
   'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
   'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'setFeatureFlag', 'settingsSize',
   'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setOpenAIRegion', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
-  'smartFilter', 'status', 'suggestDiscussWith', 'suggestSensitive', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
+  'status', 'suggestDiscussWith', 'suggestSensitive', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
   'translate', 'typeIcons', 'typeList', 'updateInfo', 'viewFilter', 'viewList', 'weekNode', 'windowLayout',
   'windowTheme', 'zoom']);
 // Electron's own (windows, overlays, updates, PDF, the zoom), what only main can tell (settings, releases, presence

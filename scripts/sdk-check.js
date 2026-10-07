@@ -1114,16 +1114,6 @@ async function main() {
     const DOC='tana:text:'+'a'.repeat(26);
     assert.deepEqual(await decisions.suggestSensitive([{id:DOC,text:'Salary review Jan'},{id:'orbital:timeline',text:'Timeline'},{id:'tana:text:'+'b'.repeat(26),text:'  '}],decided([{type:'predicate',name:'n0',probability:0.93}])),[{id:DOC,p:0.93}]);
     assert.deepEqual(calls.at(-1).body.questions.map((x)=>x.type),['predicate']);
-    // The smart filter: what was typed as the shared input, a predicate per row with its facts; only Tana ids go
-    assert.deepEqual(await decisions.filterRows('waiting on someone',[{id:DOC,text:'Ask Kor for the numbers · in progress'},{id:'orbital:timeline',text:'Timeline'}],decided([{type:'predicate',name:'r0',probability:0.81}])),[{id:DOC,p:0.81}]);
-    assert.ok(calls.at(-1).body.input.includes('waiting on someone') && calls.at(-1).body.questions[0].instructions.includes('Ask Kor for the numbers'),'what was typed is the input, each row its own question');
-    const sentBefore=calls.length;
-    // the model decides from the row's details, with today's date to read "changed today" by; Orbital reads nothing itself
-    assert.ok(calls.at(-1).body.questions[0].instructions.startsWith('Should this row stay for what they typed, read as they meant it') && /Today is \d{4}-\d{2}-\d{2} \(/.test(calls.at(-1).body.input),
-      'one question per row, read as meant, with today\'s date');
-    assert.equal(calls.at(-1).body.questions.length,1,'and nothing but the rows is asked');
-    assert.deepEqual(await decisions.filterRows('   ',[{id:DOC,text:'x'}],decided([])),[]);
-    assert.equal(calls.length,sentBefore,'nothing typed, nothing sent');
     // Ranked menus: one choice over what the menu offers, by index, the page and the line as the input
     assert.deepEqual(await decisions.rankChoices('Page: Budget\nWriting: Send it to @',['Anne','Kevin','Anne'],decided([{type:'choice',name:'pick',choice:'1',probabilities:[{value:'0',probability:0.2},{value:'1',probability:0.7},{value:'2',probability:0.1}]}])),[0.2,0.7,0.1]);
     assert.deepEqual(calls.at(-1).body.questions[0].choices.map((c)=>[c.value,c.description]),[['0','Anne'],['1','Kevin'],['2','Anne']],'by index, so two documents of one name stay two');
@@ -1132,11 +1122,8 @@ async function main() {
     assert.equal(calls.length,ranked,'one option has nothing to rank');
     flags.set('decisions',false);
     assert.equal(decisions.usable(),false,'and off again');
-    const offCalls=calls.length;
-    assert.deepEqual(await decisions.filterRows('waiting on someone',[{id:DOC,text:'Ask Kor'}],decided([])),[],'off, the smart filter finds nothing by meaning and says nothing: the words alone filter');
-    assert.equal(calls.length,offCalls,'and sends nothing');
     settings.set('openaiApiKey',undefined); settings.set('featureFlags',undefined); settings.reset();
-    console.log('ok  decisions API flag: off by default and without a key; Auto-pick type, Suggest sensitive marks, the smart filter and the ranked menus as decisions, batched past 200');
+    console.log('ok  decisions API flag: off by default and without a key; Auto-pick type, Suggest sensitive marks and the ranked menus as decisions, batched past 200');
   }
   // Edit meeting details and "/" Meeting's when page (#758): the model transcribes the words into a strict shape, and
   // main/meetings.js resolveTime decides what they come to, the same way every time, in the meeting's own time zone.

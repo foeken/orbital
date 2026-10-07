@@ -7,7 +7,7 @@ const { send } = require('./state');
 
 const FLAGS = {
   // main/decisions.js: OpenAI's Decisions API for the questions with a fixed set of answers. It takes an API key only.
-  decisions: { label: 'Decisions API', hint: () => (settings.get('openaiApiKey') ? 'Auto-pick type, sensitive marks, smart filter, @ and # order' : 'Needs an OpenAI API key') },
+  decisions: { label: 'Decisions API', hint: () => (settings.get('openaiApiKey') ? 'Auto-pick type, sensitive marks, @ and # order' : 'Needs an OpenAI API key') },
 };
 const stored = () => settings.get('featureFlags') || {};
 const on = (id) => Object.hasOwn(FLAGS, id) && stored()[id] === true;

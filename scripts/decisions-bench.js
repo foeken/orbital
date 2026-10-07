@@ -60,15 +60,6 @@ function report(name, old, now, agree, notes = []) {
   const likely = flagged.map((x, i) => [titles[i], x.p]).filter(([, p]) => p >= 0.5).sort((x, y) => y[1] - x[1]);
   report('Suggest sensitive marks: ' + titles.length + ' titles, one call (median of ' + REPEAT + ')', 'none: a new feature', ms(median(odds)) + ', ' + likely.length + ' at 50% or more', '',
     likely.map(([t, p]) => Math.round(p * 100) + '% ' + JSON.stringify(t)));
-  // The smart filter: a sentence over every title, as ⌘F asks once typing pauses; what the words alone find beside it
-  for (const q of ['waiting on someone else', 'anything about money or budgets', 'people and hiring matters', 'things to discuss with the heads of tech']) {
-    const times = [];
-    let odds = [];
-    for (let i = 0; i < REPEAT; i++) { const [t, v] = await timed(() => decisions.filterRows(q, ids)); times.push(t); odds = v; }
-    const words = titles.filter((t) => t.toLowerCase().includes(q)).length, meant = odds.map((x, i) => [titles[i], x.p]).filter(([, p]) => p >= 0.5).sort((x, y) => y[1] - x[1]);
-    report('Smart filter "' + q + '": ' + titles.length + ' titles, one call (median of ' + REPEAT + ')', words + ' found by the words', ms(median(times)) + ', ' + meant.length + ' at 50% or more', '',
-      meant.slice(0, 8).map(([t, p]) => Math.round(p * 100) + '% ' + JSON.stringify(t)));
-  }
   // Ranked menus: the @ menu's documents for a line being written, and the # menu's choices for selected words
   const offered = titles.slice(0, 40);
   for (const line of ['Follow up on the Datadog cost growth with @', 'Prepare the NLT discussion on the hardware direction, see @', 'Ask about the Works Council reply in @']) {

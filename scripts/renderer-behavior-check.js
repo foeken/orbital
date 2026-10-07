@@ -91,8 +91,8 @@ const withShims = (src) => {
   // fields that hold choices or links (renderer/fields.js): a palette harness without that file has no field focused
   if (/\bfieldRows\(/.test(src) && !/function fieldRows\(/.test(src)) src = 'globalThis.fieldRows ??= () => [];\n' + src;
   // feature flags (renderer/flags.js): a palette harness without that file has every flag off
-  if (/\b(flagRows|suggestSensitiveRows|smartFilterHit)\(/.test(src) && !/function flagRows\(/.test(src)) src = 'globalThis.flagRows ??= () => []; globalThis.suggestSensitiveRows ??= () => []; globalThis.smartFilterHit ??= () => false;\n' + src;
-  if (/\bfilterHit\(/.test(src) && !/const filterHit =/.test(src)) src = source.match(/^const filterHit =.*$/m)[0].replace('const filterHit =', 'globalThis.filterHit ??=') + '\nglobalThis.smartFilterHit ??= () => false;\n' + src;
+  if (/\b(flagRows|suggestSensitiveRows)\(/.test(src) && !/function flagRows\(/.test(src)) src = 'globalThis.flagRows ??= () => []; globalThis.suggestSensitiveRows ??= () => [];\n' + src;
+  if (/\bfilterHit\(/.test(src) && !/const filterHit =/.test(src)) src = source.match(/^const chipHit =.*$/m)[0].replace('const chipHit =', 'globalThis.chipHit ??=') + '\n' + source.match(/^const filterHit =.*$/m)[0].replace('const filterHit =', 'globalThis.filterHit ??=') + '\n' + src;
   if (/\b(rankLinkRows|rankHashChoices)\(/.test(src) && !/function rankLinkRows\(/.test(src)) src = 'globalThis.rankLinkRows ??= () => {}; globalThis.rankHashChoices ??= (link, title, choices) => choices;\n' + src;
   if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
   // the rows a row lives among: its own container's, which in a harness with one container is texts()
@@ -8437,7 +8437,17 @@ async function runReleasedOutlineCheck() {
   assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
   console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
 }
-const checks = [runFeatureFlagCheck, runSmartFilterCheck, runRankedMenusCheck, runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSuggestedCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
+// ⌘F's filter (renderer/views.js filterHit): a row's chips are words on it too, "task" and "tasks" finding #task
+function runFilterChipCheck() {
+  const api = vm.runInNewContext(`
+    const visibleTags = (n) => n.tags || [];
+    ${sourceLine('const chipHit =')}${sourceLine('const filterHit =')}
+    ({ hit: filterHit })`, {});
+  const row = { text: 'Budget', tags: [{ label: 'task' }] };
+  assert.deepEqual([api.hit(row, 'budg'), api.hit(row, 'task'), api.hit(row, 'tasks'), api.hit(row, 'meeting')], [true, true, true, false],
+    'the title, a chip, and a chip named in the plural; nothing else');
+}
+const checks = [runFeatureFlagCheck, runFilterChipCheck, runRankedMenusCheck, runPinSidebarCheck, runTimelineCopyLinkCheck, runMeetingLinksCheck, runMeetingDayCheck, runNotesRetryCheck, runNewMeetingChoiceCheck, runSearchTabDeleteCheck, runSetFieldIconCheck, runAddParticipantsCheck, runLeaveGonePageCheck, runTranslateTitlesOnlyCheck, runPopSoundCheck, runSuggestedCheck, runSearchCapCheck, runTwiceDrawnItemCheck, runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runSlashMeetingCheck, runMeetingDetailsCheck, runLinkToFailureCheck, runCaretBackCheck, runUpToTitleCheck, runNoteInPageCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runSaveViewDatesCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -8970,49 +8980,6 @@ async function runFeatureFlagCheck() {
   api.sensitive()[0].run(); await Promise.all(api.queue);
   assert.deepEqual(plain([api.marked, api.sensitive().map((r) => r.label)]), [['tana:text:page'], ['Sick leave Jan']], 'Enter marks it, and it leaves the list');
   console.log('ok  feature flags: Enable and Disable name their flags; Suggest sensitive marks only with the Decisions API on, the likely ones, never one marked');
-}
-// The smart filter (renderer/flags.js): a row ⌘F's words already find is never sent; the rest are asked about once
-// typing pauses, in one go, never one marked sensitive, and those the model gives 50% or more join the list.
-async function runSmartFilterCheck() {
-  const api = vm.runInNewContext(`
-    const asked = [], timers = [], errors = [];
-    let answer = (q, rows) => rows.map((r) => ({ id: r.id, p: r.text.startsWith('Sick') ? 0.8 : 0.2 }));
-    const tana = { smartFilter: async (q, rows) => { asked.push({ q, rows }); return answer(q, rows); } };
-    const sensitiveIds = new Set(['tana:text:secret']), filterEl = { value: 'leave ' }, filterRow = { classList: { add() {}, remove() {} } };
-    let featureFlags = [{ id: 'decisions', on: true }];
-    const flagOn = (id) => featureFlags.some((f) => f.id === id && f.on), isRealId = (id) => id.startsWith('tana:');
-    const setTimeout = (fn) => timers.push(fn), clearTimeout = () => {}, renderSoon = () => {}, showError = (e) => errors.push(e.message), visibleTags = (n) => n.tags || [], taskMetaById = new Map(), datePinsById = new Map(), pinnedIds = new Set(), agentIds = new Set(), me = () => null, memberName = (u) => u, loadMembers = () => {}, isoDay = (d) => d.toISOString().slice(0, 10), localDate = () => "2000-01-01";
-    ${sourceBetween('const SMART_LIKELY', '// the field says what it does')}
-    ${sourceLine('const chipHit =')}${sourceLine('const filterHit =')}
-    const rows = [{ id: 'tana:text:a', text: 'Annual leave plan' }, { id: 'tana:text:b', text: 'Sick days Jan', stateType: 'open' }, { id: 'tana:text:c', text: 'Budget' }, { id: 'tana:text:secret', text: 'Salary' }];
-    const works = answer;
-    ({ facts: (n) => rowFacts(n), meta: (id, m) => taskMetaById.set(id, m), pin: (id) => pinnedIds.add(id), hit: (n, q) => filterHit(n, q), shown: (q) => rows.filter((n) => filterHit(n, q)).map((n) => n.text), asked, timers, errors, type: (v) => { filterEl.value = v; }, off: () => { featureFlags = []; }, fail: () => { answer = () => { throw new Error('OpenAI Decisions answered 500'); }; }, heal: () => { answer = works; } })`, {});
-  assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan'], 'the words find what they find at once');
-  assert.equal(api.asked.length, 0, 'nothing is asked while typing goes on');
-  api.timers.splice(0).pop()(); await new Promise((done) => setImmediate(done));
-  assert.deepEqual(plain(api.asked.map((a) => [a.q, a.rows.map((r) => r.text)])), [['leave', ['Sick days Jan · status: in progress', 'Budget']]],
-    'then the rest in one ask, with what the row shows; never the row the words found, never one marked sensitive');
-  assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan', 'Sick days Jan'], 'and what it means joins what the words found');
-  assert.equal(api.timers.length, 0, 'an answered row is not asked again');
-  assert.deepEqual(plain([api.shown('le'), api.timers.length]), [['Annual leave plan'], 0], 'one or two letters ask nothing: the words alone');
-  api.fail(); api.type('time off'); api.shown('time off'); api.timers.splice(0).pop()();
-  await new Promise((done) => setImmediate(done));
-  assert.deepEqual(plain([api.shown('time off'), api.errors, api.timers.length]), [[], ['OpenAI Decisions answered 500'], 0], 'a failed ask says so once and matches nothing, rather than asking again');
-  // fixed meanwhile (a key added): once something else was typed, the same words ask again
-  api.heal(); api.type('time'); api.shown('time'); api.timers.splice(0); api.type('time off'); api.shown('time off'); api.timers.splice(0).pop()();
-  await new Promise((done) => setImmediate(done));
-  assert.deepEqual(plain([api.asked.at(-1).q, api.shown('time off')]), ['time off', ['Sick days Jan']], 'a failed ask is not kept once other words were typed: the same words ask again');
-  api.off();
-  assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan'], 'with the flag off, the words alone');
-  assert.deepEqual([api.hit({ id: 'tana:text:t', text: 'Budget', tags: [{ label: 'task' }] }, 'task'), api.hit({ id: 'tana:text:t', text: 'Budget', tags: [{ label: 'task' }] }, 'meeting')], [true, false],
-    'and a chip on the row is words on it too: "task" finds the rows tagged #task');
-  assert.equal(api.hit({ id: 'tana:text:t', text: 'Budget', tags: [{ label: 'task' }] }, 'tasks'), true, 'and "tasks" names the chip too');
-  // what the model reads of a row: everything the page knows, named, whether the row shows it or not ("pinned" found nothing while only the title went)
-  api.meta('tana:text:p', { assignees: ['tana:user-profile:sam'], watched: true }); api.pin('tana:text:p');
-  assert.equal(api.facts({ id: 'tana:text:p', text: 'Order laptops', tags: [{ label: 'task' }], stateType: 'open', createdBy: 'tana:user-profile:kim', updatedAt: '1999-12-30T10:00:00Z' }),
-    'Order laptops · kind: task · status: in progress · assigned to: tana:user-profile:sam · created by: tana:user-profile:kim · pinned · watched: I am notified of its changes · last changed: 1999-12-30',
-    'a row goes with its kind, status, people, pins, watch and dates');
-  console.log('ok  smart filter: the words at once, the rest asked once typing pauses, never a sensitive row, a failure matches nothing');
 }
 // Ranked menus (renderer/flags.js): the @ menu's documents reorder by the answer with Create still leading and a sure
 // top one selected, a sensitive result never sent, a stale answer dropped; the # menu's choices the same; nothing asked

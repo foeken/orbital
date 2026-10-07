@@ -1,10 +1,10 @@
 'use strict';
 // Feature flags (main/flags.js): Cmd+K Enable feature flag and Disable feature flag, each a page of the flags it can
-// switch, on this Mac only. And what a flag adds to the outliner itself: the Decisions API's Suggest sensitive marks,
-// smart filter and ranked @ and # menus (main/decisions.js), which go with that experiment.
+// switch, on this Mac only. And what a flag adds to the outliner itself: the Decisions API's Suggest sensitive marks
+// and ranked @ and # menus (main/decisions.js), which go with that experiment.
 let featureFlags = []; // [{ id, label, hint, on }]: read at load, and sent again whenever any page switches one
 const flagOn = (id) => featureFlags.some((f) => f.id === id && f.on);
-if (tana.featureFlags) tana.featureFlags().then((list) => { featureFlags = list; smartPlaceholder(); }, () => {});
+if (tana.featureFlags) tana.featureFlags().then((list) => { featureFlags = list; }, () => {});
 if (tana.onFeatureFlags) tana.onFeatureFlags((list) => { featureFlags = list; });
 const FLAG_GROUP = 'Feature flags';
 const flagChoices = (enable) => featureFlags.filter((f) => f.on !== enable).map((f) => ({ group: FLAG_GROUP, icon: 'options', label: f.label, hint: f.hint, keepOpen: true,
@@ -43,65 +43,6 @@ function openSensitivePalette() {
     (list) => { sensitiveFound = list; });
   openPage('suggestSensitive', 'Mark what looks sensitive…', { rows: sensitiveRows, back: BACK_TO_COMMANDS });
 }
-// ---- Smart filter (the Decisions API flag): ⌘F's filter also keeps the rows that match what is typed by meaning ----
-// Literal matches show at once, as without the flag (renderer/views.js filterHit). Once typing pauses, the page's
-// other rows go in one question each (main/decisions.js filterRows) and those at 50% or more join them. Only the rows
-// already on the page: it filters, it does not search. Never a row marked sensitive.
-const SMART_LIKELY = 0.5, SMART_WAIT = 400;
-const SMART_STATES = { proposed: 'in the inbox', open: 'in progress', waiting: 'waiting on someone', closed: 'completed', not_now: 'later' };
-const smartFilters = new Map(); // what was typed -> { odds: Map id -> p, asked: Set, waiting: Map id -> facts, timer }
-let smartAsking = 0;
-// A row as the model reads it: its title, then everything the page knows about it, named, whether the row shows it or
-// not, so a filter can be about any of it in the user's own words ("pinned", "Kevin's", "changed today"). Dates as days,
-// with today's in the question (main/decisions.js). People and pins arrive as the page reads them, like the row's line.
-// a day, and which it is when it is near: "2026-10-07 (today)" read 5 rows wrong for "changed today" where the bare day read 7-11
-const day = (iso) => { if (!iso) return ''; const d = isoDay(new Date(iso)), near = { [localDate(-1)]: 'yesterday', [localDate()]: 'today', [localDate(1)]: 'tomorrow' }[d]; return near ? d + ' (' + near + ')' : d; };
-function rowFacts(n) {
-  const meta = taskMetaById.get(n.id), pins = [...(datePinsById.get(n.id) || [])].sort(), mine = me()?.id;
-  const who = (uri) => (uri === mine ? 'me' : memberName(uri));
-  if (n.createdBy || meta?.assignees?.length) loadMembers();
-  const scope = typeof meta?.audience === 'string' ? meta.audience : meta?.audience?.scope;
-  return [n.text,
-    (n.tags || []).length && 'kind: ' + n.tags.map((t) => t.label).join(', '),
-    SMART_STATES[n.stateType] && 'status: ' + SMART_STATES[n.stateType],
-    meta?.assignees && 'assigned to: ' + (meta.assignees.length ? meta.assignees.map(who).join(', ') : 'nobody'),
-    n.createdBy && 'created by: ' + who(n.createdBy),
-    (pinnedIds?.has(n.id) || pins.length) && 'pinned' + (pins.length ? ' to ' + pins.join(', ') : ''),
-    meta?.watched && 'watched: I am notified of its changes',
-    agentIds.has(n.id) && 'handed to an AI agent',
-    scope && 'visible to: ' + scope + (meta.audience?.space ? ' (' + meta.audience.space + ')' : ''),
-    n.fields && Object.values(n.fields).flat().length && 'field values: ' + Object.values(n.fields).flat().join(', '),
-    n.start && 'meeting starts: ' + day(n.start) + ' ' + String(n.start).slice(11, 16),
-    n.subtext && 'about it: ' + n.subtext,
-    n.createdAt && 'created: ' + day(n.createdAt),
-    n.updatedAt && 'last changed: ' + day(n.updatedAt),
-  ].filter(Boolean).join(' · ');
-}
-function smartFilterHit(node, q) {
-  if (q.length < 3 || !tana.smartFilter || !flagOn('decisions') || !isRealId(node.id) || !sensitiveIds || sensitiveIds.has(node.id)) return false; // one or two letters mean nothing yet
-  // a failed ask (no key yet, the network) holds for what was typed then, not for good: once something else is typed,
-  // those words ask again. Kept, it made "events" match nothing for the rest of the session after a key was added.
-  for (const [k, v] of smartFilters) if (v.failed && k !== q) smartFilters.delete(k);
-  let s = smartFilters.get(q);
-  if (!s) smartFilters.set(q, s = { odds: new Map(), asked: new Set(), waiting: new Map(), timer: null });
-  if (s.odds.has(node.id)) return s.odds.get(node.id) >= SMART_LIKELY;
-  if (!s.asked.has(node.id)) { s.waiting.set(node.id, rowFacts(node)); clearTimeout(s.timer); s.timer = setTimeout(() => askSmartFilter(q, s), SMART_WAIT); }
-  return false;
-}
-function askSmartFilter(q, s) {
-  if (filterEl.value.trim().toLowerCase() !== q) return; // typed on: what is typed now asks for itself
-  const rows = [...s.waiting].map(([id, text]) => ({ id, text }));
-  s.waiting.clear();
-  for (const r of rows) s.asked.add(r.id);
-  smartAsking++; filterRow.classList.add('thinking');
-  tana.smartFilter(q, rows).then(
-    (odds) => { for (const o of odds) s.odds.set(o.id, o.p); },
-    (e) => { s.failed = true; for (const r of rows) s.odds.set(r.id, 0); showError(e); }, // a failed ask matches nothing rather than asking again while these words stay
-  ).finally(() => { if (!--smartAsking) filterRow.classList.remove('thinking'); for (const r of rows) if (!s.odds.has(r.id)) s.odds.set(r.id, 0); renderSoon(); });
-}
-// the field says what it does while the flag is on
-const smartPlaceholder = () => { filterEl.placeholder = flagOn('decisions') && tana.smartFilter ? 'Filter by words or meaning' : 'Filter'; };
-if (tana.onFeatureFlags) tana.onFeatureFlags(() => smartPlaceholder());
 // ---- Ranked menus (the Decisions API flag): the @ menu's documents and the # menu's choices, most likely first ----
 // Asked once a menu's rows are there (main/decisions.js rankChoices) with what the page and the line say; the rows
 // reorder when the answer lands. Nothing is asked on a page marked sensitive, and a sensitive result is never sent.
