@@ -1117,6 +1117,9 @@ async function main() {
     // The smart filter: what was typed as the shared input, a predicate per row with its facts; only Tana ids go
     assert.deepEqual(await decisions.filterRows('waiting on someone',[{id:DOC,text:'Ask Kor for the numbers · in progress'},{id:'orbital:timeline',text:'Timeline'}],decided([{type:'predicate',name:'r0',probability:0.81}])),[{id:DOC,p:0.81}]);
     assert.ok(calls.at(-1).body.input.includes('waiting on someone') && calls.at(-1).body.questions[0].instructions.includes('Ask Kor for the numbers'),'what was typed is the input, each row its own question');
+    assert.ok(calls.at(-1).body.questions[0].instructions.startsWith('Is this row about, or clearly related to, what the filter names, as a topic'),'asked as a topic: a row is about what was typed, even in other words');
+    await decisions.filterRows('devices',[{id:DOC,text:'Describe the hardware depreciation risk · #task'}],decided([{type:'predicate',name:'r0',probability:0.96}]));
+    assert.ok(calls.at(-1).body.questions[0].instructions.startsWith('Is this task about'),'and a list of tasks is asked about as tasks');
     const sentBefore=calls.length;
     assert.deepEqual(await decisions.filterRows('   ',[{id:DOC,text:'x'}],decided([])),[]);
     assert.equal(calls.length,sentBefore,'nothing typed, nothing sent');
