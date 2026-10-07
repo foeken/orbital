@@ -77,5 +77,5 @@ function rankHashChoices(link, title, choices) {
     tana.rankChoices(rankContext(plainOf(link.segs), 'Make "' + title + '" a…'), choices.map((c) => c.title))
       .then((odds) => { mine.odds = new Map(choices.map((c, i) => [c.title, odds[i] || 0])); if (hashRank === mine && palMode === 'hashCreate') renderPalette(); }, () => {});
   }
-  return hashRank.odds ? [...choices].sort((a, b) => (hashRank.odds.get(b.title) || 0) - (hashRank.odds.get(a.title) || 0)) : choices;
+  return hashRank.odds ? [...choices].sort((a, b) => (hashRank.odds.get(b.title) || 0) - (hashRank.odds.get(a.title) || 0)) : choices; // one list, no sections (renderer/toolbar.js hashRows)
 }
