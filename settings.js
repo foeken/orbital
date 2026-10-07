@@ -152,6 +152,9 @@ const SECTIONS = {
       // only for whoever already has a key, as ⌘K offers Set OpenAI API key: ChatGPT is the way in
       ...(c?.apiKey && host.setOpenAIKey ? [row('openaiKey', 'OpenAI API key', button('removeKey', 'Remove', () => load('chatgpt', async () => { await host.setOpenAIKey(''); return { ...st.chatgpt, apiKey: false }; })),
         (c.signedIn ? 'ChatGPT is asked first' : 'Asked for every AI answer') + ' · ' + HERE)] : [])] : []));
+    // where the key is sent: its project's region (main/ai.js REGIONS)
+    if (c?.apiKey && host.setOpenAIRegion) out.push(...group('OpenAI region', 'where your API key\'s project keeps its data', [row('globe', 'Region', segmented('openaiRegion', 'OpenAI region', c.region || 'europe',
+      [['europe', 'Europe'], ['us', 'United States'], ['global', 'Global']], (v) => load('chatgpt', async () => ({ ...st.chatgpt, region: await host.setOpenAIRegion(v) }))), HERE)]));
     if (ai) for (const [head, note, k] of [['Quick AI', 'translating, Discuss with, types and icons', (w) => 'quick' + w], ['Regular AI', 'reading images', (w) => w.toLowerCase()]]) {
       const set = (key) => (v) => load('ai', () => host.setAiOption(key, v));
       out.push(...group(head, note, [

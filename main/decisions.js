@@ -15,8 +15,9 @@
 const settings = require('./settings');
 const flags = require('./flags');
 const { DOC_URI } = require('./state');
+const { apiUrl, refused, keyRefusedText } = require('./ai'); // at the key's own region's address, and what a refusal says
 
-const ENDPOINT = 'https://api.openai.com/v1/decisions', MODEL = 'gpt-6-luna'; // the one model it takes (public beta)
+const MODEL = 'gpt-6-luna'; // the one model it takes (public beta)
 const TIMEOUT_MS = 20000, MAX_QUESTIONS = 200, MAX_CHOICES = 255;
 const usable = () => flags.on('decisions') && !!settings.get('openaiApiKey');
 const clip = (s, cap) => (typeof s === 'string' ? s.trim().slice(0, cap) : '');
@@ -31,13 +32,13 @@ async function decide(input, questions, fetchImpl = globalThis.fetch) {
   const parts = [];
   for (let i = 0; i < questions.length; i += MAX_QUESTIONS) parts.push(questions.slice(i, i + MAX_QUESTIONS));
   const answers = await Promise.all(parts.map(async (part) => {
-    const response = await fetchImpl(ENDPOINT, {
+    const response = await fetchImpl(apiUrl('/decisions'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
       body: JSON.stringify({ model: MODEL, input, questions: part }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (!response.ok) throw new Error('OpenAI Decisions answered ' + response.status + (response.status === 401 ? ': check the API key' : ''));
+    if (!response.ok) throw new Error(refused(response.status) ? keyRefusedText('The Decisions API') : 'OpenAI Decisions answered ' + response.status);
     return (await response.json()).answers || [];
   }));
   return new Map(answers.flat().map((a) => [a.name, a]));
@@ -109,4 +110,4 @@ const ipc = {
   'decisions:rank': (_e, context, options) => rankChoices(context, options),
 };
 
-module.exports = { usable, decide, classifyType, suggestSensitive, filterRows, rankChoices, ENDPOINT, MODEL, ipc };
+module.exports = { usable, decide, classifyType, suggestSensitive, filterRows, rankChoices, MODEL, ipc };

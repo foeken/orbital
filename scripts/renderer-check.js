@@ -494,7 +494,7 @@ const DEMO_SAFE = new Set([
   'refresh', 'related', 'relatedWatch', 'relayLink', 'relayLinkCancel', 'relayLinkStatus', 'relayRefresh', 'relayRename', 'relayReset',
   'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
   'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'setFeatureFlag', 'settingsSize',
-  'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
+  'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setOpenAIRegion', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
   'smartFilter', 'status', 'suggestDiscussWith', 'suggestSensitive', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
   'translate', 'typeIcons', 'typeList', 'updateInfo', 'viewFilter', 'viewList', 'weekNode', 'windowLayout',
   'windowTheme', 'zoom']);

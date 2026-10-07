@@ -562,6 +562,7 @@ function mockApi() {
     setAiOption: async (key, value) => { aiPick[key] = value; return aiOptions(); },
     setMcpHidden: async (on) => { mcpOff = !!on; emit(null); return mcpOff; },
     setOpenAIKey: async (key) => !!String(key || '').trim(),
+    setOpenAIRegion: async (id) => id, // main/ai.js REGIONS
     // Set type: the mock keeps main's two rules so the page behaves the same without the main process — a type that
     // lives in a space fits only a document in that space, a Library type fits anything (main/documents.js).
     // fields that hold choices or links (main/documents.js setField, defineField, addTypeField), without Tana's checks

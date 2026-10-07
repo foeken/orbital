@@ -891,7 +891,7 @@ wrong twenty.
 - **The model.** `main/ai.js` is the only place the app talks to a model. Sign in with ChatGPT (Cmd+K Sign in
   with ChatGPT / Sign out of ChatGPT, with the account status) is the way in (issue #669). An OpenAI API key stored before
   then still works as the fallback, and Cmd+K offers **Set OpenAI API key** only while one is stored: an empty field on
-  that page clears it, and the row goes. Both stay on this machine. ChatGPT sign-in uses the Codex app-server in its own auth directory
+  that page clears it, and the row goes. Beside it, **Set OpenAI region …** (also Settings › AI) picks the address the key goes to, its project's data residency: Europe (`eu.api.openai.com`, the default), United States (`us.api.openai.com`) or Global (`api.openai.com`), stored as `openaiRegion` (main/ai.js `REGIONS` and `apiUrl`, which main/decisions.js uses too). A 401 or 403 says the key may be invalid or in another region, naming the one it was sent to (`keyRefusedText`). All stay on this machine. ChatGPT sign-in uses the Codex app-server in its own auth directory
   under userData, separate from the user's Codex login, from this Mac's `codex` (`codexBin` in main/agents/codex.js) or,
   failing that, a standalone `codex-app-server` downloaded on first sign-in and kept only when `codesign` shows
   OpenAI's Developer ID. Two synced choices, each a model and an effort (main/settings.js AI_KEYS): the Quick AI (`aiQuickModel`,

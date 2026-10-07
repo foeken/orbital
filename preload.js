@@ -189,6 +189,7 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   openSettings: () => ipcRenderer.invoke('settings:open'), // Orbital's Settings window (settings.html): opened, or brought forward
   settingsSize: (height) => ipcRenderer.send('settings:size', height), // the Settings window's page, measured: the window takes its height
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
+  setOpenAIRegion: (id) => ipcRenderer.invoke('openai:setRegion', id), // 'europe' | 'us' | 'global': where the API key is sent
   aiOptions: () => ipcRenderer.invoke('ai:options'), // { model, effort, efforts, quickModel, quickEffort, quickEfforts, models }: the Quick and Regular AI, and the choices
   setAiOption: (key, value) => ipcRenderer.invoke('ai:setOption', key, value), // 'model' | 'effort' | 'quickModel' | 'quickEffort', one of the choices -> the options again
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),

@@ -465,6 +465,12 @@ ipcMain.handle('openai:setKey', (_e, key) => {
   return !!key.trim();
 });
 ipcMain.handle('chatgpt:status', () => ai.chatgptStatus(app.getPath('userData'), true));
+// Which of OpenAI's addresses the key is sent to (main/ai.js REGIONS), heard by every page as the key is
+ipcMain.handle('openai:setRegion', (_e, id) => {
+  const set = ai.setRegion(id);
+  ai.chatgptStatus(app.getPath('userData')).then((status) => send('ai:chatgptChanged', status), () => {});
+  return set;
+});
 ipcMain.handle('chatgpt:login', async () => {
   const result = await ai.startChatGPTLogin(app.getPath('userData'));
   if (!result.verificationUrl) return result;

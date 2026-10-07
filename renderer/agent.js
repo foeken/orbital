@@ -62,6 +62,13 @@ function openAIKeyRows() {
   return [{ group: 'OpenAI API key', icon: 'openaiKey', label: 'Save OpenAI API key', hint: '↩ saves locally', keepOpen: true,
     run: () => run(async () => { await tana.setOpenAIKey(key); closePalette(); }) }];
 }
+// Where the key is sent (main/ai.js REGIONS): the region of the OpenAI project the key belongs to. Europe until chosen.
+const OPENAI_REGIONS = [['europe', 'Europe'], ['us', 'United States'], ['global', 'Global']];
+const openaiRegionName = () => (OPENAI_REGIONS.find(([id]) => id === chatgptAuth?.region) || OPENAI_REGIONS[0])[1];
+const openaiRegionRows = () => OPENAI_REGIONS.map(([id, label]) => ({ group: 'OpenAI region · where your key\'s project keeps its data', icon: 'globe', label,
+  hint: label === openaiRegionName() ? 'Current' : '', keepOpen: true,
+  run: () => run(async () => { chatgptAuth = { ...(chatgptAuth || {}), region: await tana.setOpenAIRegion(id) }; closePalette(); showNote('OpenAI region: ' + label); }) }));
+function openOpenAIRegionPalette() { openPage('openaiRegion', 'OpenAI region…', { rows: (q) => matchRows(openaiRegionRows(), q), back: BACK_TO_COMMANDS }); }
 // ---- Choose agents, and Set default agent ----
 // Every agent the app knows, in one list: Tana always on, Codex and Claude greyed with what to install until this Mac has
 // them, then your linked agents (each has a page of its own: ↩ opens it), with Connect your personal agent under
