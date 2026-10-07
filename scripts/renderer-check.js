@@ -123,7 +123,7 @@ assert.deepEqual(state({ authenticated: null, authChecking: false, error: 'tempo
 assert.match(source, /if \(signedOut\) rows\.unshift\(\{ id: 'login'/, 'signed out, logging in is the first ⌘K row');
 assert.match(source, /s\.authChecking === false && s\.authenticated === false/);
 assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
-assert.match(source, /if \(tana\.setOpenAIKey && \(chatgptAuth\?\.apiKey \|\| flagOn\('decisions'\)\)\) rows\.push\(\{ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key'/, 'the key row is offered only while a key is stored (issue #669), or the Decisions API flag, which needs one, is on');
+assert.match(source, /if \(tana\.setOpenAIKey && flagOn\('decisions'\)\) rows\.push\(\{ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key'/, 'the key row is offered only while the Decisions API flag, which needs a key, is on');
 assert.match(source, /id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth/);
 assert.match(source, /function openOpenAIKeyPalette\(\)[\s\S]*palInput\.type = 'password'/);
 assert.match(source, /function openAIKeyRows\(\)[\s\S]*tana\.setOpenAIKey\(key\)/);
