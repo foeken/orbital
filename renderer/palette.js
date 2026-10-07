@@ -1065,7 +1065,10 @@ function searchNow() {
   palTimer = null; palBusy = !!q;
   const scope = fieldLinkCtx ? linkScope(fieldLinkCtx.field) : undefined; // a link field lists what it may link to, typed or not
   if (!q && !scope) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); return renderPalette(); }
-  tana.search(q, scope).then((all) => {
+  // A pasted Tana link (or bare id) is that node, read directly: a search for a url finds nothing. Unreadable, it is
+  // searched for as text. Not in a link field, whose scope a node from anywhere could step outside of.
+  const uri = !scope && tanaNodeUri(q);
+  (uri ? tana.node(uri).then((n) => [{ ...n, id: n.id || uri }], () => tana.search(q, scope)) : tana.search(q, scope)).then((all) => {
     if (seq !== palSeq || palMode !== 'search') return; // stale response
     // What only Tana's semantic search found (`related`, main/views.js) keeps its own order under its own heading.
     const found = all.filter((n) => !n.related), related = all.filter((n) => n.related);
@@ -1080,7 +1083,7 @@ function searchNow() {
     // Okafor). A full-text hit that merely mentions the words is not, so "Create" stays selected and Enter creates.
     // Words that read as a day are that date before anything else.
     const words = q.split(/\s+/).filter((w) => w && !w.startsWith('#')).length;
-    const starts = words ? nodes.findIndex((n) => titleHits(n.title ?? n.text ?? '', q).starts === words) : -1;
+    const starts = uri && nodes.length ? 0 : words ? nodes.findIndex((n) => titleHits(n.title ?? n.text ?? '', q).starts === words) : -1;
     palIndex = linkCtx && starts >= 0 && !(palRows[0] && palRows[0].date) ? starts + palRows.filter((r) => r.create).length : 0;
     palBusy = false;
     renderPalette();

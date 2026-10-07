@@ -50,7 +50,8 @@ const nameOf = (me, id, k) => (isPerson(id) ? personSlot(me, id, k) : slotName(m
 const idOf = (me, id, k) => (isPerson(id) ? 'tana:text:' + deterministicId(personSlot(me, id, k)) : slotId(me, id, k));
 const ownerOk = (owner, id) => (isPerson(id) ? !owner : ownedOk(owner, id)); // a person's: owned by nothing
 const graphMine = (n, me, id) => (n ? graphOurs(n, me, id) && ownerOk(n.ownerUri, id) : undefined);
-const CONFIRM_MS = 20000, POLL_MS = 1000;
+// OPEN_MS: how long an open waits for notes Tana is still reconnecting (a resync, a dropped stream) before saying so
+const CONFIRM_MS = 20000, POLL_MS = 1000, OPEN_MS = 5000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const within = (p, ms) => Promise.race([p, sleep(ms).then(() => { throw Object.assign(new Error('Tana has not answered yet'), { lag: true }); })]);
 const notesTitle = (meeting) => 'Private notes' + ((meeting || '').trim() ? ' · ' + meeting.trim() : ''); // found in Tana's search by its meeting
@@ -121,7 +122,8 @@ async function verify(client, eventId, me, id, login) {
   let doc;
   try { doc = await within(client.sync.subscribe(id), CONFIRM_MS); } catch { return 'lag'; }
   // what this machine holds of it may be part of it: a document still loading, or one seeded by nothing yet, proves nothing
-  if ((client.sync.stateOf && client.sync.stateOf(id) !== 'live') || readNode(doc).type === undefined) return 'lag';
+  // (one Tana stopped taking writes to is loaded, and read only: mayWrite)
+  if ((client.sync.stateOf && !['live', 'write-denied'].includes(client.sync.stateOf(id))) || readNode(doc).type === undefined) return 'lag';
   if (!docOurs(doc, eventId)) return 'refused';
   if (docPrivate(doc, eventId, me) && graphPrivate(row, me, eventId) && chainPrivate(chain, id)) return 'private';
   if (!confirmed(doc, me, login)) return 'refused'; // never confirmed: only the strict proof above makes it usable
@@ -199,20 +201,22 @@ const queues = new Map(), handed = new Map(); // handed: the note each meeting w
 const lag = (message) => Object.assign(new Error(message), { lag: true });
 
 // The meeting's notes, { id, audience: 'private' | 'shared' }, or null when there are none (yet). create: true makes them,
-// private: notes new to Tana are used only once it answers that they are.
+// private: notes new to Tana are used only once it answers that they are. Notes Tana lists but cannot be checked just now
+// throw a lag, an open's too: answered as none, the page kept showing them empty until something asked again.
 async function resolveNotes(client, eventId, me, { create = false, org, login, ...timing } = {}) {
   if (create && (!ORG.test(org || '') || !LOGIN.test(login || ''))) throw new Error('Private notes need your organization: sign in again'); // before anything is made
   const ids = Array.from({ length: SLOTS }, (_, k) => idOf(me, eventId, k));
   let rows;
   try { ({ nodes: rows = [] } = await client.graph.listNodes({ nodeIds: ids, limit: SLOTS })); }
-  catch { if (!create) return null; throw lag('Tana could not confirm your private notes just now; what you typed is kept'); }
+  catch { throw lag(create ? 'Tana could not confirm your private notes just now; what you typed is kept' : 'Tana could not check your private notes just now'); }
   const row = new Map(rows.map((n) => [n.id, n]));
   // first every place Tana lists: notes of yours there are used, whatever place is free before them
   for (const id of ids.filter((x) => row.has(x))) {
-    const answer = await verify(client, eventId, me, id, login);
+    // an open waits a little for notes still reconnecting; a create's words are kept and tried again by the page
+    const answer = create ? await verify(client, eventId, me, id, login) : await confirm(client, eventId, me, id, login, { timeout: OPEN_MS, ...timing });
     if (answer === 'private' || answer === 'shared') return { id, audience: answer };
     // yours and not checkable just now: no other note is made, since this may be the one
-    if (answer === 'lag') { if (!create) return null; throw lag('Tana could not confirm your private notes just now; what you typed is kept'); }
+    if (answer === 'lag') throw lag(create ? 'Tana could not confirm your private notes just now; what you typed is kept' : 'Tana could not check your private notes just now');
     // otherwise Tana says it is not private, yours or this meeting's: left exactly as it is
   }
   if (!create) return null; // an open reads the graph only, and asks for no document
