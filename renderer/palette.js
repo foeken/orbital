@@ -451,7 +451,8 @@ function paletteRows(q, typed = q) {
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Turns on translation, Discuss with and more' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
   // Sign in with ChatGPT is the way in (issue #669): the key is offered only to whoever already stored one, until it is cleared
-  if (tana.setOpenAIKey && chatgptAuth?.apiKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
+  // and to whoever turned on the Decisions API flag, which takes an API key only (renderer/flags.js, main/decisions.js)
+  if (tana.setOpenAIKey && (chatgptAuth?.apiKey || flagOn('decisions'))) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: chatgptAuth?.apiKey ? 'Stored locally' : 'For the Decisions API, stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
   rows.push({ id: 'installMobile', group: 'Help', icon: 'mobile', label: 'Install mobile app', hint: androidDownload ? 'iPhone from TestFlight, Android with Obtainium' : 'iPhone from TestFlight, Android coming soon', run: () => openHelp('mobile') }); // the tour's phone page: the iPhone's code and link, Android's download once a release has it (help.html)
