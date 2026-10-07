@@ -819,13 +819,19 @@ function move(document, id, direction) {
   document.transact(() => moveUnit(unit(document, id), direction));
 }
 
-// ids are in visual order. Moving down works from the end; moving up works from the start.
+// ids are in visual order: a run of adjacent rows of one row (or of the outline itself). The run moves past the row
+// beside it by that row moving to its other side (moveTo), so what counts is the rows as they are drawn, not where
+// Loro keeps them: a heading and the bullets under it are one bare block and the items of a list beside it, and moving
+// each within its own list sent the heading past its list and left the bullets where they were.
 function moveMany(document, ids, direction) {
   checkDirection(direction);
-  const units = selectedUnits(document, ids);
-  document.transact(() => {
-    for (const unit of direction === 'up' ? units : [...units].reverse()) moveUnit(unit, direction);
-  });
+  selectedUnits(document, ids, { siblings: false }); // every id a row, none twice
+  const find = (rows, parent) => { for (const r of rows) { if (r.id === ids[0]) return { rows, parent }; const f = find(r.children || [], r); if (f) return f; } return null; };
+  const { rows, parent } = find(readOutline(document), null) || { rows: [] }, at = rows.findIndex((r) => r.id === ids[0]);
+  if (ids.some((id, i) => !rows[at + i] || rows[at + i].id !== id)) throw new Error('outline selection must be adjacent siblings');
+  const up = direction === 'up', other = rows[up ? at - 1 : at + ids.length];
+  if (!other) return; // at the edge
+  moveTo(document, other.id, up ? { afterId: ids.at(-1) } : at > 0 ? { afterId: rows[at - 1].id } : { parentId: parent ? parent.id : null });
 }
 
 // ---- moving a node to a place (a drag, docs/OUTLINER.md) ----

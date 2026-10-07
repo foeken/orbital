@@ -5682,6 +5682,29 @@ async function main() {
     assert.deepEqual(outline.readOutline(m).map((n) => n.text), ['A', 'B', 'C', 'D']);
     assert.equal(m.redo(), true);
     assert.deepEqual(outline.readOutline(m).map((n) => n.text), ['A', 'D', 'B', 'C']);
+    // A heading with the bullets under it (a bare block, then the items of a list beside it) moves as one run, as drawn
+    const h = new Document(DOC, { peerId: '743' });
+    const intro = outline.insertAfter(h, null, 'Intro');
+    const head = outline.insertAfter(h, intro, 'Decision Making'); outline.setBlockType(h, head, 'heading1');
+    const b1 = outline.insertAfter(h, head, 'informed by data'); outline.setBlockType(h, b1, 'bullet');
+    const b2 = outline.insertAfter(h, b1, 'as locally as possible'); outline.setBlockType(h, b2, 'bullet');
+    outline.insertChild(h, b2, 'under it');
+    const mind = outline.insertAfter(h, b2, 'Mindset'); outline.setBlockType(h, mind, 'heading1');
+    const m1 = outline.insertAfter(h, mind, 'One team'); outline.setBlockType(h, m1, 'bullet');
+    const shape = () => outline.readOutline(h).map((n) => [n.text, n.block, ...(n.children || []).map((c) => c.text)].join(':'));
+    const before = shape(), run = [head, b1, b2];
+    assert.deepEqual(before, ['Intro:paragraph', 'Decision Making:heading1', 'informed by data:bullet', 'as locally as possible:bullet:under it', 'Mindset:heading1', 'One team:bullet']);
+    outline.moveMany(h, run, 'down');
+    assert.deepEqual(shape(), ['Intro:paragraph', 'Mindset:heading1', 'Decision Making:heading1', 'informed by data:bullet', 'as locally as possible:bullet:under it', 'One team:bullet'], 'down: past the next row, the run whole');
+    outline.moveMany(h, run, 'down'); outline.moveMany(h, run, 'down');
+    assert.deepEqual(shape().slice(-3), ['Decision Making:heading1', 'informed by data:bullet', 'as locally as possible:bullet:under it'], 'at the bottom');
+    outline.moveMany(h, run, 'down');
+    assert.deepEqual(shape().slice(-3), ['Decision Making:heading1', 'informed by data:bullet', 'as locally as possible:bullet:under it'], 'past the edge: nothing');
+    outline.moveMany(h, run, 'up'); outline.moveMany(h, run, 'up'); outline.moveMany(h, run, 'up'); outline.moveMany(h, run, 'up');
+    assert.deepEqual(shape().slice(0, 3), ['Decision Making:heading1', 'informed by data:bullet', 'as locally as possible:bullet:under it'], 'up to the top, children with it');
+    assert.equal(h.undo(), true);
+    assert.deepEqual(shape().slice(1, 4), ['Decision Making:heading1', 'informed by data:bullet', 'as locally as possible:bullet:under it'], 'one undo, one step');
+    assert.throws(() => outline.moveMany(h, [head, b2], 'down'), /siblings/, 'a run with a gap is refused');
     console.log('ok  atomic multi-remove/move undo and redo');
   }
   // Enter is one user action too: the truncation and the new node are one transaction, and Enter at the very
