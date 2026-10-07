@@ -10054,7 +10054,7 @@ async function runPeopleFieldsCheck() {
     const renderSegs = (el, segs) => el.append(...segs.map((s) => (s.mention ? '@' + s.mention.label : s.text)));
     const addIcon = () => {}, facesEls = () => [], sensitiveHidden = () => false, isGuest = (uri) => uri.startsWith('tana:guest-profile:'), demoText = (v) => v;
     const iconNode = (name) => Object.assign(document.createElement('svg'), { dataset: { icon: name } });
-    const relatedBy = new Map(), tana = { accessOptions: null }, openVisibility = () => {}, moveTo = () => {};
+    const opened = [], relatedBy = new Map(), tana = { accessOptions: null }, openVisibility = (doc) => opened.push(doc.id), moveTo = () => {};
     let renders = 0; const render = () => { renders++; };
     let summary = null; const taskSummary = () => summary, documentSummary = () => null;
     let info = null; const meetingOf = (node) => (node.icon === 'meeting' ? { id: node.id } : null), meetingInfoOf = () => info;
@@ -10071,6 +10071,8 @@ async function runPeopleFieldsCheck() {
       pins: (data, docId = 'tana:event:m') => { relatedBy.set(docId, data); return lines(pinnedFieldEl({ node: { id: docId }, docId })); },
       pinAdd: () => { relatedBy.set('tana:event:m', { hubKind: 'event', pinHub: 'tana:event:m', pinned: [] }); pinnedFieldEl({ ...page, docId: 'tana:event:m' }).childNodes[2].childNodes.at(-1).onclick(); return calls; },
       visible: (scope, word) => { summary = { scope, audience: { icon: 'lock', label: 'x', word }, people: [], peopleCount: 0 }; return visibilityFieldEl({ node: { id: 'tana:text:a' }, docId: 'tana:text:a' }).childNodes[2].textContent; },
+      opens: (data) => { relatedBy.set('tana:text:a', data); summary = { scope: 'people', audience: { icon: 'lock', label: 'x' }, people: [], peopleCount: 0 }; tana.accessOptions = () => {};
+        visibilityFieldEl({ node: { id: 'tana:text:a' }, docId: 'tana:text:a' }).childNodes[2].childNodes[0].onclick({ target: { closest: () => null } }); tana.accessOptions = null; return opened.at(-1); },
       attendees: (list) => { info = list && { attendees: list }; return lines(attendeesFieldEl(page)); },
       more: () => { attendeesFieldEl(page).childNodes[2].childNodes.at(-1).onclick(); return [renders, lines(attendeesFieldEl(page)).length]; },
       notMeeting: () => attendeesFieldEl({ node: { id: 'tana:text:a' } }),
@@ -10079,6 +10081,9 @@ async function runPeopleFieldsCheck() {
   `, {});
   assert.equal(api.visible('only-me', 'Private'), '@Robin Vega', 'Private names you, as a mention');
   assert.equal(api.visible('everyone', 'Everyone'), 'Everyone', 'the other audiences keep their word');
+  assert.equal(api.opens({ pinHub: 'tana:event:m', summaryUri: 'tana:text:a' }), 'tana:event:m', 'a meeting\'s write-up opens the meeting\'s visibility');
+  assert.equal(api.opens({ pinHub: 'tana:event:m', summaryUri: 'tana:text:other' }), 'tana:text:a',
+    'a task inside the meeting opens its own: the meeting\'s said only its organizer may change it, where the task\'s own may be changed');
   assert.equal(api.notMeeting(), null, 'no Attendees on a page that is no meeting');
   assert.equal(api.attendees(null), null, 'nor while its info is on its way');
   const people = [{ identityUri: 'tana:user-profile:sam' }, { name: 'Room 4', cutype: 'room' }, { name: 'Board', role: 'resource' }, ...['A', 'B', 'C', 'D', 'E', 'F'].map((name) => ({ name, email: name + '@x.nl' }))];
