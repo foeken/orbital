@@ -113,16 +113,40 @@ final class SampleTests: SampleCase {
         wait(for: [done], timeout: 15)
     }
 
-    // A zoomed node's Pin to Today, and Remove Pin once it is (Pages.swift NodeDetails, Engine.pin)
+    // A zoomed node's Pin to Today, and Remove Pin once it is (Pages.swift NodeDetails, Engine.pin), each drawn in the
+    // text colour with its glyph by its word: a Label drew a blue system pin in the list's icon column, far from the word
     func testPinToTodayOnAZoomedNode() {
         launch(["-zoom", "tana:text:000000000000000000000000v6"])
         let pin = app.buttons["Pin to Today"]
         XCTAssert(pin.waitForExistence(timeout: 15))
+        Self.drawnPlain(pin)
         pin.tap()
         let unpin = app.buttons["Remove Pin"]
         XCTAssert(unpin.waitForExistence(timeout: 15))
+        Self.drawnPlain(unpin)
         unpin.tap()
         XCTAssert(app.buttons["Pin to Today"].waitForExistence(timeout: 15))
+    }
+
+    // the row as drawn: no ink in a colour (the accent blue), and its glyph (the first ink, 18 pt) within the row's own
+    // 12 pt of its word
+    private static func drawnPlain(_ row: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        guard let cg = row.screenshot().image.cgImage else { return XCTFail("no screenshot", file: file, line: line) }
+        let w = cg.width, h = cg.height, scale = CGFloat(w) / row.frame.width
+        var px = [UInt8](repeating: 0, count: w * h * 4)
+        guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return XCTFail("no pixels", file: file, line: line) }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let at = { (x: Int, y: Int) in (0 ..< 3).map { Int(px[(y * w + x) * 4 + $0]) } }
+        let bg = at(w - 2, h / 2)
+        let coloured = (0 ..< w * h).contains { i in let p = at(i % w, i / w); return p.max()! - p.min()! > 60 }
+        XCTAssertFalse(coloured, "\(row.label) has ink in a colour", file: file, line: line)
+        let ink = (0 ..< w).map { x in (0 ..< h).contains { y in zip(at(x, y), bg).contains { abs($0 - $1) > 40 } } }
+        guard let glyph = ink.firstIndex(of: true) else { return XCTFail("nothing drawn", file: file, line: line) }
+        let end = (glyph ..< min(w, glyph + Int(18 * scale))).last { ink[$0] }! + 1
+        guard let word = (end ..< w).first(where: { ink[$0] }) else { return XCTFail("no word after the glyph", file: file, line: line) }
+        let gap = CGFloat(word - end) / scale
+        XCTAssert((3 ... 14).contains(gap), "\(row.label): the glyph is \(gap) pt from its word", file: file, line: line)
     }
 
 }

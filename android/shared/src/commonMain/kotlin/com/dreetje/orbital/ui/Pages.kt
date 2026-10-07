@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
@@ -389,7 +388,7 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
         val pinned = id in engine.pinned
         Row(Modifier.fillMaxWidth().clickable { engine.scope.launch { engine.pin(id, !pinned) } }.semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Outlined.PushPin, null, Modifier.size(18.dp), c.text)
+            Glyph("pinDate", Modifier.size(18.dp), c.text) // the desktop's pin-to-a-day glyph, as the iPhone draws it
             Text(if (pinned) "Remove Pin" else "Pin to Today", color = c.text)
         }
         HorizontalDivider(color = c.separator)
