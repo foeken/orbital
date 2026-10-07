@@ -118,7 +118,7 @@ function parseKey(combo) {
   }); }).listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
   const port = 9300 + Math.floor(Math.random() * 600);
-  const ch = spawn(chrome, ['--remote-debugging-port=' + port, '--hide-scrollbars', '--force-color-profile=srgb', '--force-device-scale-factor=' + DPR,
+  const ch = spawn(chrome, ['--mute-audio', '--remote-debugging-port=' + port, '--hide-scrollbars', '--force-color-profile=srgb', '--force-device-scale-factor=' + DPR,
     '--user-data-dir=' + fs.mkdtempSync(path.join(os.tmpdir(), 'orbscene-')), 'about:blank'], { stdio: 'ignore' });
   let failed = 0;
   try {

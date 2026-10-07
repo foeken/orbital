@@ -552,7 +552,8 @@ Cmd+K leads with a Selection group for it (§8).
   page is at Home on the place that view keeps for it; removed, Home is the Work View again. A Library or saved search
   chosen as Home before still works, stored as its id (`library` or a `tana:search:` uri), and opens as a window of one
   pane on it, like every Home. Every route Home goes through
-  `goHome`; Cmd+K "Go to Home" names it, and stays listed, disabled with "Current", where you already are. A Home whose saved search is gone from `api.searches()` falls back
+  `goHome`; Cmd+K "Go to Home" names it and always runs, reopening the whole window: a page sees only its own pane, so it
+  cannot tell whether the window is already Home. A Home whose saved search is gone from `api.searches()` falls back
   to the Library and the preference is repaired (`repairHome`), but only from a list that could have named it:
   `searchesLoaded` is set only by an answer that lands while connected.
 - **Reopening where you left off.** `rememberPlace` stores `{ docId, nodeId, from, title, icon, notes }` (notes: a meeting showing your notes over its write-up, so a reload reopens on them; renderer/meetingnotes.js `notesOn`) under `place` (per
@@ -577,6 +578,13 @@ with the query running.
 
 **Right-click** (or ⌃-click) on a row opens Cmd+K on that row: the caret goes where it was clicked and the row is the
 Current node; on a row of a multi-selection the selection stays and Cmd+K acts on it (renderer/events.js `contextmenu`).
+
+**Suggested** leads Cmd+K while nothing is typed: the rows you pick most that can run here, up to five, most picked
+first, also left in their own groups (renderer/palette.js `commandRows`). A pick from Cmd+K and one after a right-click
+are counted apart (`palFrom`), so each way of opening it learns its own habits. A pick adds 1 to its row (`id`, else
+`rank`; a folded choice such as Set status Completed by its folded id) and fades every other by ×0.97; a row shows from
+1.5, so twice. Rows run by a key, the sidebar or `runAction` are not picks. Kept in localStorage (`paletteUse`), this
+machine only, as Recently viewed.
 
 **In a window of several panes** (issue #409) the card and its scrim cover the whole window, centred over every pane,
 and everything the palette does stays with the pane that opened it: its rows, the node it acts on, its keys and where the
@@ -766,7 +774,10 @@ Created, Title, and Meeting time where meetings are the only kind (the event's s
 window does: soonest first for Upcoming and Today, latest first otherwise); Group None, Status, Assignee, Responsibility, Updated, Type;
 Display chooses the facts a row shows. Each is kept per page key in the synced `groupBy`, `sortBy` and `display`
 preferences; a saved search keeps its own in its document. Group by Updated sorts rows into Last hour, Last day, Last
-week, Last month and Older.
+week, Last month and Older. Group by **Meeting date** (`meeting`, offered where Meeting time is: a list of meetings
+only) puts each meeting under the day it starts, Today, Tomorrow and Yesterday by name, the days running as Meeting time
+does and a row with no window under No date; a section is keyed by its day, so a fold outlives "Tomorrow". Tana does not
+know the word and leaves it in the search's `view.groupBy` for Orbital, as it does Responsibility.
 Each also offers the page's fields (issue #624): a one-type page its type's own, a mixed list those of the types on
 it, one per name as Group has them (`pageFieldDefs`), under a small "Type fields" heading (`fieldSection`); Group
 only the ones with a closed set of values. Sort on a field goes by its first value: a date by its day, anything else
@@ -1596,7 +1607,8 @@ take the keys.
   **Home** (Cmd+K Go to Home) and **Today** (Cmd+K Today) run those rows there.
 - Then **your sidebar pins as Tana keeps them** (docs/PINNING.md §1): the pins at the top level under **Pinned**, then
   each section with its pins, in Tana's order; a click opens the pin in that page (`goto`), and the pin of the page on
-  screen is marked. A section's heading folds it and shows its count while folded (kept on this machine,
+  screen is marked. A right-click on a pin shows the Mac's own menu with **Remove pin**, which unpins it from the sidebar
+  (`window.shell.pinMenu` → main/pins.js `pins:menu`, greyed in demo mode). A section's heading folds it and shows its count while folded (kept on this machine,
   `windowSidebarFolded`); a section with nothing in it is not drawn, and with no pins at all one line says how to add one.
   Titles are masked in demo mode (renderer/segments.js `demoText`) and a sensitive pin is blurred until the header's
   eye shows sensitive items.

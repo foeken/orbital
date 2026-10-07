@@ -17,18 +17,24 @@ const LIMITS = [50, 100, 200, 500, 1000];
 const rowLimit = (limit) => (LIMITS.includes(limit) ? limit : 200);
 const completedWindow = (f) => (COMPLETED.some(([v]) => v === (f || {}).completedWithin) ? f.completedWithin : 7);
 const showsCompleted = (f) => !!f && (!f.states || f.states.includes('closed'));
-// When meetings take place, while meetings are the only kind listed (#492): Tana's four presets, applied by sdk/query.js.
+// When meetings take place, while meetings are the only kind listed (#492): Tana's four presets and This week
+// (Monday to Sunday, kept in a saved search as the week it is run in), applied by sdk/query.js.
 // 'week' is Cmd+K's meeting picker's (a week either side of today) and what an older saved range reads back as: the
-// pill names it, but offers only Tana's four.
-const WHEN = [['recent', 'Recent'], ['today', 'Today'], ['upcoming', 'Upcoming'], ['past', 'Past']];
+// pill names it, but does not offer it.
+const WHEN = [['recent', 'Recent'], ['today', 'Today'], ['thisWeek', 'This week'], ['upcoming', 'Upcoming'], ['past', 'Past']];
 const whenName = (w) => (w === 'week' ? 'Week either side' : (WHEN.find(([v]) => v === w) || [0, 'Any time'])[1]);
 const onlyMeetings = (f) => !!f && Array.isArray(f.types) && f.types.length === 1 && f.types[0] === 'meetings';
 const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['searches', 'Searches', 'search'], ['spaces', 'Spaces', 'space'], ['people', 'People', 'member'], ['types', 'Types', 'type']];
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
 // ---- group by: plain headings over the rows the view already loaded, no extra query ----
-const GROUPS = [['none', 'None', 'none'], ['status', 'Status', 'status'], ['assignee', 'Assignee', 'assigned'], ['responsibility', 'Responsibility', 'userAlert'], ['updated', 'Updated', 'updated'], ['type', 'Type', 'type']]; // [id, label, icon]
-const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type', field: 'No value' }; // responsibility has none: see below
+const GROUPS = [['none', 'None', 'none'], ['status', 'Status', 'status'], ['assignee', 'Assignee', 'assigned'], ['responsibility', 'Responsibility', 'userAlert'], ['updated', 'Updated', 'updated'], ['type', 'Type', 'type'], ['meeting', 'Meeting date', 'calendar']]; // [id, label, icon]
+const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type', field: 'No value', meeting: 'No date' }; // responsibility has none: see below
+// Group by Meeting date: a section per day a meeting starts on, offered where Meeting time sorts (meetings are all the
+// list holds), its days running the way that sort does (soonestFirst). Keyed by the day, so a folded day stays folded
+// once it is no longer Tomorrow; a row with no window (an older cached one) is under No date until it is read again.
+// Other days read as a meeting's own day does, "Tue 22 Sep" (renderer/meeting.js meetingDay).
+const meetingHeading = (day) => ({ [localDate(-1)]: 'Yesterday', [localDate()]: 'Today', [localDate(1)]: 'Tomorrow' })[day] || meetingDay(day + 'T12:00');
 // A field's missing value is its own section, headed No value: an options field can have a choice called that too.
 const NO_FIELD = '\u0000no value';
 // Group by Responsibility: what a row is to you, from who made it (the graph's createdBy, on the row already) and who
@@ -148,7 +154,7 @@ function pageFieldDefs(load = false) {
   return [...named.values()];
 }
 const GROUPABLE = ['options', 'link', 'member'];
-const baseGroups = () => (onTypePage() ? GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))) : GROUPS);
+const baseGroups = () => GROUPS.filter(([id]) => (id !== 'meeting' || meetingSort()) && (!onTypePage() || (id !== 'type' && !(noTasks() && TASK_ONLY.includes(id)))));
 // menu: the Group menu's own list, which also names a field kept by name that the page does not offer now (groupOf),
 // so the choice in effect is ticked there
 const groupList = (load, menu = false) => {
@@ -227,6 +233,7 @@ function groupKey(n, by) {
   if (by === 'assignee') { const meta = taskMetaById.get(n.id), uri = meta && meta.assignees[0]; return uri ? memberName(uri) : FALLBACK.assignee; }
   // The same lazily read metadata grouping by assignee uses; null means the row has no section here and is left out.
   if (by === 'responsibility') return responsibilityOf(n);
+  if (by === 'meeting') return n.start ? isoDay(new Date(n.start)) : FALLBACK.meeting; // ponytail: an all-day event's UTC midnight read as a local day; carry allDay on the row if a zone west of UTC shows it a day early
   // ponytail: a field with several values is filed under the first, like the assignee grouping above
   // a field by name reads the keys of the type the row is now; a value left from a former type is not its
   if (isFieldKey(by)) return fieldValuesOf(n, by, GROUPABLE)[0] || NO_FIELD;
@@ -244,9 +251,11 @@ function groupRows(list, by) {
   const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : by === 'responsibility' ? RESPONSIBILITY : isFieldKey(by) ? fieldOrder(by) : []; // Updated: newest first
   const last = isFieldKey(by) ? NO_FIELD : FALLBACK[by];
   const rank = (t) => (t === last ? 2 : fixed.includes(t) ? 0 : 1);
+  const back = by === 'meeting' && !soonestFirst() ? -1 : 1; // past meetings, latest day first
   return [...buckets.keys()]
-    .sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? fixed.indexOf(a) - fixed.indexOf(b) : a.localeCompare(b)))
-    .map((key) => (key === NO_FIELD ? { title: FALLBACK.field, id: NO_FIELD, nodes: buckets.get(key) } : { title: key, nodes: buckets.get(key) }));
+    .sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? fixed.indexOf(a) - fixed.indexOf(b) : back * a.localeCompare(b)))
+    .map((key) => (key === NO_FIELD ? { title: FALLBACK.field, id: NO_FIELD, nodes: buckets.get(key) }
+      : by === 'meeting' && key !== last ? { title: meetingHeading(key), id: key, nodes: buckets.get(key) } : { title: key, nodes: buckets.get(key) }));
 }
 function groupsOf(list) {
   const by = groupBy();
@@ -335,7 +344,7 @@ const statusRank = (n) => { const i = STATES.findIndex(([id]) => id === stateOf(
 const SORT_KEY = { status: statusRank, updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase(), meeting: (n) => n.start };
 const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
 // Meeting time runs the way the query does (sdk/query.js viewParams): soonest first for what is still to come, latest first otherwise.
-const soonestFirst = () => ['upcoming', 'today'].includes((filters.get(pillKey()) || {}).window);
+const soonestFirst = () => ['upcoming', 'today', 'thisWeek'].includes((filters.get(pillKey()) || {}).window);
 // Every page, saved searches included, keeps the order its query returned until the user says otherwise; Library's
 // starting arrangement above (newest change first) is the one exception.
 // a field stays chosen on any list, like a field grouping (groupOf): rows without it sort last

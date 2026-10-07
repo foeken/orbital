@@ -122,6 +122,7 @@
     </div>
     <p>Select several rows (<kbd>⇧↓</kbd>, or <kbd>⌘</kbd>-click) and the palette leads with <b>Selection</b> instead, counting what each row acts on ("Delete 4 items"). Rows that an action cannot apply to are counted as skipped, and the page's own rows follow under <b>Current page</b>.</p>
     <p><b>Right-click</b> a row, or <kbd>⌃</kbd>-click it, to open <kbd>⌘K</kbd> on that row: the caret goes where you clicked, and the palette acts on it. On a row inside a selection, the selection stays.</p>
+    <p><b>Suggested</b> sits above all of it once you have habits: the rows you run most, up to five, most used first. Orbital learns from what you pick, and keeps two lists, one for <kbd>⌘K</kbd> and one for right-click, because you reach for different things each way: a right-click on a task may lead with <b>Set status Completed</b> while <kbd>⌘K</kbd> leads with a view. A row joins once you have picked it twice, older picks fade as new ones come in, and the rows stay in their own groups too. Typing hides Suggested, so a query is ranked by its match alone. What you pick is remembered on this Mac only.</p>
     <div class="try">Put the caret in any task, then <span class="seq"><kbd>⌘K</kbd></span> and read the first group. Move to a meeting and open it again.</div>
   </section>
 
@@ -135,6 +136,7 @@
     </div>
     <table class="keys">
       <tr><th>Group</th><th>What is in it</th></tr>
+      <tr><td><b>Suggested</b></td><td>The rows you pick most, apart for <kbd>⌘K</kbd> and right-click, while nothing is typed</td></tr>
       <tr><td><b>Selection</b> or <b>Current node</b></td><td>What you can do to the rows you are on</td></tr>
       <tr><td><b>Table</b></td><td>Rows, columns and cells, with the caret in a table</td></tr>
       <tr><td><b>Image</b></td><td>Process image, Process image from clipboard</td></tr>
@@ -166,7 +168,7 @@
     <h2 id="greyed" data-short="Greyed rows" data-k="disabled grey unavailable why">Greyed rows, and why</h2>
     <div class="split">
       <div>
-        <p>Orbital shows you every option, even the ones you cannot use right now. A row that cannot run stays in its place, greyed, and its grey hint on the right says why: <b>Go to Home</b> says <b>Current</b> when you are already there, and <b>Go back</b> is grey with nothing to go back to. A read-only node shows <b>Delete</b> greyed. While you are signed out, everything but <b>Log in to Tana</b> is grey.</p>
+        <p>Orbital shows you every option, even the ones you cannot use right now. A row that cannot run stays in its place, greyed: <b>Go back</b> is grey with nothing to go back to. A read-only node shows <b>Delete</b> greyed. While you are signed out, everything but <b>Log in to Tana</b> is grey.</p>
         <p><kbd>↑</kbd> and <kbd>↓</kbd> skip greyed rows, and so does the highlight after you type, so <kbd>↩</kbd> always does something. The exception is a greyed row you can give a key to, such as <b>Clean up</b> before there is anything to clean up: the highlight still stops there so <kbd>⇧⌘K</kbd> can record it.</p>
       </div>
       <figure class="shot"><img data-m="start-signedout-palette" alt="The palette while signed out: every row but Log in to Tana is greyed"><figcaption>Signed out, every row is shown and only one runs.</figcaption></figure>
@@ -244,6 +246,4 @@
 </main>
 </body>
 </html>
-
-
 

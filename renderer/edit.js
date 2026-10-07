@@ -540,7 +540,7 @@ async function restorePlace() {
     savedPlace = null;
     if (zoom) return; // somewhere else already
     try {
-      if (saved.myTasks) { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; myTasksId = n.id; } // the id for the Home check (renderer/nodes.js), a search just made included
+      if (saved.myTasks) { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; }
       else saved = { docId: await (saved.today ? tana.todayNode() : tana.weekNode()), nodeId: null }; // a saved view's Today or This week (renderer/palette.js saveView)
     } catch { return; } // the view it is on is the fallback
     if (zoom) return;

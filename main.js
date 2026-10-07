@@ -124,7 +124,6 @@ function adoptLayout(win, doc, keys) {
   const ids = docPages(doc), used = new Set([...others, ...ids]), map = new Map();
   for (const id of ids) if (id && others.has(id)) { let n = 2; while (used.has(String(n))) n++; used.add(String(n)); map.set(id, String(n)); }
   for (const id of ids) setStart(map.get(id) ?? id, keys, id ? ':' + id : '');
-  for (const [id, to] of map) starts.set(to, { ...starts.get(to), as: id }); // the id it has in the view, for its Home check (renderer/nodes.js)
   if (!map.size) return doc;
   const swap = (s) => (typeof s === 'string' && s.startsWith('page') && map.has(s.slice(4)) ? 'page' + map.get(s.slice(4)) : s);
   const walk = (v) => (Array.isArray(v) ? v.map(walk) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [swap(k), walk(x)])) : swap(v));

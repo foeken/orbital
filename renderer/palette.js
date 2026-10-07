@@ -20,6 +20,7 @@ function chooseRow(create, where) {
   openRow(r, where);
 }
 function openRow(r, where) {
+  if (r && !r.disabled && palMode === 'cmd') notePaletteUse(r);
   if (r && where && !linkCtx && r.opens && !r.disabled) { closePalette(); run(async () => openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens)); }
   else if (r) runRow(r);
 }
@@ -395,7 +396,7 @@ function paletteRows(q, typed = q) {
   // Where Back lands with no history and what the anchor crumb points at, as a row: the same goHome (renderer/nodes.js),
   // so there is one route Home and it reads the choice live. On Home it stays, disabled, saying so — discoverable, and
   // still something ⇧⌘K can record a key against.
-  rows.push({ id: 'goHome', group: 'Navigate', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
+  rows.push({ id: 'goHome', group: 'Navigate', icon: 'home', label: 'Go to Home', hint: homeName() || '', run: () => goHome() });
   // Home is the window as it is now, its panes and what each shows: kept as the saved view "Home" (renderer/nodes.js)
   if (tana.windowLayout) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeId() === HOME_VIEW ? 'Updates Home to this window' : 'This window as it is', run: () => run(async () => { await saveView('Home', HOME_VIEW); setHome(HOME_VIEW); }) });
   if (windowPanes.links) rows.push({ id: 'rail', group: 'Navigate', icon: 'graph', label: 'Focus graph', run: () => (LINKS ? focusRail() : toShell({ orbital: 'focusLinks' })) });
@@ -474,6 +475,35 @@ function paletteRows(q, typed = q) {
   // Signed out, logging in is the only thing that works: every other row is greyed out, and runRow refuses it
   return matched.map((r) => { const k = r.id && hotkeyFor(r.id); return { ...r, ...(k && { kbd: k }), ...(signedOut && r.id !== 'login' && { disabled: true }) }; });
 }
+// ---- Suggested: the rows you pick most, on top ----
+// What you run from ⌘K is counted apart from what you run after a right-click on a row (renderer/events.js, ⌘K on that
+// row), since the two are used for different things. While nothing is typed, the five you pick most that can run here
+// lead under Suggested, and stay in their own groups too. Each pick fades the older ones (×0.97), so a habit that
+// changes moves the list; a row shows once picked twice. This machine's only, as Recently viewed: it changes on
+// every command, too often to sync. A key or a sidebar button running a row is no pick.
+let palFrom = 'cmd'; // how the open ⌘K was opened: 'cmd', or 'context' for a right-click
+const useKey = (r) => r.id || r.rank;
+function paletteUse() { try { return JSON.parse(localStorage.getItem('paletteUse')) || {}; } catch { return {}; } }
+function notePaletteUse(r) {
+  const id = useKey(r);
+  if (!id) return;
+  const all = paletteUse(), use = all[palFrom] || {};
+  for (const k of Object.keys(use)) if ((use[k] *= 0.97) < 0.1) delete use[k];
+  use[id] = (use[id] || 0) + 1;
+  all[palFrom] = use;
+  try { localStorage.setItem('paletteUse', JSON.stringify(all)); } catch { /* no storage: nothing learned */ }
+}
+function suggestedRows(rows) {
+  const use = paletteUse()[palFrom] || {}, seen = new Set(), score = (r) => use[useKey(r)] || 0;
+  return rows.filter((r) => !r.disabled && score(r) >= 1.5 && !seen.has(useKey(r)) && seen.add(useKey(r)))
+    .sort((a, b) => score(b) - score(a)).slice(0, 5).map((r) => ({ ...r, group: 'Suggested' }));
+}
+// The ⌘K page's rows: paletteRows, with Suggested on top while nothing is typed (a query ranks by the match alone). A
+// choice folded from a short fixed list (Set status to Completed, loaded as ⌘K opens) can be suggested too.
+const commandRows = (q, typed) => {
+  const rows = paletteRows(q, typed);
+  return q || signedOut ? rows : [...suggestedRows(rows.flatMap((r) => [r, ...(r.subAlways ? subRowsFor(r) : [])])), ...rows];
+};
 // a hotkey, recorded or default, runs its palette row's action (views/sync/login by id; documents wherever they live);
 // false when no such row exists right now, so the key can fall through to whatever else it means. A row that is here
 // but off (Clean up with nothing held, Go back with no history) answers the key by doing nothing: it is the same
@@ -583,7 +613,7 @@ function openPillPalette(id) {
   pillCtx = id; openPage('pill', 'Choose ' + id, { rows: pillRows, back: BACK_TO_COMMANDS });
 }
 function openCommandPalette() {
-  pillCtx = null; refreshChatGPTStatus(); openPage('cmd', 'Run a command', { rows: paletteRows });
+  pillCtx = null; refreshChatGPTStatus(); openPage('cmd', 'Run a command', { rows: commandRows });
 }
 // Escape: the page says where it came from; a page that says nothing (the command page, search) closes.
 function backPalette() { (palPage.back || closePalette)(); }
@@ -1178,7 +1208,7 @@ function renderPalette() {
 }
 // opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
 // link = @ linking context; pin = relationship pin context. Both reuse search results.
-function togglePalette(mode, link, pin) {
+function togglePalette(mode, link, pin, from = 'cmd') { // from: 'context' when a right-click on a row opened ⌘K (Suggested)
   // The Graph pane has no outline for Cmd+K or Cmd+S to act on: they open in the page it follows (shell.js), whose rows
   // (views, Create new …, results) are meant for it (#463 review). A picker one of its own rows opens stays here.
   if (LINKS && palette.hidden && !link && !pin && (mode === 'cmd' || mode === 'search')) return toShell({ orbital: 'palette', mode });
@@ -1186,6 +1216,7 @@ function togglePalette(mode, link, pin) {
   cancelLink(); pinCtx = null; pillCtx = null;
   palette.hidden = !show;
   if (!show) return closePalette(); // closing the way every other close does, so a field that opened it gets its focus back
+  palFrom = from;
   if (!palReturn) palReturn = returnTarget(); // switching modes keeps the original return target
   linkCtx = link || null;
   anchorPalette(link && link.rect);
@@ -1194,7 +1225,7 @@ function togglePalette(mode, link, pin) {
   // ⌘K over the prompt page leaves it, without assigning
   // "@" says what narrows it: the #filters the search reads (sdk/query.js parseQuery)
   showPage(mode, mode === 'search' ? (link ? 'Link to… #task or #meeting narrows it' : 'Search Tana') : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command',
-    { cmd: { rows: paletteRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
+    { cmd: { rows: commandRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
   if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingLinks = null; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); loadClipImage(); }

@@ -101,10 +101,13 @@ const { USER_URI: USER, TYPE_URI } = require('./ids');
 // Unless every type chosen has a workflow (`workflows`, the uris main read a workflowUri on): their nodes are tasks.
 const splitTypes = (types) => { const all = Array.isArray(types) ? types : []; return { kinds: all.filter((t) => !TYPE_URI.test(t)), typeUris: all.filter((t) => TYPE_URI.test(t)) }; };
 const tasksInScope = (types, workflows = new Set()) => { const { kinds, typeUris } = splitTypes(types); return kinds.length ? kinds.includes('tasks') : typeUris.every((u) => workflows.has(u)); };
-// When meetings take place (#492): Tana's four presets (timeRange), offered by the When pill while meetings are the only
-// kind, and 'week', a week either side of today, which only Cmd+K's meeting picker asks for. Like a state, a window only
-// means something while meetings are all that is listed, so it is applied (and stored) only then.
-const MEETING_WINDOWS = ['recent', 'today', 'upcoming', 'past'];
+// When meetings take place (#492): Tana's four presets (timeRange) and Orbital's own 'thisWeek' (Monday to Sunday, the
+// week renderer/segments.js weekTitle names), offered by the When pill while meetings are the only kind, and 'week', a
+// week either side of today, which only Cmd+K's meeting picker asks for. Like a state, a window only means something
+// while meetings are all that is listed, so it is applied (and stored) only then. 'thisWeek' is stored as a preset like
+// Tana's, so a saved search keeps meaning the week it is run in; Tana's own client does not know it and puts no window on it.
+const MEETING_WINDOWS = ['recent', 'today', 'thisWeek', 'upcoming', 'past'];
+const SOON_FIRST = ['upcoming', 'today', 'thisWeek']; // the windows listed soonest first; the rest latest first
 const meetingsOnly = (types) => Array.isArray(types) && types.length === 1 && types[0] === 'meetings';
 // Completed tasks are the one thing a list drowns in, so a window says how far back they still count: 3 days, 7
 // days, 30 days, or All. Whether they appear at all is the Status filter's business and only its — this never hides them,
@@ -158,7 +161,7 @@ function viewParams(f, me, limit = rowLimit(f && f.limit), workflows) {
   const { kinds: chosen, typeUris } = splitTypes(f.types), kinds = chosen.length ? chosen : ANY_KINDS;
   // Meetings in time order, soonest first for what is still to come and latest first otherwise, so the limit keeps the
   // ones nearest the window's edge that matters.
-  const soonFirst = f.window === 'upcoming' || f.window === 'today';
+  const soonFirst = SOON_FIRST.includes(f.window);
   const p = {
     nodeTypes: [...new Set(kinds.map((k) => KIND_NODE_TYPE[k]))], limit,
     sortOptions: meetingsOnly(f.types)
@@ -227,7 +230,7 @@ function searchQueryParams(query, me, limit = 1000, now = Date.now(), spaces = [
   // renderer sorts the rows itself, and Orbital writes that key in its own vocabulary.
   if (!p.textQuery) {
     const types = list(q.types) || [], typed = !!list(q.entityTypeUris);
-    p.sortOptions = eventsOnly && !typed ? [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: q.eventTime && q.eventTime.preset === 'upcoming' ? 'SORT_DIRECTION_ASCENDING' : 'SORT_DIRECTION_DESCENDING' }]
+    p.sortOptions = eventsOnly && !typed ? [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: q.eventTime && ['upcoming', 'thisWeek'].includes(q.eventTime.preset) ? 'SORT_DIRECTION_ASCENDING' : 'SORT_DIRECTION_DESCENDING' }]
       : types.length === 1 && types[0] === 'type' && !typed ? [{ field: 'SORT_FIELD_TITLE', direction: 'SORT_DIRECTION_ASCENDING' }] : UPDATE_DESC;
   }
   return p;
@@ -258,13 +261,15 @@ function visibilityParams(visibility, me) {
   return {};
 }
 // A stored { preset } or { min, max } (epoch ms) as a { min, max } window. The presets are Tana's (v$), on local days:
-// recent = up to the end of tomorrow, upcoming = from now, past = until now, today = today. 'week' is Orbital's own
-// (MEETING_WINDOWS), never stored as a preset: filterToSearchQuery writes it as the range it is.
+// recent = up to the end of tomorrow, upcoming = from now, past = until now, today = today; Orbital's thisWeek = this
+// Monday to the end of Sunday. 'week' is Orbital's own too (MEETING_WINDOWS), never stored as a preset:
+// filterToSearchQuery writes it as the range it is.
 function timeRange(range, now) {
   if (!range || typeof range !== 'object') return {};
   if (range.preset === undefined) return { min: range.min, max: range.max };
   const day = (offset) => { const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + offset); return d.getTime(); };
-  return { recent: { max: day(2) - 1 }, upcoming: { min: now }, past: { max: now }, today: { min: day(0), max: day(1) - 1 }, week: { min: day(-7), max: day(7) } }[range.preset] || {};
+  const monday = -((new Date(now).getDay() + 6) % 7);
+  return { recent: { max: day(2) - 1 }, upcoming: { min: now }, past: { max: now }, today: { min: day(0), max: day(1) - 1 }, thisWeek: { min: day(monday), max: day(monday + 7) - 1 }, week: { min: day(-7), max: day(7) } }[range.preset] || {};
 }
 const TEXT_MODES = { equals: 'MODE_EQUALS', prefix: 'MODE_PREFIX', listContains: 'MODE_LIST_CONTAINS' };
 const defined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null));
