@@ -497,6 +497,9 @@ row itself, children and all. ⇧↓ on a parent ⇧↑ climbed to gives back th
 step by step.
 ⇧⌘⌫ removes the selected blocks and focuses the row before the range; ⇧⌘↑/↓ and Tab/⇧Tab move the whole range, the
 selection kept; Escape or a plain arrow clears it. Documents in a selection are not deleted or moved by these keys.
+⇧⌘↑/↓ moves the range as drawn, whatever holds its rows in Tana: a heading with the bullets under it (a bare block and
+the items of a list beside it) moves as one, the row beside the range going to its other side (sdk/content.js
+`moveMany` over `moveTo`, one undo step).
 ⌘C copies the selected rows as markdown, with the rows open under them nested (renderer/select.js `selectionMarkdown`):
 marks, `[label](uri)` mentions, headings, lists, checkboxes, quotes, code and dividers, which a paste reads back as the
 same rows. On the Timeline ⌘C stays Copy link.
