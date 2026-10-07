@@ -213,6 +213,20 @@
   </section>
 
   <section class="topic">
+    <h2 id="flags" data-short="Experiments" data-k="feature flag enable disable experiment decisions api suggest sensitive marks openai region api key europe united states global">Try an experiment: feature flags</h2>
+    <div class="split">
+      <div>
+        <p>Some things are still being tried out. They stay off until you switch them on, on this Mac only: <b>Enable feature flag</b> in <kbd>⌘K</kbd> lists what you can switch on, and <b>Disable feature flag</b> what is on.</p>
+        <p><b>Decisions API</b> lets OpenAI's Decisions API answer two questions: <b>Auto-pick type</b> gets its odds from it, and <b>Suggest sensitive marks</b> (under Actions) lists the page and the documents on it that look like something to blur, most likely first, with the odds. <kbd>↩</kbd> marks one; nothing is marked on its own.</p>
+        <p>It needs an OpenAI API key, because the Decisions API does not take a ChatGPT sign-in. While the flag is on, <b>Set OpenAI API key</b> and <b>Set OpenAI region …</b> are in <kbd>⌘K</kbd> and in Settings › AI. Pick the region of the OpenAI project your key belongs to: <b>Europe</b> (the default), the <b>United States</b> or <b>Global</b>. If OpenAI refuses the key, the message says it may be invalid or set to the wrong region.</p>
+      </div>
+      <figure class="shot"><img data-m="ai-flags" alt="Cmd+K with Enable feature flag and its Decisions API choice"><figcaption><b>Enable feature flag</b>, with <b>Decisions API</b> folded in.</figcaption></figure>
+    </div>
+    <div class="note">Titles marked sensitive are never sent. Without a key the features work as before, without the Decisions API.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>enable feature</b> <i>→</i><kbd>↩</kbd></span></div>
+  </section>
+
+  <section class="topic">
     <h2 id="agents" data-short="Choose agents" data-k="agents choose agents set default agent tana codex claude dot install">Choose your agents</h2>
     <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows three of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in.</p>
     <div class="split">
