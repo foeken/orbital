@@ -8981,16 +8981,16 @@ async function runSmartFilterCheck() {
     const sensitiveIds = new Set(['tana:text:secret']), filterEl = { value: 'leave ' }, filterRow = { classList: { add() {}, remove() {} } };
     let featureFlags = [{ id: 'decisions', on: true }];
     const flagOn = (id) => featureFlags.some((f) => f.id === id && f.on), isRealId = (id) => id.startsWith('tana:');
-    const setTimeout = (fn) => timers.push(fn), clearTimeout = () => {}, renderSoon = () => {}, showError = (e) => errors.push(e.message), visibleTags = (n) => n.tags || [];
+    const setTimeout = (fn) => timers.push(fn), clearTimeout = () => {}, renderSoon = () => {}, showError = (e) => errors.push(e.message), visibleTags = (n) => n.tags || [], taskMetaById = new Map(), datePinsById = new Map(), pinnedIds = new Set(), agentIds = new Set(), me = () => null, memberName = (u) => u, loadMembers = () => {}, isoDay = (d) => d.toISOString().slice(0, 10), localDate = () => "2000-01-01";
     ${sourceBetween('const SMART_LIKELY', '// the field says what it does')}
     ${sourceLine('const chipHit =')}${sourceLine('const filterHit =')}
     const rows = [{ id: 'tana:text:a', text: 'Annual leave plan' }, { id: 'tana:text:b', text: 'Sick days Jan', stateType: 'open' }, { id: 'tana:text:c', text: 'Budget' }, { id: 'tana:text:secret', text: 'Salary' }];
     const works = answer;
-    ({ hit: (n, q) => filterHit(n, q), shown: (q) => rows.filter((n) => filterHit(n, q)).map((n) => n.text), asked, timers, errors, type: (v) => { filterEl.value = v; }, off: () => { featureFlags = []; }, fail: () => { answer = () => { throw new Error('OpenAI Decisions answered 500'); }; }, heal: () => { answer = works; } })`, {});
+    ({ facts: (n) => rowFacts(n), meta: (id, m) => taskMetaById.set(id, m), pin: (id) => pinnedIds.add(id), hit: (n, q) => filterHit(n, q), shown: (q) => rows.filter((n) => filterHit(n, q)).map((n) => n.text), asked, timers, errors, type: (v) => { filterEl.value = v; }, off: () => { featureFlags = []; }, fail: () => { answer = () => { throw new Error('OpenAI Decisions answered 500'); }; }, heal: () => { answer = works; } })`, {});
   assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan'], 'the words find what they find at once');
   assert.equal(api.asked.length, 0, 'nothing is asked while typing goes on');
   api.timers.splice(0).pop()(); await new Promise((done) => setImmediate(done));
-  assert.deepEqual(plain(api.asked.map((a) => [a.q, a.rows.map((r) => r.text)])), [['leave', ['Sick days Jan · in progress', 'Budget']]],
+  assert.deepEqual(plain(api.asked.map((a) => [a.q, a.rows.map((r) => r.text)])), [['leave', ['Sick days Jan · status: in progress', 'Budget']]],
     'then the rest in one ask, with what the row shows; never the row the words found, never one marked sensitive');
   assert.deepEqual(plain(api.shown('leave')), ['Annual leave plan', 'Sick days Jan'], 'and what it means joins what the words found');
   assert.equal(api.timers.length, 0, 'an answered row is not asked again');
@@ -9007,6 +9007,11 @@ async function runSmartFilterCheck() {
   assert.deepEqual([api.hit({ id: 'tana:text:t', text: 'Budget', tags: [{ label: 'task' }] }, 'task'), api.hit({ id: 'tana:text:t', text: 'Budget', tags: [{ label: 'task' }] }, 'meeting')], [true, false],
     'and a chip on the row is words on it too: "task" finds the rows tagged #task');
   assert.equal(api.hit({ id: 'tana:text:t', text: 'Budget', tags: [{ label: 'task' }] }, 'tasks'), true, 'and "tasks" names the chip too');
+  // what the model reads of a row: everything the page knows, named, whether the row shows it or not ("pinned" found nothing while only the title went)
+  api.meta('tana:text:p', { assignees: ['tana:user-profile:sam'], watched: true }); api.pin('tana:text:p');
+  assert.equal(api.facts({ id: 'tana:text:p', text: 'Order laptops', tags: [{ label: 'task' }], stateType: 'open', createdBy: 'tana:user-profile:kim', updatedAt: '1999-12-30T10:00:00Z' }),
+    'Order laptops · kind: task · status: in progress · assigned to: tana:user-profile:sam · created by: tana:user-profile:kim · pinned · watched: I am notified of its changes · last changed: 1999-12-30',
+    'a row goes with its kind, status, people, pins, watch and dates');
   console.log('ok  smart filter: the words at once, the rest asked once typing pauses, never a sensitive row, a failure matches nothing');
 }
 // Ranked menus (renderer/flags.js): the @ menu's documents reorder by the answer with Create still leading and a sure

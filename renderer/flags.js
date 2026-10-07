@@ -51,8 +51,32 @@ const SMART_LIKELY = 0.5, SMART_WAIT = 400;
 const SMART_STATES = { proposed: 'in the inbox', open: 'in progress', waiting: 'waiting on someone', closed: 'completed', not_now: 'later' };
 const smartFilters = new Map(); // what was typed -> { odds: Map id -> p, asked: Set, waiting: Map id -> facts, timer }
 let smartAsking = 0;
-// a row as the model reads it: its title, then what the row shows about it
-const rowFacts = (n) => [n.text, ...(n.tags || []).map((t) => '#' + t.label), SMART_STATES[n.stateType], n.start && 'on ' + String(n.start).slice(0, 10)].filter(Boolean).join(' · ');
+// A row as the model reads it: its title, then everything the page knows about it, named, whether the row shows it or
+// not, so a filter can be about any of it in the user's own words ("pinned", "Kevin's", "changed today"). Dates as days,
+// with today's in the question (main/decisions.js). People and pins arrive as the page reads them, like the row's line.
+// a day, and which it is when it is near: "2026-10-07 (today)" read 5 rows wrong for "changed today" where the bare day read 7-11
+const day = (iso) => { if (!iso) return ''; const d = isoDay(new Date(iso)), near = { [localDate(-1)]: 'yesterday', [localDate()]: 'today', [localDate(1)]: 'tomorrow' }[d]; return near ? d + ' (' + near + ')' : d; };
+function rowFacts(n) {
+  const meta = taskMetaById.get(n.id), pins = [...(datePinsById.get(n.id) || [])].sort(), mine = me()?.id;
+  const who = (uri) => (uri === mine ? 'me' : memberName(uri));
+  if (n.createdBy || meta?.assignees?.length) loadMembers();
+  const scope = typeof meta?.audience === 'string' ? meta.audience : meta?.audience?.scope;
+  return [n.text,
+    (n.tags || []).length && 'kind: ' + n.tags.map((t) => t.label).join(', '),
+    SMART_STATES[n.stateType] && 'status: ' + SMART_STATES[n.stateType],
+    meta?.assignees && 'assigned to: ' + (meta.assignees.length ? meta.assignees.map(who).join(', ') : 'nobody'),
+    n.createdBy && 'created by: ' + who(n.createdBy),
+    (pinnedIds?.has(n.id) || pins.length) && 'pinned' + (pins.length ? ' to ' + pins.join(', ') : ''),
+    meta?.watched && 'watched: I am notified of its changes',
+    agentIds.has(n.id) && 'handed to an AI agent',
+    scope && 'visible to: ' + scope + (meta.audience?.space ? ' (' + meta.audience.space + ')' : ''),
+    n.fields && Object.values(n.fields).flat().length && 'field values: ' + Object.values(n.fields).flat().join(', '),
+    n.start && 'meeting starts: ' + day(n.start) + ' ' + String(n.start).slice(11, 16),
+    n.subtext && 'about it: ' + n.subtext,
+    n.createdAt && 'created: ' + day(n.createdAt),
+    n.updatedAt && 'last changed: ' + day(n.updatedAt),
+  ].filter(Boolean).join(' · ');
+}
 function smartFilterHit(node, q) {
   if (q.length < 3 || !tana.smartFilter || !flagOn('decisions') || !isRealId(node.id) || !sensitiveIds || sensitiveIds.has(node.id)) return false; // one or two letters mean nothing yet
   // a failed ask (no key yet, the network) holds for what was typed then, not for good: once something else is typed,

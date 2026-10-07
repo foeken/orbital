@@ -1116,19 +1116,12 @@ async function main() {
     assert.deepEqual(calls.at(-1).body.questions.map((x)=>x.type),['predicate']);
     // The smart filter: what was typed as the shared input, a predicate per row with its facts; only Tana ids go
     assert.deepEqual(await decisions.filterRows('waiting on someone',[{id:DOC,text:'Ask Kor for the numbers · in progress'},{id:'orbital:timeline',text:'Timeline'}],decided([{type:'predicate',name:'r0',probability:0.81}])),[{id:DOC,p:0.81}]);
-    assert.ok(calls.at(-1).body.input.includes('waiting on someone') && calls.at(-1).body.questions[1].instructions.includes('Ask Kor for the numbers'),'what was typed is the input, each row its own question');
-    assert.ok(calls.at(-1).body.questions[1].instructions.startsWith('Is this row about, or clearly related to, what the filter names, as a topic'),'asked as a topic: a row is about what was typed, even in other words');
-    await decisions.filterRows('devices',[{id:DOC,text:'Describe the hardware depreciation risk · #task'}],decided([{type:'predicate',name:'r0',probability:0.96}]));
-    assert.ok(calls.at(-1).body.questions[1].instructions.startsWith('Is this task about'),'and a list of tasks is asked about as tasks');
-    // and once, in the same request, what the filter asks for: a topic, every row, or a fact the rows show
-    const means=calls.at(-1).body.questions[0];
-    assert.deepEqual([means.type,means.name,means.choices.map((c)=>c.value)],['choice','means',['topic','everything','fact:#task']],'the facts the rows show are the choices beside topic and everything');
-    const two=[{id:DOC,text:'Describe the hardware depreciation risk · #task · waiting on someone'},{id:'tana:text:'+'c'.repeat(26),text:'Budget · #task · in progress'}];
-    const read=(value,p,topic=0.9)=>decided([{type:'choice',name:'means',choice:value,probabilities:[{value,probability:p}]},{type:'predicate',name:'r0',probability:topic},{type:'predicate',name:'r1',probability:topic}]);
-    assert.deepEqual(await decisions.filterRows('All tasks',two,read('everything',0.82)),[{id:DOC,p:1},{id:two[1].id,p:1}],'"All tasks" read as everything keeps every row');
-    assert.deepEqual(await decisions.filterRows('waiting on someone',two,read('fact:waiting on someone',0.6)),[{id:DOC,p:1},{id:two[1].id,p:0}],'a state read as a fact keeps exactly the rows that show it');
-    assert.deepEqual(await decisions.filterRows('in progress',two,read('fact:in progress',0.4,0.3)),[{id:DOC,p:0.3},{id:two[1].id,p:0.3}],'unsure what it names, the topic answers decide');
+    assert.ok(calls.at(-1).body.input.includes('waiting on someone') && calls.at(-1).body.questions[0].instructions.includes('Ask Kor for the numbers'),'what was typed is the input, each row its own question');
     const sentBefore=calls.length;
+    // the model decides from the row's details, with today's date to read "changed today" by; Orbital reads nothing itself
+    assert.ok(calls.at(-1).body.questions[0].instructions.startsWith('Should this row stay for what they typed, read as they meant it') && /Today is \d{4}-\d{2}-\d{2} \(/.test(calls.at(-1).body.input),
+      'one question per row, read as meant, with today\'s date');
+    assert.equal(calls.at(-1).body.questions.length,1,'and nothing but the rows is asked');
     assert.deepEqual(await decisions.filterRows('   ',[{id:DOC,text:'x'}],decided([])),[]);
     assert.equal(calls.length,sentBefore,'nothing typed, nothing sent');
     // Ranked menus: one choice over what the menu offers, by index, the page and the line as the input
