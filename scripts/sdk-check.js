@@ -196,6 +196,11 @@ async function main() {
     assert.equal(source.loro.getMap('data').get('participants').get(stranger).get('changedBy'), ME, 'an invite records who made it (native addParticipant)');
     await access.setSharing(source,ME,{rule:'me'},ctx);
     assert.deepEqual(Object.keys(readNode(source).participants),[ME]);
+    const grouped=make('text'), group='tana:group:'+ulid();
+    grouped.transact(l=>{const p=l.getMap('data').get('participants').setContainer(group,new LoroMap());p.set('type','group');p.set('role','viewer');});
+    assert.equal((await access.capabilities(grouped,ME,ctx)).sharing,false,'a group grant (Tana groups-and-roles) leaves sharing to Tana');
+    await assert.rejects(access.setSharing(grouped,ME,{rule:'me'},ctx),/group/);
+    assert.ok(readNode(grouped).participants[group],'and the group keeps its access');
     await assert.rejects(access.setSharing(source,ME,{rule:'inherit'},ctx),/audience disclosure/);
     await access.setSharing(source,ME,{rule:'inherit',token:(await access.capabilities(source,ME,ctx)).sharingToken},ctx);
     assert.equal(readNode(source).restricted,undefined);
@@ -7251,7 +7256,7 @@ async function main() {
       chatDoc.transact((l) => { const g = l.getMap('data').get('participants').setContainer('tana:group:01examplegroup0000000000000', new LoroMap()); g.set('type', 'group'); g.set('role', 'editor'); });
       const before = JSON.stringify(chatDoc.data.get('participants').toJSON());
       chatDoc.transact((l) => l.getMap('data').get('participants').delete(SAM));
-      await assert.rejects(backend.handlers.get('chat:invite')(null, chatDoc.id, SAM), /shared with a group/);
+      await assert.rejects(backend.handlers.get('chat:invite')(null, chatDoc.id, SAM), /Shared with a group/);
       assert.equal(chatDoc.data.get('participants').toJSON()['tana:group:01examplegroup0000000000000'].type, 'group');
       chatDoc.transact((l) => { const p = l.getMap('data').get('participants'); p.delete('tana:group:01examplegroup0000000000000'); const s = p.setContainer(SAM, new LoroMap()); for (const [k, v] of Object.entries(JSON.parse(before)[SAM])) s.set(k, v); });
       // answering Tana's questions asks it to go on from the relay
