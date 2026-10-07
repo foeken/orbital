@@ -106,7 +106,10 @@ async function canEditEvent(doc, user, ctx = {}) {
 }
 async function capabilities(doc, user, ctx = {}) {
   const n = readNode(doc), write = supported(n) && await canWrite(n, user, ctx);
-  const sharing = write && eventSharing(n, user);
+  // A group grant (Tana's groups-and-roles, behind a runtime flag on 2026-10-07) is outside the verified subset:
+  // setSharing rewrites the participants from people only, so the group and everyone in it would lose access.
+  const grouped = Object.values(n.participants || {}).some(p => p?.type !== 'user');
+  const sharing = write && !grouped && eventSharing(n, user);
   const linkSharing = write && LINK_SHAREABLE.has(n.type) && await orgLinkSharingAllowed(ctx);
   const inheritAudience = await audienceOf({ ...n, restricted: undefined }, user, ctx);
   const inherit = sharing && inheritAudience.scope !== 'unknown' && await orgWideAllowed(n, user, ctx);
@@ -115,7 +118,7 @@ async function capabilities(doc, user, ctx = {}) {
   return { sharing, linkSharing, move: write, deletable: write && DELETABLE.has(n.type) && eventSharing(n, user), archivable: write && ARCHIVABLE.has(n.type), ownerUri: n.ownerUri || null, sharingToken,
     rules: sharing ? ['me', 'people', ...(inherit ? ['inherit'] : [])] : [], roles: ['editor', 'admin', ...(n.type === 'event' ? ['attendee'] : [])],
     audience: currentAudience, inheritAudience,
-    reason: write ? sharing ? null : 'Only the event organizer can change access' : 'Write permission is unknown or unavailable' };
+    reason: !write ? 'Write permission is unknown or unavailable' : grouped ? 'Shared with a group: change who sees it in Tana' : sharing ? null : 'Only the event organizer can change access' };
 }
 async function setLinkSharing(doc, user, enabled, ctx = {}) {
   if (typeof enabled !== 'boolean') throw new Error('Select whether to enable public link sharing');

@@ -239,9 +239,7 @@ async function inviteToChat(id, userUri) {
     const n = readNode(doc), people = n.participants || {};
     if (n.restricted !== true) throw new Error('This chat is shared through where it lives: share that instead');
     if (people[userUri]) throw new Error(name + ' is already in this chat');
-    // a group grant (type 'group') is outside the verified sharing subset: kept through it, it would be dropped, and every
-    // member of the group would lose the chat. So such a chat is left to Tana.
-    if (Object.values(people).some((p) => !p || p.type !== 'user')) throw new Error('This chat is shared with a group: invite people to it in Tana');
+    // a chat shared with a group is refused by setSharing (sdk/access.js capabilities), untouched
     const kept = Object.entries(people).filter(([uri, p]) => uri !== S.me.userUri && p && p.type === 'user').map(([uri, p]) => ({ uri, role: p.role }));
     await access.setSharing(doc, S.me.userUri, { rule: 'people', participants: [...kept, { uri: userUri, role: 'editor' }] }, ctx);
     // Tana's two lines (its onParticipantAdded and the multiple-participants notice): the first time the chat is shared,
