@@ -217,3 +217,30 @@ workspace whose relay is older is told once a session (main/agents/linked.js `ol
 admin copies **Copy the update instructions for ChatGPT**, which put the latest `relay/` in the same Site, so its address
 stays and nobody links again. A relay that is too old cannot be chosen. orbital.md is not asked about: keeping it current
 is ours, by copying `relay/server.js` to its App with each release that raises the version.
+
+## The plugin's views and Tana sign-in (issue #817)
+
+A relay started with `RELAY_TANA=on` (a Site's environment; never orbital.md) also serves the Orbital plugin's views:
+**My tasks** (`orbital_tasks`), a global entrypoint in ChatGPT's sidebar, drawn by one MCP App page (`ui://orbital/tasks`)
+that talks to ChatGPT over postMessage (`ui/initialize`, `tools/call`, `ui/open-link`, `ui/update-model-context`) and
+asks nothing of the network. A view can call only its own server, so the relay reads Tana itself, as an MCP client of
+Tana's server with each person's own sign-in.
+
+- **Signing in.** `tana_sign_in` (for the view only) runs Tana's OAuth device flow: a code the person confirms on Tana's
+  own page, which names the relay (`Orbital relay at <host>`, registered with Tana once). The token is asked for only
+  while the view asks, at most once an interval, and only with `resource=https://home.tana.inc/mcp`: an MCP token, which
+  Tana's platform refuses, can do only what Tana's MCP tools do. Orbital's own web session is never asked for.
+- **The vault.** Each ChatGPT connection has a random 256-bit key. The relay keeps it only wrapped (AES-256-GCM), once per
+  live token it gave ChatGPT (`vaults`), under HMAC-SHA256 of that token; of the token itself it keeps the SHA-256,
+  which cannot give the HMAC. Tana's tokens (`tana`) and a device code under way (`tana_pending`) are sealed under the
+  connection's key, each with its kind and its connection as additional data, so a row copied onto another connection
+  or into another table does not open. A call opens the key with the token it carries, for that call only; a renewal
+  opens it with the refresh token being spent and wraps it again for the new tokens. The database alone, or a backup of
+  it, opens nothing. Nothing of it is logged.
+- **What stays.** Whoever controls a relay's deployment can change its code and catch a sign-in as it is used: nobody
+  can prove from outside what a server runs (`/health`'s hash is the relay's own word). So a person's Tana sign-in
+  reaches only a relay they signed in to themselves, on Tana's page, and only workspaces that run and trust their relay
+  turn the views on. A device code can be phished (someone sends you theirs to confirm): Tana's page names the relay.
+  Whether Tana lets a person revoke an MCP sign-in is unverified.
+- On a Site, `serial` holds within one isolate, so two isolates renewing one Tana token at once can spend its refresh
+  token twice; the second is refused and that person signs in to Tana again.

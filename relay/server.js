@@ -173,6 +173,106 @@ const EVENTS = [{ name: 'task.assigned', title: 'Node handed to you in Orbital',
     request: { type: 'string', description: 'What the person asks you to do with the node' },
     instructions: { type: 'string', description: 'How to handle this event, from Orbital' } }, additionalProperties: true } }];
 
+// ---- the plugin's views (issue #817): Tana, signed in to by each person, on a relay started with it (RELAY_TANA=on) ----
+// orbital.md never is: it holds nobody's Tana login. On a relay a workspace or a person runs and trusts, each person signs in
+// to Tana's MCP server themselves, with the OAuth device flow on Tana's own page, which names this relay. Their Tana tokens
+// are kept sealed (AES-256-GCM) under a key of their ChatGPT connection's own, and that key only wrapped by keys made from
+// the tokens this relay gave ChatGPT, of which it keeps nothing but hashes: the rows alone open nothing. A call carries
+// its token, so it opens the key for that call and no longer. Nothing of it is ever logged.
+const VIEW = 'ui://orbital/tasks';
+const DEVICE = 'urn:ietf:params:oauth:grant-type:device_code';
+const ICON = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.33"><circle cx="10" cy="10" r="2.5"/><ellipse cx="10" cy="10" rx="8" ry="3.5" transform="rotate(-30 10 10)"/></svg>');
+const NO_ARGS = { type: 'object', properties: {}, additionalProperties: false };
+const TANA_TOOLS = [
+  { name: 'orbital_tasks', title: 'My tasks', icons: [{ src: ICON, mimeType: 'image/svg+xml' }],
+    description: 'Show the person their Tana tasks (Inbox and In Progress, assigned to them) in Orbital\'s view. If they have not signed in to Tana here yet, the view asks them to.',
+    inputSchema: NO_ARGS, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    _meta: { ui: { resourceUri: VIEW }, 'openai/ui': { entrypoints: [{ type: 'global' }] } } },
+  { name: 'tana_sign_in', title: 'Sign in to Tana', description: 'For Orbital\'s view only: start or continue signing in to Tana, with a code confirmed on Tana\'s own page.',
+    inputSchema: NO_ARGS, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }, _meta: { ui: { visibility: ['app'] } } },
+  { name: 'tana_sign_out', title: 'Sign out of Tana', description: 'For Orbital\'s view only: forget this connection\'s Tana sign-in.',
+    inputSchema: NO_ARGS, annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }, _meta: { ui: { visibility: ['app'] } } },
+].map((tool) => ({ ...tool, securitySchemes: SIGNED_IN, _meta: { ...tool._meta, securitySchemes: SIGNED_IN } }));
+// Tables a relay with Tana keeps besides the others (none of them on orbital.md)
+const TANA_TABLES = {
+  // one per live token the relay gave ChatGPT: the connection's key, wrapped by a key made from that token (vaultOf)
+  vaults: 'token TEXT PRIMARY KEY, install TEXT NOT NULL, wrap TEXT NOT NULL, expires BIGINT NOT NULL',
+  tana: 'install TEXT PRIMARY KEY, sealed TEXT NOT NULL, updated BIGINT NOT NULL', // the Tana tokens, sealed under that key
+  tana_pending: 'install TEXT PRIMARY KEY, sealed TEXT NOT NULL, expires BIGINT NOT NULL', // a sign-in under way: its device code, sealed the same way
+  tana_client: 'issuer TEXT PRIMARY KEY, client TEXT NOT NULL', // this relay as Tana's OAuth client, registered once
+};
+const tableSql = (tables) => Object.entries(tables).map(([name, cols]) => 'CREATE TABLE IF NOT EXISTS ' + name + ' (' + cols + ')');
+// WebCrypto, the same in Node and in a Worker. A token's key is HMAC-SHA256 keyed by the token itself: the hash the relay
+// keeps of it (plain SHA-256) cannot give it. Every sealed value names what it is and whose (additionalData), so a row
+// copied onto another connection, or one kind put in another's place, does not open.
+const subtle = globalThis.crypto.subtle;
+const aesKey = (raw) => subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+const tokenKey = (token) => aesKey(crypto.createHmac('sha256', token).update('orbital-relay vault v1').digest());
+async function seal(key, bytes, aad) {
+  const iv = crypto.randomBytes(12);
+  return Buffer.concat([iv, Buffer.from(await subtle.encrypt({ name: 'AES-GCM', iv, additionalData: Buffer.from(aad) }, key, bytes))]).toString('base64url');
+}
+async function unseal(key, sealed, aad) {
+  const b = Buffer.from(String(sealed), 'base64url');
+  return Buffer.from(await subtle.decrypt({ name: 'AES-GCM', iv: b.subarray(0, 12), additionalData: Buffer.from(aad) }, key, b.subarray(12)));
+}
+// The view itself: one page, no requests of its own (its CSP allows none), talking to ChatGPT over postMessage as MCP
+// Apps has it (ui/initialize, tools/call, ui/open-link). Everything it draws is set as text, never as HTML.
+const VIEW_HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><style>
+:root{font:14px/1.45 -apple-system,system-ui,sans-serif;color:CanvasText;background:Canvas}
+body{margin:0;padding:20px 24px;max-width:720px}h1{font-size:20px;margin:0 0 4px}.who,.note{opacity:.6}.who{margin:0 0 16px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin:20px 0 6px}ul{list-style:none;margin:0;padding:0}
+li{padding:8px 10px;border-radius:8px;cursor:pointer}li:hover,li.on{background:color-mix(in srgb,CanvasText 8%,transparent)}
+.type{opacity:.55;font-size:12px;margin-left:6px}.bar{display:flex;gap:8px;margin-top:20px}.code{font:600 22px ui-monospace,monospace;letter-spacing:.12em;margin:12px 0}
+button{font:inherit;padding:6px 14px;border-radius:8px;border:1px solid color-mix(in srgb,CanvasText 20%,transparent);background:none;color:inherit;cursor:pointer}
+</style></head><body><main id="app"><p class="note">Loading…</p></main><script>
+const app = document.getElementById('app');
+let n = 0; const waiting = new Map();
+const call = (method, params) => new Promise((ok, no) => { const id = ++n; waiting.set(id, { ok, no }); parent.postMessage({ jsonrpc: '2.0', id, method, params }, '*'); });
+const tool = async (name) => { const r = await call('tools/call', { name, arguments: {} }); if (r.isError) throw new Error(((r.content || [])[0] || {}).text || 'Something went wrong'); return r.structuredContent || {}; };
+addEventListener('message', (e) => {
+  if (e.source !== parent) return;
+  const m = e.data; if (!m || m.jsonrpc !== '2.0') return;
+  if (m.id !== undefined && waiting.has(m.id)) { const w = waiting.get(m.id); waiting.delete(m.id); return m.error ? w.no(new Error(m.error.message)) : w.ok(m.result); }
+  if (m.method === 'ui/notifications/tool-result' && m.params) draw(m.params.structuredContent || {});
+});
+const el = (tag, props, ...kids) => { const x = Object.assign(document.createElement(tag), props); x.append(...kids); return x; };
+const show = (...kids) => app.replaceChildren(el('h1', { textContent: 'My tasks' }), ...kids);
+const fail = (e) => show(el('p', { className: 'note', textContent: e.message }), el('div', { className: 'bar' }, el('button', { textContent: 'Try again', onclick: () => refresh() })));
+const refresh = () => tool('orbital_tasks').then(draw, fail);
+function row(t) {
+  const li = el('li', { title: 'Tell ChatGPT about this task' }, t.title, el('span', { className: 'type', textContent: t.type || '' }));
+  li.onclick = () => { for (const x of document.querySelectorAll('li.on')) x.classList.remove('on'); li.classList.add('on');
+    call('ui/update-model-context', { content: [{ type: 'text', text: 'Selected Tana task: ' + t.title + ' (' + t.id + ', ' + t.state + ')' }] }).catch(() => {}); };
+  return li;
+}
+function draw(d) {
+  if (!d.signedIn) return show(el('p', { className: 'note', textContent: 'Sign in to Tana once to see your tasks here. Tana asks you to confirm, and your sign-in is kept sealed.' }),
+    el('div', { className: 'bar' }, el('button', { textContent: 'Sign in to Tana', onclick: () => signIn() })));
+  const tasks = Array.isArray(d.tasks) ? d.tasks : [];
+  show(el('p', { className: 'who', textContent: d.user ? 'Assigned to ' + d.user : '' }),
+    ...['Inbox', 'In Progress'].flatMap((s) => { const list = tasks.filter((t) => t.state === s); return [el('h2', { textContent: s + ' · ' + list.length }), el('ul', {}, ...list.map(row))]; }),
+    el('div', { className: 'bar' }, el('button', { textContent: 'Refresh', onclick: () => refresh() }), el('button', { textContent: 'Sign out of Tana', onclick: () => signOut() })));
+}
+async function signIn() {
+  try {
+    let s = await tool('tana_sign_in');
+    if (s.state === 'waiting') {
+      const open = () => call('ui/open-link', { url: s.url }).catch(() => {});
+      show(el('p', { textContent: 'Confirm this code on Tana’s page:' }), el('p', { className: 'code', textContent: s.code }),
+        el('div', { className: 'bar' }, el('button', { textContent: 'Open Tana', onclick: open })), el('p', { className: 'note', textContent: 'Waiting for Tana…' }));
+      open();
+      while (s.state === 'waiting' && Date.now() < s.expiresAt) { await new Promise((r) => setTimeout(r, 5000)); s = await tool('tana_sign_in'); }
+    }
+    if (s.state === 'signed_in') return refresh();
+    fail(new Error(s.state === 'denied' ? 'Tana was not allowed: nothing was kept.' : 'The code ran out: sign in again.'));
+  } catch (e) { fail(e); }
+}
+const signOut = () => tool('tana_sign_out').then(() => draw({ signedIn: false }), fail);
+call('ui/initialize', { appCapabilities: { availableDisplayModes: ['fullscreen'] }, clientInfo: { name: 'orbital-tasks', version: '1.0.0' }, protocolVersion: '2026-01-26' })
+  .then(() => parent.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/initialized', params: {} }, '*'), () => {});
+</script></body></html>`;
+
 // ---- calling an agent's callback: HTTPS to a public address only, checked as the connection is made, no redirects ----
 const BLOCKED = new net.BlockList();
 for (const [a, p] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24],
@@ -249,11 +349,12 @@ const signature = (secret, id, ts, body) => 'v1,' + crypto.createHmac('sha256', 
 const goodSecret = (s) => { if (typeof s !== 'string' || !/^whsec_[A-Za-z0-9+/]+={0,2}$/.test(s)) return false; const n = Buffer.from(s.slice(6), 'base64').length; return n >= 24 && n <= 64; };
 const canonical = (v) => (Array.isArray(v) ? '[' + v.map(canonical).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}' : JSON.stringify(v));
 
-function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now, post = safePost, manual = null } = {}) {
+// tana: { issuer, mcp, fetch? } turns on the plugin's views and each person's Tana sign-in (issue #817); null, as on orbital.md, leaves them out
+function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now, post = safePost, manual = null, tana = null } = {}) {
   const PATH = '/' + String(path).replace(/^\/+|\/+$/g, '');
   const ISSUER = publicUrl.replace(/\/+$/, '') + PATH;
   const { one, all, run, serial } = store;
-  const ready = (async () => { for (const sql of SCHEMA) await store.exec(sql); })();
+  const ready = (async () => { for (const sql of [...SCHEMA, ...(tana ? tableSql(TANA_TABLES) : [])]) await store.exec(sql); })();
   // the manual's folder, or null where there is none (a relay run from this repository)
   const published = manual ? readManual(manual).catch(() => null) : Promise.resolve(null);
   const countIn = async (db, sql, ...args) => Number((await db.one(sql, ...args)).n);
@@ -295,13 +396,19 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     // an agent not heard from in TTL.idleAgent is let go (a live one renews its subscription at least monthly), and a
     // connection that never linked in TTL.unlinked loses its tokens: then both go below, as anything nobody holds
     await run('DELETE FROM agents WHERE COALESCE(seen, linked) < ?', t - TTL.idleAgent);
-    await run('DELETE FROM tokens WHERE install IN (SELECT id FROM installs WHERE created < ? AND id NOT IN (SELECT install FROM agents))', t - TTL.unlinked);
+    // (one signed in to Tana for the views is in use too, linked or not)
+    await run('DELETE FROM tokens WHERE install IN (SELECT id FROM installs WHERE created < ? AND id NOT IN (SELECT install FROM agents)' + (tana ? ' AND id NOT IN (SELECT install FROM tana)' : '') + ')', t - TTL.unlinked);
     // a connection with no token left and no link is nobody's; a client registered a day ago that never signed in either
     await run('DELETE FROM installs WHERE created < ? AND id NOT IN (SELECT install FROM tokens) AND id NOT IN (SELECT install FROM agents)', t - HOUR);
     await run('DELETE FROM subscriptions WHERE install NOT IN (SELECT id FROM installs)');
     await run('DELETE FROM clients WHERE created < ? AND id NOT IN (SELECT client FROM installs) AND id NOT IN (SELECT client FROM grants)', t - DAY);
     // an Orbital that never linked an agent and has no code left is nobody's: its key makes it again if it ever asks
     await run('DELETE FROM orbitals WHERE created < ? AND id NOT IN (SELECT orbital FROM agents) AND id NOT IN (SELECT orbital FROM codes)', t - DAY);
+    if (tana) { // a key wrapped for a token that is gone opens nothing; a sign-in nobody's connection holds is nobody's
+      await run('DELETE FROM vaults WHERE expires < ? OR token NOT IN (SELECT hash FROM tokens)', t);
+      await run('DELETE FROM tana_pending WHERE expires < ?', t);
+      await run('DELETE FROM tana WHERE install NOT IN (SELECT id FROM installs)');
+    }
   }
 
   // ---- HTTP ----
@@ -391,10 +498,11 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     await run('INSERT INTO grants VALUES (?, ?, ?, ?, ?)', hash(code), client.id, q.redirect_uri, q.code_challenge, now() + TTL.grant);
     return back({ code });
   }
-  async function issue(install, client) {
+  async function issue(install, client, key) { // key: the connection's own (Tana's views), kept from its earlier tokens or new
     const access = newToken(), refresh = newToken();
     await run('INSERT INTO tokens VALUES (?, ?, ?, ?, ?)', hash(access), 'access', install, client, now() + TTL.access);
     await run('INSERT INTO tokens VALUES (?, ?, ?, ?, ?)', hash(refresh), 'refresh', install, client, now() + TTL.refresh);
+    if (tana) await wrapFor(install, key || crypto.randomBytes(32), [[access, TTL.access], [refresh, TTL.refresh]]);
     return { access_token: access, token_type: 'Bearer', expires_in: TTL.access / 1000, refresh_token: refresh };
   }
   async function tokenGrant(req, res) {
@@ -414,9 +522,161 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     if (b.grant_type === 'refresh_token') {
       const old = await one("SELECT * FROM tokens WHERE hash = ? AND kind = 'refresh'", hash(b.refresh_token || ''));
       if (!old || old.expires < now() || (b.client_id && b.client_id !== old.client) || !(await run('DELETE FROM tokens WHERE hash = ?', old.hash))) throw bad('Unknown or expired refresh token');
-      return send(res, 200, await issue(old.install, old.client));
+      // the connection's key, opened by the refresh token being spent and wrapped again for the new ones; one that will not open
+      // (a connection from before the views) is a new key, and a Tana sign-in sealed under the old one is gone with it
+      let key = null;
+      if (tana) { key = await vaultOf(old.install, b.refresh_token); await run('DELETE FROM vaults WHERE token = ?', old.hash); if (!key) await forget(old.install); }
+      return send(res, 200, await issue(old.install, old.client, key));
     }
     throw fail(400, 'unsupported_grant_type', 'authorization_code or refresh_token');
+  }
+
+  // ---- Tana for the plugin's views (issue #817), when this relay was started with it: nothing of it otherwise ----
+  const tanaFetch = tana && (tana.fetch || ((url, options) => fetch(url, options)));
+  const tanaDown = () => fail(502, 'tana_unreachable', 'Tana did not answer: try again in a moment');
+  const asJson = async (res) => { try { const t = await res.text(); return t ? JSON.parse(t) : {}; } catch { return {}; } };
+  async function tanaCall(url, options) {
+    try { return await tanaFetch(url, { ...options, redirect: 'manual', signal: AbortSignal.timeout(15e3) }); } catch { throw tanaDown(); }
+  }
+  const form = (fields) => ({ method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body: new URLSearchParams(fields).toString() });
+  const https = (u) => { try { return new URL(u).protocol === 'https:'; } catch { return false; } };
+  let tanaMeta = null; // Tana's authorization server, as it describes itself
+  async function tanaAuth() {
+    if (tanaMeta) return tanaMeta;
+    const res = await tanaCall(tana.issuer + '/.well-known/oauth-authorization-server', {});
+    const m = res.ok ? await asJson(res) : {};
+    if (!['authorization_endpoint', 'device_authorization_endpoint', 'token_endpoint', 'registration_endpoint'].every((k) => https(m[k]))) throw tanaDown();
+    return (tanaMeta = m);
+  }
+  // this relay as Tana's OAuth client: registered once (a public client, the device flow and refresh only), named after itself
+  async function tanaClient() {
+    const m = await tanaAuth();
+    return serial('tana:client', async (db) => {
+      const row = await db.one('SELECT client FROM tana_client WHERE issuer = ?', tana.issuer);
+      if (row) return row.client;
+      const res = await tanaCall(m.registration_endpoint, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({
+        client_name: 'Orbital relay at ' + new URL(ISSUER).host, grant_types: [DEVICE, 'refresh_token'], token_endpoint_auth_method: 'none', redirect_uris: [ISSUER + '/tana'] }) });
+      const c = await asJson(res);
+      if (!res.ok || typeof c.client_id !== 'string' || !c.client_id) throw tanaDown();
+      await db.run('INSERT INTO tana_client VALUES (?, ?)', tana.issuer, c.client_id);
+      return c.client_id;
+    });
+  }
+  // the connection's key: made with its first tokens, wrapped for every token it is given since (issue), and opened only by
+  // the token a call carries
+  async function wrapFor(install, key, tokens) {
+    for (const [token, ttl] of tokens) await run('INSERT INTO vaults VALUES (?, ?, ?, ?)', hash(token), install, await seal(await tokenKey(token), key, 'vault:' + install), now() + ttl);
+  }
+  async function vaultOf(install, token) {
+    const row = token && await one('SELECT * FROM vaults WHERE token = ? AND install = ?', hash(token), install);
+    if (!row || row.expires < now()) return null;
+    try { return await unseal(await tokenKey(token), row.wrap, 'vault:' + install); } catch { return null; }
+  }
+  const sealIn = async (key, value, aad) => seal(await aesKey(key), Buffer.from(JSON.stringify(value)), aad);
+  const openIn = async (key, sealed, aad) => { try { return JSON.parse(await unseal(await aesKey(key), sealed, aad)); } catch { return null; } };
+  async function credsOf(install, key) {
+    const row = await one('SELECT sealed FROM tana WHERE install = ?', install);
+    return row ? openIn(key, row.sealed, 'tana:' + install) : null;
+  }
+  async function keepCreds(install, key, creds) {
+    const sealed = await sealIn(key, creds, 'tana:' + install);
+    if (!(await run('UPDATE tana SET sealed = ?, updated = ? WHERE install = ?', sealed, now(), install))) await run('INSERT INTO tana VALUES (?, ?, ?)', install, sealed, now());
+  }
+  const forget = (install) => Promise.all([run('DELETE FROM tana WHERE install = ?', install), run('DELETE FROM tana_pending WHERE install = ?', install)]);
+  // Tana's access token lives minutes: renewed with its refresh token, sealed again; refused, the sign-in is forgotten
+  async function freshCreds(install, key, creds) {
+    if (creds.expires > now() + MINUTE) return creds;
+    if (!creds.refresh) { await forget(install); return null; }
+    const m = await tanaAuth();
+    const res = await tanaCall(m.token_endpoint, form({ grant_type: 'refresh_token', refresh_token: creds.refresh, client_id: creds.client, resource: tana.mcp }));
+    const t = await asJson(res);
+    if (!res.ok || typeof t.access_token !== 'string') { if (res.status >= 400 && res.status < 500) { await forget(install); return null; } throw tanaDown(); }
+    const next = { ...creds, access: t.access_token, refresh: t.refresh_token || creds.refresh, expires: now() + (Number(t.expires_in) || 300) * 1000 };
+    await keepCreds(install, key, next);
+    return next;
+  }
+  // Tana's page for the code, and only Tana's: the view opens whatever this says
+  const tanaPage = (u, m) => https(u) && [new URL(m.authorization_endpoint).host, new URL(tana.issuer).host].includes(new URL(u).host);
+  // the device flow: a code to confirm on Tana's page, asked about again each time the view asks (at most every interval)
+  async function signInTana(install, key) {
+    if (await credsOf(install, key)) return { state: 'signed_in' };
+    const m = await tanaAuth(), aad = 'pending:' + install, row = await one('SELECT * FROM tana_pending WHERE install = ?', install);
+    let p = row && row.expires > now() ? await openIn(key, row.sealed, aad) : null;
+    if (!p) {
+      limit('tana-start:' + install, 3); // a new code is a request to Tana: a few a minute per connection, however often the view asks
+      const client = await tanaClient();
+      const res = await tanaCall(m.device_authorization_endpoint, form({ client_id: client, scope: 'openid profile offline_access', resource: tana.mcp }));
+      const d = await asJson(res), page = d.verification_uri_complete || d.verification_uri;
+      if (d.error === 'invalid_client') await run('DELETE FROM tana_client WHERE issuer = ?', tana.issuer); // Tana forgot this relay: register again next time
+      if (!res.ok || typeof d.device_code !== 'string' || typeof d.user_code !== 'string' || !tanaPage(page, m)) throw tanaDown();
+      p = { device: d.device_code, client, code: text(d.user_code, 20), url: page, interval: Math.max(5, Number(d.interval) || 5), next: now(), expires: now() + Math.min(Number(d.expires_in) || 600, 1800) * 1000 };
+      await run('DELETE FROM tana_pending WHERE install = ?', install);
+      await run('INSERT INTO tana_pending VALUES (?, ?, ?)', install, await sealIn(key, p, aad), p.expires);
+      return { state: 'waiting', url: p.url, code: p.code, expiresAt: p.expires };
+    }
+    const waiting = { state: 'waiting', url: p.url, code: p.code, expiresAt: p.expires };
+    if (now() < p.next) return waiting;
+    const res = await tanaCall(m.token_endpoint, form({ grant_type: DEVICE, device_code: p.device, client_id: p.client, resource: tana.mcp }));
+    const t = await asJson(res);
+    if (res.ok && typeof t.access_token === 'string') {
+      await run('DELETE FROM tana_pending WHERE install = ?', install);
+      await keepCreds(install, key, { client: p.client, access: t.access_token, refresh: typeof t.refresh_token === 'string' ? t.refresh_token : null, expires: now() + (Number(t.expires_in) || 300) * 1000 });
+      return { state: 'signed_in' };
+    }
+    if (t.error === 'authorization_pending' || t.error === 'slow_down') {
+      p.interval += t.error === 'slow_down' ? 5 : 0; p.next = now() + p.interval * 1000;
+      await run('UPDATE tana_pending SET sealed = ? WHERE install = ?', await sealIn(key, p, aad), install);
+      return waiting;
+    }
+    await run('DELETE FROM tana_pending WHERE install = ?', install);
+    if (t.error === 'access_denied' || t.error === 'expired_token') return { state: t.error === 'access_denied' ? 'denied' : 'expired' };
+    throw tanaDown();
+  }
+  // one tool of Tana's MCP server, as its own client: initialize, then the call; JSON or an event stream back
+  async function tanaTool(creds, name, args) {
+    const ask = async (msg, session) => {
+      const res = await tanaCall(tana.mcp, { method: 'POST', body: JSON.stringify(msg), headers: { authorization: 'Bearer ' + creds.access, 'content-type': 'application/json',
+        accept: 'application/json, text/event-stream', ...(session ? { 'mcp-session-id': session, 'mcp-protocol-version': '2025-06-18' } : {}) } });
+      if (res.status === 401) throw Object.assign(fail(401, 'tana_signed_out', 'Tana signed you out: sign in again'), { signedOut: true });
+      const body = await res.text().catch(() => '');
+      const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
+      const json = /event-stream/.test(res.headers.get('content-type') || '') ? body.split('\n').filter((l) => l.startsWith('data:')).map((l) => parse(l.slice(5))).find((x) => x && x.id === msg.id) : parse(body);
+      return { session: res.headers.get('mcp-session-id'), json };
+    };
+    const init = await ask({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'orbital-relay', version: String(VERSION) } } });
+    if (init.session) await ask({ jsonrpc: '2.0', method: 'notifications/initialized' }, init.session);
+    const result = (await ask({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name, arguments: args } }, init.session)).json;
+    const r = result && result.result;
+    if (!r || r.isError) throw fail(502, 'tana_failed', 'Tana could not answer that: try again in a moment');
+    const t = (r.content || []).find((c) => c && c.type === 'text');
+    try { return t ? JSON.parse(t.text) : r.structuredContent || {}; } catch { return {}; }
+  }
+  // the view's data: your tasks in Inbox and In Progress, as Tana's MCP finds them (who you are asked of Tana once, then kept sealed)
+  async function myTasks(install, key) {
+    let creds = await credsOf(install, key);
+    if (creds) creds = await freshCreds(install, key, creds);
+    if (!creds) return { signedIn: false };
+    try {
+      if (!creds.user) {
+        const u = (await tanaTool(creds, 'getCurrentUser', {})).user;
+        if (!u || typeof u.uri !== 'string') throw tanaDown();
+        creds.user = { uri: u.uri, name: text(u.name, 120) };
+        await keepCreds(install, key, creds);
+      }
+      const found = await tanaTool(creds, 'searchItems', { queries: ['*'], targets: [{ target: 'text', state: ['Inbox', 'In Progress'], assignedTo: [creds.user.uri] }] });
+      const tasks = (Array.isArray(found.items) ? found.items : []).filter((i) => i && typeof i.id === 'string' && /^tana:[a-z-]+:[0-9a-z]+$/.test(i.id)).slice(0, 200)
+        .map((i) => ({ id: i.id, title: text(i.title, 300), state: text(i.state, 30), type: i.type && i.type !== '(untyped)' ? text(i.type, 60) : '', updatedAt: text(i.updatedAt, 40) }));
+      return { signedIn: true, user: creds.user.name, tasks };
+    } catch (e) { if (e.signedOut) { await forget(install); return { signedIn: false }; } throw e; }
+  }
+  async function tanaToolCall(install, token, name) {
+    const key = await vaultOf(install.id, token);
+    if (!key) throw fail(409, 'no_vault', 'This connection was made before the view: it can open it once ChatGPT renews its sign-in, within the hour, or connect the Orbital plugin again');
+    return serial('tana:' + install.id, async () => {
+      if (name === 'tana_sign_out') { await forget(install.id); return { state: 'signed_out' }; }
+      if (name === 'tana_sign_in') return signInTana(install.id, key);
+      return myTasks(install.id, key);
+    });
   }
 
   // ---- MCP over streamable HTTP: one JSON-RPC message in, one JSON answer out ----
@@ -425,9 +685,10 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   // WWW-Authenticate starts the sign-in (any MCP client), with the same challenge in the result's _meta (ChatGPT's way).
   // Both eras of MCP: the handshake ones (initialize) and 2026-07-28, which declares its version in every request's _meta
   // and starts, if at all, with server/discover. A 2026-07-28 answer says it is complete and who answered.
-  const OPEN = ['initialize', 'ping', 'tools/list', 'server/discover', 'events/list'];
+  const OPEN = ['initialize', 'ping', 'tools/list', 'server/discover', 'events/list', 'resources/list', 'resources/read']; // the view's page holds nothing private
   const SERVER_INFO = { name: 'orbital', title: 'Orbital', version: '1.1.0' };
-  const CAPS = { tools: {}, events: {} };
+  const CAPS = tana ? { tools: {}, events: {}, resources: {} } : { tools: {}, events: {} };
+  const ALL_TOOLS = tana ? [...TOOLS, ...TANA_TOOLS] : TOOLS;
   async function mcp(req, res) {
     const m = /^Bearer (\S+)$/.exec(req.headers.authorization || '');
     const found = m && await one("SELECT * FROM tokens WHERE hash = ? AND kind = 'access'", hash(m[1]));
@@ -453,7 +714,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     const who = meta['io.modelcontextprotocol/clientInfo'], app = install && !install.app && who && text(who.title || who.name, LIMITS.name);
     if (app) { await run('UPDATE installs SET app = ? WHERE id = ?', app, install.id); install.app = app; }
     try {
-      const result = await rpc(install, agent, msg.method, params, modern);
+      const result = await rpc(install, agent, msg.method, params, modern, row && m[1]);
       return send(res, 200, { jsonrpc: '2.0', id: msg.id, result: modern ? { resultType: 'complete', ...result, _meta: { ...result._meta, 'io.modelcontextprotocol/serverInfo': SERVER_INFO } } : result });
     } catch (e) {
       if (e.status && !e.rpc) throw e;
@@ -461,7 +722,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
       return send(res, 200, { jsonrpc: '2.0', id: msg.id, error: { code: e.rpc || -32603, message: e.rpc ? e.message : 'Something went wrong', ...(e.rpc && e.data ? { data: e.data } : {}) } });
     }
   }
-  async function rpc(install, agent, method, params, modern) {
+  async function rpc(install, agent, method, params, modern, token) { // token: the one this call came with, which opens the connection's key (Tana's views)
     if (method === 'server/discover') return { supportedVersions: VERSIONS, capabilities: CAPS, instructions: INSTRUCTIONS, ttlMs: HOUR, cacheScope: 'public' };
     if (method === 'initialize') {
       const app = text(params.clientInfo && (params.clientInfo.title || params.clientInfo.name), LIMITS.name);
@@ -469,7 +730,12 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
       return { protocolVersion: PROTOCOLS.includes(params.protocolVersion) ? params.protocolVersion : PROTOCOLS[1], capabilities: CAPS, serverInfo: SERVER_INFO, instructions: INSTRUCTIONS };
     }
     if (method === 'ping') return {};
-    if (method === 'tools/list') return modern ? { tools: TOOLS, ttlMs: HOUR, cacheScope: 'public' } : { tools: TOOLS };
+    if (method === 'tools/list') return modern ? { tools: ALL_TOOLS, ttlMs: HOUR, cacheScope: 'public' } : { tools: ALL_TOOLS };
+    if (tana && method === 'resources/list') return { resources: [{ uri: VIEW, name: 'Orbital: my tasks', mimeType: 'text/html;profile=mcp-app' }] };
+    if (tana && method === 'resources/read') {
+      if (params.uri !== VIEW) throw invalid('No such resource');
+      return { contents: [{ uri: VIEW, mimeType: 'text/html;profile=mcp-app', text: VIEW_HTML, _meta: { 'openai/ui': { preferredDisplayMode: 'fullscreen', availableDisplayModes: ['fullscreen'] } } }] };
+    }
     if (method === 'events/list') return { events: EVENTS };
     // only a linked connection: an unlinked one would hear nothing, and a subscription makes the relay call a URL it was given
     if (method === 'events/subscribe') { if (!agent) throw invalid('Link first: call link_orbital with the code the person you work for gave you, then subscribe'); return await subscribe(install, params); }
@@ -477,6 +743,10 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     if (method === 'tools/call') {
       const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
       try {
+        if (tana && TANA_TOOLS.some((t) => t.name === params.name)) {
+          const data = await tanaToolCall(install, token, params.name);
+          return { content: [{ type: 'text', text: data.signedIn === false ? 'Not signed in to Tana yet: the view asks.' : Array.isArray(data.tasks) ? data.tasks.length + ' tasks' : data.state }], structuredContent: data };
+        }
         if (params.name !== 'link_orbital') throw fail(400, 'unknown_tool', 'No tool called ' + text(String(params.name), 40), -32602);
         const out = await linkOrbital(install, agent, args);
         return { content: [{ type: 'text', text: typeof out === 'string' ? out : JSON.stringify(out, null, 2) }] };
@@ -676,7 +946,8 @@ if (require.main === module) {
   const store = process.env.DATABASE_URL ? postgresStore(process.env.DATABASE_URL) : sqliteStore(process.env.RELAY_DB || ':memory:');
   // the manual where orbital.md keeps it: artifacts/orbital/public/manual, beside lib/agent-relay/server.js
   const manual = process.env.RELAY_MANUAL_DIR || require('node:path').join(__dirname, '../../artifacts/orbital/public/manual');
-  const relay = createRelay({ store, publicUrl: process.env.RELAY_PUBLIC_URL || 'http://localhost:' + port, path: process.env.RELAY_PATH || '/mcp', manual });
+  const relay = createRelay({ store, publicUrl: process.env.RELAY_PUBLIC_URL || 'http://localhost:' + port, path: process.env.RELAY_PATH || '/mcp', manual,
+    tana: process.env.RELAY_TANA === 'on' ? { issuer: 'https://home.tana.inc', mcp: TANA_MCP } : null }); // never at orbital.md (issue #817)
   relay.ready.then(() => http.createServer(relay.handle).listen(port, () => console.log('Agent relay at ' + relay.issuer + (process.env.DATABASE_URL ? ', rows in PostgreSQL' : process.env.RELAY_DB ? ', rows in ' + process.env.RELAY_DB : ', in memory'))),
     (e) => { console.error('agent relay: the database could not be prepared:', e.message); process.exit(1); });
 }

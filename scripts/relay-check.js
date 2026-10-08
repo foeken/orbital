@@ -417,6 +417,93 @@ const server = http.createServer(relay.handle);
     await assert.rejects(worker.post('https://10.0.0.8/cb', {}, '{}'), { code: 'EBLOCKED' }, 'and never a private address written out');
   }
 
+
+  // ---- the plugin's views (issue #817): off unless the relay is started with Tana; on, each sign-in kept sealed ----
+  {
+    const list = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
+    assert.deepEqual(list.json.result.tools.map((t) => t.name), ['link_orbital'], 'a relay started without Tana (orbital.md) has no views and no Tana sign-in');
+    assert.equal((await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'resources/read', params: { uri: 'ui://orbital/tasks' } } })).json.error.code, -32601, 'nor the view\'s page');
+    // a fake Tana: its authorization server (device flow, refresh), and its MCP server answering two tools, one as an event stream
+    const seen = { device: 0, polls: 0, refreshed: 0, registered: 0, bearer: [] }; let approved = false;
+    const reply = (status, body, headers = {}) => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
+    const tanaFetch = async (url, o = {}) => {
+      const u = new URL(url), f = Object.fromEntries(new URLSearchParams(typeof o.body === 'string' ? o.body : ''));
+      if (u.pathname === '/.well-known/oauth-authorization-server') return reply(200, { authorization_endpoint: 'https://login.tana.test/oauth2/authorize', device_authorization_endpoint: 'https://login.tana.test/oauth2/device', token_endpoint: 'https://login.tana.test/oauth2/token', registration_endpoint: 'https://login.tana.test/oauth2/register' });
+      if (u.pathname === '/oauth2/register') { seen.registered++; return reply(201, { client_id: 'tana-client-1' }); }
+      if (u.pathname === '/oauth2/device') { seen.device++; assert.equal(f.resource, 'https://tana.test/mcp', 'the device flow asks for Tana\'s MCP server and no more'); return reply(200, { device_code: 'DEVICE-SECRET-1', user_code: 'WXYZ-1234', verification_uri_complete: 'https://login.tana.test/device?user_code=WXYZ-1234', interval: 5, expires_in: 600 }); }
+      if (u.pathname === '/oauth2/token' && f.grant_type === 'urn:ietf:params:oauth:grant-type:device_code') { seen.polls++; return approved ? reply(200, { access_token: 'TANA-ACCESS-1', refresh_token: 'TANA-REFRESH-1', expires_in: 300 }) : reply(400, { error: 'authorization_pending' }); }
+      if (u.pathname === '/oauth2/token' && f.grant_type === 'refresh_token') { seen.refreshed++; assert.equal(f.refresh_token, 'TANA-REFRESH-1'); return reply(200, { access_token: 'TANA-ACCESS-2', refresh_token: 'TANA-REFRESH-2', expires_in: 300 }); }
+      if (url === 'https://tana.test/mcp') {
+        seen.bearer.push(o.headers.authorization);
+        const m = JSON.parse(o.body);
+        if (m.method === 'initialize') return reply(200, { jsonrpc: '2.0', id: m.id, result: { protocolVersion: '2025-06-18', capabilities: {} } }, { 'mcp-session-id': 'sess-1' });
+        if (m.method === 'notifications/initialized') return new Response(null, { status: 202 });
+        const out = m.params.name === 'getCurrentUser' ? { user: { uri: 'tana:user-profile:ann1', name: 'Ann' } }
+          : { items: [{ id: 'tana:text:t1', title: 'Write the <b>plan</b>', state: 'Inbox', type: '(untyped)' }, { id: 'tana:text:t2', title: 'Ship it', state: 'In Progress', type: 'Project task' }, { id: 'javascript:alert(1)', title: 'not a node', state: 'Inbox' }] };
+        return new Response('event: message\ndata: ' + JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { content: [{ type: 'text', text: JSON.stringify(out) }] } }) + '\n\n', { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      }
+      throw new Error('unexpected ' + url);
+    };
+    const vstore = sqliteStore(), views = createRelay({ store: vstore, publicUrl: 'https://relay.example', now: () => clock, post, tana: { issuer: 'https://tana.test', mcp: 'https://tana.test/mcp', fetch: tanaFetch } });
+    const ask = (method, p, { body, auth, form } = {}) => new Promise((resolve) => {
+      const raw = body === undefined ? '' : form ? new URLSearchParams(body).toString() : JSON.stringify(body);
+      const req = Object.assign(Readable.from(raw ? [Buffer.from(raw)] : []), { method, url: p, socket: { remoteAddress: '127.0.0.1' },
+        headers: { ...(raw ? { 'content-type': form ? 'application/x-www-form-urlencoded' : 'application/json' } : {}), ...(auth ? { authorization: 'Bearer ' + auth } : {}) } });
+      const res = { headersSent: false, statusCode: 0, headers: {}, setHeader(k, v) { this.headers[k.toLowerCase()] = v; }, writeHead(status, h = {}) { this.statusCode = status; this.headersSent = true; Object.assign(this.headers, h); },
+        end(text) { resolve({ status: this.statusCode, headers: this.headers, json: text ? JSON.parse(text) : null }); } };
+      views.handle(req, res);
+    });
+    const connect = async (name) => {
+      const redirect = 'https://agents.example/' + name + '/callback', client = (await ask('POST', '/mcp/oauth/register', { body: { redirect_uris: [redirect] } })).json.client_id;
+      const verifier = crypto.randomBytes(32).toString('base64url'), challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+      const code = new URL((await ask('GET', '/mcp/oauth/authorize?' + new URLSearchParams({ response_type: 'code', client_id: client, redirect_uri: redirect, code_challenge: challenge, code_challenge_method: 'S256' }))).headers.location).searchParams.get('code');
+      return { client, ...(await ask('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'authorization_code', code, client_id: client, redirect_uri: redirect, code_verifier: verifier } })).json };
+    };
+    const use = async (token, name) => { const r = (await ask('POST', '/mcp', { auth: token, body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name, arguments: {} } } })).json.result; return r.isError ? { error: r.content[0].text } : r.structuredContent; };
+    const tools = (await ask('POST', '/mcp', { body: { jsonrpc: '2.0', id: 4, method: 'tools/list' } })).json.result.tools, entry = tools.find((t) => t.name === 'orbital_tasks');
+    assert.deepEqual([tools.map((t) => t.name), entry._meta['openai/ui'].entrypoints, entry._meta.ui.resourceUri, tools.filter((t) => t._meta.ui && t._meta.ui.visibility).map((t) => t._meta.ui.visibility.join())],
+      [['link_orbital', 'orbital_tasks', 'tana_sign_in', 'tana_sign_out'], [{ type: 'global' }], 'ui://orbital/tasks', ['app', 'app']], 'started with Tana: My tasks in ChatGPT\'s sidebar, and its sign-in tools for the view only');
+    const page = (await ask('POST', '/mcp', { body: { jsonrpc: '2.0', id: 5, method: 'resources/read', params: { uri: 'ui://orbital/tasks' } } })).json.result.contents[0];
+    assert.ok(page.mimeType === 'text/html;profile=mcp-app' && !/innerHTML|fetch\(|https?:\/\//.test(page.text) && page.text.includes('e.source !== parent'), 'the view is one page that draws text only, asks nothing of the network, and hears its host alone');
+    assert.doesNotThrow(() => new Function(page.text.split('<script>')[1].split('</' + 'script>')[0]), 'and its script parses');
+    const ann = await connect('ann');
+    assert.deepEqual(await use(ann.access_token, 'orbital_tasks'), { signedIn: false }, 'a connection not signed in to Tana yet is asked to');
+    const start = await use(ann.access_token, 'tana_sign_in');
+    assert.deepEqual([start.state, start.code, new URL(start.url).host], ['waiting', 'WXYZ-1234', 'login.tana.test'], 'signing in is a code to confirm on Tana\'s own page');
+    assert.equal((await use(ann.access_token, 'tana_sign_in')).state, 'waiting', 'still waiting while Tana has not been told');
+    assert.equal((await use(ann.access_token, 'tana_sign_in')).state, 'waiting');
+    assert.deepEqual([seen.device, seen.polls, seen.registered], [1, 1, 1], 'one code, Tana asked at most once an interval, and this relay registered with Tana once');
+    approved = true; clock += 6e3;
+    assert.equal((await use(ann.access_token, 'tana_sign_in')).state, 'signed_in', 'confirmed, it is signed in');
+    const mine = await use(ann.access_token, 'orbital_tasks');
+    assert.deepEqual([mine.signedIn, mine.user, mine.tasks.map((t) => [t.id, t.state, t.type])], [true, 'Ann', [['tana:text:t1', 'Inbox', ''], ['tana:text:t2', 'In Progress', 'Project task']]], 'and the view has the tasks Tana\'s MCP finds for them, nothing but node ids');
+    assert.ok(seen.bearer.every((b) => b === 'Bearer TANA-ACCESS-1'), 'with their Tana token, sent to Tana only');
+    const secrets = ['TANA-ACCESS-1', 'TANA-REFRESH-1', 'DEVICE-SECRET-1', ann.access_token, ann.refresh_token];
+    let rows = await views.dump();
+    assert.deepEqual(secrets.filter((s) => rows.includes(s)), [], 'the database holds none of them as itself: Tana\'s tokens and the device code sealed, ChatGPT\'s only as hashes');
+    // ChatGPT renews its sign-in: the connection's key is wrapped again for the new tokens, and the Tana sign-in stays
+    const renewed = (await ask('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: ann.refresh_token, client_id: ann.client } })).json;
+    assert.equal((await use(renewed.access_token, 'orbital_tasks')).signedIn, true, 'a renewed connection still opens its Tana sign-in');
+    // another connection, and a sealed sign-in copied onto it: neither opens Ann's
+    const bob = await connect('bob');
+    assert.deepEqual(await use(bob.access_token, 'orbital_tasks'), { signedIn: false }, 'another connection has no Tana sign-in of Ann\'s');
+    const installOf = async (token) => (await vstore.one('SELECT install FROM tokens WHERE hash = ?', crypto.createHash('sha256').update(token).digest('base64url'))).install;
+    const [annId, bobId] = [await installOf(renewed.access_token), await installOf(bob.access_token)];
+    await vstore.run('INSERT INTO tana SELECT ?, sealed, updated FROM tana WHERE install = ?', bobId, annId); // what someone with the database could do
+    assert.deepEqual(await use(bob.access_token, 'orbital_tasks'), { signedIn: false }, 'nor does Ann\'s sealed sign-in copied onto Bob\'s connection: it opens only with her key, and only as hers');
+    await vstore.run('DELETE FROM tana WHERE install = ?', bobId);
+    // Tana's token runs out: renewed with its refresh token, sealed again
+    clock += 6 * 60e3;
+    assert.equal((await use(renewed.access_token, 'orbital_tasks')).signedIn, true, 'Tana\'s access token is renewed when it runs out');
+    assert.equal(seen.refreshed, 1);
+    rows = await views.dump();
+    assert.deepEqual(['TANA-ACCESS-2', 'TANA-REFRESH-2'].filter((s) => rows.includes(s)), [], 'and the new ones are sealed too');
+    assert.deepEqual(await use(renewed.access_token, 'tana_sign_out'), { state: 'signed_out' }, 'signing out of Tana');
+    assert.deepEqual(await use(renewed.access_token, 'orbital_tasks'), { signedIn: false }, 'forgets it');
+    assert.equal((await views.dump()).includes('"sealed"'), false, 'with nothing of it left');
+    await views.close();
+  }
+
   console.log('relay-check: ok');
   await relay.close(); server.close();
 })().catch((e) => { console.error(e); process.exit(1); });

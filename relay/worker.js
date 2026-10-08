@@ -46,7 +46,9 @@ function serve(handle, request) {
 let relay = null; // one per isolate: its rows are in D1, so another isolate's relay is the same relay
 module.exports = {
   fetch(request, env) {
-    relay ||= createRelay({ store: d1Store(env.DB), publicUrl: env.RELAY_PUBLIC_URL || new URL(request.url).origin, path: env.RELAY_PATH || '/api/mcp', post });
+    relay ||= createRelay({ store: d1Store(env.DB), publicUrl: env.RELAY_PUBLIC_URL || new URL(request.url).origin, path: env.RELAY_PATH || '/api/mcp', post,
+      // the plugin's views and each person's Tana sign-in (issue #817), only where the Site is set to: RELAY_TANA=on
+      tana: env.RELAY_TANA === 'on' ? { issuer: 'https://home.tana.inc', mcp: 'https://home.tana.inc/mcp' } : null });
     return serve(relay.handle, request);
   },
   post, // for scripts/relay-check.js; a Worker calls only fetch

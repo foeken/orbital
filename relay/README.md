@@ -25,6 +25,15 @@ Cmd+K → Choose agents → Relay …, and pastes the URL it gives back into the
 
 Nothing else needs setting: the relay takes its public URL from the requests it gets (`RELAY_PUBLIC_URL` overrides it).
 
+## The plugin's views (optional)
+
+With `RELAY_TANA=on` in the Site's environment, the relay also serves the Orbital plugin's views: **My tasks** in
+ChatGPT's sidebar, your Tana tasks in Inbox and In Progress. Each person signs in to Tana once from the view, with a code
+confirmed on Tana's own page, which names this relay. The relay then holds that person's Tana sign-in (for Tana's MCP
+server only), sealed under a key that only their own ChatGPT connection opens: the database alone opens nothing. Turn it
+on only for a relay you run and trust: whoever controls the deployment could still catch a sign-in as it is used.
+orbital.md never turns it on.
+
 ## Updating it
 
 `/health` says the relay's `version`. When Orbital needs a newer one, its Relay page says the workspace's relay is out
