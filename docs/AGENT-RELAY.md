@@ -179,6 +179,12 @@ needs that App published once from the Replit website, which reviews schema chan
 
 ## Your workspace's relay (issue #814)
 
+**The plugin.** `plugin/` is Orbital as a ChatGPT plugin: both servers an agent needs (the relay and Tana's
+`home.tana.inc/mcp`) in one `mcp.json`, and a setup skill (`skills/connect`) that asks for the link code, links and
+subscribes, in place of adding two custom MCP servers and pasting the instructions. `node plugin/build.js` packages it
+for orbital.md; `node plugin/build.js <relay URL> <workspace>` packages a workspace's own, the same plugin with its relay
+in it ("Orbital for Nedap", saved in Nedap's ChatGPT workspace as a private plugin).
+
 Every Orbital in a Tana workspace hands over through one relay: the one the workspace's admins chose, or orbital.md.
 There is no relay of your own. The choice is `relayUrl` in the `ext:orbital` root of Tana's org document
 (`orgDocUri`), beside the workspace settings Tana keeps there itself, read by every member (main/settings.js
