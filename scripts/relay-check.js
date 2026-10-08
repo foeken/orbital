@@ -412,6 +412,7 @@ const server = http.createServer(relay.handle);
     assert.equal((await ask('GET', '/api/mcp/orbital/agents', { auth: 'Orbital ' + newKey() })).status, 401, 'another key is not that Orbital');
     assert.equal((await ask('POST', '/api/mcp', { body: 'x'.repeat(LIMITS.body + 1) })).status, 413, 'a body past the limit is refused, as on Node');
     assert.equal((await ask('GET', '/api/mcp/health')).json.sha256, crypto.createHash('sha256').update(fs.readFileSync(require.resolve('../relay/server'))).digest('hex'), 'and /health names the same server.js as orbital.md');
+    assert.equal((await ask('GET', '/api/mcp/health')).json.version, require('../relay/server').VERSION, 'and the same relay version, which Orbital holds against the oldest it works with');
     await assert.rejects(worker.post('http://agents.example/cb', {}, '{}'), { code: 'EBLOCKED' }, 'its callbacks are https only');
     await assert.rejects(worker.post('https://10.0.0.8/cb', {}, '{}'), { code: 'EBLOCKED' }, 'and never a private address written out');
   }

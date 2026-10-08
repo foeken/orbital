@@ -133,6 +133,7 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   relayReset: () => ipcRenderer.invoke('relay:reset'), // a new key for your Orbital; the agents stay linked
   relayWhere: () => ipcRenderer.invoke('relay:where'), // { url, workspace, admin, deploy, fallback }: the workspace's relay, or orbital.md
   relayUse: (url) => ipcRenderer.invoke('relay:use', url), // an admin sets the workspace's relay ('' for orbital.md again); answers relayWhere
+  relayOld: () => ipcRenderer.invoke('relay:old'), // relayWhere once a session when the workspace's relay is older than Orbital needs, else null
   // Cmd+K "Discuss with …": gives the document the Discussion Task type (created in the Library when the workspace
   // has none) and writes who into its "Discuss with" field. Resolves to { typeUri, key, who }.
   discussWith: (docId, who) => ipcRenderer.invoke('doc:discussWith', docId, who),

@@ -110,8 +110,19 @@ const told = (e, out) => { settings.tellOthers(pageOf(e)); return out; };
 // ---- which relay (main/relay.js relay.base, issue #814) ----
 // where it is, whether it is the workspace's own, whether you may change it (an admin), and the words that deploy one on Sites
 async function relayWhere() {
-  return { url: relay.base, workspace: settings.workspaceGet('relayUrl') || null,
-    admin: await settings.orgAdmin().catch(() => false), deploy: relayApi.DEPLOY, fallback: relayApi.DEFAULT };
+  const [admin, version] = await Promise.all([settings.orgAdmin().catch(() => false), relayApi.relayVersion()]);
+  return { url: relay.base, workspace: settings.workspaceGet('relayUrl') || null, admin, deploy: relayApi.DEPLOY, fallback: relayApi.DEFAULT,
+    ...(version || {}), update: relayApi.UPDATE(relay.base) };
+}
+// Once a session, the first page to ask hears that the workspace's relay is out of date (renderer/agent.js noteOldRelay).
+// orbital.md is ours to keep current (docs/AGENT-RELAY.md, Running and deploying), so only a workspace's own relay is asked about.
+let toldOld = false;
+async function oldRelay() {
+  if (toldOld || !settings.workspaceGet('relayUrl')) return null;
+  const w = await relayWhere();
+  if (!w.outdated || toldOld) return null;
+  toldOld = true;
+  return w;
 }
 // The workspace's relay, set by an admin for everyone in it; an empty url goes back to orbital.md. Agents are linked to one
 // relay: on another, the list is that relay's, empty until they are linked there (refresh).
@@ -130,6 +141,7 @@ const ipc = {
   'relay:reset': () => resetKey(),
   'relay:where': () => relayWhere(),
   'relay:use': async (e, url) => told(e, await useRelay(url)),
+  'relay:old': () => oldRelay(),
 };
 
 module.exports = { relay, orbitalKey, load, refresh, refreshSoon, linkCode, codeStatus, cancelCode, rename, unlink, resetKey, send, statuses, ipc };

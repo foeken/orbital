@@ -74,16 +74,28 @@ function remember(list) {
 const agentsAt = async () => (await call('GET', '/orbital/agents')).agents;
 
 // ---- another relay: checked before it is used, and the words that have ChatGPT deploy one on Sites ----
-// A relay answers /health with { ok: true } (relay/server.js); https only, but for one on this machine.
+// A relay answers /health with { ok: true, version } (relay/server.js); https only, but for one on this machine.
+// RELAY_VERSION is the oldest relay this Orbital works with: raise it with relay/server.js VERSION when Orbital starts
+// to need what an older relay lacks, and every workspace on an older one is told to update it (relayVersion below).
+const RELAY_VERSION = 1;
+async function health(url) {
+  try { const res = await relay.fetch(url + '/health', {}); const json = res.ok ? await res.json() : null; return json && json.ok === true ? json : null; } catch { return null; }
+}
 async function checkRelay(text) {
   let u;
   try { u = new URL(String(text || '').trim()); } catch { throw new Error('That is not a URL'); }
   if (u.protocol !== 'https:' && !(u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) throw new Error('A relay is at an https:// URL');
   const url = (u.origin + u.pathname).replace(/\/+$/, '');
-  let ok = false;
-  try { const res = await relay.fetch(url + '/health', {}); ok = res.ok && (await res.json()).ok === true; } catch { /* below */ }
-  if (!ok) throw new Error(u.host + ' does not answer as a relay: its URL ends in the relay\'s path, /api/mcp on ChatGPT Sites');
+  const h = await health(url);
+  if (!h) throw new Error(u.host + ' does not answer as a relay: its URL ends in the relay\'s path, /api/mcp on ChatGPT Sites');
+  if ((Number(h.version) || 0) < RELAY_VERSION) throw new Error(u.host + ' runs an older relay than Orbital needs: deploy the latest one there first');
   return url;
+}
+// The relay in use and whether it is older than Orbital needs (a relay from before versions says none: 0). null when it
+// does not answer, which says nothing about its version.
+async function relayVersion() {
+  const h = await health(relay.base);
+  return h ? { version: Number(h.version) || 0, needed: RELAY_VERSION, outdated: (Number(h.version) || 0) < RELAY_VERSION } : null;
 }
 const RELAY_CODE = 'https://github.com/foeken/orbital/tree/main/relay';
 const DEPLOY = 'Deploy Orbital\'s agent relay for me on ChatGPT Sites. Its code is the relay folder of ' + RELAY_CODE + ', and its README.md '
@@ -91,6 +103,12 @@ const DEPLOY = 'Deploy Orbital\'s agent relay for me on ChatGPT Sites. Its code 
   + 'and its access set to public, since ChatGPT and the Orbital app reach it without signing in to Sites (the relay signs agents in '
   + 'itself). When it is live, check that its /api/mcp/health answers ok, then give me its URL ending in /api/mcp, for example '
   + 'https://orbital.<your workspace>.chatgpt.site/api/mcp. I paste that URL into Orbital.';
+// The same, for a relay that is out of date: the latest code into the Site it already is, so its address stays and
+// nobody links again
+const UPDATE = (url) => 'Update Orbital\'s agent relay on ChatGPT Sites for me: the Site at ' + url.replace(/\/api\/mcp$/, '') + '. Put the latest relay '
+  + 'folder of ' + RELAY_CODE + ' in it in place of what it holds (its README.md says how), build it with npm install and npm run build, '
+  + 'and publish it as a new version of the same Site, keeping its address and its public access. Then check that ' + url + '/health answers ok '
+  + 'with version ' + RELAY_VERSION + ' or later.';
 
 // ---- linking: a one-time code, and the message your Dot is sent ----
 // An agent has no way to add a server itself (a Dot in ChatGPT neither): you add both (the pages name them and their URLs).
@@ -217,5 +235,5 @@ async function handOver(a, nodeUri, prompt, write, was = null) {
 // working, done and broken
 const BADGE = { assigned: 'pending', working: 'working', completed: 'done', failed: 'broken' };
 
-module.exports = { relay, where, checkRelay, DEPLOY, DEFAULT, keyAt, ID, CODE, UUID, TANA_MCP, orbitalKey, newKey, call, cached, remember, agentsAt, linkCode, codeStatus, cancelCode, HOW, REQUEST_MAX, request, deliver, putBack, handOver,
+module.exports = { relay, where, checkRelay, relayVersion, RELAY_VERSION, DEPLOY, UPDATE, DEFAULT, keyAt, ID, CODE, UUID, TANA_MCP, orbitalKey, newKey, call, cached, remember, agentsAt, linkCode, codeStatus, cancelCode, HOW, REQUEST_MAX, request, deliver, putBack, handOver,
   AGENT_HEADING, AGENT_STATUS, lastAgentStatus, clearStatus, writeStatus, writeContext, BADGE };

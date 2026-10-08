@@ -24,3 +24,9 @@ Cmd+K → Choose agents → Relay …, and pastes the URL it gives back into the
 5. Give back `https://<site>/api/mcp`.
 
 Nothing else needs setting: the relay takes its public URL from the requests it gets (`RELAY_PUBLIC_URL` overrides it).
+
+## Updating it
+
+`/health` says the relay's `version`. When Orbital needs a newer one, its Relay page says the workspace's relay is out
+of date and gives an admin instructions for ChatGPT: put the latest version of this folder in the same Site, build it and
+publish it as a new version. The address stays the same, so the agents stay linked.

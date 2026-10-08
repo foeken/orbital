@@ -34,6 +34,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODE = /^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/;
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']; // the handshake ones: initialize answers in one of these
 const MODERN = '2026-07-28'; // MCP 2.0: no handshake, the version in every request's _meta; what ChatGPT's MCP Events need
+// What this relay can do for Orbital, as one number /health says, at orbital.md and on every workspace's Site alike.
+// Raised only when Orbital needs something an older relay lacks (main/relay.js RELAY_VERSION, the oldest it works with):
+// a workspace running an older one is told to update it.
+const VERSION = 1;
 const VERSIONS = [MODERN, ...PROTOCOLS];
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford's: no I, L, O or U to misread
 const TANA_MCP = 'https://home.tana.inc/mcp';
@@ -346,7 +350,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
         return send(res, 405, { error: 'method_not_allowed' }, { allow: 'POST' }); // no server-to-client stream: tools only
       }
       // which server.js runs, to hold against the repository, and which manual is published beside it
-      if (p === PATH + '/health') { const m = await published; return send(res, 200, { ok: true, sha256: SELF, manual: m && { sha256: m.sha256, files: Object.keys(m.files).length } }); }
+      if (p === PATH + '/health') { const m = await published; return send(res, 200, { ok: true, version: VERSION, sha256: SELF, manual: m && { sha256: m.sha256, files: Object.keys(m.files).length } }); }
       if (p === PATH + '/health/manual') { const m = await published; return m ? send(res, 200, m) : send(res, 404, { error: 'no_manual' }); }
       if (p === PATH + '/oauth/register' && req.method === 'POST') return await register(req, res);
       if (p === PATH + '/oauth/authorize' && req.method === 'GET') { limit('authorize:' + ip(req), LIMITS.authorize); return await authorize(url, res); } // each one writes a grant
@@ -677,4 +681,4 @@ if (require.main === module) {
     (e) => { console.error('agent relay: the database could not be prepared:', e.message); process.exit(1); });
 }
 
-module.exports = { createRelay, sqliteStore, postgresStore, d1Store, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, manualDigest };
+module.exports = { VERSION, createRelay, sqliteStore, postgresStore, d1Store, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, manualDigest };

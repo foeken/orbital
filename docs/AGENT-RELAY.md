@@ -200,3 +200,11 @@ one and break the other unseen. Nedap's runs at https://orbital.nedap.chatgpt.si
 
 On a Site, `serial` (a count and the insert it allows, kept together) holds only within one isolate, since D1 has no
 lock across awaits: twin requests on two isolates can each pass a daily cap once.
+
+**Versions.** A relay says what it can do as one number, `version` in `/health` (relay/server.js `VERSION`), the
+same at orbital.md and on every Site. Orbital holds it against the oldest relay it works with (main/relay.js
+`RELAY_VERSION`): raise both together when Orbital starts to need something an older relay lacks, and only then. A
+workspace whose relay is older is told once a session (main/agents/linked.js `oldRelay`), and its Relay page says so; an
+admin copies **Copy the update instructions for ChatGPT**, which put the latest `relay/` in the same Site, so its address
+stays and nobody links again. A relay that is too old cannot be chosen. orbital.md is not asked about: keeping it current
+is ours, by copying `relay/server.js` to its App with each release that raises the version.

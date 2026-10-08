@@ -3758,6 +3758,15 @@ async function main() {
       assert.deepEqual([now.url, now.workspace, now.admin], [base + '/mcp', base + '/mcp', true], 'a relay that answers is the workspace\'s');
       assert.equal(JSON.parse(org.loro.getMap(settings.ROOT).get('relayUrl')), base + '/mcp', 'kept in the org document\'s ext:orbital root, as the settings document keeps yours');
       assert.equal(settings.isSynced('relayUrl'), false, 'and nowhere of yours: there is no relay of your own');
+      // a relay older than this Orbital needs (main/relay.js RELAY_VERSION): never chosen, and the one in use says so
+      const realFetch = linked.relay.fetch;
+      linked.relay.fetch = async (url, o) => (url.endsWith('/health') ? { ok: true, json: async () => ({ ok: true, version: 0 }) } : realFetch(url, o));
+      await assert.rejects(h('relay:use', base + '/mcp'), /older relay than Orbital needs/, 'an admin cannot choose a relay older than Orbital needs');
+      const old = await h('relay:where');
+      assert.deepEqual([old.outdated, old.version, old.needed > old.version, old.update.includes(base + '/mcp/health')], [true, 0, true, true], 'and the workspace\'s, once out of date, says so, with the words that have ChatGPT update that same Site');
+      assert.deepEqual([!!(await h('relay:old')), await h('relay:old')], [true, null], 'which the first page to ask is told once a session');
+      linked.relay.fetch = realFetch;
+      assert.equal((await h('relay:where')).outdated, false, 'a relay as new as Orbital needs is not out of date');
       org.transact((l) => l.getMap(settings.ROOT).delete('relayUrl')); await settings.hydrateWorkspace();
       assert.equal(linked.relay.base, 'https://orbital.md/mcp', 'taken out in Tana, every member is back on orbital.md');
     }
