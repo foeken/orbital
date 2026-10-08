@@ -937,7 +937,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
 
   const timer = setInterval(() => { ready.then(sweep).catch(() => {}); }, MINUTE); if (timer.unref) timer.unref();
   // every row of every table as one string: what scripts/relay-check.js searches for secrets that must not be there
-  const dump = async () => { await ready; const out = []; for (const t of Object.keys(TABLES)) out.push(await all('SELECT * FROM ' + t)); return JSON.stringify(out); };
+  const dump = async () => { await ready; const out = []; for (const t of [...Object.keys(TABLES), ...(tana ? Object.keys(TANA_TABLES) : [])]) out.push(await all('SELECT * FROM ' + t)); return JSON.stringify(out); };
   return { handle, sweep, dump, ready, close: async () => { clearInterval(timer); await store.close(); }, path: PATH, issuer: ISSUER };
 }
 

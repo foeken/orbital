@@ -480,6 +480,7 @@ const server = http.createServer(relay.handle);
     assert.ok(seen.bearer.every((b) => b === 'Bearer TANA-ACCESS-1'), 'with their Tana token, sent to Tana only');
     const secrets = ['TANA-ACCESS-1', 'TANA-REFRESH-1', 'DEVICE-SECRET-1', ann.access_token, ann.refresh_token];
     let rows = await views.dump();
+    assert.ok(rows.includes('"sealed"') && rows.includes('"wrap"'), 'the sign-in and the wrapped keys are in the rows looked through');
     assert.deepEqual(secrets.filter((s) => rows.includes(s)), [], 'the database holds none of them as itself: Tana\'s tokens and the device code sealed, ChatGPT\'s only as hashes');
     // ChatGPT renews its sign-in: the connection's key is wrapped again for the new tokens, and the Tana sign-in stays
     const renewed = (await ask('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: ann.refresh_token, client_id: ann.client } })).json;
