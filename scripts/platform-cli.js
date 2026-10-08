@@ -881,6 +881,20 @@ commands.settings = async () => {
   for (const [k, v] of Object.entries(main.settings.synced()).sort()) out('  ' + k + ' = ' + JSON.stringify(v).slice(0, 120));
   await new Promise((r) => setTimeout(r, 1500)); // whatever opening wrote — the explanatory line, a pushed setting — leaves with the stream
 };
+// relay [<url>|none]: the workspace's relay (docs/AGENT-RELAY.md, issue #814) through main's own calls. With no
+// argument it says which relay the workspace uses, its version and whether you may change it (read-only); with one it
+// WRITES the workspace's settings (an admin only, the relay checked first), and 'none' goes back to orbital.md.
+commands.relay = async () => {
+  backend(await connect());
+  await client.sync.connect();
+  const settings = require('../main/settings'), { ipc } = require('../main/agents/linked');
+  await settings.hydrateWorkspace();
+  const [url] = positional;
+  if (url) await ipc['relay:use'](null, url === 'none' ? '' : url);
+  const w = await ipc['relay:where']();
+  out(JSON.stringify({ url: w.url, workspace: w.workspace, admin: w.admin, version: w.version, needed: w.needed, outdated: w.outdated }, null, 1));
+  await new Promise((r) => setTimeout(r, 1500)); // a write leaves with the stream, like the other write commands
+};
 // settype <id> [<tana:type:…|none>]: the Cmd+K "Set type" command through main's own rules. With no target it only
 // lists what the document may be given and why the rest is out (read-only); with one it writes, which is a WRITE.
 commands.settype = async () => {
