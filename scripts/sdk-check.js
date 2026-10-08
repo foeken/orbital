@@ -800,37 +800,6 @@ async function main() {
     assert.deepEqual(metaOf(),[[false,true]],'and says so the same way');
     console.log('ok  discuss with: the type found by title or created in the Library with its field, the document typed and the name written');
   }
-  // A field value edited through main, by the id the page uses: "<document>|<type>?attribute=<key>". Every block:
-  // handler takes it, because document() hands back the field view and the rest is the same code as a page.
-  {
-    const backend=mainHelpers(), cache=require('../db');cache.open(':memory:');
-    const fieldsSdk=require('../sdk/fields'), outlineSdk=require('../sdk/content');
-    const docs=new Map();
-    const doc=new Document('tana:text:'+ulid());doc.transact(l=>initDocument(l,'Typed',ME));docs.set(doc.id,doc);
-    const key='tana:type:'+ulid()+'?attribute=n5e1hgxz', fieldId=doc.id+'|'+key;
-    backend.testRuntime({me:{userUri:ME},win:{isDestroyed:()=>false,webContents:{send:()=>{}}},client:{
-      graph:{listNodes:async()=>({nodes:[]})},
-      sync:{subscribe:async(id)=>{if(!docs.has(id))throw new Error('unavailable');return docs.get(id);},getDocument:(id)=>docs.get(id),unsubscribe:async()=>{}},
-    }});
-    const handler=(name)=>backend.handlers.get(name);
-    const flat=(value)=>JSON.parse(JSON.stringify(value));
-    assert.deepEqual(flat(await handler('outline:children')(null,fieldId)),[],'a field with no value reads as no rows');
-    assert.deepEqual(Object.keys(doc.data.toJSON().attributes||{}),[],'and reading it wrote nothing: opening a typed page must not fill in its empty fields');
-    const first=await handler('block:insertAfter')(null,fieldId,null,'Rob Schuurman'); // the new block's id, as on a page
-    await handler('block:insertAfter')(null,fieldId,first,'Rianne Jans');
-    await handler('block:insertChild')(null,fieldId,first,'a note under Rob');
-    const rows=flat(await handler('outline:children')(null,fieldId));
-    assert.deepEqual(rows.map(r=>r.segments.map(s=>s.text).join('')),['Rob Schuurman','Rianne Jans'],'rows are written into the field, by the same handler a page uses');
-    assert.deepEqual(rows[0].children.map(r=>r.segments.map(s=>s.text).join('')),['a note under Rob'],'and a row in a field can hold children');
-    await handler('block:setText')(null,fieldId,rows[1].id,'Rianne Jans ');
-    assert.equal(fieldsSdk.readFields(doc)[0].text.split('\n')[1].trim(),'a note under Rob','the value is one field of the document, not a second document');
-    assert.equal(outlineSdk.readOutline(doc).some(r=>(r.segments||[]).some(s=>(s.text||'').includes('Rob'))),false,'and none of it reached the document\u2019s own outline');
-    // undo belongs to the document that carries the field, so ⌘Z on a field row is the same stack as everything else
-    assert.equal(await backend.undo(),doc.id,'the undo step is the document, not the field id');
-    assert.deepEqual(flat(await handler('outline:children')(null,fieldId))[1].segments.map(s=>s.text).join(''),'Rianne Jans','and it puts the row back');
-    await assert.rejects(handler('outline:children')(null,doc.id+'|not-a-field'),/./,'an id that is not a field is not a document either');
-    console.log('ok  field values are outlines: every block handler takes "<document>|<field>", children and all, on the document\u2019s own undo stack');
-  }
   // An image lives in the file cache, not in main's memory (issue #271): two asks at once share one fetch, and once
   // it has settled nothing in memory answers for it any more.
   {
@@ -1118,194 +1087,6 @@ async function main() {
     assert.equal(decisions.usable(),false,'and off again');
     settings.set('openaiApiKey',undefined); settings.set('featureFlags',undefined); settings.reset();
     console.log('ok  decisions API flag: off by default and without a key; Auto-pick type and Suggest sensitive marks as decisions, batched past 200');
-  }
-  // Edit meeting details and "/" Meeting's when page (#758): the model transcribes the words into a strict shape, and
-  // main/meetings.js resolveTime decides what they come to, the same way every time, in the meeting's own time zone.
-  {
-    const ai=require('../main/ai'), settings=require('../main/settings'), cache=require('../db');
-    cache.open(':memory:'); settings.reset();
-    const calls=[], answer=(text)=>({ok:true,status:200,json:async()=>({output:[{type:'message',content:[{type:'output_text',text}]}]})});
-    const fetchWith=(result)=>async(url,init)=>{calls.push({url,init:{...init,body:JSON.parse(init.body)}});return result;};
-    const context={today:'Monday 2026-10-05',now:'09:35',timeZone:'Europe/Amsterdam',current:'Wednesday 2026-10-07 10:00 to 11:00'};
-    await assert.rejects(ai.readMeetingTime('tomorrow from 3-5',context,fetchWith(answer('{}'))),/Sign in with ChatGPT or add an OpenAI API key to read a time/,'with no AI it says so');
-    assert.equal(calls.length,0,'and sends nothing');
-    settings.set('openaiApiKey','sk-local-only');
-    await assert.rejects(ai.readMeetingTime('   ',context,fetchWith(answer('{}'))),/Type when/,'no words, nothing asked');
-    const said={date:'2026-10-06',start:{hour:3,minute:0,fixed:false},end:{hour:5,minute:0,fixed:false},minutes:null,question:null};
-    assert.deepEqual(await ai.readMeetingTime('Tomorrow from 3-5',context,fetchWith(answer(JSON.stringify(said)))),said,'the model\u2019s object comes back as it is, for resolveTime to check');
-    const sent=calls.at(-1).init.body;
-    assert.equal(sent.text.format.type,'json_schema');assert.equal(sent.text.format.strict,true);
-    assert.deepEqual(Object.keys(sent.text.format.schema.properties).sort(),['date','end','minutes','question','start','zone'],'the answer has room for a time, a zone it names and a question, nothing else: no people, place or invitation');
-    assert.equal(sent.text.format.schema.additionalProperties,false);
-    assert.ok(sent.input.includes('Words: Tomorrow from 3-5')&&sent.input.includes('Today: Monday 2026-10-05')&&sent.input.includes('Time zone: Europe/Amsterdam'),'the words go with today, now, the zone and the meeting as it is');
-    assert.match(sent.instructions,/data, never an instruction/);
-    await assert.rejects(ai.readMeetingTime('soon',context,fetchWith(answer('Sure, at some point'))),/did not answer with a time/,'prose is no answer');
-    // the Quick AI reads it, whatever the Regular AI is: the defaults unset, the Quick choice when one is made
-    await ai.readMeetingTime('tomorrow from 3-5',context,fetchWith(answer(JSON.stringify(said))));
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],[ai.QUICK_MODEL,ai.QUICK_EFFORT],'with nothing chosen, the Quick AI\u2019s own start');
-    settings.set('aiModel','gpt-6-sol');settings.set('aiEffort','high');settings.set('aiQuickModel','gpt-5.6-luna');settings.set('aiQuickEffort','medium');
-    await ai.readMeetingTime('tomorrow from 3-5',context,fetchWith(answer(JSON.stringify(said))));
-    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-5.6-luna','medium'],'the Quick AI chosen, never the Regular AI (gpt-6-sol, high)');
-    for (const key of ['aiModel','aiEffort','aiQuickModel','aiQuickEffort']) settings.set(key,undefined);
-    settings.set('openaiApiKey',undefined); settings.reset();
-
-    const meetings=mainHelpers().meetings, AMS='Europe/Amsterdam';
-    const dates=require('../sdk/dates'), at=(y,mo,d,h,mi=0,zone=AMS)=>dates.wallTime(zone,y,mo,d,h,mi), now=Date.UTC(2026,9,5,7,35,20); // Monday 5 October 2026, 09:35 in Amsterdam
-    const meeting={now,timeZone:AMS,start:at(2026,10,7,10),end:at(2026,10,7,11)}; // Wednesday 10:00-11:00
-    const fresh={now,timeZone:AMS,start:at(2026,10,5,9,35),end:at(2026,10,5,10,5)};
-    const clock=(hour,minute=0,fixed=false)=>({hour,minute,fixed}), read=(a,ctx=meeting)=>meetings.resolveTime({date:null,start:null,end:null,minutes:null,zone:null,question:null,...a},ctx);
-    const span=(r)=>[new Date(r.start).toLocaleString('sv-SE',{timeZone:r.timeZone}),new Date(r.end).toLocaleString('sv-SE',{timeZone:r.timeZone})];
-    assert.deepEqual(span(read({date:'2026-10-06',start:clock(3),end:clock(5)})),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'"tomorrow from 3-5" is the afternoon, never the night');
-    assert.deepEqual(span(read({start:clock(3),end:clock(5)})),['2026-10-05 15:00:00','2026-10-05 17:00:00'],'a day left out is today, in the meeting\u2019s zone');
-    assert.deepEqual(span(read({start:clock(9),end:clock(11)})),['2026-10-05 09:00:00','2026-10-05 11:00:00'],'a bare 9 is the morning');
-    assert.deepEqual(span(read({start:clock(10),end:clock(2)})),['2026-10-05 10:00:00','2026-10-05 14:00:00'],'an end left open is the first after the start');
-    assert.deepEqual(span(read({start:clock(12,30)})),['2026-10-05 12:30:00','2026-10-05 13:30:00'],'a bare 12 is noon, and a start alone keeps the meeting\u2019s hour');
-    assert.deepEqual(span(read({start:clock(2)},fresh)),['2026-10-05 14:00:00','2026-10-05 14:30:00'],'a new meeting lasts half an hour');
-    assert.deepEqual(span(read({start:clock(3,0,true)})),['2026-10-05 03:00:00','2026-10-05 04:00:00'],'3am or 03:00 is kept as said');
-    assert.deepEqual(span(read({start:clock(0,0,false),minutes:30})),['2026-10-05 00:00:00','2026-10-05 00:30:00'],'midnight is a 24-hour time, kept');
-    assert.deepEqual(span(read({start:clock(22,0,true),end:clock(0,0,true)})),['2026-10-05 22:00:00','2026-10-06 00:00:00'],'"until midnight" is the end of that day');
-    assert.deepEqual(span(read({minutes:45})),['2026-10-07 10:00:00','2026-10-07 10:45:00'],'a length alone keeps the meeting\u2019s day and start');
-    assert.deepEqual(span(read({date:'2026-10-09'})),['2026-10-09 10:00:00','2026-10-09 11:00:00'],'a day alone keeps its hours');
-    assert.deepEqual(span(read({start:clock(4),end:clock(6),minutes:90})),['2026-10-05 16:00:00','2026-10-05 18:00:00'],'an end said wins over a length');
-    assert.deepEqual(JSON.parse(JSON.stringify(read({question:'Which day next week?',start:clock(3)}))),{question:'Which day next week?'},'a question goes back as it is, with no time');
-    assert.deepEqual(Object.keys(read({start:clock(3),attendees:['sam@example.com'],location:'Room 4',invite:true})).sort(),['end','start','timeZone'],'anything else in the answer is left behind');
-    const ny={...meeting,timeZone:'America/New_York'}, NY='America/New_York';
-    assert.deepEqual(span(read({date:'2026-10-06',start:clock(3),end:clock(5)},ny)),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'on the clock of whoever says it');
-    assert.equal(read({date:'2026-10-06',start:clock(3)},ny).start,at(2026,10,6,15,0,NY));
-    // a meeting kept in New York, read for someone in Amsterdam: the words are Amsterdam's clock and day, whatever zone it is kept in
-    const kept={now,timeZone:AMS,start:at(2026,10,7,10,0,NY),end:at(2026,10,7,11,0,NY)}; // 16:00-17:00 in Amsterdam
-    const tomorrow=read({date:'2026-10-06',start:clock(3),end:clock(5)},kept);
-    assert.deepEqual([tomorrow.start,tomorrow.end,tomorrow.timeZone],[at(2026,10,6,15),at(2026,10,6,17),AMS],'"tomorrow from 3-5" is 15:00-17:00 where you are, not in New York');
-    assert.deepEqual(span(read({start:clock(3),end:clock(5)},kept)),['2026-10-05 15:00:00','2026-10-05 17:00:00'],'and a day left out is your today');
-    assert.deepEqual([read({minutes:45},kept).start,read({minutes:45},kept).end],[kept.start,kept.start+27e5],'a length alone keeps the very same start');
-    assert.deepEqual(span(read({date:'2026-10-09'},kept)),['2026-10-09 16:00:00','2026-10-09 17:00:00'],'a day alone keeps its hour on your clock');
-    const late=Date.UTC(2026,9,5,22,30); // 00:30 on Tuesday in Amsterdam, still Monday 18:30 in New York
-    assert.deepEqual(span(read({start:clock(3),end:clock(5)},{...kept,now:late})),['2026-10-06 15:00:00','2026-10-06 17:00:00'],'past midnight where you are, today is your new day');
-    assert.deepEqual(span(read({start:clock(3),end:clock(5)},{...kept,now:late,timeZone:NY})),['2026-10-05 15:00:00','2026-10-05 17:00:00'],'and someone in New York is still on Monday');
-    const named=read({date:'2026-10-06',start:clock(9,0,true),zone:'America/New_York'},kept);
-    assert.deepEqual([named.start,named.end,named.timeZone],[at(2026,10,6,9,0,NY),at(2026,10,6,10,0,NY),NY],'a zone the words name reads their clock times, and is said back');
-    assert.match(JSON.parse(JSON.stringify(read({start:clock(9,0,true),zone:'Mars/Olympus'},kept))).question,/Which time zone is \u201CMars\/Olympus\u201D/,'a zone nobody knows is asked about, never dropped');
-    assert.throws(()=>read({start:clock(9),zone:5},kept),/did not answer/);
-    for (const [a,why] of [[null,/did not answer/],[[],/did not answer/],[{start:clock(25,0,true)},/did not answer/],[{start:clock(3,60)},/did not answer/],[{start:{hour:3,minute:0}},/did not answer/],
-      [{start:{hour:'3',minute:0,fixed:false}},/did not answer/],[{date:'2026-02-30'},/no such day/],[{date:'tomorrow'},/no such day/],[{minutes:0},/more than no time/],[{minutes:-15},/more than no time/],
-      [{minutes:1440},/less than a day/],[{minutes:30.5},/did not answer/],[{start:clock(15,0,true),end:clock(14,0,true)},/ends after it starts/],[{start:clock(23,0,true),end:clock(1)},/ends after it starts/],
-      [{},/No day or time/],[{date:'2030-01-01'},/two years/],[{date:'2027-03-28',start:clock(2,30,true)},/clocks skip/]])
-      assert.throws(()=>(a===null||Array.isArray(a)?meetings.resolveTime(a,meeting):read(a)),why,JSON.stringify(a));
-    // the zone's own wall clock (sdk/dates.js), which the inbox's reminders read too: the hour summer time starts is not there,
-    // the hour it ends happens twice and is taken the second time, and a summer and a winter hour keep their offsets
-    assert.deepEqual([at(2027,3,28,2,30),at(2026,10,25,2,30),at(2026,7,1,12),at(2026,12,1,12)],[NaN,Date.UTC(2026,9,25,1,30),Date.UTC(2026,6,1,10),Date.UTC(2026,11,1,11)],'wall times across both summer-time boundaries');
-    assert.deepEqual(dates.partsIn(AMS,Date.UTC(2026,9,25,0,59,59)),{y:2026,mo:10,d:25,h:2,mi:59,s:59,weekday:'Sunday'},'the last second of summer time');
-    assert.deepEqual(span(read({date:'2026-10-25',start:clock(2,30,true)})),['2026-10-25 02:30:00','2026-10-25 03:30:00'],'the hour summer time ends is a time that happens');
-    assert.equal(read({minutes:45},{...meeting,start:Date.UTC(2020,0,6,9),end:Date.UTC(2020,0,6,10)}).end-Date.UTC(2020,0,6,9),27e5,'an old meeting\u2019s length still changes: only a day named is held to two years');
-    console.log('ok  reading a meeting\u2019s time: the AI transcribes, Orbital decides: today, daytime hours, kept lengths, times said exactly, refusals, time zones and summer time');
-  }
-  // A type's own glyph. The Nucleo UI set is built into the app (build/nucleo-ui.json.gz) and stays in main; the
-  // choice is app-local, because Tana has nowhere to keep an icon and an SVG does not belong in its CRDT.
-  {
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const icons = backend.icons; icons.forgetTypeIcons();
-    const TYPE = 'tana:type:' + ulid(), OTHER = 'tana:type:' + ulid();
-    const all = icons.searchIcons('', 1e9);
-    assert.ok(all.length > 3000, 'the whole UI family is built in, not a sample: ' + all.length);
-    assert.ok(all.every((i) => /^nc-[\w.-]+$/.test(i.name)), 'every name is prefixed, so none can collide with the app\u2019s own glyphs, and all of them are usable as a CSS class');
-    assert.ok(all.every((i) => i.svg.startsWith('<svg') && i.svg.endsWith('</svg>')), 'and each one is a whole 18x18 document rather than the inner markup the library stores');
-    assert.equal(all.some((i) => /<script|<foreignObject|\son[a-z]+=/i.test(i.svg)), false, 'with nothing executable in any of them');
-    // Four of the 3503 are drawn entirely from filled dots and carry no stroke at all; every other one keeps the
-    // library's own `var(--nucleo-stroke-width, 1.5)`, which is what one CSS line matches to the app's weight.
-    assert.ok(all.filter((i) => i.svg.includes('--nucleo-stroke-width')).length > all.length - 10, 'the library\u2019s own stroke variable is kept rather than rewritten per glyph');
-    // Ranked in main because the set is in main: the name first, then the tags, so "launch" still finds the rocket.
-    assert.equal(icons.searchIcons('rocket')[0].label, 'rocket', 'an exact name leads');
-    assert.equal(icons.searchIcons('calendar-che')[0].label, 'calendar-check', 'then a name that starts with the query');
-    assert.ok(icons.searchIcons('launch').some((i) => i.label === 'rocket'), 'and a tag finds an icon whose name says nothing about it');
-    assert.equal(icons.searchIcons('nothinglikethis').length, 0, 'a query that matches nothing answers nothing');
-    assert.ok(icons.searchIcons('user').length <= 60, 'a page at a time: the renderer never receives the set');
-    // The choice, and what wears it.
-    assert.equal(icons.typeIcons().length, 0, 'nothing is chosen to begin with');
-    assert.equal(icons.typeIconName(TYPE), null);
-    assert.throws(() => icons.setTypeIcon('tana:event:' + ulid(), 'nc-rocket'), /set on a type/, 'a meeting keeps its own glyph');
-    assert.throws(() => icons.setTypeIcon(TYPE, 'nc-nothinglikethis'), /No icon called/, 'and it has to be one of the glyphs built in');
-    const chosen = icons.setTypeIcon(TYPE, 'nc-rocket');
-    assert.equal([chosen.uri, chosen.name, chosen.svg.startsWith('<svg')].join('|'), [TYPE, 'nc-rocket', true].join('|'), 'choosing answers with the glyph, so the renderer can draw it without asking again');
-    assert.equal(icons.typeIconName(TYPE), 'nc-rocket');
-    assert.equal(JSON.stringify(cache.setting('typeIcons')), JSON.stringify({ [TYPE]: 'rocket' }), 'what is stored is a name, never markup');
-    // Every surface reads the row's icon, so the name has to arrive on the row itself.
-    const typed = backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Tuxis', entityType: TYPE, updateTime: '2026-09-20T10:00:00Z' });
-    assert.equal(typed.icon, 'nc-rocket', 'a document of that type is drawn with it');
-    assert.equal(backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Other', entityType: OTHER, updateTime: '2026-09-20T10:00:00Z' }).icon, 'type', 'and a type with no glyph keeps the generic one');
-    assert.equal(JSON.stringify(backend.toNode(backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Goal', entityType: OTHER, attributes: { [OTHER + '?attribute=a']: { text: 'On track', listItems: ['On track'] }, [OTHER + '?attribute=b']: { text: '' } } })).fields),
-      JSON.stringify({ [OTHER + "?attribute=a"]: ["On track"] }), 'a row carries the field values the graph lists with it, and no empty ones');
-    assert.equal(backend.toNode({ id: TYPE, title: 'Organization', icon: 'type', tags: [] }).icon, 'nc-rocket', 'the type itself wears it too, which is where it is chosen');
-    assert.equal(backend.toNode({ id: 'tana:chat:' + ulid(), title: 'Chat', icon: 'chat', tags: [] }).icon, 'chat', 'no other kind is touched');
-    assert.equal(icons.setTypeIcon(TYPE, null), null, 'clearing answers with nothing to draw');
-    assert.equal(icons.typeIcons().length, 0, 'and the type goes back to the generic glyph');
-    assert.equal(JSON.stringify(cache.setting('typeIcons')), JSON.stringify({ [TYPE]: null }), 'which is kept as a choice, so the boot pick leaves it alone');
-    // The boot pick (issue #250): only types with no choice at all are asked about, and only names in the set stick.
-    {
-      const THIRD = 'tana:type:' + ulid(), asked = [];
-      const pick = async (missing, labels) => { asked.push(missing.map((t) => t.uri), labels.includes('rocket')); return { [TYPE]: 'rocket', [OTHER]: 'rocket', [THIRD]: 'nothinglikethis' }; };
-      assert.equal(await icons.fillTypeIcons([{ uri: TYPE, title: 'A' }, { uri: OTHER, title: 'B' }, { uri: THIRD, title: 'C' }], pick), 1, 'one type picked for');
-      assert.deepEqual(asked, [[OTHER, THIRD], true], 'the type set back to the generic glyph is not asked about, and the whole set is offered');
-      assert.deepEqual([icons.typeIconName(TYPE), icons.typeIconName(OTHER), icons.typeIconName(THIRD)], [null, 'nc-rocket', null], 'a name outside the set is dropped');
-      assert.equal(await icons.fillTypeIcons([{ uri: OTHER, title: 'B' }], async () => { throw new Error('asked again'); }), 0, 'a picked type is never asked about again');
-      icons.setTypeIcon(OTHER, null);
-    }
-    { // a saved search takes one too, for itself (#521)
-      const SEARCH = 'tana:search:' + ulid();
-      assert.equal(icons.setTypeIcon(SEARCH, 'nc-rocket').name, 'nc-rocket', 'a saved search takes an icon');
-      assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'nc-rocket', 'and its row is drawn with it');
-      icons.setTypeIcon(SEARCH, null);
-      assert.equal(backend.toNode({ id: SEARCH, title: 'Open deals', icon: 'search', tags: [] }).icon, 'search', 'No icon puts the search glyph back');
-    }
-    { // and one document, for itself: worn instead of its type's, and gone again with No icon
-      const DOC = 'tana:text:' + ulid();
-      icons.setTypeIcon(TYPE, 'nc-rocket');
-      assert.equal(icons.setTypeIcon(DOC, 'nc-flask').name, 'nc-flask', 'a document takes an icon');
-      assert.equal(backend.graphRow({ id: DOC, title: 'Plan', entityType: TYPE, updateTime: '2026-09-20T10:00:00Z' }).icon, 'nc-flask', 'its own glyph wins over its type\u2019s');
-      assert.ok(icons.typeIcons().some((i) => i.uri === DOC && i.name === 'nc-flask'), 'and the renderer is told it with the type glyphs');
-      icons.setTypeIcon(DOC, null);
-      assert.equal(backend.graphRow({ id: DOC, title: 'Plan', entityType: TYPE, updateTime: '2026-09-20T10:00:00Z' }).icon, 'nc-rocket', 'No icon puts its type\u2019s back');
-      assert.equal(backend.graphRow({ id: DOC, title: 'Plan', updateTime: '2026-09-20T10:00:00Z' }).icon, 'doc', 'or the doc glyph when it has no type');
-      icons.setTypeIcon(TYPE, null);
-    }
-    { // and a type's field, under its own key, sent with the rest of the glyphs (#606)
-      const FIELD = TYPE + '?attribute=ab12cd34';
-      assert.equal(icons.setTypeIcon(FIELD, 'nc-rocket').name, 'nc-rocket', 'a field takes an icon');
-      assert.ok(icons.typeIcons().some((i) => i.uri === FIELD && i.name === 'nc-rocket'), 'and the renderer is told it with the type glyphs');
-      assert.throws(() => icons.setTypeIcon('tana:text:' + ulid() + '?attribute=ab12cd34', 'nc-rocket'), /set on a type/, 'only a type has fields');
-      icons.setTypeIcon(FIELD, null);
-    }
-    { // the boot pick asks about fields too, as "Type › Field", and not about a type already chosen for (#606)
-      const typeDoc = new Document(TYPE);
-      typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }, { key: 'ab12cd34', title: ' ' }] }));
-      let listed = 0;
-      backend.testRuntime({ me: { userUri: 'tana:user-profile:' + ulid() }, client: { graph: { listNodes: async (p) => { if ((p.nodeTypes || [])[0] !== 'type') return { nodes: [] }; listed++; return { nodes: [{ id: TYPE, title: 'Project' }] }; } }, sync: { subscribe: async (id) => { if (id !== TYPE) throw new Error('unavailable'); return typeDoc; }, getDocument: () => null } } });
-      const pick = backend.ai.pickTypeIcons, status = backend.ai.chatgptStatus, asked = [];
-      backend.ai.pickTypeIcons = async (missing) => { asked.push(...missing); return {}; };
-      backend.ai.chatgptStatus = async () => ({ signedIn: false }); // the real one starts a Codex app-server
-      await backend.autoTypeIcons();
-      assert.deepEqual([asked.length, listed], [0, 0], 'without a sign-in or a key nothing is asked, and no type is listed or read');
-      const get = backend.settings.get; backend.settings.get = (key) => (key === 'openaiApiKey' ? 'sk-test' : get(key)); // a key, and nothing else about the settings changed
-      try { await backend.autoTypeIcons(); } finally { backend.ai.pickTypeIcons = pick; backend.ai.chatgptStatus = status; backend.settings.get = get; }
-      assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ uri: TYPE + '?attribute=gcx3bvn5', title: 'Project › Fase' }], 'a titled field with no icon is asked about under its type\u2019s name; the type, chosen for, and an untitled field are not');
-    }
-    console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
-    // The colour the same way: a hue of our own, or grey, kept beside the glyph in the settings; Tana's own hue on
-    // the type shows through when there is no entry, and is never written.
-    {
-      const HUED = 'tana:type:' + ulid();
-      backend.rememberType({ id: HUED, title: 'Hued', appearance: { hue: 259 } }); // what the graph says the type is
-      const row = () => backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Tuxis', entityType: HUED, updateTime: '2026-09-20T10:00:00Z' });
-      assert.deepEqual([row().hue, row().tags[0].hue], [259, 259], 'with no override a document of the type takes Tana\u2019s hue');
-      await backend.setTypeHue(HUED, 120);
-      assert.deepEqual([row().hue, row().tags[0].hue], [120, 120], 'our own hue replaces it on every row of the type');
-      assert.equal(JSON.stringify(cache.setting('typeHues')), JSON.stringify({ [HUED]: 120 }), 'stored under the type, in the settings that follow you');
-      await backend.setTypeHue(HUED, 'grey');
-      assert.deepEqual([row().hue, row().tags[0].color], [undefined, 'grey'], 'grey is a colour of ours Tana cannot express: no tint at all');
-      await backend.setTypeHue(HUED, null);
-      assert.deepEqual([row().hue, JSON.stringify(cache.setting('typeHues'))], [259, '{}'], 'forgetting the override brings Tana\u2019s hue back');
-      await assert.rejects(backend.setTypeHue(HUED, 400), /0-360, or grey/);
-      console.log('ok  type colours: our own hue or grey per type in the settings, Tana\u2019s hue underneath and never written');
-    }
   }
   // The app's own settings document: one document in Tana carrying the choices this app makes about your content,
   // so a machine that has never seen them opens with them. SQLite stays as the mirror the app boots from.
@@ -2204,36 +1985,6 @@ async function main() {
     console.log('ok  outline editability: profiles, ACL roles, unknown ownership, protected events, renamable searches');
   }
 
-  // Main startup status and node appearance are pure helpers: no Electron app, network, or Tana data.
-  {
-    const { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS } = mainHelpers();
-    assert.equal((await resolveInitialAuth({ isAuthenticated: async () => true })).authenticated, true);
-    assert.equal((await resolveInitialAuth({ isAuthenticated: async () => false })).authenticated, false);
-    const error = new Error('offline');
-    const failed = await resolveInitialAuth({ isAuthenticated: async () => { throw error; } });
-    assert.equal(failed.authenticated, null);
-    assert.equal(failed.error, error);
-    const space = graphRow({ id: 'tana:space:01examplep0000000000000000', title: 'Space', appearance: { hue: 0 } });
-    assert.equal(space.hue, 0);
-    assert.equal(space.tags[0].hue, 0);
-    const plain = graphRow({ id: 'tana:text:01exampleq0000000000000000', title: 'Plain' });
-    assert.equal(plain.hue, undefined);
-    assert.equal(plain.tags[0].hue, undefined);
-    assert.equal(cachedNodeHue(space), 0, 'own hue survives the cached kind tag');
-    assert.equal(cachedNodeHue({ id: plain.id, icon: null, tags: [{ label: 'Type', hue: 0 }] }), undefined, 'type hue is not a node hue');
-    assert.equal(graphRow({ id: 'tana:chat:01exampler0000000000000000', title: 'Chat' }).icon, 'chat');
-    assert.ok(VIEWS.some((s) => s.id === 'inbox' && s.title === 'Inbox' && s.icon === 'inbox'));
-    // A weekday on its own reads as the week ahead, so a past meeting has to carry its date: "Fri" for last Friday
-    // in a list that also holds this Friday is the one thing a meeting row must never say.
-    const at = (days, hour) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + days); d.setHours(hour); return d.toISOString(); };
-    const metaOf = (days) => graphRow({ id: 'tana:event:01examples0000000000000000', title: 'Meeting', calendarEvent: { startTime: at(days, 13), endTime: at(days, 14) } }).meta;
-    assert.match(metaOf(-3), /\d/, 'a meeting in the past carries its day of the month');
-    assert.match(metaOf(9), /\d{1,2} [A-Z]/, 'and so does one further out than the week ahead');
-    assert.doesNotMatch(metaOf(0), /\d{1,2} [A-Z][a-z]{2}/, 'today is just a weekday and a time');
-    assert.doesNotMatch(metaOf(3), /\d{1,2} [A-Z][a-z]{2}/, 'and so is a day later this week');
-    console.log('ok  initial auth states and node appearance hue');
-  }
-
   // #63: appearance.hue exists on graph nodes only (verified read-only: spaces and typed documents never carry it in
   // their Loro data map), so reading a document must not erase a hue and a pinned space must still get its colour.
   {
@@ -2402,35 +2153,6 @@ async function main() {
     console.log('ok  window frame is restored only where a display still shows it');
   }
 
-  // The sidebar's Changes section (#273): the node's own history, exactly as the graph keeps it. `editors` is one
-  // entry per person with that person's last edit; create and archive times stand on their own. Nothing is invented:
-  // a deletion has no actor in the graph, so it has none here either.
-  {
-    const { changesOf } = mainHelpers(), plainJson = (v) => JSON.parse(JSON.stringify(v));
-    const ANA = 'tana:user-profile:01exampleana00000000000000', BEN = 'tana:user-profile:01exampleben00000000000000';
-    const node = {
-      id: DOC, title: 'Send reply', createTime: '2026-09-18T06:04:45.181Z', createdBy: ANA, updateTime: '2026-09-18T09:32:55Z',
-      editors: { [ANA]: { peerUserHash: '159370730943085', editTime: '2026-09-18T06:32:55Z' }, [BEN]: { peerUserHash: '2', editTime: '2026-09-18T09:32:55Z' } },
-    };
-    assert.deepEqual(plainJson(changesOf(node)), [
-      { action: 'Updated', by: BEN, at: '2026-09-18T09:32:55Z' },
-      { action: 'Updated', by: ANA, at: '2026-09-18T06:32:55Z' },
-      { action: 'Created', by: ANA, at: '2026-09-18T06:04:45.181Z' },
-    ], 'every editor is an entry, newest first, and the creation is the oldest one');
-    assert.deepEqual(plainJson(changesOf({ ...node, archivedAt: '2026-09-18T10:00:00Z' })[0]), { action: 'Archived', at: '2026-09-18T10:00:00Z' },
-      'an archived node leads with its archiving, and claims no actor the graph does not name');
-    assert.deepEqual(plainJson(changesOf({ createTime: '2026-09-18T06:04:45.181Z', updateTime: '2026-09-18T09:32:55Z' })), [
-      { action: 'Updated', at: '2026-09-18T09:32:55Z' },
-      { action: 'Created', at: '2026-09-18T06:04:45.181Z' },
-    ], 'with no editors listed the update time still says when, and nobody is named for it');
-    assert.deepEqual(plainJson(changesOf({ createTime: '2026-09-18T06:04:45.181Z', updateTime: '2026-09-18T06:04:45.181Z' })), [{ action: 'Created', at: '2026-09-18T06:04:45.181Z' }],
-      'a node nobody has touched since it was made shows one entry, not an edit that never happened');
-    assert.deepEqual(plainJson(changesOf({ createdBy: ANA })), [{ action: 'Created', by: ANA }], 'a creation with no time keeps the actor and says nothing about when');
-    assert.deepEqual(plainJson(changesOf({})), [], 'a node the graph knows nothing about has no history to show');
-    assert.deepEqual(plainJson(changesOf(undefined)), [], 'and neither has a node that could not be read');
-    console.log('ok  node history: editors, creation and archival, newest first, nothing invented');
-  }
-
   // The written summaries Tana's own Changes panel shows (tana.history.v1alpha1). The service has answered in both
   // orders and leaves the default enum out of its JSON, which is exactly where a mapping like this goes wrong.
   {
@@ -2585,89 +2307,7 @@ async function main() {
     assert.deepEqual(calls.map((p) => p.nodeTypes.join()), ['user-profile'], 'a #member search is the people query alone');
     console.log('ok  search: members are fetched beside the full-text hits, so "@" finds a person by name');
   }
-  // Related results (#20): Tana's search page adds what only a semantic search found, fetched by id under the
-  // search's own filters and listed after the text hits. A failure is no related results, not a failed search.
-  {
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const hit = { id: 'tana:text:' + ulid(), title: 'Budget 2027' }, near = { id: 'tana:text:' + ulid(), title: 'Cost forecast' };
-    const hidden = { id: 'tana:text:' + ulid(), title: 'Lunch' }, semanticCalls = [], byId = [];
-    let answer = [hit, near, hidden, { id: 'not-a-uri' }, near].map((n) => ({ documentId: n.id }));
-    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
-      graph: { listNodes: async (p) => { if (p.nodeIds) { byId.push(p); return { nodes: [hidden, near].filter((n) => p.nodeIds.includes(n.id)) }; } return { nodes: p.nodeTypes.join() === 'user-profile' ? [] : [hit] }; } },
-      search: { semanticSearch: async (p) => { semanticCalls.push(p); if (answer instanceof Error) throw answer; return answer; } },
-    } });
-    const settings = require('../main/settings'); settings.set('hiddenTitles', ['Lunch']);
-    const rows = JSON.parse(JSON.stringify(await backend.search('budget #task')));
-    assert.deepEqual(rows.map((n) => [n.id, !!n.related]), [[hit.id, false], [near.id, true]], 'the semantic-only hit comes last, marked related; a text hit, a hidden title and a bad id do not');
-    assert.deepEqual(JSON.parse(JSON.stringify(semanticCalls)), [{ query: 'budget', limit: 20 }], 'the words are asked, not the #filter');
-    assert.deepEqual(JSON.parse(JSON.stringify([byId[0].nodeIds, byId[0].nodeTypes, !!byId[0].stateTypes, 'textQuery' in byId[0], 'sortOptions' in byId[0]])), [[near.id, hidden.id], ['text'], true, false, false], 'fetched by id, once each, under the #task filter');
-    semanticCalls.length = 0;
-    await backend.search('bud');
-    assert.equal(semanticCalls.length, 0, 'under four characters there is no semantic search, as in Tana');
-    answer = new Error('FailedPrecondition');
-    assert.deepEqual(JSON.parse(JSON.stringify(await backend.search('budget'))).map((n) => n.id), [hit.id], 'a refused semantic search leaves the text results');
-    settings.set('hiddenTitles', []);
-    console.log('ok  search: related results are the semantic-only hits, under the same filters, after the rest');
-  }
 
-  // Backlinks (main/related.js): the sidebar's "Mentioned in" and the typed fields this node sits in, grouped the way
-  // Tana's own Backlinks panel groups them — a field section per attribute, the plain mentions last.
-  {
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const docId = 'tana:text:' + ulid(), mentionId = 'tana:text:' + ulid(), fieldDocId = 'tana:text:' + ulid();
-    const typeUri = 'tana:type:' + ulid(), attributeUri = typeUri + '?attribute=n5e1hgxz';
-    const typeDoc = { data: { get: (key) => (key === 'template' ? { attributes: [{ key: 'n5e1hgxz', title: 'Discuss with' }] } : undefined) } };
-    const nodes = {
-      [docId]: { id: docId, title: 'Tuxis' },
-      [mentionId]: { id: mentionId, title: 'Risks Foundry' },
-      [fieldDocId]: { id: fieldDocId, title: 'Discussion Point' },
-      [typeUri]: { id: typeUri, title: 'Discussion Point' },
-    };
-    const edgeCalls = [];
-    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
-      sync: { subscribe: async (id) => (id === typeUri ? typeDoc : { data: { get: () => undefined } }) },
-      graph: {
-        listNodes: async (p) => ({ nodes: (p.nodeIds || []).map((id) => nodes[id]).filter(Boolean) }),
-        listEdges: async (p) => {
-          edgeCalls.push(p);
-          if (p.fromNodeIds) return { edges: [] }; // no pins
-          return { edges: [
-            { fromNodeId: mentionId, toNodeId: docId, type: 'EDGE_TYPE_LINKS_TO', properties: { label: 'Tuxis' } },
-            { fromNodeId: fieldDocId, toNodeId: docId, type: 'EDGE_TYPE_ATTRIBUTE_LINKS_TO', properties: { attributeUri } },
-            { fromNodeId: fieldDocId, toNodeId: docId, type: 'EDGE_TYPE_ATTRIBUTE_LINKS_TO', properties: { attributeUri } }, // the same field twice
-            { fromNodeId: docId, toNodeId: docId, type: 'EDGE_TYPE_LINKS_TO' }, // a node never lists itself
-            { fromNodeId: 'tana:text:' + ulid(), toNodeId: docId, type: 'EDGE_TYPE_LINKS_TO' }, // unreadable target
-          ] };
-        },
-        getOwnerChain: async () => ({ entries: [] }),
-      },
-    } });
-    const lite = await backend.related(docId, { lite: true });
-    assert.deepEqual([lite.lite, edgeCalls.length, 'backlinks' in lite, Array.isArray(lite.fields)], [true, 0, false, true], 'a list row\'s fields: no ListEdges, no sidebar (#579)');
-    const answered = await backend.related(docId);
-    const incoming = edgeCalls.find((p) => p.toNodeIds);
-    const asked = JSON.parse(JSON.stringify(incoming)); // main runs in its own vm context, so compare plain values
-    assert.deepEqual(asked.edgeTypes, ['EDGE_TYPE_LINKS_TO', 'EDGE_TYPE_ATTRIBUTE_LINKS_TO'], 'both kinds of backlink are asked for: mentions and field references');
-    assert.deepEqual(asked.toNodeIds, [docId], 'and for the zoomed node itself');
-    assert.deepEqual(JSON.parse(JSON.stringify(answered.backlinks.map((g) => g.label))), ['Discussion Point › Discuss with', 'Mentioned in'],
-      'a field reference is named "<Type> › <Field>" and the plain mentions come last, as Tana orders them');
-    assert.deepEqual(JSON.parse(JSON.stringify(answered.backlinks.map((g) => g.rows.map((n) => n.title)))), [['Discussion Point'], ['Risks Foundry']],
-      'each group lists its documents once, whatever it is unreadable or self-referential edges say');
-
-    // A field whose title cannot be read is not given an invented section name.
-    const otherAttribute = 'tana:type:' + ulid() + '?attribute=zz1abcde'; // a type this session has never read
-    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
-      sync: { subscribe: async () => { throw new Error('unreadable'); } },
-      graph: {
-        listNodes: async (p) => ({ nodes: (p.nodeIds || []).map((id) => nodes[id]).filter(Boolean) }),
-        listEdges: async (p) => (p.fromNodeIds ? { edges: [] } : { edges: [{ fromNodeId: fieldDocId, toNodeId: docId, type: 'EDGE_TYPE_ATTRIBUTE_LINKS_TO', properties: { attributeUri: otherAttribute } }] }),
-        getOwnerChain: async () => ({ entries: [] }),
-      },
-    } });
-    const unnamed = await backend.related(docId);
-    assert.deepEqual(JSON.parse(JSON.stringify(unnamed.backlinks.map((g) => g.label))), ['Mentioned in'], 'a field whose title cannot be read joins the mentions rather than naming a section after a key');
-    console.log('ok  backlinks: mentions and field references, grouped by field with the mentions last');
-  }
   // Date mentions (sdk/dates.js, issue #22): Tana's two date uri kinds, a mention of one in text, chat and a date
   // field, and a day page whose backlinks include whatever mentions its date.
   {
@@ -2812,49 +2452,6 @@ async function main() {
     console.log('ok  fields: a type\'s empty field is listed so it can be filled in');
   }
 
-  // A saved search carries its own completed window, stored in the `view` map beside its sort and grouping rather
-  // than inside Tana's query vocabulary, and read back the same way: opening the search shows what it was saved with.
-  {
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const DAY = 864e5, ago = (days) => new Date(Date.now() - days * DAY).toISOString();
-    const searchId = 'tana:search:' + ulid(), searchDoc = new Document(searchId);
-    searchDoc.transact((l) => {
-      initDocument(l, 'Recently completed', ME); l.getMap('data').set('type', 'search');
-      l.getMap('query').setContainer('types', new LoroList()).push('text');
-      l.getMap('query').setContainer('stateTypes', new LoroList()).push('closed');
-    });
-    const asked = []; // the limit each graph read asked for
-    const fresh = { id: 'tana:text:' + ulid(), title: 'Done yesterday', state: { type: 'closed', enteredAt: ago(1) } };
-    const older = { id: 'tana:text:' + ulid(), title: 'Done three weeks ago', state: { type: 'closed', enteredAt: ago(21) } };
-    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
-      sync: { subscribe: async () => searchDoc },
-      graph: { listNodes: async (p) => { asked.push(p.limit); return { nodes: [fresh, older] }; } },
-    } });
-    const opened = async () => (await backend.handlers.get('outline:children')(null, searchId)).map((n) => n.title);
-    assert.deepEqual(await opened(), ['Done yesterday'], 'a search with no window stored opens on the same 7 days a view does');
-    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 30 }, 'updated', 'status', ['status']);
-    assert.equal(searchDoc.loro.getMap('view').toJSON().completedWithin, 30, 'saving writes the window beside the arrangement, not into the query');
-    assert.equal(searchDoc.loro.getMap('query').toJSON().completedWithin, undefined, 'so no key Tana does not know gets into its own vocabulary');
-    assert.deepEqual(await opened(), ['Done yesterday', 'Done three weeks ago'], 'and opening the search again shows the window it was saved with');
-    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.completedWithin, 30, 'which is what the pills read back, so the pill shows what the rows are');
-    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['proposed', 'open'], assignee: 'anyone', completedWithin: 30 }, 'updated', 'status', ['status']);
-    assert.equal(searchDoc.loro.getMap('view').toJSON().completedWithin, 30, 'taking Completed out of the Status filter keeps the window, so putting it back reads the same as before');
-    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 3 }, 'updated', 'status', ['status']);
-    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.completedWithin, 3, 'every window the pill offers survives a save, 3 days included');
-    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 3, audience: 'everyone' }, 'updated', 'status', ['status']);
-    assert.equal(searchDoc.loro.getMap('view').toJSON().audience, 'everyone', 'Visible to everyone is kept beside the query, like the window (#253)');
-    assert.equal(searchDoc.loro.getMap('query').toJSON().visibility, 'open', 'while the query says Tana\'s nearest, Open, so Tana lists the superset');
-    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.audience, 'everyone', 'and the pill reads it back');
-    // The Limit (#626) is kept the same way: beside the query, read back by the pills, asked for when the search opens.
-    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.limit, 200, 'a search with no limit stored reads as the default 200');
-    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 3, limit: 500 }, 'updated', 'status', ['status']);
-    assert.deepEqual([searchDoc.loro.getMap('view').toJSON().limit, searchDoc.loro.getMap('query').toJSON().limit], [500, undefined], 'saving writes the limit beside the query, not into Tana\'s vocabulary');
-    asked.length = 0; await opened();
-    assert.equal(asked.at(-1), 500, 'opening the search asks Tana for that many');
-    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.limit, 500, 'and the pill reads it back');
-    console.log('ok  a saved search stores and reapplies its own completed window and limit, beside the query rather than inside it');
-  }
-
   // Visible to everyone (#253): the graph's restricted: false is Tana's "Open" (the node's own flag only), so the
   // answer is narrowed by owner chains, one per distinct owner. The org root is restricted to its members: everyone.
   {
@@ -2927,52 +2524,6 @@ async function main() {
     await backend.handlers.get('view:list')(null, 'inbox');
     assert.equal(requests.length, 1, 'a state filter rules chats out, so the Inbox asks nothing more');
     console.log('ok  one view fetch queries, post-filters, maps and caches rows');
-  }
-
-  // The Types view: one query over type nodes, each row carrying the space it lives in.
-  {
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const spaceUri = 'tana:space:' + ulid();
-    const inSpace = { id: 'tana:type:' + ulid(), title: 'Decision Record', spaceUri, updateTime: '2026-09-17T09:00:00Z' };
-    const loose = { id: 'tana:type:' + ulid(), title: 'Co-Worker', updateTime: '2026-09-17T08:00:00Z' };
-    const requests = [];
-    backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => {
-      requests.push(p);
-      return p.nodeIds ? { nodes: [{ id: spaceUri, title: 'Studio LT' }] } : { nodes: [inSpace, loose] };
-    } }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
-    const { nodes } = await backend.handlers.get('view:list')(null, 'types');
-    assert.deepEqual(requests[0].nodeTypes, ['type'], 'the Types view asks the graph for type nodes and nothing else');
-    assert.deepEqual(nodes.map((n) => [n.title, n.meta]), [['Decision Record', 'Studio LT'], ['Co-Worker', 'Library']],
-      'each type is listed with the space it lives in, and one with no space reads as Library');
-    assert.equal(requests.filter((p) => p.nodeIds).length, 1, 'the space titles are one nodeIds lookup, not an owner chain per row');
-    console.log('ok  the Types view lists every type with its space');
-  }
-
-  // The completed window over a real view fetch: one more post-filter beside hidden titles, applied to the answer
-  // because the graph has no field to ask for it. It composes rather than competes — the assignee filter still
-  // reaches the query, and nothing but completed tasks is touched.
-  {
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const DAY = 864e5, ago = (days) => new Date(Date.now() - days * DAY).toISOString();
-    const open = { id: 'tana:text:' + ulid(), title: 'Still going', state: { type: 'open', enteredAt: ago(400) }, updateTime: ago(1) };
-    const fresh = { id: 'tana:text:' + ulid(), title: 'Done yesterday', state: { type: 'closed', enteredAt: ago(1) }, updateTime: ago(1) };
-    const older = { id: 'tana:text:' + ulid(), title: 'Done three weeks ago', state: { type: 'closed', enteredAt: ago(21) }, updateTime: ago(1) };
-    const ancient = { id: 'tana:text:' + ulid(), title: 'Done last year', state: { type: 'closed', enteredAt: ago(300) }, updateTime: ago(1) };
-    const requests = [];
-    backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => {
-      requests.push(p);
-      return p.nodeIds ? { nodes: [] } : { nodes: [open, fresh, older, ancient], totalCount: 4 };
-    } }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
-    const listed = async (completedWithin) => (await backend.handlers.get('view:list')(null, 'library',
-      { types: ['tasks'], states: ['open', 'closed'], assignee: 'me', completedWithin })).nodes.map((n) => n.title);
-    assert.deepEqual(await listed(7), ['Still going', 'Done yesterday'], '7 days lists this week\'s completed work and leaves the rest behind');
-    assert.deepEqual(await listed(30), ['Still going', 'Done yesterday', 'Done three weeks ago'], '30 days reaches further back');
-    assert.deepEqual(await listed('all'), ['Still going', 'Done yesterday', 'Done three weeks ago', 'Done last year'], 'All keeps every completed task there is');
-    assert.deepEqual(await listed(undefined), ['Still going', 'Done yesterday'], 'and a filter that has never been given one reads as 7 days');
-    assert.deepEqual(requests.at(-1).stateTypes, ['open', 'closed'], 'the Status filter still decides what is asked for');
-    assert.deepEqual(requests.at(-1).assignedTo, [ME], 'and the assignee filter still reaches the query, so the window composes with it');
-    assert.equal('completedWithin' in requests.at(-1), false, 'the window itself is asked for nowhere: the graph has no field for it');
-    console.log('ok  the completed window ages completed rows out of a view and leaves every other row alone');
   }
 
   // The index can trail a write: a task this app holds live keeps its live state on every row built from the index,
@@ -3064,89 +2615,6 @@ async function main() {
     assert.deepEqual([made.filter((d) => d.id.startsWith('tana:workflow:')).length, readNode(live).stateWorkflowUri], [1, flow.id], 'another session finds it in the index, uses it and leaves it alone');
     assert.notEqual(backend.settings.waitingWorkflow('tana:org:01bbbbbbbbbbbbbbbbbbbbbbbb'), flow.id, 'and another workspace has its own');
     console.log('ok  Waiting: one workflow per workspace, its id computed, made once, and a task in it reads as waiting');
-  }
-
-  // The real IPC handlers put every preset through that path; roots is cache-only and refresh repeats only the
-  // last listed view.
-  {
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const requests = [];
-    const ids = { event: 'tana:event:', text: 'tana:text:', chat: 'tana:chat:', 'user-profile': 'tana:user-profile:' };
-    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
-      graph: { listNodes: async (p) => {
-        requests.push(p);
-        const kind = p.nodeTypes[0], id = (ids[kind] || 'tana:' + kind + ':') + ulid();
-        return { nodes: [{ id, title: 'row ' + requests.length, state: kind === 'text' ? { type: 'open' } : undefined, calendarEvent: kind === 'event' ? { startTime: '2026-09-14T10:00:00Z' } : undefined }], truncated: false };
-      } },
-      sync: { subscribe: async () => null, unsubscribe: async () => {} },
-    } });
-    for (const view of backend.VIEWS) {
-      const result = await backend.handlers.get('view:list')(null, view.id);
-      assert.equal(result.nodes.length, 1, view.id + ' fetched through view:list');
-    }
-    assert.equal(requests.length, backend.VIEWS.length, 'each view makes one single query');
-    const roots = await backend.handlers.get('outline:roots')();
-    assert.equal(requests.length, backend.VIEWS.length, 'roots reads SQLite without fetching');
-    assert.ok(roots.every((view) => view.nodes.length === 1), 'every view loads from its own cache section');
-    await backend.refresh();
-    assert.equal(requests.length, backend.VIEWS.length + 2, 'a refresh asks two questions: the rows of the view, and the tasks the watch rule follows');
-    // The watch query is what makes the default watch mean anything: the tasks it is about are in no view's rows.
-    const watchAsk = requests.find((p) => p.createdBy); // joined rather than compared as an array: built in the main vm
-    assert.equal(watchAsk.createdBy.join(), ME, 'it asks for the tasks you made');
-    assert.equal(watchAsk.stateTypes.includes('closed'), true, 'and asks for completions made while the app was away');
-    // the last view listed above is now Types, whose preset lists type nodes
-    assert.deepEqual(requests.at(-1).nodeTypes, ['type'], 'refresh repeats only the last listed view');
-    const custom = await backend.handlers.get('view:setFilter')(null, 'library', { types: ['chats'], text: 'urgent' });
-    assert.equal(custom.text, 'urgent');
-    assert.equal(cache.setting('viewFilter:library').text, 'urgent');
-    const reset = await backend.handlers.get('view:setFilter')(null, 'library', { types: ['unknown'] });
-    assert.equal(reset.types.join(','), 'tasks', 'invalid writes store the preset');
-    // the Library preset ships an empty text of its own, where the Chats preset this case used to run against had
-    // none at all: either way the stored 'urgent' is gone, which is what the case is about
-    assert.equal(reset.text, '', 'and drops the custom fields a prior valid write stored');
-    // No view is a kind page any more — Tasks was the last one — so a view keeps whatever kinds it is given and a
-    // stored filter is no longer overridden on the way back out.
-    assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'library', { types: ['meetings', 'tasks'] })).types, ['meetings', 'tasks'], 'a view keeps the kinds it is given');
-    assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'library', { types: ['meetings'] })).types, ['meetings'], 'the Library still picks its kinds');
-    assert.equal(roots.filter((view) => view.kind).length, 0, 'and no view is a kind page any more, so none is marked as one');
-    console.log('ok  two view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
-  }
-
-  // The badge on the app icon: how many nodes are waiting in the Inbox. It rides the refresh the views already do.
-  {
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const asked = [];
-    let count = 7;
-    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
-      graph: { listNodes: async (p) => { asked.push(p); return { nodes: [], totalCount: count }; } },
-      sync: { subscribe: async () => null, unsubscribe: async () => {} },
-    } });
-    assert.equal(await backend.inboxCount(), 7, 'the badge number is the graph count, not the rows fetched');
-    // The query matters as much as the number: counting the wrong thing would satisfy an assertion on the count alone.
-    const q = asked.at(-1);
-    assert.deepEqual(q.stateTypes, ['proposed'], 'it counts what the Inbox lists: nodes waiting in Inbox');
-    assert.equal(q.limit, 1, 'and asks for a count rather than a page of rows');
-    assert.equal(q.mode, 'LIST_NODES_MODE_WITH_COUNT', 'so totalCount comes back at all');
-    assert.deepEqual(q.assignedTo, [ME], 'and only what is waiting on you: a badge counts your own nodes, not everyone\'s');
-    // A refresh carries the number to whatever owns the icon; main.js gives S.badge the electron end of it.
-    const badged = [];
-    backend.S.badge = (n) => badged.push(n);
-    count = 3;
-    await backend.refresh();
-    assert.deepEqual(badged.at(-1), 3, 'a refresh updates the badge with the count it just read');
-    // A count that fails must not make a refresh that worked look broken — so only the count fails here. Failing
-    // every query would exercise a refresh that broke for its own reasons and prove nothing about the badge.
-    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
-      graph: { listNodes: async (p) => { if (p.limit === 1) throw new Error('unavailable'); return { nodes: [] }; } },
-      sync: { subscribe: async () => null, unsubscribe: async () => {} },
-    } });
-    backend.S.badge = (n) => badged.push(n);
-    const badgedBefore = badged.length;
-    await backend.refresh();
-    assert.equal(backend.statusSnapshot().syncing, false, 'the refresh still finishes');
-    assert.equal(backend.statusSnapshot().error, null, 'and reports nothing wrong, because for the views nothing was');
-    assert.equal(badged.length, badgedBefore, 'the badge simply keeps the number it already had');
-    console.log('ok  the Inbox badge counts through the graph and rides the view refresh');
   }
 
   // The notifications inbox (issue #18): sdk/inbox.js against a document shaped like the live one (roots data and
@@ -4270,54 +3738,6 @@ async function main() {
     assert.deepEqual([agent.links()[NODE], docs.agentIds().includes(NODE)], [undefined, false], 'and its node lets go of its task and is no longer assigned: no badge for an agent that is gone');
     docs.mut = realMut; docs.op = realOp; await relay.close(); server.close();
     console.log('ok  linked agents: linked with a code, named by themselves, a node handed over as one event to a subscriber, the badge from its last Agent status line, renamed, off, a new key, unlinked');
-  }
-  // What the badge is allowed to say: the linked task's own status, one read for every linked node.
-  {
-    const agent = require('../main/agents/codex');
-    const thread = (id, status, flags) => ({ id, status: flags ? { type: status, activeFlags: flags } : { type: status } });
-    const state = (status, flags, turn, live) => agent.agentState(status === null ? null : thread('t', status, flags), turn, live);
-    assert.equal(state('active'), 'working', 'a running task is working');
-    assert.equal(state('active', ['waitingOnApproval']), 'waiting', 'one waiting on approval is paused, not failed');
-    assert.equal(state('active', ['waitingOnUserInput']), 'waiting', 'and so is one waiting on the user');
-    // Both boundaries, from the live cases. The turns are the authority: the loaded flag proves nothing either way,
-    // and asking the thread directly is impossible while the app holds it ("already has an active writer").
-    assert.equal(state('idle', null, 'completed'), 'done', 'a task whose turn completed is finished');
-    assert.equal(state('notLoaded', null, 'completed'), 'done', 'and being unloaded does not keep it spinning');
-    assert.equal(state('notLoaded', null, 'inProgress'), 'working', 'a turn still running is still working, loaded or not');
-    assert.equal(state('notLoaded', null, null), 'pending', 'and a task that exists but has never run is pending, never finished');
-    assert.equal(state('idle', null, 'inProgress'), 'working', 'a quiet thread with a turn still running is working');
-    assert.equal(state('idle', null, 'failed'), 'broken', 'a failed turn needs attention');
-    // An interrupted turn is a run that was cut, not a task that broke: the launcher starts the bootstrap turn and
-    // Codex takes the thread over, which records exactly this shape while the work carries on.
-    assert.equal(state('notLoaded', null, 'interrupted'), 'working', 'an interrupted turn is a handover, not a failure');
-    assert.equal(state('idle', null, null), 'pending', 'a task that has never run is pending, not finished');
-    assert.equal(state('notLoaded', null, 'completed', { type: 'idle' }), 'done', 'not being loaded says nothing about the work, but a live idle answer does');
-    assert.equal(state('systemError'), 'broken', 'a system error needs attention');
-    assert.equal(state(null), 'broken', 'and an id the app cannot account for is a stale link, which is recoverable');
-    // One thread/list for all of them, and the latest turn only for the quiet ones.
-    const asked = [];
-    const rpc = async (method, params) => {
-      asked.push(method + (params.threadId ? ' ' + params.threadId : ''));
-      if (method === 'thread/list') { assert.equal(params.limit, 100, 'the newest hundred, asked by limit'); return { data: [thread('t-run', 'active'), thread('t-quiet', 'idle'), thread('t-err', 'systemError')] }; }
-      if (method === 'thread/read') { if (params.threadId === 't-old') return { thread: thread('t-old', 'active') }; throw new Error('no such thread'); }
-      assert.equal(params.limit, 1, 'the latest turn is one turn, not a page of them');
-      return { data: [{ status: params.threadId === 't-quiet' ? 'completed' : 'failed' }] };
-    };
-    const links = { n1: 't-run', n2: 't-quiet', n3: 't-err', n4: 't-gone', n5: 't-old' };
-    assert.deepEqual(await agent.agentStatuses(links, rpc), { n1: 'working', n2: 'done', n3: 'broken', n4: 'broken', n5: 'working' },
-      'every linked node is answered from one read, and a task older than the newest hundred from its own (#671 review)');
-    assert.deepEqual(asked, ['thread/list', 'thread/read t-gone', 'thread/read t-old', 'thread/turns/list t-quiet'],
-      'a task missing from the list is read by id; the turn call is made only where the thread is quiet');
-    assert.deepEqual(await agent.agentStatuses({}, async () => assert.fail('nothing linked, nothing asked')), {},
-      'and with no linked nodes there is no read at all');
-    // A reader that cannot answer — no app-server, a timeout — is red for everything, never a quiet green.
-    const dead = async () => { throw new Error('timed out'); };
-    assert.deepEqual(await agent.agentStatuses(links, dead), { n1: 'broken', n2: 'broken', n3: 'broken', n4: 'broken', n5: 'broken' },
-      'an unreachable app-server needs attention rather than claiming anything finished');
-    // A thread whose turns cannot be read is pending: it is there, but nothing says the work is done.
-    const halfDead = async (method) => { if (method === 'thread/list') return { data: [thread('t-quiet', 'idle')] }; throw new Error('no turns'); };
-    assert.deepEqual(await agent.agentStatuses({ n2: 't-quiet' }, halfDead), { n2: 'pending' }, 'an unreadable turn is not a completed one');
-    console.log('ok  Agent badge state comes from the task: one read, quiet threads ask for their latest turn');
   }
 
   // The week node is a plain "Week <n> (<year>)" document beside the day nodes: ISO-8601 week numbers, created once
@@ -5595,29 +5015,6 @@ async function main() {
     const { handlers } = mainHelpers();
     for (const channel of ['block:setBlockType', 'block:insertDivider']) assert.ok(handlers.has(channel), channel + ' is registered');
   }
-  // A meeting's call link for the sidebar: the join url out of a calendar location that may also name a room.
-  {
-    const { callOf, writeUpOf } = require('../sdk/events');
-    assert.deepEqual({ ...callOf({ location: 'https://meet.tana.inc/abc-defg-hij' }) }, { url: 'https://meet.tana.inc/abc-defg-hij', label: 'meet.tana.inc/abc-defg-hij' });
-    assert.equal(callOf({ location: 'https://meet.google.com/klm-nopq-rst/' }).label, 'meet.google.com/klm-nopq-rst');
-    const zoom = callOf({ location: '+Main Building 6.1a-R1 Presentationroom; https://example.zoom.us/j/653?pwd=AR8&from=addon' });
-    assert.equal(zoom.url, 'https://example.zoom.us/j/653?pwd=AR8&from=addon', 'the passcode stays in the url');
-    assert.equal(zoom.label, 'example.zoom.us/j/653', 'the room note and the query stay out of the label');
-    assert.equal(callOf({ location: 'Main Campus, Building B, Room 12' }), undefined, 'a room is not a call');
-    assert.equal(callOf({}), undefined, 'no location, no call');
-    const teams = callOf({ location: 'Teams meeting', actionUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_' + 'z'.repeat(140) + '%40thread.v2/0' });
-    assert.equal(teams.label, 'teams.microsoft.com', 'a join path of ids is not a label');
-    assert.match(teams.url, /^https:\/\/teams\.microsoft\.com\/l\/meetup-join\//, 'the provider link is kept whole');
-    assert.equal(callOf({ location: 'https://meet.tana.inc/a-b-c', actionUrl: 'https://zoom.us/j/1' }).label, 'meet.tana.inc/a-b-c', 'the location wins over the action');
-    // the write-up: the owned page titled with the tagline, else the owned page with Tana's sketch; never a task
-    const page = (id, title, extra) => ({ id: 'tana:text:' + id.padEnd(26, '0'), title, ...extra });
-    const tagged = page('a', 'Plan', {}), sketched = page('b', 'Other', { appearance: { imageUri: 'tana:image:x' } }), task = page('c', 'Plan', { state: { type: 'open' } });
-    const event = { calendarEvent: { tagline: 'Plan' } };
-    assert.equal(writeUpOf(event, [task, sketched, tagged]), tagged, 'the tagline names the write-up, and a task of that title is not it');
-    assert.equal(writeUpOf({}, [task, sketched, tagged]), sketched, 'without a tagline the sketch does');
-    assert.equal(writeUpOf(event, [task, page('d', 'Plan elsewhere', {})]), null, 'and with neither signal there is none');
-    assert.equal(writeUpOf(event, [{ id: 'tana:event:' + '0'.repeat(26), title: 'Plan' }]), null, 'only a text document is a write-up');
-  }
   // A multi-select is one user action: one undo/redo step restores/reapplies its complete range.
   {
     // A document read from Tana has no UndoManager until its first local edit (sdk/document.js transact): one that
@@ -6785,32 +6182,6 @@ async function main() {
     console.log('ok  remote unpin/deletion invalidation, stale graph suppression, restore and agent cache icon');
   }
   {
-    // The window's sidebar (shell.js): the tree it draws, the sections ⌘K Pin to sidebar … offers, and a pin put in a
-    // section or a new one, through the IPC handlers (main/pins.js).
-    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const colId = 'tana:collection:' + ulid(), pinA = 'tana:text:' + ulid(), pinB = 'tana:text:' + ulid();
-    const profile = new Document(ME), collection = new Document(colId), docA = new Document(pinA), docB = new Document(pinB);
-    profile.transact(l => l.getMap('data').set('pinnedCollectionUri', colId));
-    docA.transact(l => initDocument(l, 'Budget proposal', ME)); docB.transact(l => initDocument(l, 'Hiring plan', ME));
-    collection.transact(l => l.getTree('tree').createNode().data.set('uri', pinA));
-    const documents = new Map([[ME, profile], [colId, collection], [pinA, docA], [pinB, docB]]), heard = [];
-    backend.testRuntime({ me: { userUri: ME }, client: { sync: { getDocument: id => documents.get(id), subscribe: async id => documents.get(id), on: (ev, fn) => heard.push(ev) } }, win: { isDestroyed: () => false, webContents: { send() {} } } });
-    const handler = (name) => backend.handlers.get(name), plain = (value) => JSON.parse(JSON.stringify(value));
-    const tree = await handler('pins:tree')();
-    assert.deepEqual(plain(tree.map((n) => [n.uri, n.node.title])), [[pinA, 'Budget proposal']], 'the tree carries each pin with its node');
-    assert.deepEqual(plain(heard), ['change'], 'and the sidebar listens for changes once read');
-    assert.deepEqual(plain(await handler('pins:sections')()), [], 'no sections yet');
-    await handler('pins:place')(null, pinB, null, 'Foundry');
-    const [foundry] = await handler('pins:sections')();
-    assert.deepEqual([foundry.label, foundry.count], ['Foundry', 1], 'a name makes a section with the pin in it');
-    await handler('pins:place')(null, pinA, foundry.id);
-    assert.deepEqual((await handler('pins:sections')())[0].count, 2, 'a pin already in the sidebar moves into the section picked');
-    await handler('pins:place')(null, pinB, null);
-    assert.deepEqual(plain((await handler('pins:tree')()).map((n) => n.uri || n.label)), ['Foundry', pinB], 'and back to the top level');
-    await assert.rejects(handler('pins:place')(null, 'not an id', null), /Not a Tana document id/, 'the id is checked');
-    console.log('ok  the window sidebar: pin tree, sections, and pins placed into a section or a new one');
-  }
-  {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const host = new Document(DOC), targetUri = 'tana:text:01examplek0000000000000000';
     host.transact(l => initDocument(l, 'reference host', ME));
@@ -7781,23 +7152,6 @@ async function main() {
     assert.equal(await has('text/uri-list', 'electron application/osclipboard;format="Apple PNG pasteboard type"'), true, 'a copied image file (Finder, CleanShot): no image/png, the PNG under macOS\'s own type');
     assert.equal(await has('text/plain'), false, 'no image, no row');
     console.log('ok  clipboard image: a copied bitmap or a copied image file');
-  }
-  {
-    // A task from a meeting links back to it (main/rows.js meetingOf): Tana's AI files it under the event (ownerUri); the
-    // meeting's title and start come from one lookup for the list, and a meeting seen before is not asked again
-    const backend = mainHelpers(), EV = 'tana:event:' + ulid(), SPACE = 'tana:space:' + ulid(), asked = [];
-    const fromMeeting = { id: 'tana:text:' + ulid(), title: 'Send the deck', ownerUri: EV, state: { type: 'open' }, updateTime: '2026-09-29T10:00:00Z' };
-    const note = { id: 'tana:text:' + ulid(), title: 'Minutes', ownerUri: EV, updateTime: '2026-09-29T10:00:00Z' }; // a note in the meeting is no task
-    const plainTask = { id: 'tana:text:' + ulid(), title: 'Water the plants', ownerUri: SPACE, state: { type: 'open' }, updateTime: '2026-09-29T10:00:00Z' };
-    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => null }, graph: {
-      listNodes: async (p) => { if (p.nodeIds) { asked.push(p.nodeIds); return { nodes: [{ id: EV, title: 'Leadership sync ', calendarEvent: { startTime: '2026-09-28T07:00:00Z' } }].filter((n) => p.nodeIds.includes(n.id)) }; } return { nodes: [fromMeeting, note, plainTask] }; },
-    } } });
-    const rows = JSON.parse(JSON.stringify(await backend.spaceChildren(SPACE)));
-    assert.deepEqual(rows.map((r) => r.meeting || null), [{ id: EV, title: 'Leadership sync', start: '2026-09-28T07:00:00Z' }, null, null], 'the task from the meeting names it; a note in it and a task elsewhere do not');
-    assert.deepEqual(JSON.parse(JSON.stringify(asked)), [[EV]], 'one lookup for the list');
-    await backend.spaceChildren(SPACE);
-    assert.equal(asked.length, 1, 'and none the next time');
-    console.log('ok  a task from a meeting names the meeting it came from');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

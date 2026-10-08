@@ -44,10 +44,10 @@ Two rules hold everywhere:
    passing `own === true`. `typed` sets `S.writer` for the length of the write, so `sendChanged` tells that page the
    change is its own and the page does not re-read and rebuild itself under the caret (#265); a handler that drops
    `e` sends every page a plain change.
-8. **Check** — `scripts/sdk-check.js` loads main.js with a fake electron and keeps every handler, so a test calls
+8. **Check** — `scripts/sdk-check.js` fails when preload.js calls a channel main does not answer, when a handler has no
+   caller, and when two handlers claim one channel. When a bug in a handler needs a check (docs/TESTING.md, What a change
+   adds), it loads main.js with a fake electron and keeps every handler, so the check calls
    `backend.handlers.get('<area>:<verb>')(null, ...args)` (the field checks around `outline:children` are an example).
-   It also fails when preload.js calls a channel main does not answer, when a handler has no caller, and when two
-   handlers claim one channel.
 
 ## A main-process module
 
@@ -57,8 +57,8 @@ Two rules hold everywhere:
    `sdk/` first and the module uses it.
 3. Export plain functions, and the module's `ipc` table when it answers the renderer (then add it to the loop in
    main.js that registers the tables). Boot-time work is started from main.js's boot sequence.
-4. Add it to the AGENTS.md map at its place in the order, and give it checks in scripts/sdk-check.js, which runs
-   main.js and every `main/` module in one vm context.
+4. Add it to the AGENTS.md map at its place in the order. scripts/sdk-check.js runs main.js and every `main/` module in
+   one vm context, which is where a check goes once a bug in the module calls for one.
 
 ## A view or a page
 
@@ -116,9 +116,8 @@ kbd? }`.
   `openPage(mode, placeholder, { rows: xRows, back: BACK_TO_COMMANDS })` (renderer/palette.js). The page is everything
   the palette needs: `back` is where Escape goes (closing when absent), `keys(e)` answers a key first, and `typed: true`
   marks a page whose row is what you type, so no "No results" is drawn under it. Nothing else registers it.
-- Document the row and its key in docs/OUTLINER.md (Palette), and add a harness in
-  scripts/renderer-behavior-check.js when the row decides something (`runMultiTaskPaletteCheck`,
-  `runReservedComboCheck` and `runPaletteSkipCheck` are examples).
+- Document the row and its key in docs/OUTLINER.md (Palette). A palette page you open over a row joins the focus flow
+  (docs/TESTING.md, What a change adds).
 
 ## A renderer file
 
@@ -198,15 +197,18 @@ an entry in `main/documents.js` `creationOptions` and the mock's `creationOption
    its glyph in `BLOCK_GLYPH`. A block with no words of its own also goes in `isAtomic` (else keys type and split into it), and, when
    `node()` marks it `editable: false`, in `canEditStructure` (else it cannot be moved or deleted).
 3. **renderer/render.js** draws it; styles.css styles it.
-4. **scripts/sdk-check.js** — its outline section: the read, the write, and two Documents wired
-   `local-update → applyRemote` converging.
+4. **A flow** when the block is written from the page: typing into it keeps the screen and the saved outline the same
+   (`scripts/flow-check.js`).
 
 ## The checks to extend
 
 `npm run lint` and `npm run check` must pass before every push; CI runs both again on every pull request and on main, on Node 22.
+A check is added for a failure and a flow for a new journey (docs/TESTING.md, What a change adds); this table says
+where each goes.
 
 | You changed | Extend |
 |---|---|
+| a journey someone takes through the page | scripts/flow-check.js |
 | `sdk/` | scripts/sdk-check.js (offline: an in-process fake SyncService and the synthetic task fixture) |
 | a `main/` module or an IPC handler | scripts/sdk-check.js, through `backend.handlers` |
 | `db.js` | scripts/db-check.js |
