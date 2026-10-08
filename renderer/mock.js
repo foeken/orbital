@@ -804,6 +804,8 @@ function mockApi() {
     relayLinkCancel: async () => true,
     relayWhere: async () => ({ ...mockRelayNow }),
     relayOld: async () => null,
+    relayPlugin: async () => '/Users/you/Downloads/Orbital plugin.zip',
+    relayUsePlugin: async (url) => ({ ...Object.assign(mockRelayNow, { plugin: url || null }) }),
     relayUse: async (url) => ({ ...Object.assign(mockRelayNow, { url: url || 'https://orbital.md/mcp', workspace: url || null }) }),
     relayRefresh: async () => mockAgents.map((x) => ({ ...x })),
     relayRename: async (id, name) => { const a = mockAgents.find((x) => x.id === id && x.linked); if (a) a.label = name; return mockAgents.map((x) => ({ ...x })); },

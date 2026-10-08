@@ -111,7 +111,7 @@ const told = (e, out) => { settings.tellOthers(pageOf(e)); return out; };
 // where it is, whether it is the workspace's own, whether you may change it (an admin), and the words that deploy one on Sites
 async function relayWhere() {
   const [admin, version] = await Promise.all([settings.orgAdmin().catch(() => false), relayApi.relayVersion()]);
-  return { url: relay.base, workspace: settings.workspaceGet('relayUrl') || null, admin, deploy: relayApi.DEPLOY, fallback: relayApi.DEFAULT,
+  return { url: relay.base, workspace: settings.workspaceGet('relayUrl') || null, plugin: settings.workspaceGet('pluginUrl') || null, admin, deploy: relayApi.DEPLOY, fallback: relayApi.DEFAULT,
     ...(version || {}), update: relayApi.UPDATE(relay.base) };
 }
 // Once a session, the first page to ask hears that the workspace's relay is out of date (renderer/agent.js noteOldRelay).
@@ -124,11 +124,28 @@ async function oldRelay() {
   toldOld = true;
   return w;
 }
+// The Orbital plugin for ChatGPT (plugin/), made here with the relay this Orbital uses in it, since only Orbital knows
+// which that is: saved to Downloads and shown in the Finder, for the person to upload in ChatGPT
+function savePlugin() {
+  const { app, shell } = require('electron'), path = require('node:path');
+  const out = require('../../plugin/build').pack(relay.base, path.join(app.getPath('downloads'), 'Orbital plugin.zip'));
+  shell.showItemInFolder(out);
+  return out;
+}
 // The workspace's relay, set by an admin for everyone in it; an empty url goes back to orbital.md. Agents are linked to one
 // relay: on another, the list is that relay's, empty until they are linked there (refresh).
 async function useRelay(url) {
   await settings.setWorkspace('relayUrl', url ? await relayApi.checkRelay(url) : undefined);
   await refresh().catch(() => {});
+  return relayWhere();
+}
+// The workspace's Orbital plugin in ChatGPT, once an admin installed it for everyone there: its chatgpt.com link, which
+// the Connect page then offers in place of a plugin to save and upload; an empty url takes it out again
+async function usePlugin(url) {
+  let u = null;
+  if (url) { try { u = new URL(String(url).trim()); } catch { /* below */ } }
+  if (url && !(u && u.protocol === 'https:' && /(^|\.)chatgpt\.com$/.test(u.hostname))) throw new Error('The plugin\'s link is a chatgpt.com address');
+  await settings.setWorkspace('pluginUrl', u ? u.href : undefined);
   return relayWhere();
 }
 const ipc = {
@@ -141,7 +158,9 @@ const ipc = {
   'relay:reset': () => resetKey(),
   'relay:where': () => relayWhere(),
   'relay:use': async (e, url) => told(e, await useRelay(url)),
+  'relay:usePlugin': async (e, url) => told(e, await usePlugin(url)),
   'relay:old': () => oldRelay(),
+  'relay:plugin': () => savePlugin(),
 };
 
 module.exports = { relay, orbitalKey, load, refresh, refreshSoon, linkCode, codeStatus, cancelCode, rename, unlink, resetKey, send, statuses, ipc };

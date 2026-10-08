@@ -3758,6 +3758,12 @@ async function main() {
       assert.deepEqual([now.url, now.workspace, now.admin], [base + '/mcp', base + '/mcp', true], 'a relay that answers is the workspace\'s');
       assert.equal(JSON.parse(org.loro.getMap(settings.ROOT).get('relayUrl')), base + '/mcp', 'kept in the org document\'s ext:orbital root, as the settings document keeps yours');
       assert.equal(settings.isSynced('relayUrl'), false, 'and nowhere of yours: there is no relay of your own');
+      // the workspace's Orbital plugin in ChatGPT, once an admin installed it for everyone: the Connect page offers it
+      await assert.rejects(h('relay:usePlugin', 'https://plugins.example/orbital'), /chatgpt\.com/, 'only a chatgpt.com link is taken as the workspace\'s plugin');
+      assert.equal((await h('relay:usePlugin', 'https://chatgpt.com/plugins/orbital')).plugin, 'https://chatgpt.com/plugins/orbital', 'an admin names it');
+      assert.equal(JSON.parse(org.loro.getMap(settings.ROOT).get('pluginUrl')), 'https://chatgpt.com/plugins/orbital', 'beside the relay, in the same root');
+      assert.equal((await h('relay:link')).plugin, 'https://chatgpt.com/plugins/orbital', 'and Connect your personal agent offers it in place of a plugin to save');
+      assert.equal((await h('relay:usePlugin', '')).plugin, null, 'until it is taken out again');
       // a relay older than this Orbital needs (main/relay.js RELAY_VERSION): never chosen, and the one in use says so
       const realFetch = linked.relay.fetch;
       linked.relay.fetch = async (url, o) => (url.endsWith('/health') ? { ok: true, json: async () => ({ ok: true, version: 0 }) } : realFetch(url, o));

@@ -156,10 +156,18 @@ function relayRows() {
   if (c.state === 'failed') return [{ group: title, icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: title, label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
   // first both plugins: a custom MCP server each, a name and a URL, and the steps behind How to add them …
-  const add = 'Add both plugins · a custom MCP server each, a name and a URL';
+  // your Dot in ChatGPT: one plugin with both servers in it, made by main with this workspace's relay (plugin/,
+  // main/agents/linked.js savePlugin); any other agent: the two servers, as before
+  const gpt = 'Your OpenAI Dot · the Orbital plugin', add = 'Any other agent · a custom MCP server each, a name and a URL';
   const server = (icon, label, url) => ({ group: add, icon, label, hint: url + ' · ↩ copies', keepOpen: true, match: [], run: () => run(() => copyText(url, 'Copied ' + label + '\u2019s URL')) });
-  const rows = [server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana),
-    { group: add, icon: 'help', label: 'How to add them …', hint: 'Your OpenAI Dot, or any other agent', keepOpen: true, match: [], run: () => openLinkHelp(c) }];
+  // the workspace's own plugin, when an admin installed one for everyone (Relay …): one click; else one to save and upload
+  const rows = c.plugin ? [{ group: gpt, icon: 'orbital', label: 'Install the Orbital plugin', hint: 'Your workspace\'s, in ChatGPT', keepOpen: true, match: [], run: () => run(() => tana.openExternal(c.plugin)) }] : [
+    { group: gpt, icon: 'orbital', label: 'Save the Orbital plugin', hint: 'For ' + relayHost(c.url) + ' · upload it in ChatGPT', keepOpen: true, match: [],
+      run: () => run(async () => { await tana.relayPlugin(); showNote('Saved to Downloads: upload Orbital plugin.zip in ChatGPT'); }) },
+    { group: gpt, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) }];
+  rows.push(
+    server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana),
+    { group: add, icon: 'help', label: 'How to add them …', hint: 'Your OpenAI Dot, or any other agent', keepOpen: true, match: [], run: () => openLinkHelp(c) });
   // then the instructions, which only link: what goes through orbital.md is in them too, for the agent to explain
   const group = 'Then ask your agent to link';
   rows.push({ group, icon: 'prompt', label: 'Copy the instructions', hint: '↩ copies', keepOpen: true, match: [],
@@ -180,7 +188,7 @@ function openLinkHelp(c) {
   const note = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
   const rows = [
     { group: dot, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
-    note(dot, 'help', 'In ChatGPT: Add, then Create custom MCP server, once for Orbital (' + orbital + ') and once for Tana (' + tanaUrl + ', signed in). Then send your Dot the instructions.'),
+    note(dot, 'help', 'Save the Orbital plugin, then in ChatGPT\'s plugins upload it as one of your own. It brings both servers, Orbital (' + orbital + ') and Tana (' + tanaUrl + ', signed in), and its setup asks for the code: send your Dot the instructions.'),
     note(other, 'mcp', 'The same two MCP servers, then the instructions. It needs MCP events to hear about the tasks you hand it.'),
   ];
   openPage('linkHelp', 'Adding the plugins', { back: () => openLinkPalette(c.back), rows: () => rows });
@@ -203,20 +211,26 @@ function relayPageRows(q, typed) {
   const group = 'Relay · ' + (w.workspace ? 'your workspace\'s own' : 'orbital.md, until your workspace runs its own');
   const note = (g, icon, label) => ({ group: g, icon, label, note: true, wrap: true, disabled: true, match: [] });
   const rows = [{ group, icon: 'mcp', label: relayHost(w.url), hint: 'Every handover in your workspace goes through it', disabled: true, match: [] }];
+  if (w.plugin) rows.push({ group, icon: 'orbital', label: relayHost(w.plugin), hint: 'The workspace\'s Orbital plugin in ChatGPT', disabled: true, match: [] });
   // older than this Orbital needs (main/relay.js RELAY_VERSION): an admin has ChatGPT put the latest code in the same Site
   if (w.outdated) rows.push(note(group, 'info', 'Out of date: it runs relay version ' + w.version + ', and this Orbital needs ' + w.needed + '. '
     + (w.admin ? 'Have ChatGPT update it: its address stays, so nobody links again.' : 'An admin of your workspace can update it.')));
   if (w.outdated && w.admin && w.workspace) rows.push({ group, icon: 'prompt', label: 'Copy the update instructions for ChatGPT', hint: 'The latest relay, in the same Site', keepOpen: true, match: [],
     run: () => run(() => copyText(w.update, 'Copied: send them to ChatGPT')) });
   if (!w.admin) return [...rows, note(group, 'lock', 'Only an admin of your workspace can change it.')];
-  const own = 'Run your own relay · paste its URL above', url = String(typed || '').trim();
+  // one field for both: a chatgpt.com link is the workspace's plugin (installed there for everyone), anything else a relay
+  const own = 'Run your own relay · paste its URL, or your Orbital plugin\'s ChatGPT link, above', url = String(typed || '').trim();
+  const plugin = /^https:\/\/([\w-]+\.)*chatgpt\.com\//.test(url);
   rows.push({ group: own, icon: 'prompt', label: 'Copy the instructions for ChatGPT', hint: 'It deploys a relay on ChatGPT Sites and gives you its URL', keepOpen: true, match: [],
     run: () => run(() => copyText(w.deploy, 'Copied: send them to ChatGPT')) });
-  if (url) rows.push({ group: own, icon: 'link', label: 'Use ' + relayHost(url) + ' for everyone', hint: 'Checked first', keepOpen: true, match: [], run: () => useRelay(url) });
+  if (url && plugin) rows.push({ group: own, icon: 'orbital', label: 'Offer it as the workspace\'s Orbital plugin', hint: 'Connect your personal agent installs it', keepOpen: true, match: [], run: () => usePlugin(url) });
+  else if (url) rows.push({ group: own, icon: 'link', label: 'Use ' + relayHost(url) + ' for everyone', hint: 'Checked first', keepOpen: true, match: [], run: () => useRelay(url) });
+  if (w.plugin) rows.push({ group: own, icon: 'reject', label: 'Stop offering the workspace\'s plugin', hint: 'Back to a plugin to save and upload', keepOpen: true, match: [], run: () => usePlugin('') });
   if (w.workspace) rows.push({ group: own, icon: 'reload', label: 'Back to orbital.md for everyone', keepOpen: true, match: [], run: () => useRelay('') });
   return [...rows, note(own, 'link', 'Agents are linked on one relay: after a change, everyone links theirs again.')];
 }
 const useRelay = (url) => run(async () => { relayNow = await tana.relayUse(url); await loadAgentList(); showNote('Relay: ' + relayHost(relayNow.url)); openRelayPage(); });
+const usePlugin = (url) => run(async () => { relayNow = await tana.relayUsePlugin(url); showNote(url ? 'Everyone in the workspace is offered that plugin' : 'No workspace plugin'); openRelayPage(); });
 function openRelayPage() {
   openPage('relay', 'Paste a relay URL', { rows: relayPageRows, back: openAgentsPalette, typed: true });
   tana.relayWhere().then((w) => { relayNow = w; if (palMode === 'relay' && !palette.hidden) renderPalette(); }, showError);

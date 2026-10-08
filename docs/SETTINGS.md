@@ -81,8 +81,8 @@ written through `settings.set` that matches no rule stays in SQLite on this mach
 ## The workspace's settings
 
 What is the same for everyone in a Tana workspace lives in the same `ext:orbital` root, one JSON string per key, on
-Tana's own org document (`orgDocUri`) rather than in anyone's settings document: today only `relayUrl`, the workspace's
-agent relay (docs/AGENT-RELAY.md, Your workspace's relay). Every member reads it (`workspaceGet`), mirrored on the machine
+Tana's own org document (`orgDocUri`) rather than in anyone's settings document: `relayUrl`, the workspace's agent relay,
+and `pluginUrl`, its Orbital plugin in ChatGPT (docs/AGENT-RELAY.md, Your workspace's relay). Every member reads it (`workspaceGet`), mirrored on the machine
 as the local key `workspace`; only an admin writes it (`setWorkspace`), a check Orbital makes itself until Tana does (#815).
 
 On connect, the document decides: a key it holds replaces what this machine remembered, and a key only this machine
