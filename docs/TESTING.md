@@ -29,8 +29,10 @@ From fastest to slowest. Each catches what the one before it cannot.
 1. **`npm run lint` and `npm run check`** (about 20 s together, Node, offline). Offline, but not sandboxed: sdk-check and
    relay-check listen on a loopback port, which the Codex sandbox refuses (`listen EPERM ... 127.0.0.1`), so an agent runs
    `npm run check` escalated, as it does `npm run flows`. The SDK against a fake SyncService, `main.js` and every
-   `main/` module in one vm with a fake Electron, the renderer's load order, and about 160 behavior checks that each slice a
-   renderer function and run it against a fake DOM. Most were written after one bug and guard that bug.
+   `main/` module in one vm with a fake Electron, the renderer's load order, and about a hundred behavior checks that each slice a
+   renderer function and run it against a fake DOM. Each guards a bug that happened or a rule a mirror of the code cannot
+   keep (private words, read-only rows, undo, out-of-order answers); the ones that only restated a feature went on
+   2026-10-08 (What a change adds).
    CI runs in UTC and a pull request is checked on a Mac in Amsterdam, which is coverage of two zones
    worth keeping: a check about times reads the machine's zone (renderer-behavior-check.js `LOCAL_ZONE`) rather than
    naming one, since a check that named Amsterdam passed here and turned main red on GitHub (#776). Run
@@ -161,8 +163,17 @@ The manual's scenes (`manual/scenes`) play the same mock in the same Chromium, b
 
 ## What a change adds
 
+Checks come from failures. A behavior, SDK or unit check is written only for something that went wrong: a bug someone
+hit, a review finding, or a flow or check that failed. New code brings no checks of its own. A check written beside the
+code it checks is the same reading of the task written twice, so it passes because the code does and catches nothing
+the code did not already get right (agents banned from writing their own unit and integration tests did as well on
+DeepSWE, in less time; Kun Chen, 2026-10-08). What a new feature brings instead is a flow: when it adds a journey the
+flows do not walk, a flow for it, or a step on the golden path it changes.
+
 - **A fix** comes with a check that fails on the old code: a behavior check for a function, a flow step for a journey. Run
   it once with the fix reverted.
+- **A new feature**: no behavior or SDK check of its own. A journey the flows do not walk gets a flow in
+  `scripts/flow-check.js`; one that changes a golden path gets a step on it.
 - **A new `window.api` call**: put it in `DEMO_WRITES` or `DEMO_SAFE`, and mock it or list it in `NOT_MOCKED`. Mock it when the
   renderer's behavior depends on its answer.
 - **A new place that shows a node's words**: `demoText` and `blurSensitive` (docs/UI-PATTERNS.md), and mock data that reaches
@@ -194,3 +205,6 @@ the same dependency-free DevTools protocol as `shoot.js` and the manual. Worth a
 - Stale Cmd+K results while typing.
 - The gaps in `NOT_MOCKED`: `indentMany`, `outdentMany`, `pasteMarkdown`, `archiveDocument`, `taskTypes`.
 - The iPhone engine's privacy: `ios-engine-check` could assert a sensitive row reaches Swift without its title (#659).
+- Journeys whose only check restated the feature and went on 2026-10-08, with no flow yet: pasting a node link,
+  Cmd+K Set type, Discuss with and Auto-pick type, recording a shortcut, ⌘C on selected rows as markdown, and the
+  picture view. Each gets a flow when it next changes or breaks.
