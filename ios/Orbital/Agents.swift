@@ -97,7 +97,7 @@ struct ConnectAgent: View {
                     }
                 }
             } header: { SettingsView.Header("Then ask your agent to link") } footer: {
-                Text("Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through orbital.md, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.")
+                Text("Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through \((link?.url ?? "https://orbital.md/mcp").replacingOccurrences(of: "https://", with: "")), and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.")
             }
         }
         .tint(.primary)

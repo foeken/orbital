@@ -39,7 +39,11 @@ function store(list) {
   agent.storeLinked(list, (nodeId) => { documents.dropAgentMark(nodeId); agent.clearTask(nodeId); });
   load();
 }
-async function refresh() { if (orbitalKey(false)) store(await relayApi.agentsAt()); }
+// a relay that does not know your Orbital (another relay than the one you linked them on: #814) has no agents of yours
+async function refresh() {
+  if (!orbitalKey(false)) return;
+  try { store(await relayApi.agentsAt()); } catch (e) { if (e.status === 401) store([]); else throw e; }
+}
 // Cmd+K and Settings read the list often: the relay is asked at most once a minute, and the pages hear of a change
 let refreshedAt = 0;
 function refreshSoon() {
@@ -96,12 +100,26 @@ async function resetKey() {
   await call('GET', '/orbital/agents'); // a key an earlier reset left half-done is settled first (call, above)
   const next = relayApi.newKey();
   settings.set('relayKeyNext', next); // kept before it is sent: if the answer is lost after the relay took it, the next call finds it
-  await call('POST', '/orbital/rotate', { key: next });
+  await call('POST', '/orbital/rotate', { key: relayApi.keyAt(next) }); // as the relay will be told it (main/relay.js keyAt)
   settings.set('relayKey', next); settings.set('relayKeyNext', undefined);
   return true;
 }
 
 const told = (e, out) => { settings.tellOthers(pageOf(e)); return out; };
+
+// ---- which relay (main/relay.js relay.base, issue #814) ----
+// where it is, whether it is the workspace's own, whether you may change it (an admin), and the words that deploy one on Sites
+async function relayWhere() {
+  return { url: relay.base, workspace: settings.workspaceGet('relayUrl') || null,
+    admin: await settings.orgAdmin().catch(() => false), deploy: relayApi.DEPLOY, fallback: relayApi.DEFAULT };
+}
+// The workspace's relay, set by an admin for everyone in it; an empty url goes back to orbital.md. Agents are linked to one
+// relay: on another, the list is that relay's, empty until they are linked there (refresh).
+async function useRelay(url) {
+  await settings.setWorkspace('relayUrl', url ? await relayApi.checkRelay(url) : undefined);
+  await refresh().catch(() => {});
+  return relayWhere();
+}
 const ipc = {
   'relay:link': () => linkCode(), // { code, expiresAt, url, prompt }: the prompt is what the agent is given
   'relay:linkStatus': async (e, code) => { const s = await codeStatus(code); return s.state === 'linked' ? told(e, s) : s; },
@@ -110,6 +128,8 @@ const ipc = {
   'relay:rename': async (e, id, name) => told(e, await rename(id, name)),
   'relay:unlink': async (e, id) => told(e, await unlink(id)),
   'relay:reset': () => resetKey(),
+  'relay:where': () => relayWhere(),
+  'relay:use': async (e, url) => told(e, await useRelay(url)),
 };
 
 module.exports = { relay, orbitalKey, load, refresh, refreshSoon, linkCode, codeStatus, cancelCode, rename, unlink, resetKey, send, statuses, ipc };

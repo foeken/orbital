@@ -3736,6 +3736,31 @@ async function main() {
     settings.set('codex', [...docs.agentIds(), NODE]);
     assert.equal((await h('relay:unlink', id)).some((a) => a.id === id), false, 'unlinked, it leaves the list');
     assert.deepEqual([agent.links()[NODE], docs.agentIds().includes(NODE)], [undefined, false], 'and its node lets go of its task and is no longer assigned: no badge for an agent that is gone');
+    // the workspace's relay (#814): one for everyone in it, set by an admin in the ext:orbital root of Tana's org document
+    {
+      // any relay but orbital.md is told a key made from yours and its address, never yours: whoever runs a workspace's
+      // relay cannot speak for your Orbital at orbital.md or at another workspace's
+      const raw = settings.get('relayKey'), sha = (k) => require('node:crypto').createHash('sha256').update(k).digest('base64url');
+      const told = require('node:crypto').createHash('sha256').update('orbital-relay\n' + base + '/mcp\n' + raw).digest('base64url');
+      const rows = await relay.dump();
+      assert.deepEqual([rows.includes(sha(raw)), rows.includes(sha(told))], [false, true], 'a relay other than orbital.md knows your Orbital by a key of its own');
+      const org = new Document('tana:org:' + ulid());
+      let role = 'member';
+      backend.testRuntime({ me: { userUri: 'tana:user-profile:' + ulid(), orgId: 'org_1', orgDocUri: org.id },
+        session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: 'org_1', role })).toString('base64url') + '.x' },
+        client: { sync: { subscribe: async (id) => { if (id !== org.id) throw new Error('unavailable'); return org; }, getDocument: () => null } } });
+      linked.relay.base = '';
+      assert.equal((await h('relay:where')).url, 'https://orbital.md/mcp', 'a workspace with no relay of its own hands over through orbital.md');
+      await assert.rejects(h('relay:use', base + '/mcp'), /Only an admin/, 'and a member cannot give it one');
+      role = 'admin';
+      await assert.rejects(h('relay:use', base + '/elsewhere'), /does not answer as a relay/, 'an admin\'s URL is checked before anybody is sent there');
+      const now = await h('relay:use', base + '/mcp/');
+      assert.deepEqual([now.url, now.workspace, now.admin], [base + '/mcp', base + '/mcp', true], 'a relay that answers is the workspace\'s');
+      assert.equal(JSON.parse(org.loro.getMap(settings.ROOT).get('relayUrl')), base + '/mcp', 'kept in the org document\'s ext:orbital root, as the settings document keeps yours');
+      assert.equal(settings.isSynced('relayUrl'), false, 'and nowhere of yours: there is no relay of your own');
+      org.transact((l) => l.getMap(settings.ROOT).delete('relayUrl')); await settings.hydrateWorkspace();
+      assert.equal(linked.relay.base, 'https://orbital.md/mcp', 'taken out in Tana, every member is back on orbital.md');
+    }
     docs.mut = realMut; docs.op = realOp; await relay.close(); server.close();
     console.log('ok  linked agents: linked with a code, named by themselves, a node handed over as one event to a subscriber, the badge from its last Agent status line, renamed, off, a new key, unlinked');
   }

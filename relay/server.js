@@ -38,7 +38,8 @@ const VERSIONS = [MODERN, ...PROTOCOLS];
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford's: no I, L, O or U to misread
 const TANA_MCP = 'https://home.tana.inc/mcp';
 // the SHA-256 of this file as it runs, said by /health, so a deploy (or a change nobody meant) can be held against the repository
-const SELF = (() => { try { return crypto.createHash('sha256').update(require('node:fs').readFileSync(__filename)).digest('hex'); } catch { return null; } })();
+// (a bundle has no file of its own to read: relay/build.js writes the same hash in as RELAY_SHA256)
+const SELF = process.env.RELAY_SHA256 || (() => { try { return crypto.createHash('sha256').update(require('node:fs').readFileSync(__filename)).digest('hex'); } catch { return null; } })();
 // The manual orbital.md publishes (Replit keeps the site beside the relay), read once as the relay starts: every file's
 // SHA-256 by its path, and one SHA-256 over those lines as sha256sum writes them, sorted. /health says the one, so a
 // published manual can be named; /health/manual lists them all, for scripts/manual-diff.js to say what a release has
@@ -129,6 +130,14 @@ function postgresStore(url, pg = require('pg')) {
     } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
   });
   return { exec: async (sql) => { await pool.query(sql); }, ...rowsOf(pool), serial, close: () => pool.end() };
+}
+// Cloudflare D1, what a relay on ChatGPT Sites keeps its rows in (relay/worker.js): SQLite, so the queries are the same.
+// ponytail: serial is a queue in this isolate only (D1 holds no lock across awaits), so twin requests on two isolates can
+// each pass a cap once; a Durable Object per key if that is ever abused
+function d1Store(d1) {
+  const queue = keyed(), q = (sql, a) => d1.prepare(sql).bind(...a.map((v) => (v === undefined ? null : v)));
+  const rows = { one: async (sql, ...a) => (await q(sql, a).first()) ?? undefined, all: async (sql, ...a) => (await q(sql, a).all()).results, run: async (sql, ...a) => Number((await q(sql, a).run()).meta.changes) };
+  return { exec: async (sql) => { await d1.prepare(sql).run(); }, ...rows, serial: (key, fn) => queue(key, () => fn(rows)), close: async () => {} };
 }
 
 // What an agent is told when it connects, its one tool and the events it can subscribe to. How to handle an event is not
@@ -652,7 +661,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     throw fail(404, 'not_found', 'No such call');
   }
 
-  const timer = setInterval(() => { ready.then(sweep).catch(() => {}); }, MINUTE); timer.unref();
+  const timer = setInterval(() => { ready.then(sweep).catch(() => {}); }, MINUTE); if (timer.unref) timer.unref();
   // every row of every table as one string: what scripts/relay-check.js searches for secrets that must not be there
   const dump = async () => { await ready; const out = []; for (const t of Object.keys(TABLES)) out.push(await all('SELECT * FROM ' + t)); return JSON.stringify(out); };
   return { handle, sweep, dump, ready, close: async () => { clearInterval(timer); await store.close(); }, path: PATH, issuer: ISSUER };
@@ -668,4 +677,4 @@ if (require.main === module) {
     (e) => { console.error('agent relay: the database could not be prepared:', e.message); process.exit(1); });
 }
 
-module.exports = { createRelay, sqliteStore, postgresStore, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, manualDigest };
+module.exports = { createRelay, sqliteStore, postgresStore, d1Store, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, manualDigest };

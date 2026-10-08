@@ -1,0 +1,11 @@
+{
+  "name": "orbital-relay",
+  "private": true,
+  "description": "Orbital's agent relay, built for ChatGPT Sites (README.md)",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

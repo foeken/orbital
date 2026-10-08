@@ -254,6 +254,7 @@ function migrate(doc) {
 // metadata change of its own, as tellOthers does for this machine's other pages.
 const PER_DOCUMENT = ['notify', 'codexTask'];
 function applyRemote(id) {
+  if (S.me && id === S.me.orgDocUri) { hydrateWorkspace().catch(report); return false; } // the org document goes on to whatever else reads it
   if (!docId || id !== docId) return false;
   const before = PER_DOCUMENT.map((key) => load()[key] || {});
   return hydrate().then((changed) => {
@@ -266,6 +267,38 @@ function applyRemote(id) {
 }
 
 const synced = () => Object.fromEntries(Object.entries(load()).filter(([key]) => isSynced(key)));
+
+// ---- the workspace's settings: one for everyone in it (issue #814) ----
+// The same root on Tana's own workspace document (the org document, S.me.orgDocUri), beside the workspace settings Tana
+// keeps there itself (featurePolicy, approvedMcpServers): today only relayUrl, the relay everyone in it uses (main/relay.js).
+// Every member reads it; this machine mirrors it under WORKSPACE, never synced, since it is not yours.
+// ponytail: only Orbital keeps a member from writing it (orgAdmin below), since Tana does not refuse one yet: #815
+const WORKSPACE = 'workspace';
+const workspaceGet = (key) => (get(WORKSPACE) || {})[key];
+async function workspaceDoc() {
+  const uri = S.client && S.me && S.me.orgDocUri;
+  return uri ? S.client.sync.subscribe(uri).catch(() => null) : null;
+}
+async function hydrateWorkspace() {
+  const doc = await workspaceDoc();
+  if (!doc) return;
+  const now = Object.fromEntries(Object.entries(doc.loro.getMap(ROOT).toJSON() || {}).map(([key, text]) => [key, decode(text)]));
+  if (JSON.stringify(now) === JSON.stringify(get(WORKSPACE) || {})) return;
+  load()[WORKSPACE] = now; db.setSetting(WORKSPACE, now);
+  send('settings:changed', prefs());
+}
+// Whether you are an admin of the workspace you are signed into, as the session token says (the claims Tana's own client reads)
+async function orgAdmin() {
+  const c = JSON.parse(Buffer.from(String(await S.session.getAccessToken()).split('.')[1], 'base64url').toString());
+  return c.org_id === S.me.orgId && ['admin', 'owner'].includes(c.role);
+}
+async function setWorkspace(key, value) {
+  if (!await orgAdmin()) throw new Error('Only an admin of the workspace can change this');
+  const doc = await workspaceDoc();
+  if (!doc) throw new Error('The workspace is not there yet: connect first');
+  doc.transact((loro) => { const map = loro.getMap(ROOT); if (value === undefined) map.delete(key); else map.set(key, encode(value)); });
+  await hydrateWorkspace();
+}
 // The renderer's half of the same store: everything under `pref:`, with the prefix off, as one object it can read
 // at load (preload reads it synchronously) and write through key by key.
 const PREF = 'pref:';
@@ -298,4 +331,5 @@ function tellOthers(from, docId) { // from: the page handle that wrote it (main/
 // the preferences now, asked for once the page listens for settings:changed (renderer/app.js; preload's prefs:snapshot is the load-time copy)
 const ipc = { 'prefs:now': () => prefs() };
 
-module.exports = { get, set, stateName, waitingWorkflow, WAITING_STATE, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, hasNoDocument, appDocIds, isSynced, reset, AI_KEYS, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };
+module.exports = { get, set, stateName, waitingWorkflow, WAITING_STATE, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, hasNoDocument, appDocIds, isSynced, reset, AI_KEYS, tellOthers, ipc, TITLE, ROOT, POINTER, PREF,
+  workspaceGet, setWorkspace, hydrateWorkspace, orgAdmin };

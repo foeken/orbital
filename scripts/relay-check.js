@@ -388,6 +388,34 @@ const server = http.createServer(relay.handle);
   clock += TTL.idleAgent; await relay.sweep();
   assert.equal((await relay.dump()).includes(D.id), false, 'until it has not been heard from in ninety days');
 
+  // ---- the same relay on ChatGPT Sites (relay/worker.js): a Worker's Request and Response, its rows in D1 ----
+  // D1 here is node:sqlite behind D1's own calls, so what is checked is the adapter and d1Store, not the queries again
+  {
+    const { DatabaseSync } = require('node:sqlite'), sqlite = new DatabaseSync(':memory:');
+    const D1 = { prepare(sql) { const st = sqlite.prepare(sql); let a = []; const s = { bind: (...x) => { assert.ok(!x.includes(undefined), 'D1 refuses undefined: ' + sql); a = x; return s; },
+      first: async () => st.get(...a) ?? null, all: async () => ({ results: st.all(...a) }), run: async () => ({ meta: { changes: Number(st.run(...a).changes) } }) }; return s; } };
+    const worker = require('../relay/worker'), env = { DB: D1 }, site = 'https://orbital.example.chatgpt.site';
+    const ask = async (method, p, { body, auth } = {}) => {
+      const res = await worker.fetch(new Request(site + p, { method, body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+        headers: { 'cf-connecting-ip': '203.0.113.7', ...(auth ? { authorization: auth } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) } }), env);
+      const text = await res.text();
+      return { status: res.status, headers: res.headers, json: text ? JSON.parse(text) : null };
+    };
+    assert.equal((await ask('GET', '/.well-known/oauth-protected-resource/api/mcp')).json.resource, site + '/api/mcp', 'on a Site the relay is at /api/mcp, Sites keeping /mcp');
+    const list = await ask('POST', '/api/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
+    assert.deepEqual([list.status, list.json.result.tools.map((t) => t.name), list.headers.get('access-control-allow-origin')], [200, ['link_orbital'], '*'], 'its MCP answers, open to the phones\' engine');
+    const options = await ask('OPTIONS', '/api/mcp');
+    assert.deepEqual([options.status, options.json], [204, null], 'a preflight has no body');
+    const key = 'Orbital ' + newKey(), made = await ask('POST', '/api/mcp/orbital/codes', { auth: key });
+    assert.equal(made.status, 201, 'an Orbital is made in D1 and gets a code');
+    assert.equal((await ask('GET', '/api/mcp/orbital/codes/' + made.json.code, { auth: key })).json.state, 'waiting', 'and reads it back');
+    assert.equal((await ask('GET', '/api/mcp/orbital/agents', { auth: 'Orbital ' + newKey() })).status, 401, 'another key is not that Orbital');
+    assert.equal((await ask('POST', '/api/mcp', { body: 'x'.repeat(LIMITS.body + 1) })).status, 413, 'a body past the limit is refused, as on Node');
+    assert.equal((await ask('GET', '/api/mcp/health')).json.sha256, crypto.createHash('sha256').update(fs.readFileSync(require.resolve('../relay/server'))).digest('hex'), 'and /health names the same server.js as orbital.md');
+    await assert.rejects(worker.post('http://agents.example/cb', {}, '{}'), { code: 'EBLOCKED' }, 'its callbacks are https only');
+    await assert.rejects(worker.post('https://10.0.0.8/cb', {}, '{}'), { code: 'EBLOCKED' }, 'and never a private address written out');
+  }
+
   console.log('relay-check: ok');
   await relay.close(); server.close();
 })().catch((e) => { console.error(e); process.exit(1); });

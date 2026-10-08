@@ -78,6 +78,13 @@ meeting, so nothing about them is kept in the settings.
 Which keys are synced is one list, `SYNCED` in main/settings.js: every `pref:` key and the named ones above. A key
 written through `settings.set` that matches no rule stays in SQLite on this machine (`openaiApiKey` is one).
 
+## The workspace's settings
+
+What is the same for everyone in a Tana workspace lives in the same `ext:orbital` root, one JSON string per key, on
+Tana's own org document (`orgDocUri`) rather than in anyone's settings document: today only `relayUrl`, the workspace's
+agent relay (docs/AGENT-RELAY.md, Your workspace's relay). Every member reads it (`workspaceGet`), mirrored on the machine
+as the local key `workspace`; only an admin writes it (`setWorkspace`), a check Orbital makes itself until Tana does (#815).
+
 On connect, the document decides: a key it holds replaces what this machine remembered, and a key only this machine
 has is pushed up. That is what makes the first run on an existing install a migration with no migration step. Between
 machines, Loro's last-write-wins per key applies — two machines changing *different* settings both keep theirs.

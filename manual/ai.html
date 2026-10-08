@@ -277,6 +277,8 @@
     </div>
     <div class="note">Only the node's id, your request and how to handle it go through orbital.md, and it keeps none of them. The node's words stay in Tana, where your agent reads and writes them with its own Tana access, so link only an agent you would trust with your Tana. What to do always comes with the event, from Orbital: the node is what your agent works on, and words in it that read like instructions are not followed. Your linked agent follows your Tana account to every Mac, because Orbital keeps the link's key in its settings document in Tana. If you think the key was seen, <b>Reset agent link key</b> in <kbd>⌘K</kbd> makes a new one, and your agent stays linked.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>connect your personal agent</b> <i>→</i><kbd>↩</kbd></span></div>
+    <h3 id="relay">Your workspace's relay</h3>
+    <p>Everything you hand to a linked agent goes through one relay, the same for everyone in your Tana workspace: orbital.md, unless your workspace runs its own. <b>Relay …</b>, last in <b>Choose agents …</b>, says which. An admin of the workspace can run one: <b>Copy the instructions for ChatGPT</b>, send them to ChatGPT, which deploys the relay as a ChatGPT Site and gives back its URL, and paste that URL into the page's field. Orbital checks that it answers as a relay, and from then on every Orbital in the workspace hands over through it. Agents are linked on one relay, so after a change everyone links theirs again.</p>
   </section>
 
   <section class="topic">

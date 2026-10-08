@@ -8,10 +8,15 @@ const crypto = require('node:crypto');
 const settings = require('./settings');
 const content = require('../sdk/content');
 
-// where the relay is: orbital.md, or ORBITAL_RELAY_URL for one running elsewhere; the checks point both at their own.
-// The phone has no process: always orbital.md there.
+// Where the relay is (issue #814): the one your workspace's admins chose for everyone in it (settings.workspaceGet), else
+// orbital.md. ORBITAL_RELAY_URL, or a check setting base, over both. The phones read the same setting, so they hand over
+// through the same relay as the Mac.
+const DEFAULT = 'https://orbital.md/mcp';
 const env = typeof process !== 'undefined' && process.env ? process.env.ORBITAL_RELAY_URL : '';
-const relay = { base: (env || 'https://orbital.md/mcp').replace(/\/+$/, ''), fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(15000) }) };
+const relay = { override: env || '',
+  get base() { return String(this.override || settings.workspaceGet('relayUrl') || DEFAULT).replace(/\/+$/, ''); },
+  set base(url) { this.override = url; },
+  fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(15000) }) };
 const where = () => relay.base.replace(/^https?:\/\//, '');
 const ID = 'relay:'; // an agent linked through the relay, as main/agent.js and the settings' links name it
 const CODE = /^[0-9A-Z]{4}-[0-9A-Z]{4}$/;
@@ -23,6 +28,10 @@ const KEY = /^[\w-]{43}$/;
 const base64url = (bytes) => (typeof Buffer !== 'undefined' ? Buffer.from(bytes).toString('base64url')
   : btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
 const newKey = () => base64url(crypto.randomBytes(32));
+// What a relay is told your key is. orbital.md gets the key itself, as it always has; any other relay (a workspace's own,
+// #814) gets one made from the key and its address, so whoever runs it cannot take the key to orbital.md, or to another
+// workspace's relay, and speak for your Orbital there.
+const keyAt = (key) => (relay.base === DEFAULT ? key : base64url(crypto.createHash('sha256').update('orbital-relay\n' + relay.base + '\n' + key).digest()));
 function orbitalKey(create) {
   const stored = settings.get('relayKey');
   if (typeof stored === 'string' && KEY.test(stored)) return stored;
@@ -36,7 +45,7 @@ async function call(method, path, body, key = orbitalKey(false)) {
   let res;
   try {
     res = await relay.fetch(relay.base + path, { method, body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { authorization: 'Orbital ' + key, ...(body === undefined ? {} : { 'content-type': 'application/json' }) } });
+      headers: { authorization: 'Orbital ' + keyAt(key), ...(body === undefined ? {} : { 'content-type': 'application/json' }) } });
   } catch { throw new Error(where() + ' cannot be reached'); }
   const text = await res.text();
   let json = null;
@@ -49,7 +58,7 @@ async function call(method, path, body, key = orbitalKey(false)) {
     settings.set('relayKey', next); settings.set('relayKeyNext', undefined);
     return out;
   }
-  if (!res.ok) throw new Error((json && json.error_description) || where() + ' answered ' + res.status);
+  if (!res.ok) throw Object.assign(new Error((json && json.error_description) || where() + ' answered ' + res.status), { status: res.status });
   return json;
 }
 // The agents linked to your Orbital as this device last heard of them (relayAgents, its own mirror of the relay's list)
@@ -63,6 +72,25 @@ function remember(list) {
   return fresh;
 }
 const agentsAt = async () => (await call('GET', '/orbital/agents')).agents;
+
+// ---- another relay: checked before it is used, and the words that have ChatGPT deploy one on Sites ----
+// A relay answers /health with { ok: true } (relay/server.js); https only, but for one on this machine.
+async function checkRelay(text) {
+  let u;
+  try { u = new URL(String(text || '').trim()); } catch { throw new Error('That is not a URL'); }
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) throw new Error('A relay is at an https:// URL');
+  const url = (u.origin + u.pathname).replace(/\/+$/, '');
+  let ok = false;
+  try { const res = await relay.fetch(url + '/health', {}); ok = res.ok && (await res.json()).ok === true; } catch { /* below */ }
+  if (!ok) throw new Error(u.host + ' does not answer as a relay: its URL ends in the relay\'s path, /api/mcp on ChatGPT Sites');
+  return url;
+}
+const RELAY_CODE = 'https://github.com/foeken/orbital/tree/main/relay';
+const DEPLOY = 'Deploy Orbital\'s agent relay for me on ChatGPT Sites. Its code is the relay folder of ' + RELAY_CODE + ', and its README.md '
+  + 'says how: a new Site (slug orbital if it is free) holding that folder as it is, built with npm install and npm run build, published, '
+  + 'and its access set to public, since ChatGPT and the Orbital app reach it without signing in to Sites (the relay signs agents in '
+  + 'itself). When it is live, check that its /api/mcp/health answers ok, then give me its URL ending in /api/mcp, for example '
+  + 'https://orbital.<your workspace>.chatgpt.site/api/mcp. I paste that URL into Orbital.';
 
 // ---- linking: a one-time code, and the message your Dot is sent ----
 // An agent has no way to add a server itself (a Dot in ChatGPT neither): you add both (the pages name them and their URLs).
@@ -189,5 +217,5 @@ async function handOver(a, nodeUri, prompt, write, was = null) {
 // working, done and broken
 const BADGE = { assigned: 'pending', working: 'working', completed: 'done', failed: 'broken' };
 
-module.exports = { relay, where, ID, CODE, UUID, TANA_MCP, orbitalKey, newKey, call, cached, remember, agentsAt, linkCode, codeStatus, cancelCode, HOW, REQUEST_MAX, request, deliver, putBack, handOver,
+module.exports = { relay, where, checkRelay, DEPLOY, DEFAULT, keyAt, ID, CODE, UUID, TANA_MCP, orbitalKey, newKey, call, cached, remember, agentsAt, linkCode, codeStatus, cancelCode, HOW, REQUEST_MAX, request, deliver, putBack, handOver,
   AGENT_HEADING, AGENT_STATUS, lastAgentStatus, clearStatus, writeStatus, writeContext, BADGE };

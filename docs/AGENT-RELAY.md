@@ -176,3 +176,27 @@ At orbital.md (the Replit App behind it, the same one the manual is published to
 and the relay is a service of its own that takes `/mcp` and the `/.well-known/` OAuth paths, running `relay/server.js`
 as copied from this repository, with Replit's PostgreSQL (`DATABASE_URL`). A schema change (a table made or dropped)
 needs that App published once from the Replit website, which reviews schema changes. The rate limits are per instance.
+
+## Your workspace's relay (issue #814)
+
+Every Orbital in a Tana workspace hands over through one relay: the one the workspace's admins chose, or orbital.md.
+There is no relay of your own. The choice is `relayUrl` in the `ext:orbital` root of Tana's org document
+(`orgDocUri`), beside the workspace settings Tana keeps there itself, read by every member (main/settings.js
+`workspaceGet`, mirrored locally as `workspace`) and by both phones through the same code; main/relay.js
+`relay.base` resolves it. Only an admin (the session token's `role`, admin or owner) sees **Cmd+K → Choose agents →
+Relay …** with **Copy the instructions for ChatGPT** and the field to paste a URL into, and only an admin's Orbital
+writes it (`setWorkspace`). Tana does not refuse a member's write yet, so that is Orbital's own check until it does
+(#815). A URL is used only once its `/health` answers `ok` (main/relay.js `checkRelay`).
+
+Agents are linked on one relay. After a change the agent list is the new relay's, empty until everyone links theirs
+again there (main/agents/linked.js `refresh`: a relay that does not know your Orbital's key has no agents of yours).
+
+The instructions have ChatGPT deploy `relay/` as a ChatGPT Site (relay/README.md): the same `server.js`, handed
+requests by `relay/worker.js` (a Cloudflare Worker) with its rows in the Site's D1 database (`d1Store`, beside the
+SQLite and PostgreSQL stores), at `/api/mcp` since Sites keeps `/mcp`. The Site's access is public, as orbital.md is:
+the relay signs agents in itself and knows each Orbital by its key. Both deployments' `/health` give the SHA-256 of the
+`server.js` they run, and `scripts/relay-check.js` runs the relay through `worker.js` too, so a change cannot reach
+one and break the other unseen. Nedap's runs at https://orbital.nedap.chatgpt.site/api/mcp.
+
+On a Site, `serial` (a count and the insert it allows, kept together) holds only within one isolate, since D1 has no
+lock across awaits: twin requests on two isolates can each pass a daily cap once.

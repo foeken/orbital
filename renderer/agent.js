@@ -93,6 +93,7 @@ function agentsRows(q) {
     for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
     rows.push({ group: AGENTS_GROUP, icon: 'mcp', label: 'Connect your personal agent …', hint: 'Two plugins, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
+    rows.push({ group: AGENTS_GROUP, icon: 'mcp', label: 'Relay …', hint: 'Where your workspace\'s handovers go', keepOpen: true, run: () => openRelayPage() });
   }
   return matchRows(rows, q);
 }
@@ -164,7 +165,7 @@ function relayRows() {
   rows.push({ group, icon: 'prompt', label: 'Copy the instructions', hint: '↩ copies', keepOpen: true, match: [],
     run: () => run(() => copyText(c.prompt, 'Copied: send them to your agent')) },
   // what crosses orbital.md (main/agents/linked.js send): with each event the node's id, the request and how to handle it, kept nowhere
-  { group, icon: 'lock', label: 'Only the node\'s id and your request go through orbital.md, and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
+  { group, icon: 'lock', label: 'Only the node\'s id and your request go through ' + relayHost(c.url) + ', and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
   // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
   if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
   return [...rows,
@@ -189,6 +190,31 @@ function seenText(at) {
   if (!at) return '';
   const min = Math.round((Date.now() - at) / 60000);
   return min < 2 ? 'seen just now' : min < 60 ? 'seen ' + min + ' min ago' : min < 48 * 60 ? 'seen ' + Math.round(min / 60) + ' h ago' : 'not seen for ' + Math.round(min / 1440) + ' days';
+}
+// ---- the workspace's relay (main/relay.js, issue #814) ----
+// Everyone in a workspace hands over through one relay: the one its admins chose, or orbital.md. An admin runs one of
+// their own by sending ChatGPT the instructions copied here (it deploys the relay on ChatGPT Sites and gives back its URL),
+// then pastes that URL into this page's field. Agents are linked on one relay, so after a change they are linked again.
+let relayNow = null; // what main said last: { url, workspace, admin, deploy, fallback }
+const relayHost = (url) => String(url || 'orbital.md/mcp').replace(/^https?:\/\//, '');
+function relayPageRows(q, typed) {
+  const w = relayNow;
+  if (!w) return [{ group: 'Relay', label: 'Asking…', disabled: true, sweep: true, bare: true, match: [] }];
+  const group = 'Relay · ' + (w.workspace ? 'your workspace\'s own' : 'orbital.md, until your workspace runs its own');
+  const note = (g, icon, label) => ({ group: g, icon, label, note: true, wrap: true, disabled: true, match: [] });
+  const rows = [{ group, icon: 'mcp', label: relayHost(w.url), hint: 'Every handover in your workspace goes through it', disabled: true, match: [] }];
+  if (!w.admin) return [...rows, note(group, 'lock', 'Only an admin of your workspace can change it.')];
+  const own = 'Run your own relay · paste its URL above', url = String(typed || '').trim();
+  rows.push({ group: own, icon: 'prompt', label: 'Copy the instructions for ChatGPT', hint: 'It deploys a relay on ChatGPT Sites and gives you its URL', keepOpen: true, match: [],
+    run: () => run(() => copyText(w.deploy, 'Copied: send them to ChatGPT')) });
+  if (url) rows.push({ group: own, icon: 'link', label: 'Use ' + relayHost(url) + ' for everyone', hint: 'Checked first', keepOpen: true, match: [], run: () => useRelay(url) });
+  if (w.workspace) rows.push({ group: own, icon: 'reload', label: 'Back to orbital.md for everyone', keepOpen: true, match: [], run: () => useRelay('') });
+  return [...rows, note(own, 'link', 'Agents are linked on one relay: after a change, everyone links theirs again.')];
+}
+const useRelay = (url) => run(async () => { relayNow = await tana.relayUse(url); await loadAgentList(); showNote('Relay: ' + relayHost(relayNow.url)); openRelayPage(); });
+function openRelayPage() {
+  openPage('relay', 'Paste a relay URL', { rows: relayPageRows, back: openAgentsPalette, typed: true });
+  tana.relayWhere().then((w) => { relayNow = w; if (palMode === 'relay' && !palette.hidden) renderPalette(); }, showError);
 }
 // A linked agent's own page: its name and where it runs, then rename, switch off and unlink
 let linkedCtx = null; // the agent's id while its page or its rename page is up

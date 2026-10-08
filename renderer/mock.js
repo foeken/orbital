@@ -312,6 +312,9 @@ function mockApi() {
   const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true, opens: true },
     { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true, opens: true }];
   const mockRelay = { polls: 0 }; // how often the Connect your personal agent page has asked, since its code was made
+  // the workspace's relay as the Relay page shows it: orbital.md until the admin (you, here) pastes another (renderer/agent.js)
+  const mockRelayNow = { url: 'https://orbital.md/mcp', workspace: null, admin: true, fallback: 'https://orbital.md/mcp',
+    deploy: 'Deploy Orbital\'s agent relay for me on ChatGPT Sites. Its code is the relay folder of https://github.com/foeken/orbital/tree/main/relay.' };
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   let flags = [{ id: 'decisions', label: 'Decisions API', hint: 'Auto-pick type and sensitive marks', on: false }]; const flagCbs = []; // main/flags.js
@@ -799,6 +802,8 @@ function mockApi() {
       return { state: 'linked', agent: { id: 'relay:dot', label: 'Dot', app: 'ChatGPT' } };
     },
     relayLinkCancel: async () => true,
+    relayWhere: async () => ({ ...mockRelayNow }),
+    relayUse: async (url) => ({ ...Object.assign(mockRelayNow, { url: url || 'https://orbital.md/mcp', workspace: url || null }) }),
     relayRefresh: async () => mockAgents.map((x) => ({ ...x })),
     relayRename: async (id, name) => { const a = mockAgents.find((x) => x.id === id && x.linked); if (a) a.label = name; return mockAgents.map((x) => ({ ...x })); },
     relayUnlink: async (id) => { const i = mockAgents.findIndex((x) => x.id === id && x.linked); if (i >= 0) mockAgents.splice(i, 1); return mockAgents.map((x) => ({ ...x })); },
