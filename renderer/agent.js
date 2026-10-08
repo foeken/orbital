@@ -211,13 +211,15 @@ function relayPageRows(q, typed) {
   const group = 'Relay · ' + (w.workspace ? 'your workspace\'s own' : 'orbital.md, until your workspace runs its own');
   const note = (g, icon, label) => ({ group: g, icon, label, note: true, wrap: true, disabled: true, match: [] });
   const rows = [{ group, icon: 'mcp', label: relayHost(w.url), hint: 'Every handover in your workspace goes through it', disabled: true, match: [] }];
+  const who = w.changedBy && w.changedBy.name; // the admin who changed the workspace's settings last (main/settings.js setWorkspace)
   if (w.plugin) rows.push({ group, icon: 'orbital', label: relayHost(w.plugin), hint: 'The workspace\'s Orbital plugin in ChatGPT', disabled: true, match: [] });
   // older than this Orbital needs (main/relay.js RELAY_VERSION): an admin has ChatGPT put the latest code in the same Site
   if (w.outdated) rows.push(note(group, 'info', 'Out of date: it runs relay version ' + w.version + ', and this Orbital needs ' + w.needed + '. '
-    + (w.admin ? 'Have ChatGPT update it: its address stays, so nobody links again.' : 'An admin of your workspace can update it.')));
+    + (w.admin ? 'Have ChatGPT update it: its address stays, so nobody links again.' : 'Ask ' + (who || 'an admin of your workspace') + ' to update it.')));
   if (w.outdated && w.admin && w.workspace) rows.push({ group, icon: 'prompt', label: 'Copy the update instructions for ChatGPT', hint: 'The latest relay, in the same Site', keepOpen: true, match: [],
     run: () => run(() => copyText(w.update, 'Copied: send them to ChatGPT')) });
-  if (!w.admin) return [...rows, note(group, 'lock', 'Only an admin of your workspace can change it.')];
+  if (who) rows.push(note(group, 'member', 'Set by ' + who + (w.changedBy.at ? ', ' + new Date(w.changedBy.at).toLocaleDateString() : '') + '.'));
+  if (!w.admin) return [...rows, note(group, 'lock', 'Only an admin of your workspace can change it' + (who ? ', like ' + who : '') + '.')];
   // one field for both: a chatgpt.com link is the workspace's plugin (installed there for everyone), anything else a relay
   const own = 'Run your own relay · paste its URL, or your Orbital plugin\'s ChatGPT link, above', url = String(typed || '').trim();
   const plugin = /^https:\/\/([\w-]+\.)*chatgpt\.com\//.test(url);
@@ -237,7 +239,7 @@ function openRelayPage() {
 }
 // Said once a session, by the first page to ask (main/agents/linked.js oldRelay): the workspace's relay is out of date
 function noteOldRelay() {
-  if (tana.relayOld) tana.relayOld().then((w) => { if (w) showNote('Your workspace\'s relay is out of date' + (w.admin ? ': ⌘K, Relay … to update it' : ': an admin can update it')); }, () => {});
+  if (tana.relayOld) tana.relayOld().then((w) => { if (w) showNote('Your workspace\'s relay is out of date' + (w.admin ? ': ⌘K, Relay … to update it' : ': ask ' + ((w.changedBy && w.changedBy.name) || 'an admin') + ' to update it')); }, () => {});
 }
 // A linked agent's own page: its name and where it runs, then rename, switch off and unlink
 let linkedCtx = null; // the agent's id while its page or its rename page is up

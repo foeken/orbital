@@ -313,7 +313,7 @@ function mockApi() {
     { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true, opens: true }];
   const mockRelay = { polls: 0 }; // how often the Connect your personal agent page has asked, since its code was made
   // the workspace's relay as the Relay page shows it: orbital.md until the admin (you, here) pastes another (renderer/agent.js)
-  const mockRelayNow = { url: 'https://orbital.md/mcp', workspace: null, admin: true, fallback: 'https://orbital.md/mcp',
+  const mockRelayNow = { url: 'https://orbital.md/mcp', workspace: null, admin: true, fallback: 'https://orbital.md/mcp', changedBy: null,
     deploy: 'Deploy Orbital\'s agent relay for me on ChatGPT Sites. Its code is the relay folder of https://github.com/foeken/orbital/tree/main/relay.' };
   const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();

@@ -3757,6 +3757,8 @@ async function main() {
       const now = await h('relay:use', base + '/mcp/');
       assert.deepEqual([now.url, now.workspace, now.admin], [base + '/mcp', base + '/mcp', true], 'a relay that answers is the workspace\'s');
       assert.equal(JSON.parse(org.loro.getMap(settings.ROOT).get('relayUrl')), base + '/mcp', 'kept in the org document\'s ext:orbital root, as the settings document keeps yours');
+      assert.match(JSON.parse(org.loro.getMap(settings.ROOT).get('changedBy')).user, /^tana:user-profile:/, 'with who changed it last');
+      assert.equal(typeof (await h('relay:where')).changedBy.at, 'number', 'which the Relay page says, so a member knows which admin to ask');
       assert.equal(settings.isSynced('relayUrl'), false, 'and nowhere of yours: there is no relay of your own');
       // the workspace's Orbital plugin in ChatGPT, once an admin installed it for everyone: the Connect page offers it
       await assert.rejects(h('relay:usePlugin', 'https://plugins.example/orbital'), /chatgpt\.com/, 'only a chatgpt.com link is taken as the workspace\'s plugin');

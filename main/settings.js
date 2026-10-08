@@ -296,7 +296,8 @@ async function setWorkspace(key, value) {
   if (!await orgAdmin()) throw new Error('Only an admin of the workspace can change this');
   const doc = await workspaceDoc();
   if (!doc) throw new Error('The workspace is not there yet: connect first');
-  doc.transact((loro) => { const map = loro.getMap(ROOT); if (value === undefined) map.delete(key); else map.set(key, encode(value)); });
+  // and who changed it last, so a member who finds the relay out of date knows which admin to ask (renderer/agent.js)
+  doc.transact((loro) => { const map = loro.getMap(ROOT); if (value === undefined) map.delete(key); else map.set(key, encode(value)); map.set('changedBy', encode({ user: S.me.userUri, at: Date.now() })); });
   await hydrateWorkspace();
 }
 // The renderer's half of the same store: everything under `pref:`, with the prefix off, as one object it can read

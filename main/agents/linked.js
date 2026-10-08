@@ -110,9 +110,11 @@ const told = (e, out) => { settings.tellOthers(pageOf(e)); return out; };
 // ---- which relay (main/relay.js relay.base, issue #814) ----
 // where it is, whether it is the workspace's own, whether you may change it (an admin), and the words that deploy one on Sites
 async function relayWhere() {
-  const [admin, version] = await Promise.all([settings.orgAdmin().catch(() => false), relayApi.relayVersion()]);
+  const changed = settings.workspaceGet('changedBy');
+  const [admin, version, people] = await Promise.all([settings.orgAdmin().catch(() => false), relayApi.relayVersion(), changed ? Promise.resolve().then(() => require('../rows').members()).catch(() => []) : []]);
+  const by = changed && people.find((p) => p.id === changed.user); // the admin who changed the workspace's settings last, by name
   return { url: relay.base, workspace: settings.workspaceGet('relayUrl') || null, plugin: settings.workspaceGet('pluginUrl') || null, admin, deploy: relayApi.DEPLOY, fallback: relayApi.DEFAULT,
-    ...(version || {}), update: relayApi.UPDATE(relay.base) };
+    ...(version || {}), update: relayApi.UPDATE(relay.base), changedBy: changed ? { name: by ? by.title : null, at: changed.at } : null };
 }
 // Once a session, the first page to ask hears that the workspace's relay is out of date (renderer/agent.js noteOldRelay).
 // orbital.md is ours to keep current (docs/AGENT-RELAY.md, Running and deploying), so only a workspace's own relay is asked about.
