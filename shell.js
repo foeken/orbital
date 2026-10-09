@@ -341,6 +341,23 @@ function toPage(msg) {
 // ⌘-click opens a sidebar place as a tab in that page's pane, ⇧-click in a pane beside, ⌥-click floating, as everywhere in
 // the pages (renderer/palette.js elsewhere); the page opens it there (renderer/app.js goto and action)
 const sbWhere = (e) => (e && (e.metaKey || e.ctrlKey) ? 'tab' : e && e.shiftKey ? 'right' : e && e.altKey ? 'float' : undefined);
+// A row dragged onto a chat in the sidebar (a Tana chat pinned there, or an agent chat): the chat's message gets a reference to
+// it, in the pane that shows the chat or, with none, in the page the rows act in, which opens it (renderer/chat.js composeInto,
+// as ⌘K Add to chat does). The rows are the page's own drag (renderer/drag.js NODES_DRAG_TYPE), turned into the message there.
+const NODES_DRAG = 'application/x-orbital-nodes';
+function sbChatDrop(b, doc) {
+  b.addEventListener('dragover', (e) => { if (!e.dataTransfer.types.includes(NODES_DRAG)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'link'; b.classList.add('drop'); });
+  b.addEventListener('dragleave', () => b.classList.remove('drop'));
+  b.addEventListener('drop', (e) => {
+    b.classList.remove('drop');
+    let rows; try { rows = JSON.parse(e.dataTransfer.getData(NODES_DRAG)); } catch { return; }
+    if (!Array.isArray(rows)) return;
+    e.preventDefault();
+    const id = others().find((v) => docs.get(v)?.docId === doc.id) || following();
+    focusPage(id);
+    requestAnimationFrame(() => windowOf(frameOf(id))?.postMessage({ orbital: 'compose', docId: doc.id, rows, doc }, '*'));
+  });
+}
 function sbButton(cls, icon, words, run, uri, svg) {
   const b = document.createElement('button');
   b.className = cls; b.tabIndex = -1;
@@ -364,6 +381,7 @@ function sbDraw() {
     b.oncontextmenu = (e) => { e.preventDefault(); bridge.pinMenu?.(n.uri); }; // Remove pin (main/pins.js)
     b.classList.toggle('sensitive', n.node.sensitive === true);
     if (n.node.sensitive === true) b.removeAttribute('title'); // a blurred title is not told on hover either
+    if (String(n.uri).startsWith('tana:chat:')) sbChatDrop(b, { id: n.uri, text: n.node.title || 'Chat', kind: 'document', icon: n.node.icon || 'chat', hasChildren: true });
     return b;
   };
   const pinned = (list) => list.filter((n) => n.uri && n.node);
@@ -385,7 +403,7 @@ function sbDraw() {
   if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
   // Agent chats: the newest, each opening its chat in the page; none yet offers a new one, more than fit the whole list
   if (bridge.agentChats) {
-    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; return b; }; // the chat's own glyph, as its tab and the list wear it
+    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; sbChatDrop(b, c); return b; }; // the chat's own glyph, as its tab and the list wear it
     const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', (e) => toPage({ orbital: 'action', id: 'agentChats', where: sbWhere(e) }))] : [];
     rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'robot', 'New chat with Codex', (e) => toPage({ orbital: 'action', id: 'newAgentChat', where: sbWhere(e) }))]));
   }
