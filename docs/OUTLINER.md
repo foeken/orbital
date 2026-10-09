@@ -620,7 +620,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
   Filter rows by text, Switch to table/outliner and Column widths ….
-- **Actions**: Log in (signed out), Create new …, Quick Add Task, New chat with Codex (Codex on this Mac: an empty agent chat, docs/CHATS.md §13), New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
+- **Actions**: Log in (signed out), Create new …, Quick Add Task, Meet Now (a meeting called Meeting, now for 30 minutes, opened in Tana), New chat with Codex (Codex on this Mac: an empty agent chat, docs/CHATS.md §13), New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
@@ -1494,7 +1494,9 @@ main/presence.js keeps one counted room per document over sdk/presence.js). List
 
 ### Export to PDF
 
-⌘K **Export to PDF** (`exportPdf`) on the current text document, read-only ones included. Pending edits are flushed
+⌘K **Export to PDF** (`exportPdf`) on the current text document, read-only ones included; on a meeting's page, the
+document the page shows, as ⌘C copies it: the write-up while Summary is on screen (`summaryShown`), else your notes
+once they exist (`meetingNotes`), hinted "The summary" or "Your notes", and no row with neither. Pending edits are flushed
 first; the native Save dialog defaults to the title, and cancelling writes nothing. It reads the whole main outline,
 collapsed children included, without expanding references or including app controls, the sidebar or typed fields,
 and prints a separate sandboxed page as A4 with fixed light typography, lists, headings, inline marks, images and

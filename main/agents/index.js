@@ -11,6 +11,7 @@ const linked = require('./linked'); // the agents linked through orbital.md/mcp 
 const { agentIds, setAgentMark, agentPrompt, agentStatus, dropAgentMark, mut } = require('../documents');
 const mcpServer = require('../mcp-server'); // the node put back as an earlier handoff left it (putBack)
 const { readNode } = require('../../sdk/node');
+const { isId } = require('../../sdk/ids');
 const { DOC_URI: NODE, S, pageOf } = require('../state');
 const settings = require('../settings');
 
@@ -108,6 +109,7 @@ const ipc = {
   'agent:ids': () => agentIds(),
   'agent:set': async (e, id, on, prompt, agentId) => {
     if (typeof id !== 'string' || !NODE.test(id)) throw new Error('Not a Tana node');
+    if (on && isId(id, 'search')) throw new Error('A saved search is a view: assign one of its tasks');
     const result = on ? await assign(id, prompt, agentId) : await unassign(id);
     changed(e, id);
     return result;

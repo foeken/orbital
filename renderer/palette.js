@@ -158,9 +158,12 @@ function paletteRows(q, typed = q) {
   if (tana.translate && tana.setText && tana.setTitle && !demoMode) { const list = translateTargets(), to = translateTo() || 'English'; if (list.length) rows.push({ id: 'translateNodes', group: selKeys().length ? 'Selection' : docGroup, icon: 'language', label: 'Translate' + (list.length > 1 ? ' ' + list.length + ' nodes' : '') + ' into ' + to, hint: 'Writes the translation', run: () => translateNodes(list, to) }); }
   // its title shown translated (renderer/translate.js), written as the title for good, where it may be edited
   if (palDoc && tana.setTitle && !demoMode && canEditNode(palDoc)) { const doc = palDoc, found = titleTranslation(doc); if (found) rows.push({ id: 'replaceTranslation', group: docGroup, icon: 'language', label: 'Replace with translation', hint: 'From ' + found.lang, run: () => replaceWithTranslation(doc, found) }); }
-  if (palDoc && tana.exportPdf && DOC_KIND.test(palDoc.id)) {
-    const doc = palDoc;
-    rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
+  if (palDoc && tana.exportPdf) {
+    // on a meeting's page, what the page shows: its summary or your notes (renderer/meetingnotes.js), as ⌘C copies
+    const onMeeting = zoom && zoom.docId === palDoc.id && (/^tana:event:/.test(palDoc.id) || palDoc.icon === 'meeting');
+    const summaryOn = onMeeting ? summaryShown(palDoc.id) : null;
+    const pdfId = DOC_KIND.test(palDoc.id) ? palDoc.id : onMeeting ? summaryOn || (meetingNotes.get(palDoc.id) || {}).id : null;
+    if (pdfId) rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', hint: pdfId === palDoc.id ? undefined : summaryOn ? 'The summary' : 'Your notes', run: () => { flushAll(); run(() => tana.exportPdf(pdfId)); } });
   }
   // Pin to today and to tomorrow, on every real node so a recorded key works wherever it is pressed (#273). The label
   // follows pinInfo when ⌘K has read it for this node; the press reads the pins again (toggleDatePin, renderer/
@@ -310,10 +313,13 @@ function paletteRows(q, typed = q) {
     // Assigning is offered whether or not the node is with an agent already: handing it over again replaces the request
     // in its Agent context block (main/documents.js writeAgentContext), to that agent or another. One row per agent that
     // is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked.
-    rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: 'Assign to Agent', hint: assigned ? 'Replaces what ' + ((holder && holder.label) || 'the agent') + ' was asked' : 'To ' + ((fallback && fallback.label) || 'Tana'),
-      keepOpen: true, run: () => openAgentPrompt(doc) });
-    for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: a.isDefault ? 'Default' : '',
-      keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
+    // A saved search is a view, not work: there is nothing in it for an agent to do (Unassign stays, for one handed over before)
+    if (!isSearchDoc(doc)) {
+      rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: 'Assign to Agent', hint: assigned ? 'Replaces what ' + ((holder && holder.label) || 'the agent') + ' was asked' : 'To ' + ((fallback && fallback.label) || 'Tana'),
+        keepOpen: true, run: () => openAgentPrompt(doc) });
+      for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: a.isDefault ? 'Default' : '',
+        keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
+    }
     if (assigned) rows.push({ rank: 'codexUnassign', group: docGroup, icon: 'robot', label: 'Unassign from Agent', hint: holder ? holder.label : '',
       run: () => run(async () => {
         holdRow(doc); // taking it back moves the row out of Agent: it stays put, and Clean up offers the redraw
@@ -385,6 +391,8 @@ function paletteRows(q, typed = q) {
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
   if (tana.startAgentChat) rows.push(...agentChatRows()); // New chat with Codex, and on an agent chat Stop, Open in Codex and Delete chat (renderer/agentchats.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
+  // ⌘K Meet Now: a meeting called Meeting from this minute for half an hour, as "/" Meeting's now, opened on its page in Tana (not its call)
+  if (tana.createDocument && tana.nodeLink && tana.openExternal) rows.push({ id: 'meetNow', group: 'Actions', icon: 'calendar', label: 'Meet Now', hint: 'Now, for 30 minutes · opens in Tana', run: () => run(async () => { const start = Math.floor(Date.now() / 6e4) * 6e4; openInTana((await tana.createDocument('Meeting', { kind: 'meeting', start, end: start + SLASH_MEETING_LENGTH })).id); }) });
   // ⌘K New canvas (#620): named as Tana names one ("Canvas Sep 30, 2026, 2:05 PM") and opened in its window (#611)
   if (tana.createDocument && tana.openCanvas) rows.push({ id: 'newCanvas', group: 'Actions', icon: 'canvas', label: 'New canvas', hint: 'A board, drawn by Tana', run: () => run(async () => { const now = new Date(); opensCanvas((await tana.createDocument('Canvas ' + now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }), { kind: 'canvas' })).id); }) });
   rows.push(...suggestSensitiveRows()); // the Decisions API flag's (renderer/flags.js)
