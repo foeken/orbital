@@ -367,6 +367,7 @@ function paletteRows(q, typed = q) {
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
   rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: typeGlyph(s.id), label: s.text || s.title || 'Untitled search', opens: s.id, run: () => goTo(s.id) })));
+  if (tana.agentChats) rows.push(...agentChatPlaceRows()); // and every agent chat, though it is not in Tana (renderer/agentchats.js)
   // So is every workspace type: its page lists its documents. Drawn in its own glyph, without its hue.
   rows.push(...(typeListCache || []).map((t) => ({ id: 'type:' + t.uri, group: 'Types', icon: typeGlyph(t.uri), label: t.title || 'Untitled type', opens: t.uri, run: () => goTo(t.uri) })));
   rows.push(...pillCommandRows());
@@ -1134,7 +1135,8 @@ function searchNow() {
     // In the @ menu, among titles that match equally, what you link to most, and the kinds you link to most, first.
     const score = new Map(found.map((n) => [n, titleHits(n.title ?? n.text ?? '', q)])), use = linkCtx ? linkScorer() : () => 0;
     const nodes = found.map((n, i) => ({ n, i })).sort((a, b) => score.get(b.n).hits - score.get(a.n).hits || score.get(b.n).starts - score.get(a.n).starts || use(b.n) - use(a.n) || a.i - b.i).map(({ n }) => n);
-    palRows = [...resultRows(nodes), ...resultRows(related, 'RELATED').filter((row) => row.node)] // its documents only: the date and Create rows lead once
+    const chats = linkCtx || pinCtx || fieldLinkCtx || !tana.agentChats ? [] : resultRows(agentChatHits(q), 'AGENT CHATS'); // your agent chats too, which Tana does not know of: never offered to link
+    palRows = [...resultRows(nodes), ...chats, ...resultRows(related, 'RELATED').filter((row) => row.node)] // its documents only: the date and Create rows lead once
       .map((row) => (row.node ? { ...row, match: titleHits(row.label ?? '', q) } : row));
     // Linking: a result is the obvious choice when every typed word begins a word of its title ("Okafor" is Sam
     // Okafor). A full-text hit that merely mentions the words is not, so "Create" stays selected and Enter creates.

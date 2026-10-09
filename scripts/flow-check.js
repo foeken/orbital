@@ -1485,6 +1485,22 @@ flow('Your Dot has a chat of its own, which cannot be renamed or deleted', async
 });
 
 
+// ⌘S and ⌘K find agent chats though Tana does not know them (renderer/agentchats.js agentChatHits, agentChatPlaceRows): by
+// every word of their title, a Dot's chat by its name, and opened like any result
+flow('⌘S and ⌘K find agent chats, which are not in Tana', async (p) => {
+  await p.start();
+  await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
+  await p.key('⌘S'); await p.waitFor('palMode === "search"', 'search'); await p.type('release notes');
+  await p.waitFor('palRows.some((r) => r.group === "AGENT CHATS")', 'an agent chat among the results');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.group === "AGENT CHATS").map((r) => [r.label, r.opens])'), [['Draft the release notes for 0.11', 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001']], 'the chat whose title holds both words, under its own heading, opening elsewhere too');
+  await p.js('palRows.find((r) => r.group === "AGENT CHATS").run(); 1');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000001"', 'and it opens');
+  await closePalette(p);
+  await command(p, 'echo', 'Echo');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e"', '⌘K finds your Dot\u2019s chat by its name');
+});
+
+
 flow('golden path: send a chat message and read the answer', async (p) => {
   await p.start();
   await p.js("goTo('tana:chat:mockchat0')"); await p.waitFor('document.getElementById("composerText") && document.querySelector(".chat-msg")', 'the conversation');

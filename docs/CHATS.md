@@ -390,6 +390,9 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
 - **⌘K on a chat**: Stop Codex (while it answers: the turn let go), Open in Codex (`codex://threads/<id>`), Delete chat
   (forgets the link; the thread stays in Codex). **Agent chats** (⌘K Views) is the list, `orbital:agent-chats`, and the
   newest first; the window's sidebar shows the newest eight in a section of that name (docs/OUTLINER.md §19).
+- **Found though not in Tana.** ⌘K lists every agent chat under Agent chats, as it lists saved searches, and ⌘S adds the chats
+  whose title holds every word typed (a Dot's by its name) after Tana's results, under AGENT CHATS; never while linking with @,
+  since Tana cannot link to one (renderer/agentchats.js `agentChatPlaceRows`, `agentChatHits`).
 - **Your Dot.** Every agent linked through the Orbital MCP server has a chat of its own, first on the list, there for as long
   as it is linked: no Rename, Delete or Set icon. Its words go out as the `chat.message` event and its answers come back
   through the MCP server's `reply_in_orbital`, kept on this Mac (`dotChats`): docs/MCP-SERVER.md, Your Dot's chat. Since all of

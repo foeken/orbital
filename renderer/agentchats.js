@@ -13,7 +13,17 @@ const agentChatLabel = (id) => (extra.get(id) || {}).agentChat?.label || 'Codex'
 // a Dot's chat goes through the Orbital MCP server: which one, said wherever you write to it (main/agentchats.js route)
 const agentChatVia = (id) => { const c = (extra.get(id) || {}).agentChat || {}; return c.fixed ? (c.via || 'the Orbital MCP server') + (c.ours ? ', Orbital\'s relay, run by us' : c.via ? ', your workspace\'s own server' : '') : ''; }; // as renderer/agent.js relayVia says it
 // every chat on the list, as a page to open by its id: its title and glyph are known before its messages are read
-const knowAgentChats = (list) => { for (const n of list || []) extra.set(n.id, { ...n }); };
+let agentChatsKnown = []; // the list as main last said it: what ⌘K and ⌘S find, though none of it is in Tana
+const knowAgentChats = (list) => { agentChatsKnown = Array.isArray(list) ? list : []; for (const n of agentChatsKnown) extra.set(n.id, { ...n }); };
+// ⌘S: the chats whose title holds every word typed (a Dot's by its name), after Tana's own results (renderer/palette.js searchNow);
+// none for a #filter, which asks Tana for a kind of node
+function agentChatHits(q) {
+  const words = String(q || '').split(/\s+/).filter(Boolean);
+  if (!words.length || words.some((w) => w.startsWith('#'))) return [];
+  return agentChatsKnown.filter((n) => titleHits(n.title || n.text || '', q).hits === words.length);
+}
+// ⌘K: each chat a place to go, as a saved search is (renderer/palette.js paletteRows), ⌘↩ ⇧↩ ⌥↩ opening it elsewhere
+const agentChatPlaceRows = () => agentChatsKnown.map((n) => ({ id: 'agentChat:' + n.id, group: 'Agent chats', icon: n.icon || 'robot', label: n.title || n.text || 'New chat', opens: n.id, run: () => goTo(n.id) }));
 if (tana.agentChats) tana.agentChats().then(knowAgentChats, () => {});
 // an answer streaming in, or the list changed (here or on another Mac): read again what is on screen
 if (tana.onAgentChatChanged) tana.onAgentChatChanged((id) => {
