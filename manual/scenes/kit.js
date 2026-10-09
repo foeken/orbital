@@ -39,7 +39,9 @@ const SIDEBAR_PINS = [{ id: 'p1', uri: 'mockdoc2', node: { title: 'Check out the
   { id: 'p2', uri: 'mockmeeting2', node: { title: 'Leadership sync', icon: 'meeting' }, children: [] },
   { id: 's1', label: 'Studio', children: [{ id: 'p3', uri: 'tana:space:mock', node: { title: 'Studio LT', icon: 'space' }, children: [] },
     { id: 'p4', uri: 'mockspacedoc0', node: { title: 'Studio LT charter', icon: 'doc' }, children: [] }] }];
-const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (async (doc, REAL, PINS) => {
+// and its Agent chats section (main/agentchats.js list's shape), the mock's two chats with Codex (renderer/mock.js)
+const SIDEBAR_CHATS = [{ id: 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001', title: 'Draft the release notes for 0.11' }, { id: 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000002', title: 'Why is the iPhone build slow?' }];
+const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (async (doc, REAL, PINS, CHATS) => {
   const theme = document.documentElement.dataset.theme || 'light';
   const prep = (f) => { const w = f.contentWindow; if (REAL) w.eval(REAL); w.document.getElementById('login')?.click(); if (theme === 'dark') w.applyTheme('dark');
     w.eval("tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, new URLSearchParams(location.search).get('side') || '')"); };
@@ -47,11 +49,11 @@ const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (asyn
   document.getElementById('workspace').replaceChildren();
   for (const b of document.querySelectorAll('.head button, #create')) b.querySelector('svg')?.remove();
   let seq = 3;
-  window.shell = { state: () => ({ doc, theme }), onCommand: (cb) => { window.shellCmd = cb; }, layout() {}, onPins() {}, pins: async () => PINS };
+  window.shell = { state: () => ({ doc, theme }), onCommand: (cb) => { window.shellCmd = cb; }, layout() {}, onPins() {}, pins: async () => PINS, onAgentChats() {}, agentChats: async () => CHATS };
   window.orbOpen = (where, start, from) => { const id = String(++seq); localStorage.setItem('view', start.view || 'library'); localStorage.setItem('place', start.place || '{}'); window.shellCmd('open', { id, where, from, focus: true }); return id; };
   await import('/shell.js?live');
   await new Promise((r) => setTimeout(r, 1800));
-}) + ')(' + J(doc) + ',' + J(withReal ? REAL : '') + ',' + J(SIDEBAR_PINS) + ')' });
+}) + ')(' + J(doc) + ',' + J(withReal ? REAL : '') + ',' + J(SIDEBAR_PINS) + ',' + J(SIDEBAR_CHATS) + ')' });
 // a Trellis layout of panels side by side: layout([0.6, 0.4], [panel('a', ['page']), panel('b', ['page2'])], { page: page(''), page2: page('2') })
 const panel = (id, views, selected = views[0]) => ({ kind: 'panel', id: 'panel-' + id, views, selected });
 const page = (side, links) => ({ type: 'page', params: links ? { side, links: true } : { side } });
@@ -74,4 +76,4 @@ const dropOnCreate = (type, name = 'receipt.png') => ({ page: 'shell', js: "(() 
 // Auto-translate on or off (renderer/translate.js): the Dutch note mocknl0 then reads in English
 const translate = (on) => ({ js: on ? "setPref('translateTo', 'English'); render(true)" : "setPref('translateTo', undefined); render(true)" });
 
-module.exports = { open, settle, palette, onlyPalette, NARROW, REAL, real, seedTaskMeta, seedFields, live, panel, page, layout, overlay, helpTour, quickAdd, dropOnCreate, translate, SIDEBAR_PINS };
+module.exports = { SIDEBAR_CHATS, open, settle, palette, onlyPalette, NARROW, REAL, real, seedTaskMeta, seedFields, live, panel, page, layout, overlay, helpTour, quickAdd, dropOnCreate, translate, SIDEBAR_PINS };

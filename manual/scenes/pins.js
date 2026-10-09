@@ -18,7 +18,7 @@ module.exports = [
     { type: 'fri' }, { wait: 1100 }, { js: 'palInput.select()' }, { type: 'in 3 days' }, { wait: 1100 }, { js: 'palInput.select()' }, { type: '12 oct' }, { wait: 1100 },
     { js: 'palInput.select()' }, { type: 'next week' }, { wait: 1200 }] },
   { name: 'pins-edit', setup: [...open(A), pinned, { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'edit pins' }, { wait: 300 }, { key: '↩' }, { wait: 900 }], clip: card },
-  // the window's sidebar: Search, Home and Today, then the pins outside a section and each section's (kit.js SIDEBAR_PINS)
+  // the window's sidebar: Search, Home and Today, the pins outside a section and each section's (kit.js SIDEBAR_PINS), then Agent chats (SIDEBAR_CHATS)
   { name: 'pins-sidebar', setup: [W, { js: "goTo('mockdoc2')" }, { wait: 900 }], clip: [0, 0, 620, 470] },
   // Pin to sidebar … asks which section: Pinned, a section of yours, or a new one named as you type
   { name: 'pins-sidebar-section', setup: open(A), steps: [{ key: '⌘K' }, { type: 'pin to sidebar' }, { wait: 300 }, { key: '↩' }, { wait: 600 }], clip: card },
@@ -32,4 +32,3 @@ module.exports = [
     { js: "[...document.querySelectorAll('.node .text')].at(-1).id = 'mc-last'" }, { click: '#mc-last', at: [0.99, 0.5] }, { wait: 300 }, { key: '↩' }, { type: 'Call the venue ' }, { type: '@' }, { wait: 400 },
     { type: 'friday' }, { wait: 900 }, { key: '↩' }, { wait: 1300 }] },
 ];
-

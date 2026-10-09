@@ -20,6 +20,9 @@ if (file === 'shell.html') {
     pins: () => ipcRenderer.invoke('pins:tree'),
     pinMenu: (uri) => ipcRenderer.invoke('pins:menu', uri), // a right-click on a pin: Remove pin
     onPins: (cb) => ipcRenderer.on('pins:changed', () => cb()),
+    // its Agent chats section: your chats with Codex, newest first (main/agentchats.js), read again on onAgentChats
+    agentChats: () => ipcRenderer.invoke('agentChat:list'),
+    onAgentChats: (cb) => ipcRenderer.on('agentChat:changed', () => cb()),
   });
   return;
 }

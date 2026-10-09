@@ -1623,7 +1623,7 @@ rows are grey glyphs and words, and each acts in the page the Graph pane would f
 take the keys.
 
 - **Search** (with the page's ⌘S, which the page tells the shell on every layout message, `{ orbital: 'keys' }`),
-  **Home** (Cmd+K Go to Home), **Today** (Cmd+K Today) and **Agent chats** (Cmd+K Agent chats, docs/CHATS.md §13) run those rows there.
+  **Home** (Cmd+K Go to Home) and **Today** (Cmd+K Today) run those rows there.
 - Then **your sidebar pins as Tana keeps them** (docs/PINNING.md §1): the pins at the top level under **Pinned**, then
   each section with its pins, in Tana's order; a click opens the pin in that page (`goto`), and the pin of the page on
   screen is marked. A right-click on a pin shows the Mac's own menu with **Remove pin**, which unpins it from the sidebar
@@ -1631,6 +1631,10 @@ take the keys.
   `windowSidebarFolded`); a section with nothing in it is not drawn, and with no pins at all one line says how to add one.
   Titles are masked in demo mode (renderer/segments.js `demoText`) and a sensitive pin is blurred until the header's
   eye shows sensitive items.
+- Then **Agent chats** (docs/CHATS.md §13), a section folded and counted like the others (`agentChats`): your newest eight
+  chats with Codex, each opening its chat in that page and marked while it is on screen, then **All agent chats** when there
+  are more (Cmd+K Agent chats); with none yet, **New chat with Codex**. Read from `window.shell.agentChats()` (main/agentchats.js
+  `list`) when the window loads and whenever main says `agentChat:changed` for the list. Titles are masked in demo mode.
 - **Where it comes from**: `window.shell.pins()` → main/pins.js `pinTree` (each pin with its node and `sensitive`), read
   when the window loads, on a sign-in, and whenever main says `pins:changed`: main watches the collection, the profile
   and every pinned document once read (`watchSidebar`), here or in Tana, and tells every window's shell a beat later

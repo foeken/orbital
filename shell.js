@@ -316,15 +316,17 @@ bridge.onCommand((cmd, arg) => {
   }
 });
 
-// ---- the window's sidebar: Search, Home, Today and Agent chats, then your sidebar pins as Tana keeps them (docs/OUTLINER.md §19) ----
+// ---- the window's sidebar: Search, Home and Today, your sidebar pins, then your Agent chats as Tana keeps them (docs/OUTLINER.md §19) ----
 // Every row acts in the page the Graph pane would follow (the last to take the keys): a pin opens there, Search opens
-// its ⌘S, Home, Today and Agent chats run its Cmd+K rows. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
+// its ⌘S, Home and Today run its Cmd+K rows, and an agent chat opens there. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
 // top level under Pinned, then each section with its pins, read from main (main/pins.js pinTree) and read again
 // whenever main says it moved (pins:changed). Its edge is the handle: dragged it resizes, and let go narrower than
 // SB_SHUT it is its icons alone (SB_RAIL wide), never less; ⌘K Collapse/Expand sidebar and ⌃⌘S switch the two.
 const sidebar = document.getElementById('sidebar'), edge = document.getElementById('sbEdge');
 const SB_RAIL = 48, SB_MIN = 180, SB_MAX = 420, SB_SHUT = 120;
-const sbFolded = new Set(JSON.parse(localStorage.getItem('windowSidebarFolded') || '[]')); // section ids, 'pinned' for the top level
+const sbFolded = new Set(JSON.parse(localStorage.getItem('windowSidebarFolded') || '[]')); // section ids, 'pinned' for the top level, 'agentChats'
+let sbChats = []; // your chats with Codex, newest first (main/agentchats.js): the Agent chats section, its newest SB_CHATS
+const SB_CHATS = 8;
 demoMode = localStorage.getItem('demoMode') === '1'; // renderer/segments.js: titles made up while demo mode is on
 // the row glyphs: one chosen with Set icon (a Nucleo "nc-…", its markup sent with the pin by main/pins.js pinTree), a
 // node's own where icons.js has it, the ones it names differently, else its kind's (tana:search: → a search), else a document's.
@@ -350,7 +352,7 @@ function sbDraw() {
   const rows = [];
   const search = sbButton('sbrow', 'search', 'Search', () => toPage({ orbital: 'palette', mode: 'search' }));
   if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
-  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })), sbButton('sbrow', 'robot', 'Agent chats', () => toPage({ orbital: 'action', id: 'agentChats' })));
+  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
   const pin = (n) => {
     const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri, n.node.svg);
     b.dataset.uri = n.uri;
@@ -362,18 +364,26 @@ function sbDraw() {
   const pinned = (list) => list.filter((n) => n.uri && n.node);
   // the pins outside any section under Pinned, then each section; a section with nothing in it is not drawn
   const sections = [{ id: 'pinned', label: 'Pinned', pins: pinned(sbTree) }, ...sbTree.filter((n) => !n.uri && n.label).map((n) => ({ id: n.id, label: n.label, pins: pinned(n.children || []) }))];
-  for (const s of sections.filter((x) => x.pins.length)) {
-    const shut = sbFolded.has(s.id), head = document.createElement('button');
-    head.className = 'sbsec' + (shut ? ' shut' : ''); head.tabIndex = -1; head.textContent = s.label;
+  // a section's heading folds it, and shows its count while folded
+  const head = (id, label, count) => {
+    const shut = sbFolded.has(id), head = document.createElement('button');
+    head.className = 'sbsec' + (shut ? ' shut' : ''); head.tabIndex = -1; head.textContent = label;
     head.setAttribute('aria-expanded', String(!shut));
-    if (shut) { const n = document.createElement('span'); n.className = 'n'; n.textContent = s.pins.length; head.append(n); }
+    if (shut) { const n = document.createElement('span'); n.className = 'n'; n.textContent = count; head.append(n); }
     else head.insertAdjacentHTML('beforeend', glyph('chevronRight'));
     head.onmousedown = (e) => e.preventDefault();
-    head.onclick = () => { if (sbFolded.has(s.id)) sbFolded.delete(s.id); else sbFolded.add(s.id); localStorage.setItem('windowSidebarFolded', JSON.stringify([...sbFolded])); sbDraw(); };
-    rows.push(head, ...(shut ? [] : s.pins.map(pin)));
-  }
+    head.onclick = () => { if (sbFolded.has(id)) sbFolded.delete(id); else sbFolded.add(id); localStorage.setItem('windowSidebarFolded', JSON.stringify([...sbFolded])); sbDraw(); };
+    return head;
+  };
+  for (const s of sections.filter((x) => x.pins.length)) rows.push(head(s.id, s.label, s.pins.length), ...(sbFolded.has(s.id) ? [] : s.pins.map(pin)));
   // nothing pinned yet: what would fill it, and how
   if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
+  // Agent chats: the newest, each opening its chat in the page; none yet offers a new one, more than fit the whole list
+  if (bridge.agentChats) {
+    const chat = (c) => { const b = sbButton('sbrow', 'chat', demoText(c.title || 'New chat', c.id), () => toPage({ orbital: 'goto', id: c.id }), c.id); b.dataset.uri = c.id; return b; };
+    const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', () => toPage({ orbital: 'action', id: 'agentChats' }))] : [];
+    rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'robot', 'New chat with Codex', () => toPage({ orbital: 'action', id: 'newAgentChat' }))]));
+  }
   sidebar.replaceChildren(...rows);
   sbMark();
 }
@@ -389,6 +399,9 @@ function sbLoad() {
   bridge.pins().then((tree) => { if (mine === sbReading) { sbTree = Array.isArray(tree) ? tree : []; sbDraw(); } }, () => {});
 }
 bridge.onPins?.(sbLoad);
+function sbChatsLoad() { bridge.agentChats?.().then((list) => { sbChats = Array.isArray(list) ? list : []; sbDraw(); }, () => {}); }
+bridge.onAgentChats?.(sbChatsLoad);
+sbChatsLoad();
 // The width it is drawn at: --sw for the sidebar, the panes beside it and the edge (shell.css); its icons alone below SB_SHUT.
 function sbApply(width = sbOpen ? sbWidth : SB_RAIL) {
   document.body.style.setProperty('--sw', width + 'px');

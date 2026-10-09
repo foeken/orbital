@@ -13,7 +13,7 @@ const os = require('node:os');
 const path = require('node:path');
 const agent = require('./agent');
 const settings = require('./settings');
-const { send } = require('./state');
+const { S, send } = require('./state');
 const { chatRows } = require('../sdk/chat');
 const { appServerRpc, codexBin, TASK } = require('./agents/codex');
 
@@ -45,7 +45,12 @@ function linkOf(id) {
   if (!link) throw new Error('That chat is not here any more');
   return { threadId: t, ...link };
 }
-function store(threadId, link) { const all = { ...links() }; if (link) all[threadId] = link; else delete all[threadId]; settings.set(KEY, all); send('agentChat:changed', LIST); }
+// the list changed: the pages read it again, and so does each window's sidebar (shell.js), which hears nothing of send
+function store(threadId, link) {
+  const all = { ...links() }; if (link) all[threadId] = link; else delete all[threadId]; settings.set(KEY, all);
+  send('agentChat:changed', LIST);
+  for (const w of S.windows || []) { const wc = w.shell && w.shell.webContents; if (wc && !wc.isDestroyed()) wc.send('agentChat:changed', LIST); }
+}
 const away = (link) => agent.elsewhere({ device: link.device });
 const title = (text) => agent.oneLine(text, 60) || 'New chat';
 // the list page's rows (and what the renderer opens them by), newest first
