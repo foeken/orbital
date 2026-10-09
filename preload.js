@@ -123,14 +123,19 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   openAgentTask: (docId) => ipcRenderer.invoke('agent:open', docId), // open the task this node is linked to, in its agent's app
   openInAgent: (agent, link) => ipcRenderer.invoke('agent:openNew', agent, link), // a fresh, untracked task carrying the node's link
   agentStatus: () => ipcRenderer.invoke('agent:status'), // docId -> pending|working|waiting|done|broken for every linked node
-  // Connect your personal agent … (main/agents/linked.js, docs/AGENT-RELAY.md): a one-time code and the prompt that carries it
-  relayLink: () => ipcRenderer.invoke('relay:link'), // { code, expiresAt, url, tana, prompt }
-  relayLinkStatus: (code) => ipcRenderer.invoke('relay:linkStatus', code), // { state: waiting|expired, expiresAt } or { state: 'linked', agent: { id, label, app } }
-  relayLinkCancel: (code) => ipcRenderer.invoke('relay:linkCancel', code), // the code stops working
-  relayRefresh: () => ipcRenderer.invoke('relay:refresh'), // the agent list, after asking the relay
-  relayRename: (id, name) => ipcRenderer.invoke('relay:rename', id, name), // the new agent list
-  relayUnlink: (id) => ipcRenderer.invoke('relay:unlink', id), // the new agent list
-  relayReset: () => ipcRenderer.invoke('relay:reset'), // a new key for your Orbital; the agents stay linked
+  // Connect your personal agent … (main/agents/linked.js, docs/MCP-SERVER.md): a one-time code and the prompt that carries it
+  mcpLink: () => ipcRenderer.invoke('mcp:link'), // { code, expiresAt, url, tana, prompt }
+  mcpLinkStatus: (code) => ipcRenderer.invoke('mcp:linkStatus', code), // { state: waiting|expired, expiresAt } or { state: 'linked', agent: { id, label, app } }
+  mcpLinkCancel: (code) => ipcRenderer.invoke('mcp:linkCancel', code), // the code stops working
+  mcpRefresh: () => ipcRenderer.invoke('mcp:refresh'), // the agent list, after asking the MCP server
+  mcpRename: (id, name) => ipcRenderer.invoke('mcp:rename', id, name), // the new agent list
+  mcpUnlink: (id) => ipcRenderer.invoke('mcp:unlink', id), // the new agent list
+  mcpReset: () => ipcRenderer.invoke('mcp:reset'), // a new key for your Orbital; the agents stay linked
+  mcpWhere: () => ipcRenderer.invoke('mcp:where'), // { url, workspace, admin, deploy, fallback }: the workspace's MCP server, or orbital.md
+  mcpUse: (url) => ipcRenderer.invoke('mcp:use', url), // an admin sets the workspace's MCP server ('' for orbital.md again); answers mcpWhere
+  mcpUsePlugin: (url) => ipcRenderer.invoke('mcp:usePlugin', url), // an admin names the workspace's Orbital plugin in ChatGPT ('' takes it out); answers mcpWhere
+  mcpOld: () => ipcRenderer.invoke('mcp:old'), // mcpWhere once a session when the workspace's MCP server is older than Orbital needs, else null
+  mcpPlugin: (tanaApp) => ipcRenderer.invoke('mcp:plugin', tanaApp), // the Orbital plugin for ChatGPT with this MCP server in it, saved to Downloads: its path; an admin's workspace plugin passes the Tana app id ('' for none)
   // Cmd+K "Discuss with …": gives the document the Discussion Task type (created in the Library when the workspace
   // has none) and writes who into its "Discuss with" field. Resolves to { typeUri, key, who }.
   discussWith: (docId, who) => ipcRenderer.invoke('doc:discussWith', docId, who),

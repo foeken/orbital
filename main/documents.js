@@ -10,7 +10,7 @@ const { TYPE_URI, isId } = require('../sdk/ids');
 const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pageOf, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
-const relay = require('./relay'); // the "Agent status" line, as the phones write it too
+const mcpServer = require('./mcp-server'); // the "Agent status" line, as the phones write it too
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.
 async function outlineWithReferences(doc) {
@@ -203,11 +203,11 @@ async function answerChat(id, messageId, answers) {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   const written = await op(id, async (doc) => {
     if (doc.writeDenied || !(await canWriteDoc(doc).catch(() => false))) throw new Error(CHAT_READ_ONLY);
-    let relay;
-    doc.transact((loro) => { relay = chat.answerQuestions(loro, { messageId, answers, byUri: S.me.userUri }); });
-    return { relay, facts: chatFacts(doc) };
+    let relayed;
+    doc.transact((loro) => { relayed = chat.answerQuestions(loro, { messageId, answers, byUri: S.me.userUri }); });
+    return { relayed, facts: chatFacts(doc) };
   });
-  return askReply(id, written.relay, written.facts);
+  return askReply(id, written.relayed, written.facts);
 }
 // Delete one of your own messages from a chat (sdk/chat.js deleteMessage), for everyone in it. Not an undo step, as
 // sending is not: Tana's own Delete message has no undo either.
@@ -743,14 +743,14 @@ const codexPrompts = () => { const stored = settings.get('codexPrompt'); return 
 // block's children rather than adding a second one — the heading is found by its exact title among the document's
 // own top-level blocks, the same way anything else here looks a child up. Unassigning takes it out again, with its status
 // line (removeAgentContext): the node goes back to what it was before it was handed over, but for what the agent wrote.
-const { lastAgentStatus } = relay;
-// the block itself is written in main/relay.js writeContext, where the phones write it too
-const writeAgentContext = (id, prompt) => (String(prompt || '').trim() ? mut(id, (doc) => relay.writeContext(doc, prompt)) : Promise.resolve(null));
-// How a handed-over node is going: its last "Agent status: …" line (main/relay.js, where the rule is, shared with the
+const { lastAgentStatus } = mcpServer;
+// the block itself is written in main/mcp-server.js writeContext, where the phones write it too
+const writeAgentContext = (id, prompt) => (String(prompt || '').trim() ? mut(id, (doc) => mcpServer.writeContext(doc, prompt)) : Promise.resolve(null));
+// How a handed-over node is going: its last "Agent status: …" line (main/mcp-server.js, where the rule is, shared with the
 // phones; written there too, by handOver)
 const agentStatus = (id) => op(id, (doc) => lastAgentStatus(contentText(doc)));
 const agentPrompt = (id) => codexPrompts()[id]; // what the node's agent was last asked, for a reassignment that fails to put back
-// The local mark alone, for an agent that is gone (an old build's Dot, one the relay no longer lists): the node is not
+// The local mark alone, for an agent that is gone (an old build's Dot, one the MCP server no longer lists): the node is not
 // written, so nothing changes in Tana that you did not do
 function dropAgentMark(id) {
   const ids = agentIds();
@@ -759,7 +759,7 @@ function dropAgentMark(id) {
   if (Object.hasOwn(prompts, id)) { const rest = { ...prompts }; delete rest[id]; settings.set('codexPrompt', rest); }
 }
 // Unassigned: the Agent context block goes, with its status line, and any status line an older build left on its own
-const removeAgentContext = (id) => mut(id, (doc) => relay.clearStatus(doc));
+const removeAgentContext = (id) => mut(id, (doc) => mcpServer.clearStatus(doc));
 async function setAgentMark(id, on, prompt, writeContext = true) {
   const next = agentIds().filter((x) => x !== id);
   const text = typeof prompt === 'string' ? prompt.trim() : '';

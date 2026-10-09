@@ -211,7 +211,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
   // its mark; a blank request or a read-only node writes nothing; Unassign takes the line and the mark out.
   {
     require('../db').open(':memory:');
-    const { S } = require('../main/state'), settings = require('../main/settings'), relay = require('../main/relay');
+    const { S } = require('../main/state'), settings = require('../main/settings'), mcpServer = require('../main/mcp-server');
     const { Document } = require('../sdk/document'), { initDocument, contentText, ulid } = require('../sdk/node'), content = require('../sdk/content');
     const { agents, agentOf } = require('../ios/engine/agents.js');
     const was = { me: S.me, client: S.client, readOnly: S.settingsReadOnly }, ME = 'tana:user-profile:me', AGENT = '0b6f1c3e-5d2a-4c8e-9f10-2a3b4c5d6e7f', ID = 'relay:' + AGENT;
@@ -221,8 +221,8 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     let answer = { subscribers: 1, delivered: 1 };
     let unlinked = false;
     const sent = [], json = (o) => new Response(JSON.stringify(o));
-    relay.relay.fetch = async (url, init = {}) => {
-      const p = url.slice(relay.relay.base.length);
+    mcpServer.server.fetch = async (url, init = {}) => {
+      const p = url.slice(mcpServer.server.base.length);
       assert.match(new Headers(init.headers).get('authorization'), /^Orbital [\w-]{43}$/, 'every call carries your Orbital\'s key');
       if (p === '/orbital/codes') return json({ code: 'ABCD-1234', expiresAt: Date.now() + 9e5 });
       if (p === '/orbital/codes/ABCD-1234') return json({ state: 'linked', agent: { id: AGENT, name: 'Echo', app: 'ChatGPT' } });
@@ -247,7 +247,7 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     assert.deepStrictEqual(JSON.parse(await api.agents()).agents, [{ id: ID, name: 'Echo', app: 'ChatGPT', seenAt: null, on: true, isDefault: true }]);
 
     // a node a Mac handed to Codex: its request block, its mark and its link
-    relay.writeContext(doc, 'Summarise the venues');
+    mcpServer.writeContext(doc, 'Summarise the venues');
     settings.set('codex', [doc.id]); settings.set('codexPrompt', { [doc.id]: 'Summarise the venues' }); settings.set('codexTask', { [doc.id]: { agent: 'codex', taskId: 't1' } });
     answer = { subscribers: 1, delivered: 0 };
     await assert.rejects(api.handTo(doc.id, ID, 'Book the venue'), /Echo did not take it/);
@@ -259,14 +259,14 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     const out = JSON.parse(await api.handTo(doc.id, ID, '  Book the venue  '));
     assert.deepStrictEqual(lines(), ['Venue options', 'Agent status: Assigned'], 'handed over: the node ends with the status line, the request block gone');
     const event = sent.at(-1);
-    assert.deepStrictEqual([event.name, event.data.node, event.data.request, event.data.instructions], ['task.assigned', doc.id, 'Book the venue', relay.HOW], 'the event the Mac sends: the node, the request, Orbital\'s instructions');
+    assert.deepStrictEqual([event.name, event.data.node, event.data.request, event.data.instructions], ['task.assigned', doc.id, 'Book the venue', mcpServer.HOW], 'the event the Mac sends: the node, the request, Orbital\'s instructions');
     assert.deepStrictEqual([settings.get('codex'), settings.get('codexPrompt')[doc.id], settings.get('codexTask')[doc.id]], [[doc.id], 'Book the venue', { agent: ID, taskId: event.id }], 'marked and linked as the Mac\'s badge reads it');
     assert.deepStrictEqual(out, { id: ID, name: 'Echo', status: 'assigned' });
-    relay.writeStatus(doc, 'Working');
+    mcpServer.writeStatus(doc, 'Working');
     assert.strictEqual(agentOf(doc.id, doc).status, 'working', 'the Dot\'s Working shows');
     answer = { subscribers: 1, delivered: 0 };
     await assert.rejects(api.handTo(doc.id, ID, 'Book it again'), /Echo did not take it/);
-    assert.deepStrictEqual([lines().at(-1), settings.get('codexPrompt')[doc.id]], ['Agent status: Working', 'Book the venue'], 'not taken: the Dot\'s own line is back (main/relay.js handOver), and its request kept');
+    assert.deepStrictEqual([lines().at(-1), settings.get('codexPrompt')[doc.id]], ['Agent status: Working', 'Book the venue'], 'not taken: the Dot\'s own line is back (main/mcp-server.js handOver), and its request kept');
     answer = { subscribers: 1, delivered: 1 };
 
     const before = sent.length;
@@ -280,13 +280,13 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     assert.deepStrictEqual(lines(), ['Venue options'], 'Unassign takes the status line out');
     assert.deepStrictEqual([settings.get('codex'), settings.get('codexTask')[doc.id], agentOf(doc.id, doc)], [[], undefined, null], 'and the mark and the link');
 
-    // Settings' swipes: Make Default switches an agent that was off on as well; Unlink lets it go at the relay, switches it
+    // Settings' swipes: Make Default switches an agent that was off on as well; Unlink lets it go at the MCP server, switches it
     // off, makes it no one's default and unassigns its nodes, status line and all
     settings.set('agents', ['codex']); settings.set('defaultAgent', null);
     assert.deepStrictEqual(JSON.parse(await api.setDefault(ID)).map((a) => [a.on, a.isDefault]), [[true, true]], 'made the default, and on');
     await api.handTo(doc.id, ID, 'Book the venue');
-    assert.deepStrictEqual(JSON.parse(await api.unlink(ID)), [], 'unlinked: the relay no longer lists it');
-    assert.ok(unlinked, 'the relay was told');
+    assert.deepStrictEqual(JSON.parse(await api.unlink(ID)), [], 'unlinked: the MCP server no longer lists it');
+    assert.ok(unlinked, 'the MCP server was told');
     assert.deepStrictEqual([settings.get('agents'), settings.get('defaultAgent'), settings.get('codex'), settings.get('codexTask')[doc.id], lines()], [['codex'], null, [], undefined, ['Venue options']],
       'off, no longer the default, and its node unassigned with its status line gone');
     Object.assign(S, { me: was.me, client: was.client, settingsReadOnly: was.readOnly });

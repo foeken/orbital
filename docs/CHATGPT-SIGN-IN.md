@@ -37,7 +37,7 @@ documentation asks for after `initialize`. It works today; the desktop migration
 | Apple and Android signing | Developer ID, provisioning profiles and the APK key prove a binary to macOS, iOS and Android. main/ai.js checks that the standalone app-server it downloads carries OpenAI's Developer ID team. | Unrelated to OAuth. |
 
 The plugin direction is the reverse again: when ChatGPT links an agent through orbital.md/mcp, ChatGPT is the OAuth
-client and Orbital's relay is the authorization server (relay/server.js, docs/AGENT-RELAY.md). That gives ChatGPT a
+client and Orbital's MCP server is the authorization server (mcp-server/server.js, docs/MCP-SERVER.md). That gives ChatGPT a
 token for Orbital; it never gives Orbital the user's ChatGPT plan.
 
 ## 3. The SIWC flow for an open-source or local app

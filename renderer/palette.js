@@ -445,9 +445,10 @@ function paletteRows(q, typed = q) {
   if (tana.agentList) rows.push({ id: 'agents', group: 'Settings', icon: 'robot', label: 'Choose agents …', hint: agentsOn().map((a) => a.label).join(', '), keepOpen: true, run: openAgentsPalette });
   if (tana.agentList && tana.setDefaultAgent) { const d = agentsOn().find((x) => x.isDefault) || agentNamed('tana'); rows.push({ id: 'defaultAgent', group: 'Settings', icon: (d && d.icon) || 'robot', label: 'Set default agent …', hint: (d && d.label) || 'Tana', keepOpen: true, run: openDefaultAgentPalette }); } // renderer/agent.js
   // a new key for your Orbital at orbital.md, when the old one may have been seen: the agents stay linked (main/agents/linked.js resetKey)
-  if (tana.relayReset && agentList.some((x) => x.linked)) rows.push({ id: 'relayReset', group: 'Settings', icon: 'linkReset', label: 'Reset agent link key', hint: 'If it may have been seen: your agents stay linked',
-    run: () => run(async () => { await tana.relayReset(); showNote('New link key: your agents stay linked'); }) });
-  if (tana.relayLink) rows.push({ id: 'linkAgent', group: 'Settings', icon: 'mcp', label: 'Connect your personal agent …', hint: 'Two plugins, then a code', keepOpen: true, run: () => openLinkPalette() }); // renderer/agent.js
+  if (tana.mcpReset && agentList.some((x) => x.linked)) rows.push({ id: 'relayReset', group: 'Settings', icon: 'linkReset', label: 'Reset agent link key', hint: 'If it may have been seen: your agents stay linked',
+    run: () => run(async () => { await tana.mcpReset(); showNote('New link key: your agents stay linked'); }) });
+  if (tana.mcpLink) rows.push({ id: 'linkAgent', group: 'Settings', icon: 'mcp', label: 'Connect your personal agent …', hint: 'Your Dot in ChatGPT, or another agent', keepOpen: true, run: () => openLinkPalette() }); // renderer/agent.js
+  if (tana.mcpWhere) rows.push({ id: 'orgSettings', group: 'Settings', icon: 'space', badge: 'Admin only', label: 'Manage Orbital settings for all Tana users …', keepOpen: true, run: openOrgPalette }); // renderer/agent.js
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Turns on translation, Discuss with and more' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
@@ -1203,6 +1204,7 @@ function renderPalette() {
     for (const t of r.tags || []) label.append(chipEl(t, r.node && r.node.hue));
     blurSensitive(label, r.node && r.node.id);
     row.append(icon, label);
+    if (r.badge) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = r.badge; row.append(b); } // a word right after the label, like "Admin only"
     if (r.right) { const s = document.createElement('span'); s.className = 'ricon right'; row.append(addIcon(s, r.right)); }
     if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
     if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = demoMeta(r.node, r.hint); blurSensitive(h, r.node && r.node.id); row.append(h); }

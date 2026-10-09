@@ -881,6 +881,21 @@ commands.settings = async () => {
   for (const [k, v] of Object.entries(main.settings.synced()).sort()) out('  ' + k + ' = ' + JSON.stringify(v).slice(0, 120));
   await new Promise((r) => setTimeout(r, 1500)); // whatever opening wrote — the explanatory line, a pushed setting — leaves with the stream
 };
+// mcpserver [<url>|none|forget <key>]: the workspace's MCP server (docs/MCP-SERVER.md, issue #814) through main's own calls. With no
+// argument it says which MCP server the workspace uses, its version and whether you may change it (read-only); with one it
+// WRITES the workspace's settings (an admin only, the MCP server checked first), and 'none' goes back to orbital.md.
+commands.mcpserver = async () => {
+  backend(await connect());
+  await client.sync.connect();
+  const settings = require('../main/settings'), { ipc } = require('../main/agents/linked');
+  await settings.hydrateWorkspace();
+  const [url] = positional;
+  if (url === 'forget') await settings.setWorkspace(positional[1], undefined); // any key of the workspace's settings, gone (an admin only)
+  else if (url) await ipc['mcp:use'](null, url === 'none' ? '' : url);
+  const w = await ipc['mcp:where']();
+  out(JSON.stringify({ url: w.url, workspace: w.workspace, admin: w.admin, version: w.version, needed: w.needed, outdated: w.outdated }, null, 1));
+  await new Promise((r) => setTimeout(r, 1500)); // a write leaves with the stream, like the other write commands
+};
 // settype <id> [<tana:type:…|none>]: the Cmd+K "Set type" command through main's own rules. With no target it only
 // lists what the document may be given and why the rest is out (read-only); with one it writes, which is a WRITE.
 commands.settype = async () => {

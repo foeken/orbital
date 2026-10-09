@@ -88,11 +88,11 @@ function agentsRows(q) {
     hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
     // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
     disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
-  if (tana.relayLink) {
+  if (tana.mcpLink) {
     const linked = agentList.filter((a) => a.linked);
     for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
       hint: [a.enabled ? 'On' : 'Off', a.app, seenText(a.seenAt)].filter(Boolean).join(' · '), run: () => openLinkedAgent(a.id) });
-    rows.push({ group: AGENTS_GROUP, icon: 'mcp', label: 'Connect your personal agent …', hint: 'Two plugins, then a code', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
+    rows.push({ group: AGENTS_GROUP, icon: 'mcp', label: 'Connect your personal agent …', hint: 'Your Dot in ChatGPT, or another agent', keepOpen: true, run: () => openLinkPalette(openAgentsPalette) });
   }
   return matchRows(rows, q);
 }
@@ -109,86 +109,184 @@ function openDefaultAgentPalette() {
   loadAgentList().then(() => { if (palMode === 'defaultAgent') renderPalette(); });
   openPage('defaultAgent', 'Set default agent', { rows: defaultAgentRows, back: BACK_TO_COMMANDS });
 }
-// ---- Connect your personal agent: orbital.md/mcp and Tana's server added to your agent, then linked with a one-time code ----
-// (main/agents/linked.js) An agent cannot add a server itself (your OpenAI Dot cannot, and ChatGPT has no link to its own
-// "Create custom MCP server" form), so the page names both plugins as such a form wants them, a name and a URL (↩ copies
-// the URL), and How to add them … opens the steps: your Dot's in ChatGPT, then any other agent's. Then one row copies the
-// instructions, which only link. The page asks every two seconds whether that happened; once it has, the palette closes
-// on a toast naming the agent. Leaving the page does not stop the code: an agent that uses it later shows up in Choose
-// agents all the same.
+// ---- Connect your personal agent: first which agent, then only its steps, then one code that links it ----
+// (main/agents/linked.js) The first page asks which agent: your OpenAI Dot in ChatGPT, or any other agent that speaks MCP.
+// Your Dot gets the Orbital plugin (both MCP servers in one, made by main with this workspace's Orbital MCP server, or the
+// workspace's own already in ChatGPT); another agent gets the two servers as a "custom MCP server" form wants them, a name
+// and a URL (↩ copies the URL). Both end with the same code: one row copies the instructions, which only link, and the page
+// asks every two seconds whether that happened; once it has, the palette closes on a toast naming the agent. Leaving the
+// page does not stop the code: an agent that uses it later shows up in Choose agents all the same, and opening the page
+// again goes straight back to it.
 const CHATGPT_PLUGINS = 'https://chatgpt.com/plugins';
 const LINK_TITLE = 'Connect your personal agent';
-let relayCtx = null; // { state: asking|waiting|expired|failed, code, prompt, expiresAt, error, back } while the page is up
-let relayTimer = null;
-function openLinkPalette(back = BACK_TO_COMMANDS) {
-  // a code still waiting is the page you left: shown again, rather than another code (the relay holds five at most)
-  const open = relayCtx && relayCtx.state === 'waiting' && relayCtx.expiresAt > Date.now() ? relayCtx : null;
-  if (open) { open.back = back; openPage('linkAgent', LINK_TITLE, { rows: relayRows, back, typed: true }); pollRelay(open); return; }
-  const ctx = relayCtx = { state: 'asking', back };
-  openPage('linkAgent', LINK_TITLE, { rows: relayRows, back, typed: true });
-  Promise.resolve(tana.relayLink()).then((r) => { if (relayCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawRelay(); pollRelay(ctx); },
-    (e) => { if (relayCtx !== ctx) return; ctx.state = 'failed'; ctx.error = errorText(e); drawRelay(); });
+const AGENT_KINDS = [['chatgpt', 'Your OpenAI Dot', 'In ChatGPT · the Orbital plugin', 'chatgpt'], ['other', 'Another agent', 'Any agent that speaks MCP · two servers', 'mcp']];
+let connectCtx = null; // { state: asking|waiting|expired|failed, kind, code, prompt, expiresAt, error, back } while the page is up
+let connectTimer = null;
+const codeWaiting = () => (connectCtx && connectCtx.state === 'waiting' && connectCtx.expiresAt > Date.now() ? connectCtx : null);
+// kind: 'chatgpt' or 'other'; none asks which first, unless a code is still waiting, whose page it reopens ('' always asks)
+function openLinkPalette(back = BACK_TO_COMMANDS, kind = codeWaiting() ? codeWaiting().kind : null) {
+  if (!kind) {
+    const rows = (q) => matchRows(AGENT_KINDS.map(([id, label, hint, icon]) => ({ group: 'Which agent?', icon, label, hint, keepOpen: true, run: () => openLinkPalette(back, id) })), q);
+    return openPage('linkKind', LINK_TITLE, { rows, back });
+  }
+  const title = AGENT_KINDS.find(([id]) => id === kind)[1], pageBack = () => openLinkPalette(back, '');
+  // a code still waiting is the page you left, whichever agent it is for now: shown again, rather than another code (the
+  // MCP server holds five at most)
+  const open = codeWaiting();
+  if (open) { Object.assign(open, { back, kind }); openPage('linkAgent', title, { rows: connectRows, back: pageBack, typed: true }); pollConnect(open); return; }
+  const ctx = connectCtx = { state: 'asking', back, kind };
+  openPage('linkAgent', title, { rows: connectRows, back: pageBack, typed: true });
+  Promise.resolve(tana.mcpLink()).then((r) => { if (connectCtx !== ctx) return; Object.assign(ctx, r, { state: 'waiting' }); drawConnect(); pollConnect(ctx); },
+    (e) => { if (connectCtx !== ctx) return; ctx.state = 'failed'; ctx.error = errorText(e); drawConnect(); });
 }
-const drawRelay = () => { if (palMode === 'linkAgent' && !palette.hidden) renderPalette(); };
-function pollRelay(ctx) {
-  clearTimeout(relayTimer);
-  relayTimer = setTimeout(async () => {
-    if (relayCtx !== ctx || palMode !== 'linkAgent' || palette.hidden) return;
+const drawConnect = () => { if (palMode === 'linkAgent' && !palette.hidden) renderPalette(); };
+function pollConnect(ctx) {
+  clearTimeout(connectTimer);
+  connectTimer = setTimeout(async () => {
+    if (connectCtx !== ctx || palMode !== 'linkAgent' || palette.hidden) return;
     try {
-      const s = await tana.relayLinkStatus(ctx.code);
-      if (relayCtx !== ctx) return;
+      const s = await tana.mcpLinkStatus(ctx.code);
+      if (connectCtx !== ctx) return;
       if (s.state === 'linked') {
-        relayCtx = null;
+        connectCtx = null;
         await loadAgentList();
         closePalette();
         return showNote('Linked ' + s.agent.label + (s.agent.app ? ' · ' + s.agent.app : ''));
       }
       ctx.state = s.state;
     } catch { /* a missed answer: the next one asks again */ }
-    drawRelay();
-    if (ctx.state === 'waiting') pollRelay(ctx);
+    drawConnect();
+    if (ctx.state === 'waiting') pollConnect(ctx);
   }, 2000);
 }
-function relayRows() {
-  const c = relayCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back) }, title = LINK_TITLE;
+function connectRows() {
+  const c = connectCtx || { state: 'asking' }, again = { icon: 'reload', keepOpen: true, run: () => openLinkPalette(c.back, c.kind) }, title = LINK_TITLE;
   if (c.state === 'asking') return [{ group: title, label: 'Getting a code…', disabled: true, sweep: true, bare: true, match: [] }];
   if (c.state === 'failed') return [{ group: title, icon: 'link', label: c.error || 'No code', disabled: true, match: [] }, { ...again, group: title, label: 'Try again', match: [] }];
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
-  // first both plugins: a custom MCP server each, a name and a URL, and the steps behind How to add them …
-  const add = 'Add both plugins · a custom MCP server each, a name and a URL';
-  const server = (icon, label, url) => ({ group: add, icon, label, hint: url + ' · ↩ copies', keepOpen: true, match: [], run: () => run(() => copyText(url, 'Copied ' + label + '\u2019s URL')) });
-  const rows = [server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana),
-    { group: add, icon: 'help', label: 'How to add them …', hint: 'Your OpenAI Dot, or any other agent', keepOpen: true, match: [], run: () => openLinkHelp(c) }];
+  const note = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
+  let rows, setup;
+  if (c.kind === 'chatgpt') {
+    // your Dot: the Orbital plugin, the workspace's own when an admin installed one for everyone, else one to save and upload
+    setup = 'In ChatGPT · the Orbital plugin';
+    rows = c.plugin ? [{ group: setup, icon: 'orbital', label: 'Install the Orbital plugin', hint: 'Your workspace\'s, in ChatGPT', keepOpen: true, match: [], run: () => run(() => tana.openExternal(c.plugin)) },
+      note(setup, 'help', 'Its setup asks for the code: send your Dot the instructions below.')] : [
+      { group: setup, icon: 'orbital', label: 'Save the Orbital plugin', hint: 'For ' + serverHost(c.url) + ' · into Downloads', keepOpen: true, match: [],
+        run: () => run(async () => { await tana.mcpPlugin(); showNote('Saved to Downloads: upload Orbital plugin.zip in ChatGPT'); }) },
+      { group: setup, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
+      note(setup, 'help', 'Upload it there as a plugin of your own. It brings Orbital and Tana together, and its setup asks for the code: send your Dot the instructions below.')];
+  } else {
+    // any other agent: the two servers, a name and a URL each
+    setup = 'Add both to your agent · a custom MCP server each, a name and a URL';
+    const server = (icon, label, url) => ({ group: setup, icon, label, hint: url + ' · ↩ copies', keepOpen: true, match: [], run: () => run(() => copyText(url, 'Copied ' + label + '\u2019s URL')) });
+    rows = [server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana), note(setup, 'help', 'Signed in to Tana with your own account. Your agent needs MCP events to hear about the tasks you hand it.')];
+  }
+  // which Orbital MCP server the plugin and the agents use: orbital.md, or one your workspace hosts itself (main/mcp-server.js);
+  // only an admin may change it, so only an admin gets its page, everyone else the one in use
+  rows.push(c.admin ? { group: setup, icon: 'mcp', label: 'Use a self-hosted Orbital MCP server …', hint: serverHost(c.url), keepOpen: true, match: [], run: () => openServerPage(() => openLinkPalette(c.back, c.kind)) }
+    : { group: setup, icon: 'mcp', label: 'Orbital MCP server', hint: serverHost(c.url) + (c.workspace ? ' · your workspace\'s' : ' · the default'), disabled: true, match: [] });
   // then the instructions, which only link: what goes through orbital.md is in them too, for the agent to explain
   const group = 'Then ask your agent to link';
   rows.push({ group, icon: 'prompt', label: 'Copy the instructions', hint: '↩ copies', keepOpen: true, match: [],
     run: () => run(() => copyText(c.prompt, 'Copied: send them to your agent')) },
   // what crosses orbital.md (main/agents/linked.js send): with each event the node's id, the request and how to handle it, kept nowhere
-  { group, icon: 'lock', label: 'Only the node\'s id and your request go through orbital.md, and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
+  { group, icon: 'lock', label: 'Only the node\'s id and your request go through ' + serverHost(c.url) + ', and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
   // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
   if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
   return [...rows,
     { group, label: 'Waiting for your agent to use the code…', hint: 'Works once · ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') + ' left', disabled: true, sweep: true, bare: true, match: [] },
-    { group, icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { relayCtx = null; run(() => tana.relayLinkCancel(c.code)); (c.back || closePalette)(); } }];
+    { group, icon: 'reject', label: 'Cancel', hint: 'The code stops working', keepOpen: true, match: [], run: () => { connectCtx = null; run(() => tana.mcpLinkCancel(c.code)); (c.back || closePalette)(); } }];
 }
-// How to add them …: ChatGPT's plugins a ↩ away, then the steps in two short paragraphs, your OpenAI Dot's and any other
-// agent's (the phones list them one by one, Agents ConnectHelp). Back goes to the page with its code, still waiting.
-function openLinkHelp(c) {
-  const orbital = String(c.url || 'https://orbital.md/mcp').replace('https://', ''), tanaUrl = String(c.tana || 'https://home.tana.inc/mcp').replace('https://', '');
-  const dot = 'Your OpenAI Dot', other = 'Any other agent';
-  const note = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
-  const rows = [
-    { group: dot, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
-    note(dot, 'help', 'In ChatGPT: Add, then Create custom MCP server, once for Orbital (' + orbital + ') and once for Tana (' + tanaUrl + ', signed in). Then send your Dot the instructions.'),
-    note(other, 'mcp', 'The same two MCP servers, then the instructions. It needs MCP events to hear about the tasks you hand it.'),
-  ];
-  openPage('linkHelp', 'Adding the plugins', { back: () => openLinkPalette(c.back), rows: () => rows });
-}
-// When the relay last heard from an agent, in a few words
+// When the MCP server last heard from an agent, in a few words
 function seenText(at) {
   if (!at) return '';
   const min = Math.round((Date.now() - at) / 60000);
   return min < 2 ? 'seen just now' : min < 60 ? 'seen ' + min + ' min ago' : min < 48 * 60 ? 'seen ' + Math.round(min / 60) + ' h ago' : 'not seen for ' + Math.round(min / 1440) + ' days';
+}
+// ---- Manage Orbital settings for all Tana users: what is the same for everyone in the Tana workspace (issue #814) ----
+// Kept on Tana's own workspace document, written by an admin only (main/settings.js setWorkspace): the Orbital MCP server
+// everyone hands over through (orbital.md unless the workspace hosts its own) and the Orbital plugin an admin installed in
+// ChatGPT for everyone (made by the deploy instructions with the workspace's own Tana app, so nobody gets Tana twice). A member sees them, and who set them, and changes none.
+let serverNow = null; // what main said last: { url, workspace, plugin, admin, deploy, fallback, changedBy, … }
+const serverHost = (url) => String(url || 'orbital.md/mcp').replace(/^https?:\/\//, '');
+const ORG_TITLE = 'Orbital settings for all Tana users';
+const asking = (group) => [{ group, label: 'Asking…', disabled: true, sweep: true, bare: true, match: [] }];
+const noteRow = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
+const setBy = (w) => w.changedBy && w.changedBy.name; // the admin who changed them last
+function orgRows(q) {
+  const w = serverNow, group = 'For everyone in your Tana workspace';
+  if (!w) return asking(group);
+  const row = (icon, label, hint, open) => ({ group, icon, label, hint, keepOpen: true, match: [], ...(w.admin ? { run: open } : { disabled: true }) });
+  const rows = [row('mcp', 'Orbital MCP server …', serverHost(w.url) + (w.workspace ? '' : ' · the default'), () => openServerPage(openOrgPalette)),
+    ...(w.admin ? [row('createNew', 'Make the workspace plugin …', 'With your Tana app · into Downloads', openMakePluginPage)] : []),
+    row('orbital', 'Orbital plugin in ChatGPT …', w.plugin ? serverHost(w.plugin) : 'None · everyone saves one and uploads it', openPluginPage)];
+  const who = setBy(w);
+  if (who) rows.push(noteRow(group, 'member', 'Set by ' + who + (w.changedBy.at ? ', ' + new Date(w.changedBy.at).toLocaleDateString() : '') + '.'));
+  if (!w.admin) rows.push(noteRow(group, 'lock', 'Only an admin of your workspace can change these' + (who ? ', like ' + who : '') + '.'));
+  return matchRows(rows, q);
+}
+function openOrgPalette() {
+  openPage('orgSettings', ORG_TITLE, { rows: orgRows, back: BACK_TO_COMMANDS });
+  tana.mcpWhere().then((w) => { serverNow = w; if (palMode === 'orgSettings' && !palette.hidden) renderPalette(); }, showError);
+}
+// The Orbital plugin an admin installed in ChatGPT for everyone: its chatgpt.com link pasted in
+function pluginRows(q, typed) {
+  const w = serverNow, group = 'Orbital plugin in ChatGPT', text = String(typed || '').trim(), link = /^https:\/\/([\w-]+\.)*chatgpt\.com\/\S+$/.test(text) && text;
+  const rows = [];
+  if (link) rows.push({ group, icon: 'orbital', label: 'Use ' + serverHost(link), hint: 'For everyone', keepOpen: true, match: [], run: () => usePlugin(link) });
+  else if (text) rows.push({ group, icon: 'info', label: 'A link on chatgpt.com', disabled: true, match: [] });
+  if (w.plugin) rows.push({ group, icon: 'orbital', label: serverHost(w.plugin), hint: 'Now', disabled: true, match: [] },
+    { group, icon: 'reject', label: 'Clear it', hint: 'Back to a plugin to save and upload', keepOpen: true, match: [], run: () => usePlugin('') });
+  return [...rows, noteRow(group, 'help', 'Once you installed the Orbital plugin in ChatGPT for everyone in your workspace: Connect your personal agent then installs that one, rather than a plugin to save and upload. Make the workspace plugin makes it.')];
+}
+// The workspace's plugin, made by an admin: this workspace's MCP server, and the Tana app its ChatGPT workspace already has
+// (an id typed or pasted), so nobody gets Tana twice; without one it brings Tana's MCP server, as everyone's own plugin does
+function makePluginRows(q, typed) {
+  const group = 'Make the workspace plugin · for ' + serverHost(serverNow && serverNow.url), text = String(typed || '').trim(), id = (text.match(/\b(asdk_app_[0-9a-f]{32}|connector_[0-9a-z_]+)\b/) || [])[1];
+  const save = (app) => run(async () => { await tana.mcpPlugin(app); showNote('Saved to Downloads: upload Orbital workspace plugin.zip in ChatGPT'); });
+  const rows = [];
+  if (id) rows.push({ group, icon: 'tana', label: 'Save it with ' + id, hint: 'Into Downloads', keepOpen: true, match: [], run: () => save(id) });
+  else if (text) rows.push({ group, icon: 'info', label: 'A Tana app ID looks like asdk_app_ and 32 letters and digits', disabled: true, match: [] });
+  rows.push({ group, icon: 'orbital', label: 'Save it without a Tana app', hint: 'It brings Tana\'s MCP server', keepOpen: true, match: [], run: () => save('') });
+  return [...rows, noteRow(group, 'help', 'Paste the ID of the Tana app your ChatGPT workspace already has, if it has one: ChatGPT tells you. Then upload the plugin in ChatGPT, install it for everyone in your workspace, and paste its link under Orbital plugin in ChatGPT.')];
+}
+const openMakePluginPage = () => openPage('orgField', 'Paste your Tana app\'s ID, if your ChatGPT workspace has one', { rows: makePluginRows, back: openOrgPalette, typed: true });
+const usePlugin = (v) => run(async () => { serverNow = await tana.mcpUsePlugin(v); showNote(v ? 'Orbital plugin set for everyone' : 'Orbital plugin cleared'); openOrgPalette(); });
+const openPluginPage = () => openPage('orgField', 'Paste your Orbital plugin\'s ChatGPT link', { rows: pluginRows, back: openOrgPalette, typed: true });
+// The Orbital MCP server: from the settings for all Tana users, or Connect your personal agent's Use a self-hosted Orbital MCP
+// server … An admin hosts one by sending ChatGPT the instructions copied here (it deploys mcp-server/ on ChatGPT Sites and
+// gives back its URL), then pastes that URL into this page's field. Agents are linked on one server, so after a change they
+// are linked again.
+function serverPageRows(q, typed) {
+  const w = serverNow;
+  if (!w) return asking('Orbital MCP server');
+  const group = 'Orbital MCP server · ' + (w.workspace ? 'your workspace\'s own' : 'orbital.md, until your workspace hosts its own');
+  const rows = [{ group, icon: 'mcp', label: serverHost(w.url), hint: 'All handovers go here', disabled: true, match: [] }];
+  const who = setBy(w);
+  // older than this Orbital needs (main/mcp-server.js SERVER_VERSION): an admin has ChatGPT put the latest code in the same Site
+  if (w.outdated) rows.push(noteRow(group, 'info', 'Out of date: it is version ' + w.version + ', and this Orbital needs ' + w.needed + '. '
+    + (w.admin ? 'Have ChatGPT update it: its address stays, so nobody links again.' : 'Ask ' + (who || 'an admin of your workspace') + ' to update it.')));
+  if (w.outdated && w.admin && w.workspace) rows.push({ group, icon: 'prompt', label: 'Copy the update instructions for ChatGPT', hint: 'The latest, in the same Site', keepOpen: true, match: [],
+    run: () => run(() => copyText(w.update, 'Copied: send them to ChatGPT')) });
+  if (!w.admin) return [...rows, noteRow(group, 'lock', 'Only an admin of your workspace can change it' + (who ? ', like ' + who : '') + '.')];
+  const own = 'Host your own · paste its URL above', url = String(typed || '').trim();
+  // a pasted URL first, so ↩ uses it
+  if (url) rows.push({ group: own, icon: 'link', label: 'Use ' + serverHost(url) + ' for everyone', hint: 'Checked first', keepOpen: true, match: [], run: () => useServer(url) });
+  rows.push({ group: own, icon: 'prompt', label: 'Copy the instructions for ChatGPT', hint: 'It deploys one on Sites', keepOpen: true, match: [],
+    run: () => run(() => copyText(w.deploy, 'Copied: send them to ChatGPT')) });
+  if (w.workspace) rows.push({ group: own, icon: 'reload', label: 'Back to orbital.md for everyone', keepOpen: true, match: [], run: () => useServer('') });
+  return [...rows, noteRow(own, 'link', 'Agents are linked on one server: after a change, everyone links theirs again.')];
+}
+let serverBack = BACK_TO_COMMANDS;
+const useServer = (url) => run(async () => { serverNow = await tana.mcpUse(url); await loadAgentList(); showNote('Orbital MCP server: ' + serverHost(serverNow.url)); openServerPage(); });
+function openServerPage(back = serverBack) {
+  serverBack = back;
+  openPage('mcpServer', 'Paste your Orbital MCP server\'s URL', { rows: serverPageRows, back, typed: true });
+  tana.mcpWhere().then((w) => { serverNow = w; if (palMode === 'mcpServer' && !palette.hidden) renderPalette(); }, showError);
+}
+// Said once a session, by the first page to ask (main/agents/linked.js oldServer): the workspace's MCP server is out of date
+function noteOldServer() {
+  if (tana.mcpOld) tana.mcpOld().then((w) => { if (w) showNote('Your workspace\'s Orbital MCP server is out of date' + (w.admin ? ': ⌘K, Connect your personal agent, to update it' : ': ask ' + ((w.changedBy && w.changedBy.name) || 'an admin') + ' to update it')); }, () => {});
 }
 // A linked agent's own page: its name and where it runs, then rename, switch off and unlink
 let linkedCtx = null; // the agent's id while its page or its rename page is up
@@ -205,13 +303,13 @@ function linkedAgentRows(q) {
     { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, left out of Assign to Agent' : 'Back in Assign to Agent', keepOpen: true,
       run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) },
     { group, icon: 'trash', label: 'Unlink', hint: 'It can no longer take tasks from Orbital', keepOpen: true,
-      run: () => run(async () => { agentList = await tana.relayUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) }, // its nodes were unassigned too
+      run: () => run(async () => { agentList = await tana.mcpUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) }, // its nodes were unassigned too
   ];
   return matchRows(rows, q);
 }
 function openRenameAgent(a) {
   namePage('renameAgent', 'Its name in Orbital', { group: 'Rename ' + a.label + ' · ↩ saves', icon: 'field', back: () => openLinkedAgent(a.id), empty: 'Type its new name' },
-    (name) => ({ label: 'Rename to “' + name + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.relayRename(a.id, name); openLinkedAgent(a.id); }) }), a.label);
+    (name) => ({ label: 'Rename to “' + name + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.mcpRename(a.id, name); openLinkedAgent(a.id); }) }), a.label);
 }
 // ---- linking a node to a task that already exists in an agent's app (#143) ----
 // Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, Claude's session is its id. Main reads the

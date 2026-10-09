@@ -182,7 +182,7 @@ class ScreensTest {
     }
 
     // Settings' Agents has Connect your personal agent (Agents.kt): the ? beside Add both plugins opens the help with
-    // ChatGPT's plugins, and the sample, which saves nothing, asks the relay for no code and says so, with Try again
+    // ChatGPT's plugins, and the sample, which saves nothing, asks the MCP server for no code and says so, with Try again
     @Test fun connectToYourDotFromSettings() = sample(start = com.dreetje.orbital.ui.Start(settings = true)) {
         waitUntil(timeoutMillis = 3000) { onAllWithText("Connect your personal agent").isNotEmpty() }
         onNodeWithText("Connect your personal agent").performClick()

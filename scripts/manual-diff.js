@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 // What orbital.md/manual still has to take from a release (.agents/skills/orbital-manual/SKILL.md, Publishing). The
-// relay lists the published manual's files by their SHA-256 at /mcp/health/manual (relay/server.js reads them from
+// MCP server lists the published manual's files by their SHA-256 at /mcp/health/manual (mcp-server/server.js reads them from
 // disk); this holds them against manual/ at a git ref, scenes/ left out as publishing leaves it out.
-//   npm run manual-diff [-- <ref>]   (the newest v* tag by default; ORBITAL_MANUAL_HEALTH for another relay)
+//   npm run manual-diff [-- <ref>]   (the newest v* tag by default; ORBITAL_MANUAL_HEALTH for another MCP server)
 // It prints the files to copy and the ones the site has that the ref does not, and exits 1 while there are any.
 const { execFileSync } = require('node:child_process');
 const crypto = require('node:crypto');
-const { manualDigest } = require('../relay/server');
+const { manualDigest } = require('../mcp-server/server');
 
 const git = (args, input) => execFileSync('git', args, { input, maxBuffer: 1 << 30 });
 const ref = process.argv[2] || git(['tag', '--list', 'v*', '--sort=-v:refname']).toString().split('\n')[0];

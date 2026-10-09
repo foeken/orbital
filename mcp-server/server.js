@@ -1,8 +1,9 @@
 'use strict';
-// The agent relay behind orbital.md/mcp (docs/AGENT-RELAY.md): an event layer between Orbital and the agents linked to
-// it, over plain HTTPS. Orbital names an event and what goes with it (for task.assigned: a Tana node's id, the request
-// and how to handle it, all written by Orbital); the relay passes it on, keeping none of it, to the agents subscribed to
-// it, which do the rest through Tana's own MCP server. The relay says nothing of its own about what to do. Three doors:
+// The Orbital MCP server (docs/MCP-SERVER.md): what an agent adds to itself to take work from Orbital. It runs at
+// orbital.md/mcp, and as a workspace's self-hosted server on ChatGPT Sites (worker.js). It is an event layer between Orbital
+// and the agents linked to it, over plain HTTPS. Orbital names an event and what goes with it (for task.assigned: a Tana node's id, the request
+// and how to handle it, all written by Orbital); the MCP server passes it on, keeping none of it, to the agents subscribed to
+// it, which do the rest through Tana's own MCP server. The MCP server says nothing of its own about what to do. Three doors:
 //   - MCP (POST <path>): what an agent adds to itself. Each agent's MCP connection signs in on its own (OAuth 2.1 with
 //     dynamic client registration and PKCE) and is one installation; link_orbital, its one tool, ties it to an Orbital
 //     with a code Orbital made. Its events (MCP Events, protocol 2026-07-28) are subscribed to per connection, and each
@@ -10,7 +11,7 @@
 //   - OAuth (<path>/oauth/*, /.well-known/*): that sign-in. There is no account: an installation is only an identity,
 //     worth nothing until a code links it.
 //   - Orbital (<path>/orbital/*): your Orbital, known by one random key kept in its settings document in Tana; the
-//     relay keeps only the key's hash, and makes the Orbital the first time that key asks for a link code.
+//     MCP server keeps only the key's hash, and makes the Orbital the first time that key asks for a link code.
 // Nothing is queued: an event goes to whoever is subscribed when Orbital sends it, or to nobody.
 // Rows live in SQLite (node:sqlite), or in PostgreSQL (DATABASE_URL, the host's pg) where the disk does not outlast a
 // deploy; every query is written once, with ? placeholders, for both.
@@ -34,12 +35,17 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODE = /^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/;
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']; // the handshake ones: initialize answers in one of these
 const MODERN = '2026-07-28'; // MCP 2.0: no handshake, the version in every request's _meta; what ChatGPT's MCP Events need
+// What this MCP server can do for Orbital, as one number /health says, at orbital.md and on every workspace's Site alike.
+// Raised only when Orbital needs something an older MCP server lacks (main/mcp-server.js SERVER_VERSION, the oldest it works with):
+// a workspace running an older one is told to update it.
+const VERSION = 1;
 const VERSIONS = [MODERN, ...PROTOCOLS];
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford's: no I, L, O or U to misread
 const TANA_MCP = 'https://home.tana.inc/mcp';
 // the SHA-256 of this file as it runs, said by /health, so a deploy (or a change nobody meant) can be held against the repository
-const SELF = (() => { try { return crypto.createHash('sha256').update(require('node:fs').readFileSync(__filename)).digest('hex'); } catch { return null; } })();
-// The manual orbital.md publishes (Replit keeps the site beside the relay), read once as the relay starts: every file's
+// (a bundle has no file of its own to read: mcp-server/build.js writes the same hash in as RELAY_SHA256)
+const SELF = process.env.RELAY_SHA256 || (() => { try { return crypto.createHash('sha256').update(require('node:fs').readFileSync(__filename)).digest('hex'); } catch { return null; } })();
+// The manual orbital.md publishes (Replit keeps the site beside the MCP server), read once as the MCP server starts: every file's
 // SHA-256 by its path, and one SHA-256 over those lines as sha256sum writes them, sorted. /health says the one, so a
 // published manual can be named; /health/manual lists them all, for scripts/manual-diff.js to say what a release has
 // left to copy. Read from disk, so the script the host adds to every page it serves does not count.
@@ -87,7 +93,7 @@ const SCHEMA = [...Object.entries(TABLES).map(([name, cols]) => 'CREATE TABLE IF
   'CREATE INDEX IF NOT EXISTS made_who ON made (who, kind)',
   // one Orbital per key: two first asks at once must not make two (orbitalFrom inserts, then reads the one row back)
   'CREATE UNIQUE INDEX IF NOT EXISTS orbitals_secret ON orbitals (secret)',
-  // the queue and the statuses an earlier relay kept (node ids, task ids, statuses): nothing reads them any more
+  // the queue and the statuses an earlier MCP server kept (node ids, task ids, statuses): nothing reads them any more
   'DROP TABLE IF EXISTS messages', 'DROP TABLE IF EXISTS tasks', 'DROP TABLE IF EXISTS updates'];
 
 // ---- where the rows live: one(sql, ...args) a row, all() rows, run() how many changed ----
@@ -130,6 +136,14 @@ function postgresStore(url, pg = require('pg')) {
   });
   return { exec: async (sql) => { await pool.query(sql); }, ...rowsOf(pool), serial, close: () => pool.end() };
 }
+// Cloudflare D1, what an MCP server on ChatGPT Sites keeps its rows in (mcp-server/worker.js): SQLite, so the queries are the same.
+// ponytail: serial is a queue in this isolate only (D1 holds no lock across awaits), so twin requests on two isolates can
+// each pass a cap once; a Durable Object per key if that is ever abused
+function d1Store(d1) {
+  const queue = keyed(), q = (sql, a) => d1.prepare(sql).bind(...a.map((v) => (v === undefined ? null : v)));
+  const rows = { one: async (sql, ...a) => (await q(sql, a).first()) ?? undefined, all: async (sql, ...a) => (await q(sql, a).all()).results, run: async (sql, ...a) => Number((await q(sql, a).run()).meta.changes) };
+  return { exec: async (sql) => { await d1.prepare(sql).run(); }, ...rows, serial: (key, fn) => queue(key, () => fn(rows)), close: async () => {} };
+}
 
 // What an agent is told when it connects, its one tool and the events it can subscribe to. How to handle an event is not
 // here: Orbital writes it into each event (main/agents/linked.js HOW), so this server only ever passes it on.
@@ -147,7 +161,7 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { code: { type: 'string', description: 'The link code, like 7KQX-M2PD' }, name: { type: 'string', description: 'A short name for yourself, shown in Orbital' } }, required: ['code', 'name'], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
 ].map((tool) => ({ ...tool, securitySchemes: SIGNED_IN, _meta: { securitySchemes: SIGNED_IN } }));
-// The events (MCP Events). The relay checks only an event's name and size: what goes with it is Orbital's to say, an
+// The events (MCP Events). The MCP server checks only an event's name and size: what goes with it is Orbital's to say, an
 // object of at most 16 KB, described to the agent here. A new event is one more entry. No filters: a connection hears
 // only about its own agent.
 const EVENTS = [{ name: 'task.assigned', title: 'Node handed to you in Orbital',
@@ -236,16 +250,16 @@ const signature = (secret, id, ts, body) => 'v1,' + crypto.createHmac('sha256', 
 const goodSecret = (s) => { if (typeof s !== 'string' || !/^whsec_[A-Za-z0-9+/]+={0,2}$/.test(s)) return false; const n = Buffer.from(s.slice(6), 'base64').length; return n >= 24 && n <= 64; };
 const canonical = (v) => (Array.isArray(v) ? '[' + v.map(canonical).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}' : JSON.stringify(v));
 
-function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now, post = safePost, manual = null } = {}) {
+function createMcpServer({ store = sqliteStore(), publicUrl = 'http://localhost:8787', path = '/mcp', now = Date.now, post = safePost, manual = null } = {}) {
   const PATH = '/' + String(path).replace(/^\/+|\/+$/g, '');
   const ISSUER = publicUrl.replace(/\/+$/, '') + PATH;
   const { one, all, run, serial } = store;
   const ready = (async () => { for (const sql of SCHEMA) await store.exec(sql); })();
-  // the manual's folder, or null where there is none (a relay run from this repository)
+  // the manual's folder, or null where there is none (an MCP server run from this repository)
   const published = manual ? readManual(manual).catch(() => null) : Promise.resolve(null);
   const countIn = async (db, sql, ...args) => Number((await db.one(sql, ...args)).n);
   // a row anyone can make without an account, within the day's ceiling for all of them together (LIMITS.*PerDay)
-  const busy = () => fail(429, 'busy', 'The relay is taking no more new connections today: try again tomorrow');
+  const busy = () => fail(429, 'busy', 'The MCP server is taking no more new connections today: try again tomorrow');
   // make(db) a row anyone could make, within its network's day (LIMITS.<kind>PerDay): the count, the row and its record in
   // one step per network, so twin requests cannot pass the cap together; make answers false when it made nothing
   const madeBy = (kind, req, make) => {
@@ -329,7 +343,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     try {
       if (req.method === 'OPTIONS') return send(res, 204);
       await ready;
-      const url = new URL(req.url, 'http://relay'), p = url.pathname.replace(/\/+$/, '') || '/';
+      const url = new URL(req.url, 'http://mcp-server'), p = url.pathname.replace(/\/+$/, '') || '/';
       if (p.startsWith('/.well-known/oauth-protected-resource')) return send(res, 200, { resource: ISSUER, authorization_servers: [ISSUER], bearer_methods_supported: ['header'], resource_name: 'Orbital' });
       if (/^\/\.well-known\/(oauth-authorization-server|openid-configuration)/.test(p) || p === PATH + '/.well-known/oauth-authorization-server' || p === PATH + '/.well-known/openid-configuration') return send(res, 200, metadata());
       if (p === PATH) {
@@ -337,7 +351,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
         return send(res, 405, { error: 'method_not_allowed' }, { allow: 'POST' }); // no server-to-client stream: tools only
       }
       // which server.js runs, to hold against the repository, and which manual is published beside it
-      if (p === PATH + '/health') { const m = await published; return send(res, 200, { ok: true, sha256: SELF, manual: m && { sha256: m.sha256, files: Object.keys(m.files).length } }); }
+      if (p === PATH + '/health') { const m = await published; return send(res, 200, { ok: true, version: VERSION, sha256: SELF, manual: m && { sha256: m.sha256, files: Object.keys(m.files).length } }); }
       if (p === PATH + '/health/manual') { const m = await published; return m ? send(res, 200, m) : send(res, 404, { error: 'no_manual' }); }
       if (p === PATH + '/oauth/register' && req.method === 'POST') return await register(req, res);
       if (p === PATH + '/oauth/authorize' && req.method === 'GET') { limit('authorize:' + ip(req), LIMITS.authorize); return await authorize(url, res); } // each one writes a grant
@@ -458,7 +472,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     if (method === 'ping') return {};
     if (method === 'tools/list') return modern ? { tools: TOOLS, ttlMs: HOUR, cacheScope: 'public' } : { tools: TOOLS };
     if (method === 'events/list') return { events: EVENTS };
-    // only a linked connection: an unlinked one would hear nothing, and a subscription makes the relay call a URL it was given
+    // only a linked connection: an unlinked one would hear nothing, and a subscription makes the MCP server call a URL it was given
     if (method === 'events/subscribe') { if (!agent) throw invalid('Link first: call link_orbital with the code the person you work for gave you, then subscribe'); return await subscribe(install, params); }
     if (method === 'events/unsubscribe') return await unsubscribe(install, params);
     if (method === 'tools/call') {
@@ -540,7 +554,7 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
   }
   // Orbital sent an event: each live subscription of the agent's connection to it hears of it, once, before Orbital is
   // answered how many took it. No retry: a retry would hold the event (the node, the request) in memory after the
-  // answer, and the relay keeps none of it; Orbital says when nobody took it, and assigning again sends it again.
+  // answer, and the MCP server keeps none of it; Orbital says when nobody took it, and assigning again sends it again.
   async function announce(agent, event) {
     const subs = await all('SELECT * FROM subscriptions WHERE install = ? AND name = ? AND expires > ?', agent.install, event.name, now());
     const id = 'evt_' + event.id, body = JSON.stringify({ eventId: id, name: event.name, timestamp: new Date(event.at).toISOString(), data: event.data, cursor: null });
@@ -576,8 +590,8 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     return 'Linked to Orbital as ' + name + '. Now subscribe to the task.assigned event: it wakes you when a node is handed to you, and carries the request and how to handle it.';
   }
   // ---- Orbital's own door: "Authorization: Orbital <key>" ----
-  // The key is the Orbital: whoever holds it acts as it, so the relay keeps only its hash (the orbitals table's secret
-  // column, beside an id of the relay's own that the agents and codes point at). An unknown key becomes a new Orbital
+  // The key is the Orbital: whoever holds it acts as it, so the MCP server keeps only its hash (the orbitals table's secret
+  // column, beside an id of the MCP server's own that the agents and codes point at). An unknown key becomes a new Orbital
   // only where linking starts, asking for a code; anywhere else it is refused.
   async function orbitalFrom(req, mayCreate) {
     const m = /^Orbital ([\w-]{32,128})$/.exec(req.headers.authorization || '');
@@ -652,8 +666,8 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
     throw fail(404, 'not_found', 'No such call');
   }
 
-  const timer = setInterval(() => { ready.then(sweep).catch(() => {}); }, MINUTE); timer.unref();
-  // every row of every table as one string: what scripts/relay-check.js searches for secrets that must not be there
+  const timer = setInterval(() => { ready.then(sweep).catch(() => {}); }, MINUTE); if (timer.unref) timer.unref();
+  // every row of every table as one string: what scripts/mcp-server-check.js searches for secrets that must not be there
   const dump = async () => { await ready; const out = []; for (const t of Object.keys(TABLES)) out.push(await all('SELECT * FROM ' + t)); return JSON.stringify(out); };
   return { handle, sweep, dump, ready, close: async () => { clearInterval(timer); await store.close(); }, path: PATH, issuer: ISSUER };
 }
@@ -661,11 +675,11 @@ function createRelay({ store = sqliteStore(), publicUrl = 'http://localhost:8787
 if (require.main === module) {
   const port = Number(process.env.PORT) || 8787;
   const store = process.env.DATABASE_URL ? postgresStore(process.env.DATABASE_URL) : sqliteStore(process.env.RELAY_DB || ':memory:');
-  // the manual where orbital.md keeps it: artifacts/orbital/public/manual, beside lib/agent-relay/server.js
+  // the manual where orbital.md keeps it: artifacts/orbital/public/manual, beside lib/agent-mcp-server/server.js
   const manual = process.env.RELAY_MANUAL_DIR || require('node:path').join(__dirname, '../../artifacts/orbital/public/manual');
-  const relay = createRelay({ store, publicUrl: process.env.RELAY_PUBLIC_URL || 'http://localhost:' + port, path: process.env.RELAY_PATH || '/mcp', manual });
-  relay.ready.then(() => http.createServer(relay.handle).listen(port, () => console.log('Agent relay at ' + relay.issuer + (process.env.DATABASE_URL ? ', rows in PostgreSQL' : process.env.RELAY_DB ? ', rows in ' + process.env.RELAY_DB : ', in memory'))),
+  const server = createMcpServer({ store, publicUrl: process.env.RELAY_PUBLIC_URL || 'http://localhost:' + port, path: process.env.RELAY_PATH || '/mcp', manual });
+  server.ready.then(() => http.createServer(server.handle).listen(port, () => console.log('Orbital MCP server at ' + server.issuer + (process.env.DATABASE_URL ? ', rows in PostgreSQL' : process.env.RELAY_DB ? ', rows in ' + process.env.RELAY_DB : ', in memory'))),
     (e) => { console.error('agent relay: the database could not be prepared:', e.message); process.exit(1); });
 }
 
-module.exports = { createRelay, sqliteStore, postgresStore, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, manualDigest };
+module.exports = { VERSION, createMcpServer, sqliteStore, postgresStore, d1Store, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, manualDigest };

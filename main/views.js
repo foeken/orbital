@@ -273,6 +273,7 @@ async function start() {
   // The settings document decides before anything is listed: a view's filter, the hidden titles and the MCP switch
   // are all read on the way into the first refresh, and on a new machine this is also what pushes them up.
   try { await settings.hydrate(); } catch (e) { report(e); } finally { read(); }
+  settings.hydrateWorkspace().catch(report); // the workspace's own settings (its MCP server), beside yours
   tellSidebars(); // the windows' sidebars, read before this login connected, read your pins now (shell.js)
   // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more. What
   // this app deleted is known before any of them is asked for (the in-memory set starts empty on every launch).

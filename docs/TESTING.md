@@ -27,7 +27,7 @@ the same kinds came back PR after PR.
 From fastest to slowest. Each catches what the one before it cannot.
 
 1. **`npm run lint` and `npm run check`** (about 20 s together, Node, offline). Offline, but not sandboxed: sdk-check and
-   relay-check listen on a loopback port, which the Codex sandbox refuses (`listen EPERM ... 127.0.0.1`), so an agent runs
+   mcp-server-check listen on a loopback port, which the Codex sandbox refuses (`listen EPERM ... 127.0.0.1`), so an agent runs
    `npm run check` escalated, as it does `npm run flows`. The SDK against a fake SyncService, `main.js` and every
    `main/` module in one vm with a fake Electron, the renderer's load order, and about a hundred behavior checks that each slice a
    renderer function and run it against a fake DOM. Each guards a bug that happened or a rule a mirror of the code cannot
@@ -41,7 +41,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    demo mode (`DEMO_WRITES`, renderer/state.js) or listed as writing no content (`DEMO_SAFE`), and either answered by the
    mock or listed in `NOT_MOCKED`. A new call fails until both are decided. Demo mode lets the synced settings through on
    purpose (view filters, hidden titles, agents, preferences): they are settings, not content.
-   `scripts/relay-check.js` runs the agent relay (relay/, docs/AGENT-RELAY.md) on a loopback port with its clock in hand:
+   `scripts/mcp-server-check.js` runs the Orbital MCP server (mcp-server/, docs/MCP-SERVER.md) on a loopback port with its clock in hand:
    an agent's OAuth sign-in (PKCE, a code used once, rotating refresh), linking with a code, subscribing to
    task.assigned (the callback challenged and signed) and an event delivered once to it, isolation between agents and
    between Orbitals, and what must fail (an unknown key, a used or expired code, an unlinked connection subscribing, an
@@ -49,7 +49,7 @@ From fastest to slowest. Each catches what the one before it cannot.
    with the agents kept, and two first asks for a code making one Orbital. It checks that the request an event carried
    is not in the database afterwards, and that no Orbital key or OAuth token is stored as itself (the subscriptions'
    signing secrets are kept as given: signing needs them). sdk-check drives Orbital's side of it
-   (main/agents/linked.js) against the same relay.
+   (main/agents/linked.js) against the same MCP server.
 2. **`npm run flows`** (about a minute and a half, Chromium on the mock, `scripts/flow-check.js`). Whole journeys in the real page, each on a
    fresh page that fails on any uncaught error, unhandled rejection or `console.error`:
    - sensitive titles stay hidden on every page, in Cmd+K, in tooltips, labels and the window title;

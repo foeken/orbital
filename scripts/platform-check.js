@@ -20,7 +20,7 @@ const AREAS = {
 
 // What both phones run (ios/engine/build.js bundles these desktop modules and the SDK into the engine): a change here
 // changes both phones at once
-const SHARED = /^(ios\/engine\/|sdk\/|main\/(timeline|settings|state|relay)\.js$|renderer\/segments\.js$)/;
+const SHARED = /^(ios\/engine\/|sdk\/|main\/(timeline|settings|state|mcp-server)\.js$|renderer\/segments\.js$)/;
 
 // The desktop features the phones carry too: when one changes on the desktop, the phones usually follow. A new desktop
 // feature is not here, and does not come to the phones by itself.

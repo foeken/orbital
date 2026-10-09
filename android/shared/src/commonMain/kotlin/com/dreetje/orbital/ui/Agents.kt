@@ -159,7 +159,7 @@ fun ConnectAgent(engine: Engine, back: () -> Unit) {
             }
         }
         item("link") {
-            Group("Then ask your agent to link", footer = "Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through orbital.md, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.") {
+            Group("Then ask your agent to link", footer = "Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through ${(link?.url ?: "https://orbital.md/mcp").removePrefix("https://")}, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.") {
                 val l = link
                 when {
                     state == "asking" -> GroupRow(last = true) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Getting a code…", color = c.secondary) }

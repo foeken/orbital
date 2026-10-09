@@ -1,0 +1,11 @@
+{
+  "name": "orbital-mcp-server",
+  "private": true,
+  "description": "Orbital's Orbital MCP server, built for ChatGPT Sites (README.md)",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -507,7 +507,7 @@ class Engine(
     // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, linking one with a code as the
     // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
     val agentsOn: List<Agent> get() = agents.filter { it.on }.sortedBy { !it.isDefault } // what Assign to <its name> … offers, the default first
-    // the relay asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
+    // the MCP server asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
     suspend fun loadAgents(): String? {
         if (isSample) return null
         return try {
