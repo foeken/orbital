@@ -528,6 +528,18 @@ composerText.addEventListener('paste', (e) => {
 composerText.addEventListener('focus', () => selectMsg(null));
 // A row dragged here, from this pane or another, goes in where it is dropped (composerDropSegs); never inside a chip
 const composerTakes = (e) => e.dataTransfer.types.includes(NODES_DRAG_TYPE) && !chatReadOnly.has(composer.dataset.doc);
+// Anywhere on the chat, not only its message box: rows dropped on the conversation go into the message, as ⌘K Add to chat
+// puts them there (composeAdd), and the box is lit while they are over it. Taken before renderer/drag.js sees the drop.
+const chatScroll = outline.parentElement, chatDropOn = (e) => !composer.hidden && chatScroll.classList.contains('chatting') && composerTakes(e);
+chatScroll.addEventListener('dragover', (e) => { if (!chatDropOn(e)) return; e.preventDefault(); composer.classList.add('dropping'); });
+chatScroll.addEventListener('dragleave', (e) => { if (!chatScroll.contains(e.relatedTarget)) composer.classList.remove('dropping'); });
+chatScroll.addEventListener('drop', (e) => {
+  composer.classList.remove('dropping');
+  if (!chatDropOn(e)) return;
+  e.preventDefault();
+  composeAdd(composerDropSegs(JSON.parse(e.dataTransfer.getData(NODES_DRAG_TYPE))));
+  composerText.focus();
+});
 composerText.addEventListener('dragover', (e) => { if (composerTakes(e)) e.preventDefault(); });
 composerText.addEventListener('drop', (e) => {
   if (!composerTakes(e)) return;

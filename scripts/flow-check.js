@@ -1449,6 +1449,21 @@ flow('Cmd+K Views open in a tab, a pane beside or floating with ⌘↩, ⇧↩ a
 });
 
 
+// A row dropped anywhere on a chat's conversation, not only on its message box, goes into the message as a reference
+// (renderer/chat.js chatScroll drop): in a Tana chat and in an agent chat alike, and the box is lit while it is over it.
+flow('A node dropped on a chat fills its message with a reference', async (p) => {
+  await p.start();
+  const drop = (types) => p.js('(() => { const dt = new DataTransfer(); dt.setData("application/x-orbital-nodes", JSON.stringify([[{ mention: { uri: "mockdoc2", label: "Check out the new editor", icon: "task" } }]])); const at = outline.parentElement;'
+    + ' at.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true })); const lit = composer.classList.contains("dropping");'
+    + ' at.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true })); return [lit, composer.classList.contains("dropping"), [...composerText.querySelectorAll(".mention")].map((m) => m.textContent.trim())]; })()');
+  for (const id of ['tana:chat:mockchat0', 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001']) {
+    await p.js('goTo(' + J(id) + ')'); await p.waitFor('zoom && zoom.docId === ' + J(id) + ' && !composer.hidden', 'the chat with its message box');
+    assert.deepEqual(await drop(), [true, false, ['Check out the new editor']], id + ': lit while over it, and the reference in the message');
+    await p.js('setComposer(null); 1');
+  }
+});
+
+
 flow('golden path: send a chat message and read the answer', async (p) => {
   await p.start();
   await p.js("goTo('tana:chat:mockchat0')"); await p.waitFor('document.getElementById("composerText") && document.querySelector(".chat-msg")', 'the conversation');

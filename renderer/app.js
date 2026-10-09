@@ -89,7 +89,7 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'remove' && onSearchPage()) removeZoomedBlock(); // Delete on a saved search's tab (shell.js, #615)
   else if (e.data?.orbital === 'copyLink' && zoom) copyNodeLink(meetingShown(zoom.docId) || zoom.docId); // Copy link on the tab: the page's node, whatever row has the caret (#542); on a meeting, the summary or notes it shows, as ⌘C
   else if (e.data?.orbital === 'processImage') processImage(e.data.file); // an image dropped on Create new (shell.js)
-  else if (e.data?.orbital === 'compose' && typeof e.data.docId === 'string' && Array.isArray(e.data.segs) && e.data.doc) composeInto(e.data.docId, e.data.segs, e.data.doc); // ⌘K Add to chat, from this pane or another (renderer/chat.js)
+  else if (e.data?.orbital === 'compose' && typeof e.data.docId === 'string' && (Array.isArray(e.data.segs) || Array.isArray(e.data.rows)) && e.data.doc) composeInto(e.data.docId, Array.isArray(e.data.segs) ? e.data.segs : composerDropSegs(e.data.rows), e.data.doc); // ⌘K Add to chat, from this pane or another, or rows dropped on a chat in the sidebar (rows: renderer/drag.js dragSegs)
 });
 titleEl.addEventListener('blur', () => document.documentElement.classList.remove('renaming'));
 // Under a tab bar (html.tabbed) the header buttons are drawn in this page's tab bar, beside its ⋯ (shell.js navbtns),

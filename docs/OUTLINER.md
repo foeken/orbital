@@ -1624,6 +1624,10 @@ take the keys.
 
 - **Search** (with the page's ⌘S, which the page tells the shell on every layout message, `{ orbital: 'keys' }`),
   **Home** (Cmd+K Go to Home), **Timeline** (Cmd+K Timeline, marked while the Timeline is on screen) and **Today** (Cmd+K Today) run those rows there.
+- **A row dragged onto a chat** in the sidebar (a pinned Tana chat or an agent chat) goes into that chat's message as a
+  reference, in the pane that shows the chat or, with none, in the page the rows act in, which opens it (shell.js
+  `sbChatDrop` → the page's `compose` with the dragged rows → renderer/chat.js `composeInto`, as ⌘K Add to chat). On a chat's own
+  page a drop anywhere on the conversation does the same (renderer/chat.js `chatScroll`).
 - **⌘-, ⇧- and ⌥-click** on Timeline, Today, a pin or an agent chat open it as a tab in that page's pane, in a pane beside it
   or floating, as a ⌘-click does in the pages (shell.js `sbWhere`, the page's `goto`/`action` with `where`, renderer/palette.js
   `runAction`: a row's `opens`). Search and Home have no single place to open there, and stay plain clicks.
