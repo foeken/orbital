@@ -620,7 +620,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
   Filter rows by text, Switch to table/outliner and Column widths ….
-- **Actions**: Log in (signed out), Create new …, Quick Add Task, New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
+- **Actions**: Log in (signed out), Create new …, Quick Add Task, Meet Now (a meeting called Meeting, now for 30 minutes, opened in Tana), New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
