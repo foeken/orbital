@@ -151,7 +151,7 @@ function d1Store(d1) {
   return { exec: async (sql) => { await d1.prepare(sql).run(); }, ...rows, serial: (key, fn) => queue(key, () => fn(rows)), close: async () => {} };
 }
 
-// What an agent is told when it connects, its one tool and the events it can subscribe to. How to handle an event is not
+// What an agent is told when it connects, its tools and the events it can subscribe to. How to handle an event is not
 // here: Orbital writes it into each event (main/agents/linked.js HOW), so this server only ever passes it on.
 const INSTRUCTIONS = 'Orbital is an outliner over Tana. Its owner hands you Tana nodes to work on. You need two MCP servers: this one, and Tana\'s at '
   + TANA_MCP + '. Link once with link_orbital and the code they give you, then subscribe to the task.assigned and chat.message events. Each event carries the request '
@@ -623,7 +623,7 @@ function createMcpServer({ store = sqliteStore(), publicUrl = 'http://localhost:
       if (agent) await db.run('DELETE FROM agents WHERE id = ?', agent.id); // linking again moves this connection
       await db.run('INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, ?)', id, row.orbital, install.id, name, app, now(), now());
     });
-    return 'Linked to Orbital as ' + name + '. Now subscribe to the task.assigned event: it wakes you when a node is handed to you, and carries the request and how to handle it.';
+    return 'Linked to Orbital as ' + name + '. Now subscribe to the task.assigned and chat.message events: task.assigned wakes you when a node is handed to you, chat.message when they write to you in your Orbital chat (answer it with reply_in_orbital), and each carries how to handle it.';
   }
   // ---- Orbital's own door: "Authorization: Orbital <key>" ----
   // The key is the Orbital: whoever holds it acts as it, so the MCP server keeps only its hash (the orbitals table's secret

@@ -144,7 +144,7 @@ const server = http.createServer(mcp.handle);
   assert.match(code, /^[0-9A-Z]{4}-[0-9A-Z]{4}$/);
   assert.equal((await call('GET', '/mcp/orbital/codes/' + code, { auth: as(orbital) })).json.state, 'waiting');
   assert.equal((await grok.tool('link_orbital', { code: 'AAAA-AAAA', name: 'GrokBot' })).error, true, 'an unknown code links nothing');
-  assert.match((await grok.tool('link_orbital', { code: code.toLowerCase(), name: '  GrokBot ' })).text, /Linked to Orbital as GrokBot/, 'a code, typed in any case');
+  assert.match((await grok.tool('link_orbital', { code: code.toLowerCase(), name: '  GrokBot ' })).text, /^Linked to Orbital as GrokBot\. Now subscribe to the task\.assigned and chat\.message events/, 'a code, typed in any case, and the agent told to subscribe to both events');
   const linked = (await call('GET', '/mcp/orbital/codes/' + code, { auth: as(orbital) })).json;
   assert.equal(linked.state, 'linked');
   assert.equal(linked.agent.name, 'GrokBot', 'the agent named itself');
