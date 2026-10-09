@@ -3630,7 +3630,7 @@ async function main() {
       mcp.call = async (method, path, body) => { asked.push([method, path, body]); const out = answer(method, path, body); if (out instanceof Error) throw out; return out; };
       try {
         settings.set('relayAgents', [{ id: AGENT, name: 'Echo', app: 'ChatGPT', linkedAt: 1 }]);
-        assert.deepEqual(plain(chats.list().map((r) => [r.id, r.title, r.meta || null, r.agentChat.fixed])), [[DOT, 'Echo', null, true]], 'a linked Dot has its chat, first on the list, by its name alone');
+        assert.deepEqual(plain(chats.list().map((r) => [r.id, r.title, r.meta || null, r.agentChat.fixed, r.agentChat.via, r.agentChat.ours])), [[DOT, 'Echo', null, true, new URL(mcp.server.base).host, mcp.server.base === mcp.DEFAULT]], 'a linked Dot has its chat, first on the list, by its name alone, with the MCP server it goes through');
         assert.deepEqual(plain(await handler('agentChat:send')(null, DOT, 'What is due today?')), { queued: false }, 'a message to it is sent');
         const [, path, sent] = asked.find(([, p]) => p.endsWith('/events'));
         assert.deepEqual([path, sent.name, sent.data.chat, sent.data.message, sent.data.instructions], ['/orbital/agents/' + AGENT + '/events', 'chat.message', AGENT, 'What is due today?', chats.CHAT_HOW], 'as chat.message, with its chat and how to answer');

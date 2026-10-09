@@ -392,6 +392,8 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
   newest first; the window's sidebar shows the newest eight in a section of that name (docs/OUTLINER.md §19).
 - **Your Dot.** Every agent linked through the Orbital MCP server has a chat of its own, first on the list, there for as long
   as it is linked: no Rename, Delete or Set icon. Its words go out as the `chat.message` event and its answers come back
-  through the MCP server's `reply_in_orbital`, kept on this Mac (`dotChats`): docs/MCP-SERVER.md, Your Dot's chat.
+  through the MCP server's `reply_in_orbital`, kept on this Mac (`dotChats`): docs/MCP-SERVER.md, Your Dot's chat. Since all of
+  it passes through that server (orbital.md, ours, unless the workspace runs its own), the chat says so where you write: its top
+  line (`agentChatVia`) instead of “not shared with Tana”, the message box and its empty page.
 - **What it is not.** Not an @Codex question (§12): that is a question about a Tana chat, answered privately beside it.
   Claude is not offered yet (issue #823).

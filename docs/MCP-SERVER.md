@@ -45,6 +45,11 @@ with a new code moves it.
 
 ## Your Dot's chat
 
+Unlike a chat with Codex, which never leaves the Mac, **everything said in a Dot's chat goes through this server**: your
+messages out and its answers back. On orbital.md that is our server; on a workspace's own, the workspace's. The chat names it
+(main/agentchats.js `route`): at its top (“Goes through orbital.md, Orbital's own server”, what the server does with it on a
+hover), in the message box and on its empty page, and the manual says it in Chats, Your Dot's chat.
+
 Every linked agent has a chat of its own in Orbital's Agent chats (main/agentchats.js `dotList`, docs/CHATS.md §13), there for
 as long as it is linked: it cannot be deleted or renamed, and goes, with what was said in it, when the agent is unlinked.
 What you write goes to the agent as the `chat.message` event `{ chat, message, instructions }` (`chat` is the agent's id, the

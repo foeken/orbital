@@ -595,7 +595,7 @@ function emptyText(parent) {
   if (id === INBOX_PAGE) return 'No notifications yet.';
   if (id === PROPOSALS_PAGE) return 'No proposals waiting.';
   if (id === AGENT_CHATS_PAGE) return 'No agent chats yet. ⌘K New chat with Codex starts one.';
-  if (isChatPage(parent)) return isAgentChat(id) ? (String(id).includes(':dot:') ? 'Write to your Dot below. Its answers come back here, and only you see them.' : 'Ask Codex anything below. The chat is kept in Codex, and Orbital keeps only its link.') : 'No messages yet. Say something to Tana below.';
+  if (isChatPage(parent)) return isAgentChat(id) ? (String(id).includes(':dot:') ? 'Write to your Dot below. What you write and its answers go through the Orbital MCP server, named above: only you see them here, and nothing of it goes to Tana.' : 'Ask Codex anything below. The chat is kept in Codex, and Orbital keeps only its link.') : 'No messages yet. Say something to Tana below.';
   if (!isSearchDoc(parent.node) && !isTypeDoc(parent.node)) return 'No content';
   const filter = filters.get(id), key = hotkeyFor('createTask');
   return 'Nothing matches.' + (filter && tasksInFilter(filter) && key ? ' ' + key + ' creates a task.' : '');

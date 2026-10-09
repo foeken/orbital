@@ -1473,8 +1473,9 @@ flow('Your Dot has a chat of its own, which cannot be renamed or deleted', async
   await p.waitFor('(kids.get("orbital:agent-chats") || []).length', 'the list');
   assert.equal(await p.js('kids.get("orbital:agent-chats")[0].id'), id, 'the Dot\u2019s chat comes first');
   await p.js('goTo(' + J(id) + ')'); await p.waitFor('zoom && zoom.docId === ' + J(id) + ' && !composer.hidden', 'its chat');
-  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Echo · @ links · Not shared with Tana', 'its message box is named after it');
-  await p.waitFor('document.querySelector(".chat-context")?.textContent === "Only you · not shared with Tana"', 'the line says it is private, and nothing more');
+  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Echo · @ links · Goes through orbital.md', 'its message box is named after it, and says where what you write goes');
+  await p.waitFor('document.querySelector(".chat-context")?.textContent === "Goes through orbital.md, Orbital\u2019s own server · only you see it here".replace("\u2019", "\'")', 'the line says whose server it goes through');
+  assert.match(await p.js('document.querySelector(".chat-context").title'), /pass through orbital\.md, Orbital's own server, which passes each message on as it comes and keeps an answer only until Orbital collects it/, 'and, on a hover, what that server does with it');
   await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
   assert.deepEqual(await p.js('["renameAgentChat", "deleteAgentChat", "openAgentChat", "setIcon"].filter((r) => paletteRows("").some((x) => x.id === r))'), [], 'nothing to rename, delete, open in Codex or give an icon');
   await closePalette(p);
