@@ -316,9 +316,9 @@ bridge.onCommand((cmd, arg) => {
   }
 });
 
-// ---- the window's sidebar: Search, Home and Today, your sidebar pins, then your Agent chats as Tana keeps them (docs/OUTLINER.md §19) ----
+// ---- the window's sidebar: Search, Home, Timeline and Today, your sidebar pins, then your Agent chats as Tana keeps them (docs/OUTLINER.md §19) ----
 // Every row acts in the page the Graph pane would follow (the last to take the keys): a pin opens there, Search opens
-// its ⌘S, Home and Today run its Cmd+K rows, and an agent chat opens there. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
+// its ⌘S, Home, Timeline and Today run its Cmd+K rows, and an agent chat opens there. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
 // top level under Pinned, then each section with its pins, read from main (main/pins.js pinTree) and read again
 // whenever main says it moved (pins:changed). Its edge is the handle: dragged it resizes, and let go narrower than
 // SB_SHUT it is its icons alone (SB_RAIL wide), never less; ⌘K Collapse/Expand sidebar and ⌃⌘S switch the two.
@@ -352,7 +352,9 @@ function sbDraw() {
   const rows = [];
   const search = sbButton('sbrow', 'search', 'Search', () => toPage({ orbital: 'palette', mode: 'search' }));
   if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
-  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
+  const timeline = sbButton('sbrow', 'timeline', 'Timeline', () => toPage({ orbital: 'action', id: 'timeline' }));
+  timeline.dataset.uri = 'orbital:timeline'; // marked while it is the page on screen, as a pin is (sbMark)
+  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), timeline, sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
   const pin = (n) => {
     const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri, n.node.svg);
     b.dataset.uri = n.uri;
@@ -380,7 +382,7 @@ function sbDraw() {
   if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
   // Agent chats: the newest, each opening its chat in the page; none yet offers a new one, more than fit the whole list
   if (bridge.agentChats) {
-    const chat = (c) => { const b = sbButton('sbrow', 'chat', demoText(c.title || 'New chat', c.id), () => toPage({ orbital: 'goto', id: c.id }), c.id); b.dataset.uri = c.id; return b; };
+    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), () => toPage({ orbital: 'goto', id: c.id }), c.id, c.svg); b.dataset.uri = c.id; return b; }; // the chat's own glyph, as its tab and the list wear it
     const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', () => toPage({ orbital: 'action', id: 'agentChats' }))] : [];
     rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'robot', 'New chat with Codex', () => toPage({ orbital: 'action', id: 'newAgentChat' }))]));
   }

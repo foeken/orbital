@@ -220,6 +220,8 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   startAgentChat: (agent, text) => ipcRenderer.invoke('agentChat:start', agent, text), // a new chat with that agent, its first message sent: its row on the list
   sendAgentChat: (id, text) => ipcRenderer.invoke('agentChat:send', id, text), // { queued }: queued when the Codex app has the chat open, and answered there
   stopAgentChat: (id) => ipcRenderer.invoke('agentChat:stop', id), // stop the answer being written
+  renameAgentChat: (id, name) => ipcRenderer.invoke('agentChat:rename', id, name), // here and in Codex: its row on the list
+  agentChatInfo: (id) => ipcRenderer.invoke('agentChat:info', id), // { model, effort } the chat runs with, named as Orbital names them
   openAgentChat: (id) => ipcRenderer.invoke('agentChat:open', id), // in the Codex app
   deleteAgentChat: (id) => ipcRenderer.invoke('agentChat:delete', id), // forget the link (the thread stays in Codex): the list as it is now
   onAgentChatChanged: (cb) => ipcRenderer.on('agentChat:changed', (_e, id) => cb(id)), // a chat's answer moved on, or the list changed

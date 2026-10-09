@@ -65,9 +65,10 @@ const typeIcons = () => Object.entries(stored())
 // Choosing one: a label from the set, or null to go back to the generic type glyph. Stored under the type, so every
 // document of that type follows it. The generic glyph is kept as a null entry rather than no entry: it is a choice
 // too, and fillTypeIcons only picks for types nobody has chosen for.
-// A document (tana:text:) can take one of its own too, which it wears instead of its type's (main/rows.js plainRow).
+// A document (tana:text:) can take one of its own too, which it wears instead of its type's (main/rows.js plainRow), and
+// so can an agent chat (main/agentchats.js list), on its page, the list and the sidebar.
 function setTypeIcon(typeUri, name) {
-  if (typeof typeUri !== 'string' || !/^tana:(type:[0-9a-z]{26}(\?attribute=[0-9a-z]{8})?|(search|text):[0-9a-z]{26})$/.test(typeUri)) throw new Error('Icons are set on a type, a field, a saved search or a document');
+  if (typeof typeUri !== 'string' || !/^(tana:(type:[0-9a-z]{26}(\?attribute=[0-9a-z]{8})?|(search|text):[0-9a-z]{26})|orbital:agent-chat:[0-9a-f-]{36})$/.test(typeUri)) throw new Error('Icons are set on a type, a field, a saved search, a document or an agent chat');
   const next = { ...stored() };
   if (name == null) next[typeUri] = null;
   else {

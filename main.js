@@ -491,6 +491,7 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   await refresh({ after: true }); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
   send('outline:changed', null);
   tellSidebars(); // a pinned search or document wears it there too (shell.js)
+  if (agentChats.isChat(typeUri)) agentChats.tellList(); // an agent chat's on its list and in the sidebar's Agent chats
   return chosen;
 });
 // After each start: the fast AI picks a glyph for every titled type and field that has none (issues #250, #606). In the

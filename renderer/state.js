@@ -4,7 +4,7 @@
 const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi());
 // Demo mode draws made-up words, and nothing on screen may then reach Tana: every call that writes is refused here,
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
-const DEMO_WRITES = new Set(['mcpUse', 'mcpUsePlugin', 'sendChat', 'askAgent', 'deleteAgentAsk', 'startAgentChat', 'sendAgentChat', 'stopAgentChat', 'deleteAgentChat', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
+const DEMO_WRITES = new Set(['mcpUse', 'mcpUsePlugin', 'sendChat', 'askAgent', 'deleteAgentAsk', 'startAgentChat', 'sendAgentChat', 'stopAgentChat', 'renameAgentChat', 'deleteAgentChat', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
   'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox', 'cycleCheckboxes',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',

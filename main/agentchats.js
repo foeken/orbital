@@ -12,6 +12,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const agent = require('./agent');
+const icons = require('./icons');
+const { modelLabel, effortLabel } = require('./prompts');
 const settings = require('./settings');
 const { S, send } = require('./state');
 const { chatRows } = require('../sdk/chat');
@@ -45,9 +47,13 @@ function linkOf(id) {
   if (!link) throw new Error('That chat is not here any more');
   return { threadId: t, ...link };
 }
-// the list changed: the pages read it again, and so does each window's sidebar (shell.js), which hears nothing of send
+// the list changed (a chat, its name, its icon): the pages read it again, and so does each window's sidebar (shell.js),
+// which hears nothing of send
 function store(threadId, link) {
   const all = { ...links() }; if (link) all[threadId] = link; else delete all[threadId]; settings.set(KEY, all);
+  tellList();
+}
+function tellList() {
   send('agentChat:changed', LIST);
   for (const w of S.windows || []) { const wc = w.shell && w.shell.webContents; if (wc && !wc.isDestroyed()) wc.send('agentChat:changed', LIST); }
 }
@@ -56,7 +62,8 @@ const title = (text) => agent.oneLine(text, 60) || 'New chat';
 // the list page's rows (and what the renderer opens them by), newest first
 function list() {
   return Object.entries(links()).sort(([, a], [, b]) => (b.at || 0) - (a.at || 0)).map(([t, l]) => ({
-    id: PREFIX + t, text: l.title || 'New chat', title: l.title || 'New chat', kind: 'document', icon: 'robot', editable: false, hasChildren: true, appPage: true,
+    id: PREFIX + t, text: l.title || 'New chat', title: l.title || 'New chat', kind: 'document', icon: icons.typeIconName(PREFIX + t) || 'robot', editable: false, hasChildren: true, appPage: true,
+    ...(icons.typeIconName(PREFIX + t) ? { svg: icons.svgOf(icons.typeIconName(PREFIX + t)) } : {}), // a glyph chosen with Set icon: the sidebar has only icons.js
     meta: away(l) ? 'On another Mac' : 'Codex', agentChat: { agent: l.agent || 'codex', at: l.at || null, elsewhere: away(l) },
   }));
 }
@@ -121,6 +128,23 @@ async function say(id, text) {
     return { queued: true };
   }
 }
+// A new name: kept with the link (the list, the sidebar, every Mac), and given to the thread in Codex too, so the Codex
+// app lists it by the same name; a Codex that cannot be reached leaves the name here alone.
+async function rename(id, name) {
+  const { threadId, ...link } = linkOf(id), named = agent.oneLine(name, 80);
+  if (!named) throw new Error('Type a name');
+  store(threadId, { ...link, title: named });
+  if (!away(link) && codexBin()) { const rpc = appServerRpc(20000); try { await rpc.ready; await rpc.call('thread/name/set', { threadId, name: named }); } catch {} finally { rpc.stop(); } }
+  return list().find((r) => r.id === id);
+}
+// The model and reasoning effort the thread runs with, as Orbital names them (main/prompts.js), for its page
+async function info(id) {
+  const link = linkOf(id);
+  if (away(link)) return {};
+  const rpc = appServerRpc(20000);
+  try { await rpc.ready; const t = (await rpc.call('thread/read', { threadId: link.threadId })).thread || {}; return { model: t.model ? modelLabel(t.model) : '', effort: t.reasoningEffort ? effortLabel(t.reasoningEffort) : '' }; }
+  finally { rpc.stop(); }
+}
 async function stopTurn(id) { const t = threadOf(id), s = t && live.get(t); if (s) await s.stop(); }
 
 // ---- reading a chat back ----
@@ -168,10 +192,12 @@ const ipc = {
   'agentChat:start': (_e, agentId, text) => start(agentId, text),
   'agentChat:send': (_e, id, text) => say(id, text),
   'agentChat:stop': (_e, id) => stopTurn(id),
+  'agentChat:rename': (_e, id, name) => rename(id, name),
+  'agentChat:info': (_e, id) => info(id),
   'agentChat:open': (_e, id) => { const { shell } = require('electron'); return shell.openExternal(TASK + encodeURIComponent(linkOf(id).threadId)); },
   'agentChat:delete': (_e, id) => { const { threadId } = linkOf(id); store(threadId, null); return list(); },
 };
 const isChat = (id) => String(id || '').startsWith(PREFIX); // a chat, or a new one (orbital:agent-chat:new)
 const stop = () => { for (const s of [...live.values()]) s.stop(); };
 
-module.exports = { LIST, PREFIX, KEY, isChat, list, rows, turnMessages, start, say, workspace, stop, ipc };
+module.exports = { LIST, PREFIX, KEY, isChat, tellList, list, rows, turnMessages, start, say, workspace, stop, ipc };

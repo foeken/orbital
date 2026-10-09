@@ -22,7 +22,7 @@ function agentChatSend(docId, draft, text) {
   run(async () => {
     let sent;
     try {
-      if (docId === AGENT_CHAT_NEW) { const n = await tana.startAgentChat('codex', text); extra.set(n.id, n); navReplace = true; openDoc(n.id); return; }
+      if (docId === AGENT_CHAT_NEW) { const n = await tana.startAgentChat('codex', text); extra.set(n.id, n); agentChatInfos.delete(n.id); navReplace = true; openDoc(n.id); return; }
       sent = await tana.sendAgentChat(docId, text);
     } catch (e) { restoreDraft(docId, draft); throw e; }
     if (sent.queued) showNote('Codex has this chat open: your message is queued there, and Codex answers it in the app');
@@ -31,6 +31,28 @@ function agentChatSend(docId, draft, text) {
   });
 }
 const agentChatAnswering = (docId) => (kids.get(docId) || []).some((n) => n.chat && n.chat.streaming);
+// The line at the top of an agent chat, where a Tana chat says who can see it (renderer/chat.js chatContextEl): a lock and
+// that only you see it and Tana does not, then the model and reasoning effort Codex runs it with, asked once per chat
+// (main/agentchats.js info)
+const agentChatInfos = new Map(); // docId -> { model, effort }, or null while it is asked
+function agentChatContextEl(id) {
+  if (id !== AGENT_CHAT_NEW && !agentChatInfos.has(id) && tana.agentChatInfo) {
+    agentChatInfos.set(id, null);
+    tana.agentChatInfo(id).then((i) => { agentChatInfos.set(id, i || {}); if (zoom && zoom.docId === id) renderSoon(true); }, () => agentChatInfos.delete(id));
+  }
+  const info = agentChatInfos.get(id) || {}, el = document.createElement('div'), words = [info.model, info.effort].filter(Boolean).join(' · ');
+  el.className = 'chat-context';
+  el.append(addIcon(document.createElement('span'), 'lock'), 'Only you · not shared with Tana', ...(words ? [' · ' + words] : []));
+  return el;
+}
+// Rename chat …: the name on the list and in the sidebar, and the thread's name in Codex (main/agentchats.js rename)
+function renameAgentChat(docId) {
+  const now = (extra.get(docId) || {}).title || '';
+  namePage('renameAgentChat', 'Rename the chat…', { group: 'Rename chat', icon: 'rename', back: BACK_TO_COMMANDS },
+    (name) => ({ label: 'Rename to “' + name + '”', run: () => run(async () => { const n = await tana.renameAgentChat(docId, name); if (n) extra.set(n.id, n); renderSoon(true); }) }), now);
+}
+// a double-click on an agent chat's title renames it, as its read-only title takes no typing
+titleEl.addEventListener('dblclick', () => { if (zoom && !zoom.nodeId && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW && tana.renameAgentChat) renameAgentChat(zoom.docId); });
 function deleteAgentChat(docId) {
   run(async () => { knowAgentChats(await tana.deleteAgentChat(docId)); extra.delete(docId); kids.delete(docId); navReplace = true; goTo(AGENT_CHATS_PAGE); showNote('Chat removed from Orbital. It is still in Codex'); });
 }
@@ -42,8 +64,8 @@ function agentChatRows() {
   const docId = zoom && !zoom.nodeId && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW ? zoom.docId : null, here = docId && extra.get(docId);
   if (!docId || !here || (here.agentChat && here.agentChat.elsewhere)) return rows;
   if (agentChatAnswering(docId)) rows.push({ id: 'stopAgentChat', group: 'Current node', icon: 'robot', label: 'Stop Codex', hint: 'The answer being written', run: () => run(() => tana.stopAgentChat(docId)) });
+  if (tana.renameAgentChat) rows.push({ id: 'renameAgentChat', group: 'Current node', icon: 'rename', label: 'Rename chat …', hint: here.title || '', keepOpen: true, run: () => renameAgentChat(docId) });
   rows.push({ id: 'openAgentChat', group: 'Current node', icon: 'robot', label: 'Open in Codex', hint: 'This chat, in the Codex app', run: () => run(() => tana.openAgentChat(docId)) });
   rows.push({ id: 'deleteAgentChat', group: 'Current node', icon: 'trash', label: 'Delete chat', hint: 'From Orbital; it stays in Codex', run: () => deleteAgentChat(docId) });
   return rows;
 }
-

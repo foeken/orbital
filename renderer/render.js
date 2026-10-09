@@ -491,7 +491,8 @@ function renderOutline() {
   markTranslatable(titleEl, page && !page.pending && editable ? parent.node.text : null, parent && parent.docId); // and leaving it, the translation again
   blurSensitive(titleEl, parent && parent.docId);
   const pageIcon = parent ? iconOf(parent.node) || nodeIcon(parent.node) : viewOf()?.icon; // nodeIcon: a chat or an agent known by its tag
-  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable, (pageIcon && iconNode(pageIcon)?.outerHTML) || '');
+  const agentChat = !!parent && !!tana.renameAgentChat && isAgentChat(parent.docId) && parent.docId !== AGENT_CHAT_NEW; // its tab's Rename is Rename chat … (renderer/agentchats.js)
+  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable || agentChat, (pageIcon && iconNode(pageIcon)?.outerHTML) || '');
   // a view, a saved search, an app page or a chat is named by its tab under a tab bar, so its heading goes (styles.css html.listing)
   document.documentElement.classList.toggle('listing', !parent || appOwned(parent.docId) || isChatPage(parent));
   document.documentElement.classList.toggle('chatpage', isChatPage(parent)); // a chat never shows its title: its tab names it, or nothing does (styles.css)
