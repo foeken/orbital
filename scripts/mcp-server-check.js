@@ -170,7 +170,7 @@ const server = http.createServer(mcp.handle);
   assert.equal(posted.length, 0, 'nothing was sent, and nothing is kept for later');
 
   // ---- the Dot's chat with its Orbital: chat.message out, its answers (reply_in_orbital) kept until its Orbital takes them ----
-  const CHAT = D.id, replies = (o = orbital, agentRow = D) => call('POST', '/mcp/orbital/agents/' + agentRow.id + '/replies', { auth: as(o) });
+  const CHAT = D.id, replies = (o = orbital, agentRow = D, taken = []) => call('POST', '/mcp/orbital/agents/' + agentRow.id + '/replies', { auth: as(o), body: { taken } });
   assert.deepEqual((await send(D, crypto.randomUUID(), 'chat.message', { chat: CHAT, message: 'What is due today?' })).json, { subscribers: 0, delivered: 0 }, 'chat.message is an event Orbital may send');
   assert.deepEqual((await replies()).json, { replies: [] }, 'with no answer yet, there is nothing to take');
   assert.equal((await dot.tool('reply_in_orbital', { chat: 'not-a-chat', text: 'Hi' })).error, true, 'an answer names its chat');
@@ -180,10 +180,14 @@ const server = http.createServer(mcp.handle);
   assert.equal((await replies(stranger)).status, 401, 'only its own Orbital takes them');
   const taken = (await replies()).json.replies;
   assert.deepEqual(taken.map((r) => [r.chat, r.text]), [[CHAT, 'Two things:\n\n- the **charter**\n- the sync'], [CHAT, 'And one more.']], 'its Orbital takes them, oldest first, line breaks and Markdown kept');
-  assert.deepEqual((await replies()).json, { replies: [] }, 'and once taken they are gone from the MCP server');
+  assert.deepEqual((await replies()).json.replies.map((r) => r.id), taken.map((r) => r.id), 'until its Orbital says it has them they are sent again, so one lost on the way is not lost');
+  assert.deepEqual((await replies(orbital, D, taken.map((r) => r.id))).json, { replies: [] }, 'and once it says so they are gone from the MCP server');
   await dot.tool('reply_in_orbital', { chat: CHAT, text: 'Left behind' });
   assert.equal((await grok.tool('reply_in_orbital', { chat: CHAT, text: 'Not mine' })).error, false, 'another agent answers in its own chat');
-  assert.deepEqual((await replies(orbital, G)).json.replies.map((r) => r.text), ['Not mine'], 'which is its own: each agent\'s answers are taken apart');
+  const notMine = (await replies(orbital, G)).json.replies;
+  assert.deepEqual(notMine.map((r) => r.text), ['Not mine'], 'which is its own: each agent\'s answers are taken apart');
+  await replies(orbital, D, notMine.map((r) => r.id));
+  assert.deepEqual((await replies(orbital, G)).json.replies.map((r) => r.text), ['Not mine'], 'and confirming them through another agent deletes nothing');
 
   // ---- a day on ----
   const late = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json.code;

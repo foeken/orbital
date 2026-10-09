@@ -386,7 +386,8 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
 - **What Orbital keeps.** Only the link, the setting `agentChats` (thread → `{ agent, title, at, device }`), which follows
   you (main/settings.js SYNCED). The title is the first message on one line. A thread lives on the Mac that started it, so
   the link names that Mac (main/agent.js `deviceId`): another Mac lists the chat as “On another Mac”, and its page says to
-  open it there. Nothing of a chat is written to Tana.
+  open it there. The conversation is never written to Tana; the link, title included, is, in your own settings document,
+  restricted to you (docs/SETTINGS.md).
 - **The Codex app.** The thread is listed there too. While the app has it open it is the thread's writer, so a message
   sent here is queued to it (`codex queue`) and answered in the app; the page says so, and the next read shows it.
 - **On the page**: the line at its top, where a Tana chat says who sees it, has a lock, “Only you · not shared with Tana”,

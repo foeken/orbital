@@ -688,14 +688,15 @@ function createMcpServer({ store = sqliteStore(), publicUrl = 'http://localhost:
         return send(res, 200, agentView({ ...a, name }));
       }
       if (method === 'DELETE' && parts.length === 2) { await run('DELETE FROM agents WHERE id = ?', a.id); await run('DELETE FROM replies WHERE agent = ?', a.id); return send(res, 204); }
-      // the answers the agent left in its chat (reply_in_orbital), oldest first, taken: whoever asks has them, and they are gone here
+      // the answers the agent left in its chat (reply_in_orbital), oldest first. Each stays until its Orbital says it has it
+      // (taken: the ids it got last time), so an answer whose response is lost on the way is sent again, never lost.
       if (method === 'POST' && parts[2] === 'replies' && parts.length === 3) {
-        const taken = await serial('agent:' + a.id, async (db) => {
-          const rows = await db.all('SELECT * FROM replies WHERE agent = ? ORDER BY created', a.id);
-          for (const r of rows) await db.run('DELETE FROM replies WHERE id = ?', r.id);
-          return rows;
+        const b = await body(req), done = (Array.isArray(b.taken) ? b.taken : []).filter((id) => UUID.test(String(id))).slice(0, LIMITS.replies);
+        const waiting = await serial('agent:' + a.id, async (db) => {
+          for (const id of done) await db.run('DELETE FROM replies WHERE id = ? AND agent = ?', id, a.id);
+          return db.all('SELECT * FROM replies WHERE agent = ? ORDER BY created', a.id);
         });
-        return send(res, 200, { replies: taken.map((r) => ({ id: r.id, chat: r.chat, text: r.text, at: Number(r.created) })) });
+        return send(res, 200, { replies: waiting.map((r) => ({ id: r.id, chat: r.chat, text: r.text, at: Number(r.created) })) });
       }
       // an event for this agent: its name (one of EVENTS) and what goes with it, as Orbital says; delivered at once to
       // whatever the agent's connection subscribed, and Orbital told how many took it. The id makes the event's id, the

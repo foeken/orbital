@@ -405,7 +405,8 @@ function sbDraw() {
   if (bridge.agentChats) {
     const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; sbChatDrop(b, c); return b; }; // the chat's own glyph, as its tab and the list wear it
     const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', (e) => toPage({ orbital: 'action', id: 'agentChats', where: sbWhere(e) }))] : [];
-    rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'chatgpt', 'New chat with ChatGPT', (e) => toPage({ orbital: 'action', id: 'newAgentChat', where: sbWhere(e) }))]));
+    // the new chat's page itself, not its Cmd+K row: that row is there only on a Mac with the ChatGPT app, and the page says what is missing
+    rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'chatgpt', 'New chat with ChatGPT', (e) => toPage({ orbital: 'goto', id: 'orbital:agent-chat:new', where: sbWhere(e) }))]));
   }
   sidebar.replaceChildren(...rows);
   sbMark();
