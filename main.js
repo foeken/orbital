@@ -220,9 +220,10 @@ function closeOverlay(win, result = {}) {
   const help = !!pending && !win.isDestroyed() && !!main && firstHelp(main, pending.theme);
   const note = typeof result.note === 'string' ? result.note.slice(0, 200) : undefined;
   const open = isId(result.open) ? result.open : undefined; // the node the note is about, which its toast opens
+  const go = result.go === true && !!open; // Quick Add's ↩: the page goes to the task it made, under a first start's tour too
   if (opener && !opener.isDestroyed()) {
     if (!help) opener.focus(); // the tour has the keys now
-    opener.send('overlay:closed', { palette: result.palette === true && !help, chatgpt: result.chatgpt === true && !help, note: help ? undefined : note, open: help ? undefined : open });
+    opener.send('overlay:closed', { palette: result.palette === true && !help, chatgpt: result.chatgpt === true && !help, note: help ? undefined : note, open: help && !go ? undefined : open, go });
   }
   if (help && note) win.overlay.later = { opener, note, open }; // the task's toast waits for the tour: under it, it would be gone first
   const later = view.later; // this was that tour: the toast it held back is due now

@@ -756,11 +756,14 @@ function createNamed(choice, title) {
 // titled "New Note", made in the Library first, then opened in the page with the caret in its first row (edit: true,
 // renderer/edit.js restorePlace). One press makes one note and one page: a press while main answers is the same one, and
 // a held key repeats nothing (renderer/events.js). A note made where no page can open (signed out, a window closing) is
-// kept in the Library and the toast opens it here instead. Demo mode saves nothing, so there the page opens on the
-// Library, as it did before #756.
+// kept in the Library and the toast opens it here instead. Demo mode saves nothing, so there the page opens on a
+// "New Note" of the app's own (DEMO_NOTE): empty, read-only like everything in demo mode, and never in Tana.
+const DEMO_NOTE = 'orbital:new-note';
+extra.set(DEMO_NOTE, { id: DEMO_NOTE, text: 'New Note', title: 'New Note', kind: 'document', icon: 'doc', editable: false, hasChildren: false, appPage: true });
+kids.set(DEMO_NOTE, []); // nothing to ask main for
 let openingNote = false;
 function openNoteIn(where) {
-  if (demoMode) return run(() => tana.splitWindow(where, { view: 'library', place: '{}' }));
+  if (demoMode) return run(() => tana.splitWindow(where, { view: 'library', place: JSON.stringify({ docId: DEMO_NOTE, nodeId: null, title: 'New Note', icon: 'doc' }) }));
   if (openingNote) return;
   openingNote = true;
   return run(async () => {

@@ -7,11 +7,12 @@ function openOverlay(page, at) {
   if (tana.openOverlay) tana.openOverlay(page, theme, at);
 }
 // ⌘K closed it (the key the tour teaches): the palette opens here; the tour's last page asks for ChatGPT sign-in. A
-// note is the task Quick Add Task made.
+// note is the task Quick Add Task made; go (its ↩) opens that task here.
 if (tana.onOverlayClosed) tana.onOverlayClosed((result) => {
   if (result.palette) togglePalette('cmd');
   if (result.chatgpt) startChatGPTLogin();
   if (result.image) processImage({ clipboard: true }); // Quick Add's Process image from clipboard: here, as Cmd+K's row does it (renderer/upload.js)
+  if (result.go && result.open) goTo(result.open);
   if (result.note) showNote(result.note, false, result.open); // a click on it opens the task it names
 });
 // Help: from ⌘K Help, the ? in the window's header (shell.js, renderer/app.js), and once by itself on a first start (helpOnce,

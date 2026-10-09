@@ -706,7 +706,8 @@ flow('golden path: set a task\u2019s status, assign it, complete and reopen it',
 });
 
 // 16. Quick Add Task (task.html, ⇧⌘Space), on a stand-in for main as the Settings flow is: a title, a type with ↓, an
-// assignee with ⇥ and a few letters, and ↩ makes the task, hands it over and tells the window what it made
+// assignee with ⇥ and a few letters, and ↩ makes the task, hands it over and tells the window to go to it; ⌘↩ makes one
+// and tells the window with a note instead
 const QUICK_ADD_API = String.raw`if (location.pathname === '/task.html') { window.__calls = [];
   const people = [['robin', 'Robin Vega', true], ['sam', 'Sam Okafor'], ['priya', 'Priya Raman']].map(([k, title, me]) => ({ id: 'tana:user-profile:' + k, title, me: !!me }));
   window.api = { members: async () => people, taskTypes: async () => [{ uri: 'tana:type:bug', title: 'Bug', hue: 10 }, { uri: 'tana:type:decision', title: 'Decision', hue: 150 }], clipboardHasImage: async () => false,
@@ -727,7 +728,13 @@ flow('golden path: Quick Add Task makes a typed task for someone', async (p) => 
   await p.key('↩');
   await p.waitFor('__calls.some((c) => c[0] === "closeOverlay")', 'the card to close');
   assert.deepEqual(await p.js('__calls'), [['createDocument', 'Fix the login loop', { kind: 'task', typeUri: 'tana:type:bug' }], ['setAssignees', 'tana:text:quick1', ['tana:user-profile:priya']],
-    ['closeOverlay', { note: 'Task created: Fix the login loop, assigned to Priya Raman', open: 'tana:text:quick1' }]], 'the task made as a Bug, handed to Priya, and the window told');
+    ['closeOverlay', { open: 'tana:text:quick1', go: true }]], 'the task made as a Bug, handed to Priya, and the window goes to it');
+  await p.open('task.html');
+  await p.waitFor('document.activeElement && document.activeElement.id === "taskTitle"', 'the card again');
+  await p.type('Water the plants'); await p.key('⌘↩');
+  await p.waitFor('__calls.some((c) => c[0] === "closeOverlay")', 'the card to close');
+  assert.deepEqual(await p.js('__calls'), [['createDocument', 'Water the plants', { kind: 'task' }], ['closeOverlay', { note: 'Task created: Water the plants', open: 'tana:text:quick1', go: false }]],
+    '⌘↩ makes the task and leaves a note that opens it');
 });
 
 // 16b. Cmd+K Install mobile app (renderer/overlays.js openHelp('mobile'), main.js openOverlay): the Help tour opens on
@@ -1477,7 +1484,7 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
       signed.add(s);
       await p.waitFor(frame(s) + '?.contentDocument?.readyState === "complete" && typeof ' + frame(s) + '.contentWindow.goTo === "function"', 'page ' + s + ' to load', 8000);
       for (let i = 0; ; i++) { try { await p.jsIn(s, 'tana.splitWindow = async (where, start) => parent.orbOpen(where, start || {}, ' + J(s) + '); ' + NOTE_FROM_OPENER + '; document.getElementById("login")?.click(); 1'); break; } catch (e) { if (i > 20) throw e; await p.sleep(50); } }
-      await p.waitFor(frame(s) + '.contentDocument.querySelector("#outline .node, #outline .empty") && ' + frame(s) + '.contentDocument.getElementById("title").textContent', 'page ' + s + ' drawn', 8000);
+      await p.waitFor(frame(s) + '.contentDocument.querySelector("#outline .node, #outline .empty, #outline .empty-note") && ' + frame(s) + '.contentDocument.getElementById("title").textContent', 'page ' + s + ' drawn', 8000);
     }
   };
   const found = (s, label) => p.waitFor('(' + frame(s) + '.contentDocument.querySelector("#palette .row.active")?.textContent || "").includes(' + J(label) + ')', J(label) + ' found');
@@ -1524,6 +1531,11 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   await p.js(frame('2') + '.contentWindow.postMessage({ orbital: "copyLink" }, "*")');
   await p.waitFor(frame('2') + '.contentWindow.__copied', 'the tab\u2019s Copy link');
   assert.equal(await p.jsIn('2', 'window.__copied'), await p.jsIn('2', 'tana.nodeLink("tana:text:mockwriteup4")'), 'the tab\u2019s Copy link copied the summary');
+  // demo mode saves nothing: ⌘N opens a tab on a New Note of the app's own, empty and made nowhere
+  await p.jsIn('7', 'toggleDemoMode(); 1'); await p.key('⌘N');
+  await pages(8);
+  assert.deepEqual(await p.jsIn('8', '[zoom && zoom.docId, document.getElementById("title").textContent, document.querySelector("#outline .empty-note")?.textContent]'), ['orbital:new-note', 'New Note', 'No content'], 'demo mode: the tab opens on an empty New Note of its own');
+  await p.jsIn('7', 'toggleDemoMode(); 1');
   for (const s of await sides()) assert.deepEqual(await p.jsIn(s, 'window.__errors'), [], 'page ' + s + ' reported errors');
 });
 

@@ -1,7 +1,8 @@
 'use strict';
 // Quick Add Task (task.html; issues #232, #237, #241): the title, the type the task is made with — plain Task, or one of
 // the workflow types main offers (main/documents.js taskTypes) — and who it is for. ↑/↓ choose the type, ⇥ turns the
-// field into "Assign to…" over the workspace members (↑/↓, ↩ picks, Esc or ⇥ goes back), ↩ creates, Esc closes, ⌘K
+// field into "Assign to…" over the workspace members (↑/↓, ↩ picks, Esc or ⇥ goes back), ↩ creates the task and goes to
+// it, ⌘↩ creates it and stays with a note that opens it, Esc closes, ⌘K
 // closes and opens the palette. A page of its own that main lays over the whole window, both halves of a split
 // (main.js openOverlay); the page that asked gave its theme in the query and shows the note this sends back.
 // The task is open and assigned to you, as a task from a title always is; someone else chosen here is written after
@@ -49,7 +50,7 @@ function draw() {
   // an image on the clipboard: its row takes ↩ while no title is typed (the page that opened this processes it, as Cmd+K's row does)
   const image = clipImage && !taskField.value.trim();
   taskList.hidden = taskTypes.length < 2 && !clipImage; // plain Task alone is no choice
-  taskList.replaceChildren(...(taskTypes.length > 1 ? [group('Type'), ...taskTypes.map((type, i) => rowEl('task', type.title, i === taskAt && !image, type.hue, () => { taskAt = i; createTask(); }))] : []),
+  taskList.replaceChildren(...(taskTypes.length > 1 ? [group('Type'), ...taskTypes.map((type, i) => rowEl('task', type.title, i === taskAt && !image, type.hue, () => { taskAt = i; createTask(true); }))] : []),
     ...(clipImage ? [group('Clipboard'), rowEl('imageSparkle', 'Process image from clipboard', image, null, () => closeTask({ image: true }))] : []));
 }
 // "Assign to…": the field filters the members, and the title waits to come back
@@ -69,17 +70,19 @@ function pickPerson() {
   if (person) assignee = person.me ? null : person;
   toTitle();
 }
-function createTask() {
+// go (↩, a click on a type): the window goes to the new task, since a note alone read as nothing happening; ⌘↩ stays
+// where you are with the note, which opens the task. A refused assignment is said in the note either way.
+function createTask(go = false) {
   const title = taskField.value.trim(), type = taskTypes[taskAt], person = assignee;
   if (!title || taskBusy || !taskApi) return;
   taskBusy = true; taskError.hidden = true;
   taskApi.createDocument(title, type.uri ? { kind: 'task', typeUri: type.uri } : { kind: 'task' }).then(async (node) => {
-    let note = 'Task created: ' + title;
+    let note = 'Task created: ' + title, refused = false;
     if (person) {
       try { await taskApi.setAssignees(node.id, [person.id]); note += ', assigned to ' + person.title; }
-      catch (e) { note += ' (not assigned to ' + person.title + ': ' + errorText(e) + ')'; }
+      catch (e) { refused = true; note += ' (not assigned to ' + person.title + ': ' + errorText(e) + ')'; }
     }
-    closeTask({ note, open: node.id }); // the toast opens the task it names
+    closeTask({ ...(go && !refused ? {} : { note }), open: node.id, go }); // the toast opens the task it names
   }, (e) => { // the card stays with what was typed, so the press can simply be repeated
     taskBusy = false;
     taskError.textContent = errorText(e);
@@ -92,7 +95,7 @@ taskField.addEventListener('keydown', (e) => {
   if (mod && e.key === 'k') closeTask({ palette: true });
   else if (e.key === 'Escape') { if (people_) toTitle(); else closeTask(); }
   else if (e.key === 'Tab') { if (people_) toTitle(); else toPeople(); }
-  else if (e.key === 'Enter') { if (people_) pickPerson(); else if (clipImage && !taskField.value.trim()) closeTask({ image: true }); else createTask(); }
+  else if (e.key === 'Enter') { if (people_) pickPerson(); else if (clipImage && !taskField.value.trim()) closeTask({ image: true }); else createTask(!mod); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && size > 1) {
     const step = e.key === 'ArrowDown' ? 1 : size - 1;
     if (people_) peopleAt = (peopleAt + step) % size; else taskAt = (taskAt + step) % size;
