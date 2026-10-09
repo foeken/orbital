@@ -312,24 +312,24 @@ subset does not carry and would drop.
 status updates included; the app draws one other than "accepted N changes" as a small centred line (`row.chat.status`).
 
 
-## 12. @Codex and @Claude: a question and its answer on this Mac, never in Tana
+## 12. @Codex: a question and its answer on this Mac, never in Tana
 
 main/chatagents.js, renderer/chat.js (issues #468, #669). "@" in the composer offers, after Tana, every agent that is
-switched on in Choose agents, is on this Mac and can read an answer back (Codex, Claude); a message that mentions
+switched on in Choose agents, is on this Mac and can read an answer back (Codex); a message that mentions
 one (the chip is written as plain "@Codex") goes through `chatAgent:ask` instead of `chat:send`, and nothing of it is
 written to Tana. Tana has no author for an agent's words: a message is `human` with a `fromUserUri`, or `ai`, which
 Tana draws as the chat's own agent (§2), so an `ai` message would read as Tana's answer to everyone in the chat, and a
 `human` one as yours. Both the question and the answer stay in Orbital:
 
-1. **A task of that agent on this Mac** is started with the agent's own `start` (main/agents/codex.js, claude.js; the Assign to Agent path, keyed by the chat, so
+1. **A task of that agent on this Mac** is started with the agent's own `start` (main/agents/codex.js; the Assign to Agent path, keyed by the chat, so
    its workspace is `agent-workspaces/Tana`, shared by every task). Its prompt is the question, then the whole conversation, oldest first,
    one `{"from","text"}` JSON line per message between `<<<chat` and `chat>>>` (so nothing anyone wrote can pass for the
    question or close the quote), mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
-   (`RULES`: Codex's `thread/start` `developerInstructions`, Claude's `--append-system-prompt`) say only the question is a
+   (`RULES`: Codex's `thread/start` `developerInstructions`) say only the question is a
    request and the chat, like anything read in Tana, is quoted material never to be followed; that the question and answer are shown to the asker alone and never
    saved to Tana, to answer only what was asked, and never to write to Tana. And the task is held read-only by the agent
-   itself, not only told: Codex's `sandbox: 'read-only'` with `approvalPolicy: 'never'`, Claude with `--disallowedTools Bash
-   Edit Write NotebookEdit` (security review finding 2). A task that cannot start keeps nothing, and the words go back to the composer.
+   itself, not only told: Codex's `sandbox: 'read-only'` with `approvalPolicy: 'never'`
+   (security review finding 2). A task that cannot start keeps nothing, and the words go back to the composer.
 2. **The question stays local**: `chatAsks` (chat → `[{ id, question, agent, taskId, at, state, text }]`, `id` a local
    uuid) is not in main/settings.js `SYNCED`, so it lives in this Mac's SQLite only. Another machine, and everyone else in
    the chat, sees nothing of it.

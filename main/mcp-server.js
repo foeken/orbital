@@ -197,7 +197,7 @@ async function deliver(a, nodeUri, text) {
 // wins, so a handoff added after an old Completed is the current one.
 // The whole line, a full stop allowed: "Agent status: Working with finance" is somebody's sentence, never a status to
 // show or to take out of the node
-const AGENT_HEADING = 'Agent context'; // the block a Codex or Claude handoff writes its request under (main/documents.js)
+const AGENT_HEADING = 'Agent context'; // the block a Codex handoff writes its request under (main/documents.js)
 const AGENT_STATUS = /^\s*Agent status:\s*(Assigned|Working|Completed|Failed)\s*\.?\s*$/i;
 const lastAgentStatus = (text) => { let last = null; for (const line of String(text || '').split('\n')) { const m = line.match(AGENT_STATUS); if (m) last = m[1].toLowerCase(); } return last; };
 // An earlier handoff's lines out of the node: its request block (to Codex, say) and every status line, at the top level
@@ -210,7 +210,7 @@ function writeStatus(doc, status) {
   clearStatus(doc);
   return content.insertAfter(doc, null, 'Agent status: ' + status);
 }
-// A Codex or Claude handoff's request, as one "Agent context" block at the end of the node with the request's lines under
+// A Codex handoff's request, as one "Agent context" block at the end of the node with the request's lines under
 // it, where a person reading it in Tana can see what the agent was handed. Handing it over again rewrites that block's
 // children rather than adding a second one. Blank lines would be empty outline rows, which read as damage rather than
 // as spacing; everything else is kept line for line, in order. Answers the block's id, or null with nothing to write.
@@ -233,7 +233,7 @@ function writeContext(doc, prompt) {
 }
 // ---- handing a node over, and putting it back ----
 // The node as an earlier handoff left it, when the agent does not take the new one. was: { linked, status, prompt }, the
-// earlier handoff's (to an agent linked through orbital.md: its last status line; to Codex or Claude: its request), or
+// earlier handoff's (to an agent linked through orbital.md: its last status line; to Codex: its request), or
 // null, for a node handed to nobody before.
 function putBack(doc, was) {
   if (was && was.linked && was.status) writeStatus(doc, was.status[0].toUpperCase() + was.status.slice(1));

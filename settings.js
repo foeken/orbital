@@ -181,7 +181,7 @@ const SECTIONS = {
     const choose = popup('defaultAgent', 'Default agent', pick, on.map((a) => [a.id, a.label]), (v) => load('agents', () => host.setDefaultAgent(v)));
     choose.disabled = on.length < 2;
     return [
-      ...group('Agents', 'who a node can be handed to', list.flatMap(agentRows)),
+      ...group('Agents', 'who a node can be handed to', [...list.flatMap(agentRows), row('robot', 'Claude', null, 'Coming soon', true)]), // to come back properly; renderer/agent.js says the same
       ...group(null, null, list.length ? [row('robot', 'Default agent', choose, 'Assign to Agent starts with it')] : []),
     ];
   },

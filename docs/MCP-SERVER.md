@@ -1,6 +1,6 @@
 # MCP-SERVER.md — orbital.md/mcp, the event layer between Orbital and your Dot
 
-Orbital hands work to agents (main/agent.js): Tana, Codex and Claude are built in. The Orbital MCP server is how your Dot,
+Orbital hands work to agents (main/agent.js): Tana and Codex are built in. The Orbital MCP server is how your Dot,
 OpenAI's always-on agent in ChatGPT, becomes one more. It is the MCP server at **orbital.md/mcp** (mcp-server/server.js),
 plain JSON over HTTPS, and it is **only an event layer**: Orbital sends an event, the MCP server passes it on to the agents
 subscribed to it and keeps none of it, and the rest happens in Tana. The MCP server says nothing of its own about what an
@@ -57,8 +57,7 @@ A long press's **Assign to …** lists each linked agent that is on above the pe
 the request in the same sheet, typed or dictated; Assign closes it at once and the handoff goes on behind it, the +
 turning meanwhile, a request the agent did not take said and kept for the next time (Engine handOff), and a tap on the ticked agent, or Unassigned, takes the node back. A node's page shows
 the agent and its last status line. The MCP server sends `access-control-allow-origin: *`, which is what lets the engine
-call it from its page on home.tana.inc. Renaming, switching off and Reset agent link key stay on the Mac; Tana, Codex and
-Claude run on a Mac only.
+call it from its page on home.tana.inc. Renaming, switching off and Reset agent link key stay on the Mac; Tana and Codex run on a Mac only.
 
 ## Why the request travels in the event
 

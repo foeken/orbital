@@ -1,5 +1,5 @@
 'use strict';
-// Asking a local agent from a Tana chat (issue #468, docs/CHATS.md §12): "@Codex …" or "@Claude …", whichever agents
+// Asking a local agent from a Tana chat (issue #468, docs/CHATS.md §12): "@Codex …", or another agent that
 // are switched on and can answer a question (main/agent.js, a plugin with read). Tana itself is asked the way Tana's
 // own chat asks it, so it is not one of these. Neither the question nor the answer is written to Tana: Tana has no author for them but you
 // (a message is a person's or Tana's own AI), so both stay in Orbital, on this device. A task of that agent on this Mac

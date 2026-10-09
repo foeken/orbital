@@ -903,9 +903,9 @@ wrong twenty.
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
   **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
-  Codex's app-server), **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
-  Orbital never signs in to Anthropic) and every agent linked through orbital.md/mcp, your Dot among them (below). Codex and
-  Claude are offered only once this Mac has them. **Choose agents …** (Settings) lists them, greyed with what to install
+  Codex's app-server) and every agent linked through orbital.md/mcp, your Dot among them (below); **Claude** is listed
+  grey as Coming soon until it comes back properly. Codex is
+  offered only once this Mac has it. **Choose agents …** (Settings) lists them, greyed with what to install
   when missing: ↩ switches one on or off; **Set default agent …** picks the **default agent** on a page of its own. Both
   follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
   **Connect your personal agent …** (Settings, and under the linked agents in Choose agents) links your own agent (your
@@ -920,16 +920,16 @@ wrong twenty.
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked; beside it **Assign to <agent> …** for each agent that is on, Assign to Codex …, Assign to Echo …, opens
   the same page with that agent picked) and hands the node over; the agent's own default model does the work. The node then carries the agent
-  badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session
+  badge, which says what the task is doing, read every 30 s while anything is assigned; a task of a local agent, which
   lives only on the Mac that ran it, names that Mac in its link and reads **Agent on another Mac** (grey, not a button)
   anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). Assign to Agent stays offered on a node an agent already has:
-  handing it over again replaces the request in its Agent context block. Codex and Claude are handed the request typed
-  here as the work, with the node's uri to read as its context (main/agent.js `agentPrompt`): what they read in Tana,
+  handing it over again replaces the request in its Agent context block. Codex is handed the request typed
+  here as the work, with the node's uri to read as its context (main/agent.js `agentPrompt`): what it reads in Tana,
   the Agent context block included, is material anyone the node is shared with can edit, never instructions. **Unassign from Agent** takes it back at once,
   and takes the Agent context block (with its status line) out of the node again. **Go to <agent> task** opens it (Codex
-  in Codex, Claude in Terminal on `claude --resume`, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
+  in Codex, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
   badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not, **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
-  node's link and tracks nothing. Codex and Claude tasks run on this Mac, Tana's in Tana, and a Dot's in ChatGPT.
+  node's link and tracks nothing. Codex tasks run on this Mac, Tana's in Tana, and a Dot's in ChatGPT.
 
 - **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
   (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is

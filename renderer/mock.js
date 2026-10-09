@@ -309,8 +309,7 @@ function mockApi() {
   ] };
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
-  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true, opens: true },
-    { id: 'claude', label: 'Claude', icon: 'robot', installed: true, enabled: false, isDefault: false, missing: 'Install Claude Code', link: true, openNew: true, chat: true, opens: true }];
+  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true, opens: true }];
   const mockLink = { polls: 0 }; // how often the Connect your personal agent page has asked, since its code was made
   // the workspace's MCP server as the MCP server page shows it: orbital.md until the admin (you, here) pastes another (renderer/agent.js)
   const mockServerNow = { url: 'https://orbital.md/mcp', workspace: null, admin: true, fallback: 'https://orbital.md/mcp', changedBy: null,
@@ -785,7 +784,7 @@ function mockApi() {
       return !!on;
     },
     linkAgentTask: async (docId) => { codexAssigned.add(docId); return true; },
-    // the agents (main/agent.js): Tana and Codex on, Claude installed and off, enough to draw their Cmd+K pages; your Dot links below
+    // the agents (main/agent.js): Tana and Codex on, enough to draw their Cmd+K pages; your Dot links below
     agentList: async () => mockAgents.map((a) => ({ ...a })),
     enableAgent: async (id, on) => {
       const a = mockAgents.find((x) => x.id === id);

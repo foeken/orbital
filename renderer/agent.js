@@ -70,8 +70,8 @@ const openaiRegionRows = () => OPENAI_REGIONS.map(([id, label]) => ({ group: 'Op
   run: () => run(async () => { chatgptAuth = { ...(chatgptAuth || {}), region: await tana.setOpenAIRegion(id) }; closePalette(); showNote('OpenAI region: ' + label); }) }));
 function openOpenAIRegionPalette() { openPage('openaiRegion', 'OpenAI region…', { rows: (q) => matchRows(openaiRegionRows(), q), back: BACK_TO_COMMANDS }); }
 // ---- Choose agents, and Set default agent ----
-// Every agent the app knows, in one list: Tana always on, Codex and Claude greyed with what to install until this Mac has
-// them, then your linked agents (each has a page of its own: ↩ opens it), with Connect your personal agent under
+// Every agent the app knows, in one list: Tana always on, Codex greyed with what to install until this Mac has
+// it, Claude coming soon, then your linked agents (each has a page of its own: ↩ opens it), with Connect your personal agent under
 // them (Reset agent link key is in Cmd+K itself). ↩ on a built-in one switches it on or off. The default, the agent Assign to Agent
 // starts on, is picked on a page of its own (Set default agent …). The lists are main's, and each answer is the new
 // list, so the page redraws from what was stored.
@@ -88,6 +88,7 @@ function agentsRows(q) {
     hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
     // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
     disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
+  rows.push({ group: AGENTS_GROUP, icon: 'robot', label: 'Claude', hint: 'Coming soon', disabled: true }); // to come back properly; settings.js says the same
   if (tana.mcpLink) {
     const linked = agentList.filter((a) => a.linked);
     for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
@@ -318,7 +319,7 @@ function openRenameAgent(a) {
     (name) => ({ label: 'Rename to “' + name + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.mcpRename(a.id, name); openLinkedAgent(a.id); }) }), a.label);
 }
 // ---- linking a node to a task that already exists in an agent's app (#143) ----
-// Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, Claude's session is its id. Main reads the
+// Pasted rather than picked: Codex's Copy link gives codex://threads/<id>. Main reads the
 // paste (each agent knows its own shape) and stores the link; the badge and Go to task then work as for an assignment.
 let agentLinkCtx = null; // { doc, agent } the pasted link is for, while this page is up
 function agentLinkRows(q, typed) {

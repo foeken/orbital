@@ -1650,8 +1650,8 @@ async function main() {
     assert.doesNotMatch(told, /Treat that block as the work/, 'the node\'s own text is no longer the work request');
     assert.match(String(backend.agent.agentPrompt(risk.id, 'Review the Q3 risk log', '  ')), /No request came with it[\s\S]*do not act on it/, 'with no request typed, it reads the node and acts on nothing');
     // An agent that is switched off takes nothing, and is refused before anything is written.
-    const off = make('text', 'Not for Claude');
-    await assert.rejects(backend.agents.assign(off.id, 'Do it', 'claude'), /not switched on/, 'an agent that is off is refused by name');
+    const off = make('text', 'Not for that agent');
+    await assert.rejects(backend.agents.assign(off.id, 'Do it', 'nobody'), /not switched on/, 'an agent that is not on is refused by name');
     // A task begun and then not handed over (Codex made the thread, opening it failed) is let go, not left running (#671 review)
     const stuck = make('text', 'Opens nowhere'), released = [];
     codex.start = async () => { throw new Error('Cannot open Codex from here'); };
@@ -3530,26 +3530,26 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const agent = backend.agent, settings = backend.settings, NODE = 'tana:text:' + ulid(), THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
-    const cx = agent.get('codex'), cl = agent.get('claude');
-    cx.available = () => true; cl.available = () => false;
+    const cx = agent.get('codex'), cl = agent.register({ id: 'other', label: 'Other', icon: 'robot', available: () => false, local: true, start: async () => THREAD }); // a second coding agent, its tasks on this Mac only
+    cx.available = () => true;
     const view = () => agent.list().map((a) => a.id + (a.installed ? '' : '?') + (a.enabled ? '+' : '') + (a.isDefault ? '*' : '')).join(' ');
-    assert.equal(view(), 'tana+* codex+ claude?', 'Tana, Codex and Claude are known, in that order; Tana is on and the default, Codex is on as before, Claude waits');
+    assert.equal(view(), 'tana+* codex+ other?', 'Tana, Codex and another agent are known, in the order they registered; Tana is on and the default, Codex is on as before, a new one waits');
     assert.throws(() => agent.setEnabled('tana', false), 'Tana cannot be switched off');
-    assert.throws(() => agent.setDefault('claude'), /Switch that agent on first/, 'an agent that is off cannot be the default');
+    assert.throws(() => agent.setDefault('other'), /Switch that agent on first/, 'an agent that is off cannot be the default');
     cl.available = () => true;
-    agent.setEnabled('claude', true); agent.setDefault('claude');
-    assert.equal(view(), 'tana+ codex+ claude+*', 'switched on and chosen');
+    agent.setEnabled('other', true); agent.setDefault('other');
+    assert.equal(view(), 'tana+ codex+ other+*', 'switched on and chosen');
     assert.deepEqual([settings.isSynced('agents'), settings.isSynced('defaultAgent')], [true, true], 'and both follow you to the next machine');
     cl.available = () => false;
     assert.equal(agent.defaultAgent(), 'tana', 'a default this Mac cannot run falls back to Tana, so Assign to Agent always has somewhere to go');
     cl.available = () => true;
-    agent.setEnabled('claude', false);
-    agent.setEnabled('claude', true);
+    agent.setEnabled('other', false);
+    agent.setEnabled('other', true);
     assert.equal(agent.defaultAgent(), 'tana', 'switching the default off forgets it: switched on again it does not come back as the default unannounced');
-    agent.setEnabled('claude', false); agent.setEnabled('codex', false);
+    agent.setEnabled('other', false); agent.setEnabled('codex', false);
     assert.deepEqual([...agent.enabledIds()], ['tana'], 'with everything else off, Tana is left');
-    settings.set('agents', ['relay:' + THREAD, 'codex']); agent.setEnabled('claude', true);
-    assert.deepEqual(settings.get('agents'), ['relay:' + THREAD, 'codex', 'claude'], 'an agent this Mac does not know yet (a Dot linked on the phone) stays on when another is switched');
+    settings.set('agents', ['relay:' + THREAD, 'codex']); agent.setEnabled('other', true);
+    assert.deepEqual(settings.get('agents'), ['relay:' + THREAD, 'codex', 'other'], 'an agent this Mac does not know yet (a Dot linked on the phone) stays on when another is switched');
     settings.set('agents', undefined); settings.set('defaultAgent', undefined);
     // A link names its agent; the shapes older builds wrote are Codex tasks.
     assert.equal(agent.setTask(NODE, 'codex', THREAD).taskId, THREAD);
@@ -3562,11 +3562,11 @@ async function main() {
     assert.equal(agent.taskLink(NODE), null, 'an agent the app does not know is no link');
     agent.clearTask(NODE);
     assert.equal(agent.tasks()[NODE], undefined, 'a cleared link leaves nothing behind in the map');
-    // A Claude session lives only on the Mac that ran it: its link names that Mac, and another Mac says so (#671 review).
-    assert.deepEqual({ ...agent.setTask(NODE, 'claude', THREAD) }, { agent: 'claude', taskId: THREAD, device: agent.deviceId() }, 'a Claude link names this Mac');
+    // A task that lives only on the Mac that ran it (a local plugin): its link names that Mac, and another Mac says so (#671 review).
+    assert.deepEqual({ ...agent.setTask(NODE, 'other', THREAD) }, { agent: 'other', taskId: THREAD, device: agent.deviceId() }, 'a local agent\'s link names this Mac');
     assert.equal(agent.elsewhere(agent.taskLink(NODE)), false, 'and here it is not elsewhere');
     assert.equal(settings.isSynced('deviceId'), false, 'this Mac\'s id stays on this Mac');
-    settings.set('codexTask', { [NODE]: { agent: 'claude', taskId: THREAD, device: 'another-mac' } });
+    settings.set('codexTask', { [NODE]: { agent: 'other', taskId: THREAD, device: 'another-mac' } });
     assert.equal(agent.elsewhere(agent.taskLink(NODE)), true, 'a link another Mac made is elsewhere');
     assert.equal((await backend.agents.readStatuses())[NODE], 'elsewhere', 'and its badge says so rather than pending for ever');
     assert.equal(agent.elsewhere(agent.setTask(NODE, 'codex', THREAD)), false, 'a Codex link names no Mac');
@@ -3575,51 +3575,6 @@ async function main() {
     assert.equal(cx.linkId('codex://threads/' + THREAD), THREAD, 'Codex takes its Copy link');
     assert.equal(cx.linkId(THREAD), THREAD, 'or the bare id');
     assert.equal(cx.linkId('not-a-thread'), null, 'and nothing else');
-    assert.equal(cl.linkId('claude --resume ' + THREAD), THREAD, 'Claude takes its resume command');
-    assert.equal(cl.linkId('codex://threads/' + THREAD), null, 'but not a Codex link');
-    // Claude's state is read from its transcript (main/agents/claude.js): the last turn decides.
-    const claude = require('../main/agents/claude');
-    const said = (type, extra) => ({ type, message: { role: type, ...extra } });
-    assert.equal(claude.sessionState(null).state, 'pending', 'no transcript yet is pending');
-    // The status poll reads only the end of a session, without blocking (#671 review): a long one still answers.
-    {
-      const os = require('node:os'), nodePath = require('node:path'), realHome = os.homedir, home = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'orbital-claude-home-'));
-      const dir = nodePath.join(home, '.claude', 'projects', '-tmp-Tana'); fs.mkdirSync(dir, { recursive: true });
-      const long = { type: 'user', message: { role: 'user', content: 'x'.repeat(1000) } };
-      const last = { type: 'assistant', message: { role: 'assistant', stop_reason: 'end_turn', model: 'claude-x', content: [{ type: 'text', text: 'all done' }] } };
-      fs.writeFileSync(nodePath.join(dir, THREAD + '.jsonl'), Array(400).fill(JSON.stringify(long)).concat(JSON.stringify(last)).join('\n') + '\n'); // ~400 KB, past the tail read
-      os.homedir = () => home;
-      try {
-        assert.deepEqual({ ...(await claude.claude.statuses({ [NODE]: THREAD })) }, { [NODE]: 'done' }, 'a session longer than the part read still reads its last turn');
-        assert.deepEqual({ ...(await claude.claude.read([THREAD])).get(THREAD) }, { state: 'done', text: 'all done' }, 'and @Claude gets its answer from it');
-      } finally { os.homedir = realHome; }
-    }
-    // A Claude link opened on a Mac without Claude Code is an Orbital error, and a run that cannot start refuses the
-    // handoff rather than leaving a task pending for ever (#671 review).
-    {
-      const realAgent = require('../main/agent'), { S: realS } = require('../main/state'), findBin = realAgent.findBin, keptData = realS.userData;
-      realS.userData = fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'orbital-claude-'));
-      try {
-        realAgent.findBin = () => null;
-        await assert.rejects(claude.claude.open(THREAD), /not installed/, 'no Claude Code: opening says so, no Terminal running null');
-        await assert.rejects(claude.claude.start({ prompt: 'Do it' }), /not installed/, 'and nothing is started');
-        realAgent.findBin = () => require('node:path').join(realS.userData, 'no-claude-here');
-        await assert.rejects(claude.claude.start({ prompt: 'Do it' }), /could not be started/, 'a binary that will not launch rejects the handoff');
-        // a chat question runs without the tools that change anything, refused by Claude Code itself
-        const fake = require('node:path').join(realS.userData, 'claude'), said = fake + '.args';
-        fs.writeFileSync(fake, '#!/bin/sh\nprintf "%s\\n" "$@" > ' + JSON.stringify(said) + '\n', { mode: 0o755 });
-        realAgent.findBin = () => fake;
-        const argsOf = async (opts) => { fs.rmSync(said, { force: true }); await claude.claude.start(opts); for (let i = 0; i < 100 && !fs.existsSync(said); i++) await new Promise((r) => setTimeout(r, 20)); await new Promise((r) => setTimeout(r, 20)); return fs.readFileSync(said, 'utf8').split('\n'); };
-        const asked = await argsOf({ prompt: 'What is due?', rules: 'Answer only', readOnly: true });
-        assert.deepEqual(asked.slice(asked.indexOf('--disallowedTools'), asked.indexOf('--')), ['--disallowedTools', 'Bash', 'Edit', 'Write', 'NotebookEdit'], 'a chat question runs without Bash, Edit, Write or NotebookEdit');
-        assert.equal(asked[asked.indexOf('--') + 1], 'What is due?', 'and the question still follows --');
-        assert.equal((await argsOf({ nodeUri: 'tana:text:01examplee0000000000000000', title: 'Ship it', prompt: 'Ship it' })).includes('--disallowedTools'), false, 'a node\'s task keeps the user\'s own Claude settings');
-      } finally { realAgent.findBin = findBin; realS.userData = keptData; }
-    }
-    assert.equal(claude.sessionState([said('user', { content: 'Do it' })]).state, 'working', 'a question with no answer yet is working');
-    assert.deepEqual({ ...claude.sessionState([said('user', {}), said('assistant', { stop_reason: 'tool_use', content: [] })]) }, { state: 'working', text: '' }, 'and so is a turn still using tools');
-    assert.deepEqual({ ...claude.sessionState([said('user', {}), said('assistant', { stop_reason: 'end_turn', model: 'claude-x', content: [{ type: 'text', text: 'pong' }] })]) }, { state: 'done', text: 'pong' }, 'a turn that ended is done, with its words');
-    assert.equal(claude.sessionState([said('user', {}), said('assistant', { stop_reason: 'stop_sequence', model: '<synthetic>', content: [{ type: 'text', text: 'Could not refresh your login' }] })]).state, 'broken', 'an error Claude Code reports instead of an answer is broken');
     // Tana's state is read from its chat (main/agents/tana.js).
     const { chatState } = require('../main/agents/tana');
     const msg = (from, extra) => ({ type: 'message', fromUserType: from, ...extra });
@@ -3629,7 +3584,8 @@ async function main() {
     assert.equal(chatState(null, [msg('human'), msg('ai', { id: 'q1', toolCalls: [{ name: 'askUserQuestion', status: 'awaiting_user_input' }], questionsData: { questions: [{ id: 'a', question: 'Which repo?', options: [] }] } })]), 'waiting', 'a question Tana asks back is waiting for you');
     assert.equal(chatState(null, [msg('human'), msg('ai', { errorMessage: 'limit' })]), 'broken', 'an error is broken');
     assert.equal(chatState(null, [msg('human'), msg('ai', { completedAt: 2 })]), 'done', 'an answer is done');
-    console.log('ok  agents: Tana always on and the default, Codex and Claude switched and chosen, links by agent, pasted links, Claude and Tana states');
+    agent.unregister('other');
+    console.log('ok  agents: Tana always on and the default, agents switched and chosen, links by agent, pasted links, Tana states');
   }
   // Agents linked through the MCP server (main/agents/linked.js, mcp-server/server.js, docs/MCP-SERVER.md): a real MCP server on a
   // loopback port, an agent signing in and linking as an MCP client would, and Orbital's side through its handlers.
@@ -6798,7 +6754,7 @@ async function main() {
       assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)], [], 'no Codex on this device, no agent to offer');
       cx.available = () => true;
       assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)].map((a) => ({ ...a })), [{ id: 'codex', label: 'Codex', icon: 'robot' }]);
-      await assert.rejects(askAgent(null, chatDoc.id, 'claude', '@Claude hi'), /not switched on/, 'only the agents that are on');
+      await assert.rejects(askAgent(null, chatDoc.id, 'nobody', '@Nobody hi'), /not switched on/, 'only the agents that are on');
       backend.settings.set('agents', []); // Codex switched off in Choose agents
       assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)], [], 'an agent switched off is not offered either');
       backend.settings.set('agents', undefined);
