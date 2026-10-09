@@ -1308,7 +1308,7 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   assert.match(await p.js('connectCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned and chat\.message events\. Each time an Orbital event fires, do what its data\.instructions say.*kept nowhere/, 'what it copies: the code, the events that wake it and carry its instructions, and what goes through orbital.md');
   assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
   assert.deepEqual(await p.js('[palRows[5].label, palRows[5].group]'), ['Copy the code', 'Then ask your agent to link'], 'or the code alone');
-  assert.match(await p.js('palRows[6].label'), /^Only the node's id and your request go through orbital\.md\/mcp, and it keeps neither/, 'it says what goes through orbital.md');
+  assert.match(await p.js('palRows[6].label'), /^Everything you send your agent goes through orbital\.md, Orbital's relay, run by us: a node's id and your request with each task, your messages in its chat, and its answers until Orbital collects them\..* Host your own Orbital MCP server to keep all of it in your workspace\.$/, 'it says plainly that everything sent to the agent goes through our relay, and how to keep it in-house');
   assert.deepEqual(await p.js('[palRows[7].label, !!palRows[7].icon, palRows[7].group === palRows[4].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your agent to use the code…', false, true, true],
     'and waits in the same group, with no glyph, a light passing over its words');
   // where the heading's words start (its box plus its padding), measured once the page has slid in
@@ -1335,7 +1335,9 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Dot"', 'its row');
   await p.key('↩');
   await p.waitFor('palMode === "linkedAgent"', 'its page');
-  assert.deepEqual(await p.js('palRows.map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
+  await p.waitFor('palRows.length === 4', 'its page, with what goes through the MCP server');
+  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
+  assert.match(await p.js('palRows[3].label'), /^Everything you send your agent goes through orbital\.md, Orbital's relay, run by us/, 'and under them, that what you send it goes through our relay');
   await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink"', 'Unlink'); await p.key('↩');
   await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot")', 'Choose agents without it');
   await closePalette(p);
@@ -1474,8 +1476,8 @@ flow('Your Dot has a chat of its own, which cannot be renamed or deleted', async
   assert.equal(await p.js('kids.get("orbital:agent-chats")[0].id'), id, 'the Dot\u2019s chat comes first');
   await p.js('goTo(' + J(id) + ')'); await p.waitFor('zoom && zoom.docId === ' + J(id) + ' && !composer.hidden', 'its chat');
   assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Echo · @ links · Goes through orbital.md', 'its message box is named after it, and says where what you write goes');
-  await p.waitFor('document.querySelector(".chat-context")?.textContent === "Goes through orbital.md, Orbital\u2019s own server · only you see it here".replace("\u2019", "\'")', 'the line says whose server it goes through');
-  assert.match(await p.js('document.querySelector(".chat-context").title'), /pass through orbital\.md, Orbital's own server, which passes each message on as it comes and keeps an answer only until Orbital collects it/, 'and, on a hover, what that server does with it');
+  await p.waitFor('document.querySelector(".chat-context")?.textContent === "Goes through orbital.md, Orbital\u2019s relay, run by us · only you see it here".replace("\u2019", "\'")', 'the line says whose server it goes through');
+  assert.match(await p.js('document.querySelector(".chat-context").title'), /pass through orbital\.md, Orbital's relay, run by us, which passes each message on as it comes and keeps an answer only until Orbital collects it/, 'and, on a hover, what that server does with it');
   await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
   assert.deepEqual(await p.js('["renameAgentChat", "deleteAgentChat", "openAgentChat", "setIcon"].filter((r) => paletteRows("").some((x) => x.id === r))'), [], 'nothing to rename, delete, open in Codex or give an icon');
   await closePalette(p);

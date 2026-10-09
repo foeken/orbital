@@ -11,7 +11,7 @@ const isAgentChat = (id) => String(id || '').startsWith(AGENT_CHAT);
 const agentChatFixed = (id) => !!(extra.get(id) || {}).agentChat?.fixed;
 const agentChatLabel = (id) => (extra.get(id) || {}).agentChat?.label || 'Codex'; // who the chat is with
 // a Dot's chat goes through the Orbital MCP server: which one, said wherever you write to it (main/agentchats.js route)
-const agentChatVia = (id) => { const c = (extra.get(id) || {}).agentChat || {}; return c.fixed ? (c.via || 'the Orbital MCP server') + (c.ours ? ', Orbital\'s own server' : c.via ? ', your workspace\'s server' : '') : ''; };
+const agentChatVia = (id) => { const c = (extra.get(id) || {}).agentChat || {}; return c.fixed ? (c.via || 'the Orbital MCP server') + (c.ours ? ', Orbital\'s relay, run by us' : c.via ? ', your workspace\'s own server' : '') : ''; }; // as renderer/agent.js relayVia says it
 // every chat on the list, as a page to open by its id: its title and glyph are known before its messages are read
 const knowAgentChats = (list) => { for (const n of list || []) extra.set(n.id, { ...n }); };
 if (tana.agentChats) tana.agentChats().then(knowAgentChats, () => {});
