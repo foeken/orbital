@@ -22,7 +22,7 @@ function chooseRow(create, where) {
 function openRow(r, where) {
   if (r && !r.disabled && palMode === 'cmd') notePaletteUse(r);
   else if (r && !r.disabled && r.node && linkCtx) noteLinkUse(r.node); // the @ menu learns what you link to
-  if (r && where && !linkCtx && r.opens && !r.disabled) { closePalette(); run(async () => openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens)); }
+  if (r && where && !linkCtx && (r.opens || r.opensView) && !r.disabled) { closePalette(); run(async () => (r.opensView ? tana.splitWindow(where, { view: r.opensView, place: '{}' }) : openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens))); } // a view (the Library, Inbox, Types) opens as itself, nothing zoomed
   else if (r) runRow(r);
 }
 function settleEnter() { if (palEnter) { const { create, where } = palEnter; palEnter = null; chooseRow(create, where); } }
@@ -356,7 +356,7 @@ function paletteRows(q, typed = q) {
   // Views, most used first: the Timeline (today's tasks and what happened), Today and This week, then what came in
   // (Inbox, Notifications, Proposals), and the Library and Types last. Today's node (titled with the date, pinned to
   // today) and the week's ("Week 38 (2026)") are documents created on demand, but places to go all the same.
-  const viewRows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
+  const viewRows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, opensView: s.id, run: () => setView(s.id) })); // opensView: ⌘↩ ⇧↩ ⌥↩ open the view itself elsewhere (openRow)
   if (tana.todayNode) viewRows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', opens: () => tana.todayNode(), run: () => run(async () => goTo(await tana.todayNode())) });
   if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', opens: () => tana.weekNode(), run: () => run(async () => goTo(await tana.weekNode())) });
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
@@ -537,7 +537,7 @@ function runAction(id, where = null) { // where: a row that opens a place opens 
   if (LINKS && !['railToggle', 'rail', 'reload'].includes(id) && !PANE_ROWS.some(([rowId]) => rowId === id)) { toShell({ orbital: 'action', id }); return true; }
   if (palette.hidden) { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
   const rows = paletteRows(''), row = rows.find((r) => r.id === id);
-  if (row) { if (row.disabled) return true; if (where && row.opens) run(async () => openElsewhere(where, typeof row.opens === 'function' ? await row.opens() : row.opens)); else row.run(); return true; }
+  if (row) { if (row.disabled) return true; if (where && (row.opens || row.opensView)) openRow(row, where); else row.run(); return true; }
   // A key pressed with the palette closed may wait on main below (access, participants, spaces). A palette opened in
   // the meantime, still open or already closed again, has moved palSeq on (showPage), and the key lets its answer go
   // rather than taking that palette over or reopening one Esc just closed.

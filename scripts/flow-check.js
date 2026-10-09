@@ -1434,6 +1434,21 @@ flow('Sidebar rows ⌘-, ⇧- and ⌥-clicked open their place in a tab, a pane 
 });
 
 
+// ⌘K's Views with ⌘↩, ⇧↩ or ⌥↩ (renderer/palette.js openRow): a view opens as itself elsewhere, an app page as its page
+flow('Cmd+K Views open in a tab, a pane beside or floating with ⌘↩, ⇧↩ and ⌥↩', async (p) => {
+  await p.start();
+  await p.js('window.__split = []; tana.splitWindow = async (where, start) => { __split.push([where, start.view, JSON.parse(start.place).docId || null]); return "2"; }; 1');
+  for (const [words, label, key] of [['library', 'Library', '⌘↩'], ['notifications', 'Notifications', '⇧↩'], ['timeline', 'Timeline', '⌥↩']]) {
+    await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type(words);
+    await p.waitFor('palRows[palIndex] && palRows[palIndex].label === ' + J(label), label + ' as the active row'); await p.key(key);
+    await p.waitFor('palette.hidden', 'the palette closed');
+  }
+  await p.waitFor('__split.length === 3', 'three opened elsewhere');
+  const split = await p.js('__split.map(([w, v, d]) => [w, d || v])'); // a view has nothing zoomed: its place is the view itself
+  assert.deepEqual(split, [['tab', 'library'], ['right', 'orbital:notifications'], ['float', 'orbital:timeline']], 'the Library as a view, the others as their pages, each where its key says: ' + J(split));
+});
+
+
 flow('golden path: send a chat message and read the answer', async (p) => {
   await p.start();
   await p.js("goTo('tana:chat:mockchat0')"); await p.waitFor('document.getElementById("composerText") && document.querySelector(".chat-msg")', 'the conversation');
