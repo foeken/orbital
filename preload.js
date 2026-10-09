@@ -133,9 +133,9 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   mcpReset: () => ipcRenderer.invoke('mcp:reset'), // a new key for your Orbital; the agents stay linked
   mcpWhere: () => ipcRenderer.invoke('mcp:where'), // { url, workspace, admin, deploy, fallback }: the workspace's MCP server, or orbital.md
   mcpUse: (url) => ipcRenderer.invoke('mcp:use', url), // an admin sets the workspace's MCP server ('' for orbital.md again); answers mcpWhere
-  mcpUsePlugin: (url) => ipcRenderer.invoke('mcp:usePlugin', url), // an admin names the workspace's Orbital plugin in ChatGPT ('' takes it out); answers mcpWhere
+  mcpUsePlugin: (url) => ipcRenderer.invoke('mcp:usePlugin', url), // an admin names the workspace's Orbital plugin in ChatGPT ('' takes it out), which the linking instructions add; answers mcpWhere
+  mcpCheck: (url) => ipcRenderer.invoke('mcp:check', url), // what a typed MCP server URL is, without using it: { url, version, needed, outdated } or { error }
   mcpOld: () => ipcRenderer.invoke('mcp:old'), // mcpWhere once a session when the workspace's MCP server is older than Orbital needs, else null
-  mcpPlugin: (tanaApp) => ipcRenderer.invoke('mcp:plugin', tanaApp), // the Orbital plugin for ChatGPT with this MCP server in it, saved to Downloads: its path; an admin's workspace plugin passes the Tana app id ('' for none)
   // Cmd+K "Discuss with …": gives the document the Discussion Task type (created in the Library when the workspace
   // has none) and writes who into its "Discuss with" field. Resolves to { typeUri, key, who }.
   discussWith: (docId, who) => ipcRenderer.invoke('doc:discussWith', docId, who),

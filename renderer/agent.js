@@ -111,15 +111,15 @@ function openDefaultAgentPalette() {
 }
 // ---- Connect your personal agent: first which agent, then only its steps, then one code that links it ----
 // (main/agents/linked.js) The first page asks which agent: your OpenAI Dot in ChatGPT, or any other agent that speaks MCP.
-// Your Dot gets the Orbital plugin (both MCP servers in one, made by main with this workspace's Orbital MCP server, or the
-// workspace's own already in ChatGPT); another agent gets the two servers as a "custom MCP server" form wants them, a name
-// and a URL (↩ copies the URL). Both end with the same code: one row copies the instructions, which only link, and the page
+// Both get the two servers as a "custom MCP server" form wants them, a name and a URL (↩ copies the URL): Orbital's is the
+// workspace's own when an admin set one in Tana, else orbital.md; your Dot also gets where ChatGPT adds them. Both end with
+// the same code: one row copies the instructions, which only link, another the code alone, and the page
 // asks every two seconds whether that happened; once it has, the palette closes on a toast naming the agent. Leaving the
 // page does not stop the code: an agent that uses it later shows up in Choose agents all the same, and opening the page
 // again goes straight back to it.
 const CHATGPT_PLUGINS = 'https://chatgpt.com/plugins';
 const LINK_TITLE = 'Connect your personal agent';
-const AGENT_KINDS = [['chatgpt', 'Your OpenAI Dot', 'In ChatGPT · the Orbital plugin', 'chatgpt'], ['other', 'Another agent', 'Any agent that speaks MCP · two servers', 'mcp']];
+const AGENT_KINDS = [['chatgpt', 'Your OpenAI Dot', 'In ChatGPT · two servers', 'chatgpt'], ['other', 'Another agent', 'Any agent that speaks MCP · two servers', 'mcp']];
 let connectCtx = null; // { state: asking|waiting|expired|failed, kind, code, prompt, expiresAt, error, back } while the page is up
 let connectTimer = null;
 const codeWaiting = () => (connectCtx && connectCtx.state === 'waiting' && connectCtx.expiresAt > Date.now() ? connectCtx : null);
@@ -166,31 +166,31 @@ function connectRows() {
   const left = Math.max(0, (c.expiresAt || 0) - Date.now());
   const note = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
   let rows, setup;
+  const server = (icon, label, url) => ({ group: setup, icon, label, hint: url + ' · ↩ copies', keepOpen: true, match: [], run: () => run(() => copyText(url, 'Copied ' + label + '\u2019s URL')) });
   if (c.kind === 'chatgpt') {
-    // your Dot: the Orbital plugin, the workspace's own when an admin installed one for everyone, else one to save and upload
-    setup = 'In ChatGPT · the Orbital plugin';
-    rows = c.plugin ? [{ group: setup, icon: 'orbital', label: 'Install the Orbital plugin', hint: 'Your workspace\'s, in ChatGPT', keepOpen: true, match: [], run: () => run(() => tana.openExternal(c.plugin)) },
-      note(setup, 'help', 'Its setup asks for the code: send your Dot the instructions below.')] : [
-      { group: setup, icon: 'orbital', label: 'Save the Orbital plugin', hint: 'For ' + serverHost(c.url) + ' · into Downloads', keepOpen: true, match: [],
-        run: () => run(async () => { await tana.mcpPlugin(); showNote('Saved to Downloads: upload Orbital plugin.zip in ChatGPT'); }) },
-      { group: setup, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: CHATGPT_PLUGINS.replace('https://', ''), keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
-      note(setup, 'help', 'Upload it there as a plugin of your own. It brings Orbital and Tana together, and its setup asks for the code: send your Dot the instructions below.')];
+    // your Dot: with the workspace's Orbital plugin, the instructions ask it to add that (main/mcp-server.js linkCode) and there
+    // is nothing to do by hand; without, both servers added in ChatGPT, where Add then Create custom MCP server takes a name
+    // and a URL (the phones' steps)
+    setup = 'Add both in ChatGPT · a custom MCP server each, a name and a URL';
+    rows = c.plugin ? [] : [{ group: setup, icon: 'chatgpt', label: 'Open ChatGPT plugins', hint: 'Add, then Create custom MCP server', keepOpen: true, match: [], run: () => run(() => tana.openExternal(CHATGPT_PLUGINS)) },
+      server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana)];
   } else {
     // any other agent: the two servers, a name and a URL each
     setup = 'Add both to your agent · a custom MCP server each, a name and a URL';
-    const server = (icon, label, url) => ({ group: setup, icon, label, hint: url + ' · ↩ copies', keepOpen: true, match: [], run: () => run(() => copyText(url, 'Copied ' + label + '\u2019s URL')) });
-    rows = [server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana), note(setup, 'help', 'Signed in to Tana with your own account. Your agent needs MCP events to hear about the tasks you hand it.')];
+    rows = [server('orbital', 'Orbital', c.url), server('tana', 'Tana', c.tana), note(setup, 'help', 'Your agent needs MCP events to hear about the tasks you hand it.')];
   }
-  // which Orbital MCP server the plugin and the agents use: orbital.md, or one your workspace hosts itself (main/mcp-server.js);
+  // which Orbital MCP server the agents use: orbital.md, or one your workspace hosts itself (main/mcp-server.js);
   // only an admin may change it, so only an admin gets its page, everyone else the one in use
-  rows.push(c.admin ? { group: setup, icon: 'mcp', label: 'Use a self-hosted Orbital MCP server …', hint: serverHost(c.url), keepOpen: true, match: [], run: () => openServerPage(() => openLinkPalette(c.back, c.kind)) }
+  if (rows.length) rows.push(c.admin ? { group: setup, icon: 'mcp', label: 'Use a self-hosted Orbital MCP server …', hint: serverHost(c.url), keepOpen: true, match: [], run: () => openServerPage(() => openLinkPalette(c.back, c.kind)) }
     : { group: setup, icon: 'mcp', label: 'Orbital MCP server', hint: serverHost(c.url) + (c.workspace ? ' · your workspace\'s' : ' · the default'), disabled: true, match: [] });
-  // then the instructions, which only link: what goes through orbital.md is in them too, for the agent to explain
-  const group = 'Then ask your agent to link';
-  rows.push({ group, icon: 'prompt', label: 'Copy the instructions', hint: '↩ copies', keepOpen: true, match: [],
+  // then the instructions, which only link: what goes through orbital.md is in them too, for the agent to explain; or the
+  // code alone, for an agent whose setup asks for it
+  const group = rows.length ? 'Then ask your agent to link' : 'Ask your Dot to link';
+  rows.push({ group, icon: 'prompt', label: 'Copy the instructions', hint: rows.length ? '↩ copies' : 'They add your workspace\'s Orbital plugin · ↩ copies', keepOpen: true, match: [],
     run: () => run(() => copyText(c.prompt, 'Copied: send them to your agent')) },
+  { group, icon: 'link', label: 'Copy the code', hint: 'Only the code · works once', keepOpen: true, match: [], run: () => run(() => copyText(c.code, 'Code copied')) },
   // what crosses orbital.md (main/agents/linked.js send): with each event the node's id, the request and how to handle it, kept nowhere
-  { group, icon: 'lock', label: 'Only the node\'s id and your request go through ' + serverHost(c.url) + ', and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
+  { group, label: 'Only the node\'s id and your request go through ' + serverHost(c.url) + ', and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
   // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
   if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
   return [...rows,
@@ -203,13 +203,12 @@ function seenText(at) {
   const min = Math.round((Date.now() - at) / 60000);
   return min < 2 ? 'seen just now' : min < 60 ? 'seen ' + min + ' min ago' : min < 48 * 60 ? 'seen ' + Math.round(min / 60) + ' h ago' : 'not seen for ' + Math.round(min / 1440) + ' days';
 }
-// ---- Manage Orbital settings for all Tana users: what is the same for everyone in the Tana workspace (issue #814) ----
+// ---- Open Orbital Settings for Tana Workspace: what is the same for everyone in the Tana workspace (issue #814) ----
 // Kept on Tana's own workspace document, written by an admin only (main/settings.js setWorkspace): the Orbital MCP server
-// everyone hands over through (orbital.md unless the workspace hosts its own) and the Orbital plugin an admin installed in
-// ChatGPT for everyone (made by the deploy instructions with the workspace's own Tana app, so nobody gets Tana twice). A member sees them, and who set them, and changes none.
-let serverNow = null; // what main said last: { url, workspace, plugin, admin, deploy, fallback, changedBy, … }
+// everyone hands over through (orbital.md unless the workspace hosts its own). A member sees it, and who set it, and changes nothing.
+let serverNow = null; // what main said last: { url, workspace, admin, deploy, fallback, changedBy, … }
 const serverHost = (url) => String(url || 'orbital.md/mcp').replace(/^https?:\/\//, '');
-const ORG_TITLE = 'Orbital settings for all Tana users';
+const ORG_TITLE = 'Orbital Settings for Tana Workspace';
 const asking = (group) => [{ group, label: 'Asking…', disabled: true, sweep: true, bare: true, match: [] }];
 const noteRow = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
 const setBy = (w) => w.changedBy && w.changedBy.name; // the admin who changed them last
@@ -217,9 +216,8 @@ function orgRows(q) {
   const w = serverNow, group = 'For everyone in your Tana workspace';
   if (!w) return asking(group);
   const row = (icon, label, hint, open) => ({ group, icon, label, hint, keepOpen: true, match: [], ...(w.admin ? { run: open } : { disabled: true }) });
-  const rows = [row('mcp', 'Orbital MCP server …', serverHost(w.url) + (w.workspace ? '' : ' · the default'), () => openServerPage(openOrgPalette)),
-    ...(w.admin ? [row('createNew', 'Make the workspace plugin …', 'With your Tana app · into Downloads', openMakePluginPage)] : []),
-    row('orbital', 'Orbital plugin in ChatGPT …', w.plugin ? serverHost(w.plugin) : 'None · everyone saves one and uploads it', openPluginPage)];
+  const rows = [row('mcp', 'Set custom MCP server URL …', serverHost(w.url) + (w.workspace ? '' : ' · the default'), () => openServerPage(openOrgPalette)),
+    row('link', 'Set Orbital ChatGPT plugin URL …', w.plugin ? 'Set' : 'None', openPluginPage)]; // its link is long: the page it opens shows it
   const who = setBy(w);
   if (who) rows.push(noteRow(group, 'member', 'Set by ' + who + (w.changedBy.at ? ', ' + new Date(w.changedBy.at).toLocaleDateString() : '') + '.'));
   if (!w.admin) rows.push(noteRow(group, 'lock', 'Only an admin of your workspace can change these' + (who ? ', like ' + who : '') + '.'));
@@ -229,52 +227,60 @@ function openOrgPalette() {
   openPage('orgSettings', ORG_TITLE, { rows: orgRows, back: BACK_TO_COMMANDS });
   tana.mcpWhere().then((w) => { serverNow = w; if (palMode === 'orgSettings' && !palette.hidden) renderPalette(); }, showError);
 }
-// The Orbital plugin an admin installed in ChatGPT for everyone: its chatgpt.com link pasted in
+// The Orbital plugin an admin installed in ChatGPT for everyone: its chatgpt.com link pasted in, which the linking
+// instructions then ask a Dot to add (main/mcp-server.js linkCode)
 function pluginRows(q, typed) {
-  const w = serverNow, group = 'Orbital plugin in ChatGPT', text = String(typed || '').trim(), link = /^https:\/\/([\w-]+\.)*chatgpt\.com\/\S+$/.test(text) && text;
+  const w = serverNow, group = 'Orbital ChatGPT plugin URL', text = String(typed || '').trim(), link = /^https:\/\/([\w-]+\.)*chatgpt\.com\/\S+$/.test(text) && text;
   const rows = [];
-  if (link) rows.push({ group, icon: 'orbital', label: 'Use ' + serverHost(link), hint: 'For everyone', keepOpen: true, match: [], run: () => usePlugin(link) });
+  if (link) rows.push({ group, icon: 'link', label: 'Use ' + serverHost(link), hint: 'For everyone', keepOpen: true, match: [], run: () => usePlugin(link) });
   else if (text) rows.push({ group, icon: 'info', label: 'A link on chatgpt.com', disabled: true, match: [] });
-  if (w.plugin) rows.push({ group, icon: 'orbital', label: serverHost(w.plugin), hint: 'Now', disabled: true, match: [] },
-    { group, icon: 'reject', label: 'Clear it', hint: 'Back to a plugin to save and upload', keepOpen: true, match: [], run: () => usePlugin('') });
-  return [...rows, noteRow(group, 'help', 'Once you installed the Orbital plugin in ChatGPT for everyone in your workspace: Connect your personal agent then installs that one, rather than a plugin to save and upload. Make the workspace plugin makes it.')];
+  if (w.plugin && !text) rows.push({ group, icon: 'link', label: serverHost(w.plugin), hint: 'Now', disabled: true, match: [] },
+    { group, icon: 'reject', label: 'Clear it', hint: 'Back to adding the two servers by hand', keepOpen: true, match: [], run: () => usePlugin('') });
+  return [...rows, noteRow(group, 'help', 'Once the Orbital plugin is installed in ChatGPT for everyone in your workspace, Connect your personal agent\u2019s instructions ask your Dot to add it, then link with the code.')];
 }
-// The workspace's plugin, made by an admin: this workspace's MCP server, and the Tana app its ChatGPT workspace already has
-// (an id typed or pasted), so nobody gets Tana twice; without one it brings Tana's MCP server, as everyone's own plugin does
-function makePluginRows(q, typed) {
-  const group = 'Make the workspace plugin · for ' + serverHost(serverNow && serverNow.url), text = String(typed || '').trim(), id = (text.match(/\b(asdk_app_[0-9a-f]{32}|connector_[0-9a-z_]+)\b/) || [])[1];
-  const save = (app) => run(async () => { await tana.mcpPlugin(app); showNote('Saved to Downloads: upload Orbital workspace plugin.zip in ChatGPT'); });
-  const rows = [];
-  if (id) rows.push({ group, icon: 'tana', label: 'Save it with ' + id, hint: 'Into Downloads', keepOpen: true, match: [], run: () => save(id) });
-  else if (text) rows.push({ group, icon: 'info', label: 'A Tana app ID looks like asdk_app_ and 32 letters and digits', disabled: true, match: [] });
-  rows.push({ group, icon: 'orbital', label: 'Save it without a Tana app', hint: 'It brings Tana\'s MCP server', keepOpen: true, match: [], run: () => save('') });
-  return [...rows, noteRow(group, 'help', 'Paste the ID of the Tana app your ChatGPT workspace already has, if it has one: ChatGPT tells you. Then upload the plugin in ChatGPT, install it for everyone in your workspace, and paste its link under Orbital plugin in ChatGPT.')];
-}
-const openMakePluginPage = () => openPage('orgField', 'Paste your Tana app\'s ID, if your ChatGPT workspace has one', { rows: makePluginRows, back: openOrgPalette, typed: true });
 const usePlugin = (v) => run(async () => { serverNow = await tana.mcpUsePlugin(v); showNote(v ? 'Orbital plugin set for everyone' : 'Orbital plugin cleared'); openOrgPalette(); });
 const openPluginPage = () => openPage('orgField', 'Paste your Orbital plugin\'s ChatGPT link', { rows: pluginRows, back: openOrgPalette, typed: true });
-// The Orbital MCP server: from the settings for all Tana users, or Connect your personal agent's Use a self-hosted Orbital MCP
+// The Orbital MCP server: from Orbital Settings for Tana Workspace, or Connect your personal agent's Use a self-hosted Orbital MCP
 // server … An admin hosts one by sending ChatGPT the instructions copied here (it deploys mcp-server/ on ChatGPT Sites and
 // gives back its URL), then pastes that URL into this page's field. Agents are linked on one server, so after a change they
 // are linked again.
+// A URL typed into the page is asked what it is (main/mcp-server.js probeServer) a moment after the typing stops; the page
+// then speaks of that one, not of the server in use. Only the answer for what is typed now is kept.
+let serverProbe = { text: '', answer: null }, probeTimer = 0;
+function probeTyped(url) {
+  if (serverProbe.text === url) return serverProbe.answer;
+  serverProbe = { text: url, answer: null };
+  clearTimeout(probeTimer);
+  const land = (answer) => { if (serverProbe.text !== url) return; serverProbe.answer = answer; if (palMode === 'mcpServer' && !palette.hidden) renderPalette(); };
+  if (url && tana.mcpCheck) probeTimer = setTimeout(() => tana.mcpCheck(url).then((a) => land(a || { error: 'No answer' }), (e) => land({ error: errorText(e) })), 400);
+  return null;
+}
 function serverPageRows(q, typed) {
   const w = serverNow;
   if (!w) return asking('Orbital MCP server');
   const group = 'Orbital MCP server · ' + (w.workspace ? 'your workspace\'s own' : 'orbital.md, until your workspace hosts its own');
-  const rows = [{ group, icon: 'mcp', label: serverHost(w.url), hint: 'All handovers go here', disabled: true, match: [] }];
-  const who = setBy(w);
-  // older than this Orbital needs (main/mcp-server.js SERVER_VERSION): an admin has ChatGPT put the latest code in the same Site
-  if (w.outdated) rows.push(noteRow(group, 'info', 'Out of date: it is version ' + w.version + ', and this Orbital needs ' + w.needed + '. '
+  const who = setBy(w), url = String(typed || '').trim();
+  // An admin on the default (orbital.md) is here to set the workspace's own: the default is not shown, nor its version.
+  // A server of the workspace's own is, and so is whatever a member is told they cannot change.
+  const current = !!w.workspace || !w.admin;
+  const rows = current ? [{ group, icon: 'mcp', label: serverHost(w.url), hint: 'All handovers go here', disabled: true, match: [] }] : [];
+  // older than this Orbital needs (main/mcp-server.js SERVER_VERSION): an admin has ChatGPT put the latest code in the same Site.
+  // Said of the server in use only while nothing is typed: a typed URL gets its own answer below.
+  if (current && w.outdated && !(url && w.admin)) rows.push(noteRow(group, 'info', 'Out of date: it is version ' + w.version + ', and this Orbital needs ' + w.needed + '. '
     + (w.admin ? 'Have ChatGPT update it: its address stays, so nobody links again.' : 'Ask ' + (who || 'an admin of your workspace') + ' to update it.')));
-  if (w.outdated && w.admin && w.workspace) rows.push({ group, icon: 'prompt', label: 'Copy the update instructions for ChatGPT', hint: 'The latest, in the same Site', keepOpen: true, match: [],
+  if (w.outdated && w.admin && w.workspace && !url) rows.push({ group, icon: 'prompt', label: 'Copy the update instructions for ChatGPT', hint: 'The latest, in the same Site', keepOpen: true, match: [],
     run: () => run(() => copyText(w.update, 'Copied: send them to ChatGPT')) });
   if (!w.admin) return [...rows, noteRow(group, 'lock', 'Only an admin of your workspace can change it' + (who ? ', like ' + who : '') + '.')];
-  const own = 'Host your own · paste its URL above', url = String(typed || '').trim();
-  // a pasted URL first, so ↩ uses it
-  if (url) rows.push({ group: own, icon: 'link', label: 'Use ' + serverHost(url) + ' for everyone', hint: 'Checked first', keepOpen: true, match: [], run: () => useServer(url) });
-  rows.push({ group: own, icon: 'prompt', label: 'Copy the instructions for ChatGPT', hint: 'It deploys one on Sites', keepOpen: true, match: [],
+  // with a URL typed, the page is about using it: the hosting rows wait until the field is empty again
+  const own = url ? 'Your own MCP server · for everyone' : 'Host your own · paste its URL above', probe = url ? probeTyped(url) : null;
+  // a pasted URL first, so ↩ uses it once it answers as an MCP server this Orbital works with
+  if (url && !probe) rows.push({ group: own, icon: 'link', label: 'Use ' + serverHost(url) + ' for everyone', hint: 'Checking…', disabled: true, match: [] });
+  else if (probe && probe.error) rows.push(noteRow(own, 'info', probe.error));
+  else if (probe && probe.outdated) rows.push(noteRow(own, 'info', 'Out of date: ' + serverHost(probe.url) + ' is version ' + probe.version + ', and this Orbital needs ' + probe.needed + '. Have ChatGPT update it, then paste it again.'));
+  else if (probe) rows.push({ group: own, icon: 'link', label: 'Use ' + serverHost(probe.url) + ' for everyone', hint: 'Version ' + probe.version, keepOpen: true, match: [], run: () => useServer(probe.url) });
+  if (!url) rows.push({ group: own, icon: 'prompt', label: 'Copy instructions to host your own for ChatGPT', hint: 'It deploys one on Sites', keepOpen: true, match: [],
     run: () => run(() => copyText(w.deploy, 'Copied: send them to ChatGPT')) });
-  if (w.workspace) rows.push({ group: own, icon: 'reload', label: 'Back to orbital.md for everyone', keepOpen: true, match: [], run: () => useServer('') });
+  if (w.workspace && !url) rows.push({ group: own, icon: 'reload', label: 'Back to orbital.md for everyone', keepOpen: true, match: [], run: () => useServer('') });
   return [...rows, noteRow(own, 'link', 'Agents are linked on one server: after a change, everyone links theirs again.')];
 }
 let serverBack = BACK_TO_COMMANDS;

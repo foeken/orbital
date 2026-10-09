@@ -9,7 +9,7 @@
 // the hidden titles), on while the outliner's demo mode is (localStorage, shared with it), and renderer/settings.js the
 // models' and thinking levels' names, as Cmd+K Choose models writes them.
 // Without window.api (the manual's scenes, flow-check) the window is empty until start() is handed one.
-const TABS = [['general', 'General', 'options'], ['ai', 'AI', 'brain'], ['agents', 'Agents', 'robot'], ['lists', 'Lists', 'hiddenItems'], ['org', 'Custom MCP', 'mcp']]; // org: shown to an admin only (st.org.admin)
+const TABS = [['general', 'General', 'options'], ['ai', 'AI', 'brain'], ['agents', 'Agents', 'robot'], ['lists', 'Hidden', 'hidden'], ['org', 'MCP', 'mcp']]; // org: shown to an admin only (st.org.admin)
 const LANGS = ['English', 'Dutch', 'German', 'French', 'Spanish']; // renderer/translate.js TRANSLATE_LANGS
 const GLYPHS = window.ICONS || {}; // icons.js: our own markup
 const $ = (id) => document.getElementById(id);
@@ -189,13 +189,20 @@ const SECTIONS = {
     ...group('Hidden titles', null, host.filters ? [hiddenList()] : []),
     ...group('Chats', null, host.setMcpHidden ? [row('robot', 'Show MCP chats', toggle('mcp', 'Show MCP chats', !st.mcpHidden, () => load('mcpHidden', () => host.setMcpHidden(!st.mcpHidden)), st.mcpHidden == null), 'Chats an MCP client started')] : []),
   ],
-  // what is the same for everyone in the Tana workspace, as ⌘K Manage Orbital settings for all Tana users sets it
+  // what is the same for everyone in the Tana workspace, as ⌘K Open Orbital Settings for Tana Workspace sets it
   // (renderer/agent.js): kept on the workspace's own document, and written by an admin only (main/settings.js setWorkspace)
   org: () => {
     const w = st.org;
     if (!w) return [];
     const copy = (text) => () => navigator.clipboard.writeText(text), who = w.changedBy && w.changedBy.name;
+    // said first, where it cannot be missed: a change here changes Orbital for the whole workspace
+    const banner = el('div', 'banner'), icon = el('span', 'icon'), words = el('div');
+    banner.setAttribute('role', 'note'); icon.innerHTML = GLYPHS.users || '';
+    words.append(el('b', null, 'These settings apply to everyone in your Tana workspace who uses Orbital'),
+      el('div', 'sub', 'Kept in the workspace itself. Only admins see this tab' + (who ? '; last changed by ' + who : '') + '.'));
+    banner.append(icon, words);
     return [
+      banner,
       ...group('Orbital MCP server', 'where every handover goes', [
         row('mcp', 'Server URL', field('org/url', 'Orbital MCP server URL', w.workspace, w.fallback || 'https://orbital.md/mcp', async (v) => { const now = await host.mcpUse(v); load('agents', host.agentList); return now; }),
           w.outdated ? 'Out of date: version ' + w.version + ', and Orbital needs ' + w.needed : w.workspace ? 'Your workspace\'s own · agents link again after a change' : 'Empty: orbital.md'),
@@ -203,9 +210,8 @@ const SECTIONS = {
         ...(w.outdated && w.workspace ? [row('prompt', 'Update it', button('update', 'Copy Instructions', copy(w.update)), 'The latest code in the same Site, at the same address')] : []),
       ]),
       ...group('ChatGPT', 'the Orbital plugin', [
-        row('orbital', 'Plugin link', field('org/plugin', 'Orbital plugin link', w.plugin, 'https://chatgpt.com/…', (v) => host.mcpUsePlugin(v)), 'Installed for everyone: Connect your personal agent installs it. ⌘K makes it'),
+        row('link', 'Plugin link', field('org/plugin', 'Orbital plugin link', w.plugin, 'https://chatgpt.com/…', (v) => host.mcpUsePlugin(v)), 'Installed for everyone: the linking instructions ask each Dot to add it'),
       ]),
-      el('p', 'foot', 'For everyone in your Tana workspace, kept in the workspace itself. Only admins see this tab' + (who ? '; last changed by ' + who : '') + '.'),
     ];
   },
 };
@@ -215,7 +221,7 @@ function draw() {
   if (!host) return;
   const t = st.prefs.theme === 'dark' || st.prefs.theme === 'light' ? st.prefs.theme : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   document.documentElement.dataset.theme = t;
-  const tabs = TABS.filter(([id]) => id !== 'org' || st.org?.admin), now = tabs.some(([id]) => id === tab) ? tab : 'general'; // Custom MCP for an admin only
+  const tabs = TABS.filter(([id]) => id !== 'org' || st.org?.admin), now = tabs.some(([id]) => id === tab) ? tab : 'general'; // MCP for an admin only
   const had = document.activeElement?.dataset?.key, name = TABS.find(([id]) => id === now)[1];
   document.title = name; $('title').textContent = name;
   $('tabs').replaceChildren(...tabs.map(([id, label, icon]) => {

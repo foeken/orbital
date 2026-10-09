@@ -3760,24 +3760,19 @@ async function main() {
       assert.match(JSON.parse(org.loro.getMap(settings.ROOT).get('changedBy')).user, /^tana:user-profile:/, 'with who changed it last');
       assert.equal(typeof (await h('mcp:where')).changedBy.at, 'number', 'which the MCP server page says, so a member knows which admin to ask');
       assert.equal(settings.isSynced('mcpServerUrl'), false, 'and nowhere of yours: there is no MCP server of your own');
-      // the workspace's Orbital plugin in ChatGPT, once an admin installed it for everyone: the Connect page offers it
+      // Connect your personal agent names the workspace's own MCP server, set in Tana, as the one to add
+      const linkPage = await h('mcp:link');
+      assert.deepEqual([linkPage.url, linkPage.workspace, linkPage.plugin], [base + '/mcp', true, null], 'Connect your personal agent names the workspace\'s own MCP server to add');
+      assert.match(linkPage.prompt, /^Call Orbital's link_orbital tool with the code /, 'and with no plugin its instructions only link');
+      // the workspace's Orbital plugin in ChatGPT, once an admin installed it for everyone: the instructions ask the Dot to add it
       await assert.rejects(h('mcp:usePlugin', 'https://plugins.example/orbital'), /chatgpt\.com/, 'only a chatgpt.com link is taken as the workspace\'s plugin');
       assert.equal((await h('mcp:usePlugin', 'https://chatgpt.com/plugins/orbital')).plugin, 'https://chatgpt.com/plugins/orbital', 'an admin names it');
       assert.equal(JSON.parse(org.loro.getMap(settings.ROOT).get('pluginUrl')), 'https://chatgpt.com/plugins/orbital', 'beside the MCP server, in the same root');
-      assert.equal((await h('mcp:link')).plugin, 'https://chatgpt.com/plugins/orbital', 'and Connect your personal agent offers it in place of a plugin to save');
+      const withPlugin = await h('mcp:link');
+      assert.match(withPlugin.prompt, /^First add the Orbital plugin to ChatGPT from https:\/\/chatgpt\.com\/plugins\/orbital, if you do not have it yet: .*Then call Orbital's link_orbital tool with the code /,
+        'the instructions ask the Dot to add the plugin, then link with the code');
+      assert.equal(withPlugin.plugin, 'https://chatgpt.com/plugins/orbital', 'and the Connect page knows it, to leave out the servers to add by hand');
       assert.equal((await h('mcp:usePlugin', '')).plugin, null, 'until it is taken out again');
-      // the workspace's plugin, made with its Tana app (plugin/build.js): it requires that app, and brings no second Tana connection
-      const tanaApp = 'asdk_app_6a1fd7ff30d481a4b3d0241ab0158d9f';
-      {
-        const { pack } = require('../plugin/build'), zip = require('node:path').join(require('node:os').tmpdir(), 'orbital-plugin-check-' + process.pid + '.zip');
-        const read = (f) => JSON.parse(require('node:child_process').execFileSync('unzip', ['-p', zip, 'orbital/' + f], { encoding: 'utf8' }));
-        pack(base + '/mcp', zip, tanaApp);
-        assert.deepEqual([Object.keys(read('mcp.json').mcpServers), read('.app.json').apps.tana, read('plugin.json').extensions['com.openai'].apps],
-          [['orbital'], { id: tanaApp, required: true }, './.app.json'], 'the plugin requires the workspace\'s Tana app, with only Orbital\'s MCP server of its own');
-        pack(base + '/mcp', zip);
-        assert.deepEqual(Object.keys(read('mcp.json').mcpServers), ['orbital', 'tana'], 'and without one it brings Tana\'s MCP server');
-        require('node:fs').rmSync(zip, { force: true });
-      }
       // an MCP server older than this Orbital needs (main/mcp-server.js SERVER_VERSION): never chosen, and the one in use says so
       const realFetch = linked.server.fetch;
       linked.server.fetch = async (url, o) => (url.endsWith('/health') ? { ok: true, json: async () => ({ ok: true, version: 0 }) } : realFetch(url, o));

@@ -179,19 +179,13 @@ needs that App published once from the Replit website, which reviews schema chan
 
 ## Your workspace's MCP server (issue #814)
 
-**The plugin.** `plugin/` is Orbital as a ChatGPT plugin: both servers an agent needs (the MCP server and Tana's
-`home.tana.inc/mcp`) in one `mcp.json`, and a setup skill (`skills/connect`) that asks for the link code, links and
-subscribes. Which MCP server goes in it is the workspace's, so the repo holds orbital.md's and Orbital makes the zip itself
-(`plugin/build.js` `pack`, from the Connect page's **Save the Orbital plugin**: Downloads, shown in the Finder). An admin
-who installed it for the whole workspace in ChatGPT names it with its chatgpt.com link (`pluginUrl`, the MCP server page's same
-field), and the Connect page offers **Install the Orbital plugin** instead. Any other agent still adds the two servers.
-A ChatGPT workspace that already has a Tana app would get a second Tana connection from a plugin that brings Tana's MCP
-server, with its own sign-in and its own set of the same tools. So an admin makes the workspace's plugin with that app's id
-(⌘K Manage Orbital settings for all Tana users, Make the workspace plugin, into Downloads as Orbital workspace plugin.zip;
-or `node plugin/build.js <url> asdk_app_…`): it requires the app (`.app.json`, `extensions.com.openai.apps`) and keeps only
-Orbital's MCP server in `mcp.json`. The admin uploads it in ChatGPT, installs it for everyone, and pastes its link beside the
-MCP server (the same page, or the Settings window's Custom MCP tab). The zip a person saves still brings Tana's MCP server: that is for a workspace without its own plugin.
-`node plugin/build.js [MCP server URL] [Tana app id]` makes the same zip in `dist/plugins`.
+**The servers, or the workspace's plugin.** Orbital makes no ChatGPT plugin. An agent adds the two servers as custom MCP
+servers, a name and a URL each: Orbital's (the workspace's own once an admin set it in Tana, else orbital.md) and Tana's
+`home.tana.inc/mcp`. The Connect page names both (↩ copies a URL; for your Dot, Open ChatGPT plugins is where ChatGPT adds
+them), then the link code: Copy the instructions, or Copy the code alone. An admin who installed an Orbital plugin in ChatGPT
+for the whole workspace names its chatgpt.com link (`pluginUrl`, ⌘K Open Orbital Settings for Tana Workspace or the Settings
+window's MCP tab): the instructions then ask your Dot to add that plugin first and link with the code
+(main/mcp-server.js `linkCode`), and your Dot's Connect page leaves out the servers and the self-hosted setting.
 
 Every Orbital in a Tana workspace hands over through one relay: the one the workspace's admins chose, or orbital.md.
 There is no MCP server of your own. The choice is `mcpServerUrl` in the `ext:orbital` root of Tana's org document
@@ -200,7 +194,8 @@ There is no MCP server of your own. The choice is `mcpServerUrl` in the `ext:orb
 `MCP server.base` resolves it. In the app it is called a **self-hosted Orbital MCP server**: Connect your personal agent's
 **Use a self-hosted Orbital MCP server …** opens it, for an admin only (the session token's `role`, admin or owner, sent
 with the link code as `admin`): everyone else sees one line naming the server in use, the workspace's or the default.
-The page has **Copy the instructions for ChatGPT** and the field to paste a URL into, and only an admin's Orbital
+The page has **Copy instructions to host your own for ChatGPT** and the field to paste a URL into (an admin on the
+default sees no default server there, only the workspace's own once it has one), and only an admin's Orbital
 writes it (`setWorkspace`). Tana does not refuse a member's write yet, so that is Orbital's own check until it does
 (#815). A URL is used only once its `/health` answers `ok` (main/mcp-server.js `checkServer`).
 

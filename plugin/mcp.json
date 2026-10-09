@@ -1,7 +1,0 @@
-{
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
-  "mcpServers": {
-    "orbital": { "type": "streamable-http", "url": "https://orbital.md/mcp" },
-    "tana": { "type": "streamable-http", "url": "https://home.tana.inc/mcp" }
-  }
-}

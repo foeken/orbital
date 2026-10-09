@@ -392,8 +392,10 @@ const server = http.createServer(mcp.handle);
   // D1 here is node:sqlite behind D1's own calls, so what is checked is the adapter and d1Store, not the queries again
   {
     const { DatabaseSync } = require('node:sqlite'), sqlite = new DatabaseSync(':memory:');
+    let slow = 0; // ms each D1 call takes, as a real D1 does: the body must still reach a handler that waited on one first
+    const wait = () => (slow ? new Promise((r) => setTimeout(r, slow)) : null);
     const D1 = { prepare(sql) { const st = sqlite.prepare(sql); let a = []; const s = { bind: (...x) => { assert.ok(!x.includes(undefined), 'D1 refuses undefined: ' + sql); a = x; return s; },
-      first: async () => st.get(...a) ?? null, all: async () => ({ results: st.all(...a) }), run: async () => ({ meta: { changes: Number(st.run(...a).changes) } }) }; return s; } };
+      first: async () => { await wait(); return st.get(...a) ?? null; }, all: async () => { await wait(); return { results: st.all(...a) }; }, run: async () => { await wait(); return { meta: { changes: Number(st.run(...a).changes) } }; } }; return s; } };
     const worker = require('../mcp-server/worker'), env = { DB: D1 }, site = 'https://orbital.example.chatgpt.site';
     const ask = async (method, p, { body, auth } = {}) => {
       const res = await worker.fetch(new Request(site + p, { method, body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
@@ -404,6 +406,13 @@ const server = http.createServer(mcp.handle);
     assert.equal((await ask('GET', '/.well-known/oauth-protected-resource/api/mcp')).json.resource, site + '/api/mcp', 'on a Site the MCP server is at /api/mcp, Sites keeping /mcp');
     const list = await ask('POST', '/api/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
     assert.deepEqual([list.status, list.json.result.tools.map((t) => t.name), list.headers.get('access-control-allow-origin')], [200, ['link_orbital'], '*'], 'its MCP answers, open to the phones\' engine');
+    // a signed-in request looks its token up in D1 before it reads the body: on a Site that read once never ended (the
+    // body's end told before anybody listened), so every call from ChatGPT after sign-in hung
+    slow = 20;
+    const late = await Promise.race([ask('POST', '/api/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'tools/list' }, auth: 'Bearer ' + 'x'.repeat(43) }),
+      new Promise((r) => setTimeout(() => r(null), 3000))]);
+    assert.ok(late && late.status === 200, 'a body read after a slow D1 lookup still arrives');
+    slow = 0;
     const options = await ask('OPTIONS', '/api/mcp');
     assert.deepEqual([options.status, options.json], [204, null], 'a preflight has no body');
     const key = 'Orbital ' + newKey(), made = await ask('POST', '/api/mcp/orbital/codes', { auth: key });

@@ -52,6 +52,12 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 /* the field an agent's switch opens when it needs a paste first (Dot's chat link), under its row and in line with its label */
 .foot, .error { margin: 12px 10px 0; font-size: 11px; color: var(--muted); }
 .error { color: var(--red); }
+/* the MCP tab's banner: what is set there is set for everyone in the workspace, so it says so first, tinted */
+.banner { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent) 30%, transparent); }
+.banner .icon { flex: none; width: 22px; height: 22px; color: var(--accent); }
+.banner .icon svg { width: 22px; height: 22px; }
+.banner b { font-weight: 600; }
+.banner + .head { margin-top: 0; }
 
 /* the controls, in the system's sizes: a push button, a pop-up button (its menu is macOS's own), a segmented control, a switch */
 .btn { flex: none; height: 22px; padding: 0 11px; border: 0; border-radius: 6px; background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline), 0 1px 1.5px rgba(0, 0, 0, 0.08); white-space: nowrap; }

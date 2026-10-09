@@ -126,16 +126,6 @@ async function oldServer() {
   toldOld = true;
   return w;
 }
-// The Orbital plugin for ChatGPT (plugin/), made here with the MCP server this Orbital uses in it, since only Orbital knows
-// which that is: saved to Downloads and shown in the Finder, for the person to upload in ChatGPT. tanaApp: an admin making the
-// workspace's plugin names the Tana app the ChatGPT workspace already has, which it then uses rather than Tana's MCP server
-// (plugin/build.js), for everyone to install from its link (usePlugin below)
-function savePlugin(tanaApp) {
-  const { app, shell } = require('electron'), path = require('node:path');
-  const out = require('../../plugin/build').pack(server.base, path.join(app.getPath('downloads'), tanaApp === undefined ? 'Orbital plugin.zip' : 'Orbital workspace plugin.zip'), tanaApp || undefined);
-  shell.showItemInFolder(out);
-  return out;
-}
 // The workspace's MCP server, set by an admin for everyone in it; an empty url goes back to orbital.md. Agents are linked to one
 // MCP server: on another, the list is that MCP server's, empty until they are linked there (refresh).
 async function useServer(url) {
@@ -143,8 +133,8 @@ async function useServer(url) {
   await refresh().catch(() => {});
   return mcpWhere();
 }
-// The workspace's Orbital plugin in ChatGPT, once an admin installed it for everyone there: its chatgpt.com link, which
-// the Connect page then offers in place of a plugin to save and upload; an empty url takes it out again
+// The workspace's Orbital plugin in ChatGPT, once an admin installed it for everyone there: its chatgpt.com link, which the
+// linking instructions then ask the Dot to add (mcp-server.js linkCode); an empty url takes it out again
 async function usePlugin(url) {
   let u = null;
   if (url) { try { u = new URL(String(url).trim()); } catch { /* below */ } }
@@ -163,8 +153,8 @@ const ipc = {
   'mcp:where': () => mcpWhere(),
   'mcp:use': async (e, url) => told(e, await useServer(url)),
   'mcp:usePlugin': async (e, url) => told(e, await usePlugin(url)),
+  'mcp:check': (_e, url) => mcpServer.probeServer(url), // a typed URL asked, nothing changed: { url, version, needed, outdated } or { error }
   'mcp:old': () => oldServer(),
-  'mcp:plugin': (_e, tanaApp) => savePlugin(tanaApp),
 };
 
 module.exports = { server, orbitalKey, load, refresh, refreshSoon, linkCode, codeStatus, cancelCode, rename, unlink, resetKey, send, statuses, ipc };

@@ -38,7 +38,8 @@ const MODERN = '2026-07-28'; // MCP 2.0: no handshake, the version in every requ
 // What this MCP server can do for Orbital, as one number /health says, at orbital.md and on every workspace's Site alike.
 // Raised only when Orbital needs something an older MCP server lacks (main/mcp-server.js SERVER_VERSION, the oldest it works with):
 // a workspace running an older one is told to update it.
-const VERSION = 1;
+// 2: on a Site, a request whose handler waited on D1 before reading its body no longer hangs (worker.js serve)
+const VERSION = 2;
 const VERSIONS = [MODERN, ...PROTOCOLS];
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford's: no I, L, O or U to misread
 const TANA_MCP = 'https://home.tana.inc/mcp';

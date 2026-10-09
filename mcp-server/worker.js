@@ -24,15 +24,17 @@ async function post(url, headers, body, { timeout = 10e3, maxBytes = LIMITS.call
 }
 
 // A Request as the handler reads one (method, url, headers, the caller's address, the body as one chunk), and a Response
-// from what it writes.
+// from what it writes. The body is read once and handed to every listener whenever it listens: the handler waits on D1 (its
+// schema, a token) before it reads, and an end told before anybody listened was lost, hanging the request (Node's own
+// request holds its body until read, which is why orbital.md never hung).
 function serve(handle, request) {
-  const url = new URL(request.url), headers = {}, listeners = {};
+  const url = new URL(request.url), headers = {};
   for (const [k, v] of request.headers) headers[k] = v;
+  const body = ['GET', 'HEAD', 'OPTIONS'].includes(request.method) ? Promise.resolve(null) : request.arrayBuffer();
   const req = { method: request.method, url: url.pathname + url.search, headers, socket: { remoteAddress: headers['cf-connecting-ip'] || '' },
-    on(event, fn) { (listeners[event] ||= []).push(fn); return req; }, destroy() {} };
-  const emit = (event, value) => (listeners[event] || []).forEach((fn) => fn(value));
-  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) queueMicrotask(() => emit('end'));
-  else request.arrayBuffer().then((b) => { if (b.byteLength) emit('data', Buffer.from(b)); emit('end'); }, (e) => emit('error', e));
+    // listeners run in the order they were added (data before end), however late
+    on(event, fn) { body.then((b) => { if (event === 'data' && b && b.byteLength) fn(Buffer.from(b)); else if (event === 'end') fn(); }, (e) => { if (event === 'error') fn(e); }); return req; },
+    destroy() {} };
   return new Promise((resolve) => {
     const out = new Headers();
     const res = { statusCode: 200, headersSent: false,

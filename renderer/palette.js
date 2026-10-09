@@ -448,7 +448,7 @@ function paletteRows(q, typed = q) {
   if (tana.mcpReset && agentList.some((x) => x.linked)) rows.push({ id: 'relayReset', group: 'Settings', icon: 'linkReset', label: 'Reset agent link key', hint: 'If it may have been seen: your agents stay linked',
     run: () => run(async () => { await tana.mcpReset(); showNote('New link key: your agents stay linked'); }) });
   if (tana.mcpLink) rows.push({ id: 'linkAgent', group: 'Settings', icon: 'mcp', label: 'Connect your personal agent …', hint: 'Your Dot in ChatGPT, or another agent', keepOpen: true, run: () => openLinkPalette() }); // renderer/agent.js
-  if (tana.mcpWhere) rows.push({ id: 'orgSettings', group: 'Settings', icon: 'space', badge: 'Admin only', label: 'Manage Orbital settings for all Tana users …', keepOpen: true, run: openOrgPalette }); // renderer/agent.js
+  if (tana.mcpWhere) rows.push({ id: 'orgSettings', group: 'Settings', icon: 'space', badge: 'Admin only', label: 'Open Orbital Settings for Tana Workspace …', keepOpen: true, run: openOrgPalette }); // renderer/agent.js
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Turns on translation, Discuss with and more' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });

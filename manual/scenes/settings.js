@@ -29,18 +29,20 @@ const card = [310, 76, 660, 556];
 // where main.js insets them; close is the only live one, as a settings window has it.
 const SETTINGS_API = "start({ prefs: { theme: new URLSearchParams(location.search).get('theme') }, translate: () => {}, filters: async () => ['Daily standup', 'Lunch*', 'Focus time'],"
   + " aiOptions: async () => ({ models: ['gpt-6-luna', 'gpt-6-sol', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'medium', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'medium', 'high', 'xhigh'] }),"
-  + " chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@example.com' }), mcpHidden: async () => true, setMcpHidden: async (on) => on, setPref: async () => {},"
+  + " chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@example.com' }), mcpHidden: async () => true, setMcpHidden: async (on) => on, setPref: async () => {}, mcpWhere: async () => window.org,"
   + " agentList: async () => window.agents, enableAgent: async (id, on, setup) => (window.agents = window.agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a))), setDefaultAgent: async () => window.agents,"
   + " settingsSize: (h) => { frameElement.style.height = h + 'px'; } }); 1";
 const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
   { id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true, app: 'ChatGPT' },
   { id: 'claude', label: 'Claude', icon: 'robot', installed: false, enabled: false, missing: 'Install Claude Code' }];
+// the MCP tab is an admin's only: the window is handed the workspace's settings for that shot alone, as main answers an admin
+const ORG = { admin: true, url: 'https://orbital.md/mcp', workspace: null, fallback: 'https://orbital.md/mcp', plugin: 'https://chatgpt.com/plugins/orbital', deploy: 'Deploy', changedBy: { name: 'Robin Vega' } };
 const settingsWindow = (tab = 'general') => ({ page: 'shell', js: "(() => { const theme = window.shell.state().theme, w = document.createElement('div'), f = document.createElement('iframe'), s = document.createElement('style');"
   + " s.textContent = '#mc-settings { position: fixed; z-index: 9999; left: 50%; top: 70px; width: 600px; transform: translateX(-50%); border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 0.5px rgba(0,0,0,.3), 0 22px 70px rgba(0,0,0,.35); }"
   + " #mc-settings iframe { display: block; width: 600px; height: 300px; border: 0; } #mc-settings i { position: absolute; top: 13px; width: 12px; height: 12px; border-radius: 50%; background: rgba(128,128,128,.35); } #mc-settings i:first-of-type { background: #ff5f57; }';"
   + " w.id = 'mc-settings'; w.innerHTML = '<i style=\"left:18px\"></i><i style=\"left:38px\"></i><i style=\"left:58px\"></i>'; document.head.append(s);"
   + " localStorage.setItem('settingsTab', " + JSON.stringify(tab) + "); f.src = 'settings.html?side=settings&theme=' + theme; w.prepend(f); document.body.append(w);"
-  + " return new Promise((r) => { f.onload = () => { f.contentWindow.agents = " + JSON.stringify(AGENTS) + "; f.contentWindow.eval(" + JSON.stringify(SETTINGS_API) + "); setTimeout(r, 300); }; }); })()" });
+  + " return new Promise((r) => { f.onload = () => { f.contentWindow.agents = " + JSON.stringify(AGENTS) + "; f.contentWindow.org = " + JSON.stringify(tab === 'org' ? ORG : null) + "; f.contentWindow.eval(" + JSON.stringify(SETTINGS_API) + "); setTimeout(r, 300); }; }); })()" });
 const settingsFrame = { sel: '#mc-settings', page: 'shell', pad: 36 };
 
 
@@ -48,6 +50,7 @@ module.exports = [
   // ---- the Settings window: ⌘, opens it over the app (drawn here as main would, settingsWindow above) ----
   { name: 'settings-window', size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }], steps: [settingsWindow('general'), { wait: 300 }], clip: settingsFrame },
   { name: 'settings-ai', size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }], steps: [settingsWindow('ai'), { wait: 300 }], clip: settingsFrame },
+  { name: 'settings-mcp', size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }], steps: [settingsWindow('org'), { wait: 300 }], clip: settingsFrame },
   { name: 'settings-tabs', video: true, size: '1280x800', setup: [open('mockdoc0'), { wait: 800 }, settingsWindow('general'), { wait: 300 }], steps: [
     { click: '[data-key="tab/ai"]', page: 'settings' }, { wait: 1200 }, { click: '[data-key="tab/agents"]', page: 'settings' }, { wait: 900 },
     { click: '[data-key="agent/codex"]', page: 'settings' }, { wait: 700 }, { click: '[data-key="agent/codex"]', page: 'settings' }, { wait: 700 },

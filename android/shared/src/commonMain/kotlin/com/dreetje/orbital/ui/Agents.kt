@@ -173,6 +173,11 @@ fun ConnectAgent(engine: Engine, back: () -> Unit) {
                             Icon(Icons.Outlined.ContentCopy, null, Modifier.size(20.dp), c.text); Text("Copy the instructions", Modifier.weight(1f), color = c.text)
                             if (copied == "message") Text("Copied", color = c.secondary)
                         }
+                        // the code alone, for an agent whose setup asks for it (the Mac's Copy the code)
+                        GroupRow(onClick = { copy("code", l.code) }) {
+                            Icon(Icons.Outlined.ContentCopy, null, Modifier.size(20.dp), c.text); Text("Copy the code", Modifier.weight(1f), color = c.text)
+                            if (copied == "code") Text("Copied", color = c.secondary)
+                        }
                         if (state == "expired" || l.expiresAt <= now) {
                             GroupRow { Text("The code expired. Nobody used it.", color = c.secondary) }
                             GroupRow(last = true, onClick = { asks++ }) { Text("Get a new code", color = c.text) }

@@ -1292,7 +1292,7 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
   - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
     another Mac switched it on) and the default agent.
-  - **Lists**: the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
+  - **Hidden** (eye-slash): the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
     it) and Show MCP chats.
   Every control makes the call its Cmd+K row makes, so a choice made there and one made here are the same write. Main
   sends the window what it sends the pages (main/state.js `send`, main/settings.js `tellOthers`): a setting changed in a
