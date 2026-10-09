@@ -74,7 +74,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                 Group("Tana") { GroupRow(last = true) { Label("tana", "Account"); Text(engine.email ?: "Tana", color = c.secondary) } }
             }
             item("chatgpt") {
-                Group("ChatGPT", footer = "Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this phone.") {
+                Group("ChatGPT", footer = "Your ChatGPT account is for the AI in Orbital. It stays on this phone.") {
                     val a = account
                     if (a == null) GroupRow(last = true, onClick = { signingIn = true }) { Label("chatgpt", "Sign in with ChatGPT") }
                     else {

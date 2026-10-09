@@ -16,7 +16,7 @@ const codexBin = () => agent.findBin('codex', ['/Applications/ChatGPT.app/Conten
 function appServerRpc(timeoutMs = 20000, onNote, options = {}) {
   const { spawn } = require('node:child_process');
   const bin = options.bin || codexBin();
-  if (!bin) throw new Error('Codex is not installed on this Mac: install the ChatGPT app or the Codex CLI');
+  if (!bin) throw new Error('ChatGPT is not on this Mac: install the ChatGPT app');
   const args = [...(options.codexHome ? ['-c', 'cli_auth_credentials_store="file"'] : []), ...(bin.endsWith('/codex-app-server') ? [] : ['app-server'])];
   const child = spawn(bin, args, { env: options.codexHome ? isolatedCodexEnv(options.codexHome) : process.env, stdio: ['pipe', 'pipe', 'ignore'] });
   let buf = '', seq = 0, dead = null;
@@ -34,7 +34,7 @@ function appServerRpc(timeoutMs = 20000, onNote, options = {}) {
       // A notification carries a method and no id. It is the only way a caller hears that a turn has ended, which is
       // what decides when this child may let the thread go.
       if (m.method !== undefined && m.id === undefined) { if (onNote) { try { onNote(m); } catch {} } continue; }
-      if (m.method !== undefined) { if (options.decline) child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code: -32601, message: 'Orbital cannot answer this: continue the chat in Codex' } }) + '\n'); continue; } // a request of the server's: its id is not one of ours
+      if (m.method !== undefined) { if (options.decline) child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code: -32601, message: 'Orbital cannot answer this: continue the chat in the ChatGPT app' } }) + '\n'); continue; } // a request of the server's: its id is not one of ours
       const r = waiting.get(m.id);
       if (!r) continue;
       waiting.delete(m.id);
@@ -156,7 +156,7 @@ async function createTask({ key, prompt, instructions, readOnly = false, userDat
     if (readOnly) Object.assign(params, { sandbox: 'read-only', approvalPolicy: 'never' });
     const started = await rpc.call('thread/start', params);
     id = started && started.thread && started.thread.id;
-    if (!id) throw new Error('Codex did not return a task id');
+    if (!id) throw new Error('ChatGPT did not return a task id');
     owned.set(key, entry); // from here something owns the thread, so something must be able to give it back
     await rpc.call('turn/start', { threadId: id, input: [{ type: 'text', text: prompt }] });
   } catch (e) {
@@ -167,7 +167,7 @@ async function createTask({ key, prompt, instructions, readOnly = false, userDat
   if (!gone) { cap = setTimeout(letGo, runMs); cap.unref?.(); }
   return id;
 }
-const openUrl = (url) => { const { shell } = require('electron'); if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here'); return shell.openExternal(url); };
+const openUrl = (url) => { const { shell } = require('electron'); if (!shell || !shell.openExternal) throw new Error('Cannot open the ChatGPT app from here'); return shell.openExternal(url); };
 // A Codex turn's answer: its final answer, or, once it has completed, what it said last when the model does not mark
 // one (while it runs, an unmarked message is progress, not the answer)
 function codexAnswer(turn) {
@@ -177,7 +177,7 @@ function codexAnswer(turn) {
 }
 
 const codex = agent.register({
-  id: 'codex', label: 'Codex', icon: 'robot', missing: 'Install the ChatGPT app or the Codex CLI',
+  id: 'codex', label: 'ChatGPT', icon: 'chatgpt', missing: 'Install the ChatGPT app',
   available: () => !!codexBin(),
   // Assign to Agent opens the new task in Codex, where the work is watched; a chat question stays on its page.
   async start({ key, nodeUri, title, rules, prompt, readOnly, userData }) {

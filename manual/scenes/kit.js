@@ -39,8 +39,8 @@ const SIDEBAR_PINS = [{ id: 'p1', uri: 'mockdoc2', node: { title: 'Check out the
   { id: 'p2', uri: 'mockmeeting2', node: { title: 'Leadership sync', icon: 'meeting' }, children: [] },
   { id: 's1', label: 'Studio', children: [{ id: 'p3', uri: 'tana:space:mock', node: { title: 'Studio LT', icon: 'space' }, children: [] },
     { id: 'p4', uri: 'mockspacedoc0', node: { title: 'Studio LT charter', icon: 'doc' }, children: [] }] }];
-// and its Agent chats section (main/agentchats.js list's shape), the mock's two chats with Codex (renderer/mock.js)
-const SIDEBAR_CHATS = [{ id: 'orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e', title: 'Echo', icon: 'robot' }, { id: 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001', title: 'Draft the release notes for 0.11', icon: 'robot' }, { id: 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000002', title: 'Why is the iPhone build slow?', icon: 'robot' }];
+// and its Agent chats section (main/agentchats.js list's shape), the mock's two chats with ChatGPT (renderer/mock.js)
+const SIDEBAR_CHATS = [{ id: 'orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e', title: 'Echo', icon: 'robot' }, { id: 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001', title: 'Draft the release notes for 0.11', icon: 'chatgpt' }, { id: 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000002', title: 'Why is the iPhone build slow?', icon: 'chatgpt' }];
 const live = (doc = null, withReal = false) => ({ page: 'shell', js: '(' + (async (doc, REAL, PINS, CHATS) => {
   const theme = document.documentElement.dataset.theme || 'light';
   const prep = (f) => { const w = f.contentWindow; if (REAL) w.eval(REAL); w.document.getElementById('login')?.click(); if (theme === 'dark') w.applyTheme('dark');

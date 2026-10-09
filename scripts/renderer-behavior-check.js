@@ -2275,8 +2275,8 @@ function runPaletteSkipCheck() {
   assert.match(emptyText.text('orbital:timeline'), /^Nothing yet\./, 'an empty Timeline says what shows up there');
   assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⇧⌘Space creates a task.', 'an empty My Tasks names the key that makes one');
   assert.equal(emptyText.text('tana:search:meet'), 'Nothing matches.', 'a search that lists no tasks does not');
-  assert.match(emptyText.text('orbital:agent-chats'), /New chat with Codex starts one/, 'an empty Agent chats page says how to start one');
-  assert.match(emptyText.text('orbital:agent-chat:new'), /^Ask Codex anything below/, 'and a new agent chat says where it is kept, not Tana\'s words');
+  assert.match(emptyText.text('orbital:agent-chats'), /New chat with ChatGPT starts one/, 'an empty Agent chats page says how to start one');
+  assert.match(emptyText.text('orbital:agent-chat:new'), /^Ask ChatGPT anything below/, 'and a new agent chat says where it is kept, not Tana\'s words');
   // a workflow type's documents are tasks, so a search of it alone is a list of tasks: its Status and Assigned to pills show
   assert.equal(emptyText.text('tana:search:flow'), 'Nothing matches. ⇧⌘Space creates a task.', 'a search of a workflow type lists tasks');
   assert.equal(emptyText.text('tana:search:risk'), 'Nothing matches.', 'one that also names a type without a workflow does not');

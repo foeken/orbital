@@ -1419,18 +1419,18 @@ flow('Open Orbital Settings for Tana Workspace: the MCP server and the plugin li
 // Agent chats (renderer/agentchats.js, main/agentchats.js): ⌘K New chat with Codex opens a chat with nothing in it, its
 // first message makes the chat and the page becomes it, Codex's answer streams in where Tana's would, the Agent chats
 // page lists it first, and Delete chat takes it off the list and goes back there.
-flow('Agent chats: a new chat with Codex, its answer, the list, and Delete chat', async (p) => {
+flow('Agent chats: a new chat with ChatGPT, its answer, the list, and Delete chat', async (p) => {
   await p.start();
-  await command(p, 'new chat with codex', 'New chat with Codex');
+  await command(p, 'new chat with chatgpt', 'New chat with ChatGPT');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:new" && !composer.hidden', 'a new chat with its composer');
-  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Codex · @ links · Not shared with Tana', 'the composer says who it goes to, and that Tana gets none of it');
+  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message ChatGPT · @ links · Not shared with Tana', 'the composer says who it goes to, and that Tana gets none of it');
   assert.match(await p.js('document.querySelector(".chat-context")?.textContent || ""'), /^Only you · not shared with Tana/, 'the line over the chat says it is private, and Tana does not see it');
-  assert.match(await p.js('outline.textContent'), /kept in Codex/, 'and the empty chat says where it is kept');
+  assert.match(await p.js('outline.textContent'), /kept in the ChatGPT app/, 'and the empty chat says where it is kept');
   await p.js('composerText.focus(); 1');
   await p.type('Summarise my week'); await p.key('↩');
   await p.waitFor('zoom && /^orbital:agent-chat:0198c0de/.test(zoom.docId)', 'the page becomes the new chat');
   const id = await p.js('zoom.docId');
-  await p.waitFor('/Mock answer from Codex to: Summarise my week/.test(outline.textContent)', 'Codex\u2019s answer', 6000);
+  await p.waitFor('/Mock answer from ChatGPT to: Summarise my week/.test(outline.textContent)', 'Codex\u2019s answer', 6000);
   assert.deepEqual(await p.js('[...outline.querySelectorAll(".chat-msg")].map((m) => m.className.replace("chat-msg ", "").split(" ")[0])'), ['mine', 'theirs'], 'your message, then Codex\u2019s');
   assert.equal(await p.js('document.getElementById("title").textContent'), 'Summarise my week', 'titled with its first message');
   await p.waitFor('/not shared with Tana · GPT-6 · High$/.test(document.querySelector(".chat-context")?.textContent || "")', 'the model and reasoning beside it');
@@ -1511,7 +1511,7 @@ flow('Your Dot has a chat of its own, which cannot be renamed or deleted', async
   await p.waitFor('document.querySelector(".chat-context")?.textContent === "Goes through orbital.md, Orbital\u2019s relay, run by us · only you see it here".replace("\u2019", "\'")', 'the line says whose server it goes through');
   assert.match(await p.js('document.querySelector(".chat-context").title'), /pass through orbital\.md, Orbital's relay, run by us, which passes each message on as it comes and keeps an answer only until Orbital collects it/, 'and, on a hover, what that server does with it');
   await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
-  assert.deepEqual(await p.js('["renameAgentChat", "deleteAgentChat", "openAgentChat", "setIcon"].filter((r) => paletteRows("").some((x) => x.id === r))'), [], 'nothing to rename, delete, open in Codex or give an icon');
+  assert.deepEqual(await p.js('["renameAgentChat", "deleteAgentChat", "openAgentChat", "setIcon"].filter((r) => paletteRows("").some((x) => x.id === r))'), [], 'nothing to rename, delete, open in ChatGPT or give an icon');
   await closePalette(p);
   assert.equal(await p.js('renameTitle()'), false, 'and its tab\u2019s Rename does nothing');
 });

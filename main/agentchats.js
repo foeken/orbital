@@ -68,9 +68,9 @@ const title = (text) => agent.oneLine(text, 60) || 'New chat';
 // the list page's rows (and what the renderer opens them by): your Dots' chats, then the Codex chats newest first
 function list() {
   return [...dotList(), ...Object.entries(links()).sort(([, a], [, b]) => (b.at || 0) - (a.at || 0)).map(([t, l]) => ({
-    id: PREFIX + t, text: l.title || 'New chat', title: l.title || 'New chat', kind: 'document', icon: icons.typeIconName(PREFIX + t) || 'robot', editable: false, hasChildren: true, appPage: true,
+    id: PREFIX + t, text: l.title || 'New chat', title: l.title || 'New chat', kind: 'document', icon: icons.typeIconName(PREFIX + t) || 'chatgpt', editable: false, hasChildren: true, appPage: true,
     ...(icons.typeIconName(PREFIX + t) ? { svg: icons.svgOf(icons.typeIconName(PREFIX + t)) } : {}), // a glyph chosen with Set icon: the sidebar has only icons.js
-    meta: away(l) ? 'On another Mac' : 'Codex', agentChat: { agent: l.agent || 'codex', at: l.at || null, elsewhere: away(l) },
+    meta: away(l) ? 'On another Mac' : 'ChatGPT', agentChat: { agent: l.agent || 'codex', at: l.at || null, elsewhere: away(l) },
   }))];
 }
 
@@ -112,9 +112,9 @@ async function turn(threadId, text) {
   return id;
 }
 async function start(agentId, text) {
-  if ((agentId || 'codex') !== 'codex') throw new Error('Only Codex can be chatted with');
+  if ((agentId || 'codex') !== 'codex') throw new Error('Only ChatGPT can be chatted with');
   if (typeof text !== 'string' || !text.trim()) throw new Error('Type a message first');
-  if (!codexBin()) throw new Error('Codex is not installed on this Mac: install the ChatGPT app or the Codex CLI');
+  if (!codexBin()) throw new Error('ChatGPT is not on this Mac: install the ChatGPT app');
   const threadId = await turn(null, text.trim());
   store(threadId, { agent: 'codex', title: title(text), at: Date.now(), device: agent.deviceId() });
   return list().find((r) => r.id === PREFIX + threadId);
@@ -126,7 +126,7 @@ async function say(id, text) {
   const link = linkOf(id);
   if (away(link)) throw new Error('This chat is on another Mac: continue it there');
   if (typeof text !== 'string' || !text.trim()) throw new Error('Type a message first');
-  if (live.has(link.threadId)) throw new Error('Codex is still answering');
+  if (live.has(link.threadId)) throw new Error('ChatGPT is still answering');
   try { await turn(link.threadId, text.trim()); return { queued: false }; }
   catch (e) {
     const bin = codexBin();
@@ -189,10 +189,10 @@ async function rows(id, read = readTurns) {
   if (dotIdOf(id)) return dotRows(dotIdOf(id));
   if (!threadOf(id)) return []; // a new chat, its first message not sent yet
   const link = linkOf(id);
-  if (away(link)) return [{ id: 'away', text: 'This chat is on another Mac. Open it there, or in Codex on that Mac.', kind: 'block', editable: false, segments: [{ text: 'This chat is on another Mac. Open it there, or in Codex on that Mac.' }], hasChildren: false, children: [] }];
+  if (away(link)) return [{ id: 'away', text: 'This chat is on another Mac. Open it there, or in the ChatGPT app on that Mac.', kind: 'block', editable: false, segments: [{ text: 'This chat is on another Mac. Open it there, or in the ChatGPT app on that Mac.' }], hasChildren: false, children: [] }];
   const s = live.get(link.threadId), turns = (await read(link.threadId)).filter((t) => !s || t.id !== s.turnId);
   const messages = turns.flatMap(turnMessages).concat(s ? liveMessages(s) : []);
-  return chatRows(messages, { aiName: 'Codex', me: ME, streamingId: s ? 'live:a' : undefined });
+  return chatRows(messages, { aiName: 'ChatGPT', me: ME, streamingId: s ? 'live:a' : undefined });
 }
 
 // ---- your Dot: one chat per agent linked through the Orbital MCP server (main/agents/linked.js), for as long as it is linked ----

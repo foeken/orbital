@@ -310,22 +310,22 @@ function mockApi() {
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   // Agent chats (main/agentchats.js): two chats with Codex, the second on another Mac; a message is answered after a moment
   const AGENT_LIST = 'orbital:agent-chats', agentChatId = (n) => 'orbital:agent-chat:0198c0de-0000-7000-8000-' + String(n).padStart(12, '0');
-  const agentChatRow = (id, title, hoursAgo, elsewhere) => ({ id, text: title, title, kind: 'document', icon: 'robot', editable: false, hasChildren: true, appPage: true, meta: elsewhere ? 'On another Mac' : 'Codex', agentChat: { agent: 'codex', at: Date.now() - hoursAgo * 36e5, elsewhere } });
-  const codexMsg = (mine, text, minsAgo, notes) => { const m = chatMsg(mine, [].concat(text), minsAgo, notes); if (!mine) { m.text = 'Codex'; m.segments = [{ text: 'Codex' }]; } return m; };
+  const agentChatRow = (id, title, hoursAgo, elsewhere) => ({ id, text: title, title, kind: 'document', icon: 'chatgpt', editable: false, hasChildren: true, appPage: true, meta: elsewhere ? 'On another Mac' : 'ChatGPT', agentChat: { agent: 'codex', at: Date.now() - hoursAgo * 36e5, elsewhere } });
+  const codexMsg = (mine, text, minsAgo, notes) => { const m = chatMsg(mine, [].concat(text), minsAgo, notes); if (!mine) { m.text = 'ChatGPT'; m.segments = [{ text: 'ChatGPT' }]; } return m; };
   const DOT_CHAT = 'orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e';
-  content[AGENT_LIST] = [{ ...agentChatRow(DOT_CHAT, 'Echo', 0, false), meta: undefined, agentChat: { agent: 'dot', label: 'Echo', at: Date.now() - 36e5, fixed: true, via: 'orbital.md', ours: true } }, agentChatRow(agentChatId(1), 'Draft the release notes for 0.11', 1, false), agentChatRow(agentChatId(2), 'Why is the iPhone build slow?', 26, true)];
+  content[AGENT_LIST] = [{ ...agentChatRow(DOT_CHAT, 'Echo', 0, false), icon: 'robot', meta: undefined, agentChat: { agent: 'dot', label: 'Echo', at: Date.now() - 36e5, fixed: true, via: 'orbital.md', ours: true } }, agentChatRow(agentChatId(1), 'Draft the release notes for 0.11', 1, false), agentChatRow(agentChatId(2), 'Why is the iPhone build slow?', 26, true)];
   content[DOT_CHAT] = [codexMsg(true, 'What is on my plate today?', 70), Object.assign(codexMsg(false, ['Three things: the Studio LT charter, the leadership sync at 14:00, and Sam is waiting on your review.'], 69), { text: 'Echo', segments: [{ text: 'Echo' }] })];
   content[agentChatId(1)] = [codexMsg(true, 'Draft the release notes for 0.11 from the pull requests merged this week', 62),
-    codexMsg(false, ['Here is a first draft.', 'Meet Now in ⌘K makes a half-hour meeting and opens it in Tana.', 'Agent chats: chat with Codex from Orbital, kept in Codex.', 'Past days in a meeting search start folded.'], 61, ['Thought for 38 seconds'])];
-  content[agentChatId(2)] = [{ id: 'away', text: 'This chat is on another Mac. Open it there, or in Codex on that Mac.', kind: 'block', editable: false, segments: [{ text: 'This chat is on another Mac. Open it there, or in Codex on that Mac.' }], hasChildren: false, children: [] }];
+    codexMsg(false, ['Here is a first draft.', 'Meet Now in ⌘K makes a half-hour meeting and opens it in Tana.', 'Agent chats: chat with ChatGPT from Orbital, kept in the ChatGPT app.', 'Past days in a meeting search start folded.'], 61, ['Thought for 38 seconds'])];
+  content[agentChatId(2)] = [{ id: 'away', text: 'This chat is on another Mac. Open it there, or in the ChatGPT app on that Mac.', kind: 'block', editable: false, segments: [{ text: 'This chat is on another Mac. Open it there, or in the ChatGPT app on that Mac.' }], hasChildren: false, children: [] }];
   const agentChanged = [], emitAgent = (id) => setTimeout(() => agentChanged.forEach((cb) => cb(id)), 0);
   const codexAnswers = (id, text) => {
     const reply = codexMsg(false, '', 0); reply.children = []; reply.chat.streaming = true;
     content[id] = [...(content[id] || []), codexMsg(true, text, 0), reply]; emitAgent(id);
-    setTimeout(() => { const at = content[id].indexOf(reply); if (at >= 0) content[id].splice(at, 1, codexMsg(false, 'Mock answer from Codex to: ' + text, 0, ['Thought for 2 seconds'])); emitAgent(id); }, 1500);
+    setTimeout(() => { const at = content[id].indexOf(reply); if (at >= 0) content[id].splice(at, 1, codexMsg(false, 'Mock answer from ChatGPT to: ' + text, 0, ['Thought for 2 seconds'])); emitAgent(id); }, 1500);
   };
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
-  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true, opens: true }];
+  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true, opens: true }];
   const mockLink = { polls: 0 }; // how often the Connect your personal agent page has asked, since its code was made
   // the workspace's MCP server as the MCP server page shows it: orbital.md until the admin (you, here) pastes another (renderer/agent.js)
   const mockServerNow = { url: 'https://orbital.md/mcp', workspace: null, admin: true, fallback: 'https://orbital.md/mcp', changedBy: null,
@@ -744,11 +744,11 @@ function mockApi() {
       return { messageId: sent.chat.id, responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
     },
     // @Codex (main/chatagents.js): the question is a message to the chat; the answer is local, here after two and a half seconds
-    chatAgents: async () => [{ id: 'codex', label: 'Codex', icon: 'robot' }],
+    chatAgents: async () => [{ id: 'codex', label: 'ChatGPT', icon: 'chatgpt' }],
     // Agent chats (main/agentchats.js): the list, a new chat started with its first message, and the rest of the turns
     agentChats: async () => structuredClone(content[AGENT_LIST]),
     startAgentChat: async (agent, text) => { const row = agentChatRow(agentChatId(100 + (++seq)), text.slice(0, 60), 0, false); content[AGENT_LIST] = [...content[AGENT_LIST].filter((r) => r.agentChat.fixed), row, ...content[AGENT_LIST].filter((r) => !r.agentChat.fixed)]; codexAnswers(row.id, text); emitAgent(AGENT_LIST); return structuredClone(row); },
-    sendAgentChat: async (id, text) => { codexAnswers(id, text); if (id === DOT_CHAT) content[id].forEach((m) => { if (m.text === 'Codex') { m.text = 'Echo'; m.segments = [{ text: 'Echo' }]; } }); return { queued: false }; },
+    sendAgentChat: async (id, text) => { codexAnswers(id, text); if (id === DOT_CHAT) content[id].forEach((m) => { if (m.text === 'ChatGPT') { m.text = 'Echo'; m.segments = [{ text: 'Echo' }]; } }); return { queued: false }; },
     stopAgentChat: async (id) => { content[id] = (content[id] || []).filter((m) => !(m.chat && m.chat.streaming)); emitAgent(id); },
     openAgentChat: async () => true,
     agentChatInfo: async (id) => (id === DOT_CHAT ? {} : { model: 'GPT-6', effort: 'High' }),
@@ -759,7 +759,7 @@ function mockApi() {
     deleteAgentAsk: async (docId, id) => { agentAsks[docId] = (agentAsks[docId] || []).filter((a) => a.id !== id); },
     deleteChatMessage: async (docId, messageId) => { content[docId] = (content[docId] || []).filter((m) => !(m.chat && m.chat.mine && m.chat.id === messageId)); emit(docId); },
     openAgentAsk: async (docId, id) => (agentAsks[docId] || []).some((a) => a.id === id),
-    agentReplies: async (docId) => (agentAsks[docId] || []).map((a) => ({ id: a.id, question: a.question, at: a.at, agent: 'codex', label: 'Codex', ...(Date.now() - a.at < 2500 ? { state: 'working', text: '' } : { state: 'done', text: 'Mock answer from Codex, kept on this device.' }) })),
+    agentReplies: async (docId) => (agentAsks[docId] || []).map((a) => ({ id: a.id, question: a.question, at: a.at, agent: 'codex', label: 'ChatGPT', ...(Date.now() - a.at < 2500 ? { state: 'working', text: '' } : { state: 'done', text: 'Mock answer from Codex, kept on this device.' }) })),
     newChat: async () => {
       const n = { id: 'tana:chat:mocknew' + (++seq), text: 'New chat', kind: 'document', hasChildren: true, editable: false, icon: 'chat', tags: [{ label: 'chat', color: 'grey' }] };
       created[n.id] = n; content[n.id] = []; all.push(n);

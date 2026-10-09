@@ -56,9 +56,9 @@ app already uses. Cmd+S searches Tana itself, with `#task`, `#meeting`, `#space`
 `#<Type>` filters; Cmd+F filters the rows already on screen.
 
 **Hand a task to an agent.** Assign a node to an agent with a prompt: Tana's own AI, always there and
-answering in a Tana chat on the node, or Codex when this Mac has it (Claude is coming soon; Cmd+K "Choose
+answering in a Tana chat on the node, or ChatGPT when this Mac has the ChatGPT app, whose Codex runs the task (Claude is coming soon; Cmd+K "Choose
 agents" switches them on and picks the default). The row wears a badge that reads the task's state and
-opens it, and @Codex in a chat answers
+opens it, and @ChatGPT in a chat answers
 on this Mac only. "Discuss with…" makes a node a discussion task with someone, and a model can read
 its title to suggest who (sign in with ChatGPT, or keep the OpenAI API key you saved before; only the
 title is sent, and the key stays on the machine).

@@ -478,7 +478,7 @@ ipcMain.handle('chatgpt:login', async () => {
   if (!result.verificationUrl) return result;
   try {
     const loginUrl = new URL(result.verificationUrl);
-    if (loginUrl.protocol !== 'https:') throw new Error('Codex returned an invalid ChatGPT sign-in URL');
+    if (loginUrl.protocol !== 'https:') throw new Error('ChatGPT returned an invalid sign-in URL');
     await shell.openExternal(loginUrl.toString());
   }
   catch (error) { await ai.cancelChatGPTLogin(app.getPath('userData')); throw error; }

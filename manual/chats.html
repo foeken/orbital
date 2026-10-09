@@ -60,7 +60,7 @@
   .ch-ph1, .ch-ph2, .ch-t1, .ch-t2 { transition: none; }
   .ch-a1 { overflow: hidden; }
 
-  /* @Codex: a message for Tana goes to the chat; one for Codex stays on this Mac */
+  /* @ChatGPT: a message for Tana goes to the chat; one for ChatGPT stays on this Mac */
   .ch-codex { --loop: 8s; gap: 150px; }
   .ch-codex .win { width: 230px; min-height: 120px; }
   .ch-codex .ttl { display: flex; align-items: center; gap: 8px; font-size: 15px; }
@@ -149,7 +149,7 @@
       <li><b>Who can see it</b> "Only you can see this chat", or the faces of the people in it. The Add participants link opens the sharing page.</li>
       <li><b>Your messages</b> In a light blue bubble on the right. Hover over one to see when it was sent.</li>
       <li><b>Thought for 14 seconds</b> How long Tana worked on the answer below it.</li>
-      <li><b>Who answered</b> In bold over each run of replies: Tana AI, a colleague, or Codex.</li>
+      <li><b>Who answered</b> In bold over each run of replies: Tana AI, a colleague, or ChatGPT.</li>
       <li><b>References</b> Nodes a message mentions or attaches, as links that open them.</li>
       <li><b>Proposals</b> What Tana suggested creating or changing, as cards.</li>
       <li><b>The message box</b> It stays at the bottom however long the chat gets.</li>
@@ -187,9 +187,9 @@
     <div class="split flip">
       <div>
         <h3>@ links and mentions</h3>
-        <p>Type <b>@</b> to link a node. <b>Tana</b> comes first: mentioning it asks Tana to answer, even in a chat with other people. <b>Codex</b> comes next (see <a href="#codex">below</a>), then your recent pages and search results. Pasting a Tana link turns it into the node's chip as well, and so does dragging a row onto the chat: drop it anywhere on the conversation, or on a chat in the sidebar, and its chip lands in the message box.</p>
+        <p>Type <b>@</b> to link a node. <b>Tana</b> comes first: mentioning it asks Tana to answer, even in a chat with other people. <b>ChatGPT</b> comes next (see <a href="#codex">below</a>), then your recent pages and search results. Pasting a Tana link turns it into the node's chip as well, and so does dragging a row onto the chat: drop it anywhere on the conversation, or on a chat in the sidebar, and its chip lands in the message box.</p>
       </div>
-      <figure class="shot"><img data-m="chats-mention" alt="The @ dropdown with Tana, Codex and a recent page"><figcaption>"@" at the caret. Tana first, then Codex.</figcaption></figure>
+      <figure class="shot"><img data-m="chats-mention" alt="The @ dropdown with Tana, ChatGPT and a recent page"><figcaption>"@" at the caret. Tana first, then ChatGPT.</figcaption></figure>
     </div>
     <div class="split">
       <div>
@@ -272,8 +272,8 @@
   </section>
 
   <section class="topic">
-    <h2 id="codex" data-short="Ask @Codex" data-k="codex agent local device private answer add to message open codex task">Ask @Codex, privately</h2>
-    <p>Pick <b>Codex</b> after <b>@</b> and your question goes to a Codex task on this Mac instead of to Tana. Codex reads the conversation and answers you alone. Nothing of it is written to Tana, so nobody else in the chat sees the question or the answer.</p>
+    <h2 id="codex" data-short="Ask @ChatGPT" data-k="codex agent local device private answer add to message open codex task chatgpt">Ask @ChatGPT, privately</h2>
+    <p>Pick <b>ChatGPT</b> after <b>@</b> and your question goes to a ChatGPT task on this Mac instead of to Tana. ChatGPT reads the conversation and answers you alone. Nothing of it is written to Tana, so nobody else in the chat sees the question or the answer.</p>
     <div class="mg ch-codex" aria-hidden="true">
       <div class="win">
         <div class="ttl"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 14.25h8a3.25 3.25 0 0 0 .4-6.48A4.5 4.5 0 0 0 4.75 8a3 3 0 0 0 .25 6.25Z"/></svg>The chat</div>
@@ -283,48 +283,48 @@
       <div class="win">
         <div class="ttl"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.75" y="3.25" width="12.5" height="8.5" rx="1.5"/><path d="M6.5 14.75h5M9 11.75v3"/></svg>This Mac</div>
         <div class="mt-small">Only you</div>
-        <div class="ch-land"><span class="ch-chip grey ch-l2"><b>@Codex</b> what changed?</span></div>
+        <div class="ch-land"><span class="ch-chip grey ch-l2"><b>@ChatGPT</b> what changed?</span></div>
       </div>
       <div class="ch-src">
         <span class="ch-chip ch-f1">Draft the memo?</span>
-        <span class="ch-chip grey ch-f2"><b>@Codex</b> what changed?</span>
+        <span class="ch-chip grey ch-f2"><b>@ChatGPT</b> what changed?</span>
       </div>
     </div>
     <div class="split">
       <div>
-        <p>Your question shows in a grey bubble among the messages, marked with a crossed-out cloud: "Only visible for you, on this device. Never saved to Tana." Codex's answer comes under it in grey, with the dots until it arrives. Questions and answers are kept on this Mac, so they are still there after a restart.</p>
+        <p>Your question shows in a grey bubble among the messages, marked with a crossed-out cloud: "Only visible for you, on this device. Never saved to Tana." ChatGPT's answer comes under it in grey, with the dots until it arrives. Questions and answers are kept on this Mac, so they are still there after a restart.</p>
         <ul>
-          <li><b>Add to message</b> on Codex's name line (or <kbd>↩</kbd> on the selected answer, or <kbd>⌘K</kbd> <b>Add Codex’s answer to message</b>) puts the answer in your message box, to send as your own words.</li>
-          <li>Click the name line, or run <kbd>⌘K</kbd> <b>Open Codex task</b>, to open the task in Codex.</li>
+          <li><b>Add to message</b> on ChatGPT's name line (or <kbd>↩</kbd> on the selected answer, or <kbd>⌘K</kbd> <b>Add ChatGPT’s answer to message</b>) puts the answer in your message box, to send as your own words.</li>
+          <li>Click the name line, or run <kbd>⌘K</kbd> <b>Open ChatGPT task</b>, to open the task in the ChatGPT app.</li>
           <li><b>Delete message</b> on the question removes it and its answer from this Mac.</li>
         </ul>
       </div>
-      <figure class="clip"><video data-m="chats-codex"></video><figcaption>A question for Codex. The answer stays on this Mac.</figcaption></figure>
+      <figure class="clip"><video data-m="chats-codex"></video><figcaption>A question for ChatGPT. The answer stays on this Mac.</figcaption></figure>
     </div>
-    <p>Codex needs to be set up on this Mac first. <a href="ai.html">AI &amp; agents</a> covers Codex, its hosts and handing whole nodes to an agent.</p>
+    <p>ChatGPT needs to be set up on this Mac first. <a href="ai.html">AI &amp; agents</a> covers ChatGPT and handing whole nodes to an agent.</p>
   </section>
 
   <section class="topic">
-    <h2 id="agent-chats" data-short="Chat with Codex" data-k="agent chats codex new chat with codex thread open in codex delete chat stop codex sidebar">Chat with Codex</h2>
-    <p>A chat can also be with Codex itself. <kbd>⌘K</kbd> <b>New chat with Codex</b> opens an empty chat, and your first message starts it. Codex answers on the page the way Tana does, its commands folded into the thinking line. The conversation is a Codex thread on this Mac, so it is in the Codex app as well, where you can carry on. Nothing of it is written to Tana.</p>
+    <h2 id="agent-chats" data-short="Chat with ChatGPT" data-k="agent chats codex new chat with codex thread open in codex delete chat stop codex sidebar chatgpt">Chat with ChatGPT</h2>
+    <p>A chat can also be with ChatGPT itself. <kbd>⌘K</kbd> <b>New chat with ChatGPT</b> opens an empty chat, and your first message starts it. ChatGPT answers on the page the way Tana does, its commands folded into the thinking line. The conversation is a ChatGPT thread on this Mac, so it is in the ChatGPT app as well, where you can carry on. Nothing of it is written to Tana.</p>
     <div class="split">
       <div>
         <ul>
-          <li>The sidebar lists your newest chats with Codex under <b>Agent chats</b>, and <kbd>⌘K</kbd> <b>Agent chats</b> opens all of them, newest first. One started on another Mac is listed too, and opens on that Mac. Though they are not in Tana, <kbd>⌘K</kbd> and <kbd>⌘S</kbd> find them by their title, and your Dot's by its name.</li>
-          <li>The line at the top says it is private, and which model and reasoning effort Codex answers with.</li>
+          <li>The sidebar lists your newest chats with ChatGPT under <b>Agent chats</b>, and <kbd>⌘K</kbd> <b>Agent chats</b> opens all of them, newest first. One started on another Mac is listed too, and opens on that Mac. Though they are not in Tana, <kbd>⌘K</kbd> and <kbd>⌘S</kbd> find them by their title, and your Dot's by its name.</li>
+          <li>The line at the top says it is private, and which model and reasoning effort ChatGPT answers with.</li>
           <li>Your Dot, once linked (<a href="ai.html#link-agent">AI &amp; agents</a>), has a chat of its own at the top of the list. That chat goes when you unlink the Dot, and cannot be renamed or deleted before.</li>
-          <li><b>Rename chat …</b>, in <kbd>⌘K</kbd> or as <b>Rename</b> when you right-click its tab, renames it here and in Codex. <b>Set icon</b> gives it a glyph of its own.</li>
-          <li><kbd>⌘K</kbd> <b>Open in Codex</b> shows the chat in the Codex app, <b>Stop Codex</b> stops an answer being written, and <b>Delete chat</b> takes it off the list. It stays in Codex.</li>
-          <li>Codex works in a folder of its own, <code>~/.orbital/chats</code>, and does not stop to ask you for approval: its own reviewer decides. When the Codex app has the chat open, your message is queued there and answered in the app.</li>
+          <li><b>Rename chat …</b>, in <kbd>⌘K</kbd> or as <b>Rename</b> when you right-click its tab, renames it here and in the ChatGPT app. <b>Set icon</b> gives it a glyph of its own.</li>
+          <li><kbd>⌘K</kbd> <b>Open in ChatGPT</b> shows the chat in the ChatGPT app, <b>Stop ChatGPT</b> stops an answer being written, and <b>Delete chat</b> takes it off the list. It stays in the ChatGPT app.</li>
+          <li>ChatGPT works in a folder of its own, <code>~/.orbital/chats</code>, and does not stop to ask you for approval: its own reviewer decides. When the ChatGPT app has the chat open, your message is queued there and answered in the app.</li>
         </ul>
       </div>
-      <figure class="shot"><img data-m="chats-agent" alt="A chat with Codex: your request on the right, Codex's draft under Thought for 38 seconds"><figcaption>A chat with Codex, kept in Codex.</figcaption></figure>
+      <figure class="shot"><img data-m="chats-agent" alt="A chat with ChatGPT: your request on the right, ChatGPT's draft under Thought for 38 seconds"><figcaption>A chat with ChatGPT, kept in the ChatGPT app.</figcaption></figure>
     </div>
-    <figure class="shot wide"><img data-m="chats-agent-list" alt="Agent chats: two chats with Codex, the second on another Mac"><figcaption><b>Agent chats</b> lists them, newest first.</figcaption></figure>
+    <figure class="shot wide"><img data-m="chats-agent-list" alt="Agent chats: two chats with ChatGPT, the second on another Mac"><figcaption><b>Agent chats</b> lists them, newest first.</figcaption></figure>
     <div class="split flip">
       <div>
         <h3>Your Dot's chat goes through the Orbital MCP server</h3>
-        <p>Codex runs on this Mac, so a chat with it never leaves it. Your Dot runs in ChatGPT, so everything you write to it, and every answer it gives, goes through the Orbital MCP server it is linked on. That is <b>orbital.md</b>, Orbital's relay, run by us, unless your workspace runs its own Orbital MCP server, which keeps all of it within your workspace. The chat says which, at the top and in the message box.</p>
+        <p>A chat with ChatGPT goes from this Mac straight to OpenAI, as it does in the ChatGPT app: it never passes through us. Your Dot is different: everything you write to it, and every answer it gives, goes through the Orbital MCP server it is linked on. That is <b>orbital.md</b>, Orbital's relay, run by us, unless your workspace runs its own Orbital MCP server, which keeps all of it within your workspace. The chat says which, at the top and in the message box.</p>
         <p>The server passes each message on as it comes and keeps nothing of it. It keeps an answer only until Orbital collects it, a few seconds while you wait, and a week at most if this Mac is off. The conversation itself is kept on this Mac, and nothing of it goes to Tana.</p>
       </div>
       <figure class="shot"><img data-m="chats-dot" alt="The chat with Echo: Goes through orbital.md, Orbital's relay, run by us, at the top, and its message box saying the same"><figcaption>Your Dot's chat names the server it goes through.</figcaption></figure>
@@ -338,7 +338,7 @@
       <tr><td>Send the message</td><td><kbd>↩</kbd></td></tr>
       <tr><td>New line in the message</td><td><kbd>⇧↩</kbd></td></tr>
       <tr><td>Switch between To Tana and To the chat (empty box)</td><td><kbd>⇥</kbd></td></tr>
-      <tr><td>Link a node, Tana or Codex</td><td><kbd>@</kbd></td></tr>
+      <tr><td>Link a node, Tana or ChatGPT</td><td><kbd>@</kbd></td></tr>
       <tr><td>Run a skill (first character)</td><td><kbd>/</kbd></td></tr>
       <tr><td>Leave the message box</td><td><kbd>esc</kbd></td></tr>
       <tr><td>Select the newest message, then walk the messages</td><td><kbd>↑</kbd> <kbd>↓</kbd></td></tr>

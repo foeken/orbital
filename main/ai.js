@@ -176,7 +176,7 @@ async function startChatGPTLogin(userData) {
   const status = await readChatGPT(rpc);
   if (status.signedIn) return status;
   const result = await rpc.call('account/login/start', { type: 'chatgptDeviceCode' });
-  if (result.type !== 'chatgptDeviceCode' || !result.loginId || !result.verificationUrl || !result.userCode) throw new Error('This Codex CLI does not support ChatGPT device sign-in; update Codex CLI and try again');
+  if (result.type !== 'chatgptDeviceCode' || !result.loginId || !result.verificationUrl || !result.userCode) throw new Error('This ChatGPT app does not support device sign-in yet: update the ChatGPT app and try again');
   activeLogin = { loginId: result.loginId, verificationUrl: result.verificationUrl, userCode: result.userCode };
   loginError = null;
   send('ai:chatgptChanged', authView({ account: null }));
@@ -235,7 +235,7 @@ async function askChatGPT(instructions, input, userData, use, image, timeout = T
       approvalPolicy: 'never', sandbox: 'read-only', baseInstructions: instructions + NO_TOOLS,
     });
     threadId = started.thread?.id;
-    if (!threadId) throw new Error('Codex did not start a ChatGPT request');
+    if (!threadId) throw new Error('ChatGPT did not start the request');
     const completed = new Promise((resolve, reject) => {
       const pending = { threadId, turnId: null, resolve, reject, timer: setTimeout(() => {
         if (activeTurn === pending) {
