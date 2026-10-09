@@ -382,7 +382,7 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
 - **The Codex app.** The thread is listed there too. While the app has it open it is the thread's writer, so a message
   sent here is queued to it (`codex queue`) and answered in the app; the page says so, and the next read shows it.
 - **⌘K on a chat**: Stop Codex (while it answers: the turn let go), Open in Codex (`codex://threads/<id>`), Delete chat
-  (forgets the link; the thread stays in Codex). **Agent chats** (sidebar, ⌘K Views) is the list, `orbital:agent-chats`,
-  newest first.
+  (forgets the link; the thread stays in Codex). **Agent chats** (⌘K Views) is the list, `orbital:agent-chats`, and the
+  newest first; the window's sidebar shows the newest eight in a section of that name (docs/OUTLINER.md §19).
 - **What it is not.** Not an @Codex question (§12): that is a question about a Tana chat, answered privately beside it.
   Claude is not offered yet (issue #823).
