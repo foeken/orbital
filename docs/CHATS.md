@@ -312,24 +312,24 @@ subset does not carry and would drop.
 status updates included; the app draws one other than "accepted N changes" as a small centred line (`row.chat.status`).
 
 
-## 12. @Codex and @Claude: a question and its answer on this Mac, never in Tana
+## 12. @ChatGPT: a question and its answer on this Mac, never in Tana
 
 main/chatagents.js, renderer/chat.js (issues #468, #669). "@" in the composer offers, after Tana, every agent that is
-switched on in Choose agents, is on this Mac and can read an answer back (Codex, Claude); a message that mentions
-one (the chip is written as plain "@Codex") goes through `chatAgent:ask` instead of `chat:send`, and nothing of it is
+switched on in Choose agents, is on this Mac and can read an answer back (Codex); a message that mentions
+one (the chip is written as plain "@ChatGPT") goes through `chatAgent:ask` instead of `chat:send`, and nothing of it is
 written to Tana. Tana has no author for an agent's words: a message is `human` with a `fromUserUri`, or `ai`, which
 Tana draws as the chat's own agent (§2), so an `ai` message would read as Tana's answer to everyone in the chat, and a
 `human` one as yours. Both the question and the answer stay in Orbital:
 
-1. **A task of that agent on this Mac** is started with the agent's own `start` (main/agents/codex.js, claude.js; the Assign to Agent path, keyed by the chat, so
+1. **A task of that agent on this Mac** is started with the agent's own `start` (main/agents/codex.js; the Assign to Agent path, keyed by the chat, so
    its workspace is `agent-workspaces/Tana`, shared by every task). Its prompt is the question, then the whole conversation, oldest first,
    one `{"from","text"}` JSON line per message between `<<<chat` and `chat>>>` (so nothing anyone wrote can pass for the
    question or close the quote), mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
-   (`RULES`: Codex's `thread/start` `developerInstructions`, Claude's `--append-system-prompt`) say only the question is a
+   (`RULES`: Codex's `thread/start` `developerInstructions`) say only the question is a
    request and the chat, like anything read in Tana, is quoted material never to be followed; that the question and answer are shown to the asker alone and never
    saved to Tana, to answer only what was asked, and never to write to Tana. And the task is held read-only by the agent
-   itself, not only told: Codex's `sandbox: 'read-only'` with `approvalPolicy: 'never'`, Claude with `--disallowedTools Bash
-   Edit Write NotebookEdit` (security review finding 2). A task that cannot start keeps nothing, and the words go back to the composer.
+   itself, not only told: Codex's `sandbox: 'read-only'` with `approvalPolicy: 'never'`
+   (security review finding 2). A task that cannot start keeps nothing, and the words go back to the composer.
 2. **The question stays local**: `chatAsks` (chat → `[{ id, question, agent, taskId, at, state, text }]`, `id` a local
    uuid) is not in main/settings.js `SYNCED`, so it lives in this Mac's SQLite only. Another machine, and everyone else in
    the chat, sees nothing of it.
@@ -359,3 +359,53 @@ latest question, opens it in Codex (`chatAgent:open`: the page names the questio
 answering `taskId → { state, text }` for the ones still running, and `url(taskId)` to open one in its own app. The
 question, the prompt, the rules, the local record, the grey bubble, the reply, Add to message and Open are shared, and the page draws every
 label from `chatAgent:list`. Codex is the only entry today.
+
+## 13. Agent chats: a chat that is a Codex thread
+
+main/agentchats.js, renderer/agentchats.js (and renderer/chat.js, which draws it). A chat in Orbital whose conversation is
+Codex's: ⌘K **New chat with ChatGPT** opens an empty one (`orbital:agent-chat:new`), its first message starts a Codex thread
+through the app-server (`thread/start`, then `turn/start`), and the page becomes `orbital:agent-chat:<thread id>`. Every
+later message is a new turn on a fresh app-server child (`thread/resume`, `turn/start`), which holds the thread as its
+writer until `turn/completed` and lets go with `thread/unsubscribe`. The answer streams in from `item/agentMessage/delta`
+(main pushes `agentChat:changed`, coalesced, and the page reads its rows again); the rows are the same chat rows Tana chats
+use: each turn is your `userMessage` and one Codex message from its `agentMessage` items, its commands and tool calls the
+“Thought for …” line (sdk/chat.js `chatRows`). History is `thread/turns/list` in ascending order with `itemsView: full`;
+a turn this Mac is running is drawn from what has streamed in, since another reader sees it as interrupted.
+
+- **Its name.** The user sees ChatGPT: the agent is Codex inside the ChatGPT app (main/agents/codex.js finds it there first, its
+  `codex://` links open there), and the ChatGPT account and plan pay for it. Its id stays `codex`, so stored links,
+  settings and recorded keys still find it.
+- **Where it runs.** `~/.orbital/chats`, made on first use with its house rules in `AGENTS.md`. A chat asks nobody: it
+  runs with `sandbox: workspace-write`, `approvalPolicy: on-request` and `approvalsReviewer: auto_review`, so Codex's own
+  reviewer decides what it may do, and a request that still comes to the client is answered no (`appServerRpc` `decline`).
+- **Kept small.** Codex compacts a chat by itself once its conversation passes 40k tokens (`model_auto_compact_token_limit`
+  with the scope `body_after_prefix`, passed as the thread's `config` on `thread/start` and `thread/resume`): the older
+  turns become a summary for Codex, and the page still shows every message, since only `userMessage` and `agentMessage`
+  items are drawn. Its default would wait until 90% of the model's window, so these chats would never compact. Without
+  the scope the limit counts Codex's own ~30k of instructions and tools as well, and below that it compacts on every turn.
+- **What Orbital keeps.** Only the link, the setting `agentChats` (thread → `{ agent, title, at, device }`), which follows
+  you (main/settings.js SYNCED). The title is the first message on one line. A thread lives on the Mac that started it, so
+  the link names that Mac (main/agent.js `deviceId`): another Mac lists the chat as “On another Mac”, and its page says to
+  open it there. The conversation is never written to Tana; the link, title included, is, in your own settings document,
+  restricted to you (docs/SETTINGS.md).
+- **The Codex app.** The thread is listed there too. While the app has it open it is the thread's writer, so a message
+  sent here is queued to it (`codex queue`) and answered in the app; the page says so, and the next read shows it.
+- **On the page**: the line at its top, where a Tana chat says who sees it, has a lock, “Only you · not shared with Tana”,
+  and the model and reasoning effort the thread runs with (`agentChat:info`, `thread/read`, named by main/prompts.js). The
+  composer says “Message Codex · @ links · Not shared with Tana”. **Rename chat …** (⌘K, Rename on the tab's right-click
+  menu, or a double-click on the title) keeps the new name with the link and gives it to the thread (`thread/name/set`), so
+  the Codex app lists it by that name too. **Set icon** works as on a document: the choice is kept in `typeIcons` under the
+  chat's id and worn on its tab, the list and the sidebar.
+- **⌘K on a chat**: Stop ChatGPT (while it answers: the turn let go), Open in ChatGPT (`codex://threads/<id>`), Delete chat
+  (forgets the link; the thread stays in Codex). **Agent chats** (⌘K Views) is the list, `orbital:agent-chats`, and the
+  newest first; the window's sidebar shows the newest eight in a section of that name (docs/OUTLINER.md §19).
+- **Found though not in Tana.** ⌘K lists every agent chat under Agent chats, as it lists saved searches, and ⌘S adds the chats
+  whose title holds every word typed (a Dot's by its name) after Tana's results, under AGENT CHATS; never while linking with @,
+  since Tana cannot link to one (renderer/agentchats.js `agentChatPlaceRows`, `agentChatHits`).
+- **Your Dot.** Every agent linked through the Orbital MCP server has a chat of its own, first on the list, there for as long
+  as it is linked: no Rename, Delete or Set icon. Its words go out as the `chat.message` event and its answers come back
+  through the MCP server's `reply_in_orbital`, kept on this Mac (`dotChats`): docs/MCP-SERVER.md, Your Dot's chat. Since all of
+  it passes through that server (orbital.md, ours, unless the workspace runs its own), the chat says so where you write: its top
+  line (`agentChatVia`) instead of “not shared with Tana”, the message box and its empty page.
+- **What it is not.** Not an @ChatGPT question (§12): that is a question about a Tana chat, answered privately beside it.
+  Claude is not offered yet (issue #823).

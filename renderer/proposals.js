@@ -82,7 +82,7 @@ function proposalButtonsEl(node, answer = answerProposal) {
 // Cmd+K: the place, among the Views, with how many are waiting there
 function proposalsViewRow() {
   const n = proposalCount();
-  return { id: 'proposals', group: 'Views', icon: 'proposals', label: 'Proposals', hint: n ? n + ' pending' : '', run: () => goTo(PROPOSALS_PAGE) };
+  return { id: 'proposals', group: 'Views', icon: 'proposals', label: 'Proposals', hint: n ? n + ' pending' : '', opens: PROPOSALS_PAGE, run: () => goTo(PROPOSALS_PAGE) };
 }
 // Cmd+K: the proposals selected, or the one the caret is on. Approve stays listed, disabled, when none of them can be
 // approved here, so its key still has a row to be recorded against.

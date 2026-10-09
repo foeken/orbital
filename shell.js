@@ -316,15 +316,17 @@ bridge.onCommand((cmd, arg) => {
   }
 });
 
-// ---- the window's sidebar: Search, Home and Today, then your sidebar pins as Tana keeps them (docs/OUTLINER.md §19) ----
+// ---- the window's sidebar: Search, Home, Timeline and Today, your sidebar pins, then your Agent chats as Tana keeps them (docs/OUTLINER.md §19) ----
 // Every row acts in the page the Graph pane would follow (the last to take the keys): a pin opens there, Search opens
-// its ⌘S, Home and Today run its Cmd+K rows. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
+// its ⌘S, Home, Timeline and Today run its Cmd+K rows, and an agent chat opens there. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
 // top level under Pinned, then each section with its pins, read from main (main/pins.js pinTree) and read again
 // whenever main says it moved (pins:changed). Its edge is the handle: dragged it resizes, and let go narrower than
 // SB_SHUT it is its icons alone (SB_RAIL wide), never less; ⌘K Collapse/Expand sidebar and ⌃⌘S switch the two.
 const sidebar = document.getElementById('sidebar'), edge = document.getElementById('sbEdge');
 const SB_RAIL = 48, SB_MIN = 180, SB_MAX = 420, SB_SHUT = 120;
-const sbFolded = new Set(JSON.parse(localStorage.getItem('windowSidebarFolded') || '[]')); // section ids, 'pinned' for the top level
+const sbFolded = new Set(JSON.parse(localStorage.getItem('windowSidebarFolded') || '[]')); // section ids, 'pinned' for the top level, 'agentChats'
+let sbChats = []; // your chats with Codex, newest first (main/agentchats.js): the Agent chats section, its newest SB_CHATS
+const SB_CHATS = 8;
 demoMode = localStorage.getItem('demoMode') === '1'; // renderer/segments.js: titles made up while demo mode is on
 // the row glyphs: one chosen with Set icon (a Nucleo "nc-…", its markup sent with the pin by main/pins.js pinTree), a
 // node's own where icons.js has it, the ones it names differently, else its kind's (tana:search: → a search), else a document's.
@@ -335,6 +337,26 @@ function toPage(msg) {
   if (!win) return;
   focusPage(id);
   win.postMessage(msg, '*');
+}
+// ⌘-click opens a sidebar place as a tab in that page's pane, ⇧-click in a pane beside, ⌥-click floating, as everywhere in
+// the pages (renderer/palette.js elsewhere); the page opens it there (renderer/app.js goto and action)
+const sbWhere = (e) => (e && (e.metaKey || e.ctrlKey) ? 'tab' : e && e.shiftKey ? 'right' : e && e.altKey ? 'float' : undefined);
+// A row dragged onto a chat in the sidebar (a Tana chat pinned there, or an agent chat): the chat's message gets a reference to
+// it, in the pane that shows the chat or, with none, in the page the rows act in, which opens it (renderer/chat.js composeInto,
+// as ⌘K Add to chat does). The rows are the page's own drag (renderer/drag.js NODES_DRAG_TYPE), turned into the message there.
+const NODES_DRAG = 'application/x-orbital-nodes';
+function sbChatDrop(b, doc) {
+  b.addEventListener('dragover', (e) => { if (!e.dataTransfer.types.includes(NODES_DRAG)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'link'; b.classList.add('drop'); });
+  b.addEventListener('dragleave', () => b.classList.remove('drop'));
+  b.addEventListener('drop', (e) => {
+    b.classList.remove('drop');
+    let rows; try { rows = JSON.parse(e.dataTransfer.getData(NODES_DRAG)); } catch { return; }
+    if (!Array.isArray(rows)) return;
+    e.preventDefault();
+    const id = others().find((v) => docs.get(v)?.docId === doc.id) || following();
+    focusPage(id);
+    requestAnimationFrame(() => windowOf(frameOf(id))?.postMessage({ orbital: 'compose', docId: doc.id, rows, doc }, '*'));
+  });
 }
 function sbButton(cls, icon, words, run, uri, svg) {
   const b = document.createElement('button');
@@ -350,30 +372,42 @@ function sbDraw() {
   const rows = [];
   const search = sbButton('sbrow', 'search', 'Search', () => toPage({ orbital: 'palette', mode: 'search' }));
   if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
-  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
+  const timeline = sbButton('sbrow', 'timeline', 'Timeline', (e) => toPage({ orbital: 'action', id: 'timeline', where: sbWhere(e) }));
+  timeline.dataset.uri = 'orbital:timeline'; // marked while it is the page on screen, as a pin is (sbMark)
+  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), timeline, sbButton('sbrow', 'today', 'Today', (e) => toPage({ orbital: 'action', id: 'today', where: sbWhere(e) })));
   const pin = (n) => {
-    const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri, n.node.svg);
+    const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), (e) => toPage({ orbital: 'goto', id: n.uri, where: sbWhere(e) }), n.uri, n.node.svg);
     b.dataset.uri = n.uri;
     b.oncontextmenu = (e) => { e.preventDefault(); bridge.pinMenu?.(n.uri); }; // Remove pin (main/pins.js)
     b.classList.toggle('sensitive', n.node.sensitive === true);
     if (n.node.sensitive === true) b.removeAttribute('title'); // a blurred title is not told on hover either
+    if (String(n.uri).startsWith('tana:chat:')) sbChatDrop(b, { id: n.uri, text: n.node.title || 'Chat', kind: 'document', icon: n.node.icon || 'chat', hasChildren: true });
     return b;
   };
   const pinned = (list) => list.filter((n) => n.uri && n.node);
   // the pins outside any section under Pinned, then each section; a section with nothing in it is not drawn
   const sections = [{ id: 'pinned', label: 'Pinned', pins: pinned(sbTree) }, ...sbTree.filter((n) => !n.uri && n.label).map((n) => ({ id: n.id, label: n.label, pins: pinned(n.children || []) }))];
-  for (const s of sections.filter((x) => x.pins.length)) {
-    const shut = sbFolded.has(s.id), head = document.createElement('button');
-    head.className = 'sbsec' + (shut ? ' shut' : ''); head.tabIndex = -1; head.textContent = s.label;
+  // a section's heading folds it, and shows its count while folded
+  const head = (id, label, count) => {
+    const shut = sbFolded.has(id), head = document.createElement('button');
+    head.className = 'sbsec' + (shut ? ' shut' : ''); head.tabIndex = -1; head.textContent = label;
     head.setAttribute('aria-expanded', String(!shut));
-    if (shut) { const n = document.createElement('span'); n.className = 'n'; n.textContent = s.pins.length; head.append(n); }
+    if (shut) { const n = document.createElement('span'); n.className = 'n'; n.textContent = count; head.append(n); }
     else head.insertAdjacentHTML('beforeend', glyph('chevronRight'));
     head.onmousedown = (e) => e.preventDefault();
-    head.onclick = () => { if (sbFolded.has(s.id)) sbFolded.delete(s.id); else sbFolded.add(s.id); localStorage.setItem('windowSidebarFolded', JSON.stringify([...sbFolded])); sbDraw(); };
-    rows.push(head, ...(shut ? [] : s.pins.map(pin)));
-  }
+    head.onclick = () => { if (sbFolded.has(id)) sbFolded.delete(id); else sbFolded.add(id); localStorage.setItem('windowSidebarFolded', JSON.stringify([...sbFolded])); sbDraw(); };
+    return head;
+  };
+  for (const s of sections.filter((x) => x.pins.length)) rows.push(head(s.id, s.label, s.pins.length), ...(sbFolded.has(s.id) ? [] : s.pins.map(pin)));
   // nothing pinned yet: what would fill it, and how
   if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
+  // Agent chats: the newest, each opening its chat in the page; none yet offers a new one, more than fit the whole list
+  if (bridge.agentChats) {
+    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; sbChatDrop(b, c); return b; }; // the chat's own glyph, as its tab and the list wear it
+    const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', (e) => toPage({ orbital: 'action', id: 'agentChats', where: sbWhere(e) }))] : [];
+    // the new chat's page itself, not its Cmd+K row: that row is there only on a Mac with the ChatGPT app, and the page says what is missing
+    rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'chatgpt', 'New chat with ChatGPT', (e) => toPage({ orbital: 'goto', id: 'orbital:agent-chat:new', where: sbWhere(e) }))]));
+  }
   sidebar.replaceChildren(...rows);
   sbMark();
 }
@@ -389,6 +423,9 @@ function sbLoad() {
   bridge.pins().then((tree) => { if (mine === sbReading) { sbTree = Array.isArray(tree) ? tree : []; sbDraw(); } }, () => {});
 }
 bridge.onPins?.(sbLoad);
+function sbChatsLoad() { bridge.agentChats?.().then((list) => { sbChats = Array.isArray(list) ? list : []; sbDraw(); }, () => {}); }
+bridge.onAgentChats?.(sbChatsLoad);
+sbChatsLoad();
 // The width it is drawn at: --sw for the sidebar, the panes beside it and the edge (shell.css); its icons alone below SB_SHUT.
 function sbApply(width = sbOpen ? sbWidth : SB_RAIL) {
   document.body.style.setProperty('--sw', width + 'px');

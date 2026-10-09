@@ -66,6 +66,16 @@ import kotlinx.coroutines.launch
 // what can be handed to an agent: a node of yours, not a chat, a search or a person
 fun handable(id: String): Boolean = id.startsWith("tana:") && kindOf(id) !in listOf("chat", "search", "user-profile")
 
+// What goes through the Orbital MCP server, as the Mac says it (renderer/agent.js relayWords; ios/Orbital/Agents.swift the same): on
+// orbital.md that is Orbital's relay, run by us; any other address is the workspace's own
+fun relayWords(url: String?): String {
+    val host = (url ?: "https://orbital.md/mcp").removePrefix("https://").substringBefore('/')
+    val ours = host == "orbital.md"
+    return "Everything you send your agent goes through $host" + (if (ours) ", Orbital's relay, run by us" else ", your workspace's own Orbital MCP server") +
+        ": a node's id and your request with each task, your messages in its chat, and its answers until Orbital collects them. A node's words stay in Tana, where your agent reads them with its own access." +
+        (if (ours) " Host your own Orbital MCP server to keep all of it in your workspace." else "")
+}
+
 // Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped right to make it the default
 // and left to unlink it, then Connect your personal agent
 @Composable
@@ -159,7 +169,7 @@ fun ConnectAgent(engine: Engine, back: () -> Unit) {
             }
         }
         item("link") {
-            Group("Then ask your agent to link", footer = "Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through ${(link?.url ?: "https://orbital.md/mcp").removePrefix("https://")}, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.") {
+            Group("Then ask your agent to link", footer = "Send the instructions to your agent. The code works once, for fifteen minutes.\n\n${relayWords(link?.url)}") {
                 val l = link
                 when {
                     state == "asking" -> GroupRow(last = true) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Getting a code…", color = c.secondary) }

@@ -22,7 +22,7 @@ function chooseRow(create, where) {
 function openRow(r, where) {
   if (r && !r.disabled && palMode === 'cmd') notePaletteUse(r);
   else if (r && !r.disabled && r.node && linkCtx) noteLinkUse(r.node); // the @ menu learns what you link to
-  if (r && where && !linkCtx && r.opens && !r.disabled) { closePalette(); run(async () => openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens)); }
+  if (r && where && !linkCtx && (r.opens || r.opensView) && !r.disabled) { closePalette(); run(async () => (r.opensView ? tana.splitWindow(where, { view: r.opensView, place: '{}' }) : openElsewhere(where, typeof r.opens === 'function' ? await r.opens() : r.opens))); } // a view (the Library, Inbox, Types) opens as itself, nothing zoomed
   else if (r) runRow(r);
 }
 function settleEnter() { if (palEnter) { const { create, where } = palEnter; palEnter = null; chooseRow(create, where); } }
@@ -281,7 +281,7 @@ function paletteRows(q, typed = q) {
   // On a saved search's page it is the search's, wherever the caret is: its rows are other documents (a goal, a task),
   // which have no icon of their own to set, and the search is what the page is (#551).
   // A document takes one for itself, worn instead of its type's; a task keeps its box.
-  const iconDoc = !tana.searchIcons || !tana.setTypeIcon ? null : palDoc && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc) || (DOC_KIND.test(palDoc.id) && isRealId(palDoc.id) && !isTask(palDoc))) ? palDoc : onSearchPage() ? docOf(zoom.docId) || extra.get(zoom.docId) || { id: zoom.docId, text: titleEl.textContent } : null;
+  const iconDoc = !tana.searchIcons || !tana.setTypeIcon ? null : palDoc && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc) || (DOC_KIND.test(palDoc.id) && isRealId(palDoc.id) && !isTask(palDoc)) || (tana.agentChats && isAgentChat(palDoc.id) && palDoc.id !== AGENT_CHAT_NEW && !agentChatFixed(palDoc.id))) ? palDoc : onSearchPage() ? docOf(zoom.docId) || extra.get(zoom.docId) || { id: zoom.docId, text: titleEl.textContent } : null;
   if (iconDoc) {
     const doc = iconDoc;
     rows.push({ id: 'setIcon', group: doc === palDoc ? docGroup : 'Current page', icon: iconOf(doc), label: 'Set icon',
@@ -362,16 +362,18 @@ function paletteRows(q, typed = q) {
   // Views, most used first: the Timeline (today's tasks and what happened), Today and This week, then what came in
   // (Inbox, Notifications, Proposals), and the Library and Types last. Today's node (titled with the date, pinned to
   // today) and the week's ("Week 38 (2026)") are documents created on demand, but places to go all the same.
-  const viewRows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
+  const viewRows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, opensView: s.id, run: () => setView(s.id) })); // opensView: ⌘↩ ⇧↩ ⌥↩ open the view itself elsewhere (openRow)
   if (tana.todayNode) viewRows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', opens: () => tana.todayNode(), run: () => run(async () => goTo(await tana.todayNode())) });
   if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', opens: () => tana.weekNode(), run: () => run(async () => goTo(await tana.weekNode())) });
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
   if (tana.proposalAnswer) viewRows.push(proposalsViewRow()); // what Tana's AI proposed and is waiting on you to accept
   if (tana.children) viewRows.push(timelineViewRow()); // what happened to what you watch, and what landed in your Inbox
+  if (tana.agentChats) viewRows.push(agentChatsViewRow()); // your chats with ChatGPT and your Dot (renderer/agentchats.js)
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
   rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: typeGlyph(s.id), label: s.text || s.title || 'Untitled search', opens: s.id, run: () => goTo(s.id) })));
+  if (tana.agentChats) rows.push(...agentChatPlaceRows()); // and every agent chat, though it is not in Tana (renderer/agentchats.js)
   // So is every workspace type: its page lists its documents. Drawn in its own glyph, without its hue.
   rows.push(...(typeListCache || []).map((t) => ({ id: 'type:' + t.uri, group: 'Types', icon: typeGlyph(t.uri), label: t.title || 'Untitled type', opens: t.uri, run: () => goTo(t.uri) })));
   rows.push(...pillCommandRows());
@@ -387,6 +389,7 @@ function paletteRows(q, typed = q) {
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Quick Add Task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
+  if (tana.startAgentChat) rows.push(...agentChatRows()); // New chat with ChatGPT, and on an agent chat Stop, Open in ChatGPT and Delete chat (renderer/agentchats.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
   // ⌘K Meet Now: a meeting called Meeting from this minute for half an hour, as "/" Meeting's now, opened on its page in Tana (not its call)
   if (tana.createDocument && tana.nodeLink && tana.openExternal) rows.push({ id: 'meetNow', group: 'Actions', icon: 'calendar', label: 'Meet Now', hint: 'Now, for 30 minutes · opens in Tana', run: () => run(async () => { const start = Math.floor(Date.now() / 6e4) * 6e4; openInTana((await tana.createDocument('Meeting', { kind: 'meeting', start, end: start + SLASH_MEETING_LENGTH })).id); }) });
@@ -537,13 +540,13 @@ const commandRows = (q, typed) => {
 // false when no such row exists right now, so the key can fall through to whatever else it means. A row that is here
 // but off (Clean up with nothing held, Go back with no history) answers the key by doing nothing: it is the same
 // command either way, so it must not mean one thing while it is live and something else while it is not.
-function runAction(id) {
+function runAction(id, where = null) { // where: a row that opens a place opens it there instead (a sidebar row ⌘-, ⇧- or ⌥-clicked)
   // A key pressed in the Graph pane acts in the page it follows, where its rows are meant (#463 review), except the
   // pane's own rows and the workspace's moves, which ask the shell from wherever they are pressed.
   if (LINKS && !['railToggle', 'rail', 'reload'].includes(id) && !PANE_ROWS.some(([rowId]) => rowId === id)) { toShell({ orbital: 'action', id }); return true; }
   if (palette.hidden) { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
   const rows = paletteRows(''), row = rows.find((r) => r.id === id);
-  if (row) { if (!row.disabled) row.run(); return true; }
+  if (row) { if (row.disabled) return true; if (where && (row.opens || row.opensView)) openRow(row, where); else row.run(); return true; }
   // A key pressed with the palette closed may wait on main below (access, participants, spaces). A palette opened in
   // the meantime, still open or already closed again, has moved palSeq on (showPage), and the key lets its answer go
   // rather than taking that palette over or reopening one Esc just closed.
@@ -794,7 +797,7 @@ function resultRows(nodes, group) {
   // a link field that holds something can be emptied here too, as an options field can; last, so Enter never clears
   if (field && group === undefined && choiceValues(field).length && fuzzyMatch('Clear value', palInput.value.trim())) rows.push({ group: field.field.label || 'Value', icon: 'none', label: 'Clear value', run: () => writeChoice(field, []) });
   if (!ctx) return rows;
-  if (ctx.composer) rows.unshift(...tanaMentionRows(palInput.value.trim(), ctx), ...agentMentionRows(palInput.value.trim(), ctx)); // a chat's "@" can ask Tana itself, or an agent on this device (renderer/chat.js)
+  if (ctx.composer && !isAgentChat(composer.dataset.doc)) rows.unshift(...tanaMentionRows(palInput.value.trim(), ctx), ...agentMentionRows(palInput.value.trim(), ctx)); // a chat's "@" can ask Tana itself, or an agent on this device (renderer/chat.js)
   const title = ctx.text || palInput.value.replace(/(^|\s)#\S+/g, ' ').trim(); // "@" at a caret has no selection: what is typed becomes the new document's title, its #filters left out
   if (!title) return rows;
   // words that read as a day ("friday", "12 oct", "tomorrow": parseDay) also offer that date, first, as Tana's "@" does
@@ -1140,7 +1143,8 @@ function searchNow() {
     // In the @ menu, among titles that match equally, what you link to most, and the kinds you link to most, first.
     const score = new Map(found.map((n) => [n, titleHits(n.title ?? n.text ?? '', q)])), use = linkCtx ? linkScorer() : () => 0;
     const nodes = found.map((n, i) => ({ n, i })).sort((a, b) => score.get(b.n).hits - score.get(a.n).hits || score.get(b.n).starts - score.get(a.n).starts || use(b.n) - use(a.n) || a.i - b.i).map(({ n }) => n);
-    palRows = [...resultRows(nodes), ...resultRows(related, 'RELATED').filter((row) => row.node)] // its documents only: the date and Create rows lead once
+    const chats = linkCtx || pinCtx || fieldLinkCtx || !tana.agentChats ? [] : resultRows(agentChatHits(q), 'AGENT CHATS'); // your agent chats too, which Tana does not know of: never offered to link
+    palRows = [...resultRows(nodes), ...chats, ...resultRows(related, 'RELATED').filter((row) => row.node)] // its documents only: the date and Create rows lead once
       .map((row) => (row.node ? { ...row, match: titleHits(row.label ?? '', q) } : row));
     // Linking: a result is the obvious choice when every typed word begins a word of its title ("Okafor" is Sam
     // Okafor). A full-text hit that merely mentions the words is not, so "Create" stays selected and Enter creates.
@@ -1314,6 +1318,7 @@ const shellRun = (command) => { if (window.frameElement) window.parent.postMessa
 // key left). Main gives the new page its id, and it opens on the place stored under that id (shell.js open, edit.js).
 // A ⌘- or ⇧-click on a row's line still selects: only its bullet, a chat's links and cards reach here with those.
 const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'tab' : e.shiftKey ? 'right' : e.altKey ? 'float' : null);
+const WHERE = new Set(['tab', 'right', 'float']); // what another page may ask for (renderer/app.js: the sidebar's modified clicks)
 async function openElsewhere(where, docId, nodeId = null) {
   if (opensCanvas(docId)) return; // ⌘/⇧/⌥ on a canvas: its own window, as a plain click (renderer/edit.js, #611)
   if (inOtherPane(placeKey(docId, nodeId))) return; // already on screen in another pane: that pane takes the keys (#533)

@@ -4,7 +4,7 @@
 const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi());
 // Demo mode draws made-up words, and nothing on screen may then reach Tana: every call that writes is refused here,
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
-const DEMO_WRITES = new Set(['mcpUse', 'mcpUsePlugin', 'sendChat', 'askAgent', 'deleteAgentAsk', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
+const DEMO_WRITES = new Set(['mcpUse', 'mcpUsePlugin', 'sendChat', 'askAgent', 'deleteAgentAsk', 'startAgentChat', 'sendAgentChat', 'stopAgentChat', 'renameAgentChat', 'deleteAgentChat', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
   'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox', 'cycleCheckboxes',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
@@ -132,7 +132,7 @@ const AGENT_BADGE = {
 };
 const agentStateOf = (id) => (AGENT_BADGE[agentStates.get(id)] ? agentStates.get(id) : 'pending');
 const agentTasks = new Map(); // docId -> { agent, taskId }: which agent's task each linked node is
-// Every agent the app knows (main/agent.js list): Tana always, Codex and Claude greyed until installed. Read at boot
+// Every agent the app knows (main/agent.js list): Tana always, Codex greyed until installed. Read at boot
 // and after Choose agents changes it; the rows each agent brings are drawn from it.
 let agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }];
 let agentPick = 'tana'; // the agent the Assign to Agent page will hand the node to, the default until the page picks another

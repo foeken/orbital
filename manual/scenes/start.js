@@ -5,6 +5,8 @@
 const help = { page: 'shell', js: "(() => { const f = document.createElement('iframe'); f.id = 'mc-help'; f.src = 'help.html?theme=' + window.shell.state().theme; f.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:100;background:transparent'; f.allowTransparency = true; document.body.append(f); return new Promise((r) => f.onload = () => { f.contentWindow.focus(); setTimeout(r, 300); }); })()" };
 // the tour as Cmd+K Install mobile app opens it: on its iPhone page (main.js openOverlay, at=mobile)
 const helpMobile = { ...help, js: help.js.replace("'help.html?theme='", "'help.html?at=mobile&theme='") };
+// its Agent chats page (help-agents), taken once both chats have been asked and answered in its loop
+const helpAgents = { ...help, js: help.js.replace("'help.html?theme='", "'help.html?at=agents&theme='") };
 // an image file dragged over Create new, then dropped (shell.js create.ondragover / ondrop)
 const drag = (type) => ({ page: 'shell', js: "(() => { const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0)); const dt = new DataTransfer(); dt.items.add(new File([png], 'lunch-receipt.png', { type: 'image/png' })); document.getElementById('create').dispatchEvent(new DragEvent('" + type + "', { dataTransfer: dt, bubbles: true, cancelable: true })); })()" });
 const library = { js: "setView('inbox')" };
@@ -26,6 +28,7 @@ module.exports = [
   ] },
   // the tour's last page, where Install mobile app opens it: iPhone chosen, its TestFlight code and link
   { name: 'start-help-iphone', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, helpMobile, { wait: 900 }] },
+  { name: 'start-help-agents', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, helpAgents, { wait: 3800 }] },
   // the same page with Android chosen in its selector, as a page whose latest release has the APK sees it (updater.js
   // androidRelease, which the mock has no main to ask): the code that adds Orbital to Obtainium and the download
   { name: 'start-help-android', clip: [300, 40, 680, 560], setup: [{ wait: 800 }, helpMobile, { wait: 900 },
@@ -51,7 +54,6 @@ module.exports = [
   ] },
   { name: 'start-logout', setup: [library, { wait: 800 }, { key: '⌘K' }, { type: 'log out' }, { key: '↩' }, { wait: 500 }, bare], clip: { sel: '#palette .card', pad: 28 } },
 ];
-
 
 
 

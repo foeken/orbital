@@ -24,6 +24,7 @@ const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, s
 const { nodePin, pinTree, tellSidebars, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
+const agentChats = require('./main/agentchats');
 const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
@@ -56,7 +57,7 @@ function keepHome(wc) {
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
 // sent to the other pages; plus outline:children, which routes between several modules.
-for (const m of [require('./main/documents'), agents, require('./main/chatagents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/meeting-notes'), require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, require('./main/flags'), decisions, updater]) {
+for (const m of [require('./main/documents'), agents, require('./main/chatagents'), agentChats, require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/meeting-notes'), require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, require('./main/flags'), decisions, updater]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -345,7 +346,7 @@ function createMenu() {
 }
 
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (page) page.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id, page ? page.id : 'main') : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))); });
+ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === agentChats.LIST ? agentChats.list() : agentChats.isChat(id) ? agentChats.rows(id) : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (page) page.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id, page ? page.id : 'main') : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))); });
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
 // the menu shows ⌃⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
@@ -477,7 +478,7 @@ ipcMain.handle('chatgpt:login', async () => {
   if (!result.verificationUrl) return result;
   try {
     const loginUrl = new URL(result.verificationUrl);
-    if (loginUrl.protocol !== 'https:') throw new Error('Codex returned an invalid ChatGPT sign-in URL');
+    if (loginUrl.protocol !== 'https:') throw new Error('ChatGPT returned an invalid sign-in URL');
     await shell.openExternal(loginUrl.toString());
   }
   catch (error) { await ai.cancelChatGPTLogin(app.getPath('userData')); throw error; }
@@ -490,6 +491,7 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   await refresh({ after: true }); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
   send('outline:changed', null);
   tellSidebars(); // a pinned search or document wears it there too (shell.js)
+  if (agentChats.isChat(typeUri)) agentChats.tellList(); // an agent chat's on its list and in the sidebar's Agent chats
   return chosen;
 });
 // After each start: the fast AI picks a glyph for every titled type and field that has none (issues #250, #606). In the
@@ -708,5 +710,5 @@ if (process.env.TANA_MAIN_TEST) {
   });
 
   app.on('window-all-closed', () => {}); // stay in the Dock (activate above)
-  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agents.stop(); ai.stop(); }); // no writer outlives the app that spawned it
+  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agents.stop(); agentChats.stop(); ai.stop(); }); // no writer outlives the app that spawned it
 }

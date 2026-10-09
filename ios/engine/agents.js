@@ -4,7 +4,7 @@
 // Orbital's key (relayKey), which agents are on and the default (agents, defaultAgent), and each node's mark, request and
 // task link (codex, codexPrompt, codexTask). So an agent linked on the phone is in the Mac's Choose agents, and a node
 // handed over from the phone shows the Mac's badge, and the other way round. Only agents linked through orbital.md are
-// offered here: Tana, Codex and Claude run on a Mac.
+// offered here: Tana and Codex run on a Mac.
 const { S } = require('../../main/state');
 const settings = require('../../main/settings');
 const mcpServer = require('../../main/mcp-server');

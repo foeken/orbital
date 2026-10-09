@@ -13,7 +13,7 @@ const chatDrafts = new Map(); // docId -> what was typed there and not sent
 // docId -> { asked, id }: a message that went out for Tana to answer, when, and its id once main has written it. Each
 // send has its own, so the dots follow the newest one and only its own answer, one after that message, ends them.
 const chatWaiting = new Map();
-const isChatPage = (parent) => !!parent && !parent.nodeId && String(parent.docId).startsWith('tana:chat:');
+const isChatPage = (parent) => !!parent && !parent.nodeId && (String(parent.docId).startsWith('tana:chat:') || isAgentChat(parent.docId)); // a Tana chat, or an agent chat (renderer/agentchats.js)
 // @Codex and any other agent on this device (main/chatagents.js, docs/CHATS.md §12): the agents "@" offers, and the
 // questions asked in a chat with their answers, which live on this device only and never reach Tana. chatId -> [{ id,
 // question, agent, label, at, state: working|done|failed, text }], read when the chat opens and while one runs.
@@ -192,6 +192,7 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
 // Who can see a chat and, for a meeting's chat, which meeting it is about: one quiet line at the top right (#543). The
 // meeting's attendees stay on the meeting's page: drawn here, as they were, they read as the chat's audience.
 function chatContextEl(parent) {
+  if (tana.agentChats && isAgentChat(parent.docId)) return agentChatContextEl(parent.docId); // a chat with Codex: private, and its model (renderer/agentchats.js)
   const node = parent.node;
   if (sensitiveHidden(node.id)) return null; // a sensitive chat says nothing about who
   const summary = documentSummary(node), meeting = tana.meetingInfo ? meetingOf(node) : null, el = document.createElement('div');
@@ -291,7 +292,7 @@ function toComposer() { selectMsg(null); if (!composer.hidden) composerText.focu
 // Yours to delete: a local question or answer (both go), or your own message in the chat when you may write in it
 function deletableMsg(docId, key) {
   const el = msgEl(key);
-  if (!el || chatShown !== docId) return false;
+  if (!el || chatShown !== docId || isAgentChat(docId)) return false; // an agent chat's messages are Codex's
   if (askOf(docId, key)) return !!tana.deleteAgentAsk;
   return el.classList.contains('mine') && !chatReadOnly.has(docId) && !!tana.deleteChatMessage;
 }
@@ -374,7 +375,7 @@ function showMode() {
   const docId = composer.dataset.doc, ai = chatAi.get(docId), readOnly = chatReadOnly.has(docId);
   composer.classList.toggle('readonly', readOnly);
   composerText.contentEditable = readOnly ? 'false' : 'plaintext-only';
-  composerText.dataset.placeholder = readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
+  composerText.dataset.placeholder = isAgentChat(docId) ? 'Message ' + agentChatLabel(docId) + ' · @ links · ' + (agentChatVia(docId) ? 'Goes through ' + agentChatVia(docId).split(',')[0] : 'Not shared with Tana') : readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
 }
 // A skill is for Tana to run, so while one is attached the message goes To Tana and the mode stays put
 function switchMode(docId, ai = !chatAi.get(docId)) { if (chatSkill && !ai) return; chatAi.set(docId, ai); showMode(); }
@@ -469,6 +470,7 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
+  if (isAgentChat(docId)) return agentChatSend(docId, draft, text); // renderer/agentchats.js: to Codex, never Tana
   // @Codex and the like: the question goes to that agent on this device, and stays here with its answer; not to Tana
   const agent = !skill && tana.askAgent && askedAgent(text);
   if (agent) {
@@ -507,7 +509,7 @@ composerText.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) { e.preventDefault(); chatSend(); return; }
   if (e.key === 'Tab' && !e.shiftKey && !mod && chatAi.has(composer.dataset.doc) && !plainOf(composerSegs()).trim() && !composerText.querySelector('.mention')) { e.preventDefault(); switchMode(composer.dataset.doc); return; }
   if (e.key === '@' && !mod) { e.preventDefault(); composerLink(); return; }
-  if (e.key === '/' && !mod && !chatSkill && !beforeCaret().trim() && tana.searchPreview) { e.preventDefault(); openSkillPicker(); return; }
+  if (e.key === '/' && !mod && !chatSkill && !beforeCaret().trim() && tana.searchPreview && !isAgentChat(composer.dataset.doc)) { e.preventDefault(); openSkillPicker(); return; }
   if (e.key === 'Backspace' && chatSkill && !beforeCaret()) { e.preventDefault(); chatSkill = null; showSkill(); return; }
   // the field's own keys stay its own: ⌘Z undoes typing here rather than the last change to a node; ⌘K and the rest go on
   if (!mod || ['z', 'a', 'c', 'x', 'v', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace'].includes(e.key.length === 1 ? e.key.toLowerCase() : e.key)) e.stopPropagation();
@@ -526,6 +528,18 @@ composerText.addEventListener('paste', (e) => {
 composerText.addEventListener('focus', () => selectMsg(null));
 // A row dragged here, from this pane or another, goes in where it is dropped (composerDropSegs); never inside a chip
 const composerTakes = (e) => e.dataTransfer.types.includes(NODES_DRAG_TYPE) && !chatReadOnly.has(composer.dataset.doc);
+// Anywhere on the chat, not only its message box: rows dropped on the conversation go into the message, as ⌘K Add to chat
+// puts them there (composeAdd), and the box is lit while they are over it. Taken before renderer/drag.js sees the drop.
+const chatScroll = outline.parentElement, chatDropOn = (e) => !composer.hidden && chatScroll.classList.contains('chatting') && composerTakes(e);
+chatScroll.addEventListener('dragover', (e) => { if (!chatDropOn(e)) return; e.preventDefault(); composer.classList.add('dropping'); });
+chatScroll.addEventListener('dragleave', (e) => { if (!chatScroll.contains(e.relatedTarget)) composer.classList.remove('dropping'); });
+chatScroll.addEventListener('drop', (e) => {
+  composer.classList.remove('dropping');
+  if (!chatDropOn(e)) return;
+  e.preventDefault();
+  composeAdd(composerDropSegs(JSON.parse(e.dataTransfer.getData(NODES_DRAG_TYPE))));
+  composerText.focus();
+});
 composerText.addEventListener('dragover', (e) => { if (composerTakes(e)) e.preventDefault(); });
 composerText.addEventListener('drop', (e) => {
   if (!composerTakes(e)) return;
@@ -549,13 +563,13 @@ function chatAfterRender(parent, stick) {
   }
   // Asked once there is a connection: a chat reopened at launch is drawn before there is one, and the render after it
   // comes up asks; a failed ask is asked again on the next render.
-  if (docId && connected && !chatAi.has(docId) && !chatAsking.has(docId) && tana.chatAnswers) {
+  if (docId && connected && !isAgentChat(docId) && !chatAi.has(docId) && !chatAsking.has(docId) && tana.chatAnswers) {
     chatAsking.add(docId);
     tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) { showMode(); renderSoon(true); } }, () => {}) // renderSoon: waiting questions show once write access is known
       .finally(() => chatAsking.delete(docId));
   }
   const asking = chat && showQuestions(docId, chatPendingQ); // Tana's questions take the composer's place
-  if (opened) agentLoad(docId);
+  if (opened && !isAgentChat(docId)) agentLoad(docId); // @Codex asks: a Tana chat's
   if (!chat) showQuestions(null, null);
   composer.hidden = !chat || !!asking;
   if (chatCompose && chatCompose.docId === docId && !composer.hidden) { const { segs } = chatCompose; chatCompose = null; composeAdd(segs); } // ⌘K Add to chat, to a chat that was opening

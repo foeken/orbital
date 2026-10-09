@@ -1337,10 +1337,10 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   assert.equal(await p.js('palRows.some((r) => /plugin/i.test(r.label))'), false, 'and nothing of ChatGPT\u2019s plugins page');
   assert.equal(await p.js('palRows.some((r) => /link_orbital/.test(r.label))'), false, 'no tool names in the steps');
   assert.deepEqual(await p.js('[palRows[4].label, palRows[4].group, !!palRows[4].disabled]'), ['Copy the instructions', 'Then ask your agent to link', false], 'then the instructions');
-  assert.match(await p.js('connectCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned event\. Each time an Orbital event fires, do what its data\.instructions say.*kept nowhere/, 'what it copies: the code, the event that wakes it and carries its instructions, and what goes through orbital.md');
+  assert.match(await p.js('connectCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned and chat\.message events\. Each time an Orbital event fires, do what its data\.instructions say.*kept nowhere/, 'what it copies: the code, the events that wake it and carry its instructions, and what goes through orbital.md');
   assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
   assert.deepEqual(await p.js('[palRows[5].label, palRows[5].group]'), ['Copy the code', 'Then ask your agent to link'], 'or the code alone');
-  assert.match(await p.js('palRows[6].label'), /^Only the node's id and your request go through orbital\.md\/mcp, and it keeps neither/, 'it says what goes through orbital.md');
+  assert.match(await p.js('palRows[6].label'), /^Everything you send your agent goes through orbital\.md, Orbital's relay, run by us: a node's id and your request with each task, your messages in its chat, and its answers until Orbital collects them\..* Host your own Orbital MCP server to keep all of it in your workspace\.$/, 'it says plainly that everything sent to the agent goes through our relay, and how to keep it in-house');
   assert.deepEqual(await p.js('[palRows[7].label, !!palRows[7].icon, palRows[7].group === palRows[4].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your agent to use the code…', false, true, true],
     'and waits in the same group, with no glyph, a light passing over its words');
   // where the heading's words start (its box plus its padding), measured once the page has slid in
@@ -1367,7 +1367,9 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Dot"', 'its row');
   await p.key('↩');
   await p.waitFor('palMode === "linkedAgent"', 'its page');
-  assert.deepEqual(await p.js('palRows.map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
+  await p.waitFor('palRows.length === 4', 'its page, with what goes through the MCP server');
+  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
+  assert.match(await p.js('palRows[3].label'), /^Everything you send your agent goes through orbital\.md, Orbital's relay, run by us/, 'and under them, that what you send it goes through our relay');
   await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink"', 'Unlink'); await p.key('↩');
   await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot")', 'Choose agents without it');
   await closePalette(p);
@@ -1414,6 +1416,123 @@ flow('Open Orbital Settings for Tana Workspace: the MCP server and the plugin li
 
 // 20. A chat (docs/CHATS.md): a message typed in the composer is sent with ↩, shows as yours at once, and Tana's answer
 // follows below it
+// Agent chats (renderer/agentchats.js, main/agentchats.js): ⌘K New chat with Codex opens a chat with nothing in it, its
+// first message makes the chat and the page becomes it, Codex's answer streams in where Tana's would, the Agent chats
+// page lists it first, and Delete chat takes it off the list and goes back there.
+flow('Agent chats: a new chat with ChatGPT, its answer, the list, and Delete chat', async (p) => {
+  await p.start();
+  await command(p, 'new chat with chatgpt', 'New chat with ChatGPT');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:new" && !composer.hidden', 'a new chat with its composer');
+  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message ChatGPT · @ links · Not shared with Tana', 'the composer says who it goes to, and that Tana gets none of it');
+  assert.match(await p.js('document.querySelector(".chat-context")?.textContent || ""'), /^Only you · not shared with Tana/, 'the line over the chat says it is private, and Tana does not see it');
+  assert.match(await p.js('outline.textContent'), /kept in the ChatGPT app/, 'and the empty chat says where it is kept');
+  await p.js('composerText.focus(); 1');
+  await p.type('Summarise my week'); await p.key('↩');
+  await p.waitFor('zoom && /^orbital:agent-chat:0198c0de/.test(zoom.docId)', 'the page becomes the new chat');
+  const id = await p.js('zoom.docId');
+  await p.waitFor('/Mock answer from ChatGPT to: Summarise my week/.test(outline.textContent)', 'Codex\u2019s answer', 6000);
+  assert.deepEqual(await p.js('[...outline.querySelectorAll(".chat-msg")].map((m) => m.className.replace("chat-msg ", "").split(" ")[0])'), ['mine', 'theirs'], 'your message, then Codex\u2019s');
+  assert.equal(await p.js('document.getElementById("title").textContent'), 'Summarise my week', 'titled with its first message');
+  await p.waitFor('/not shared with Tana · GPT-6 · High$/.test(document.querySelector(".chat-context")?.textContent || "")', 'the model and reasoning beside it');
+  // Rename chat …: the title, and the list's name for it
+  await command(p, 'rename chat', 'Rename chat …');
+  await p.waitFor('palMode === "renameAgentChat" && palInput.value === "Summarise my week"', 'the rename page with the name as it is');
+  await p.js('palInput.value = ""; palInput.dispatchEvent(new Event("input")); 1'); await p.type('Week summary'); await p.key('↩');
+  await p.waitFor('document.getElementById("title").textContent === "Week summary"', 'the chat renamed');
+  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type('set icon');
+  assert.ok(await p.js('palRows.some((r) => r.id === "setIcon")'), 'Set icon is offered on the chat'); await closePalette(p);
+  await p.js('renameTitle(); 1'); // Rename on the chat\u2019s tab, its right-click menu (shell.js)
+  await p.waitFor('palMode === "renameAgentChat" && palInput.value === "Week summary"', 'the tab\u2019s Rename opens Rename chat'); await closePalette(p);
+  await command(p, 'agent chats', 'Agent chats');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 4', 'the list with the new chat');
+  assert.equal(await p.js('kids.get("orbital:agent-chats")[1].id'), id, 'newest first, after your Dot\u2019s chat');
+  await p.js('goTo(' + J(id) + ')'); await at(p, id);
+  await command(p, 'delete chat', 'Delete chat');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 3', 'back on the list, without it');
+  assert.equal(await p.js('(kids.get("orbital:agent-chats") || []).some((n) => n.id === ' + J(id) + ')'), false, 'the chat is off the list');
+});
+
+
+// The sidebar's rows with ⌘, ⇧ or ⌥ (shell.js sbWhere): the page opens the row's place beside it, as ⌘↩ does in Cmd+K
+// (renderer/palette.js runAction where), and a plain click still goes there in this page.
+flow('Sidebar rows ⌘-, ⇧- and ⌥-clicked open their place in a tab, a pane beside or floating', async (p) => {
+  await p.start();
+  await p.js('window.__split = []; tana.splitWindow = async (where, start) => { __split.push([where, JSON.parse(start.place).docId]); return "2"; }; 1');
+  const today = await p.js('tana.todayNode()');
+  for (const [id, where] of [['timeline', 'right'], ['today', 'tab'], ['agentChats', 'float'], ['newAgentChat', 'tab']]) await p.js('runAction(' + J(id) + ', ' + J(where) + '); 1');
+  await p.waitFor('__split.length === 4', 'four places opened elsewhere');
+  assert.deepEqual(await p.js('__split'), [['right', 'orbital:timeline'], ['tab', today], ['float', 'orbital:agent-chats'], ['tab', 'orbital:agent-chat:new']], 'each where its key says');
+  await p.js('runAction("timeline"); 1');
+  await p.waitFor('zoom && zoom.docId === "orbital:timeline"', 'a plain click goes there in this page');
+  assert.equal(await p.js('__split.length'), 4, 'and opens nothing beside it');
+});
+
+
+// ⌘K's Views with ⌘↩, ⇧↩ or ⌥↩ (renderer/palette.js openRow): a view opens as itself elsewhere, an app page as its page
+flow('Cmd+K Views open in a tab, a pane beside or floating with ⌘↩, ⇧↩ and ⌥↩', async (p) => {
+  await p.start();
+  await p.js('window.__split = []; tana.splitWindow = async (where, start) => { __split.push([where, start.view, JSON.parse(start.place).docId || null]); return "2"; }; 1');
+  for (const [words, label, key] of [['library', 'Library', '⌘↩'], ['notifications', 'Notifications', '⇧↩'], ['timeline', 'Timeline', '⌥↩']]) {
+    await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type(words);
+    await p.waitFor('palRows[palIndex] && palRows[palIndex].label === ' + J(label), label + ' as the active row'); await p.key(key);
+    await p.waitFor('palette.hidden', 'the palette closed');
+  }
+  await p.waitFor('__split.length === 3', 'three opened elsewhere');
+  const split = await p.js('__split.map(([w, v, d]) => [w, d || v])'); // a view has nothing zoomed: its place is the view itself
+  assert.deepEqual(split, [['tab', 'library'], ['right', 'orbital:notifications'], ['float', 'orbital:timeline']], 'the Library as a view, the others as their pages, each where its key says: ' + J(split));
+});
+
+
+// A row dropped anywhere on a chat's conversation, not only on its message box, goes into the message as a reference
+// (renderer/chat.js chatScroll drop): in a Tana chat and in an agent chat alike, and the box is lit while it is over it.
+flow('A node dropped on a chat fills its message with a reference', async (p) => {
+  await p.start();
+  const drop = (types) => p.js('(() => { const dt = new DataTransfer(); dt.setData("application/x-orbital-nodes", JSON.stringify([[{ mention: { uri: "mockdoc2", label: "Check out the new editor", icon: "task" } }]])); const at = outline.parentElement;'
+    + ' at.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true })); const lit = composer.classList.contains("dropping");'
+    + ' at.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true })); return [lit, composer.classList.contains("dropping"), [...composerText.querySelectorAll(".mention")].map((m) => m.textContent.trim())]; })()');
+  for (const id of ['tana:chat:mockchat0', 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001']) {
+    await p.js('goTo(' + J(id) + ')'); await p.waitFor('zoom && zoom.docId === ' + J(id) + ' && !composer.hidden', 'the chat with its message box');
+    assert.deepEqual(await drop(), [true, false, ['Check out the new editor']], id + ': lit while over it, and the reference in the message');
+    await p.js('setComposer(null); 1');
+  }
+});
+
+
+// Your Dot's chat (renderer/agentchats.js, main/agentchats.js dotList): first on the list, its message box named after it, and
+// nothing to rename or delete: it goes when the Dot is unlinked.
+flow('Your Dot has a chat of its own, which cannot be renamed or deleted', async (p) => {
+  await p.start();
+  const id = 'orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e';
+  await command(p, 'agent chats', 'Agent chats');
+  await p.waitFor('(kids.get("orbital:agent-chats") || []).length', 'the list');
+  assert.equal(await p.js('kids.get("orbital:agent-chats")[0].id'), id, 'the Dot\u2019s chat comes first');
+  await p.js('goTo(' + J(id) + ')'); await p.waitFor('zoom && zoom.docId === ' + J(id) + ' && !composer.hidden', 'its chat');
+  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Echo · @ links · Goes through orbital.md', 'its message box is named after it, and says where what you write goes');
+  await p.waitFor('document.querySelector(".chat-context")?.textContent === "Goes through orbital.md, Orbital\u2019s relay, run by us · only you see it here".replace("\u2019", "\'")', 'the line says whose server it goes through');
+  assert.match(await p.js('document.querySelector(".chat-context").title'), /pass through orbital\.md, Orbital's relay, run by us, which passes each message on as it comes and keeps an answer only until Orbital collects it/, 'and, on a hover, what that server does with it');
+  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
+  assert.deepEqual(await p.js('["renameAgentChat", "deleteAgentChat", "openAgentChat", "setIcon"].filter((r) => paletteRows("").some((x) => x.id === r))'), [], 'nothing to rename, delete, open in ChatGPT or give an icon');
+  await closePalette(p);
+  assert.equal(await p.js('renameTitle()'), false, 'and its tab\u2019s Rename does nothing');
+});
+
+
+// ⌘S and ⌘K find agent chats though Tana does not know them (renderer/agentchats.js agentChatHits, agentChatPlaceRows): by
+// every word of their title, a Dot's chat by its name, and opened like any result
+flow('⌘S and ⌘K find agent chats, which are not in Tana', async (p) => {
+  await p.start();
+  await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
+  await p.key('⌘S'); await p.waitFor('palMode === "search"', 'search'); await p.type('release notes');
+  await p.waitFor('palRows.some((r) => r.group === "AGENT CHATS")', 'an agent chat among the results');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.group === "AGENT CHATS").map((r) => [r.label, r.opens])'), [['Draft the release notes for 0.11', 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001']], 'the chat whose title holds both words, under its own heading, opening elsewhere too');
+  await p.js('palRows.find((r) => r.group === "AGENT CHATS").run(); 1');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000001"', 'and it opens');
+  await closePalette(p);
+  await command(p, 'echo', 'Echo');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e"', '⌘K finds your Dot\u2019s chat by its name');
+});
+
+
 flow('golden path: send a chat message and read the answer', async (p) => {
   await p.start();
   await p.js("goTo('tana:chat:mockchat0')"); await p.waitFor('document.getElementById("composerText") && document.querySelector(".chat-msg")', 'the conversation');

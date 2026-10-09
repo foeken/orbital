@@ -1,7 +1,7 @@
 'use strict';
 // Agents linked through the MCP server at orbital.md/mcp (docs/MCP-SERVER.md; the MCP server is mcp-server/): any agent that adds
 // that MCP server to itself and links with a code from Cmd+K Connect your personal agent … Each is an agent of its own beside Codex
-// and Claude (main/agent.js), "relay:<its id>", named as it named itself.
+// (main/agent.js), "relay:<its id>", named as it named itself.
 //   - Your Orbital is one random key (relayKey), made the first time you link an agent and kept in the Orbital settings
 //     document, so every device signed into your Tana account has the same agents. The MCP server keeps only its hash.
 //   - The MCP server keeps the list of agents; relayAgents mirrors it on this machine, so they are known before the network
@@ -37,6 +37,7 @@ agent.addSource(load);
 // a new agent chosen, and the nodes of one the MCP server no longer lists let go (main/agent.js storeLinked), then registered
 function store(list) {
   agent.storeLinked(list, (nodeId) => { documents.dropAgentMark(nodeId); agent.clearTask(nodeId); });
+  require('../agentchats').tellList(); // each linked agent has its chat there (main/agentchats.js dotList): linked or unlinked, the list and the sidebars read it again
   load();
 }
 // an MCP server that does not know your Orbital (another MCP server than the one you linked them on: #814) has no agents of yours

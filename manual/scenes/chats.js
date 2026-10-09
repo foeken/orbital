@@ -3,7 +3,7 @@
 // A clip ends on a change the renderer paints: a page whose only motion is a CSS animation (the dots, the thinking
 // shimmer) records no frames in headless Chromium, so what follows a wait is shown in a still (chats-answered).
 const open = (id) => ({ js: "goTo('" + id + "')" });
-const C = 'tana:chat:mockchat0', Q = 'tana:chat:mockchat4';
+const C = 'tana:chat:mockchat0', Q = 'tana:chat:mockchat4', A = 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001';
 const pal = { sel: '#palette .box, #palette > div', pad: 14 };
 // the Library with its type filter on chats
 const chatLibrary = [{ js: "setView('library')" }, { wait: 800 }, { js: "setViewF({ types: ['chats'], states: null })" }];
@@ -33,6 +33,9 @@ module.exports = [
     steps: [{ key: '⌘S' }, { wait: 300 }, { type: '#chat' }, { wait: 1300 }, { key: 'esc' }, { wait: 300 }, { key: '⌘K' }, { wait: 300 }, { type: 'mcp' }, { wait: 800 }, { key: '↩' }, { wait: 500 }, { key: '⌘S' }, { wait: 300 }, { type: '#chat' }, { wait: 1200 }] },
   { name: 'chats-codex', video: true, hold: 1800, setup: [open(C), { wait: 1500 }], clip: [190, 250, 900, 550],
     steps: [{ click: '#composerText' }, { type: '@' }, { wait: 700 }, { key: '↓' }, { wait: 400 }, { key: '↩' }, { type: ' what changed since the first draft?', delay: 40 }, { wait: 300 }, { key: '↩' }, { wait: 5200 }] },
+  { name: 'chats-agent', size: '1280x800', setup: [open(A), { wait: 1500 }, { js: 'outline.parentElement.scrollTop = 0' }, { wait: 300 }] },
+  { name: 'chats-dot', size: '1280x800', setup: [open('orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e'), { wait: 1500 }, { js: 'outline.parentElement.scrollTop = 0' }, { wait: 300 }] },
+  { name: 'chats-agent-list', setup: [open('orbital:agent-chats'), { wait: 1200 }], clip: [0, 0, 1280, 360] },
   // the chapter, drawn whole
   { name: 'chats-page-check', url: 'manual/chats.html', full: true, size: '1440x900' },
   // the diagrams mid-loop, to check them

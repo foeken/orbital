@@ -25,16 +25,15 @@ const hidePage = { js: "(() => { const s = document.createElement('style'); s.te
 const card = [310, 76, 660, 556];
 // Orbital's Settings window (settings.html) is a window of its own (main.js openSettings), which the runner has none of:
 // an iframe in a drawn window frame over the app does what main does, as page 'settings', handed what main would answer
-// (fictional: Robin's sign-in, four agents with Dot found in the ChatGPT app and Claude not installed, three hidden titles). Its traffic lights are drawn
+// (fictional: Robin's sign-in, three agents with Dot found in the ChatGPT app, Claude coming soon, three hidden titles). Its traffic lights are drawn
 // where main.js insets them; close is the only live one, as a settings window has it.
 const SETTINGS_API = "start({ prefs: { theme: new URLSearchParams(location.search).get('theme') }, translate: () => {}, filters: async () => ['Daily standup', 'Lunch*', 'Focus time'],"
   + " aiOptions: async () => ({ models: ['gpt-6-luna', 'gpt-6-sol', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'medium', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'medium', 'high', 'xhigh'] }),"
   + " chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@example.com' }), mcpHidden: async () => true, setMcpHidden: async (on) => on, setPref: async () => {}, mcpWhere: async () => window.org,"
   + " agentList: async () => window.agents, enableAgent: async (id, on, setup) => (window.agents = window.agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a))), setDefaultAgent: async () => window.agents,"
   + " settingsSize: (h) => { frameElement.style.height = h + 'px'; } }); 1";
-const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
-  { id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true, app: 'ChatGPT' },
-  { id: 'claude', label: 'Claude', icon: 'robot', installed: false, enabled: false, missing: 'Install Claude Code' }];
+const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt', installed: true, enabled: true, isDefault: true },
+  { id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true, app: 'ChatGPT' }];
 // the MCP tab is an admin's only: the window is handed the workspace's settings for that shot alone, as main answers an admin
 const ORG = { admin: true, url: 'https://orbital.md/mcp', workspace: null, fallback: 'https://orbital.md/mcp', plugin: 'https://chatgpt.com/plugins/orbital', deploy: 'Deploy', changedBy: { name: 'Robin Vega' } };
 const settingsWindow = (tab = 'general') => ({ page: 'shell', js: "(() => { const theme = window.shell.state().theme, w = document.createElement('div'), f = document.createElement('iframe'), s = document.createElement('style');"

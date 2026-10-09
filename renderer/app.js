@@ -81,15 +81,15 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages, links: e.data.links === true, sidebar: e.data.sidebar !== false }; toShell({ orbital: 'keys', search: hotkeyFor('search') || '' }); drawLinksBtn(); document.documentElement.classList.toggle('tabbed', e.data.pages > 1); document.documentElement.classList.add('framed'); navSent = ''; tellNav(); retell(); } // framed: the shell draws the header buttons, in a tab bar or its header; retell: the title and document again (renderer/rail.js)
   else if (e.data?.orbital === 'navclick') navRow.querySelector('#' + CSS.escape(String(e.data.id)))?.click(); // a press on its copy in the tab bar
   else if (e.data?.orbital === 'follow' && LINKS) follow(e.data.docId, e.data.doc); // the Graph pane: the focused pane's document (renderer/rail.js)
-  else if (e.data?.orbital === 'goto') { if (typeof e.data.view === 'string') setView(e.data.view); else if (typeof e.data.id === 'string') goTo(e.data.id); } // what the Graph pane opened, opened here
+  else if (e.data?.orbital === 'goto') { if (typeof e.data.view === 'string') setView(e.data.view); else if (typeof e.data.id === 'string' && WHERE.has(e.data.where)) run(() => openElsewhere(e.data.where, e.data.id)); else if (typeof e.data.id === 'string') goTo(e.data.id); } // what the Graph pane or the sidebar opened, here or (a modified click) beside it
   else if (e.data?.orbital === 'panes') otherPanes = e.data.places && typeof e.data.places === 'object' ? e.data.places : {}; // where the other panes are (shell.js tellPlaces, #533)
-  else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id); // a key pressed in the Graph pane
+  else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id, WHERE.has(e.data.where) ? e.data.where : null); // a key pressed in the Graph pane, or a sidebar row (a modified click: its place beside this page)
   else if (e.data?.orbital === 'rename') renameTitle(); // Rename on the tab (shell.js)
   else if (e.data?.orbital === 'refresh') refreshSearch(); // Refresh in the pane's menu (shell.js)
   else if (e.data?.orbital === 'remove' && onSearchPage()) removeZoomedBlock(); // Delete on a saved search's tab (shell.js, #615)
   else if (e.data?.orbital === 'copyLink' && zoom) copyNodeLink(meetingShown(zoom.docId) || zoom.docId); // Copy link on the tab: the page's node, whatever row has the caret (#542); on a meeting, the summary or notes it shows, as ⌘C
   else if (e.data?.orbital === 'processImage') processImage(e.data.file); // an image dropped on Create new (shell.js)
-  else if (e.data?.orbital === 'compose' && typeof e.data.docId === 'string' && Array.isArray(e.data.segs) && e.data.doc) composeInto(e.data.docId, e.data.segs, e.data.doc); // ⌘K Add to chat, from this pane or another (renderer/chat.js)
+  else if (e.data?.orbital === 'compose' && typeof e.data.docId === 'string' && (Array.isArray(e.data.segs) || Array.isArray(e.data.rows)) && e.data.doc) composeInto(e.data.docId, Array.isArray(e.data.segs) ? e.data.segs : composerDropSegs(e.data.rows), e.data.doc); // ⌘K Add to chat, from this pane or another, or rows dropped on a chat in the sidebar (rows: renderer/drag.js dragSegs)
 });
 titleEl.addEventListener('blur', () => document.documentElement.classList.remove('renaming'));
 // Under a tab bar (html.tabbed) the header buttons are drawn in this page's tab bar, beside its ⋯ (shell.js navbtns),
