@@ -316,9 +316,9 @@ bridge.onCommand((cmd, arg) => {
   }
 });
 
-// ---- the window's sidebar: Search, Home and Today, then your sidebar pins as Tana keeps them (docs/OUTLINER.md §19) ----
+// ---- the window's sidebar: Search, Home, Today and Agent chats, then your sidebar pins as Tana keeps them (docs/OUTLINER.md §19) ----
 // Every row acts in the page the Graph pane would follow (the last to take the keys): a pin opens there, Search opens
-// its ⌘S, Home and Today run its Cmd+K rows. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
+// its ⌘S, Home, Today and Agent chats run its Cmd+K rows. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
 // top level under Pinned, then each section with its pins, read from main (main/pins.js pinTree) and read again
 // whenever main says it moved (pins:changed). Its edge is the handle: dragged it resizes, and let go narrower than
 // SB_SHUT it is its icons alone (SB_RAIL wide), never less; ⌘K Collapse/Expand sidebar and ⌃⌘S switch the two.
@@ -350,7 +350,7 @@ function sbDraw() {
   const rows = [];
   const search = sbButton('sbrow', 'search', 'Search', () => toPage({ orbital: 'palette', mode: 'search' }));
   if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
-  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
+  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })), sbButton('sbrow', 'robot', 'Agent chats', () => toPage({ orbital: 'action', id: 'agentChats' })));
   const pin = (n) => {
     const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri, n.node.svg);
     b.dataset.uri = n.uri;

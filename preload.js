@@ -211,6 +211,15 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   agentReplies: (id) => ipcRenderer.invoke('chatAgent:replies', id), // the questions asked in this chat with their answers, local only: [{ id, question, agent, label, at, state: working|done|failed, text }]
   openAgentAsk: (id, askId) => ipcRenderer.invoke('chatAgent:open', id, askId), // open the task that answered this question in its agent's app: true, or false when it is not on this device
   deleteAgentAsk: (id, askId) => ipcRenderer.invoke('chatAgent:delete', id, askId), // forget a question and its answer on this device (they were never in Tana)
+  // Agent chats (main/agentchats.js, docs/CHATS.md §13): a chat that is a Codex thread, Orbital keeping only its link; a
+  // chat's messages, and the list's rows, come through children(id) like any page's
+  agentChats: () => ipcRenderer.invoke('agentChat:list'), // [{ id, title, meta, agentChat: { agent, at, elsewhere } }], newest first
+  startAgentChat: (agent, text) => ipcRenderer.invoke('agentChat:start', agent, text), // a new chat with that agent, its first message sent: its row on the list
+  sendAgentChat: (id, text) => ipcRenderer.invoke('agentChat:send', id, text), // { queued }: queued when the Codex app has the chat open, and answered there
+  stopAgentChat: (id) => ipcRenderer.invoke('agentChat:stop', id), // stop the answer being written
+  openAgentChat: (id) => ipcRenderer.invoke('agentChat:open', id), // in the Codex app
+  deleteAgentChat: (id) => ipcRenderer.invoke('agentChat:delete', id), // forget the link (the thread stays in Codex): the list as it is now
+  onAgentChatChanged: (cb) => ipcRenderer.on('agentChat:changed', (_e, id) => cb(id)), // a chat's answer moved on, or the list changed
   deleteChatMessage: (id, messageId) => ipcRenderer.invoke('chat:delete', id, messageId), // delete one of your own messages from the chat, for everyone, as Tana's Delete message does
   inviteToChat: (id, userUri) => ipcRenderer.invoke('chat:invite', id, userUri), // a workspace member joins the chat as an editor: { name } // a new chat with Tana, yours alone: Node to zoom
   taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Quick Add Task offers (task.html)

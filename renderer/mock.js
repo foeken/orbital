@@ -308,6 +308,20 @@ function mockApi() {
     { id: 'q2', question: 'What should the new clause cover?', multiSelect: true, options: [{ label: 'Data retention', description: 'how long we keep it' }, { label: 'Sub-processors' }, { label: 'Breach notification' }] },
   ] };
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
+  // Agent chats (main/agentchats.js): two chats with Codex, the second on another Mac; a message is answered after a moment
+  const AGENT_LIST = 'orbital:agent-chats', agentChatId = (n) => 'orbital:agent-chat:0198c0de-0000-7000-8000-' + String(n).padStart(12, '0');
+  const agentChatRow = (id, title, hoursAgo, elsewhere) => ({ id, text: title, title, kind: 'document', icon: 'robot', editable: false, hasChildren: true, appPage: true, meta: elsewhere ? 'On another Mac' : 'Codex', agentChat: { agent: 'codex', at: Date.now() - hoursAgo * 36e5, elsewhere } });
+  const codexMsg = (mine, text, minsAgo, notes) => { const m = chatMsg(mine, [].concat(text), minsAgo, notes); if (!mine) { m.text = 'Codex'; m.segments = [{ text: 'Codex' }]; } return m; };
+  content[AGENT_LIST] = [agentChatRow(agentChatId(1), 'Draft the release notes for 0.11', 1, false), agentChatRow(agentChatId(2), 'Why is the iPhone build slow?', 26, true)];
+  content[agentChatId(1)] = [codexMsg(true, 'Draft the release notes for 0.11 from the pull requests merged this week', 62),
+    codexMsg(false, ['Here is a first draft.', 'Meet Now in ⌘K makes a half-hour meeting and opens it in Tana.', 'Agent chats: chat with Codex from Orbital, kept in Codex.', 'Past days in a meeting search start folded.'], 61, ['Thought for 38 seconds'])];
+  content[agentChatId(2)] = [{ id: 'away', text: 'This chat is on another Mac. Open it there, or in Codex on that Mac.', kind: 'block', editable: false, segments: [{ text: 'This chat is on another Mac. Open it there, or in Codex on that Mac.' }], hasChildren: false, children: [] }];
+  const agentChanged = [], emitAgent = (id) => setTimeout(() => agentChanged.forEach((cb) => cb(id)), 0);
+  const codexAnswers = (id, text) => {
+    const reply = codexMsg(false, '', 0); reply.children = []; reply.chat.streaming = true;
+    content[id] = [...(content[id] || []), codexMsg(true, text, 0), reply]; emitAgent(id);
+    setTimeout(() => { const at = content[id].indexOf(reply); if (at >= 0) content[id].splice(at, 1, codexMsg(false, 'Mock answer from Codex to: ' + text, 0, ['Thought for 2 seconds'])); emitAgent(id); }, 1500);
+  };
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true, opens: true }];
   const mockLink = { polls: 0 }; // how often the Connect your personal agent page has asked, since its code was made
@@ -729,6 +743,14 @@ function mockApi() {
     },
     // @Codex (main/chatagents.js): the question is a message to the chat; the answer is local, here after two and a half seconds
     chatAgents: async () => [{ id: 'codex', label: 'Codex', icon: 'robot' }],
+    // Agent chats (main/agentchats.js): the list, a new chat started with its first message, and the rest of the turns
+    agentChats: async () => structuredClone(content[AGENT_LIST]),
+    startAgentChat: async (agent, text) => { const row = agentChatRow(agentChatId(100 + (++seq)), text.slice(0, 60), 0, false); content[AGENT_LIST] = [row, ...content[AGENT_LIST]]; codexAnswers(row.id, text); emitAgent(AGENT_LIST); return structuredClone(row); },
+    sendAgentChat: async (id, text) => { codexAnswers(id, text); return { queued: false }; },
+    stopAgentChat: async (id) => { content[id] = (content[id] || []).filter((m) => !(m.chat && m.chat.streaming)); emitAgent(id); },
+    openAgentChat: async () => true,
+    deleteAgentChat: async (id) => { content[AGENT_LIST] = content[AGENT_LIST].filter((r) => r.id !== id); emitAgent(AGENT_LIST); return structuredClone(content[AGENT_LIST]); },
+    onAgentChatChanged: (cb) => agentChanged.push(cb),
     askAgent: async (docId, agent, text) => { const id = 'mockask' + (++seq); (agentAsks[docId] ||= []).push({ id, question: text, at: Date.now() }); return { id }; },
     deleteAgentAsk: async (docId, id) => { agentAsks[docId] = (agentAsks[docId] || []).filter((a) => a.id !== id); },
     deleteChatMessage: async (docId, messageId) => { content[docId] = (content[docId] || []).filter((m) => !(m.chat && m.chat.mine && m.chat.id === messageId)); emit(docId); },

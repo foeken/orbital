@@ -359,3 +359,30 @@ latest question, opens it in Codex (`chatAgent:open`: the page names the questio
 answering `taskId → { state, text }` for the ones still running, and `url(taskId)` to open one in its own app. The
 question, the prompt, the rules, the local record, the grey bubble, the reply, Add to message and Open are shared, and the page draws every
 label from `chatAgent:list`. Codex is the only entry today.
+
+## 13. Agent chats: a chat that is a Codex thread
+
+main/agentchats.js, renderer/agentchats.js (and renderer/chat.js, which draws it). A chat in Orbital whose conversation is
+Codex's: ⌘K **New chat with Codex** opens an empty one (`orbital:agent-chat:new`), its first message starts a Codex thread
+through the app-server (`thread/start`, then `turn/start`), and the page becomes `orbital:agent-chat:<thread id>`. Every
+later message is a new turn on a fresh app-server child (`thread/resume`, `turn/start`), which holds the thread as its
+writer until `turn/completed` and lets go with `thread/unsubscribe`. The answer streams in from `item/agentMessage/delta`
+(main pushes `agentChat:changed`, coalesced, and the page reads its rows again); the rows are the same chat rows Tana chats
+use: each turn is your `userMessage` and one Codex message from its `agentMessage` items, its commands and tool calls the
+“Thought for …” line (sdk/chat.js `chatRows`). History is `thread/turns/list` in ascending order with `itemsView: full`;
+a turn this Mac is running is drawn from what has streamed in, since another reader sees it as interrupted.
+
+- **Where it runs.** `~/.orbital/chats`, made on first use with its house rules in `AGENTS.md`. A chat asks nobody: it
+  runs with `sandbox: workspace-write`, `approvalPolicy: on-request` and `approvalsReviewer: auto_review`, so Codex's own
+  reviewer decides what it may do, and a request that still comes to the client is answered no (`appServerRpc` `decline`).
+- **What Orbital keeps.** Only the link, the setting `agentChats` (thread → `{ agent, title, at, device }`), which follows
+  you (main/settings.js SYNCED). The title is the first message on one line. A thread lives on the Mac that started it, so
+  the link names that Mac (main/agent.js `deviceId`): another Mac lists the chat as “On another Mac”, and its page says to
+  open it there. Nothing of a chat is written to Tana.
+- **The Codex app.** The thread is listed there too. While the app has it open it is the thread's writer, so a message
+  sent here is queued to it (`codex queue`) and answered in the app; the page says so, and the next read shows it.
+- **⌘K on a chat**: Stop Codex (while it answers: the turn let go), Open in Codex (`codex://threads/<id>`), Delete chat
+  (forgets the link; the thread stays in Codex). **Agent chats** (sidebar, ⌘K Views) is the list, `orbital:agent-chats`,
+  newest first.
+- **What it is not.** Not an @Codex question (§12): that is a question about a Tana chat, answered privately beside it.
+  Claude is not offered yet (issue #823).
