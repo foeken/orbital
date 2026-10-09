@@ -12,3 +12,9 @@ regex = '''(?i)\b[a-z0-9-]+\.[a-z0-9-]+\.chatgpt\.site\b'''
 keywords = ["chatgpt.site"]
 [[rules.allowlists]]
 regexes = ['''(?i)\.(example|acme)\.chatgpt\.site''']
+# Nor anyone's work email address
+[[rules]]
+id = "work-email"
+description = "A work email address: use an invented one (robin@example.com)"
+regex = '''(?i)\b[a-z0-9._%+-]+@nedap\.com\b'''
+keywords = ["@nedap.com"]
