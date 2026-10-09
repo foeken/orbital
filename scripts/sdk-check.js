@@ -63,7 +63,7 @@ function mainHelpers(childProcess) {
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
   const loaded = load(nodePath.join(root, 'main.js'));
-  return { ...loaded, handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), mcpServer: load(nodePath.join(root, 'main', 'mcp-server.js')), documents: load(nodePath.join(root, 'main', 'documents.js')), meetings: load(nodePath.join(root, 'main', 'meetings.js')), meetingNotes: load(nodePath.join(root, 'main', 'meeting-notes.js')) };
+  return { ...loaded, handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), agentChats: load(nodePath.join(root, 'main', 'agentchats.js')), mcpServer: load(nodePath.join(root, 'main', 'mcp-server.js')), documents: load(nodePath.join(root, 'main', 'documents.js')), meetings: load(nodePath.join(root, 'main', 'meetings.js')), meetingNotes: load(nodePath.join(root, 'main', 'meeting-notes.js')) };
 }
 
 // An agent's MCP connection to an MCP server (mcp-server/server.js), signed in as an MCP client signs in: registered, PKCE, a token
@@ -3586,6 +3586,37 @@ async function main() {
     assert.equal(chatState(null, [msg('human'), msg('ai', { completedAt: 2 })]), 'done', 'an answer is done');
     agent.unregister('other');
     console.log('ok  agents: Tana always on and the default, agents switched and chosen, links by agent, pasted links, Tana states');
+  }
+  // Agent chats (main/agentchats.js, docs/CHATS.md §13): a link per Codex thread in the synced settings, its turns drawn
+  // as your messages and Codex's, and nothing of it in Tana. The turns are read through a stand-in for Codex here.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const chats = backend.agentChats, settings = backend.settings, agent = backend.agent;
+    const plain = (v) => JSON.parse(JSON.stringify(v)), T = '01a1207b-34c6-7573-977a-f0dea4178bc5', ID = chats.PREFIX + T, handler = (name) => backend.handlers.get(name);
+    assert.equal(settings.isSynced('agentChats'), true, 'the links follow you to the next machine');
+    settings.set('agentChats', { [T]: { agent: 'codex', title: 'Draft the notes', at: 2, device: agent.deviceId() } });
+    assert.deepEqual(plain((await handler('agentChat:list')(null)).map((r) => [r.id, r.title, r.meta, r.agentChat.elsewhere])), [[ID, 'Draft the notes', 'Codex', false]], 'the list names each chat and its agent');
+    const turn = { id: 'turn1', status: 'completed', startedAt: 100, completedAt: 104, items: [{ type: 'userMessage', id: 'u1', content: [{ type: 'text', text: 'What is due?' }] },
+      { type: 'commandExecution', id: 'c1' }, { type: 'agentMessage', id: 'a1', text: 'Two **tasks**' }] };
+    const failed = { id: 'turn2', status: 'failed', startedAt: 200, completedAt: 201, error: { message: 'Usage limit' }, items: [{ type: 'userMessage', id: 'u2', content: [{ type: 'text', text: 'And now?' }] }] };
+    let asked = null;
+    const rows = await chats.rows(ID, async (t) => { asked = t; return [turn, failed]; });
+    assert.equal(asked, T, 'the turns are read from the chat\'s own thread');
+    assert.deepEqual(plain(rows.map((r) => [r.chat.mine, r.chat.author === 'ai' ? r.text : 'me'])), [[true, 'me'], [false, 'Codex'], [true, 'me'], [false, 'Codex']], 'each turn is your message, then Codex\'s');
+    assert.deepEqual(plain(rows[1].children.map((c) => c.text)), ['Thought for 4 seconds', 'Two tasks'], 'its commands are the thought line, and its words the answer');
+    assert.deepEqual(plain(rows[3].children.map((c) => c.text)), ['Error: Usage limit'], 'a turn that failed says why');
+    assert.deepEqual(plain(await chats.rows(chats.PREFIX + 'new', async () => assert.fail('a new chat reads nothing'))), [], 'a new chat has no messages until its first is sent');
+    // A thread lives on the Mac that started it: another Mac lists the chat and says where it is, and sends nothing to it
+    settings.set('agentChats', { [T]: { agent: 'codex', title: 'Draft the notes', at: 2, device: 'another-mac' } });
+    assert.equal(chats.list()[0].meta, 'On another Mac', 'another Mac\'s chat says so on the list');
+    assert.match((await chats.rows(ID, async () => assert.fail('nothing is read for it')))[0].text, /on another Mac/, 'and its page says where to open it');
+    await assert.rejects(handler('agentChat:send')(null, ID, 'Hi'), /on another Mac/, 'a message to it is refused here');
+    await assert.rejects(handler('agentChat:start')(null, 'claude', 'Hi'), /Only Codex/, 'only Codex can be chatted with');
+    await assert.rejects(handler('agentChat:start')(null, 'codex', '  '), /Type a message/, 'and a chat starts with a message');
+    // Delete chat forgets the link only: the thread stays in Codex, and the chat can no longer be opened here
+    assert.deepEqual(plain([...await handler('agentChat:delete')(null, ID)]), [], 'deleting forgets the link');
+    await assert.rejects(handler('agentChat:send')(null, ID, 'Hi'), /not here any more/, 'and a chat that was deleted takes no more messages');
+    console.log('ok  agent chats: synced links, turns as messages, failed turns, another Mac, delete forgets the link');
   }
   // Agents linked through the MCP server (main/agents/linked.js, mcp-server/server.js, docs/MCP-SERVER.md): a real MCP server on a
   // loopback port, an agent signing in and linking as an MCP client would, and Orbital's side through its handlers.

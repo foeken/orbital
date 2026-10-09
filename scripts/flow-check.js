@@ -1382,6 +1382,32 @@ flow('Open Orbital Settings for Tana Workspace: the MCP server and the plugin li
 
 // 20. A chat (docs/CHATS.md): a message typed in the composer is sent with ↩, shows as yours at once, and Tana's answer
 // follows below it
+// Agent chats (renderer/agentchats.js, main/agentchats.js): ⌘K New chat with Codex opens a chat with nothing in it, its
+// first message makes the chat and the page becomes it, Codex's answer streams in where Tana's would, the Agent chats
+// page lists it first, and Delete chat takes it off the list and goes back there.
+flow('Agent chats: a new chat with Codex, its answer, the list, and Delete chat', async (p) => {
+  await p.start();
+  await command(p, 'new chat with codex', 'New chat with Codex');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:new" && !composer.hidden', 'a new chat with its composer');
+  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Codex · @ links', 'the composer says who it goes to');
+  assert.match(await p.js('outline.textContent'), /kept in Codex/, 'and the empty chat says where it is kept');
+  await p.js('composerText.focus(); 1');
+  await p.type('Summarise my week'); await p.key('↩');
+  await p.waitFor('zoom && /^orbital:agent-chat:0198c0de/.test(zoom.docId)', 'the page becomes the new chat');
+  const id = await p.js('zoom.docId');
+  await p.waitFor('/Mock answer from Codex to: Summarise my week/.test(outline.textContent)', 'Codex\u2019s answer', 6000);
+  assert.deepEqual(await p.js('[...outline.querySelectorAll(".chat-msg")].map((m) => m.className.replace("chat-msg ", "").split(" ")[0])'), ['mine', 'theirs'], 'your message, then Codex\u2019s');
+  assert.equal(await p.js('document.getElementById("title").textContent'), 'Summarise my week', 'titled with its first message');
+  await command(p, 'agent chats', 'Agent chats');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 3', 'the list with the new chat');
+  assert.equal(await p.js('kids.get("orbital:agent-chats")[0].id'), id, 'newest first');
+  await p.js('goTo(' + J(id) + ')'); await at(p, id);
+  await command(p, 'delete chat', 'Delete chat');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 2', 'back on the list, without it');
+  assert.equal(await p.js('(kids.get("orbital:agent-chats") || []).some((n) => n.id === ' + J(id) + ')'), false, 'the chat is off the list');
+});
+
+
 flow('golden path: send a chat message and read the answer', async (p) => {
   await p.start();
   await p.js("goTo('tana:chat:mockchat0')"); await p.waitFor('document.getElementById("composerText") && document.querySelector(".chat-msg")', 'the conversation');

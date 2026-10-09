@@ -11,6 +11,8 @@ const codexBin = () => agent.findBin('codex', ['/Applications/ChatGPT.app/Conten
 // `codex app-server` speaks JSON-RPC on stdio. Read callers stop this child after one call; ChatGPT auth holds it
 // open while a device login or model turn is active. Bounded by a timeout; stderr carries unrelated CLI warnings.
 // `options.bin` names the binary (main/ai.js: the standalone `codex-app-server`, which takes no subcommand).
+// `options.decline`: a request from the server (an approval, a question for the user) is answered no at once, for a
+// caller with nobody to ask (main/agentchats.js); without it such a request waits for the Codex app to take the thread.
 function appServerRpc(timeoutMs = 20000, onNote, options = {}) {
   const { spawn } = require('node:child_process');
   const bin = options.bin || codexBin();
@@ -32,6 +34,7 @@ function appServerRpc(timeoutMs = 20000, onNote, options = {}) {
       // A notification carries a method and no id. It is the only way a caller hears that a turn has ended, which is
       // what decides when this child may let the thread go.
       if (m.method !== undefined && m.id === undefined) { if (onNote) { try { onNote(m); } catch {} } continue; }
+      if (m.method !== undefined) { if (options.decline) child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code: -32601, message: 'Orbital cannot answer this: continue the chat in Codex' } }) + '\n'); continue; } // a request of the server's: its id is not one of ours
       const r = waiting.get(m.id);
       if (!r) continue;
       waiting.delete(m.id);

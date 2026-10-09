@@ -620,7 +620,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
   Filter rows by text, Switch to table/outliner and Column widths ….
-- **Actions**: Log in (signed out), Create new …, Quick Add Task, New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
+- **Actions**: Log in (signed out), Create new …, Quick Add Task, New chat with Codex (Codex on this Mac: an empty agent chat, docs/CHATS.md §13), New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
@@ -1623,7 +1623,7 @@ rows are grey glyphs and words, and each acts in the page the Graph pane would f
 take the keys.
 
 - **Search** (with the page's ⌘S, which the page tells the shell on every layout message, `{ orbital: 'keys' }`),
-  **Home** (Cmd+K Go to Home) and **Today** (Cmd+K Today) run those rows there.
+  **Home** (Cmd+K Go to Home), **Today** (Cmd+K Today) and **Agent chats** (Cmd+K Agent chats, docs/CHATS.md §13) run those rows there.
 - Then **your sidebar pins as Tana keeps them** (docs/PINNING.md §1): the pins at the top level under **Pinned**, then
   each section with its pins, in Tana's order; a click opens the pin in that page (`goto`), and the pin of the page on
   screen is marked. A right-click on a pin shows the Mac's own menu with **Remove pin**, which unpins it from the sidebar

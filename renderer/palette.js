@@ -361,7 +361,8 @@ function paletteRows(q, typed = q) {
   if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', opens: () => tana.weekNode(), run: () => run(async () => goTo(await tana.weekNode())) });
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
   if (tana.proposalAnswer) viewRows.push(proposalsViewRow()); // what Tana's AI proposed and is waiting on you to accept
-  if (tana.children) viewRows.push(timelineViewRow()); // what happened to what you watch, and what landed in your Inbox
+  if (tana.children) viewRows.push(timelineViewRow());
+  if (tana.agentChats) viewRows.push(agentChatsViewRow()); // chats with Codex (renderer/agentchats.js) // what happened to what you watch, and what landed in your Inbox
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
@@ -381,6 +382,7 @@ function paletteRows(q, typed = q) {
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Quick Add Task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
+  if (tana.startAgentChat) rows.push(...agentChatRows()); // New chat with Codex, and on an agent chat Stop, Open in Codex and Delete chat (renderer/agentchats.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
   // ⌘K New canvas (#620): named as Tana names one ("Canvas Sep 30, 2026, 2:05 PM") and opened in its window (#611)
   if (tana.createDocument && tana.openCanvas) rows.push({ id: 'newCanvas', group: 'Actions', icon: 'canvas', label: 'New canvas', hint: 'A board, drawn by Tana', run: () => run(async () => { const now = new Date(); opensCanvas((await tana.createDocument('Canvas ' + now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }), { kind: 'canvas' })).id); }) });
@@ -786,7 +788,7 @@ function resultRows(nodes, group) {
   // a link field that holds something can be emptied here too, as an options field can; last, so Enter never clears
   if (field && group === undefined && choiceValues(field).length && fuzzyMatch('Clear value', palInput.value.trim())) rows.push({ group: field.field.label || 'Value', icon: 'none', label: 'Clear value', run: () => writeChoice(field, []) });
   if (!ctx) return rows;
-  if (ctx.composer) rows.unshift(...tanaMentionRows(palInput.value.trim(), ctx), ...agentMentionRows(palInput.value.trim(), ctx)); // a chat's "@" can ask Tana itself, or an agent on this device (renderer/chat.js)
+  if (ctx.composer && !isAgentChat(composer.dataset.doc)) rows.unshift(...tanaMentionRows(palInput.value.trim(), ctx), ...agentMentionRows(palInput.value.trim(), ctx)); // a chat's "@" can ask Tana itself, or an agent on this device (renderer/chat.js)
   const title = ctx.text || palInput.value.replace(/(^|\s)#\S+/g, ' ').trim(); // "@" at a caret has no selection: what is typed becomes the new document's title, its #filters left out
   if (!title) return rows;
   // words that read as a day ("friday", "12 oct", "tomorrow": parseDay) also offer that date, first, as Tana's "@" does
