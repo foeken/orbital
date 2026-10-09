@@ -45,9 +45,13 @@ with a new code moves it.
 
 ## Your Dot's chat
 
+Wherever a Dot is linked, handed something or written to, Orbital says what goes through this server and whose it is
+(renderer/agent.js `relayWords`/`relayVia`, settings.js `relayRow`, the phones' `relayWords` in Agents.swift and Agents.kt):
+“Goes through orbital.md, Orbital's relay, run by us”, or the workspace's own, with how to keep it in the workspace.
+
 Unlike a chat with Codex, which never leaves the Mac, **everything said in a Dot's chat goes through this server**: your
 messages out and its answers back. On orbital.md that is our server; on a workspace's own, the workspace's. The chat names it
-(main/agentchats.js `route`): at its top (“Goes through orbital.md, Orbital's own server”, what the server does with it on a
+(main/agentchats.js `route`): at its top (“Goes through orbital.md, Orbital's relay, run by us”, what the server does with it on a
 hover), in the message box and on its empty page, and the manual says it in Chats, Your Dot's chat.
 
 Every linked agent has a chat of its own in Orbital's Agent chats (main/agentchats.js `dotList`, docs/CHATS.md §13), there for

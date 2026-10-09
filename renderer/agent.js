@@ -191,7 +191,7 @@ function connectRows() {
     run: () => run(() => copyText(c.prompt, 'Copied: send them to your agent')) },
   { group, icon: 'link', label: 'Copy the code', hint: 'Only the code · works once', keepOpen: true, match: [], run: () => run(() => copyText(c.code, 'Code copied')) },
   // what crosses orbital.md (main/agents/linked.js send): with each event the node's id, the request and how to handle it, kept nowhere
-  { group, label: 'Only the node\'s id and your request go through ' + serverHost(c.url) + ', and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
+  { group, icon: 'mcp', label: relayWords(c.url, c.workspace), note: true, wrap: true, disabled: true, match: [] });
   // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
   if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
   return [...rows,
@@ -209,6 +209,17 @@ function seenText(at) {
 // everyone hands over through (orbital.md unless the workspace hosts its own). A member sees it, and who set it, and changes nothing.
 let serverNow = null; // what main said last: { url, workspace, admin, deploy, fallback, changedBy, … }
 const serverHost = (url) => String(url || 'orbital.md/mcp').replace(/^https?:\/\//, '');
+// What goes through the Orbital MCP server, said wherever an agent is linked, handed something or written to (the phones say
+// the same, ios/Orbital/Agents.swift and ui/Agents.kt): on orbital.md that is Orbital's relay, run by us, unless the workspace
+// hosts its own (main/mcp-server.js server.base). relayVia is the short form, relayWords the whole of it.
+const relayHost = (url) => serverHost(url).replace(/\/.*$/, '');
+const relayOurs = (url, workspace) => !workspace && relayHost(url) === 'orbital.md';
+const relayVia = (url, workspace) => 'Goes through ' + relayHost(url) + (relayOurs(url, workspace) ? ', Orbital\'s relay, run by us' : workspace ? ', your workspace\'s own server' : '');
+const relayWords = (url, workspace) => 'Everything you send your agent goes through ' + relayHost(url) + (relayOurs(url, workspace) ? ', Orbital\'s relay, run by us' : workspace ? ', your workspace\'s own Orbital MCP server' : '')
+  + ': a node\'s id and your request with each task, your messages in its chat, and its answers until Orbital collects them. A node\'s words stay in Tana, where your agent reads them with its own access.'
+  + (relayOurs(url, workspace) ? ' Host your own Orbital MCP server to keep all of it in your workspace.' : '');
+// the MCP server in use, asked once for the pages that name it before Connect your personal agent has (serverNow)
+function relayKnown(mode) { if (!serverNow && tana.mcpWhere) tana.mcpWhere().then((w) => { serverNow = w; if (palMode === mode && !palette.hidden) renderPalette(); }, () => {}); return serverNow || {}; }
 const ORG_TITLE = 'Orbital Settings for Tana Workspace';
 const asking = (group) => [{ group, label: 'Asking…', disabled: true, sweep: true, bare: true, match: [] }];
 const noteRow = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
@@ -304,13 +315,14 @@ function openLinkedAgent(id) {
 function linkedAgentRows(q) {
   const a = agentNamed(linkedCtx);
   if (!a) return [{ group: 'Linked agent', icon: 'link', label: 'Not linked any more', disabled: true }];
-  const group = [a.label, a.app ? 'through ' + a.app : '', seenText(a.seenAt) || 'not seen yet'].filter(Boolean).join(' · ');
+  const group = [a.label, a.app ? 'through ' + a.app : '', seenText(a.seenAt) || 'not seen yet'].filter(Boolean).join(' · '), w = relayKnown('linkedAgent');
   const rows = [
     { group, icon: 'field', label: 'Rename …', keepOpen: true, run: () => openRenameAgent(a) },
     { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, left out of Assign to Agent' : 'Back in Assign to Agent', keepOpen: true,
       run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) },
     { group, icon: 'trash', label: 'Unlink', hint: 'It can no longer take tasks from Orbital', keepOpen: true,
       run: () => run(async () => { agentList = await tana.mcpUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) }, // its nodes were unassigned too
+    { group, icon: 'mcp', label: relayWords(w.url, w.workspace), note: true, wrap: true, disabled: true }, // what goes through the MCP server, and whose it is
   ];
   return matchRows(rows, q);
 }
@@ -365,6 +377,8 @@ function agentPromptRows() {
   // the editor is the only thing most assignments see.
   const rows = [{ group: AGENT_GROUP, icon: 'robot', label: prompt ? 'Assign to ' + label : 'What should ' + label + ' do?',
     hint: prompt ? '⌘↩' : 'Nothing to send yet', disabled: !prompt, keepOpen: true, run: submitAgentPrompt }];
+  // to an agent linked through the MCP server, the request goes through it: said under the row that sends it
+  if (String(agentPick).startsWith('relay:')) { const w = relayKnown('agentPrompt'); rows.push({ group: AGENT_GROUP, icon: 'mcp', label: relayVia(w.url, w.workspace), note: true, disabled: true }); }
   // Only with a choice to make: Tana alone needs no list. Choosing keeps the keyboard where it was: picked from the
   // list, the list keeps it so another can be tried; clicked or reached from the editor, the caret goes back.
   // Not when the row that opened the page already named the agent (Assign to Echo …): the choice is made
