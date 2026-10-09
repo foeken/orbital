@@ -466,7 +466,7 @@ flow('the Settings window writes what you pick and shows what is newest', async 
   await p.js('document.querySelector(\'[data-key="agent/codex"]\').focus(); 1'); await p.key('Space'); await settle(p, 150);
   assert.deepEqual(await p.js('[__calls.find((c) => c[0] === "enableAgent"), document.activeElement.dataset.key, document.activeElement.getAttribute("aria-checked")]'),
     [['enableAgent', 'codex', false], 'agent/codex', 'false'], 'Space switches Codex off, and the keyboard is still on its switch');
-  // the Lists tab: + and a title hides it, ⌫ on a selected one unhides it
+  // the Hidden tab: + and a title hides it, ⌫ on a selected one unhides it
   await tab('lists');
   await p.js('document.querySelector(\'[data-key="hidden+"]\').click(); 1'); await p.type('Lunch*'); await p.key('↩'); await settle(p, 150);
   await p.js('document.querySelector(\'[data-key="hidden/Secret project"]\').click(); document.querySelector(\'[data-key="hidden/Secret project"]\').focus(); 1'); await p.key('⌫'); await settle(p, 150);
@@ -480,6 +480,30 @@ flow('the Settings window writes what you pick and shows what is newest', async 
   await tab('lists'); await settle(p, 100);
   assert.ok(!(await shown()).includes('Secret project'), 'demo mode shows no real hidden title');
 });
+
+// the MCP tab: an admin's only, under a banner saying it is for everyone in the workspace, its fields written as ⌘K
+// Open Orbital Settings for Tana Workspace writes them
+flow('the Settings window\'s MCP tab: for an admin only, a pasted server URL and plugin link saved for everyone', async (p) => {
+  await p.start();
+  const open = async (admin) => {
+    await p.js('localStorage.setItem("settingsTab", "org"); location.href = "/settings.html"; 1');
+    await p.waitFor('document.readyState === "complete" && typeof start === "function"', 'the Settings window', 8000);
+    await p.js('(() => { window.__calls = []; let w = { url: "https://orbital.md/mcp", workspace: null, admin: ' + admin + ', deploy: "Deploy", fallback: "https://orbital.md/mcp" };'
+      + ' start({ prefs: { theme: "light" }, setPref: async () => {}, mcpWhere: async () => w, agentList: async () => [], mcpUse: async (v) => { __calls.push(["mcpUse", v]); return (w = { ...w, url: v, workspace: v || null }); },'
+      + ' mcpUsePlugin: async (v) => { __calls.push(["mcpUsePlugin", v]); return (w = { ...w, plugin: v || null }); } }); })(); 1');
+    await settle(p, 150);
+  };
+  await open(false);
+  assert.deepEqual(await p.js('[!!document.querySelector(\'[data-key="tab/org"]\'), document.title]'), [false, 'General'], 'a member has no such tab, and the window opens on General');
+  await open(true);
+  assert.deepEqual(await p.js('[!!document.querySelector(\'[data-key="tab/org"]\'), document.title]'), [true, 'MCP'], 'an admin has it, and comes back to it');
+  assert.equal(await p.js('document.querySelector("#pane > .banner:first-child b").textContent'), 'These settings apply to everyone in your Tana workspace who uses Orbital', 'the banner says so first');
+  await p.js('(() => { const f = document.querySelector(\'[data-key="org/url"]\'); f.value = "https://orbital.acme.chatgpt.site/api/mcp"; f.dispatchEvent(new Event("input")); f.dispatchEvent(new Event("change")); })()'); await settle(p, 150);
+  assert.deepEqual(await p.js('[__calls, document.querySelector(\'[data-key="org/url"]\').value]'), [[['mcpUse', 'https://orbital.acme.chatgpt.site/api/mcp']], 'https://orbital.acme.chatgpt.site/api/mcp'], 'the server is saved for everyone, and stays in its field');
+  await p.js('(() => { const f = document.querySelector(\'[data-key="org/plugin"]\'); f.value = "https://chatgpt.com/plugins/orbital"; f.dispatchEvent(new Event("input")); f.dispatchEvent(new Event("change")); })()'); await settle(p, 150);
+  assert.deepEqual(await p.js('[__calls.at(-1), document.querySelector(\'[data-key="org/plugin"]\').value]'), [['mcpUsePlugin', 'https://chatgpt.com/plugins/orbital'], 'https://chatgpt.com/plugins/orbital'], 'and the plugin link, for the instructions to add');
+});
+
 
 // ---- Golden paths: what someone does every day, start to end, by key and by pointer as they would ----
 // The flows above guard the kinds of break that came back PR after PR; these guard the paths themselves, so a change
@@ -1217,42 +1241,86 @@ flow('golden path: read notifications and settle proposals', async (p) => {
   assert.deepEqual(await p.js('__screen()'), before.filter((t) => !/^(Check out the new editor|Studio LT charter)$/.test(t)), 'the others stay');
 });
 
-// Connect your personal agent (main/agents/linked.js, docs/AGENT-RELAY.md): ⌘K Connect your personal agent names both
-// plugins, How to add them … opens the steps for your Dot and any other agent and comes back to the same code, then it
+// Connect your personal agent (main/agents/linked.js, docs/MCP-SERVER.md): ⌘K Connect your personal agent asks which
+// agent; both pages have the two servers (your Dot's with where ChatGPT adds them), both the same code; then it
 // copies the instructions that carry a one-time code; while the page waits the agent links itself
 // (the mock's Dot, on the third time the page asks), the palette closes on its name, and from then on it is one of
 // your agents, with a page of its own to rename or unlink it
 flow('golden path: connect your Dot with a code, and it joins your agents', async (p) => {
   await p.start();
   await command(p, 'connect your personal agent', 'Connect your personal agent \u2026');
-  await p.waitFor('palMode === "linkAgent" && palRows.length === 7', 'the plugins, the instructions and the wait');
-  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => [r.icon, r.label, r.hint])'), [['orbital', 'Orbital', 'https://orbital.md/mcp · ↩ copies'], ['tana', 'Tana', 'https://home.tana.inc/mcp · ↩ copies'], ['help', 'How to add them …', 'Your OpenAI Dot, or any other agent']],
-    'both plugins as a custom MCP server form asks for them, a name and a URL, then the steps');
-  assert.equal(await p.js('palIndex'), 0, '↩ starts at Orbital');
-  await p.js('palRows[2].run()');
-  await p.waitFor('palMode === "linkHelp" && palRows[0].label === "Open ChatGPT plugins"', 'the steps, ChatGPT\u2019s plugins first');
-  assert.deepEqual(await p.js('palRows.map((r) => r.group)'), ['Your OpenAI Dot', 'Your OpenAI Dot', 'Any other agent'], 'one paragraph for your Dot, one for any other agent');
-  assert.match(await p.js('palRows[1].label'), /^In ChatGPT: Add, then Create custom MCP server, once for Orbital \(orbital\.md\/mcp\) and once for Tana/, 'your Dot\u2019s steps in one paragraph');
-  assert.match(await p.js('palRows.at(-1).label'), /needs MCP events/, 'any other agent needs MCP events');
-  assert.equal(await p.js('palRows.some((r) => /link_orbital/.test(r.label))'), false, 'no tool names in the steps');
+  await p.waitFor('palMode === "linkKind" && palRows.length === 2', 'which agent, first');
+  assert.deepEqual(await p.js('palRows.map((r) => [r.icon, r.label])'), [['chatgpt', 'Your OpenAI Dot'], ['mcp', 'Another agent']], 'your Dot in ChatGPT, or another agent');
+  await p.js('palRows[0].run()');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 9', 'your Dot\u2019s page: where to add them, the two servers, the instructions and the wait');
+  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => [r.icon, r.label, r.hint])'), [['chatgpt', 'Open ChatGPT plugins', 'Add, then Create custom MCP server'],
+    ['orbital', 'Orbital', 'https://orbital.md/mcp · ↩ copies'], ['tana', 'Tana', 'https://home.tana.inc/mcp · ↩ copies']], 'your Dot: where ChatGPT adds them, then both servers, a name and a URL');
+  assert.equal(await p.js('palRows.some((r) => /plugin[.]zip|Save the Orbital plugin|Install the Orbital plugin/.test(r.label + (r.hint || "")))'), false, 'and no plugin to save or install');
+  assert.equal(await p.js('palIndex'), 0, '↩ starts at Open ChatGPT plugins');
+  // the self-hosted MCP server's page, and back to the same code
+  assert.deepEqual(await p.js('[palRows[3].label, palRows[3].hint]'), ['Use a self-hosted Orbital MCP server …', 'orbital.md/mcp'], 'then which MCP server it is');
+  await p.js('palRows[3].run()');
+  // an admin on the default is here to set the workspace's own: no default server shown, the instructions first
+  await p.waitFor('palMode === "mcpServer" && palRows[0].label === "Copy instructions to host your own for ChatGPT"', 'the MCP server page, without the default');
+  assert.equal(await p.js('palRows.some((r) => r.label === "orbital.md/mcp")'), false, 'orbital.md is not shown');
+  // a server of the workspace's own is; a typed URL is asked what it is, and the page speaks of that one: the warning about the server in use steps aside
+  await p.js('serverNow = { ...serverNow, workspace: "https://orbital.acme.chatgpt.site/api/mcp", url: "https://orbital.acme.chatgpt.site/api/mcp", outdated: true, version: 0, needed: 1 }; renderPalette(); 1');
+  await p.waitFor('palRows[0].label === "orbital.acme.chatgpt.site/api/mcp" && palRows.some((r) => /^Out of date: it is version 0/.test(r.label))', 'the workspace\u2019s own server, out of date');
+  await p.waitFor('palRows.some((r) => /^Out of date: it is version 0/.test(r.label))', 'the server in use, out of date');
+  const typeUrl = (u) => p.js('palInput.value = ' + J(u) + '; renderPalette(); 1');
+  await typeUrl('https://orbital.acme.chatgpt.site');
+  await p.waitFor('palRows.some((r) => r.label === "Use orbital.acme.chatgpt.site/api/mcp for everyone" && r.hint === "Version 1" && !r.disabled)', 'a Site\u2019s bare address, found at /api/mcp with its version');
+  assert.equal(await p.js('palRows.some((r) => /^Out of date: it is version/.test(r.label))'), false, 'the warning about the server in use steps aside');
+  assert.equal(await p.js('palRows.some((r) => /^Copy instructions/.test(r.label))'), false, 'and so do the instructions to host one: a URL is pasted');
+  await typeUrl('https://orbital-old.example.chatgpt.site/api/mcp');
+  await p.waitFor('palRows.some((r) => r.label === "Out of date: orbital-old.example.chatgpt.site/api/mcp is version 0, and this Orbital needs 1. Have ChatGPT update it, then paste it again.")', 'an old one says so of itself');
+  assert.equal(await p.js('palRows.some((r) => /^Use /.test(r.label))'), false, 'and offers no Use');
+  await typeUrl('https://example.com');
+  await p.waitFor('palRows.some((r) => /^example.com does not answer as an Orbital MCP server/.test(r.label))', 'one that does not answer says so');
+  await typeUrl(''); await p.js('serverNow = { ...serverNow, workspace: null, url: "https://orbital.md/mcp", outdated: false }; 1');
   await p.js('backPalette()');
-  await p.waitFor('palMode === "linkAgent" && palRows.length === 7 && relayCtx.code === "7KQX-M2PD"', 'back on the page, its code still waiting');
-  assert.deepEqual(await p.js('[palRows[3].label, palRows[3].group, !!palRows[3].disabled]'), ['Copy the instructions', 'Then ask your agent to link', false], 'then the instructions');
-  assert.match(await p.js('relayCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned event\. Each time an Orbital event fires, do what its data\.instructions say.*kept nowhere/, 'what it copies: the code, the event that wakes it and carries its instructions, and what goes through orbital.md');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 9 && connectCtx.code === "7KQX-M2PD"', 'back on your Dot\u2019s page, its code still waiting');
+  // the workspace's own server, set in Tana: its URL is the one to add
+  await p.js('connectCtx.url = "https://orbital.acme.chatgpt.site/api/mcp"; renderPalette(); 1');
+  assert.equal(await p.js('palRows[1].hint'), 'https://orbital.acme.chatgpt.site/api/mcp · ↩ copies', 'the workspace\u2019s own MCP server, to add');
+  await p.js('connectCtx.url = "https://orbital.md/mcp"; renderPalette(); 1');
+  // the code alone, for a setup that asks for it
+  await p.js('window.__copyText = copyText; copyText = (text) => { window.__copied = text; }; palRows.find((r) => r.label === "Copy the code").run(); 1');
+  await p.waitFor('window.__copied === "7KQX-M2PD"', 'Copy the code copies the code alone');
+  await p.js('copyText = window.__copyText; 1');
+  // the workspace's Orbital plugin, set: the instructions add it, so nothing is done by hand, only the linking
+  await p.js('connectCtx.plugin = "https://chatgpt.com/plugins/orbital"; renderPalette(); 1');
+  assert.deepEqual(await p.js('palRows.slice(0, 2).map((r) => [r.label, r.group, r.hint])'), [['Copy the instructions', 'Ask your Dot to link', 'They add your workspace\'s Orbital plugin · ↩ copies'],
+    ['Copy the code', 'Ask your Dot to link', 'Only the code · works once']], 'with the workspace\u2019s plugin, only the linking');
+  assert.equal(await p.js('palRows.some((r) => /Open ChatGPT plugins|self-hosted|^Orbital$|^Tana$/.test(r.label))'), false, 'no servers to add by hand');
+  await p.js('connectCtx.plugin = null; renderPalette(); 1');
+  // back to the question, and another agent: its two servers, with the same code
+  await p.js('backPalette()');
+  await p.waitFor('palMode === "linkKind"', 'back to which agent');
+  await p.js('palRows[1].run()');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 9 && connectCtx.code === "7KQX-M2PD"', 'another agent\u2019s page, the same code');
+  assert.deepEqual(await p.js('palRows.slice(0, 2).map((r) => [r.icon, r.label, r.hint])'), [['orbital', 'Orbital', 'https://orbital.md/mcp · ↩ copies'], ['tana', 'Tana', 'https://home.tana.inc/mcp · ↩ copies']],
+    'another agent: both servers as a custom MCP server form asks for them, a name and a URL');
+  assert.match(await p.js('palRows[2].label'), /needs MCP events/, 'and that it needs MCP events');
+  assert.equal(await p.js('palRows.some((r) => /plugin/i.test(r.label))'), false, 'and nothing of ChatGPT\u2019s plugins page');
+  assert.equal(await p.js('palRows.some((r) => /link_orbital/.test(r.label))'), false, 'no tool names in the steps');
+  assert.deepEqual(await p.js('[palRows[4].label, palRows[4].group, !!palRows[4].disabled]'), ['Copy the instructions', 'Then ask your agent to link', false], 'then the instructions');
+  assert.match(await p.js('connectCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned event\. Each time an Orbital event fires, do what its data\.instructions say.*kept nowhere/, 'what it copies: the code, the event that wakes it and carries its instructions, and what goes through orbital.md');
   assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
-  assert.match(await p.js('palRows[4].label'), /^Only the node's id and your request go through orbital\.md, and it keeps neither/, 'it says what goes through orbital.md');
-  assert.deepEqual(await p.js('[palRows[5].label, !!palRows[5].icon, palRows[5].group === palRows[3].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your agent to use the code…', false, true, true],
+  assert.deepEqual(await p.js('[palRows[5].label, palRows[5].group]'), ['Copy the code', 'Then ask your agent to link'], 'or the code alone');
+  assert.match(await p.js('palRows[6].label'), /^Only the node's id and your request go through orbital\.md\/mcp, and it keeps neither/, 'it says what goes through orbital.md');
+  assert.deepEqual(await p.js('[palRows[7].label, !!palRows[7].icon, palRows[7].group === palRows[4].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your agent to use the code…', false, true, true],
     'and waits in the same group, with no glyph, a light passing over its words');
   // where the heading's words start (its box plus its padding), measured once the page has slid in
   const offset = '(() => { const g = document.querySelector("#palette .list .group"); return document.querySelector("#palette .row .label.sweep").getBoundingClientRect().left - g.getBoundingClientRect().left - parseFloat(getComputedStyle(g).paddingLeft); })()';
   await p.waitFor('Math.abs(' + offset + ') <= 1', 'the wait to start where the heading\u2019s words do (' + await p.js(offset) + 'px off at first)');
-  assert.match(await p.js('palRows[5].hint'), /^Works once · \d+:\d\d left$/, 'saying how long the code lasts');
-  // left and opened again while its code waits: the same page, no new code (the relay holds five at most)
-  await p.js('(() => { const f = tana.relayLink; window.__codes = 0; tana.relayLink = (...a) => { window.__codes++; return f(...a); }; return 1; })()');
+  assert.match(await p.js('palRows[7].hint'), /^Works once · \d+:\d\d left$/, 'saying how long the code lasts');
+  // left and opened again while its code waits: the same page, no new code (the MCP server holds five at most)
+  await p.js('(() => { const f = tana.mcpLink; window.__codes = 0; tana.mcpLink = (...a) => { window.__codes++; return f(...a); }; return 1; })()');
   await closePalette(p);
   await command(p, 'connect your personal agent', 'Connect your personal agent \u2026');
-  await p.waitFor('palMode === "linkAgent" && palRows.length === 7', 'the page left, back');
-  assert.deepEqual(await p.js('[window.__codes, relayCtx.code]'), [0, '7KQX-M2PD'], 'reopened while its code waits: that code again, no new one');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 9 && palRows[0].label === "Orbital"', 'the page left, back: straight to its page, the agent last chosen');
+  assert.deepEqual(await p.js('[window.__codes, connectCtx.code]'), [0, '7KQX-M2PD'], 'reopened while its code waits: that code again, no new one');
   await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked Dot · ChatGPT"', 'the palette to close on the agent that linked', 10000);
   await command(p, 'set default agent', 'Set default agent \u2026');
   await p.waitFor('palMode === "defaultAgent" && palRows.some((r) => r.label === "Dot")', 'Set default agent');
@@ -1270,6 +1338,45 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   assert.deepEqual(await p.js('palRows.map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
   await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink"', 'Unlink'); await p.key('↩');
   await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot")', 'Choose agents without it');
+  await closePalette(p);
+});
+
+// only an admin may change the workspace's Orbital MCP server: a member sees the one in use and cannot open its page
+flow('connect your agent as a member: the workspace\'s Orbital MCP server, not its setting', async (p) => {
+  await p.start();
+  await p.js('const made = tana.mcpLink; tana.mcpLink = async () => ({ ...await made(), admin: false, workspace: true, url: "https://orbital.acme.chatgpt.site/api/mcp" }); 1');
+  await command(p, 'connect your personal agent', 'Connect your personal agent \u2026');
+  await p.waitFor('palMode === "linkKind"', 'which agent');
+  await p.js('palRows[1].run()');
+  await p.waitFor('palMode === "linkAgent" && palRows.length === 9', 'another agent\u2019s page');
+  assert.equal(await p.js('palRows.some((r) => /self-hosted/.test(r.label))'), false, 'no self-hosted setting for a member');
+  assert.deepEqual(await p.js('[palRows[3].label, palRows[3].hint, !!palRows[3].disabled, !!palRows[3].run]'),
+    ['Orbital MCP server', 'orbital.acme.chatgpt.site/api/mcp · your workspace\'s', true, false], 'only the one in use');
+  await closePalette(p);
+});
+
+// what is the same for everyone in the Tana workspace, one ⌘K page: the MCP server and the plugin link, each its own page
+flow('Open Orbital Settings for Tana Workspace: the MCP server and the plugin link, read-only for a member', async (p) => {
+  await p.start();
+  await command(p, 'settings for tana workspace', 'Open Orbital Settings for Tana Workspace \u2026');
+  await p.waitFor('palMode === "orgSettings" && palRows.length === 2', 'the Orbital Settings for Tana Workspace');
+  assert.deepEqual(await p.js('palRows.map((r) => [r.label, r.hint, r.icon])'), [['Set custom MCP server URL \u2026', 'orbital.md/mcp · the default', 'mcp'],
+    ['Set Orbital ChatGPT plugin URL \u2026', 'None', 'link']], 'each with what it is now');
+  await p.js('palRows[0].run()');
+  await p.waitFor('palMode === "mcpServer"', 'its own page');
+  await p.js('openOrgPalette(); 1');
+  await p.waitFor('palMode === "orgSettings" && palRows.length === 2', 'back on the settings');
+  await p.js('palRows[1].run()');
+  await p.waitFor('palMode === "orgField"', 'the plugin link\u2019s own field');
+  await p.type('plugin');
+  await p.waitFor('palRows[0] && palRows[0].disabled && palRows[0].label === "A link on chatgpt.com"', 'what is not a link is said so');
+  await p.js('palInput.value = "https://chatgpt.com/plugins/orbital"; renderPalette(); 1');
+  await p.waitFor('palRows[0] && palRows[0].label === "Use chatgpt.com/plugins/orbital"', 'a link to use');
+  await p.js('palRows[0].run()');
+  await p.waitFor('palMode === "orgSettings" && palRows[1] && palRows[1].hint === "Set"', 'back on the settings, the link set');
+  await p.js('const where = tana.mcpWhere; tana.mcpWhere = async () => ({ ...await where(), admin: false }); openOrgPalette(); 1');
+  await p.waitFor('palMode === "orgSettings" && palRows.length === 3 && palRows.slice(0, 2).every((r) => r.disabled && !r.run)', 'a member sees them, and opens none');
+  assert.match(await p.js('palRows[2].label'), /^Only an admin of your workspace can change these/, 'and is told why');
   await closePalette(p);
 });
 

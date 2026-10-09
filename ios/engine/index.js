@@ -125,6 +125,7 @@ async function meeting(id, doc) {
 // content calls fail rather than show everything; after, a read that fails (offline) goes on with the last list.
 const MAC_FIRST = "Open Orbital on your Mac once to set it up for this account, then check again here.";
 async function settled() {
+  settings.hydrateWorkspace().catch(() => {}); // the workspace's MCP server, as the Mac reads it (main/settings.js)
   // hydrate also answers (false) when the document could not be opened at all: only a known settings document counts
   const read = await within('settings document', settings.hydrate()).then(() => !!settings.settingsDocId(), () => false);
   if (read) return void settings.set('settingsRead', true); // this account's own mirror (stand-ins.js ns), never synced
@@ -475,7 +476,7 @@ window.orbital = {
   },
   async setup() {
     const to = settings.get('pref:translateTo'), pins = await within('date pins', datePins(S.client.sync, S.me.userUri)).catch(() => ({}));
-    refreshSoon(); // the linked agents, asked of the relay now and then: what it answers is in the next setup
+    refreshSoon(); // the linked agents, asked of the MCP server now and then: what it answers is in the next setup
     return JSON.stringify({ to: LANGS.includes(to) ? to : null, ai: Object.fromEntries(Object.entries(settings.AI_KEYS).map(([k, s]) => [k, settings.get(s)]).filter(([, v]) => typeof v === 'string')),
       sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length), // pinned to any day
       agents: linked(), handed: handed() }); // your Dot and what it has, for the long press

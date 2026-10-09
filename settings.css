@@ -28,7 +28,7 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 #bar { -webkit-app-region: drag; border-bottom: 1px solid var(--sep); }
 #title { margin: 0; height: 38px; line-height: 38px; font-size: 13px; font-weight: 600; text-align: center; }
 #tabs { display: flex; justify-content: center; gap: 2px; padding: 0 0 10px; }
-.tab { -webkit-app-region: no-drag; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 68px; padding: 5px 0 4px; border: 0; border-radius: 9px; background: none; font-size: 11px; color: var(--muted); }
+.tab { -webkit-app-region: no-drag; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 68px; padding: 5px 8px 4px; box-sizing: border-box; white-space: nowrap; border: 0; border-radius: 9px; background: none; font-size: 11px; color: var(--muted); }
 .tab svg { width: 22px; height: 22px; }
 .tab.on { background: var(--sel); color: var(--fg); }
 .tab.on svg { color: var(--accent); }
@@ -52,12 +52,19 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 /* the field an agent's switch opens when it needs a paste first (Dot's chat link), under its row and in line with its label */
 .foot, .error { margin: 12px 10px 0; font-size: 11px; color: var(--muted); }
 .error { color: var(--red); }
+/* the MCP tab's banner: what is set there is set for everyone in the workspace, so it says so first, tinted */
+.banner { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent) 30%, transparent); }
+.banner .icon { flex: none; width: 22px; height: 22px; color: var(--accent); }
+.banner .icon svg { width: 22px; height: 22px; }
+.banner b { font-weight: 600; }
+.banner + .head { margin-top: 0; }
 
 /* the controls, in the system's sizes: a push button, a pop-up button (its menu is macOS's own), a segmented control, a switch */
 .btn { flex: none; height: 22px; padding: 0 11px; border: 0; border-radius: 6px; background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline), 0 1px 1.5px rgba(0, 0, 0, 0.08); white-space: nowrap; }
 .btn:active { background: var(--sel); }
 .popup { flex: none; max-width: 220px; height: 22px; padding: 0 26px 0 9px; border: 0; border-radius: 6px; appearance: none; background: var(--chev) right 3px center / 16px 16px no-repeat, var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline), 0 1px 1.5px rgba(0, 0, 0, 0.08); text-overflow: ellipsis; }
 .popup:disabled { opacity: 0.5; }
+.field { flex: none; width: 250px; height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline), 0 1px 1.5px rgba(0, 0, 0, 0.08); text-overflow: ellipsis; } /* a pasted URL or ID (settings.js field) */
 .seg { display: inline-flex; flex: none; padding: 2px; border-radius: 7px; background: var(--sel); }
 .seg button { padding: 2px 12px; border: 0; border-radius: 5px; background: none; font-size: 12px; }
 .seg button.on { background: var(--ctl); box-shadow: 0 0 0 0.5px var(--ctlline), 0 1px 2px rgba(0, 0, 0, 0.12); }

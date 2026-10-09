@@ -159,7 +159,7 @@ fun ConnectAgent(engine: Engine, back: () -> Unit) {
             }
         }
         item("link") {
-            Group("Then ask your agent to link", footer = "Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through orbital.md, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.") {
+            Group("Then ask your agent to link", footer = "Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through ${(link?.url ?: "https://orbital.md/mcp").removePrefix("https://")}, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.") {
                 val l = link
                 when {
                     state == "asking" -> GroupRow(last = true) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Getting a code…", color = c.secondary) }
@@ -172,6 +172,11 @@ fun ConnectAgent(engine: Engine, back: () -> Unit) {
                         GroupRow(onClick = { copy("message", l.prompt) }) {
                             Icon(Icons.Outlined.ContentCopy, null, Modifier.size(20.dp), c.text); Text("Copy the instructions", Modifier.weight(1f), color = c.text)
                             if (copied == "message") Text("Copied", color = c.secondary)
+                        }
+                        // the code alone, for an agent whose setup asks for it (the Mac's Copy the code)
+                        GroupRow(onClick = { copy("code", l.code) }) {
+                            Icon(Icons.Outlined.ContentCopy, null, Modifier.size(20.dp), c.text); Text("Copy the code", Modifier.weight(1f), color = c.text)
+                            if (copied == "code") Text("Copied", color = c.secondary)
                         }
                         if (state == "expired" || l.expiresAt <= now) {
                             GroupRow { Text("The code expired. Nobody used it.", color = c.secondary) }

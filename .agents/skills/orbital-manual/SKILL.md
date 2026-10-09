@@ -138,7 +138,7 @@ Nothing is drawn twice without a reason, and the tricks are kept, not rediscover
 After `npm run release` publishes (its last line reminds you), publish `manual/` from the released commit: the app
 opens the web copy, so a release is not done until the manual there matches it. It is unlisted: nothing on the front
 page links to it, and nothing should until Andre says so. Publish only the files `npm run manual-diff -- v<version>`
-lists: the relay beside the site reads the published manual from disk and lists its files by SHA-256 at
+lists: the Orbital MCP server beside the site reads the published manual from disk and lists its files by SHA-256 at
 `/mcp/health/manual` (`/mcp/health` names the whole of it in one SHA-256), and the script holds them against the tag.
 Downloading the pages to compare does not work: the host adds a script to every page it serves. Copy the whole folder
 only when that list is most of it. The site is the Replit App **orbital.md** (Replit MCP, replId
@@ -152,7 +152,7 @@ folder, copied byte for byte. The Replit tools take prompts, not files, so the f
    published folder unchanged, change nothing else, add no links, do not publish. Poll with `list_app_files`/
    `read_app_file` and compare.
 3. `publish_app`, wait for `get_publish_status` success, then check `https://orbital.md/manual` (no slash) in a
-   browser, and that the front page does not mention the manual. The relay reads the manual as it starts, and a publish
+   browser, and that the front page does not mention the manual. The Orbital MCP server reads the manual as it starts, and a publish
    starts it again: `npm run manual-diff -- v<version>` then says `orbital.md/manual is v<version>`.
 
 The host serves `/manual` as the manual's index.html without redirecting, so its relative links would point at the site

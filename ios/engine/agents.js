@@ -1,17 +1,17 @@
 'use strict';
 // Your Dot from the phone: linked and handed nodes as the Mac does it (main/agents/linked.js, main/agents/index.js
-// assign), over the same relay client, event words and status line (main/relay.js), and the same synced settings: your
+// assign), over the same MCP server client, event words and status line (main/mcp-server.js), and the same synced settings: your
 // Orbital's key (relayKey), which agents are on and the default (agents, defaultAgent), and each node's mark, request and
 // task link (codex, codexPrompt, codexTask). So an agent linked on the phone is in the Mac's Choose agents, and a node
 // handed over from the phone shows the Mac's badge, and the other way round. Only agents linked through orbital.md are
 // offered here: Tana, Codex and Claude run on a Mac.
 const { S } = require('../../main/state');
 const settings = require('../../main/settings');
-const relay = require('../../main/relay');
-const agent = require('../../main/agent'); // which agents are on, the default and the relay's list, kept as the Mac keeps them
+const mcpServer = require('../../main/mcp-server');
+const agent = require('../../main/agent'); // which agents are on, the default and the MCP server's list, kept as the Mac keeps them
 const { contentText, editable, readNode } = require('../../sdk/node');
 
-const { ID } = relay;
+const { ID } = mcpServer;
 // which agents are on, as stored: unset is Codex alone, Tana always on and never stored (main/agent.js)
 const enabled = agent.storedIds;
 const object = (key) => { const v = settings.get(key); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; };
@@ -27,10 +27,10 @@ function mark(id, link) {
   settings.set('codexTask', tasks);
 }
 
-// The agents linked to your Orbital, as this phone last heard from the relay, each with whether it is on and the default
+// The agents linked to your Orbital, as this phone last heard from the MCP server, each with whether it is on and the default
 function linked() {
   const on = enabled(), def = settings.get('defaultAgent');
-  return relay.cached().map((a) => ({ id: ID + a.id, name: a.name, app: a.app || '', seenAt: a.seenAt || null, on: on.includes(ID + a.id), isDefault: def === ID + a.id }));
+  return mcpServer.cached().map((a) => ({ id: ID + a.id, name: a.name, app: a.app || '', seenAt: a.seenAt || null, on: on.includes(ID + a.id), isDefault: def === ID + a.id }));
 }
 // node -> the linked agent it is handed to, for the long press and a node's Agent field
 function handed() {
@@ -38,19 +38,19 @@ function handed() {
   for (const [id, link] of Object.entries(agent.tasks())) if (link && known.has(link.agent) && marked().includes(id)) out[id] = link.agent;
   return out;
 }
-// The relay's list mirrored, as the Mac keeps it (main/agent.js storeLinked): an agent this account sees for the first time
-// is chosen, and one the relay no longer lists lets go of its nodes, the node not written
+// The MCP server's list mirrored, as the Mac keeps it (main/agent.js storeLinked): an agent this account sees for the first time
+// is chosen, and one the MCP server no longer lists lets go of its nodes, the node not written
 async function refresh() {
-  if (!relay.orbitalKey(false)) return;
-  agent.storeLinked(await relay.agentsAt(), (id) => mark(id, null));
+  if (!mcpServer.orbitalKey(false)) return;
+  agent.storeLinked(await mcpServer.agentsAt(), (id) => mark(id, null));
   await settings.flush();
 }
-// The relay asked at most once a minute as the app reads its setup; what it answers shows at the next read. Never before
+// The MCP server asked at most once a minute as the app reads its setup; what it answers shows at the next read. Never before
 // this account's settings document was read: with no relaySeen yet, every agent would look new and be made the default
 // again over the one you chose.
 let refreshedAt = 0;
 function refreshSoon() {
-  if (!settings.settingsDocId() || !relay.orbitalKey(false) || Date.now() - refreshedAt < 60e3) return;
+  if (!settings.settingsDocId() || !mcpServer.orbitalKey(false) || Date.now() - refreshedAt < 60e3) return;
   refreshedAt = Date.now();
   refresh().catch(() => {});
 }
@@ -59,7 +59,7 @@ function refreshSoon() {
 // when there is none yet; null when no linked agent has it
 function agentOf(id, doc) {
   const agentId = handed()[id], a = agentId && linked().find((x) => x.id === agentId);
-  return a ? { id: a.id, name: a.name, status: relay.lastAgentStatus(contentText(doc)) || 'assigned' } : null;
+  return a ? { id: a.id, name: a.name, status: mcpServer.lastAgentStatus(contentText(doc)) || 'assigned' } : null;
 }
 
 // What the app calls (index.js window.orbital). hold opens a node and keeps it a while; settled reads this account's
@@ -72,7 +72,7 @@ function agents({ hold, settled }) {
     if (doc.writeDenied) throw new Error('Tana refused the change: this is read-only to you');
   }
   return {
-    // Settings' Agents and the long press: the linked agents (asked of the relay first, the last list when it cannot be
+    // Settings' Agents and the long press: the linked agents (asked of the MCP server first, the last list when it cannot be
     // reached) and the nodes they have
     async agents() {
       await settled();
@@ -84,31 +84,31 @@ function agents({ hold, settled }) {
     // the code is shown, so the Mac is the same Orbital), the two servers' URLs and the instructions for your agent
     async linkCode() {
       await settled();
-      const out = await relay.linkCode();
+      const out = await mcpServer.linkCode();
       await settings.flush();
       return JSON.stringify(out);
     },
     // asked every two seconds while the page is up: waiting, expired, or linked with the agent, switched on and the default
     async linkStatus(code) {
-      const s = await relay.codeStatus(code);
+      const s = await mcpServer.codeStatus(code);
       if (s.state !== 'linked') return JSON.stringify({ state: s.state, expiresAt: s.expiresAt });
       await refresh();
       return JSON.stringify({ state: 'linked', agent: { id: ID + s.agent.id, name: s.agent.name, app: s.agent.app } });
     },
-    linkCancel: async (code) => JSON.stringify(await relay.cancelCode(code)),
-    // Assign to <its name> …: handed over as the Mac hands it (main/relay.js handOver): the node ends with "Agent status:
+    linkCancel: async (code) => JSON.stringify(await mcpServer.cancelCode(code)),
+    // Assign to <its name> …: handed over as the Mac hands it (main/mcp-server.js handOver): the node ends with "Agent status:
     // Assigned", then the event goes. A node that will not take the line is handed to nobody; an event the agent did not
     // take puts the node back as the earlier handoff left it (its status line, or a Codex request block) and leaves no mark.
     async handTo(id, agentId, prompt) {
       await settled();
-      const a = relay.cached().find((x) => ID + x.id === agentId);
+      const a = mcpServer.cached().find((x) => ID + x.id === agentId);
       if (!a || !enabled().includes(agentId)) throw new Error('That agent is not switched on');
-      const text = relay.request(a, prompt); // checked before the node is opened
+      const text = mcpServer.request(a, prompt); // checked before the node is opened
       const doc = await hold(id);
       if (!writable(doc)) throw new Error('This is read-only to you, so it cannot be handed over');
       const link = agent.tasks()[id], was = marked().includes(id) && link
-        ? { linked: typeof link.agent === 'string' && link.agent.startsWith(ID), status: relay.lastAgentStatus(contentText(doc)), prompt: object('codexPrompt')[id] } : null;
-      const taskId = await relay.handOver(a, id, text, async (fn) => { fn(doc); await written(id, doc); }, was);
+        ? { linked: typeof link.agent === 'string' && link.agent.startsWith(ID), status: mcpServer.lastAgentStatus(contentText(doc)), prompt: object('codexPrompt')[id] } : null;
+      const taskId = await mcpServer.handOver(a, id, text, async (fn) => { fn(doc); await written(id, doc); }, was);
       mark(id, { agent: agentId, taskId, prompt: text });
       await settings.flush();
       return JSON.stringify(agentOf(id, doc));
@@ -117,7 +117,7 @@ function agents({ hold, settled }) {
     async unhand(id) {
       await settled();
       const doc = await hold(id);
-      if (writable(doc)) { relay.clearStatus(doc); await written(id, doc).catch(() => {}); }
+      if (writable(doc)) { mcpServer.clearStatus(doc); await written(id, doc).catch(() => {}); }
       mark(id, null);
       await settings.flush();
       return JSON.stringify(true);
@@ -126,23 +126,23 @@ function agents({ hold, settled }) {
     // an agent that is on; a swipe on one that is off means both)
     async setDefault(agentId) {
       await settled();
-      if (!relay.cached().some((a) => ID + a.id === agentId)) throw new Error('No such linked agent');
+      if (!mcpServer.cached().some((a) => ID + a.id === agentId)) throw new Error('No such linked agent');
       agent.choose(agentId);
       await settings.flush();
       return JSON.stringify(linked());
     },
-    // Settings' swipe, Unlink, as linked.js unlink: the relay lets the agent go, it is switched off (and no longer the
+    // Settings' swipe, Unlink, as linked.js unlink: the MCP server lets the agent go, it is switched off (and no longer the
     // default), and its nodes are unassigned, status line and all: an agent that is gone keeps no badge
     async unlink(agentId) {
       await settled();
-      const a = relay.cached().find((x) => ID + x.id === agentId);
+      const a = mcpServer.cached().find((x) => ID + x.id === agentId);
       if (!a) throw new Error('No such linked agent');
-      await relay.call('DELETE', '/orbital/agents/' + a.id);
+      await mcpServer.call('DELETE', '/orbital/agents/' + a.id);
       agent.enable(agentId, false);
       for (const [id, link] of Object.entries(agent.tasks())) {
         if (!link || link.agent !== agentId) continue;
         const doc = await hold(id).catch(() => null);
-        if (doc && writable(doc)) { relay.clearStatus(doc); await written(id, doc).catch(() => {}); }
+        if (doc && writable(doc)) { mcpServer.clearStatus(doc); await written(id, doc).catch(() => {}); }
         mark(id, null);
       }
       await refresh();

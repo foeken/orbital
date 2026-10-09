@@ -1,16 +1,16 @@
-# AGENT-RELAY.md — orbital.md/mcp, the event layer between Orbital and your Dot
+# MCP-SERVER.md — orbital.md/mcp, the event layer between Orbital and your Dot
 
-Orbital hands work to agents (main/agent.js): Tana, Codex and Claude are built in. The agent relay is how your Dot,
-OpenAI's always-on agent in ChatGPT, becomes one more. It is the MCP server at **orbital.md/mcp** (relay/server.js),
-plain JSON over HTTPS, and it is **only an event layer**: Orbital sends an event, the relay passes it on to the agents
-subscribed to it and keeps none of it, and the rest happens in Tana. The relay says nothing of its own about what an
+Orbital hands work to agents (main/agent.js): Tana, Codex and Claude are built in. The Orbital MCP server is how your Dot,
+OpenAI's always-on agent in ChatGPT, becomes one more. It is the MCP server at **orbital.md/mcp** (mcp-server/server.js),
+plain JSON over HTTPS, and it is **only an event layer**: Orbital sends an event, the MCP server passes it on to the agents
+subscribed to it and keeps none of it, and the rest happens in Tana. The MCP server says nothing of its own about what an
 agent should do: what to do comes with each event, written by Orbital.
 
 ## The flow
 
 1. **Cmd+K → Connect your personal agent …** (renderer/agent.js) asks main for a code. The first time, main makes *your Orbital*:
    one random key, kept in the Orbital settings document in Tana (`relayKey`, docs/SETTINGS.md), so every device
-   signed into your Tana account is the same Orbital. The relay keeps only the key's hash, and makes the Orbital the
+   signed into your Tana account is the same Orbital. The MCP server keeps only the key's hash, and makes the Orbital the
    first time that key asks for a code.
 2. An agent cannot add an MCP server itself (your Dot cannot, and ChatGPT has no link straight to its form), so the
    page's first group, **Add both plugins**, names the two servers as such a form asks for them, a name and a URL:
@@ -46,9 +46,9 @@ with a new code moves it.
 ## From a phone
 
 The iPhone and Android apps link and hand over exactly as the Mac does, through the same code run in the phones' engine
-(ios/engine/agents.js): main/relay.js (the relay client, the link message, the event's words, the status line, and the
+(ios/engine/agents.js): main/mcp-server.js (the MCP server client, the link message, the event's words, the status line, and the
 handover itself, `handOver`: Assigned written, the event sent, the node put back as the earlier handoff left it when the
-agent does not take it) and main/agent.js (which agents are on, the default, and the relay's list kept: `storeLinked`), with
+agent does not take it) and main/agent.js (which agents are on, the default, and the MCP server's list kept: `storeLinked`), with
 the same synced settings: `relayKey`, `agents` and `defaultAgent`, and each node's `codex`, `codexPrompt` and `codexTask`.
 So a Dot linked on the phone is in the Mac's Choose agents, and a node handed over from the phone has the Mac's badge.
 **Settings → Agents → Connect your personal agent** is the Connect page (the two plugins with the ? for the steps, the
@@ -56,7 +56,7 @@ instructions with their code, the wait), and an agent there swipes right to Make
 A long press's **Assign to …** lists each linked agent that is on above the people (on a note, alone): a tap asks for
 the request in the same sheet, typed or dictated; Assign closes it at once and the handoff goes on behind it, the +
 turning meanwhile, a request the agent did not take said and kept for the next time (Engine handOff), and a tap on the ticked agent, or Unassigned, takes the node back. A node's page shows
-the agent and its last status line. The relay sends `access-control-allow-origin: *`, which is what lets the engine
+the agent and its last status line. The MCP server sends `access-control-allow-origin: *`, which is what lets the engine
 call it from its page on home.tana.inc. Renaming, switching off and Reset agent link key stay on the Mac; Tana, Codex and
 Claude run on a Mac only.
 
@@ -70,16 +70,16 @@ your request (the words you typed, not the node's) passes through orbital.md, wh
 ## Events (MCP Events)
 
 The events are [OpenAI's MCP Events](https://developers.openai.com/plugins/build/mcp-events) (MCP protocol
-2026-07-28), which dots subscribe to. `EVENTS` in relay/server.js lists them, today one: **task.assigned**, its data
-`{ node, request, instructions }`. The relay checks only an event's name and size (16 KB); what goes with it is
+2026-07-28), which dots subscribe to. `EVENTS` in mcp-server/server.js lists them, today one: **task.assigned**, its data
+`{ node, request, instructions }`. The MCP server checks only an event's name and size (16 KB); what goes with it is
 Orbital's to say, passed through as sent, so a later event is one more entry in `EVENTS` and a call from Orbital.
 
 - **Subscribing.** Only a connection linked to an Orbital may subscribe: an unlinked one would hear nothing, and a
-  subscription makes the relay call a URL it was given. ChatGPT calls `events/subscribe` with the event, a callback URL
-  and a `whsec_` signing secret. The relay challenges the callback (a signed `{ type: "verification", challenge }` it must
+  subscription makes the MCP server call a URL it was given. ChatGPT calls `events/subscribe` with the event, a callback URL
+  and a `whsec_` signing secret. The MCP server challenges the callback (a signed `{ type: "verification", challenge }` it must
   echo, not again for a day once it has), then keeps the subscription for the lifetime it grants: a week unless asked
   otherwise, an hour to thirty days; ChatGPT refreshes it before `refreshBefore`. `events/unsubscribe` ends it.
-- **Delivering.** `POST /orbital/agents/<id>/events { id, name, data }` sends one; the relay POSTs
+- **Delivering.** `POST /orbital/agents/<id>/events { id, name, data }` sends one; the MCP server POSTs
   `{ eventId: "evt_<id>", name, timestamp, data, cursor: null }` to each live subscription of that agent's connection,
   signed with Standard Webhooks (`webhook-id` = the event id, `webhook-timestamp`, `webhook-signature`,
   `X-MCP-Subscription-Id`), and answers Orbital `{ subscribers, delivered }`. Each is tried once, before it answers, and
@@ -88,7 +88,7 @@ Orbital's to say, passed through as sent, so a later event is one more entry in 
 - **Callbacks** must be HTTPS to a public address: every address the name resolves to is checked as the connection is
   made (loopback, private, link-local, cloud metadata and IPv4-in-IPv6 forms are refused), and redirects are not followed.
 
-## Three doors (relay/server.js)
+## Three doors (mcp-server/server.js)
 
 | Door | Path | Who | Auth |
 |---|---|---|---|
@@ -111,9 +111,9 @@ answers 401 with the `WWW-Authenticate` challenge, the same challenge in the res
 `GET|DELETE /orbital/codes/<code>`; `GET /orbital/agents`, `PATCH|DELETE /orbital/agents/<id>`,
 `POST /orbital/agents/<id>/events { id, name, data }`. `GET /mcp/health` answers the SHA-256 of the server.js it runs, to
 hold a deploy (or a change nobody meant) against this repository, and `manual: { sha256, files }` for the manual orbital.md
-publishes beside it (`RELAY_MANUAL_DIR`, by default `artifacts/orbital/public/manual` next to `lib/agent-relay`), or
+publishes beside it (`RELAY_MANUAL_DIR`, by default `artifacts/orbital/public/manual` next to `lib/agent-MCP server`), or
 `manual: null` where there is none. That SHA-256 is the one `sha256sum` gives over the manual's files, sorted, as
-`path` lines; `GET /mcp/health/manual` lists each file's, which `npm run manual-diff` holds against a tag. The relay
+`path` lines; `GET /mcp/health/manual` lists each file's, which `npm run manual-diff` holds against a tag. The MCP server
 reads the folder once, as it starts.
 
 ## What it knows, and what it does not
@@ -122,19 +122,19 @@ reads the folder once, as it starts.
   keeps your Orbital, its agents and their names, their subscriptions (the callback URL and the signing secret ChatGPT
   gave, which signing needs), codes and tokens. The node's own words stay in Tana, between Tana and the Dot's own access.
 - **Keys and tokens only as hashes**: your Orbital's key, access and refresh tokens, authorization codes.
-  scripts/relay-check.js searches every table for them. The one secret kept as given is each subscription's signing
-  secret (the `whsec_` ChatGPT sends), since the relay signs every event with it: whoever reads the database could sign
-  events to that Dot's callback, so the database is as private as the relay itself.
+  scripts/mcp-server-check.js searches every table for them. The one secret kept as given is each subscription's signing
+  secret (the `whsec_` ChatGPT sends), since the MCP server signs every event with it: whoever reads the database could sign
+  events to that Dot's callback, so the database is as private as the MCP server itself.
 - **Reset agent link key** survives a lost answer: Orbital keeps the new key (`relayKeyNext`, synced) before sending it,
   and a call the old key no longer opens tries the new one and keeps it.
 - **Whoever reads your Orbital settings document can act as your Orbital**: send your agents events. That is you,
   Tana, and anyone you share that document with. Cmd+K → Reset agent link key makes a new key for the same Orbital, so
   the agents stay linked.
-- **Whoever controls orbital.md could alter an event on its way** (the request or the instructions), since the relay
+- **Whoever controls orbital.md could alter an event on its way** (the request or the instructions), since the MCP server
   passes them on: keep the Replit App's access tight, and hold `/mcp/health` against the repository after a deploy.
 - **A code is a short secret**: 40 bits, once, fifteen minutes, ten tries a minute per connection, and failed codes
   held to 300 a minute across every connection together, so new connections buy no more guesses.
-- **Limits a caller cannot pick**: behind the host's proxy, which reaches the relay from this machine or its private
+- **Limits a caller cannot pick**: behind the host's proxy, which reaches the MCP server from this machine or its private
   network, the address it appended (the last of `X-Forwarded-For`) is the one a limit counts; the ones before it are
   whatever the caller wrote. A request straight from a public address came through no proxy, so its header is ignored
   and it is counted by its own address. The limits' own memory holds at most 50,000 callers: ended windows are let go,
@@ -163,16 +163,59 @@ reads the folder once, as it starts.
 
 ## Running and deploying
 
-`npm run relay` runs it on port 8787 (`PORT`), in memory unless `RELAY_DB` names a SQLite file. `RELAY_PUBLIC_URL` is
+`npm run MCP server` runs it on port 8787 (`PORT`), in memory unless `RELAY_DB` names a SQLite file. `RELAY_PUBLIC_URL` is
 where it is reached (`https://orbital.md`), `RELAY_PATH` its path (`/mcp`). Point Orbital at another one with
-`ORBITAL_RELAY_URL` (`http://localhost:8787/mcp`). It needs Node 22.5 or later and nothing from npm.
+`ORBITAL_MCP_SERVER_URL` (`http://localhost:8787/mcp`). It needs Node 22.5 or later and nothing from npm.
 
 With `DATABASE_URL` it keeps its rows in PostgreSQL instead, through the host's own `pg` module: a host whose disk is
 replaced on every deploy (Replit's) would otherwise forget every linked agent at each release. Every query is written
-once for both (`?` placeholders, BIGINT times), and `RELAY_CHECK_DATABASE_URL=… node scripts/relay-check.js` runs the
+once for both (`?` placeholders, BIGINT times), and `RELAY_CHECK_DATABASE_URL=… node scripts/mcp-server-check.js` runs the
 whole check on a PostgreSQL database.
 
 At orbital.md (the Replit App behind it, the same one the manual is published to) the website stays a static service,
-and the relay is a service of its own that takes `/mcp` and the `/.well-known/` OAuth paths, running `relay/server.js`
+and the MCP server is a service of its own that takes `/mcp` and the `/.well-known/` OAuth paths, running `mcp-server/server.js`
 as copied from this repository, with Replit's PostgreSQL (`DATABASE_URL`). A schema change (a table made or dropped)
 needs that App published once from the Replit website, which reviews schema changes. The rate limits are per instance.
+
+## Your workspace's MCP server (issue #814)
+
+**The servers, or the workspace's plugin.** Orbital makes no ChatGPT plugin. An agent adds the two servers as custom MCP
+servers, a name and a URL each: Orbital's (the workspace's own once an admin set it in Tana, else orbital.md) and Tana's
+`home.tana.inc/mcp`. The Connect page names both (↩ copies a URL; for your Dot, Open ChatGPT plugins is where ChatGPT adds
+them), then the link code: Copy the instructions, or Copy the code alone. An admin who installed an Orbital plugin in ChatGPT
+for the whole workspace names its chatgpt.com link (`pluginUrl`, ⌘K Open Orbital Settings for Tana Workspace or the Settings
+window's MCP tab): the instructions then ask your Dot to add that plugin first and link with the code
+(main/mcp-server.js `linkCode`), and your Dot's Connect page leaves out the servers and the self-hosted setting.
+
+Every Orbital in a Tana workspace hands over through one relay: the one the workspace's admins chose, or orbital.md.
+There is no MCP server of your own. The choice is `mcpServerUrl` in the `ext:orbital` root of Tana's org document
+(`orgDocUri`), beside the workspace settings Tana keeps there itself, read by every member (main/settings.js
+`workspaceGet`, mirrored locally as `workspace`) and by both phones through the same code; main/mcp-server.js
+`MCP server.base` resolves it. In the app it is called a **self-hosted Orbital MCP server**: Connect your personal agent's
+**Use a self-hosted Orbital MCP server …** opens it, for an admin only (the session token's `role`, admin or owner, sent
+with the link code as `admin`): everyone else sees one line naming the server in use, the workspace's or the default.
+The page has **Copy instructions to host your own for ChatGPT** and the field to paste a URL into (an admin on the
+default sees no default server there, only the workspace's own once it has one), and only an admin's Orbital
+writes it (`setWorkspace`). Tana does not refuse a member's write yet, so that is Orbital's own check until it does
+(#815). A URL is used only once its `/health` answers `ok` (main/mcp-server.js `checkServer`).
+
+Agents are linked on one MCP server. After a change the agent list is the new MCP server's, empty until everyone links theirs
+again there (main/agents/linked.js `refresh`: an MCP server that does not know your Orbital's key has no agents of yours).
+
+The instructions have ChatGPT deploy `mcp-server/` as a ChatGPT Site (mcp-server/README.md): the same `server.js`, handed
+requests by `mcp-server/worker.js` (a Cloudflare Worker) with its rows in the Site's D1 database (`d1Store`, beside the
+SQLite and PostgreSQL stores), at `/api/mcp` since Sites keeps `/mcp`. The Site's access is public, as orbital.md is:
+the MCP server signs agents in itself and knows each Orbital by its key. Both deployments' `/health` give the SHA-256 of the
+`server.js` they run, and `scripts/mcp-server-check.js` runs the MCP server through `worker.js` too, so a change cannot reach
+one and break the other unseen.
+
+On a Site, `serial` (a count and the insert it allows, kept together) holds only within one isolate, since D1 has no
+lock across awaits: twin requests on two isolates can each pass a daily cap once.
+
+**Versions.** An MCP server says what it can do as one number, `version` in `/health` (mcp-server/server.js `VERSION`), the
+same at orbital.md and on every Site. Orbital holds it against the oldest MCP server it works with (main/mcp-server.js
+`SERVER_VERSION`): raise both together when Orbital starts to need something an older MCP server lacks, and only then. A
+workspace whose MCP server is older is told once a session (main/agents/linked.js `oldServer`), and its MCP server page says so; an
+admin copies **Copy the update instructions for ChatGPT**, which put the latest `mcp-server/` in the same Site, so its address
+stays and nobody links again. An MCP server that is too old cannot be chosen. orbital.md is not asked about: keeping it current
+is ours, by copying `mcp-server/server.js` to its App with each release that raises the version.

@@ -401,7 +401,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var handing: Handing?
     // the agents on, the default first: what Assign to <its name> … offers
     var agentsOn: [Agent] { agents.filter(\.on).sorted { $0.isDefault && !$1.isDefault } }
-    // the relay asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
+    // the MCP server asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
     func loadAgents() async -> String? {
         guard !Self.isSample else { return nil }
         do {

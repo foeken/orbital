@@ -9,13 +9,14 @@
 // the hidden titles), on while the outliner's demo mode is (localStorage, shared with it), and renderer/settings.js the
 // models' and thinking levels' names, as Cmd+K Choose models writes them.
 // Without window.api (the manual's scenes, flow-check) the window is empty until start() is handed one.
-const TABS = [['general', 'General', 'options'], ['ai', 'AI', 'brain'], ['agents', 'Agents', 'robot'], ['lists', 'Lists', 'hiddenItems']];
+const TABS = [['general', 'General', 'options'], ['ai', 'AI', 'brain'], ['agents', 'Agents', 'robot'], ['lists', 'Hidden', 'hidden'], ['org', 'MCP', 'mcp']]; // org: shown to an admin only (st.org.admin)
 const LANGS = ['English', 'Dutch', 'German', 'French', 'Spanish']; // renderer/translate.js TRANSLATE_LANGS
 const GLYPHS = window.ICONS || {}; // icons.js: our own markup
 const $ = (id) => document.getElementById(id);
-const st = { prefs: {}, ai: null, chatgpt: null, agents: null, hidden: null, mcpHidden: null };
+const st = { prefs: {}, ai: null, chatgpt: null, agents: null, hidden: null, mcpHidden: null, org: null };
 const asked = {};
 let host = null, tab = TABS.some(([id]) => id === localStorage.getItem('settingsTab')) ? localStorage.getItem('settingsTab') : 'general';
+const drafts = {}; // what is typed in a field and not saved yet, kept through redraws
 let failure = null, hiddenPick = null, adding = null, sized = 0; // the last call that failed; the hidden title − removes; the + field's words while it shows
 demoMode = localStorage.getItem('demoMode') === '1';
 addEventListener('storage', (e) => { if (e.key === 'demoMode') { demoMode = e.newValue === '1'; draw(); } });
@@ -30,7 +31,7 @@ function load(part, call) {
     (e) => { if (asked[part] === n) { failure = String(e?.message || e); draw(); } }); // as main said it (preload.js unwraps it)
 }
 function reload() {
-  for (const [part, call] of [['ai', 'aiOptions'], ['chatgpt', 'chatgptStatus'], ['agents', 'agentList'], ['hidden', 'filters'], ['mcpHidden', 'mcpHidden'], ['flags', 'featureFlags']]) if (host[call]) load(part, host[call]);
+  for (const [part, call] of [['ai', 'aiOptions'], ['chatgpt', 'chatgptStatus'], ['agents', 'agentList'], ['hidden', 'filters'], ['mcpHidden', 'mcpHidden'], ['flags', 'featureFlags'], ['org', 'mcpWhere']]) if (host[call]) load(part, host[call]);
 }
 function start(handed) {
   host = handed;
@@ -79,6 +80,15 @@ function row(icon, label, controls, sub, dim) {
   if (sub) text.append(el('div', 'sub', sub));
   r.append(glyph, text, ...[].concat(controls || []));
   return r;
+}
+// a text field saved when it changes (↩ or leaving it), empty clears it; Esc puts back what is saved
+function field(key, label, value, placeholder, save) {
+  const f = el('input', 'field');
+  f.dataset.key = key; f.value = drafts[key] ?? value ?? ''; f.placeholder = placeholder; f.spellcheck = false; f.setAttribute('aria-label', label);
+  f.oninput = () => { drafts[key] = f.value; };
+  f.onchange = () => { const v = f.value.trim(); if (v === (value || '')) { delete drafts[key]; return; } load('org', async () => { const w = await save(v); delete drafts[key]; return w; }); };
+  f.onkeydown = (e) => { if (e.key === 'Escape') { delete drafts[key]; draw(); } };
+  return f;
 }
 function group(head, note, rows) {
   if (!rows.length) return []; // a section with nothing in it is not drawn
@@ -179,6 +189,31 @@ const SECTIONS = {
     ...group('Hidden titles', null, host.filters ? [hiddenList()] : []),
     ...group('Chats', null, host.setMcpHidden ? [row('robot', 'Show MCP chats', toggle('mcp', 'Show MCP chats', !st.mcpHidden, () => load('mcpHidden', () => host.setMcpHidden(!st.mcpHidden)), st.mcpHidden == null), 'Chats an MCP client started')] : []),
   ],
+  // what is the same for everyone in the Tana workspace, as ⌘K Open Orbital Settings for Tana Workspace sets it
+  // (renderer/agent.js): kept on the workspace's own document, and written by an admin only (main/settings.js setWorkspace)
+  org: () => {
+    const w = st.org;
+    if (!w) return [];
+    const copy = (text) => () => navigator.clipboard.writeText(text), who = w.changedBy && w.changedBy.name;
+    // said first, where it cannot be missed: a change here changes Orbital for the whole workspace
+    const banner = el('div', 'banner'), icon = el('span', 'icon'), words = el('div');
+    banner.setAttribute('role', 'note'); icon.innerHTML = GLYPHS.users || '';
+    words.append(el('b', null, 'These settings apply to everyone in your Tana workspace who uses Orbital'),
+      el('div', 'sub', 'Kept in the workspace itself. Only admins see this tab' + (who ? '; last changed by ' + who : '') + '.'));
+    banner.append(icon, words);
+    return [
+      banner,
+      ...group('Orbital MCP server', 'where every handover goes', [
+        row('mcp', 'Server URL', field('org/url', 'Orbital MCP server URL', w.workspace, w.fallback || 'https://orbital.md/mcp', async (v) => { const now = await host.mcpUse(v); load('agents', host.agentList); return now; }),
+          w.outdated ? 'Out of date: version ' + w.version + ', and Orbital needs ' + w.needed : w.workspace ? 'Your workspace\'s own · agents link again after a change' : 'Empty: orbital.md'),
+        row('prompt', 'Host your own', button('deploy', 'Copy Instructions', copy(w.deploy)), 'ChatGPT deploys it on Sites and gives you the URL to paste above'),
+        ...(w.outdated && w.workspace ? [row('prompt', 'Update it', button('update', 'Copy Instructions', copy(w.update)), 'The latest code in the same Site, at the same address')] : []),
+      ]),
+      ...group('ChatGPT', 'the Orbital plugin', [
+        row('link', 'Plugin link', field('org/plugin', 'Orbital plugin link', w.plugin, 'https://chatgpt.com/…', (v) => host.mcpUsePlugin(v)), 'Installed for everyone: the linking instructions ask each Dot to add it'),
+      ]),
+    ];
+  },
 };
 
 // Every draw builds the window anew from st, the theme with it; the window then takes the page's height
@@ -186,15 +221,16 @@ function draw() {
   if (!host) return;
   const t = st.prefs.theme === 'dark' || st.prefs.theme === 'light' ? st.prefs.theme : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   document.documentElement.dataset.theme = t;
-  const had = document.activeElement?.dataset?.key, name = TABS.find(([id]) => id === tab)[1];
+  const tabs = TABS.filter(([id]) => id !== 'org' || st.org?.admin), now = tabs.some(([id]) => id === tab) ? tab : 'general'; // MCP for an admin only
+  const had = document.activeElement?.dataset?.key, name = TABS.find(([id]) => id === now)[1];
   document.title = name; $('title').textContent = name;
-  $('tabs').replaceChildren(...TABS.map(([id, label, icon]) => {
-    const b = button('tab/' + id, null, () => { if (id !== tab) { tab = id; hiddenPick = null; adding = null; localStorage.setItem('settingsTab', id); draw(); } }, 'tab' + (id === tab ? ' on' : ''));
+  $('tabs').replaceChildren(...tabs.map(([id, label, icon]) => {
+    const b = button('tab/' + id, null, () => { if (id !== now) { tab = id; hiddenPick = null; adding = null; localStorage.setItem('settingsTab', id); draw(); } }, 'tab' + (id === now ? ' on' : ''));
     b.innerHTML = GLYPHS[icon] || ''; b.append(el('span', null, label));
-    b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(id === tab));
+    b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(id === now));
     return b;
   }));
-  $('pane').replaceChildren(...SECTIONS[tab](), ...(failure ? [el('p', 'error', failure)] : []));
+  $('pane').replaceChildren(...SECTIONS[now](), ...(failure ? [el('p', 'error', failure)] : []));
   if (had) document.querySelector('[data-key="' + CSS.escape(had) + '"]')?.focus({ preventScroll: true });
   const height = Math.ceil(document.body.getBoundingClientRect().height);
   if (height !== sized && host.settingsSize) { sized = height; host.settingsSize(height); }

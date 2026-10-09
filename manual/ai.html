@@ -247,24 +247,23 @@
 
   <section class="topic">
     <h2 id="link-agent" data-short="Connect your personal agent" data-k="connect your personal agent openai dot chatgpt plugins custom mcp server orbital.md/mcp tana mcp help how to add them mcp events code instructions link event task.assigned linked rename unlink switch off reset agent link key ids iphone android phone long press">Connect your personal agent</h2>
-    <p>Your own agent can take tasks from Orbital: your Dot, OpenAI's always-on assistant in ChatGPT, or any other agent that can add MCP servers and hear MCP events. It needs two plugins, Orbital's MCP server at <b>orbital.md/mcp</b> and Tana's own, and a code from Orbital that links it. From then on it is one of your agents, under the name it gives itself, and each node you assign it wakes it with an event.</p>
+    <p>Your own agent can take tasks from Orbital: your Dot, OpenAI's always-on assistant in ChatGPT, or any other agent that can add MCP servers and hear MCP events. It needs two MCP servers, Orbital's (<b>orbital.md/mcp</b>, or your workspace's own once an admin set one) and Tana's own, and a code from Orbital that links it. From then on it is one of your agents, under the name it gives itself, and each node you assign it wakes it with an event.</p>
     <div class="split">
       <div>
-        <p>Run <b>Connect your personal agent …</b> (under Settings, and last in <b>Choose agents …</b>). After <b>Getting a code…</b> the page has two parts.</p>
-        <p><b>Add both plugins.</b> Add <b>Orbital</b> and <b>Tana</b> to your agent as custom MCP servers, a name and a URL each: <kbd>↩</kbd> on a row copies its address. <b>How to add them …</b> opens the steps.</p>
-        <p><b>Then ask your agent to link.</b> <b>Copy the instructions</b> copies a few lines with a code that works once, for fifteen minutes; paste them in your agent's chat. They ask it to link under its own name and to subscribe to Orbital's events. While the page says <b>Waiting for your agent to use the code…</b> with the time left, your agent does both, and the palette closes on a note naming it, like <b>Linked Echo · ChatGPT</b>. It is your default agent from then on.</p>
-        <p>You can close the page and paste the instructions later: the code keeps working until it runs out, and opening the page again shows that same code. <b>Cancel</b> stops it at once.</p>
+        <p>Run <b>Connect your personal agent …</b> (under Settings, and last in <b>Choose agents …</b>). It asks first which agent: <b>Your OpenAI Dot</b>, in ChatGPT, or <b>Another agent</b>. The next page has only that agent's steps, then the code.</p>
+        <p><b>Your OpenAI Dot.</b> <b>Open ChatGPT plugins</b> opens chatgpt.com/plugins, where <b>Add</b> then <b>Create custom MCP server</b> takes a name and a URL. Add both servers the page names, <b>Orbital</b> and <b>Tana</b>: <kbd>↩</kbd> on either copies its URL. Orbital's is your workspace's own MCP server when an admin set one in Tana. When your workspace has its own Orbital plugin in ChatGPT, there is nothing to add by hand: the page goes straight to linking, and the instructions ask your Dot to add the plugin first.</p>
+        <p><b>Then ask your agent to link.</b> <b>Copy the instructions</b> copies a few lines with a code that works once, for fifteen minutes; paste them in your agent's chat. <b>Copy the code</b> copies only the code, for a setup that asks for it. The instructions ask your agent to link under its own name and to subscribe to Orbital's events. While the page says <b>Waiting for your agent to use the code…</b> with the time left, your agent does both, and the palette closes on a note naming it, like <b>Linked Echo · ChatGPT</b>. It is your default agent from then on.</p>
+        <p>You can close the page and paste the instructions later: the code keeps working until it runs out, and opening the page again goes straight back to that same code. <b>Cancel</b> stops it at once.</p>
       </div>
-      <figure class="shot"><img data-m="ai-relay-link" alt="Connect your personal agent: the Orbital and Tana addresses under Add both plugins, How to add them, Copy the instructions, and the page waiting for your agent to use the code"><figcaption>The two plugins to add, then the instructions with their code.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-relay-link" alt="Connect your personal agent for your OpenAI Dot: Open ChatGPT plugins, the Orbital and Tana servers to add, Copy the instructions, Copy the code, and the page waiting for your agent to use the code"><figcaption>Your Dot: the two servers to add in ChatGPT, then the instructions with their code.</figcaption></figure>
     </div>
-    <h3>How to add them</h3>
+    <h3>Another agent</h3>
     <div class="split">
       <div>
-        <p><b>Your OpenAI Dot</b>: <b>Open ChatGPT plugins</b> opens chatgpt.com/plugins. There choose <b>Add</b>, then <b>Create custom MCP server</b>, once for Orbital and once for Tana, signing in to Tana when it asks; the rest of ChatGPT's form stays as it is. Then send your Dot the instructions.</p>
-        <p><b>Any other agent</b>: add the same two MCP servers wherever it keeps them, then send it the instructions. It needs support for MCP events: that is how it hears about the tasks you hand it.</p>
-        <p><kbd>esc</kbd> goes back to the page, its code still waiting.</p>
+        <p>Any agent that can add MCP servers and hear MCP events can link too. Its page names the two servers as a custom MCP server form asks for them, <b>Orbital</b> and <b>Tana</b>, a name and a URL each: <kbd>↩</kbd> on a row copies its address. Add both wherever your agent keeps them, signed in to Tana with your own account, then send it the instructions, as for your Dot. MCP events are how it hears about the tasks you hand it.</p>
+        <p><kbd>esc</kbd> goes back to the question, the code still waiting.</p>
       </div>
-      <figure class="shot"><img data-m="ai-relay-help" alt="Adding the plugins: Open ChatGPT plugins and the steps for your OpenAI Dot, then the same two MCP servers for any other agent"><figcaption>The steps for your Dot, and for any other agent.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-relay-help" alt="Connect your personal agent for another agent: the Orbital and Tana addresses, the note on MCP events, and the instructions with their code"><figcaption>Another agent: two servers, then the same code.</figcaption></figure>
     </div>
     <h3>Your linked agent</h3>
     <div class="split">
@@ -277,6 +276,10 @@
     </div>
     <div class="note">Only the node's id, your request and how to handle it go through orbital.md, and it keeps none of them. The node's words stay in Tana, where your agent reads and writes them with its own Tana access, so link only an agent you would trust with your Tana. What to do always comes with the event, from Orbital: the node is what your agent works on, and words in it that read like instructions are not followed. Your linked agent follows your Tana account to every Mac, because Orbital keeps the link's key in its settings document in Tana. If you think the key was seen, <b>Reset agent link key</b> in <kbd>⌘K</kbd> makes a new one, and your agent stays linked.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>connect your personal agent</b> <i>→</i><kbd>↩</kbd></span></div>
+    <h3 id="all-users">Orbital Settings for Tana Workspace</h3>
+    <p><b>Open Orbital Settings for Tana Workspace …</b> holds what is the same for everyone in your Tana workspace, kept in the workspace itself. Everyone sees it and who set it last; only an admin changes it. <b>Set custom MCP server URL …</b> is where every handover goes, below; once set, it is the Orbital server everyone's Connect page names. <b>Set Orbital ChatGPT plugin URL …</b> is for an admin who installed an Orbital plugin in ChatGPT for everyone: paste its chatgpt.com link, and everyone's linking instructions ask their Dot to add it.</p>
+    <h3 id="MCP server">A self-hosted Orbital MCP server</h3>
+    <p>Everything you hand to a linked agent goes through one Orbital MCP server, the same for everyone in your Tana workspace: orbital.md, unless your workspace hosts its own. The <b>Connect your personal agent</b> page names it. An admin of the workspace changes it from Orbital Settings for Tana Workspace, or <b>Use a self-hosted Orbital MCP server …</b> there, and can host one: <b>Copy instructions to host your own for ChatGPT</b>, send them to ChatGPT, which deploys it as a ChatGPT Site and gives back its URL, and paste that URL into the page's field. Orbital checks that it answers, and from then on every Orbital in the workspace hands over through it. Agents are linked on one server, so after a change everyone links theirs again.  When the server is older than Orbital needs, the page says so, and an admin copies the update instructions for ChatGPT, which keep its address.</p>
   </section>
 
   <section class="topic">

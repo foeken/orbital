@@ -15,10 +15,10 @@
 //   read(taskIds)           Map taskId -> { state: working|done|failed, text }, for @<agent> in a chat
 //   release(key), stop()    let go of a task this app is running, one or all
 // Only id, label, available and start are required; the app offers what a plugin answers and nothing else.
-// Some agents come and go while the app runs: those linked through the relay (main/agents/linked.js), one per agent
+// Some agents come and go while the app runs: those linked through the MCP server (main/agents/linked.js), one per agent
 // linked, are registered by a source that is asked to catch up whenever the agents are looked at.
 const settings = require('./settings');
-const relay = require('./relay'); // the agents linked through orbital.md, as the relay lists them (storeLinked)
+const mcpServer = require('./mcp-server'); // the agents linked through orbital.md, as the MCP server lists them (storeLinked)
 
 const AGENTS = {}; // id -> plugin, in the order they registered
 const register = (plugin) => { AGENTS[plugin.id] = plugin; return plugin; };
@@ -64,7 +64,7 @@ function setDefault(id) {
   return list();
 }
 // What the renderer draws: every agent, installed or not, and what each can do. Names and flags only. A linked agent
-// says so, with the app it came through and when the relay last heard from it.
+// says so, with the app it came through and when the MCP server last heard from it.
 const list = () => { catchUp(); return Object.values(AGENTS).map((a) => ({
   id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id), isDefault: defaultAgent() === a.id,
   link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere, opens: !!(a.open || a.opensHere), // opens: Go to <agent> task can show it
@@ -99,15 +99,15 @@ const elsewhere = (link) => !!(link && link.device && link.device !== deviceId()
 const clearTask = (id) => setTask(id, null);
 // nodeId -> { agent, taskId } for every linked node, for the badge and the rows that open a task
 const links = () => Object.fromEntries(Object.keys(tasks()).map((id) => [id, taskLink(id)]).filter(([, link]) => link));
-// The relay's list of linked agents mirrored (main/relay.js remember), as the Mac (main/agents/linked.js) and the phones'
+// The MCP server's list of linked agents mirrored (main/mcp-server.js remember), as the Mac (main/agents/linked.js) and the phones'
 // engine (ios/engine/agents.js) keep it: one this account sees for the first time is chosen, once (linking your Dot is
-// choosing it; switched off or another picked later, that stays), and one the relay no longer lists (unlinked elsewhere,
+// choosing it; switched off or another picked later, that stays), and one the MCP server no longer lists (unlinked elsewhere,
 // or linked to another Orbital) lets go of its nodes: drop(nodeId) takes the mark, the request and the link, each side
 // its own way, the node itself left as it is. Read from the stored links, which keep an agent no longer registered.
 function storeLinked(list, drop) {
-  for (const a of relay.remember(list)) choose(relay.ID + a.id);
-  const listed = new Set(list.map((a) => relay.ID + a.id));
-  for (const [nodeId, stored] of Object.entries(tasks())) if (stored && typeof stored.agent === 'string' && stored.agent.startsWith(relay.ID) && !listed.has(stored.agent)) drop(nodeId);
+  for (const a of mcpServer.remember(list)) choose(mcpServer.ID + a.id);
+  const listed = new Set(list.map((a) => mcpServer.ID + a.id));
+  for (const [nodeId, stored] of Object.entries(tasks())) if (stored && typeof stored.agent === 'string' && stored.agent.startsWith(mcpServer.ID) && !listed.has(stored.agent)) drop(nodeId);
 }
 
 // ---- what a coding agent is told ----

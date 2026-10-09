@@ -1,15 +1,15 @@
 'use strict';
-// The agent relay end to end (relay/server.js, docs/AGENT-RELAY.md): an Orbital and two agents over real HTTP on a
-// loopback port, the relay's clock in the check's hands. Sign-in (OAuth with PKCE), linking with a code, the events an
+// The Orbital MCP server end to end (mcp-server/server.js, docs/MCP-SERVER.md): an Orbital and two agents over real HTTP on a
+// loopback port, the MCP server's clock in the check's hands. Sign-in (OAuth with PKCE), linking with a code, the events an
 // agent subscribes to and receives, signed, at its callback, and what must fail: a used or expired code, a wrong key,
-// an event that is not one the relay lists, a callback that does not answer its challenge. Last, no secret and no
+// an event that is not one the MCP server lists, a callback that does not answer its challenge. Last, no secret and no
 // token is in the database as itself.
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const crypto = require('node:crypto');
 const EventEmitter = require('node:events');
 const { Readable } = require('node:stream');
-const { createRelay, sqliteStore, postgresStore, safePost, TTL, LIMITS, isPublicAddress } = require('../relay/server');
+const { createMcpServer, sqliteStore, postgresStore, safePost, TTL, LIMITS, isPublicAddress } = require('../mcp-server/server');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -21,18 +21,18 @@ const base = process.env.RELAY_CHECK_DATABASE_URL ? postgresStore(process.env.RE
 // twin tests below)
 let slow = null;
 const store = { ...base, one: async (sql, ...a) => { const row = await base.one(sql, ...a); if (slow && slow.test(sql)) await new Promise((r) => setTimeout(r, 30)); return row; } };
-// the agents' event callbacks (MCP Events): every POST the relay makes is kept here, and answered as a receiver would
+// the agents' event callbacks (MCP Events): every POST the MCP server makes is kept here, and answered as a receiver would
 const posted = [];
 const echo = (body) => ({ status: 200, text: JSON.parse(body).type === 'verification' ? JSON.stringify({ challenge: JSON.parse(body).challenge }) : '' });
 let answer = echo;
 const post = async (url, headers, body) => { posted.push({ url, headers, body }); return answer(body); };
-// a published manual of two files, one in a folder, as orbital.md keeps it beside the relay
-const manualDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-manual-'));
+// a published manual of two files, one in a folder, as orbital.md keeps it beside the MCP server
+const manualDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-server-manual-'));
 fs.mkdirSync(path.join(manualDir, 'media'));
 fs.writeFileSync(path.join(manualDir, 'index.html'), '<h1>Welcome</h1>\n');
 fs.writeFileSync(path.join(manualDir, 'media', 'start.webp'), Buffer.from([0, 1, 2, 255]));
-const relay = createRelay({ store, publicUrl: 'http://127.0.0.1', now: () => clock, post, manual: manualDir });
-const server = http.createServer(relay.handle);
+const mcp = createMcpServer({ store, publicUrl: 'http://127.0.0.1', now: () => clock, post, manual: manualDir });
+const server = http.createServer(mcp.handle);
 
 (async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -45,10 +45,10 @@ const server = http.createServer(relay.handle);
     const text = await res.text();
     return { status: res.status, headers: res.headers, json: text ? JSON.parse(text) : null };
   };
-  // a request straight to the relay from `from`, with no proxy in between: what a caller reaching the listener sees
+  // a request straight to the MCP server from `from`, with no proxy in between: what a caller reaching the listener sees
   const direct = (method, path, { from, headers = {}, body } = {}) => new Promise((resolve) => {
     const req = Object.assign(Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]), { method, url: path, headers: { 'content-type': 'application/json', ...headers }, socket: { remoteAddress: from } });
-    relay.handle(req, { headersSent: false, statusCode: 0, setHeader() {}, writeHead(status) { this.statusCode = status; this.headersSent = true; }, end(text) { resolve({ status: this.statusCode, json: text ? JSON.parse(text) : null }); } });
+    mcp.handle(req, { headersSent: false, statusCode: 0, setHeader() {}, writeHead(status) { this.statusCode = status; this.headersSent = true; }, end(text) { resolve({ status: this.statusCode, json: text ? JSON.parse(text) : null }); } });
   });
   const until = async (done) => { for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setTimeout(r, 5)); };
   // a promise that has to settle within ms, or the check fails rather than waits for ever
@@ -157,11 +157,11 @@ const server = http.createServer(relay.handle);
   assert.deepEqual(agents.map((a) => a.name), ['GrokBot', 'Dot'], 'one Orbital, as many agents as link to it');
   const [G, D] = agents;
 
-  // ---- an event for an agent: a name the relay lists and what goes with it; with nobody subscribed, nobody hears it ----
+  // ---- an event for an agent: a name the MCP server lists and what goes with it; with nobody subscribed, nobody hears it ----
   const NODE = 'tana:text:01jzq8k3m5p7r9t1v3x5z7b9d1';
   const send = (agent, id, name = 'task.assigned', data = { node: NODE }, o = orbital) => call('POST', '/mcp/orbital/agents/' + agent.id + '/events', { auth: as(o), body: { id, name, data } });
   assert.equal((await send(G, 'not-an-id')).status, 400, 'an event has a UUID');
-  assert.equal((await send(G, crypto.randomUUID(), 'task.deleted')).status, 400, 'and a name the relay lists');
+  assert.equal((await send(G, crypto.randomUUID(), 'task.deleted')).status, 400, 'and a name the MCP server lists');
   assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', ['x'])).status, 400, 'its data is an object');
   assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { note: 'x'.repeat(17000) })).status, 400, 'of at most 16 KB');
   assert.equal((await send(G, crypto.randomUUID(), 'task.assigned', { note: '会'.repeat(6000) })).status, 400, 'counted in bytes, as it goes over the wire');
@@ -172,7 +172,7 @@ const server = http.createServer(relay.handle);
   // ---- a day on ----
   const late = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json.code;
   clock += 24 * 3600e3 + 1;
-  await relay.sweep();
+  await mcp.sweep();
   assert.match((await grok.rpc('tools/call', { name: 'link_orbital', arguments: {} })).result._meta['mcp/www_authenticate'][0], /invalid_token/, 'a day on, the hour-long access token has run out');
   for (const a of [grok, dot]) a.tokens = (await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: a.tokens.refresh_token, client_id: a.client } })).json;
   assert.equal((await call('GET', '/mcp/orbital/codes/' + late, { auth: as(orbital) })).status, 404, 'and a code nobody used is gone');
@@ -214,13 +214,13 @@ const server = http.createServer(relay.handle);
   answer = echo; posted.length = 0;
   const made = (await sub(want)).json.result;
   assert.deepEqual([made.resultType, made.cursor, made.truncated, made.refreshBefore], ['complete', null, false, new Date(clock + TTL.subscription).toISOString()], 'subscribed, for a week');
-  // Standard Webhooks, worked out here rather than with the relay's own function
+  // Standard Webhooks, worked out here rather than with the MCP server's own function
   const signs = (p) => p.headers['webhook-signature'] === 'v1,' + crypto.createHmac('sha256', Buffer.from(SECRET.slice(6), 'base64')).update(p.headers['webhook-id'] + '.' + p.headers['webhook-timestamp'] + '.' + p.body).digest('base64');
   const [check] = posted;
   assert.deepEqual([JSON.parse(check.body).type, /^msg_verification_/.test(check.headers['webhook-id']), check.headers['x-mcp-subscription-id'], signs(check)], ['verification', true, made.id, true], 'the callback was challenged first, signed');
   const refreshedSub = (await sub({ ...want, arguments: undefined, ttlMs: 3 * 864e5 })).json.result;
   assert.deepEqual([refreshedSub.id, posted.length, refreshedSub.refreshBefore], [made.id, 1, new Date(clock + 3 * 864e5).toISOString()], 'asked again it is the same subscription, as long as asked, not challenged again');
-  // grok, signed in but linked to nothing, cannot subscribe: it would hear nothing, and a subscription makes the relay call a URL
+  // grok, signed in but linked to nothing, cannot subscribe: it would hear nothing, and a subscription makes the MCP server call a URL
   const before = posted.length;
   assert.equal((await sub({ ...want, delivery: { ...want.delivery, url: 'https://receiver.example/grok' } }, grok)).json.error.code, -32602, 'a connection linked to nothing cannot subscribe');
   assert.equal(posted.length, before, 'and nothing was called for it');
@@ -235,18 +235,18 @@ const server = http.createServer(relay.handle);
   const pkg = { node: NODE, request: 'Draft the pilot brief', instructions: 'How to handle it, as Orbital writes it' };
   await send(D, crypto.randomUUID(), 'task.assigned', pkg);
   assert.deepEqual(JSON.parse(posted[0].body).data, pkg, 'the package Orbital sends (node, request, instructions) arrives as it was sent');
-  assert.equal((await relay.dump()).includes('Draft the pilot brief'), false, 'and the relay keeps none of it');
+  assert.equal((await mcp.dump()).includes('Draft the pilot brief'), false, 'and the MCP server keeps none of it');
   assert.equal((await send(D, crypto.randomUUID(), 'task.assigned', { request: 'x'.repeat(17000) })).status, 400, 'up to 16 KB');
-  // a receiver that fails is tried once: Orbital hears nobody took it, and nothing of the event waits in the relay for later
+  // a receiver that fails is tried once: Orbital hears nobody took it, and nothing of the event waits in the MCP server for later
   answer = () => ({ status: 503, text: '' }); posted.length = 0;
-  const realTimeout = global.setTimeout, again = []; // a delivery the relay would make later is a timer that delivers
+  const realTimeout = global.setTimeout, again = []; // a delivery the MCP server would make later is a timer that delivers
   global.setTimeout = (fn, ...rest) => { if (/deliver\(/.test(String(fn))) again.push(fn); return realTimeout(fn, ...rest); };
   assert.deepEqual((await send(D, crypto.randomUUID(), 'task.assigned', pkg)).json, { subscribers: 1, delivered: 0 }, 'a receiver that fails: Orbital is told nobody took it');
   global.setTimeout = realTimeout;
   assert.deepEqual([posted.length, again.length], [1, 0], 'tried once, with no retry holding it to send again');
   answer = echo;
   // a callback that never finishes its answer holds a call; a connection with as many open as it may has the next refused
-  // before a socket is opened, so no receiver can pile up the relay's connections (finding 3)
+  // before a socket is opened, so no receiver can pile up the MCP server's connections (finding 3)
   const holds = [], perConnection = LIMITS.callsPerConnection;
   answer = () => new Promise((resolve) => holds.push(resolve)); posted.length = 0; LIMITS.callsPerConnection = 1;
   const held = send(D, crypto.randomUUID());
@@ -319,39 +319,39 @@ const server = http.createServer(relay.handle);
   const keyHash = (k) => crypto.createHash('sha256').update(k).digest('base64url');
   // a client that never signed in and a connection with no token and no link are swept away, the linked ones stay
   const lone = (await call('POST', '/mcp/oauth/register', { body: { redirect_uris: ['https://agents.example/lone'] } })).json.client_id;
-  clock += 24 * 3600e3 + 1; await relay.sweep();
-  const kept = await relay.dump();
+  clock += 24 * 3600e3 + 1; await mcp.sweep();
+  const kept = await mcp.dump();
   assert.deepEqual([kept.includes(lone), kept.includes(D.id)], [false, true], 'an unused client goes; a linked agent stays');
   assert.deepEqual(strays.map((k) => kept.includes(keyHash(k))), strays.map(() => false), 'and an Orbital that never linked an agent goes after a day');
   // which server.js runs, to hold against the repository
-  assert.equal((await call('GET', '/mcp/health')).json.sha256, crypto.createHash('sha256').update(require('node:fs').readFileSync(require.resolve('../relay/server'))).digest('hex'), '/health names the file it runs');
+  assert.equal((await call('GET', '/mcp/health')).json.sha256, crypto.createHash('sha256').update(require('node:fs').readFileSync(require.resolve('../mcp-server/server'))).digest('hex'), '/health names the file it runs');
   // and the manual beside it: each file by its SHA-256, and one SHA-256 over them as sha256sum lists them, sorted
   const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
   const files = { 'index.html': sha('<h1>Welcome</h1>\n'), 'media/start.webp': sha(Buffer.from([0, 1, 2, 255])) };
   const digest = sha(files['index.html'] + '  index.html\n' + files['media/start.webp'] + '  media/start.webp\n');
   assert.deepEqual((await call('GET', '/mcp/health')).json.manual, { sha256: digest, files: 2 }, '/health names the published manual');
   assert.deepEqual((await call('GET', '/mcp/health/manual')).json, { sha256: digest, files }, '/health/manual lists its files');
-  const bare = createRelay({ store: sqliteStore() });
+  const bare = createMcpServer({ store: sqliteStore() });
   const health = await new Promise((resolve) => bare.handle(Object.assign(Readable.from([]), { method: 'GET', url: '/mcp/health', headers: {}, socket: { remoteAddress: '127.0.0.1' } }),
     { headersSent: false, setHeader() {}, writeHead() { this.headersSent = true; }, end(text) { resolve(JSON.parse(text)); } }));
   await bare.close();
-  assert.equal(health.manual, null, 'a relay with no manual beside it says so');
+  assert.equal(health.manual, null, 'an MCP server with no manual beside it says so');
   fs.rmSync(manualDir, { recursive: true });
   assert.equal(isPublicAddress('::7f00:1'), false, 'an IPv4 address written the old IPv6 way is not public either');
 
   // ---- what the database holds: ids, and no key or token as itself (only their hashes) ----
-  // two first asks for a code at once, with a key the relay has not seen: one Orbital, not two
+  // two first asks for a code at once, with a key the MCP server has not seen: one Orbital, not two
   const twin = { key: newKey() }, twinHash = crypto.createHash('sha256').update(twin.key).digest('base64url');
   slow = /FROM orbitals/;
   const asked = await Promise.all([1, 2].map(() => call('POST', '/mcp/orbital/codes', { auth: as(twin) })));
   slow = null;
   assert.deepEqual(asked.map((a) => a.status), [201, 201], 'both get a code');
-  assert.equal((await relay.dump()).split(twinHash).length - 1, 1, 'and the key is one Orbital');
-  const rows = await relay.dump();
+  assert.equal((await mcp.dump()).split(twinHash).length - 1, 1, 'and the key is one Orbital');
+  const rows = await mcp.dump();
   for (const secret of [firstKey, fresh, grok.tokens.access_token, grok.tokens.refresh_token]) assert.ok(!rows.includes(secret), 'the database never holds ' + secret.slice(0, 12) + '…');
 
   // ---- what anyone can make without an account has a ceiling a day per network, kept in the database (finding 8) ----
-  clock += 2 * 24 * 3600e3; await relay.sweep();
+  clock += 2 * 24 * 3600e3; await mcp.sweep();
   const daily = { orbitals: LIMITS.orbitalsPerDay, installs: LIMITS.installsPerDay, clients: LIMITS.clientsPerDay };
   LIMITS.orbitalsPerDay = 2;
   const newcomer = (from) => call('POST', '/mcp/orbital/codes', { auth: 'Orbital ' + newKey(), forwarded: from });
@@ -378,16 +378,54 @@ const server = http.createServer(relay.handle);
   assert.equal((await from('198.51.100.40')).json.error, 'busy', 'until it has used up its own');
   assert.deepEqual([(await from('2001:db8:5:6::1')).status, (await from('2001:db8:5:6::2')).status, (await from('2001:db8:5:6:ffff::3')).json.error, (await from('2001:db8:5:7::1')).status], [201, 201, 'busy', 201],
     'an IPv6 /64 is one network, so new addresses inside it buy nothing; the next /64 is another');
-  clock += 24 * 3600e3 + 1; await relay.sweep();
+  clock += 24 * 3600e3 + 1; await mcp.sweep();
   assert.equal((await from('198.51.100.40')).status, 201, 'and a day later it registers again');
   Object.assign(LIMITS, { orbitalsPerDay: daily.orbitals, installsPerDay: daily.installs, clientsPerDay: daily.clients });
   // a connection that never linked loses its tokens after a week; an agent not heard from in ninety days is let go
-  clock += TTL.unlinked + 1; await relay.sweep();
+  clock += TTL.unlinked + 1; await mcp.sweep();
   assert.equal((await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: grok.tokens.refresh_token, client_id: grok.client } })).status, 400, 'grok, unlinked a week ago, signs in afresh');
-  assert.ok((await relay.dump()).includes(D.id), 'while the linked Dot stays');
-  clock += TTL.idleAgent; await relay.sweep();
-  assert.equal((await relay.dump()).includes(D.id), false, 'until it has not been heard from in ninety days');
+  assert.ok((await mcp.dump()).includes(D.id), 'while the linked Dot stays');
+  clock += TTL.idleAgent; await mcp.sweep();
+  assert.equal((await mcp.dump()).includes(D.id), false, 'until it has not been heard from in ninety days');
 
-  console.log('relay-check: ok');
-  await relay.close(); server.close();
+  // ---- the same MCP server on ChatGPT Sites (mcp-server/worker.js): a Worker's Request and Response, its rows in D1 ----
+  // D1 here is node:sqlite behind D1's own calls, so what is checked is the adapter and d1Store, not the queries again
+  {
+    const { DatabaseSync } = require('node:sqlite'), sqlite = new DatabaseSync(':memory:');
+    let slow = 0; // ms each D1 call takes, as a real D1 does: the body must still reach a handler that waited on one first
+    const wait = () => (slow ? new Promise((r) => setTimeout(r, slow)) : null);
+    const D1 = { prepare(sql) { const st = sqlite.prepare(sql); let a = []; const s = { bind: (...x) => { assert.ok(!x.includes(undefined), 'D1 refuses undefined: ' + sql); a = x; return s; },
+      first: async () => { await wait(); return st.get(...a) ?? null; }, all: async () => { await wait(); return { results: st.all(...a) }; }, run: async () => { await wait(); return { meta: { changes: Number(st.run(...a).changes) } }; } }; return s; } };
+    const worker = require('../mcp-server/worker'), env = { DB: D1 }, site = 'https://orbital.example.chatgpt.site';
+    const ask = async (method, p, { body, auth } = {}) => {
+      const res = await worker.fetch(new Request(site + p, { method, body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+        headers: { 'cf-connecting-ip': '203.0.113.7', ...(auth ? { authorization: auth } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) } }), env);
+      const text = await res.text();
+      return { status: res.status, headers: res.headers, json: text ? JSON.parse(text) : null };
+    };
+    assert.equal((await ask('GET', '/.well-known/oauth-protected-resource/api/mcp')).json.resource, site + '/api/mcp', 'on a Site the MCP server is at /api/mcp, Sites keeping /mcp');
+    const list = await ask('POST', '/api/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
+    assert.deepEqual([list.status, list.json.result.tools.map((t) => t.name), list.headers.get('access-control-allow-origin')], [200, ['link_orbital'], '*'], 'its MCP answers, open to the phones\' engine');
+    // a signed-in request looks its token up in D1 before it reads the body: on a Site that read once never ended (the
+    // body's end told before anybody listened), so every call from ChatGPT after sign-in hung
+    slow = 20;
+    const late = await Promise.race([ask('POST', '/api/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'tools/list' }, auth: 'Bearer ' + 'x'.repeat(43) }),
+      new Promise((r) => setTimeout(() => r(null), 3000))]);
+    assert.ok(late && late.status === 200, 'a body read after a slow D1 lookup still arrives');
+    slow = 0;
+    const options = await ask('OPTIONS', '/api/mcp');
+    assert.deepEqual([options.status, options.json], [204, null], 'a preflight has no body');
+    const key = 'Orbital ' + newKey(), made = await ask('POST', '/api/mcp/orbital/codes', { auth: key });
+    assert.equal(made.status, 201, 'an Orbital is made in D1 and gets a code');
+    assert.equal((await ask('GET', '/api/mcp/orbital/codes/' + made.json.code, { auth: key })).json.state, 'waiting', 'and reads it back');
+    assert.equal((await ask('GET', '/api/mcp/orbital/agents', { auth: 'Orbital ' + newKey() })).status, 401, 'another key is not that Orbital');
+    assert.equal((await ask('POST', '/api/mcp', { body: 'x'.repeat(LIMITS.body + 1) })).status, 413, 'a body past the limit is refused, as on Node');
+    assert.equal((await ask('GET', '/api/mcp/health')).json.sha256, crypto.createHash('sha256').update(fs.readFileSync(require.resolve('../mcp-server/server'))).digest('hex'), 'and /health names the same server.js as orbital.md');
+    assert.equal((await ask('GET', '/api/mcp/health')).json.version, require('../mcp-server/server').VERSION, 'and the same MCP server version, which Orbital holds against the oldest it works with');
+    await assert.rejects(worker.post('http://agents.example/cb', {}, '{}'), { code: 'EBLOCKED' }, 'its callbacks are https only');
+    await assert.rejects(worker.post('https://10.0.0.8/cb', {}, '{}'), { code: 'EBLOCKED' }, 'and never a private address written out');
+  }
+
+  console.log('mcp-server-check: ok');
+  await mcp.close(); server.close();
 })().catch((e) => { console.error(e); process.exit(1); });

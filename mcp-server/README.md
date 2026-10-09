@@ -1,0 +1,32 @@
+# Orbital's Orbital MCP server
+
+The MCP server between Orbital and the agents linked to it (docs/MCP-SERVER.md). `server.js` is the whole MCP server. It runs
+two ways from that one file:
+
+- **On Node** (orbital.md): `node server.js`, its rows in SQLite or PostgreSQL (`DATABASE_URL`), at `/mcp`.
+- **On ChatGPT Sites**: `worker.js` hands each request to the same server, its rows in the Site's D1 database, at `/api/mcp`
+  (Sites keeps `/mcp` for itself). `build.js` bundles both into `dist/server/index.js`.
+
+A change to `server.js` reaches both. `npm run check` runs the MCP server end to end on Node and through `worker.js`.
+
+## Deploy it on ChatGPT Sites
+
+For a workspace that hosts its own Orbital MCP server. An admin asks ChatGPT, with the instructions Orbital copies from
+Cmd+K → Connect your personal agent → Use a self-hosted Orbital MCP server …, and pastes the URL it gives back there.
+
+1. Make a new Site (slug `orbital` if it is free) and put this folder in it as it is. `.openai/hosting.json` asks for
+   one D1 database, `DB`.
+2. `npm install`, then `npm run build`: `dist/server/index.js` and `dist/.openai/hosting.json`.
+3. Publish it, then set its access to **public**. ChatGPT and the Orbital app reach it without signing in to Sites; the
+   MCP server signs agents in itself (OAuth) and knows each Orbital by its key.
+4. Check `https://<site>/api/mcp/health` answers `{"ok":true,…}`. Its `sha256` is the `server.js` it runs, the same
+   hash orbital.md's `/mcp/health` gives for the same file.
+5. Give back `https://<site>/api/mcp`.
+
+Nothing else needs setting: the MCP server takes its public URL from the requests it gets (`RELAY_PUBLIC_URL` overrides it).
+
+## Updating it
+
+`/health` says the MCP server's `version`. When Orbital needs a newer one, its MCP server page says the workspace's MCP server is out
+of date and gives an admin instructions for ChatGPT: put the latest version of this folder in the same Site, build it and
+publish it as a new version. The address stays the same, so the agents stay linked.

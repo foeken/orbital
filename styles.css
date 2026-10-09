@@ -1364,6 +1364,9 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .palette .hint { color: var(--muted); font-size: 14px; white-space: nowrap; }
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }
 .palette .row.active kbd { background: #e4e4e4; }
+.palette .label:has(+ .badge) { flex: 0 1 auto; } /* the label as long as its words, the badge right after them */
+.palette .badge { flex-shrink: 0; margin-right: auto; font-size: 11px; color: #666; background: #f1f1f1; border-radius: 5px; padding: 1px 6px; vertical-align: 1px; } /* a row's badge, renderer/palette.js */
+.palette .row.active .badge { background: #e4e4e4; }
 /* @ linking: the same palette as a dropdown under the caret (anchorPalette places and sizes the card), no scrim */
 /* No scrim, open or closing: a dropdown fading out must not bring the Cmd+K scrim back for the length of its fade.
    Only the display waits on :not([hidden]), the same weight as .palette[hidden], which would keep it on screen. */
@@ -1576,6 +1579,8 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .pbutton.reject:hover { background: rgba(255, 255, 255, .08); color: #c9cccf; }
 [data-theme="dark"] .palette kbd { color: #b7bcbe; background: #303436; }
 [data-theme="dark"] .palette .row.active kbd { background: #42484a; }
+[data-theme="dark"] .palette .badge { color: #b7bcbe; background: #303436; }
+[data-theme="dark"] .palette .row.active .badge { background: #42484a; }
 [data-theme="dark"] .recorder h2 { color: #c9c9c9; }
 [data-theme="dark"] .recorder .rbox { border-color: #454b4e; }
 [data-theme="dark"] .recorder .keys { color: #adb1b2; }

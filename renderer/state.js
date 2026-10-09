@@ -4,13 +4,13 @@
 const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi());
 // Demo mode draws made-up words, and nothing on screen may then reach Tana: every call that writes is refused here,
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
-const DEMO_WRITES = new Set(['sendChat', 'askAgent', 'deleteAgentAsk', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
+const DEMO_WRITES = new Set(['mcpUse', 'mcpUsePlugin', 'sendChat', 'askAgent', 'deleteAgentAsk', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
   'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox', 'cycleCheckboxes',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
   'insertImage', 'insertTable', 'insertAfter', 'insertBefore', 'split', 'join', 'insertChild', 'pasteMarkdown', 'removeMany', 'moveMany', 'indentMany',
   'outdentMany', 'remove', 'indent', 'outdent', 'move', 'moveTo', 'insertMention', 'pin', 'unpin', 'placePin', 'pinTo', 'unpinFrom', 'setSensitive',
-  'setAgent', 'relayUnlink', 'undo', 'redo']); // relayUnlink unassigns the agent's nodes, which writes to them
+  'setAgent', 'mcpUnlink', 'undo', 'redo']); // mcpUnlink unassigns the agent's nodes, which writes to them
 function readOnlyInDemo(api) {
   return new Proxy({ ...api }, { // a copy: contextBridge freezes window.api, and a proxy of a frozen object must hand back its own values
     get: (own, key) => {

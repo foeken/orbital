@@ -915,7 +915,7 @@ wrong twenty.
   event (a node handed to it is that event: the node's id, the request and how to handle it, nothing of the request
   written into the node, which the Dot reads as content; its badge follows the node's last line, "Agent status: Assigned |
   Working | Completed | Failed": Orbital writes Assigned, grey until the Dot changes it to Working as it starts); each linked agent is one more agent,
-  listed with the other agents in Choose agents, with a page of its own (Rename …, Switch off, Unlink); **Set default agent …** picks the default on a page of its own, and **Reset agent link key** makes a new key for your Orbital at orbital.md (docs/AGENT-RELAY.md).
+  listed with the other agents in Choose agents, with a page of its own (Rename …, Switch off, Unlink); **Set default agent …** picks the default on a page of its own, and **Reset agent link key** makes a new key for your Orbital at orbital.md (docs/MCP-SERVER.md).
   **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
   default ticked; beside it **Assign to <agent> …** for each agent that is on, Assign to Codex …, Assign to Echo …, opens
   the same page with that agent picked) and hands the node over; the agent's own default model does the work. The node then carries the agent
@@ -1292,7 +1292,7 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
   - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
     another Mac switched it on) and the default agent.
-  - **Lists**: the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
+  - **Hidden** (eye-slash): the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
     it) and Show MCP chats.
   Every control makes the call its Cmd+K row makes, so a choice made there and one made here are the same write. Main
   sends the window what it sends the pages (main/state.js `send`, main/settings.js `tellOthers`): a setting changed in a

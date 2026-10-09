@@ -10,7 +10,7 @@ require('./codex');
 require('./claude');
 const linked = require('./linked'); // the agents linked through orbital.md/mcp (your Dot), one plugin each, as they come and go
 const { agentIds, setAgentMark, agentPrompt, agentStatus, dropAgentMark, mut } = require('../documents');
-const relay = require('../relay'); // the node put back as an earlier handoff left it (putBack)
+const mcpServer = require('../mcp-server'); // the node put back as an earlier handoff left it (putBack)
 const { readNode } = require('../../sdk/node');
 const { DOC_URI: NODE, S, pageOf } = require('../state');
 const settings = require('../settings');
@@ -47,17 +47,17 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
     return result;
   } catch (error) {
     if (started && a.release) await a.release(id).catch(() => {});
-    // an agent linked through orbital.md has put the node back itself (main/relay.js handOver): only its marks are left
+    // an agent linked through orbital.md has put the node back itself (main/mcp-server.js handOver): only its marks are left
     if (!was && agentIds().includes(id)) { if (a.linked) dropAgentMark(id); else await setAgentMark(id, false); agent.clearTask(id); }
     else if (before) await restore(id, before, !a.linked).catch(() => {});
     throw error;
   }
 }
 // The node as its earlier handoff left it: the mark and that request in the settings, and node: the node itself, its
-// Agent context block or the status line an agent linked through orbital.md last wrote (main/relay.js putBack)
+// Agent context block or the status line an agent linked through orbital.md last wrote (main/mcp-server.js putBack)
 async function restore(id, before, node) {
   await setAgentMark(id, true, before.prompt, false);
-  if (node) await mut(id, (doc) => relay.putBack(doc, before));
+  if (node) await mut(id, (doc) => mcpServer.putBack(doc, before));
 }
 // What a plugin still holds for a node's previous task (a Codex writer) is let go before the link moves on: a later
 // unassign releases only the agent the link then names (#671 review)
@@ -103,7 +103,7 @@ async function readStatuses() {
 
 const changed = (e, id) => { settings.tellOthers(pageOf(e), id); };
 const ipc = {
-  'agent:list': () => { linked.refreshSoon(); return agent.list(); }, // the relay's list is asked for now and then, and the pages told when it moved
+  'agent:list': () => { linked.refreshSoon(); return agent.list(); }, // the MCP server's list is asked for now and then, and the pages told when it moved
   'agent:enable': (e, id, on) => { const out = agent.setEnabled(id, !!on); changed(e); return out; },
   'agent:default': (e, id) => { const out = agent.setDefault(id); changed(e); return out; },
   'agent:ids': () => agentIds(),

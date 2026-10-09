@@ -2,8 +2,8 @@
 
 Everything this app decides *about your content* lives in one document in Tana, so the choices you make on one
 machine are the choices the app opens with on the next. Machine-only secrets are the exception: they stay in the
-local SQLite settings table. One secret lives in it on purpose: `relayKey`, your Orbital's key at the agent relay
-(docs/AGENT-RELAY.md), so every device signed into your Tana account has the same linked agents. The document is created by the app, titled **Orbital**, and its first line says so.
+local SQLite settings table. One secret lives in it on purpose: `relayKey`, your Orbital's key at the Orbital MCP server
+(docs/MCP-SERVER.md), so every device signed into your Tana account has the same linked agents. The document is created by the app, titled **Orbital**, and its first line says so.
 Deleting it in Tana loses nothing: the app writes a new one from what the machine remembers (see Finding it, below).
 
 ## Why a document of our own
@@ -41,7 +41,7 @@ the third catches up on the next connect.
 | View filters (`viewFilter:*`), hidden titles, the MCP switch | The window's size and position |
 | Type, field, saved-search and document icons and the colour a type is drawn in (`typeIcons`, `typeHues`), sensitive marks, watch choices (`notify`), the Quick AI (`aiQuickModel`, `aiQuickEffort`: Auto-translate, Discuss with, Auto-pick type, type icons) and the Regular AI (`aiModel`, `aiEffort`: reading images, on the Mac and in the iPhone's Quick Add and Share), set on either app's Settings, defaults in main/ai.js | Which page you had open, where you were zoomed, whether sensitive items are unblurred (`sensitiveVisible`), the OpenAI API key (`openaiApiKey`) and its region (`openaiRegion`), the feature flags (`featureFlags`, main/flags.js: experiments switched on here only, as the Decisions API needs the key that is here), and ChatGPT auth in a separate, isolated Codex home under userData |
 | Agent assignments, their prompts, which agents are on and the default (`agents`, `defaultAgent`), and the tasks they became (`codexTask`: node → agent and task id) | The row cache, which is a mirror of Tana and is rebuilt by any refresh |
-| Your Orbital's key at the agent relay (`relayKey`, docs/AGENT-RELAY.md), and the linked agents already switched on once (`relaySeen`) | The linked agents as the relay last listed them (`relayAgents`), asked for again when Cmd+K or Settings shows them |
+| Your Orbital's key at the Orbital MCP server (`relayKey`, docs/MCP-SERVER.md), and the linked agents already switched on once (`relaySeen`) | The linked agents as the MCP server last listed them (`relayAgents`), asked for again when Cmd+K or Settings shows them |
 | Which saved search is the Work View's My Tasks (`myTasks`, its id: a rename keeps it, two machines share it) | |
 | Renderer preferences (`pref:*`): Home, recorded hotkeys, theme, sort, grouping, which facts a row shows, folded sections, the sidebar's open/closed state, saved views (`savedViews`: a window's layout and each page's view and place, under a name) | Recently viewed, what you pick most in Cmd+K (`paletteUse`, Suggested), the sidebar's width, the row cache, and ChatGPT auth in its isolated local Codex home |
 
@@ -77,6 +77,13 @@ meeting, so nothing about them is kept in the settings.
 
 Which keys are synced is one list, `SYNCED` in main/settings.js: every `pref:` key and the named ones above. A key
 written through `settings.set` that matches no rule stays in SQLite on this machine (`openaiApiKey` is one).
+
+## The workspace's settings
+
+What is the same for everyone in a Tana workspace lives in the same `ext:orbital` root, one JSON string per key, on
+Tana's own org document (`orgDocUri`) rather than in anyone's settings document: `mcpServerUrl`, the workspace's Orbital MCP server,
+and `pluginUrl`, its Orbital plugin in ChatGPT (docs/MCP-SERVER.md, Your workspace's MCP server). Every member reads it (`workspaceGet`), mirrored on the machine
+as the local key `workspace`; only an admin writes it (`setWorkspace`), a check Orbital makes itself until Tana does (#815).
 
 On connect, the document decides: a key it holds replaces what this machine remembered, and a key only this machine
 has is pushed up. That is what makes the first run on an existing install a migration with no migration step. Between

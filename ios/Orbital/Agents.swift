@@ -78,6 +78,10 @@ struct ConnectAgent: View {
                         Button { UIPasteboard.general.string = link.prompt; said("message") } label: {
                             LabeledContent { Text(copied == "message" ? "Copied" : "") } label: { Label("Copy the instructions", systemImage: "doc.on.doc") }
                         }
+                        // the code alone, for an agent whose setup asks for it (the Mac's Copy the code)
+                        Button { UIPasteboard.general.string = link.code; said("code") } label: {
+                            LabeledContent { Text(copied == "code" ? "Copied" : "") } label: { Label("Copy the code", systemImage: "link") }
+                        }
                         if state == "expired" || link.expiresAt <= Date.now.timeIntervalSince1970 * 1000 {
                             Text("The code expired. Nobody used it.").foregroundStyle(.secondary)
                             Button("Get a new code") { Task { await ask() } }
@@ -97,7 +101,7 @@ struct ConnectAgent: View {
                     }
                 }
             } header: { SettingsView.Header("Then ask your agent to link") } footer: {
-                Text("Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through orbital.md, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.")
+                Text("Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through \((link?.url ?? "https://orbital.md/mcp").replacingOccurrences(of: "https://", with: "")), and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.")
             }
         }
         .tint(.primary)
