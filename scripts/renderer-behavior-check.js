@@ -3264,6 +3264,19 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   api.stage({ types: ['meetings'], window: 'upcoming' });
   assert.deepEqual(titles(meets, 'meeting').map(([t]) => t), ['Today', 'Tomorrow', later, 'No date'], 'a list of upcoming meetings runs soonest first');
   assert.ok(plain(api.groupList()).some(([id]) => id === 'meeting'), 'Meeting date is offered where only meetings are listed');
+  // Grouped by Meeting date, the days before today start folded; opening one is remembered, and today never folds itself
+  api.setGroupBy('meeting');
+  const past = [{ id: 'p1', start: at(-2, 9) }, { id: 'p2', start: at(-1, 9) }, ...meets];
+  const folds = () => plain(api.groupsOf(past)).map((g) => [g.title, g.collapsed]);
+  assert.deepEqual(folds(), [[api.meetingDay(at(-2, 12)), true], ['Yesterday', true], ['Today', false], ['Tomorrow', false], [later, false], ['No date', false]],
+    'past days start folded, today and later open');
+  api.toggleGroup(plain(api.groupsOf(past))[1].id);
+  assert.deepEqual(folds().slice(0, 3).map(([, c]) => c), [true, false, false], 'a past day opened stays open');
+  api.toggleGroup(plain(api.groupsOf(past))[2].id);
+  assert.equal(folds()[2][1], true, 'and today still folds by hand');
+  api.toggleGroup(plain(api.groupsOf(past))[2].id);
+  api.toggleGroup(plain(api.groupsOf(past))[1].id);
+  api.setGroupBy('none');
   api.stage({ types: ['tasks'], states: ['open'], assignee: 'me' });
   assert.ok(!plain(api.groupList()).some(([id]) => id === 'meeting'), 'and nowhere else');
   // The Tasks view lists several types and docs: the choice fields of the types its rows are now are offered by name,

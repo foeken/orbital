@@ -787,7 +787,8 @@ Display chooses the facts a row shows. Each is kept per page key in the synced `
 preferences; a saved search keeps its own in its document. Group by Updated sorts rows into Last hour, Last day, Last
 week, Last month and Older. Group by **Meeting date** (`meeting`, offered where Meeting time is: a list of meetings
 only) puts each meeting under the day it starts, Today, Tomorrow and Yesterday by name, the days running as Meeting time
-does and a row with no window under No date; a section is keyed by its day, so a fold outlives "Tomorrow". Tana does not
+does and a row with no window under No date; a section is keyed by its day, so a fold outlives "Tomorrow". A day before
+today starts folded, and opening one is remembered (views.js `startsFolded`). Tana does not
 know the word and leaves it in the search's `view.groupBy` for Orbital, as it does Responsibility.
 Each also offers the page's fields (issue #624): a one-type page its type's own, a mixed list those of the types on
 it, one per name as Group has them (`pageFieldDefs`), under a small "Type fields" heading (`fieldSection`); Group
