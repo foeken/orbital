@@ -29,8 +29,13 @@ const RULES = [
   'would in your own app, and use your Tana tools when the question is about their work.', '',
   'This folder holds only these house rules. Do not save files, notes or anything read from Tana here.', '',
 ].join('\n');
-// what a chat may do: Codex's own sandbox, and its reviewer instead of a person for anything beyond it
-const RUN = { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write' };
+// what a chat may do: Codex's own sandbox, and its reviewer instead of a person for anything beyond it. And when Codex
+// compacts it: once the conversation itself passes 40k tokens, not the fixed ~30k of Codex's instructions and tools under
+// it (the scope) and not at 90% of the model's window (~855k for a 950k one), Codex's default. Chats mostly ask for
+// something to be done, so a summary of the older turns is enough, and every message after stays small and cheap.
+// Checked live 2026-10-09 (codex-cli 0.160.0): honoured per thread on thread/start and on thread/resume alike.
+const RUN = { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write',
+  config: { model_auto_compact_token_limit: 40000, model_auto_compact_token_limit_scope: 'body_after_prefix' } };
 const TOOLS = new Set(['commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall', 'webSearch', 'collabAgentToolCall', 'imageGeneration']);
 
 function workspace() {
@@ -275,4 +280,4 @@ const ipc = {
 const isChat = (id) => String(id || '').startsWith(PREFIX); // a chat, or a new one (orbital:agent-chat:new)
 const stop = () => { for (const s of [...live.values()]) s.stop(); if (listening) { clearTimeout(listening); listening = null; } };
 
-module.exports = { LIST, PREFIX, KEY, DOT, CHAT_HOW, isChat, tellList, list, dotSend, takeReplies, rows, turnMessages, start, say, workspace, stop, ipc };
+module.exports = { LIST, PREFIX, KEY, DOT, CHAT_HOW, RUN, isChat, tellList, list, dotSend, takeReplies, rows, turnMessages, start, say, workspace, stop, ipc };

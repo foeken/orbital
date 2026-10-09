@@ -375,6 +375,11 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
 - **Where it runs.** `~/.orbital/chats`, made on first use with its house rules in `AGENTS.md`. A chat asks nobody: it
   runs with `sandbox: workspace-write`, `approvalPolicy: on-request` and `approvalsReviewer: auto_review`, so Codex's own
   reviewer decides what it may do, and a request that still comes to the client is answered no (`appServerRpc` `decline`).
+- **Kept small.** Codex compacts a chat by itself once its conversation passes 40k tokens (`model_auto_compact_token_limit`
+  with the scope `body_after_prefix`, passed as the thread's `config` on `thread/start` and `thread/resume`): the older
+  turns become a summary for Codex, and the page still shows every message, since only `userMessage` and `agentMessage`
+  items are drawn. Its default would wait until 90% of the model's window, so these chats would never compact. Without
+  the scope the limit counts Codex's own ~30k of instructions and tools as well, and below that it compacts on every turn.
 - **What Orbital keeps.** Only the link, the setting `agentChats` (thread → `{ agent, title, at, device }`), which follows
   you (main/settings.js SYNCED). The title is the first message on one line. A thread lives on the Mac that started it, so
   the link names that Mac (main/agent.js `deviceId`): another Mac lists the chat as “On another Mac”, and its page says to

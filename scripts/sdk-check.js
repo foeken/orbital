@@ -3597,6 +3597,7 @@ async function main() {
     const chats = backend.agentChats, settings = backend.settings, agent = backend.agent;
     const plain = (v) => JSON.parse(JSON.stringify(v)), T = '01a1207b-34c6-7573-977a-f0dea4178bc5', ID = chats.PREFIX + T, handler = (name) => backend.handlers.get(name);
     assert.equal(settings.isSynced('agentChats'), true, 'the links follow you to the next machine');
+    assert.deepEqual(plain(chats.RUN.config), { model_auto_compact_token_limit: 40000, model_auto_compact_token_limit_scope: 'body_after_prefix' }, 'a chat is compacted once its conversation passes 40k tokens, on start and resume alike');
     settings.set('agentChats', { [T]: { agent: 'codex', title: 'Draft the notes', at: 2, device: agent.deviceId() } });
     assert.deepEqual(plain((await handler('agentChat:list')(null)).map((r) => [r.id, r.title, r.meta, r.agentChat.elsewhere])), [[ID, 'Draft the notes', 'Codex', false]], 'the list names each chat and its agent');
     const turn = { id: 'turn1', status: 'completed', startedAt: 100, completedAt: 104, items: [{ type: 'userMessage', id: 'u1', content: [{ type: 'text', text: 'What is due?' }] },
