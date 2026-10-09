@@ -4734,6 +4734,7 @@ function runCurrentNodeStatusCheck() {
     const stateOf = () => 'proposed';
     const openStatusPalette = () => {}, statusRows = () => [];
     const tana = { setState: async () => {} }; // only the status row can be built, so the rows read as what this is about
+    ${sourceBetween('const SEARCH_ID =', 'const childrenOf =')}
     ${functionSource('currentDoc')}
     ${functionSource('taskActionContext')}
     ${functionSource('taskActionRows')}
@@ -4763,6 +4764,13 @@ function runCurrentNodeStatusCheck() {
   assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE],
       items: [['k', row({ id: 'n2', kind: 'block', text: 'just a note' }, DATE.id)]], focusedKey: 'k' })),
     { on: DATE.id, rows: [] }, 'while a plain note is nothing on its own, so it stays the page it belongs to, which has no status');
+  // My Tasks is a saved search: a caret in a task's notes there is the task's, or Assign to Agent hands over the search
+  const SEARCH = { id: 'tana:search:mytasks', kind: 'document', icon: 'search', text: 'My Tasks' };
+  assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK],
+      items: [['k', row({ id: 'n4', kind: 'block', text: 'a note under the task' }, TASK.id)]], focusedKey: 'k' })).on,
+    TASK.id, 'a line inside a task listed on a saved search is that task, not the search');
+  assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK], items: [], focusedKey: null })).on,
+    SEARCH.id, 'with no caret the page is still the search');
 }
 // A saved search page lists documents the way a view does, but its rows live in kids rather than in any view's nodes.
 // Three things used to stop at that boundary and leave the rows as they were first drawn: a live change to one of

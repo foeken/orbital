@@ -3401,6 +3401,9 @@ async function main() {
     cx.available = () => true;
     cx.start = async (opts) => { created.push(opts); await backend.electron.shell.openExternal('codex://threads/01a0b379-afbc-74c3-a191-c419e6543bcc'); return '01a0b379-afbc-74c3-a191-c419e6543bcc'; };
     assert.equal(await assigned(), '', 'nothing is handed to the agent to begin with');
+    await assert.rejects(set('tana:search:01j0aaaaaaaaaaaaaaaaaaaaaa', true, 'Check replies'), /saved search/,
+      'a saved search is a view: handed over, the agent got My Tasks instead of a task');
+    assert.equal(created.length + (await assigned()).length, 0, 'and nothing was started or marked');
     assert.equal(await set(task.id, true), true);
     assert.equal(await assigned(), task.id, 'assigning stores the id');
     assert.equal((cache.setting('codex') || []).join(','), task.id, 'in the settings table, so it survives a restart');

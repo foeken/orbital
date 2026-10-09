@@ -310,10 +310,13 @@ function paletteRows(q, typed = q) {
     // Assigning is offered whether or not the node is with an agent already: handing it over again replaces the request
     // in its Agent context block (main/documents.js writeAgentContext), to that agent or another. One row per agent that
     // is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked.
-    rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: 'Assign to Agent', hint: assigned ? 'Replaces what ' + ((holder && holder.label) || 'the agent') + ' was asked' : 'To ' + ((fallback && fallback.label) || 'Tana'),
-      keepOpen: true, run: () => openAgentPrompt(doc) });
-    for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: a.isDefault ? 'Default' : '',
-      keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
+    // A saved search is a view, not work: there is nothing in it for an agent to do (Unassign stays, for one handed over before)
+    if (!isSearchDoc(doc)) {
+      rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: 'Assign to Agent', hint: assigned ? 'Replaces what ' + ((holder && holder.label) || 'the agent') + ' was asked' : 'To ' + ((fallback && fallback.label) || 'Tana'),
+        keepOpen: true, run: () => openAgentPrompt(doc) });
+      for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: a.isDefault ? 'Default' : '',
+        keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
+    }
     if (assigned) rows.push({ rank: 'codexUnassign', group: docGroup, icon: 'robot', label: 'Unassign from Agent', hint: holder ? holder.label : '',
       run: () => run(async () => {
         holdRow(doc); // taking it back moves the row out of Agent: it stays put, and Clean up offers the redraw
