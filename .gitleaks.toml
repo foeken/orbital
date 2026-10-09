@@ -1,5 +1,14 @@
 # What may not land in a commit, checked by gitleaks (the secrets job in .github/workflows/ci.yml, npm run secrets):
-# gitleaks' own rules for keys and tokens. Nobody's real Tana content belongs in this repo (AGENTS.md): quote invented
-# meetings, spaces and documents in tests and comments (renderer/mock.js, ios/Orbital/*-sample.json).
+# gitleaks' own rules for keys and tokens, and one of Orbital's. Nobody's real Tana content belongs in this repo (AGENTS.md):
+# quote invented meetings, spaces and documents in tests and comments (renderer/mock.js, ios/Orbital/*-sample.json).
 [extend]
 useDefault = true
+
+# A real workspace's MCP server on ChatGPT Sites is its own business: examples use orbital.example or orbital.acme
+[[rules]]
+id = "real-sites-address"
+description = "The address of a real ChatGPT Site: use orbital.example.chatgpt.site or orbital.acme.chatgpt.site"
+regex = '''(?i)\b[a-z0-9-]+\.[a-z0-9-]+\.chatgpt\.site\b'''
+keywords = ["chatgpt.site"]
+[[rules.allowlists]]
+regexes = ['''(?i)\.(example|acme)\.chatgpt\.site''']
