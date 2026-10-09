@@ -31,7 +31,7 @@ struct SettingsView: View {
                 } header: {
                     Header("ChatGPT")
                 } footer: {
-                    Text("Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this iPhone.")
+                    Text("Your ChatGPT account is for the AI in Orbital. It stays on this iPhone.")
                 }
                 AgentsSection(engine: engine) // your Dot (Agents.swift)
                 Section {

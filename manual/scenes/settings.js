@@ -32,7 +32,7 @@ const SETTINGS_API = "start({ prefs: { theme: new URLSearchParams(location.searc
   + " chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@example.com' }), mcpHidden: async () => true, setMcpHidden: async (on) => on, setPref: async () => {}, mcpWhere: async () => window.org,"
   + " agentList: async () => window.agents, enableAgent: async (id, on, setup) => (window.agents = window.agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a))), setDefaultAgent: async () => window.agents,"
   + " settingsSize: (h) => { frameElement.style.height = h + 'px'; } }); 1";
-const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
+const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt', installed: true, enabled: true, isDefault: true },
   { id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true, app: 'ChatGPT' }];
 // the MCP tab is an admin's only: the window is handed the workspace's settings for that shot alone, as main answers an admin
 const ORG = { admin: true, url: 'https://orbital.md/mcp', workspace: null, fallback: 'https://orbital.md/mcp', plugin: 'https://chatgpt.com/plugins/orbital', deploy: 'Deploy', changedBy: { name: 'Robin Vega' } };

@@ -61,7 +61,7 @@
   @keyframes ai-s1 { 0%, 45% { opacity: 1; } 49%, 97% { opacity: .4; } 100% { opacity: 1; } }
   @keyframes ai-s2 { 0%, 45% { opacity: .4; } 49%, 97% { opacity: 1; } 100% { opacity: .4; } }
 
-  /* ---- @Codex: the question goes to this Mac, never to Tana, until you send the answer yourself ---- */
+  /* ---- @ChatGPT: the question goes to this Mac, never to Tana, until you send the answer yourself ---- */
   .ai-local { --loop: 9s; gap: 0; }
   .ai-local-chat { width: 270px; display: flex; flex-direction: column; gap: 10px; }
   .ai-q { align-self: flex-end; font-size: 13px; color: var(--ink); background: var(--well); border-radius: 12px; padding: 6px 11px; box-shadow: 0 0 0 1px var(--line); }
@@ -94,7 +94,7 @@
   <header class="hero">
     <p class="eyebrow">Chapter 11</p>
     <h1>Let a model read, and an agent work</h1>
-    <p class="lead">Orbital can ask a model about the node you are on: who it is for, what type it is, what an image says, what a Dutch title means. It can also hand the node to a Codex agent and show you, on the row, how that work is going.</p>
+    <p class="lead">Orbital can ask a model about the node you are on: who it is for, what type it is, what an image says, what a Dutch title means. It can also hand the node to an agent like ChatGPT and show you, on the row, how that work is going.</p>
     <div class="mg ai-hero" aria-hidden="true">
       <div class="ai-hero-stage">
         <div class="win ai-hero-win">
@@ -118,7 +118,7 @@
       <div>
         <h3>Sign in with ChatGPT</h3>
         <p>Open <kbd>⌘K</kbd> and run <b>Sign in with ChatGPT</b> (under Settings). The <b>ChatGPT account</b> page shows a short code: enter it in the browser page that opens. <b>Copy code</b> puts it on the clipboard, and <b>Cancel ChatGPT sign-in</b> stops waiting.</p>
-        <p>Once you are in, the same row reads <b>Sign out of ChatGPT</b>, and its page says who you are signed in as. The first sign-in on a Mac without Codex may say <b>Getting ChatGPT sign-in ready…</b> while it fetches what it needs, once.</p>
+        <p>Once you are in, the same row reads <b>Sign out of ChatGPT</b>, and its page says who you are signed in as. The first sign-in on a Mac without the ChatGPT app may say <b>Getting ChatGPT sign-in ready…</b> while it fetches what it needs, once.</p>
       </div>
       <figure class="shot"><img data-m="ai-signin" alt="The ChatGPT account page in Cmd+K, asking you to enter a code in your browser"><figcaption>The code to type in your browser, with <b>Copy code</b> under it.</figcaption></figure>
     </div>
@@ -129,7 +129,7 @@
       <tr><td>The name <b>Discuss with …</b> suggests, <b>Auto-pick type</b>, <b>Process image</b>, <b>Auto-translate …</b>, <b>Translate into …</b></td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
       <tr><td>Icons for your types, picked for you</td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
       <tr><td><b>Assign to Agent</b> with Tana</td><td>Nothing: Tana is always there</td></tr>
-      <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with Codex</td><td>The Codex app or CLI on this Mac</td></tr>
+      <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with ChatGPT</td><td>The ChatGPT app on this Mac</td></tr>
       <tr><td><b>Assign to Agent</b> with your personal agent</td><td>Orbital and Tana added to your agent (your OpenAI Dot, or any agent that speaks MCP) as custom MCP servers, and the agent linked once (<a href="#link-agent">below</a>)</td></tr>
     </table>
     <div class="tip">The moment you sign in or save a key, Orbital gives every type that has no icon one that fits its name, and does the same for their fields. You see the new glyphs on bullets and chips. An icon you chose yourself, or <b>No icon</b>, is never touched.</div>
@@ -227,19 +227,19 @@
   </section>
 
   <section class="topic">
-    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents set default agent tana codex claude coming soon dot install">Choose your agents</h2>
-    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows two of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> runs on this Mac, through the Codex app or CLI, with its own sign-in. <b>Claude</b> is listed as <b>Coming soon</b>.</p>
+    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents set default agent tana codex claude coming soon dot install chatgpt">Choose your agents</h2>
+    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows two of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>ChatGPT</b> runs on this Mac, through the ChatGPT app, with its own sign-in. <b>Claude</b> is listed as <b>Coming soon</b>.</p>
     <div class="split">
       <div>
         <p>Run <b>Choose agents …</b> to see them in one list. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat. An agent you linked is in the same list under its own name, and its last row is <b>Connect your personal agent …</b>.</p>
       </div>
-      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, Codex on, Claude coming soon, then Connect your personal agent"><figcaption>Which agents are on, and the way to link your own.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, ChatGPT on, Claude coming soon, then Connect your personal agent"><figcaption>Which agents are on, and the way to link your own.</figcaption></figure>
     </div>
     <div class="split flip">
       <div>
         <p><b>Set default agent …</b> in <kbd>⌘K</kbd>, its hint the current one, lists the agents that are on: <kbd>↩</kbd> makes one the agent <b>Assign to Agent</b> starts on. Tana is the default until you choose another, and a Dot becomes it the moment you link it. Both choices follow you to your other Macs.</p>
       </div>
-      <figure class="shot"><img data-m="ai-default" alt="Set default agent: Tana and Codex, the agents that are on, Tana ticked as the default"><figcaption><b>Set default agent …</b>: <kbd>↩</kbd> makes one the default.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-default" alt="Set default agent: Tana and ChatGPT, the agents that are on, Tana ticked as the default"><figcaption><b>Set default agent …</b>: <kbd>↩</kbd> makes one the default.</figcaption></figure>
     </div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>choose agents</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
@@ -251,7 +251,7 @@
       <div>
         <p>Run <b>Connect your personal agent …</b> (under Settings, and last in <b>Choose agents …</b>). It asks first which agent: <b>Your OpenAI Dot</b>, in ChatGPT, or <b>Another agent</b>. The next page has only that agent's steps, then the code.</p>
         <p><b>Your OpenAI Dot.</b> <b>Open ChatGPT plugins</b> opens chatgpt.com/plugins, where <b>Add</b> then <b>Create custom MCP server</b> takes a name and a URL. Add both servers the page names, <b>Orbital</b> and <b>Tana</b>: <kbd>↩</kbd> on either copies its URL. Orbital's is your workspace's own MCP server when an admin set one in Tana. When your workspace has its own Orbital plugin in ChatGPT, there is nothing to add by hand: the page goes straight to linking, and the instructions ask your Dot to add the plugin first.</p>
-        <p><b>Then ask your agent to link.</b> <b>Copy the instructions</b> copies a few lines with a code that works once, for fifteen minutes; paste them in your agent's chat. <b>Copy the code</b> copies only the code, for a setup that asks for it. The instructions ask your agent to link under its own name and to subscribe to Orbital's events. While the page says <b>Waiting for your agent to use the code…</b> with the time left, your agent does both, and the palette closes on a note naming it, like <b>Linked Echo · ChatGPT</b>. It is your default agent from then on, and has a chat of its own under <b>Agent chats</b>, which goes through the Orbital MCP server (<a href="chats.html#agent-chats">Chat with Codex</a>).</p>
+        <p><b>Then ask your agent to link.</b> <b>Copy the instructions</b> copies a few lines with a code that works once, for fifteen minutes; paste them in your agent's chat. <b>Copy the code</b> copies only the code, for a setup that asks for it. The instructions ask your agent to link under its own name and to subscribe to Orbital's events. While the page says <b>Waiting for your agent to use the code…</b> with the time left, your agent does both, and the palette closes on a note naming it, like <b>Linked Echo · ChatGPT</b>. It is your default agent from then on, and has a chat of its own under <b>Agent chats</b>, which goes through the Orbital MCP server (<a href="chats.html#agent-chats">Chat with ChatGPT</a>).</p>
         <p>You can close the page and paste the instructions later: the code keeps working until it runs out, and opening the page again goes straight back to that same code. <b>Cancel</b> stops it at once.</p>
       </div>
       <figure class="shot"><img data-m="ai-relay-link" alt="Connect your personal agent for your OpenAI Dot: Open ChatGPT plugins, the Orbital and Tana servers to add, Copy the instructions, Copy the code, and the page waiting for your agent to use the code"><figcaption>Your Dot: the two servers to add in ChatGPT, then the instructions with their code.</figcaption></figure>
@@ -282,11 +282,11 @@
   </section>
 
   <section class="topic">
-    <h2 id="agent" data-short="Assign to Agent" data-k="agent assign unassign prompt robot tana codex dot">Hand a node to an agent</h2>
+    <h2 id="agent" data-short="Assign to Agent" data-k="agent assign unassign prompt robot tana codex dot chatgpt">Hand a node to an agent</h2>
     <p><b>Assign to Agent</b> gives the node you are on to a new task, with the node as its context. You only say what to do with it. Its hint says which agent it goes to. On a node an agent already has, it says it replaces what that agent was asked: assigning again sends your new request in place of the old one.</p>
     <h3>Assign to Agent</h3>
     <p>Run <b>Assign to Agent</b>. The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. With more than one agent on, they are listed under the prompt, the default ticked; <kbd>⇥</kbd> moves between the prompt and that list. The agent's own default model does the work.</p>
-    <p>Each agent that is on also has a row of its own, like <b>Assign to Codex …</b> or <b>Assign to Echo …</b>, its hint <b>Default</b> on the default: it opens the same prompt with that agent already chosen, so no list under it.</p>
+    <p>Each agent that is on also has a row of its own, like <b>Assign to ChatGPT …</b> or <b>Assign to Echo …</b>, its hint <b>Default</b> on the default: it opens the same prompt with that agent already chosen, so no list under it.</p>
     <figure class="anno">
       <img data-m="ai-prompt" alt="The Assign to Agent page: a prompt, the send row, and the agents to choose from">
       <span class="pin" style="--x:3%;--y:9%">1</span>
@@ -300,7 +300,7 @@
     </ol>
     <figure class="clip wide"><video data-m="ai-assign"></video><figcaption>Assigned: the badge appears beside the title, grey while the task starts, then blue as it works.</figcaption></figure>
     <p>The node now carries the agent badge. Under <b>Group by Responsibility</b> it belongs in the <b>Agent</b> section, but it stays where it is until you press <b>Clean up</b>, so nothing jumps under your pointer. Dropping a task into the Agent section opens the same prompt.</p>
-    <p><b>Unassign from Agent</b> takes the node back at once, and removes what the agent left at the end of the node: the agent's context and its status line. The task itself stays where it ran: a Tana chat, a Codex task, your Dot's chat.</p>
+    <p><b>Unassign from Agent</b> takes the node back at once, and removes what the agent left at the end of the node: the agent's context and its status line. The task itself stays where it ran: a Tana chat, a ChatGPT task, your Dot's chat.</p>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>assign to agent</b> <i>→</i><kbd>↩</kbd></span>, write a line, then <kbd>⌘↩</kbd>.</div>
   </section>
 
@@ -326,54 +326,54 @@
       <li><b>A completed task</b> The badge drops to a grey outline: a record that there was a task.</li>
     </ol>
     <p>A node handed to your Dot follows its own last line, <b>Agent status: …</b>. Orbital writes <b>Agent status: Assigned</b> as it sends the event, and the badge stays grey until your Dot picks the task up and changes the line to <b>Working</b>, so blue means it really started; then <b>Completed</b> turns it green, or <b>Failed</b> red. Whatever your Dot writes goes above that line, which stays the node's last. It is ordinary text, so anyone who opens the node in Tana sees it too, and the task's own status stays yours: <b>Agent completed</b> means your turn to look, not done.</p>
-    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, a Codex task in Codex. Your Dot's badge only shows how it is going: its work is in the node itself. On the Timeline, a task row carries the badge right after its title.</p>
+    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, a ChatGPT task in the ChatGPT app. Your Dot's badge only shows how it is going: its work is in the node itself. On the Timeline, a task row carries the badge right after its title.</p>
   </section>
 
   <section class="topic">
-    <h2 id="codex" data-short="Agent tasks" data-k="go to task link task open in codex tana">Go to a task, link one, or start a fresh one</h2>
+    <h2 id="codex" data-short="Agent tasks" data-k="go to task link task open in codex tana chatgpt">Go to a task, link one, or start a fresh one</h2>
     <div class="split">
       <div>
-        <p>Every agent that is on brings the rows it can do. Codex brings all three; Tana, whose tasks are chats here, brings only <b>Go to Tana task</b>; your Dot, whose work is in the node, brings none. Type <b>codex</b> in <kbd>⌘K</kbd> to see Codex's:</p>
+        <p>Every agent that is on brings the rows it can do. ChatGPT brings all three; Tana, whose tasks are chats here, brings only <b>Go to Tana task</b>; your Dot, whose work is in the node, brings none. Type <b>chatgpt</b> in <kbd>⌘K</kbd> to see ChatGPT's:</p>
         <ul>
-          <li><b>Go to Codex task</b> opens the task this node is assigned to. <b>Go to Tana task</b> opens the chat here.</li>
-          <li><b>Link Codex task …</b> links a task that already exists.</li>
-          <li><b>Open in Codex</b> starts a new Codex task with this node's link and tracks nothing: no badge, no state.</li>
+          <li><b>Go to ChatGPT task</b> opens the task this node is assigned to. <b>Go to Tana task</b> opens the chat here.</li>
+          <li><b>Link ChatGPT task …</b> links a task that already exists.</li>
+          <li><b>Open in ChatGPT</b> starts a new ChatGPT task with this node's link and tracks nothing: no badge, no state.</li>
         </ul>
       </div>
-      <figure class="shot"><img data-m="ai-codex-rows" alt="Cmd+K filtered by codex: Open in Codex, Go to Codex task, Link Codex task, Assign to Codex"><figcaption>The Codex rows, on an assigned node.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-codex-rows" alt="Cmd+K filtered by chatgpt: Open in ChatGPT, Go to ChatGPT task, Link ChatGPT task, Assign to ChatGPT, then Sign in with ChatGPT and New chat with ChatGPT"><figcaption>The ChatGPT rows, on an assigned node.</figcaption></figure>
     </div>
     <div class="split flip">
       <div>
-        <h3>Link Codex task …</h3>
-        <p>In Codex, use Copy link on the task, then paste the <code>codex://threads/…</code> link (or the bare id) here. <b>Link to this Codex task</b> links it, and the badge follows that task from then on.</p>
+        <h3>Link ChatGPT task …</h3>
+        <p>In the ChatGPT app, use Copy link on the task, then paste the <code>codex://threads/…</code> link (or the bare id) here. <b>Link to this ChatGPT task</b> links it, and the badge follows that task from then on.</p>
       </div>
-      <figure class="shot"><img data-m="ai-link" alt="Link Codex task page with a pasted codex link"><figcaption>A pasted link, ready to link.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-link" alt="Link ChatGPT task page with a pasted codex link"><figcaption>A pasted link, ready to link.</figcaption></figure>
     </div>
   </section>
 
   <section class="topic">
-    <h2 id="chat" data-short="@Codex in a chat" data-k="codex chat mention local only you add to message open codex task delete">Ask @Codex in a chat, privately</h2>
-    <p>In a Tana chat, type <b>@</b> in the message box and pick <b>Codex</b> (after Tana, hinted “Ask Codex · the answer stays on this device”). Your question goes to a task on this Mac with the whole conversation as context. Nothing of it reaches Tana, so nobody else in the chat sees it.</p>
+    <h2 id="chat" data-short="@ChatGPT in a chat" data-k="codex chat mention local only you add to message open codex task delete chatgpt">Ask @ChatGPT in a chat, privately</h2>
+    <p>In a Tana chat, type <b>@</b> in the message box and pick <b>ChatGPT</b> (after Tana, hinted “Ask ChatGPT · the answer stays on this device”). Your question goes to a task on this Mac with the whole conversation as context. Nothing of it reaches Tana, so nobody else in the chat sees it.</p>
     <div class="mg ai-local" aria-hidden="true">
       <div class="win ai-local-chat">
-        <div class="ai-q"><b>@Codex</b> what did we decide?</div>
-        <div class="ai-a"><span><b style="color:var(--text)">Codex</b> · <u>Add to message</u></span><span class="bar" style="--w:200px"></span><span class="bar" style="--w:140px"></span></div>
+        <div class="ai-q"><b>@ChatGPT</b> what did we decide?</div>
+        <div class="ai-a"><span><b style="color:var(--text)">ChatGPT</b> · <u>Add to message</u></span><span class="bar" style="--w:200px"></span><span class="bar" style="--w:140px"></span></div>
       </div>
       <div class="ai-local-paths"><span class="ai-p-mac"><i class="arrow"></i></span><span class="ai-p-tana"><i class="arrow"></i></span></div>
       <div class="ai-local-dests">
-        <div class="win ai-dest ai-mac"><span class="lbl">This Mac</span>A Codex task. Only you see it.</div>
+        <div class="win ai-dest ai-mac"><span class="lbl">This Mac</span>A ChatGPT task. Only you see it.</div>
         <div class="win ai-dest ai-tana"><span class="lbl">Tana</span>Only what you send yourself.</div>
       </div>
     </div>
-    <p>The question shows on your side in a grey bubble, with a crossed cloud in its corner: only visible to you, on this device. Dots show while Codex works, then its answer appears on the other side in grey text under <b>Codex</b>.</p>
-    <figure class="clip wide"><video data-m="ai-chat-codex"></video><figcaption>Pick <b>Codex</b> from the @ list, ask, and the answer arrives just for you.</figcaption></figure>
+    <p>The question shows on your side in a grey bubble, with a crossed cloud in its corner: only visible to you, on this device. Dots show while ChatGPT works, then its answer appears on the other side in grey text under <b>ChatGPT</b>.</p>
+    <figure class="clip wide"><video data-m="ai-chat-codex"></video><figcaption>Pick <b>ChatGPT</b> from the @ list, ask, and the answer arrives just for you.</figcaption></figure>
     <ul>
-      <li><b>Add to message</b> on the answer's name line, <kbd>↩</kbd> on a selected answer, or <kbd>⌘K</kbd> <b>Add Codex’s answer to message</b> puts the answer in the message box. Sent from there, it is your message: the only way it reaches Tana.</li>
-      <li>Click the <b>Codex</b> line over an answer, or run <b>Open Codex task</b>, to open the task in Codex.</li>
-      <li>Select the question or answer (<kbd>↑</kbd> from the start of the message box) and press <kbd>⇧⌘⌫</kbd>, or run <b>Delete message</b>, to forget both from this Mac. The task stays in Codex.</li>
+      <li><b>Add to message</b> on the answer's name line, <kbd>↩</kbd> on a selected answer, or <kbd>⌘K</kbd> <b>Add ChatGPT’s answer to message</b> puts the answer in the message box. Sent from there, it is your message: the only way it reaches Tana.</li>
+      <li>Click the <b>ChatGPT</b> line over an answer, or run <b>Open ChatGPT task</b>, to open the task in the ChatGPT app.</li>
+      <li>Select the question or answer (<kbd>↑</kbd> from the start of the message box) and press <kbd>⇧⌘⌫</kbd>, or run <b>Delete message</b>, to forget both from this Mac. The task stays in the ChatGPT app.</li>
       <li>Questions and answers are kept on this Mac, so they are still there after a restart. Your other Macs do not see them.</li>
     </ul>
-    <div class="note">Tana has no author for an agent's words. A message written there would read as yours or as Tana AI's to everyone in the chat. So Codex answers only you, and is told never to write to Tana.</div>
+    <div class="note">Tana has no author for an agent's words. A message written there would read as yours or as Tana AI's to everyone in the chat. So ChatGPT answers only you, and is told never to write to Tana.</div>
   </section>
 
   <section class="topic">
@@ -388,7 +388,7 @@
       <tr><td>Assign to Agent: to the list of agents, and back</td><td><kbd>⇥</kbd></td></tr>
       <tr><td>Assign to Agent: cancel, writing nothing</td><td><kbd>esc</kbd></td></tr>
       <tr><td>In a chat: select the newest message from the message box</td><td><kbd>↑</kbd></td></tr>
-      <tr><td>In a chat: delete the selected message, or a Codex question and its answer</td><td><kbd>⇧⌘⌫</kbd></td></tr>
+      <tr><td>In a chat: delete the selected message, or a ChatGPT question and its answer</td><td><kbd>⇧⌘⌫</kbd></td></tr>
     </table>
   </section>
 </main>

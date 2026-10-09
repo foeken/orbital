@@ -106,7 +106,7 @@ function chatgptRow(c) {
   if (c.installing) return at(null, 'Getting ChatGPT sign-in ready…');
   if (c.loggingIn) return at([button('copyCode', 'Copy Code', () => navigator.clipboard.writeText(c.userCode)), button('cancelLogin', 'Cancel', () => load('chatgpt', host.chatgptCancel))], 'Enter ' + c.userCode + ' in your browser');
   if (c.signedIn) return at(button('chatgpt', 'Sign Out', () => load('chatgpt', host.chatgptLogout)), (c.email ? demoText(c.email, 'chatgpt') : 'Signed in') + ' · ' + HERE);
-  if (c.available === false) return at(null, c.error || 'Codex CLI unavailable', true);
+  if (c.available === false) return at(null, c.error || 'Install the ChatGPT app to sign in', true);
   return at(button('chatgpt', 'Sign In…', () => load('chatgpt', async () => {
     const r = await host.chatgptLogin(); // opens the browser; the code to enter there shows on this row
     return r.userCode ? { ...st.chatgpt, available: true, signedIn: false, loggingIn: true, userCode: r.userCode, error: null } : r;

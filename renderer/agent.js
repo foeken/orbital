@@ -43,7 +43,7 @@ function chatgptRows(q) {
     { group: 'Actions', icon: 'chatgpt', label: 'Sign out of ChatGPT', run: () => run(async () => { chatgptAuth = await tana.chatgptLogout(); renderPalette(); }) },
   ];
   else rows = [
-    { group: 'ChatGPT', icon: 'chatgpt', label: chatgptAuth.available === false ? 'Sign-in unavailable' : 'Not signed in', hint: chatgptAuth.available === false ? (chatgptAuth.error || 'Codex CLI unavailable') : (chatgptAuth.apiKey ? 'Preferred over API key' : ''), disabled: true },
+    { group: 'ChatGPT', icon: 'chatgpt', label: chatgptAuth.available === false ? 'Sign-in unavailable' : 'Not signed in', hint: chatgptAuth.available === false ? (chatgptAuth.error || 'Install the ChatGPT app to sign in') : (chatgptAuth.apiKey ? 'Preferred over API key' : ''), disabled: true },
     { group: 'Actions', icon: 'chatgpt', label: 'Sign in with ChatGPT', run: startChatGPTLogin },
   ];
   return matchRows(rows, q);
