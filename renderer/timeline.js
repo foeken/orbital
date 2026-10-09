@@ -20,7 +20,7 @@ function timelineUriAt() {
   return (key && items.get(key)?.node.timeline?.uri) || null;
 }
 function timelineViewRow() {
-  return { id: 'timeline', group: 'Views', icon: 'timeline', label: 'Timeline', run: () => goTo(TIMELINE_PAGE) };
+  return { id: 'timeline', group: 'Views', icon: 'timeline', label: 'Timeline', opens: TIMELINE_PAGE, run: () => goTo(TIMELINE_PAGE) };
 }
 // The Work View: the Timeline in page '' beside My Tasks in page '2', the saved view installed first (renderer/palette.js
 // savedViews) and the one a first launch opens (renderer/edit.js). Its layout is main's own ('workView': main.js pair),

@@ -570,7 +570,7 @@ assert.match(source, /if \(viewFiltered\(\)\) \{/);
 assert.match(source, /if \(!zoom \|\| onSearchPage\(\) \|\| onTypePage\(\)\) rows\.push\(\{ id: 'filter'/, 'a saved search page and a type page offer the filter row, so ⌘F reaches them');
 // A key recorded for a row that is listed but off (Clean up with nothing held, Go back with no history) is answered
 // by doing nothing, rather than falling through to whatever else the combo might mean: one command, one meaning.
-assert.match(source, /if \(row\) \{ if \(!row\.disabled\) row\.run\(\); return true; \}/, 'a hotkey for a disabled row is a no-op the app still owns');
+assert.match(source, /if \(row\) \{ if \(row\.disabled\) return true;/, 'a hotkey for a disabled row is a no-op the app still owns');
 // and the palette's own arrows land on such a row, which is the only way Cmd+Shift+K can record a shortcut for it
 assert.match(source, /if \(!rows\[next\]\.disabled \|\| rows\[next\]\.id\) return next;/, 'Up/Down reach a disabled row that has a stable id, so it can be given a key before it goes live');
 // (shown and hidden through showHide, which opens and closes it in place: renderer/motion.js)
