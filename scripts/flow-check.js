@@ -426,6 +426,24 @@ flow('Copy link on a meeting offers the meeting, your notes and its summary, and
   assert.deepEqual(await links(), [['Copy link to summary (No summary yet)', '\u2318C Copy link to meeting'], await link('tana:event:mockmeeting1')], 'two days ago, nothing written: no notes row, \u2318C copies the meeting');
   assert.equal(await p.js('__notes.made'), 0, 'asking made no notes');
 });
+// 8c. Export to PDF on a meeting's page exports what the page shows, its summary or your notes, as ⌘C copies it; a
+// meeting with neither on screen has nothing to export
+flow('Export to PDF on a meeting exports the summary or the notes on screen', async (p) => {
+  await p.start({ real: true });
+  await p.js('window.__exported = []; tana.exportPdf = async (id) => { __exported.push(id); }; 1'); // the mock has no Save dialog
+  const exportRow = async (id, ready) => {
+    await p.js('goTo(' + J(id) + ')'); await at(p, id); await settle(p, 300); await p.waitFor(ready, 'the page of ' + id);
+    await p.key('\u2318K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type('export to pdf'); await settle(p, 200);
+    const row = await p.js('(palRows.find((r) => r.id === "exportPdf") || {}).hint || (palRows.some((r) => r.id === "exportPdf") ? "row" : null)');
+    if (row) { await p.js('palRows.find((r) => r.id === "exportPdf").run()'); await p.waitFor('__exported.length', 'the export'); }
+    await closePalette(p);
+    return [row, await p.js('__exported.splice(0)')];
+  };
+  assert.deepEqual(await exportRow('tana:event:mockmeeting4', 'summaryShown(zoom.docId) && __screen().length'), ['The summary', ['tana:text:mockwriteup4']], 'its summary on screen: the summary');
+  assert.deepEqual(await exportRow('tana:event:mockmeeting5', 'meetingNotes.get(zoom.docId)?.id'), ['Your notes', ['tana:text:mocknotes5']], 'its notes on screen: the notes');
+  assert.deepEqual(await exportRow('tana:event:mockmeeting1', 'meetingNotes.has(zoom.docId)'), [null, []], 'nothing written: no row');
+  assert.equal(await p.js('__notes.made'), 0, 'asking made no notes');
+});
 // 9. The Settings window (settings.html): each control makes its call, an answer older than a newer one is dropped
 // (#673 review), the keyboard stays on the control that had it, and demo mode masks your email and hidden titles
 const SETTINGS_API = String.raw`(() => {
