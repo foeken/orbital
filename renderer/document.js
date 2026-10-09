@@ -24,7 +24,7 @@ titleEl.addEventListener('blur', () => titleEl.removeAttribute('tabindex')); // 
 // Rename, on the tab (shell.js) and in Cmd+K: the heading back where a page hides it (a chat), its words selected. Only
 // while it can be typed in: titleEl carries a key then (isContentEditable reads false while it is hidden).
 function renameTitle() {
-  if (zoom && !zoom.nodeId && tana.renameAgentChat && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW) { renameAgentChat(zoom.docId); return true; } // a chat that is a Codex thread: renamed there too
+  if (zoom && !zoom.nodeId && tana.renameAgentChat && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW && !agentChatFixed(zoom.docId)) { renameAgentChat(zoom.docId); return true; } // a chat that is a Codex thread: renamed there too
   if (!titleEl.dataset.key) return false;
   document.documentElement.classList.add('renaming');
   titleEl.focus();

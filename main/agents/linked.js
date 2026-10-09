@@ -37,6 +37,7 @@ agent.addSource(load);
 // a new agent chosen, and the nodes of one the MCP server no longer lists let go (main/agent.js storeLinked), then registered
 function store(list) {
   agent.storeLinked(list, (nodeId) => { documents.dropAgentMark(nodeId); agent.clearTask(nodeId); });
+  require('../agentchats').tellList(); // each linked agent has its chat there (main/agentchats.js dotList): linked or unlinked, the list and the sidebars read it again
   load();
 }
 // an MCP server that does not know your Orbital (another MCP server than the one you linked them on: #814) has no agents of yours

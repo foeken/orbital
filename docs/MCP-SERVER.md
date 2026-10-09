@@ -43,6 +43,17 @@ agent should do: what to do comes with each event, written by Orbital.
 One Orbital has as many agents as you link; each agent's MCP connection is one link. Linking the same connection again
 with a new code moves it.
 
+## Your Dot's chat
+
+Every linked agent has a chat of its own in Orbital's Agent chats (main/agentchats.js `dotList`, docs/CHATS.md §13), there for
+as long as it is linked: it cannot be deleted or renamed, and goes, with what was said in it, when the agent is unlinked.
+What you write goes to the agent as the `chat.message` event `{ chat, message, instructions }` (`chat` is the agent's id, the
+instructions are `CHAT_HOW`); an agent that has not subscribed to it is named, with what to ask it. The agent answers with
+`reply_in_orbital { chat, text }` (Markdown, line breaks kept, 16 KB at most), which the MCP server keeps until Orbital takes
+it: every three seconds while an answer is awaited (fifteen minutes at most), and whenever the chat is read. The
+conversation is kept on the Mac that took it (`dotChats`, not synced). An MCP server older than version 3 has neither the
+event nor the tool, and the chat says so.
+
 ## From a phone
 
 The iPhone and Android apps link and hand over exactly as the Mac does, through the same code run in the phones' engine
@@ -104,11 +115,13 @@ request without a token got a 401. So they need none, and hold nothing private; 
 (`securitySchemes: [{ type: 'oauth2' }]`, mirrored in `_meta`), and calling it or subscribing without a valid token
 answers 401 with the `WWW-Authenticate` challenge, the same challenge in the result's `_meta["mcp/www_authenticate"]`.
 
-**The one tool.** `link_orbital { code, name }`. There is no instructions tool: how to handle an event comes with it.
+**The tools.** `link_orbital { code, name }`, and `reply_in_orbital { chat, text }`: the agent's answer in its chat with your
+Orbital (below). There is no instructions tool: how to handle an event comes with it.
 
 **Orbital's calls.** `POST /orbital/codes` (the only one an unknown key may make: it becomes an Orbital), `POST /orbital/rotate { key }`,
 `GET|DELETE /orbital/codes/<code>`; `GET /orbital/agents`, `PATCH|DELETE /orbital/agents/<id>`,
-`POST /orbital/agents/<id>/events { id, name, data }`. `GET /mcp/health` answers the SHA-256 of the server.js it runs, to
+`POST /orbital/agents/<id>/events { id, name, data }`, `POST /orbital/agents/<id>/replies` (takes the agent's answers waiting
+in its chat, oldest first). `GET /mcp/health` answers the SHA-256 of the server.js it runs, to
 hold a deploy (or a change nobody meant) against this repository, and `manual: { sha256, files }` for the manual orbital.md
 publishes beside it (`RELAY_MANUAL_DIR`, by default `artifacts/orbital/public/manual` next to `lib/agent-MCP server`), or
 `manual: null` where there is none. That SHA-256 is the one `sha256sum` gives over the manual's files, sorted, as
@@ -117,9 +130,11 @@ reads the folder once, as it starts.
 
 ## What it knows, and what it does not
 
-- **Nothing of an event is kept.** It passes each on as it comes: the node's id, your request and the instructions. It
+- **Nothing of an event is kept.** It passes each on as it comes: the node's id, your request or message and the instructions. It
   keeps your Orbital, its agents and their names, their subscriptions (the callback URL and the signing secret ChatGPT
   gave, which signing needs), codes and tokens. The node's own words stay in Tana, between Tana and the Dot's own access.
+- **An agent's answer in its chat is kept until your Orbital takes it** (`replies`): a week at most, a hundred at most per
+  agent, and gone with the agent when it is unlinked. Taking it deletes it, so it is never kept beside what your Orbital has.
 - **Keys and tokens only as hashes**: your Orbital's key, access and refresh tokens, authorization codes.
   scripts/mcp-server-check.js searches every table for them. The one secret kept as given is each subscription's signing
   secret (the `whsec_` ChatGPT sends), since the MCP server signs every event with it: whoever reads the database could sign

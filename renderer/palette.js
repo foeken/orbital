@@ -278,7 +278,7 @@ function paletteRows(q, typed = q) {
   // On a saved search's page it is the search's, wherever the caret is: its rows are other documents (a goal, a task),
   // which have no icon of their own to set, and the search is what the page is (#551).
   // A document takes one for itself, worn instead of its type's; a task keeps its box.
-  const iconDoc = !tana.searchIcons || !tana.setTypeIcon ? null : palDoc && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc) || (DOC_KIND.test(palDoc.id) && isRealId(palDoc.id) && !isTask(palDoc)) || (tana.agentChats && isAgentChat(palDoc.id) && palDoc.id !== AGENT_CHAT_NEW)) ? palDoc : onSearchPage() ? docOf(zoom.docId) || extra.get(zoom.docId) || { id: zoom.docId, text: titleEl.textContent } : null;
+  const iconDoc = !tana.searchIcons || !tana.setTypeIcon ? null : palDoc && (TYPE_NODE.test(palDoc.id) || isSearchDoc(palDoc) || (DOC_KIND.test(palDoc.id) && isRealId(palDoc.id) && !isTask(palDoc)) || (tana.agentChats && isAgentChat(palDoc.id) && palDoc.id !== AGENT_CHAT_NEW && !agentChatFixed(palDoc.id))) ? palDoc : onSearchPage() ? docOf(zoom.docId) || extra.get(zoom.docId) || { id: zoom.docId, text: titleEl.textContent } : null;
   if (iconDoc) {
     const doc = iconDoc;
     rows.push({ id: 'setIcon', group: doc === palDoc ? docGroup : 'Current page', icon: iconOf(doc), label: 'Set icon',
