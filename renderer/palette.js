@@ -158,9 +158,12 @@ function paletteRows(q, typed = q) {
   if (tana.translate && tana.setText && tana.setTitle && !demoMode) { const list = translateTargets(), to = translateTo() || 'English'; if (list.length) rows.push({ id: 'translateNodes', group: selKeys().length ? 'Selection' : docGroup, icon: 'language', label: 'Translate' + (list.length > 1 ? ' ' + list.length + ' nodes' : '') + ' into ' + to, hint: 'Writes the translation', run: () => translateNodes(list, to) }); }
   // its title shown translated (renderer/translate.js), written as the title for good, where it may be edited
   if (palDoc && tana.setTitle && !demoMode && canEditNode(palDoc)) { const doc = palDoc, found = titleTranslation(doc); if (found) rows.push({ id: 'replaceTranslation', group: docGroup, icon: 'language', label: 'Replace with translation', hint: 'From ' + found.lang, run: () => replaceWithTranslation(doc, found) }); }
-  if (palDoc && tana.exportPdf && DOC_KIND.test(palDoc.id)) {
-    const doc = palDoc;
-    rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
+  if (palDoc && tana.exportPdf) {
+    // on a meeting's page, what the page shows: its summary or your notes (renderer/meetingnotes.js), as ⌘C copies
+    const onMeeting = zoom && zoom.docId === palDoc.id && (/^tana:event:/.test(palDoc.id) || palDoc.icon === 'meeting');
+    const summaryOn = onMeeting ? summaryShown(palDoc.id) : null;
+    const pdfId = DOC_KIND.test(palDoc.id) ? palDoc.id : onMeeting ? summaryOn || (meetingNotes.get(palDoc.id) || {}).id : null;
+    if (pdfId) rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', hint: pdfId === palDoc.id ? undefined : summaryOn ? 'The summary' : 'Your notes', run: () => { flushAll(); run(() => tana.exportPdf(pdfId)); } });
   }
   // Pin to today and to tomorrow, on every real node so a recorded key works wherever it is pressed (#273). The label
   // follows pinInfo when ⌘K has read it for this node; the press reads the pins again (toggleDatePin, renderer/

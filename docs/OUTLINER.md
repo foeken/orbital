@@ -1494,7 +1494,9 @@ main/presence.js keeps one counted room per document over sdk/presence.js). List
 
 ### Export to PDF
 
-⌘K **Export to PDF** (`exportPdf`) on the current text document, read-only ones included. Pending edits are flushed
+⌘K **Export to PDF** (`exportPdf`) on the current text document, read-only ones included; on a meeting's page, the
+document the page shows, as ⌘C copies it: the write-up while Summary is on screen (`summaryShown`), else your notes
+once they exist (`meetingNotes`), hinted "The summary" or "Your notes", and no row with neither. Pending edits are flushed
 first; the native Save dialog defaults to the title, and cancelling writes nothing. It reads the whole main outline,
 collapsed children included, without expanding references or including app controls, the sidebar or typed fields,
 and prints a separate sandboxed page as A4 with fixed light typography, lists, headings, inline marks, images and
