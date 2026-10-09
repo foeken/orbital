@@ -2743,6 +2743,7 @@ async function runNoteInPageCheck() {
       createDocument: (title, opts) => { calls.push(['createDocument', title, opts]); return new Promise((resolve, reject) => pending.push({ resolve, reject })); },
       splitWindow: async (where, start) => { calls.push(['splitWindow', where, JSON.parse(start.place), start.view]); return pageAnswer; },
     };
+    ${sourceLine('const DEMO_NOTE')}
     ${sourceLine('let openingNote')}
     ${functionSource('openNoteIn')}
     const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -2765,7 +2766,7 @@ async function runNoteInPageCheck() {
   assert.equal(api.calls().filter((c) => c[0] === 'createDocument').length, 6, 'and the next press is a fresh try');
   await api.land({ id: 'tana:text:n6', title: 'New Note', icon: 'doc' });
   api.demo(); api.open('right'); await api.tick(); await api.tick();
-  assert.deepEqual(plain(api.calls().slice(-1)), [['splitWindow', 'right', {}, 'library']], 'demo mode saves nothing: the page opens on the Library, as it did');
+  assert.deepEqual(plain(api.calls().slice(-1)), [['splitWindow', 'right', { docId: 'orbital:new-note', nodeId: null, title: 'New Note', icon: 'doc' }, 'library']], 'demo mode saves nothing: the page opens on a New Note of the app\u2019s own');
   assert.equal(api.calls().filter((c) => c[0] === 'createDocument').length, 6, 'and no note is asked for');
   console.log('ok  New tab, New pane and New floating pane each open on a new note of their own, one per press');
 }
@@ -8182,7 +8183,7 @@ checks.push(function runSearchDraftTaskCheck() {
 // choice's options and opens it, once however often Enter is pressed.
 checks.push(async function runNamePageCheck() {
   const api = vm.runInNewContext(`
-    let page = null, opened = [], closed = 0; const made = [], extra = new Map(), whens = [];
+    let page = null, opened = [], closed = 0; const made = [], extra = new Map(), kids = new Map(), whens = [];
     const openPage = (mode, placeholder, p, value) => { page = { mode, placeholder, value, ...p }; }, openCreationPalette = () => {};
     const meetingWhen = (item, choice, title) => whens.push([item, choice.kind, title]); // renderer/toolbar.js, "/" Meeting's When page
     const closePalette = () => { closed++; }, openDoc = (id) => opened.push(id), addSearch = () => {};
