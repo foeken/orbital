@@ -33,7 +33,7 @@ module.exports = [
     steps: [{ key: '⌘S' }, { wait: 300 }, { type: '#chat' }, { wait: 1300 }, { key: 'esc' }, { wait: 300 }, { key: '⌘K' }, { wait: 300 }, { type: 'mcp' }, { wait: 800 }, { key: '↩' }, { wait: 500 }, { key: '⌘S' }, { wait: 300 }, { type: '#chat' }, { wait: 1200 }] },
   { name: 'chats-codex', video: true, hold: 1800, setup: [open(C), { wait: 1500 }], clip: [190, 250, 900, 550],
     steps: [{ click: '#composerText' }, { type: '@' }, { wait: 700 }, { key: '↓' }, { wait: 400 }, { key: '↩' }, { type: ' what changed since the first draft?', delay: 40 }, { wait: 300 }, { key: '↩' }, { wait: 5200 }] },
-  { name: 'chats-agent', size: '1280x800', setup: [open(A), { wait: 1500 }] },
+  { name: 'chats-agent', size: '1280x800', setup: [open(A), { wait: 1500 }, { js: 'outline.parentElement.scrollTop = 0' }, { wait: 300 }] },
   { name: 'chats-agent-list', setup: [open('orbital:agent-chats'), { wait: 1200 }], clip: [0, 0, 1280, 360] },
   // the chapter, drawn whole
   { name: 'chats-page-check', url: 'manual/chats.html', full: true, size: '1440x900' },

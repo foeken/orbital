@@ -381,6 +381,12 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
   open it there. Nothing of a chat is written to Tana.
 - **The Codex app.** The thread is listed there too. While the app has it open it is the thread's writer, so a message
   sent here is queued to it (`codex queue`) and answered in the app; the page says so, and the next read shows it.
+- **On the page**: the line at its top, where a Tana chat says who sees it, has a lock, “Only you · not shared with Tana”,
+  and the model and reasoning effort the thread runs with (`agentChat:info`, `thread/read`, named by main/prompts.js). The
+  composer says “Message Codex · @ links · Not shared with Tana”. **Rename chat …** (⌘K, Rename on the tab's right-click
+  menu, or a double-click on the title) keeps the new name with the link and gives it to the thread (`thread/name/set`), so
+  the Codex app lists it by that name too. **Set icon** works as on a document: the choice is kept in `typeIcons` under the
+  chat's id and worn on its tab, the list and the sidebar.
 - **⌘K on a chat**: Stop Codex (while it answers: the turn let go), Open in Codex (`codex://threads/<id>`), Delete chat
   (forgets the link; the thread stays in Codex). **Agent chats** (⌘K Views) is the list, `orbital:agent-chats`, and the
   newest first; the window's sidebar shows the newest eight in a section of that name (docs/OUTLINER.md §19).

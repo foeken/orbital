@@ -192,6 +192,7 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
 // Who can see a chat and, for a meeting's chat, which meeting it is about: one quiet line at the top right (#543). The
 // meeting's attendees stay on the meeting's page: drawn here, as they were, they read as the chat's audience.
 function chatContextEl(parent) {
+  if (tana.agentChats && isAgentChat(parent.docId)) return agentChatContextEl(parent.docId); // a chat with Codex: private, and its model (renderer/agentchats.js)
   const node = parent.node;
   if (sensitiveHidden(node.id)) return null; // a sensitive chat says nothing about who
   const summary = documentSummary(node), meeting = tana.meetingInfo ? meetingOf(node) : null, el = document.createElement('div');
@@ -374,7 +375,7 @@ function showMode() {
   const docId = composer.dataset.doc, ai = chatAi.get(docId), readOnly = chatReadOnly.has(docId);
   composer.classList.toggle('readonly', readOnly);
   composerText.contentEditable = readOnly ? 'false' : 'plaintext-only';
-  composerText.dataset.placeholder = isAgentChat(docId) ? 'Message Codex · @ links' : readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
+  composerText.dataset.placeholder = isAgentChat(docId) ? 'Message Codex · @ links · Not shared with Tana' : readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
 }
 // A skill is for Tana to run, so while one is attached the message goes To Tana and the mode stays put
 function switchMode(docId, ai = !chatAi.get(docId)) { if (chatSkill && !ai) return; chatAi.set(docId, ai); showMode(); }

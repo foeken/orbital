@@ -749,6 +749,8 @@ function mockApi() {
     sendAgentChat: async (id, text) => { codexAnswers(id, text); return { queued: false }; },
     stopAgentChat: async (id) => { content[id] = (content[id] || []).filter((m) => !(m.chat && m.chat.streaming)); emitAgent(id); },
     openAgentChat: async () => true,
+    agentChatInfo: async () => ({ model: 'GPT-6', effort: 'High' }),
+    renameAgentChat: async (id, name) => { const row = content[AGENT_LIST].find((r) => r.id === id); if (row) { row.text = row.title = name.trim(); emitAgent(AGENT_LIST); } return structuredClone(row); },
     deleteAgentChat: async (id) => { content[AGENT_LIST] = content[AGENT_LIST].filter((r) => r.id !== id); emitAgent(AGENT_LIST); return structuredClone(content[AGENT_LIST]); },
     onAgentChatChanged: (cb) => agentChanged.push(cb),
     askAgent: async (docId, agent, text) => { const id = 'mockask' + (++seq); (agentAsks[docId] ||= []).push({ id, question: text, at: Date.now() }); return { id }; },

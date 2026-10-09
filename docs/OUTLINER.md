@@ -1623,7 +1623,7 @@ rows are grey glyphs and words, and each acts in the page the Graph pane would f
 take the keys.
 
 - **Search** (with the page's ⌘S, which the page tells the shell on every layout message, `{ orbital: 'keys' }`),
-  **Home** (Cmd+K Go to Home) and **Today** (Cmd+K Today) run those rows there.
+  **Home** (Cmd+K Go to Home), **Timeline** (Cmd+K Timeline, marked while the Timeline is on screen) and **Today** (Cmd+K Today) run those rows there.
 - Then **your sidebar pins as Tana keeps them** (docs/PINNING.md §1): the pins at the top level under **Pinned**, then
   each section with its pins, in Tana's order; a click opens the pin in that page (`goto`), and the pin of the page on
   screen is marked. A right-click on a pin shows the Mac's own menu with **Remove pin**, which unpins it from the sidebar

@@ -1389,7 +1389,8 @@ flow('Agent chats: a new chat with Codex, its answer, the list, and Delete chat'
   await p.start();
   await command(p, 'new chat with codex', 'New chat with Codex');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:new" && !composer.hidden', 'a new chat with its composer');
-  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Codex · @ links', 'the composer says who it goes to');
+  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Codex · @ links · Not shared with Tana', 'the composer says who it goes to, and that Tana gets none of it');
+  assert.match(await p.js('document.querySelector(".chat-context")?.textContent || ""'), /^Only you · not shared with Tana/, 'the line over the chat says it is private, and Tana does not see it');
   assert.match(await p.js('outline.textContent'), /kept in Codex/, 'and the empty chat says where it is kept');
   await p.js('composerText.focus(); 1');
   await p.type('Summarise my week'); await p.key('↩');
@@ -1398,6 +1399,16 @@ flow('Agent chats: a new chat with Codex, its answer, the list, and Delete chat'
   await p.waitFor('/Mock answer from Codex to: Summarise my week/.test(outline.textContent)', 'Codex\u2019s answer', 6000);
   assert.deepEqual(await p.js('[...outline.querySelectorAll(".chat-msg")].map((m) => m.className.replace("chat-msg ", "").split(" ")[0])'), ['mine', 'theirs'], 'your message, then Codex\u2019s');
   assert.equal(await p.js('document.getElementById("title").textContent'), 'Summarise my week', 'titled with its first message');
+  await p.waitFor('/not shared with Tana · GPT-6 · High$/.test(document.querySelector(".chat-context")?.textContent || "")', 'the model and reasoning beside it');
+  // Rename chat …: the title, and the list's name for it
+  await command(p, 'rename chat', 'Rename chat …');
+  await p.waitFor('palMode === "renameAgentChat" && palInput.value === "Summarise my week"', 'the rename page with the name as it is');
+  await p.js('palInput.value = ""; palInput.dispatchEvent(new Event("input")); 1'); await p.type('Week summary'); await p.key('↩');
+  await p.waitFor('document.getElementById("title").textContent === "Week summary"', 'the chat renamed');
+  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type('set icon');
+  assert.ok(await p.js('palRows.some((r) => r.id === "setIcon")'), 'Set icon is offered on the chat'); await closePalette(p);
+  await p.js('renameTitle(); 1'); // Rename on the chat\u2019s tab, its right-click menu (shell.js)
+  await p.waitFor('palMode === "renameAgentChat" && palInput.value === "Week summary"', 'the tab\u2019s Rename opens Rename chat'); await closePalette(p);
   await command(p, 'agent chats', 'Agent chats');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 3', 'the list with the new chat');
   assert.equal(await p.js('kids.get("orbital:agent-chats")[0].id'), id, 'newest first');

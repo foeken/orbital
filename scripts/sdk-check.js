@@ -3606,8 +3606,13 @@ async function main() {
     assert.deepEqual(plain(rows[1].children.map((c) => c.text)), ['Thought for 4 seconds', 'Two tasks'], 'its commands are the thought line, and its words the answer');
     assert.deepEqual(plain(rows[3].children.map((c) => c.text)), ['Error: Usage limit'], 'a turn that failed says why');
     assert.deepEqual(plain(await chats.rows(chats.PREFIX + 'new', async () => assert.fail('a new chat reads nothing'))), [], 'a new chat has no messages until its first is sent');
+    // Rename chat …: kept with the link on one line, and Codex told too when it is here (here it is not)
+    const findBin = agent.findBin; agent.findBin = () => null;
+    try { assert.equal((await handler('agentChat:rename')(null, ID, '  Week\n  summary ')).title, 'Week summary', 'a new name is kept with the link, on one line'); }
+    finally { agent.findBin = findBin; }
+    await assert.rejects(handler('agentChat:rename')(null, ID, '   '), /Type a name/, 'and an empty one is refused');
     // A thread lives on the Mac that started it: another Mac lists the chat and says where it is, and sends nothing to it
-    settings.set('agentChats', { [T]: { agent: 'codex', title: 'Draft the notes', at: 2, device: 'another-mac' } });
+    settings.set('agentChats', { [T]: { agent: 'codex', title: 'Week summary', at: 2, device: 'another-mac' } });
     assert.equal(chats.list()[0].meta, 'On another Mac', 'another Mac\'s chat says so on the list');
     assert.match((await chats.rows(ID, async () => assert.fail('nothing is read for it')))[0].text, /on another Mac/, 'and its page says where to open it');
     await assert.rejects(handler('agentChat:send')(null, ID, 'Hi'), /on another Mac/, 'a message to it is refused here');
