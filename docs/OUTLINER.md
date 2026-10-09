@@ -1624,6 +1624,9 @@ take the keys.
 
 - **Search** (with the page's ⌘S, which the page tells the shell on every layout message, `{ orbital: 'keys' }`),
   **Home** (Cmd+K Go to Home), **Timeline** (Cmd+K Timeline, marked while the Timeline is on screen) and **Today** (Cmd+K Today) run those rows there.
+- **⌘-, ⇧- and ⌥-click** on Timeline, Today, a pin or an agent chat open it as a tab in that page's pane, in a pane beside it
+  or floating, as a ⌘-click does in the pages (shell.js `sbWhere`, the page's `goto`/`action` with `where`, renderer/palette.js
+  `runAction`: a row's `opens`). Search and Home have no single place to open there, and stay plain clicks.
 - Then **your sidebar pins as Tana keeps them** (docs/PINNING.md §1): the pins at the top level under **Pinned**, then
   each section with its pins, in Tana's order; a click opens the pin in that page (`goto`), and the pin of the page on
   screen is marked. A right-click on a pin shows the Mac's own menu with **Remove pin**, which unpins it from the sidebar

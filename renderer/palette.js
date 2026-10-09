@@ -531,13 +531,13 @@ const commandRows = (q, typed) => {
 // false when no such row exists right now, so the key can fall through to whatever else it means. A row that is here
 // but off (Clean up with nothing held, Go back with no history) answers the key by doing nothing: it is the same
 // command either way, so it must not mean one thing while it is live and something else while it is not.
-function runAction(id) {
+function runAction(id, where = null) { // where: a row that opens a place opens it there instead (a sidebar row ⌘-, ⇧- or ⌥-clicked)
   // A key pressed in the Graph pane acts in the page it follows, where its rows are meant (#463 review), except the
   // pane's own rows and the workspace's moves, which ask the shell from wherever they are pressed.
   if (LINKS && !['railToggle', 'rail', 'reload'].includes(id) && !PANE_ROWS.some(([rowId]) => rowId === id)) { toShell({ orbital: 'action', id }); return true; }
   if (palette.hidden) { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
   const rows = paletteRows(''), row = rows.find((r) => r.id === id);
-  if (row) { if (!row.disabled) row.run(); return true; }
+  if (row) { if (row.disabled) return true; if (where && row.opens) run(async () => openElsewhere(where, typeof row.opens === 'function' ? await row.opens() : row.opens)); else row.run(); return true; }
   // A key pressed with the palette closed may wait on main below (access, participants, spaces). A palette opened in
   // the meantime, still open or already closed again, has moved palSeq on (showPage), and the key lets its answer go
   // rather than taking that palette over or reopening one Esc just closed.
@@ -1308,6 +1308,7 @@ const shellRun = (command) => { if (window.frameElement) window.parent.postMessa
 // key left). Main gives the new page its id, and it opens on the place stored under that id (shell.js open, edit.js).
 // A ⌘- or ⇧-click on a row's line still selects: only its bullet, a chat's links and cards reach here with those.
 const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'tab' : e.shiftKey ? 'right' : e.altKey ? 'float' : null);
+const WHERE = new Set(['tab', 'right', 'float']); // what another page may ask for (renderer/app.js: the sidebar's modified clicks)
 async function openElsewhere(where, docId, nodeId = null) {
   if (opensCanvas(docId)) return; // ⌘/⇧/⌥ on a canvas: its own window, as a plain click (renderer/edit.js, #611)
   if (inOtherPane(placeKey(docId, nodeId))) return; // already on screen in another pane: that pane takes the keys (#533)

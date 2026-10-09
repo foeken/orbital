@@ -1419,6 +1419,21 @@ flow('Agent chats: a new chat with Codex, its answer, the list, and Delete chat'
 });
 
 
+// The sidebar's rows with ⌘, ⇧ or ⌥ (shell.js sbWhere): the page opens the row's place beside it, as ⌘↩ does in Cmd+K
+// (renderer/palette.js runAction where), and a plain click still goes there in this page.
+flow('Sidebar rows ⌘-, ⇧- and ⌥-clicked open their place in a tab, a pane beside or floating', async (p) => {
+  await p.start();
+  await p.js('window.__split = []; tana.splitWindow = async (where, start) => { __split.push([where, JSON.parse(start.place).docId]); return "2"; }; 1');
+  const today = await p.js('tana.todayNode()');
+  for (const [id, where] of [['timeline', 'right'], ['today', 'tab'], ['agentChats', 'float'], ['newAgentChat', 'tab']]) await p.js('runAction(' + J(id) + ', ' + J(where) + '); 1');
+  await p.waitFor('__split.length === 4', 'four places opened elsewhere');
+  assert.deepEqual(await p.js('__split'), [['right', 'orbital:timeline'], ['tab', today], ['float', 'orbital:agent-chats'], ['tab', 'orbital:agent-chat:new']], 'each where its key says');
+  await p.js('runAction("timeline"); 1');
+  await p.waitFor('zoom && zoom.docId === "orbital:timeline"', 'a plain click goes there in this page');
+  assert.equal(await p.js('__split.length'), 4, 'and opens nothing beside it');
+});
+
+
 flow('golden path: send a chat message and read the answer', async (p) => {
   await p.start();
   await p.js("goTo('tana:chat:mockchat0')"); await p.waitFor('document.getElementById("composerText") && document.querySelector(".chat-msg")', 'the conversation');

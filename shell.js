@@ -338,6 +338,9 @@ function toPage(msg) {
   focusPage(id);
   win.postMessage(msg, '*');
 }
+// ⌘-click opens a sidebar place as a tab in that page's pane, ⇧-click in a pane beside, ⌥-click floating, as everywhere in
+// the pages (renderer/palette.js elsewhere); the page opens it there (renderer/app.js goto and action)
+const sbWhere = (e) => (e && (e.metaKey || e.ctrlKey) ? 'tab' : e && e.shiftKey ? 'right' : e && e.altKey ? 'float' : undefined);
 function sbButton(cls, icon, words, run, uri, svg) {
   const b = document.createElement('button');
   b.className = cls; b.tabIndex = -1;
@@ -352,11 +355,11 @@ function sbDraw() {
   const rows = [];
   const search = sbButton('sbrow', 'search', 'Search', () => toPage({ orbital: 'palette', mode: 'search' }));
   if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
-  const timeline = sbButton('sbrow', 'timeline', 'Timeline', () => toPage({ orbital: 'action', id: 'timeline' }));
+  const timeline = sbButton('sbrow', 'timeline', 'Timeline', (e) => toPage({ orbital: 'action', id: 'timeline', where: sbWhere(e) }));
   timeline.dataset.uri = 'orbital:timeline'; // marked while it is the page on screen, as a pin is (sbMark)
-  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), timeline, sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
+  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), timeline, sbButton('sbrow', 'today', 'Today', (e) => toPage({ orbital: 'action', id: 'today', where: sbWhere(e) })));
   const pin = (n) => {
-    const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri, n.node.svg);
+    const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), (e) => toPage({ orbital: 'goto', id: n.uri, where: sbWhere(e) }), n.uri, n.node.svg);
     b.dataset.uri = n.uri;
     b.oncontextmenu = (e) => { e.preventDefault(); bridge.pinMenu?.(n.uri); }; // Remove pin (main/pins.js)
     b.classList.toggle('sensitive', n.node.sensitive === true);
@@ -382,9 +385,9 @@ function sbDraw() {
   if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
   // Agent chats: the newest, each opening its chat in the page; none yet offers a new one, more than fit the whole list
   if (bridge.agentChats) {
-    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), () => toPage({ orbital: 'goto', id: c.id }), c.id, c.svg); b.dataset.uri = c.id; return b; }; // the chat's own glyph, as its tab and the list wear it
-    const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', () => toPage({ orbital: 'action', id: 'agentChats' }))] : [];
-    rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'robot', 'New chat with Codex', () => toPage({ orbital: 'action', id: 'newAgentChat' }))]));
+    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; return b; }; // the chat's own glyph, as its tab and the list wear it
+    const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', (e) => toPage({ orbital: 'action', id: 'agentChats', where: sbWhere(e) }))] : [];
+    rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'robot', 'New chat with Codex', (e) => toPage({ orbital: 'action', id: 'newAgentChat', where: sbWhere(e) }))]));
   }
   sidebar.replaceChildren(...rows);
   sbMark();

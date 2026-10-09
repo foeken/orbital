@@ -57,10 +57,10 @@ function deleteAgentChat(docId) {
   run(async () => { knowAgentChats(await tana.deleteAgentChat(docId)); extra.delete(docId); kids.delete(docId); navReplace = true; goTo(AGENT_CHATS_PAGE); showNote('Chat removed from Orbital. It is still in Codex'); });
 }
 // ⌘K: the page under Views, a new chat under Actions, and on a chat what can be done with it
-const agentChatsViewRow = () => ({ id: 'agentChats', group: 'Views', icon: 'robot', label: 'Agent chats', hint: 'Chats with Codex', run: () => goTo(AGENT_CHATS_PAGE) });
+const agentChatsViewRow = () => ({ id: 'agentChats', group: 'Views', icon: 'robot', label: 'Agent chats', hint: 'Chats with Codex', opens: AGENT_CHATS_PAGE, run: () => goTo(AGENT_CHATS_PAGE) });
 function agentChatRows() {
   const rows = [];
-  if (tana.startAgentChat && codexHere()) rows.push({ id: 'newAgentChat', group: 'Actions', icon: 'robot', label: 'New chat with Codex', hint: 'Kept in Codex, not in Tana', run: () => openDoc(AGENT_CHAT_NEW) });
+  if (tana.startAgentChat && codexHere()) rows.push({ id: 'newAgentChat', group: 'Actions', icon: 'robot', label: 'New chat with Codex', hint: 'Kept in Codex, not in Tana', opens: AGENT_CHAT_NEW, run: () => openDoc(AGENT_CHAT_NEW) });
   const docId = zoom && !zoom.nodeId && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW ? zoom.docId : null, here = docId && extra.get(docId);
   if (!docId || !here || (here.agentChat && here.agentChat.elsewhere)) return rows;
   if (agentChatAnswering(docId)) rows.push({ id: 'stopAgentChat', group: 'Current node', icon: 'robot', label: 'Stop Codex', hint: 'The answer being written', run: () => run(() => tana.stopAgentChat(docId)) });
