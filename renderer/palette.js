@@ -367,8 +367,8 @@ function paletteRows(q, typed = q) {
   if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', opens: () => tana.weekNode(), run: () => run(async () => goTo(await tana.weekNode())) });
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
   if (tana.proposalAnswer) viewRows.push(proposalsViewRow()); // what Tana's AI proposed and is waiting on you to accept
-  if (tana.children) viewRows.push(timelineViewRow());
-  if (tana.agentChats) viewRows.push(agentChatsViewRow()); // chats with Codex (renderer/agentchats.js) // what happened to what you watch, and what landed in your Inbox
+  if (tana.children) viewRows.push(timelineViewRow()); // what happened to what you watch, and what landed in your Inbox
+  if (tana.agentChats) viewRows.push(agentChatsViewRow()); // your chats with ChatGPT and your Dot (renderer/agentchats.js)
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
@@ -389,7 +389,7 @@ function paletteRows(q, typed = q) {
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Quick Add Task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
-  if (tana.startAgentChat) rows.push(...agentChatRows()); // New chat with Codex, and on an agent chat Stop, Open in Codex and Delete chat (renderer/agentchats.js)
+  if (tana.startAgentChat) rows.push(...agentChatRows()); // New chat with ChatGPT, and on an agent chat Stop, Open in ChatGPT and Delete chat (renderer/agentchats.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
   // ⌘K Meet Now: a meeting called Meeting from this minute for half an hour, as "/" Meeting's now, opened on its page in Tana (not its call)
   if (tana.createDocument && tana.nodeLink && tana.openExternal) rows.push({ id: 'meetNow', group: 'Actions', icon: 'calendar', label: 'Meet Now', hint: 'Now, for 30 minutes · opens in Tana', run: () => run(async () => { const start = Math.floor(Date.now() / 6e4) * 6e4; openInTana((await tana.createDocument('Meeting', { kind: 'meeting', start, end: start + SLASH_MEETING_LENGTH })).id); }) });

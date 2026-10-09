@@ -3643,6 +3643,8 @@ async function main() {
         answer = (method, p) => (p.endsWith('/replies') ? { replies: [{ id: 'r1', chat: AGENT, text: 'Two things: the **charter** and the sync.', at: 5 }] } : { subscribers: 1, delivered: 1 });
         rows = await chats.rows(DOT);
         assert.deepEqual(plain(rows.map((r) => [r.chat.mine, r.text, r.children.map((c) => c.text).join(' ')])), [[true, 'Someone', 'What is due today?'], [false, 'Echo', 'Two things: the charter and the sync.']], 'its answer, taken from the MCP server, drawn as its own');
+        assert.deepEqual(plain(asked.filter(([, p]) => p.endsWith('/replies')).at(-1)[2]), { taken: ['r1'] }, 'and the MCP server is told it is here, so it lets it go');
+        assert.equal((await chats.rows(DOT)).length, 2, 'an answer sent again, before that was heard, is not shown twice');
         answer = () => ({ replies: [] });
         assert.equal((await chats.rows(DOT)).length, 2, 'and kept here: a read after it still has both');
         answer = (method, p) => (p.endsWith('/events') ? { subscribers: 0, delivered: 0 } : { replies: [] });

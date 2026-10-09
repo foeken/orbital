@@ -99,6 +99,7 @@ async function turn(threadId, text) {
     else if (note.method === 'turn/completed') end();
   }, { decline: true });
   state.stop = end;
+  if (id) live.set(id, state); // taken before the first wait, so a second message cannot start a second writer on the thread meanwhile
   try {
     await rpc.ready;
     if (id) await rpc.call('thread/resume', { threadId: id, ...RUN });
@@ -198,7 +199,8 @@ async function rows(id, read = readTurns) {
 // ---- your Dot: one chat per agent linked through the Orbital MCP server (main/agents/linked.js), for as long as it is linked ----
 // Your words go to it as the chat.message event (mcp-server/server.js EVENTS) and it answers with that server's reply_in_orbital
 // tool; Orbital takes the answers (POST /orbital/agents/<id>/replies), every few seconds while one is awaited and whenever the
-// chat is read, and keeps the conversation on this Mac (dotChats, not in main/settings.js SYNCED). The chat is the agent's:
+// chat is read, keeps the conversation on this Mac (dotChats, not in main/settings.js SYNCED), and then tells the server it
+// has them (taken), which only then lets them go: an answer whose response was lost is sent again. The chat is the agent's:
 // it cannot be deleted or renamed, and goes, with its conversation, when the agent is unlinked.
 // shortcut: the server hands an answer to whichever Mac takes it first, so with two Macs one has it; keep the conversation in the synced settings if that bites.
 const DOT = PREFIX + 'dot:', DOT_KEY = 'dotChats', ASK_MS = 3000, WAIT_MS = 15 * 60 * 1000, KEEP = 500, MESSAGE_MAX = 12 * 1024;
@@ -233,14 +235,22 @@ async function dotSend(agentId, text) {
   awaited.set(a.id, Date.now()); listen(); changed('dot:' + a.id);
   return { queued: false };
 }
-// the answers waiting at the MCP server, taken and kept; true when there were any
+// the answers waiting at the MCP server, kept here once (by id) and then confirmed, so the server lets them go; true when
+// there were new ones. What was kept but not yet confirmed (unconfirmed) goes with the next ask.
+const unconfirmed = new Map(); // agentId -> ids kept here that the server has not heard we have
 async function takeReplies(agentId) {
+  const taken = unconfirmed.get(agentId) || [];
   let out;
-  try { out = await mcpServer.call('POST', '/orbital/agents/' + agentId + '/replies'); }
+  try { out = await mcpServer.call('POST', '/orbital/agents/' + agentId + '/replies', { taken }); }
   catch (e) { if (e.status === 404 && dotAgent(agentId)) { awaited.delete(agentId); throw new Error(older()); } throw e; }
+  if (unconfirmed.get(agentId) === taken) unconfirmed.delete(agentId);
   const replies = (out && Array.isArray(out.replies) ? out.replies : []).filter((r) => r && typeof r.text === 'string');
   if (!replies.length) return false;
-  for (const r of replies) dotSay(agentId, { id: String(r.id), from: 'dot', text: r.text, at: Number(r.at) || Date.now() });
+  const have = new Set((dotStore()[agentId] || []).map((m) => m.id)), fresh = replies.filter((r) => !have.has(String(r.id)));
+  for (const r of fresh) dotSay(agentId, { id: String(r.id), from: 'dot', text: r.text, at: Number(r.at) || Date.now() });
+  unconfirmed.set(agentId, replies.map((r) => String(r.id)));
+  if (!fresh.length) return false; // seen before: confirmed with the next ask
+  takeReplies(agentId).catch(() => {}); // confirmed at once, so the server keeps them no longer than it must; a failure confirms with the next ask
   awaited.delete(agentId); changed('dot:' + agentId); tellList();
   return true;
 }
