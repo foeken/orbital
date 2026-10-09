@@ -10,6 +10,8 @@ const isAgentChat = (id) => String(id || '').startsWith(AGENT_CHAT);
 // your Dot's own chat (main/agentchats.js dotList): there for as long as the Dot is linked, so not renamed, deleted or given an icon
 const agentChatFixed = (id) => !!(extra.get(id) || {}).agentChat?.fixed;
 const agentChatLabel = (id) => (extra.get(id) || {}).agentChat?.label || 'Codex'; // who the chat is with
+// a Dot's chat goes through the Orbital MCP server: which one, said wherever you write to it (main/agentchats.js route)
+const agentChatVia = (id) => { const c = (extra.get(id) || {}).agentChat || {}; return c.fixed ? (c.via || 'the Orbital MCP server') + (c.ours ? ', Orbital\'s own server' : c.via ? ', your workspace\'s server' : '') : ''; };
 // every chat on the list, as a page to open by its id: its title and glyph are known before its messages are read
 const knowAgentChats = (list) => { for (const n of list || []) extra.set(n.id, { ...n }); };
 if (tana.agentChats) tana.agentChats().then(knowAgentChats, () => {});
@@ -45,7 +47,11 @@ function agentChatContextEl(id) {
   }
   const info = agentChatInfos.get(id) || {}, el = document.createElement('div'), words = [info.model, info.effort].filter(Boolean).join(' · ');
   el.className = 'chat-context';
-  el.append(addIcon(document.createElement('span'), 'lock'), 'Only you · not shared with Tana', ...(words ? [' · ' + words] : []));
+  const via = agentChatVia(id);
+  if (via) { // your Dot's: what you write and its answers pass through the MCP server on their way, and that is said first
+    el.title = 'Your messages to ' + agentChatLabel(id) + ' and its answers pass through ' + via + ', which passes each message on as it comes and keeps an answer only until Orbital collects it. Nothing of it goes to Tana.';
+    el.append(addIcon(document.createElement('span'), 'mcp'), 'Goes through ' + via + ' · only you see it here');
+  } else el.append(addIcon(document.createElement('span'), 'lock'), 'Only you · not shared with Tana', ...(words ? [' · ' + words] : []));
   return el;
 }
 // Rename chat …: the name on the list and in the sidebar, and the thread's name in Codex (main/agentchats.js rename)

@@ -209,9 +209,12 @@ function dotList() {
   const agents = mcpServer.cached(), all = dotStore(), gone = Object.keys(all).filter((id) => !agents.some((a) => a.id === id));
   if (gone.length) { const kept = { ...all }; for (const id of gone) delete kept[id]; settings.set(DOT_KEY, kept); } // unlinked: its chat goes with it
   return agents.map((a) => ({ id: DOT + a.id, text: a.name, title: a.name, kind: 'document', icon: 'robot', editable: false, hasChildren: true, appPage: true,
-    agentChat: { agent: 'dot', label: a.name, at: ((all[a.id] || []).at(-1) || {}).at || a.linkedAt || null, fixed: true } })); // its name is enough: a personal agent needs no app beside it
+    agentChat: { agent: 'dot', label: a.name, at: ((all[a.id] || []).at(-1) || {}).at || a.linkedAt || null, fixed: true, ...route() } })); // its name is enough: a personal agent needs no app beside it
 }
 const older = () => mcpServer.where() + ' runs an Orbital MCP server too old for chats with your Dot (version 3): deploy the latest one there';
+// The MCP server everything said in the chat goes through, said on its page: orbital.md is Orbital's own, run by us, so your
+// words and the Dot's answers pass through our server; a workspace's own is its own (main/mcp-server.js server.base, #814)
+function route() { const via = new URL(mcpServer.server.base).host; return { via, ours: mcpServer.server.base === mcpServer.DEFAULT }; }
 async function dotSend(agentId, text) {
   const a = dotAgent(agentId);
   if (!a) throw new Error('That Dot is not linked any more');

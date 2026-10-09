@@ -312,7 +312,7 @@
         <ul>
           <li>The sidebar lists your newest chats with Codex under <b>Agent chats</b>, and <kbd>⌘K</kbd> <b>Agent chats</b> opens all of them, newest first. One started on another Mac is listed too, and opens on that Mac.</li>
           <li>The line at the top says it is private, and which model and reasoning effort Codex answers with.</li>
-          <li>Your Dot, once linked (<a href="ai.html#link-agent">AI &amp; agents</a>), has a chat of its own at the top of the list. Write to it as to Codex: its answers come back through orbital.md and stay on this Mac. That chat goes when you unlink the Dot, and cannot be renamed or deleted before.</li>
+          <li>Your Dot, once linked (<a href="ai.html#link-agent">AI &amp; agents</a>), has a chat of its own at the top of the list. That chat goes when you unlink the Dot, and cannot be renamed or deleted before.</li>
           <li><b>Rename chat …</b>, in <kbd>⌘K</kbd> or as <b>Rename</b> when you right-click its tab, renames it here and in Codex. <b>Set icon</b> gives it a glyph of its own.</li>
           <li><kbd>⌘K</kbd> <b>Open in Codex</b> shows the chat in the Codex app, <b>Stop Codex</b> stops an answer being written, and <b>Delete chat</b> takes it off the list. It stays in Codex.</li>
           <li>Codex works in a folder of its own, <code>~/.orbital/chats</code>, and does not stop to ask you for approval: its own reviewer decides. When the Codex app has the chat open, your message is queued there and answered in the app.</li>
@@ -321,6 +321,14 @@
       <figure class="shot"><img data-m="chats-agent" alt="A chat with Codex: your request on the right, Codex's draft under Thought for 38 seconds"><figcaption>A chat with Codex, kept in Codex.</figcaption></figure>
     </div>
     <figure class="shot wide"><img data-m="chats-agent-list" alt="Agent chats: two chats with Codex, the second on another Mac"><figcaption><b>Agent chats</b> lists them, newest first.</figcaption></figure>
+    <div class="split flip">
+      <div>
+        <h3>Your Dot's chat goes through the Orbital MCP server</h3>
+        <p>Codex runs on this Mac, so a chat with it never leaves it. Your Dot runs in ChatGPT, so everything you write to it, and every answer it gives, goes through the Orbital MCP server it is linked on. That is <b>orbital.md</b>, Orbital's own server, run by us, unless your workspace runs its own. The chat says which, at the top and in the message box.</p>
+        <p>The server passes each message on as it comes and keeps nothing of it. It keeps an answer only until Orbital collects it, a few seconds while you wait, and a week at most if this Mac is off. The conversation itself is kept on this Mac, and nothing of it goes to Tana.</p>
+      </div>
+      <figure class="shot"><img data-m="chats-dot" alt="The chat with Echo: Goes through orbital.md, Orbital's own server, at the top, and its message box saying the same"><figcaption>Your Dot's chat names the server it goes through.</figcaption></figure>
+    </div>
   </section>
 
   <section class="topic">
