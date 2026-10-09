@@ -921,6 +921,20 @@ flow('golden path: "/" Task and Meeting, named, the meeting\u2019s time reviewed
 // 17c. Edit meeting details (#758): ⌘K on a meeting you may change, one field, read by the AI only when ↩ asks (the mock
 // stands in for it), its reading shown beside the meeting as it is and written only when pressed; Escape goes back to the
 // commands and the caret comes back
+// ⌘K Meet Now (renderer/palette.js): asks nothing, makes "Meeting" from this minute for half an hour, and opens its page in
+// Tana: the meeting's link, never its call's
+flow('Meet Now makes a half-hour meeting called Meeting and opens it in Tana', async (p) => {
+  await p.start();
+  await p.js('window.__creates = []; window.__opened = []; const made = tana.createDocument, opener = tana.openExternal; tana.createDocument = (title, opts) => made(title, opts).then((n) => { __creates.push([title, opts, n.id]); return n; }); tana.openExternal = (url) => { __opened.push(url); return opener(url); }; 1');
+  const before = await p.js('Math.floor(Date.now() / 6e4) * 6e4');
+  await command(p, 'meet now', 'Meet Now');
+  await p.waitFor('__opened.length === 1', 'the meeting opened in Tana');
+  const [[title, opts, id]] = await p.js('__creates');
+  assert.deepEqual([title, opts.kind, opts.end - opts.start], ['Meeting', 'meeting', 18e5], 'a meeting called Meeting, half an hour long');
+  assert.ok(opts.start >= before && opts.start <= Date.now(), 'starting this minute');
+  assert.deepEqual(await p.js('__opened'), [await p.js('tana.nodeLink(' + J(id) + ')')], 'and the meeting itself opened in Tana');
+});
+
 flow('golden path: Edit meeting details reads "tomorrow from 3-5" and applies it only when pressed', async (p) => {
   await p.start();
   await p.js("goTo('mockmeeting2')"); await at(p, 'mockmeeting2');
