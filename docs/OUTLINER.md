@@ -1379,7 +1379,7 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   before a key, a press or another place, puts the caret back in the note (`caretBack`). One press makes one note and one
   page: a press while it is being made is the same one, and the key held down repeats nothing (renderer/events.js
   `NOTE_PAGES`). A note no page could open on (signed out) stays in the Library and the toast opens it; demo mode, which
-  saves nothing, opens the page on the Library as before. ⌃⌘N (New window) still opens on the place you are. Main gives the id
+  saves nothing, opens the page on an empty "New Note" of the app's own (`orbital:new-note`, never in Tana). ⌃⌘N (New window) still opens on the place you are. Main gives the id
   (`api.splitWindow(where)` answers it) and tells the shell (`shell:command` 'open'), the page that asked stores its
   view and place under that id, and the new page opens there and takes the keyboard. Panes are docked, tabbed or
   floating and dragged between those by their tabs; the tab's title is the page's (renderer/render.js `tellTitle`
@@ -1460,8 +1460,9 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
   will be and for whom ("Bug · Assigned to Me"); ⇥ or a click there turns the field into "Assign to…" over the members
   (`api.members`, you first), where ↑/↓ choose, Enter picks and brings the title back, and Escape or ⇥ go back
   unchanged. Enter creates the trimmed text through `api.createDocument(title, { kind: 'task', typeUri? })`, open and
-  assigned to you, then `api.setAssignees` when someone else was picked; a refused assignment leaves the task and says
-  why in the note, which the asking page shows as a toast. Enter on nothing does nothing, a refusal stays on the card
+  assigned to you, then `api.setAssignees` when someone else was picked, and the asking page goes to the new task;
+  ⌘Enter creates it and stays, with a toast that opens it. A refused assignment leaves the task and says why in the
+  note, shown as a toast either way. Enter on nothing does nothing, a refusal stays on the card
   with the text kept, Escape closes, ⌘K closes and opens the palette. Demo mode refuses it before it opens. The key
   works in Orbital's windows only.
 - **The update card** (update.html, updater.js, #667): what a check finds — at launch, once a day, the app menu's Check
