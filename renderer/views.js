@@ -300,8 +300,12 @@ function groupId(g, by) {
 }
 // Remembered across launches, the way the sidebar remembers its closed sections (renderer/rail.js): the set itself is
 // read at load in renderer/state.js, and only folded sections are in it, so nothing accumulates but what you folded.
-const collapseKey = (id) => pillKey() + '\n' + groupBy() + '\n' + id;
-const groupCollapsed = (id) => collapsedGroups.has(collapseKey(id));
+// Meeting date opens on what is still ahead: a day before today starts folded, and opening it is what is stored, under
+// a key of its own as the Proposals page's From others (renderer/proposals.js), so a day folded while ahead is not
+// opened by passing.
+const startsFolded = (id) => groupBy() === 'meeting' && /^\d{4}-/.test(id) && id < localDate();
+const collapseKey = (id) => pillKey() + '\n' + groupBy() + '\n' + (startsFolded(id) ? 'open\n' : '') + id;
+const groupCollapsed = (id) => startsFolded(id) !== collapsedGroups.has(collapseKey(id));
 // Forced, like setGroupBy: the click's whole point is to redraw, and on a saved search page the caret often sits in
 // the renameable title, which would otherwise defer the render.
 function toggleGroup(id) {
