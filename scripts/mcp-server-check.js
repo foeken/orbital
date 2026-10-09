@@ -85,7 +85,7 @@ const server = http.createServer(mcp.handle);
   assert.equal(hello.status, 200, 'hello needs no sign-in');
   assert.deepEqual(hello.json.result.capabilities, { tools: {}, events: {} }, 'tools, and the task.assigned event');
   const open = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 2, method: 'tools/list' } });
-  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital'], 'nor does the list');
+  assert.deepEqual(open.json.result.tools.map((t) => t.name), ['link_orbital', 'reply_in_orbital'], 'nor does the list');
   assert.ok(open.json.result.tools.every((t) => t.securitySchemes[0].type === 'oauth2' && t._meta.securitySchemes[0].type === 'oauth2'), 'and each tool says it needs a sign-in');
   for (const auth of [undefined, 'Bearer not-a-token']) {
     const unauth = await call('POST', '/mcp', { auth, body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'link_orbital', arguments: {} } } });
@@ -122,9 +122,9 @@ const server = http.createServer(mcp.handle);
   }
   const grok = await signIn('Grok');
   const listed = (await grok.rpc('tools/list')).result.tools;
-  assert.deepEqual(listed.map((t) => t.name), ['link_orbital'], 'one tool, linking: how to handle an event comes with the event, from Orbital');
-  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false]],
-    'it says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three)');
+  assert.deepEqual(listed.map((t) => t.name), ['link_orbital', 'reply_in_orbital'], 'linking, and answering in its chat: how to handle an event comes with the event, from Orbital');
+  assert.deepEqual(listed.map((t) => [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.openWorldHint]), [[false, false, false], [false, false, false]],
+    'each says whether it writes, can destroy or reaches beyond Orbital (ChatGPT wants all three)');
   assert.equal((await grok.rpc('tools/call', { name: 'get_instructions', arguments: { event: 'task.assigned' } })).error.code, -32602, 'there is no instructions tool: this server tells an agent nothing of its own about what to do');
 
   // a refresh token turns once: the new pair works, the old refresh token does not
@@ -169,6 +169,22 @@ const server = http.createServer(mcp.handle);
   assert.deepEqual((await send(G, crypto.randomUUID())).json, { subscribers: 0, delivered: 0 }, 'an agent that has not subscribed hears nothing, and Orbital is told so');
   assert.equal(posted.length, 0, 'nothing was sent, and nothing is kept for later');
 
+  // ---- the Dot's chat with its Orbital: chat.message out, its answers (reply_in_orbital) kept until its Orbital takes them ----
+  const CHAT = D.id, replies = (o = orbital, agentRow = D) => call('POST', '/mcp/orbital/agents/' + agentRow.id + '/replies', { auth: as(o) });
+  assert.deepEqual((await send(D, crypto.randomUUID(), 'chat.message', { chat: CHAT, message: 'What is due today?' })).json, { subscribers: 0, delivered: 0 }, 'chat.message is an event Orbital may send');
+  assert.deepEqual((await replies()).json, { replies: [] }, 'with no answer yet, there is nothing to take');
+  assert.equal((await dot.tool('reply_in_orbital', { chat: 'not-a-chat', text: 'Hi' })).error, true, 'an answer names its chat');
+  assert.equal((await dot.tool('reply_in_orbital', { chat: CHAT, text: '  ' })).error, true, 'and says something');
+  assert.deepEqual(await dot.tool('reply_in_orbital', { chat: CHAT, text: 'Two things:\n\n- the **charter**\n- the sync' }), { error: false, text: 'Sent: it shows in Orbital as your answer.' }, 'the agent is told it went');
+  await dot.tool('reply_in_orbital', { chat: CHAT, text: 'And one more.' });
+  assert.equal((await replies(stranger)).status, 401, 'only its own Orbital takes them');
+  const taken = (await replies()).json.replies;
+  assert.deepEqual(taken.map((r) => [r.chat, r.text]), [[CHAT, 'Two things:\n\n- the **charter**\n- the sync'], [CHAT, 'And one more.']], 'its Orbital takes them, oldest first, line breaks and Markdown kept');
+  assert.deepEqual((await replies()).json, { replies: [] }, 'and once taken they are gone from the MCP server');
+  await dot.tool('reply_in_orbital', { chat: CHAT, text: 'Left behind' });
+  assert.equal((await grok.tool('reply_in_orbital', { chat: CHAT, text: 'Not mine' })).error, false, 'another agent answers in its own chat');
+  assert.deepEqual((await replies(orbital, G)).json.replies.map((r) => r.text), ['Not mine'], 'which is its own: each agent\'s answers are taken apart');
+
   // ---- a day on ----
   const late = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json.code;
   clock += 24 * 3600e3 + 1;
@@ -179,7 +195,9 @@ const server = http.createServer(mcp.handle);
 
   // ---- rename, unlink, and a new key ----
   assert.equal((await call('PATCH', '/mcp/orbital/agents/' + D.id, { auth: as(orbital), body: { name: 'My dot' } })).json.name, 'My dot');
+  await grok.tool('reply_in_orbital', { chat: CHAT, text: 'Gone with GrokBot' });
   assert.equal((await call('DELETE', '/mcp/orbital/agents/' + G.id, { auth: as(orbital) })).status, 204);
+  assert.doesNotMatch(await mcp.dump(), /Gone with GrokBot/, 'an unlinked agent\'s answers go with it');
   assert.equal((await send(G, crypto.randomUUID())).status, 404, 'an unlinked agent is sent nothing more');
   const fresh = newKey();
   assert.equal((await call('POST', '/mcp/orbital/rotate', { auth: as(orbital), body: { key: fresh } })).status, 204);
@@ -196,9 +214,9 @@ const server = http.createServer(mcp.handle);
   const old = await call('POST', '/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '1900-01-01' } } } });
   assert.deepEqual([old.json.error.code, old.json.error.data.supported[0]], [-32022, '2026-07-28'], 'a version Orbital does not speak is refused, naming those it does');
   const listedTools = (await modern('tools/list')).json.result;
-  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.length], ['complete', 'public', 'number', 1], 'the tools, cacheable, in the new shape');
+  assert.deepEqual([listedTools.resultType, listedTools.cacheScope, typeof listedTools.ttlMs, listedTools.tools.map((t) => t.name)], ['complete', 'public', 'number', ['link_orbital', 'reply_in_orbital']], 'the tools, cacheable, in the new shape');
   const events = (await modern('events/list')).json.result.events;
-  assert.deepEqual(events.map((e) => [e.name, e.delivery, Object.keys(e.payloadSchema.properties), e.payloadSchema.additionalProperties]), [['task.assigned', ['webhook'], ['node', 'request', 'instructions'], true]],
+  assert.deepEqual(events.map((e) => [e.name, e.delivery, Object.keys(e.payloadSchema.properties), e.payloadSchema.additionalProperties]), [['task.assigned', ['webhook'], ['node', 'request', 'instructions'], true], ['chat.message', ['webhook'], ['chat', 'message', 'instructions'], true]],
     'task.assigned, by webhook, its data the node and whatever else Orbital sends');
   const SECRET = 'whsec_' + crypto.randomBytes(32).toString('base64'), CB = 'https://receiver.example/mcp-events/cb1';
   const want = { name: 'task.assigned', arguments: {}, delivery: { mode: 'webhook', url: CB, secret: SECRET }, cursor: null };
@@ -405,7 +423,7 @@ const server = http.createServer(mcp.handle);
     };
     assert.equal((await ask('GET', '/.well-known/oauth-protected-resource/api/mcp')).json.resource, site + '/api/mcp', 'on a Site the MCP server is at /api/mcp, Sites keeping /mcp');
     const list = await ask('POST', '/api/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
-    assert.deepEqual([list.status, list.json.result.tools.map((t) => t.name), list.headers.get('access-control-allow-origin')], [200, ['link_orbital'], '*'], 'its MCP answers, open to the phones\' engine');
+    assert.deepEqual([list.status, list.json.result.tools.map((t) => t.name), list.headers.get('access-control-allow-origin')], [200, ['link_orbital', 'reply_in_orbital'], '*'], 'its MCP answers, open to the phones\' engine');
     // a signed-in request looks its token up in D1 before it reads the body: on a Site that read once never ended (the
     // body's end told before anybody listened), so every call from ChatGPT after sign-in hung
     slow = 20;

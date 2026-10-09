@@ -491,7 +491,7 @@ function renderOutline() {
   markTranslatable(titleEl, page && !page.pending && editable ? parent.node.text : null, parent && parent.docId); // and leaving it, the translation again
   blurSensitive(titleEl, parent && parent.docId);
   const pageIcon = parent ? iconOf(parent.node) || nodeIcon(parent.node) : viewOf()?.icon; // nodeIcon: a chat or an agent known by its tag
-  const agentChat = !!parent && !!tana.renameAgentChat && isAgentChat(parent.docId) && parent.docId !== AGENT_CHAT_NEW; // its tab's Rename is Rename chat … (renderer/agentchats.js)
+  const agentChat = !!parent && !!tana.renameAgentChat && isAgentChat(parent.docId) && parent.docId !== AGENT_CHAT_NEW && !agentChatFixed(parent.docId); // its tab's Rename is Rename chat … (renderer/agentchats.js); a Dot's chat has none
   tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable || agentChat, (pageIcon && iconNode(pageIcon)?.outerHTML) || '');
   // a view, a saved search, an app page or a chat is named by its tab under a tab bar, so its heading goes (styles.css html.listing)
   document.documentElement.classList.toggle('listing', !parent || appOwned(parent.docId) || isChatPage(parent));
@@ -595,7 +595,7 @@ function emptyText(parent) {
   if (id === INBOX_PAGE) return 'No notifications yet.';
   if (id === PROPOSALS_PAGE) return 'No proposals waiting.';
   if (id === AGENT_CHATS_PAGE) return 'No agent chats yet. ⌘K New chat with Codex starts one.';
-  if (isChatPage(parent)) return isAgentChat(id) ? 'Ask Codex anything below. The chat is kept in Codex, and Orbital keeps only its link.' : 'No messages yet. Say something to Tana below.';
+  if (isChatPage(parent)) return isAgentChat(id) ? (String(id).includes(':dot:') ? 'Write to your Dot below. Its answers come back here, and only you see them.' : 'Ask Codex anything below. The chat is kept in Codex, and Orbital keeps only its link.') : 'No messages yet. Say something to Tana below.';
   if (!isSearchDoc(parent.node) && !isTypeDoc(parent.node)) return 'No content';
   const filter = filters.get(id), key = hotkeyFor('createTask');
   return 'Nothing matches.' + (filter && tasksInFilter(filter) && key ? ' ' + key + ' creates a task.' : '');

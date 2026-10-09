@@ -7,6 +7,9 @@ const AGENT_CHATS_PAGE = 'orbital:agent-chats', AGENT_CHAT = 'orbital:agent-chat
 extra.set(AGENT_CHATS_PAGE, { id: AGENT_CHATS_PAGE, text: 'Agent chats', title: 'Agent chats', kind: 'document', icon: 'robot', editable: false, hasChildren: true, appPage: true });
 extra.set(AGENT_CHAT_NEW, { id: AGENT_CHAT_NEW, text: 'New chat with Codex', title: 'New chat with Codex', kind: 'document', icon: 'robot', editable: false, hasChildren: true, appPage: true });
 const isAgentChat = (id) => String(id || '').startsWith(AGENT_CHAT);
+// your Dot's own chat (main/agentchats.js dotList): there for as long as the Dot is linked, so not renamed, deleted or given an icon
+const agentChatFixed = (id) => !!(extra.get(id) || {}).agentChat?.fixed;
+const agentChatLabel = (id) => (extra.get(id) || {}).agentChat?.label || 'Codex'; // who the chat is with
 // every chat on the list, as a page to open by its id: its title and glyph are known before its messages are read
 const knowAgentChats = (list) => { for (const n of list || []) extra.set(n.id, { ...n }); };
 if (tana.agentChats) tana.agentChats().then(knowAgentChats, () => {});
@@ -62,7 +65,7 @@ function agentChatRows() {
   const rows = [];
   if (tana.startAgentChat && codexHere()) rows.push({ id: 'newAgentChat', group: 'Actions', icon: 'robot', label: 'New chat with Codex', hint: 'Kept in Codex, not in Tana', opens: AGENT_CHAT_NEW, run: () => openDoc(AGENT_CHAT_NEW) });
   const docId = zoom && !zoom.nodeId && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW ? zoom.docId : null, here = docId && extra.get(docId);
-  if (!docId || !here || (here.agentChat && here.agentChat.elsewhere)) return rows;
+  if (!docId || !here || (here.agentChat && here.agentChat.elsewhere) || agentChatFixed(docId)) return rows; // a Dot's chat: nothing to rename, open or delete
   if (agentChatAnswering(docId)) rows.push({ id: 'stopAgentChat', group: 'Current node', icon: 'robot', label: 'Stop Codex', hint: 'The answer being written', run: () => run(() => tana.stopAgentChat(docId)) });
   if (tana.renameAgentChat) rows.push({ id: 'renameAgentChat', group: 'Current node', icon: 'rename', label: 'Rename chat …', hint: here.title || '', keepOpen: true, run: () => renameAgentChat(docId) });
   rows.push({ id: 'openAgentChat', group: 'Current node', icon: 'robot', label: 'Open in Codex', hint: 'This chat, in the Codex app', run: () => run(() => tana.openAgentChat(docId)) });
