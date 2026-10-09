@@ -7,7 +7,6 @@
 const agent = require('../agent');
 require('./tana');
 require('./codex');
-require('./claude');
 const linked = require('./linked'); // the agents linked through orbital.md/mcp (your Dot), one plugin each, as they come and go
 const { agentIds, setAgentMark, agentPrompt, agentStatus, dropAgentMark, mut } = require('../documents');
 const mcpServer = require('../mcp-server'); // the node put back as an earlier handoff left it (putBack)

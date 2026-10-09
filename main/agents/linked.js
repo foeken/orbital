@@ -1,7 +1,7 @@
 'use strict';
 // Agents linked through the MCP server at orbital.md/mcp (docs/MCP-SERVER.md; the MCP server is mcp-server/): any agent that adds
 // that MCP server to itself and links with a code from Cmd+K Connect your personal agent … Each is an agent of its own beside Codex
-// and Claude (main/agent.js), "relay:<its id>", named as it named itself.
+// (main/agent.js), "relay:<its id>", named as it named itself.
 //   - Your Orbital is one random key (relayKey), made the first time you link an agent and kept in the Orbital settings
 //     document, so every device signed into your Tana account has the same agents. The MCP server keeps only its hash.
 //   - The MCP server keeps the list of agents; relayAgents mirrors it on this machine, so they are known before the network

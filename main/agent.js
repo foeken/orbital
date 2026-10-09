@@ -1,7 +1,7 @@
 'use strict';
 // The agents a Tana node can be handed to, and the link from each node to the task it became (issue #669). Each agent
 // is a plugin in main/agents/ that registers itself here (main/agents/index.js loads them): Tana, always there and the
-// default until you choose another; Codex and Claude, when this Mac has them; and every agent linked through
+// default until you choose another; Codex, when this Mac has it; and every agent linked through
 // orbital.md/mcp, your Dot among them. A plugin answers:
 //   id, label, icon         how the app names and draws it ("Codex", the robot glyph)
 //   available()             whether this Mac can run it; one that cannot shows greyed in Choose agents
@@ -34,10 +34,10 @@ function catchUp() {
 const get = (id) => { catchUp(); return typeof id === 'string' && Object.hasOwn(AGENTS, id) ? AGENTS[id] : null; };
 
 // Which agents are on, and which one Assign to Agent uses. Both follow you (main/settings.js SYNCED). Unset is Tana and
-// Codex: Codex is what this app handed work to before agents were plugins, so nobody loses it on update; Claude is new
+// Codex: Codex is what this app handed work to before agents were plugins, so nobody loses it on update; one added later
 // and waits to be switched on. Tana cannot be switched off: it needs nothing installed and is the one agent everybody has.
 // The ids stored as on, every one: one this device does not run or know yet (a Dot linked on the phone and not heard of
-// here, Claude on the phone) is kept, so switching one agent here never switches off another device's.
+// here) is kept, so switching one agent here never switches off another device's.
 const storedIds = () => { const stored = settings.get('agents'); return (Array.isArray(stored) ? stored : ['codex']).filter((id) => id !== 'tana'); };
 const enabledIds = () => ['tana', ...storedIds().filter((id) => get(id))];
 const usable = (id) => !!get(id) && enabledIds().includes(id) && get(id).available();
@@ -86,7 +86,7 @@ function taskLink(id) {
 }
 function setTask(id, agentId, taskId) {
   const map = tasks();
-  // a plugin whose tasks live only on the Mac that ran them (local: Claude Code's sessions) names that Mac with the link
+  // a plugin whose tasks live only on the Mac that ran them (local) names that Mac with the link
   const a = get(agentId), hasId = typeof taskId === 'string' && !!taskId;
   if (a && hasId) map[id] = { agent: agentId, taskId, ...(a.local ? { device: deviceId() } : {}) }; else delete map[id];
   settings.set('codexTask', map);
@@ -123,7 +123,7 @@ function oneLine(text, cap = TITLE_CAP) {
 // The request is what the person typed here, and it is the only thing the agent is told to do. The node is its
 // context, read live through the agent's Tana connection rather than copied in and going stale; but anyone the node is
 // shared with can edit it, its Agent context block included, so what the agent reads in Tana is material, never
-// instructions (security review finding 2). The first line is the node's own name, because Codex and Claude both name
+// instructions (security review finding 2). The first line is the node's own name, because a coding agent names
 // a task after how its first message opens.
 function agentPrompt(nodeUri, title, request) {
   const name = oneLine(title);
@@ -150,14 +150,14 @@ function agentPrompt(nodeUri, title, request) {
 }
 // One workspace for every task a coding agent starts, under the app's data and made on demand: never the last project
 // and never this repo. Codex lists a thread under the folder it ran in, so a folder per node made each task a project
-// of its own (issue #553); one folder puts them all under a single "Tana" project, and Claude's sessions with them.
+// of its own (issue #553); one folder puts them all under a single "Tana" project.
 function agentWorkspace(userData) {
   const path = require('node:path'), fs = require('node:fs');
   const dir = path.join(userData, 'agent-workspaces', 'Tana');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
-// The first of these files that exists and runs, or null: how Codex and Claude are found on this Mac. An app opened
+// The first of these files that exists and runs, or null: how a coding agent is found on this Mac. An app opened
 // from the Finder gets launchd's PATH (/usr/bin:/bin:…), so the places their installers use are named as well.
 function findBin(name, extra = []) {
   const fs = require('node:fs'), path = require('node:path'), home = require('node:os').homedir();

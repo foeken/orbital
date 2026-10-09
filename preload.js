@@ -111,7 +111,7 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   proposalAnswer: (chatUri, proposedUri, approve) => ipcRenderer.invoke('proposals:answer', chatUri, proposedUri, approve),
   timelinePages: (n) => ipcRenderer.invoke('timeline:pages', n), // how many pages of three days back children('orbital:timeline') reads; resolves to the number it took
   onTimelinePart: (cb) => ipcRenderer.on('timeline:part', (_e, rows) => cb(rows)), // the Timeline so far, while children('orbital:timeline') is still reading the rest
-  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, Dot, Claude, and every agent linked
+  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, and every agent linked
   // through orbital.md/mcp (main/agents/linked.js), which carries linked, app and seenAt
   agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, isDefault, link, openNew, chat, opensHere, setup, linked?, app?, seenAt? }]
   enableAgent: (id, on) => ipcRenderer.invoke('agent:enable', id, on), // the new list

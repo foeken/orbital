@@ -129,7 +129,7 @@
       <tr><td>The name <b>Discuss with …</b> suggests, <b>Auto-pick type</b>, <b>Process image</b>, <b>Auto-translate …</b>, <b>Translate into …</b></td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
       <tr><td>Icons for your types, picked for you</td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
       <tr><td><b>Assign to Agent</b> with Tana</td><td>Nothing: Tana is always there</td></tr>
-      <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with Codex or Claude</td><td>The Codex app or CLI, or Claude Code, on this Mac</td></tr>
+      <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with Codex</td><td>The Codex app or CLI on this Mac</td></tr>
       <tr><td><b>Assign to Agent</b> with your personal agent</td><td>Orbital and Tana added to your agent (your OpenAI Dot, or any agent that speaks MCP) as custom MCP servers, and the agent linked once (<a href="#link-agent">below</a>)</td></tr>
     </table>
     <div class="tip">The moment you sign in or save a key, Orbital gives every type that has no icon one that fits its name, and does the same for their fields. You see the new glyphs on bullets and chips. An icon you chose yourself, or <b>No icon</b>, is never touched.</div>
@@ -227,13 +227,13 @@
   </section>
 
   <section class="topic">
-    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents set default agent tana codex claude dot install">Choose your agents</h2>
-    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows three of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> and <b>Claude</b> run on this Mac, through the Codex app or CLI and through Claude Code, each with its own sign-in.</p>
+    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents set default agent tana codex claude coming soon dot install">Choose your agents</h2>
+    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows two of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>Codex</b> runs on this Mac, through the Codex app or CLI, with its own sign-in. <b>Claude</b> is listed as <b>Coming soon</b>.</p>
     <div class="split">
       <div>
         <p>Run <b>Choose agents …</b> to see them in one list. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat. An agent you linked is in the same list under its own name, and its last row is <b>Connect your personal agent …</b>.</p>
       </div>
-      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, Codex on, Claude off, then Connect your personal agent"><figcaption>Which agents are on, and the way to link your own.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, Codex on, Claude coming soon, then Connect your personal agent"><figcaption>Which agents are on, and the way to link your own.</figcaption></figure>
     </div>
     <div class="split flip">
       <div>
@@ -241,7 +241,6 @@
       </div>
       <figure class="shot"><img data-m="ai-default" alt="Set default agent: Tana and Codex, the agents that are on, Tana ticked as the default"><figcaption><b>Set default agent …</b>: <kbd>↩</kbd> makes one the default.</figcaption></figure>
     </div>
-    <div class="note">Claude runs as your own Claude Code on this Mac, signed in with your own account. Orbital never signs in to Anthropic and never sees a Claude login.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>choose agents</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
 
@@ -283,7 +282,7 @@
   </section>
 
   <section class="topic">
-    <h2 id="agent" data-short="Assign to Agent" data-k="agent assign unassign prompt robot tana codex dot claude">Hand a node to an agent</h2>
+    <h2 id="agent" data-short="Assign to Agent" data-k="agent assign unassign prompt robot tana codex dot">Hand a node to an agent</h2>
     <p><b>Assign to Agent</b> gives the node you are on to a new task, with the node as its context. You only say what to do with it. Its hint says which agent it goes to. On a node an agent already has, it says it replaces what that agent was asked: assigning again sends your new request in place of the old one.</p>
     <h3>Assign to Agent</h3>
     <p>Run <b>Assign to Agent</b>. The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. With more than one agent on, they are listed under the prompt, the default ticked; <kbd>⇥</kbd> moves between the prompt and that list. The agent's own default model does the work.</p>
@@ -301,7 +300,7 @@
     </ol>
     <figure class="clip wide"><video data-m="ai-assign"></video><figcaption>Assigned: the badge appears beside the title, grey while the task starts, then blue as it works.</figcaption></figure>
     <p>The node now carries the agent badge. Under <b>Group by Responsibility</b> it belongs in the <b>Agent</b> section, but it stays where it is until you press <b>Clean up</b>, so nothing jumps under your pointer. Dropping a task into the Agent section opens the same prompt.</p>
-    <p><b>Unassign from Agent</b> takes the node back at once, and removes what the agent left at the end of the node: the agent's context and its status line. The task itself stays where it ran: a Tana chat, a Codex task, a Claude session, your Dot's chat.</p>
+    <p><b>Unassign from Agent</b> takes the node back at once, and removes what the agent left at the end of the node: the agent's context and its status line. The task itself stays where it ran: a Tana chat, a Codex task, your Dot's chat.</p>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>assign to agent</b> <i>→</i><kbd>↩</kbd></span>, write a line, then <kbd>⌘↩</kbd>.</div>
   </section>
 
@@ -323,22 +322,22 @@
       <li><b>Agent waiting for you</b> Blue and still. The task wants an approval or an answer from you.</li>
       <li><b>Agent completed</b> Green. The task finished its last turn.</li>
       <li><b>Agent needs attention</b> Red. The task failed or cannot be reached; assign again to retry.</li>
-      <li><b>Agent on another Mac</b> Grey. A Claude task lives on the Mac that started it: open it there. Assigning the node here starts a new one on this Mac.</li>
+      <li><b>Agent on another Mac</b> Grey. The task lives on the Mac that started it: open it there. Assigning the node here starts a new one on this Mac.</li>
       <li><b>A completed task</b> The badge drops to a grey outline: a record that there was a task.</li>
     </ol>
     <p>A node handed to your Dot follows its own last line, <b>Agent status: …</b>. Orbital writes <b>Agent status: Assigned</b> as it sends the event, and the badge stays grey until your Dot picks the task up and changes the line to <b>Working</b>, so blue means it really started; then <b>Completed</b> turns it green, or <b>Failed</b> red. Whatever your Dot writes goes above that line, which stays the node's last. It is ordinary text, so anyone who opens the node in Tana sees it too, and the task's own status stays yours: <b>Agent completed</b> means your turn to look, not done.</p>
-    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, a Codex task in Codex, a Claude session in Terminal. Your Dot's badge only shows how it is going: its work is in the node itself. On the Timeline, a task row carries the badge right after its title.</p>
+    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, a Codex task in Codex. Your Dot's badge only shows how it is going: its work is in the node itself. On the Timeline, a task row carries the badge right after its title.</p>
   </section>
 
   <section class="topic">
-    <h2 id="codex" data-short="Agent tasks" data-k="go to task link task open in codex claude tana">Go to a task, link one, or start a fresh one</h2>
+    <h2 id="codex" data-short="Agent tasks" data-k="go to task link task open in codex tana">Go to a task, link one, or start a fresh one</h2>
     <div class="split">
       <div>
-        <p>Every agent that is on brings the rows it can do. Codex and Claude bring all three; Tana, whose tasks are chats here, brings only <b>Go to Tana task</b>; your Dot, whose work is in the node, brings none. Type <b>codex</b> in <kbd>⌘K</kbd> to see Codex's:</p>
+        <p>Every agent that is on brings the rows it can do. Codex brings all three; Tana, whose tasks are chats here, brings only <b>Go to Tana task</b>; your Dot, whose work is in the node, brings none. Type <b>codex</b> in <kbd>⌘K</kbd> to see Codex's:</p>
         <ul>
-          <li><b>Go to Codex task</b> opens the task this node is assigned to. <b>Go to Claude task</b> opens the session in Terminal, and <b>Go to Tana task</b> opens the chat here.</li>
-          <li><b>Link Codex task …</b> links a task that already exists. <b>Link Claude task …</b> takes a session id.</li>
-          <li><b>Open in Codex</b> starts a new Codex task with this node's link and tracks nothing: no badge, no state. <b>Open in Claude</b> does the same in Terminal.</li>
+          <li><b>Go to Codex task</b> opens the task this node is assigned to. <b>Go to Tana task</b> opens the chat here.</li>
+          <li><b>Link Codex task …</b> links a task that already exists.</li>
+          <li><b>Open in Codex</b> starts a new Codex task with this node's link and tracks nothing: no badge, no state.</li>
         </ul>
       </div>
       <figure class="shot"><img data-m="ai-codex-rows" alt="Cmd+K filtered by codex: Open in Codex, Go to Codex task, Link Codex task, Assign to Codex"><figcaption>The Codex rows, on an assigned node.</figcaption></figure>
@@ -353,8 +352,8 @@
   </section>
 
   <section class="topic">
-    <h2 id="chat" data-short="@Codex in a chat" data-k="codex claude chat mention local only you add to message open codex task delete">Ask @Codex or @Claude in a chat, privately</h2>
-    <p>In a Tana chat, type <b>@</b> in the message box and pick <b>Codex</b> (after Tana, hinted “Ask Codex · the answer stays on this device”), or <b>Claude</b> when it is on. Your question goes to a task on this Mac with the whole conversation as context. Nothing of it reaches Tana, so nobody else in the chat sees it.</p>
+    <h2 id="chat" data-short="@Codex in a chat" data-k="codex chat mention local only you add to message open codex task delete">Ask @Codex in a chat, privately</h2>
+    <p>In a Tana chat, type <b>@</b> in the message box and pick <b>Codex</b> (after Tana, hinted “Ask Codex · the answer stays on this device”). Your question goes to a task on this Mac with the whole conversation as context. Nothing of it reaches Tana, so nobody else in the chat sees it.</p>
     <div class="mg ai-local" aria-hidden="true">
       <div class="win ai-local-chat">
         <div class="ai-q"><b>@Codex</b> what did we decide?</div>

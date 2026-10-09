@@ -132,7 +132,7 @@ const AGENT_BADGE = {
 };
 const agentStateOf = (id) => (AGENT_BADGE[agentStates.get(id)] ? agentStates.get(id) : 'pending');
 const agentTasks = new Map(); // docId -> { agent, taskId }: which agent's task each linked node is
-// Every agent the app knows (main/agent.js list): Tana always, Codex and Claude greyed until installed. Read at boot
+// Every agent the app knows (main/agent.js list): Tana always, Codex greyed until installed. Read at boot
 // and after Choose agents changes it; the rows each agent brings are drawn from it.
 let agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }];
 let agentPick = 'tana'; // the agent the Assign to Agent page will hand the node to, the default until the page picks another

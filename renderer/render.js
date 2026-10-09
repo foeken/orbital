@@ -722,7 +722,7 @@ function agentBadgeEl(id, done = !!docOf(id)?.done) {
   if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); el.append(svg); }
   return el;
 }
-// The task behind a node: a Tana chat opens here, in Orbital; Codex's and Claude's open in their own apps (main).
+// The task behind a node: a Tana chat opens here, in Orbital; Codex's opens in its own app (main).
 function openAgentTask(id) {
   const link = agentTasks.get(id);
   if (link && (agentNamed(link.agent) || {}).opensHere) return goTo(link.taskId);
