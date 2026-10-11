@@ -403,7 +403,9 @@ function sbDraw() {
   if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
   // Agent chats: the newest, each opening its chat in the page; none yet offers a new one, more than fit the whole list
   if (bridge.agentChats) {
-    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; sbChatDrop(b, c); return b; }; // the chat's own glyph, as its tab and the list wear it
+    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; sbChatDrop(b, c);
+      b.oncontextmenu = (e) => { e.preventDefault(); bridge.agentChatMenu?.(c.id); }; // Delete chat (main/agentchats.js)
+      return b; }; // the chat's own glyph, as its tab and the list wear it
     const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', (e) => toPage({ orbital: 'action', id: 'agentChats', where: sbWhere(e) }))] : [];
     // the new chat's page itself, not its Cmd+K row: that row is there only on a Mac with the ChatGPT app, and the page says what is missing
     rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'chatgpt', 'New chat with ChatGPT', (e) => toPage({ orbital: 'goto', id: 'orbital:agent-chat:new', where: sbWhere(e) }))]));

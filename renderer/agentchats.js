@@ -22,7 +22,15 @@ const agentChatPlaceRows = () => agentChatsKnown.map((n) => ({ id: 'agentChat:' 
 if (tana.agentChats) tana.agentChats().then(knowAgentChats, () => {});
 // an answer streaming in, or the list changed (here or on another Mac): read again what is on screen
 if (tana.onAgentChatChanged) tana.onAgentChatChanged((id) => {
-  if (id === AGENT_CHATS_PAGE) { tana.agentChats().then((list) => { knowAgentChats(list); return kids.has(id) ? reload(id).then(() => renderSoon(true)) : null; }).catch(() => {}); return; }
+  if (id === AGENT_CHATS_PAGE) {
+    tana.agentChats().then((list) => {
+      knowAgentChats(list);
+      // the chat on screen was deleted (the sidebar's Delete chat, or on another Mac): back to the list, as ⌘K Delete chat goes
+      if (zoom && !zoom.nodeId && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW && !agentChatsKnown.some((n) => n.id === zoom.docId)) { navReplace = true; goTo(AGENT_CHATS_PAGE); return null; }
+      return kids.has(id) ? reload(id).then(() => renderSoon(true)) : null;
+    }).catch(() => {});
+    return;
+  }
   if (kids.has(id)) reload(id).then(() => renderSoon(true), () => {});
 });
 const codexHere = () => agentList.some((a) => a.id === 'codex' && a.installed);

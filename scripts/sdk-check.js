@@ -3625,6 +3625,14 @@ async function main() {
     // Delete chat forgets the link only: the thread stays in Codex, and the chat can no longer be opened here
     assert.deepEqual(plain([...await handler('agentChat:delete')(null, ID)]), [], 'deleting forgets the link');
     await assert.rejects(handler('agentChat:send')(null, ID, 'Hi'), /not here any more/, 'and a chat that was deleted takes no more messages');
+    // A right-click on a chat in the sidebar (shell.js): Delete chat, the same forgetting of its link
+    settings.set('agentChats', { [T]: { agent: 'codex', title: 'Week summary', at: 2, device: agent.deviceId() } });
+    let menu = null;
+    Object.assign(backend.electron.Menu, { buildFromTemplate: (items) => { menu = items; return { popup() {} }; } }); backend.electron.BrowserWindow.fromWebContents = () => null;
+    handler('agentChat:menu')({ sender: {} }, ID);
+    assert.deepEqual(plain(menu.map((i) => i.label)), ['Delete chat'], 'a right-click on a chat offers Delete chat');
+    menu[0].click();
+    assert.equal(chats.list().some((r) => r.id === ID), false, 'which forgets the link');
     console.log('ok  agent chats: synced links, turns as messages, failed turns, another Mac, delete forgets the link');
   }
   // Agents linked through the MCP server (main/agents/linked.js, mcp-server/server.js, docs/MCP-SERVER.md): a real MCP server on a

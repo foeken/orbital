@@ -23,6 +23,7 @@ if (file === 'shell.html') {
     // its Agent chats section: your chats with Codex, newest first (main/agentchats.js), read again on onAgentChats
     agentChats: () => ipcRenderer.invoke('agentChat:list'),
     onAgentChats: (cb) => ipcRenderer.on('agentChat:changed', () => cb()),
+    agentChatMenu: (id) => ipcRenderer.invoke('agentChat:menu', id), // a right-click on a chat: Delete chat
   });
   return;
 }

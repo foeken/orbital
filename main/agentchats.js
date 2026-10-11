@@ -237,6 +237,11 @@ const ipc = {
   'agentChat:info': (_e, id) => info(id),
   'agentChat:open': (_e, id) => { const { shell } = require('electron'); return shell.openExternal(TASK + encodeURIComponent(linkOf(id).threadId)); },
   'agentChat:delete': async (_e, id) => { const { threadId } = linkOf(id); store(threadId, null); return list(); },
+  // a right-click on a chat in the sidebar (shell.js): Delete chat, which forgets the link as ⌘K Delete chat does
+  'agentChat:menu': (e, id) => {
+    const { BrowserWindow, Menu } = require('electron'), { threadId } = linkOf(id);
+    Menu.buildFromTemplate([{ label: 'Delete chat', enabled: !S.demo, click: () => store(threadId, null) }]).popup({ window: BrowserWindow.fromWebContents(e.sender) });
+  },
 };
 const isChat = (id) => String(id || '').startsWith(PREFIX); // a chat, or a new one (orbital:agent-chat:new)
 const stop = () => { for (const s of [...live.values()]) s.stop(); };
