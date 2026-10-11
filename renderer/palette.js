@@ -41,7 +41,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'pinSidebar', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
-  'codex', 'codexTo', 'codexUnassign', 'codexOpen', 'sendToAgent',
+  'codex', 'codexTo', 'codexUnassign', 'codexOpen',
   'visibility', 'addParticipants', 'notify', 'copyLink', 'exportPdf',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
@@ -240,14 +240,6 @@ function paletteRows(q, typed = q) {
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ id: 'openInTana', group: docGroup, icon: 'tana', label: 'Open in Tana', run: () => openInTana(doc.id) }); }
   // a meeting's call, on the meeting and on its write-up: its related read carries the link (callRow)
   if (palDoc && isRealId(palDoc.id)) { const call = callRow(relatedBy.get(palDoc.id)); if (call) rows.push({ ...call, group: docGroup }); }
-  // Open in <agent>: a new task in that agent's app with the node's link, nothing tracked (Assign to Agent is the
-  // tracked one), one row for each agent that is on and can take a link. Codex's id keeps its old name so a recorded
-  // key still finds the row.
-  if (palDoc && tana.nodeLink && tana.openInAgent && isRealId(palDoc.id)) {
-    const doc = palDoc;
-    for (const a of agentsOn().filter((x) => x.openNew)) rows.push({ id: a.id === 'codex' ? 'sendToAgent' : 'openIn' + a.label, rank: 'sendToAgent', group: docGroup, icon: a.icon, label: 'Open in ' + a.label, hint: 'New task with this link',
-      run: () => run(async () => tana.openInAgent(a.id, await tana.nodeLink(doc.id))) });
-  }
   // What this document is: its Tana type, or none. Only a document or a meeting carries one, so a block, a space or a
   // member is not offered the row at all. The list is main's (the rules for which types fit live there); the hint is
   // the type it has now, read from the chip the row already carries.

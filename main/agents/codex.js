@@ -4,7 +4,6 @@
 // app-server, so appServerRpc and codexBin are exported for it.
 const agent = require('../agent');
 
-const NEW_TASK = 'https://chatgpt.com/codex/open-app?q='; // the public route for a new composer; codex://threads/new is internal and does nothing from outside
 const TASK = 'codex://threads/';
 const codexBin = () => agent.findBin('codex', ['/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex', '/Applications/ChatGPT.app/Contents/Resources/codex', '/Applications/Codex.app/Contents/Resources/codex']);
 
@@ -188,7 +187,6 @@ const codex = agent.register({
   },
   statuses,
   open: (taskId) => openUrl(TASK + encodeURIComponent(taskId)),
-  openNew: (link) => openUrl(NEW_TASK + encodeURIComponent(link + '\n')),
   // One app-server child reads the latest turn of each task (itemsView full). Read from a second app-server, a turn
   // still running on the one that started it shows as interrupted, so only an answer or a completed or failed turn
   // ends the wait here.
@@ -207,4 +205,4 @@ const codex = agent.register({
   release, stop,
 });
 
-module.exports = { codex, codexBin, appServerRpc, agentState, agentStatuses, createTask, codexAnswer, release, stop, NEW_TASK, TASK };
+module.exports = { codex, codexBin, appServerRpc, agentState, agentStatuses, createTask, codexAnswer, release, stop, TASK };

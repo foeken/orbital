@@ -276,7 +276,6 @@ assert.match(source, /blockSelection\(keys, true, 'Move'\)/, 'while moving it st
 assert.match(source, /tana\.setStateMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);
 assert.match(source, /const rows = \[\.\.\.selection\];/, 'what acts on the selection comes before everything else in Cmd+K');
-assert.match(source, /id: a\.id === 'codex' \? 'sendToAgent' : 'openIn' \+ a\.label[^\n]*label: 'Open in ' \+ a\.label[\s\S]*?tana\.openInAgent\(a\.id, await tana\.nodeLink\(doc\.id\)\)/, 'Open in <agent> hands that agent the current node link, and Codex keeps the id a recorded key finds');
 // the current document's own actions (pins, link, icon, visibility, location) follow under the same heading, before the views
 assert.ok(source.indexOf("const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';") < source.indexOf("const viewRows = views.map((s) => ({ id: 'view:'"), 'the document actions join the Current node group ahead of the views');
 assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);
@@ -489,7 +488,7 @@ const DEMO_SAFE = new Set(['agentChats', 'agentChatInfo', 'openAgentChat', 'onAg
   'mcpHidden', 'meetingInfo', 'members', 'readMeetingTime', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
   'onChatGPTStatus', 'onFeatureFlags', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
   'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
-  'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',
+  'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',
   'pinState', 'prefs', 'prefsNow', 'presenceClose', 'presenceOpen', 'presenceSet', 'presenceView', 'previewMove',
   'refresh', 'related', 'relatedWatch', 'mcpLink', 'mcpLinkCancel', 'mcpLinkStatus', 'mcpRefresh', 'mcpRename', 'mcpReset', 'mcpWhere', 'mcpOld', 'mcpCheck',
   'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',

@@ -10,7 +10,6 @@
 //   resume(taskId, prompt)  hands an existing task the new request (a reassignment)
 //   statuses({ nodeId: taskId })  nodeId -> pending | working | waiting | done | broken
 //   open(taskId)            shows the task in the agent's own app (Tana's opens in Orbital, renderer side)
-//   openNew(link)           a fresh, untracked task carrying the node's link (Open in <agent>)
 //   read(taskIds)           Map taskId -> { state: working|done|failed, text }, for @<agent> in a chat
 //   release(key), stop()    let go of a task this app is running, one or all
 // Only id, label, available and start are required; the app offers what a plugin answers and nothing else.
@@ -66,7 +65,7 @@ function setDefault(id) {
 // says so, with the app it came through and when the MCP server last heard from it.
 const list = () => { catchUp(); return Object.values(AGENTS).map((a) => ({
   id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id), isDefault: defaultAgent() === a.id,
-  openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere, opens: !!(a.open || a.opensHere), // opens: Go to <agent> task can show it
+  chat: !!a.read, opensHere: !!a.opensHere, opens: !!(a.open || a.opensHere), // opens: Go to <agent> task can show it
   ...(a.linked ? { linked: true, app: a.app || '', seenAt: a.seenAt || null } : {}),
 })); };
 

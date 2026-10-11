@@ -125,13 +125,6 @@ const ipc = {
     await a.open(link.taskId);
     return true;
   },
-  // Open in <agent>: a fresh task with the node's link, nothing tracked (Assign to Agent is the tracked one)
-  'agent:openNew': (_e, agentId, link) => {
-    if (typeof link !== 'string' || !/^https:\/\//.test(link)) throw new Error('Not a link');
-    const a = ready(agentId);
-    if (!a.openNew) throw new Error(a.label + ' cannot open a link');
-    return a.openNew(link);
-  },
   ...linked.ipc,
 };
 const stop = () => { for (const a of Object.values(agent.AGENTS)) if (a.stop) a.stop(); }; // no writer outlives the app that spawned it
