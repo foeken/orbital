@@ -210,8 +210,9 @@ const writable = async (doc) => canWrite(readNode(doc), S.me.userUri, await acce
 
 // Quick Add Task's types (task.js, main/documents.js taskTypes and customCreation): the types with a workflow that apply
 // to documents and that you may create in (a space's type keeps its tasks in that space). Each type is read and let go
-// again, and the list is kept for the session: types change rarely and there can be many.
-let taskTypeList = null;
+// again, and the list is kept five minutes: types are made and renamed in Tana at any time, and Siri knows them by
+// what this last answered (Engine.swift keepTasks), and there can be many.
+let taskTypeList = null, taskTypesRead = 0;
 // What a document of a type is made as (main/documents.js customCreation): a task when the type has a workflow, else a
 // document of it; null for a type of meetings, or one whose space is not yours to write in
 async function creatable(uri, ctx) {
@@ -237,7 +238,7 @@ async function listsTasks(searchId) {
     return types.length > 0;
   } catch { return false; }
 }
-const taskTypes = () => (taskTypeList ||= (async () => {
+const taskTypes = () => (Date.now() - taskTypesRead > 300000 && (taskTypeList = null, taskTypesRead = Date.now()), taskTypeList ||= (async () => {
   const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }), ctx = await access();
   const types = await Promise.all(nodes.map((t) => creatable(t.id, ctx)));
   return types.filter((t) => t && t.task).sort((a, b) => a.title.localeCompare(b.title));
@@ -440,11 +441,12 @@ window.orbital = {
     return JSON.stringify(await Promise.all(order.map(async (n) => ({ ...listRow(n), glyph: await iconPng(chosen[n.id]).catch(() => null) }))));
   },
   // Siri and Shortcuts' List Tasks and their task lookup (Intents.swift, Engine.swift keepTasks): the tasks assigned to
-  // you in every state, the last changed first, marked sensitive and masked in demo mode as every list here is
+  // you in every state, the last changed first, each with its type, marked sensitive and masked in demo mode as every
+  // list here is
   async tasks() {
     await settled();
     const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['text'], stateTypes: STATE_TYPES, assignedTo: [S.me.userUri], limit: 300, sortOptions: newest });
-    return JSON.stringify(redact(nodes.map(listRow)));
+    return JSON.stringify(redact(nodes.map((n) => ({ ...listRow(n), typeUri: n.entityType || null }))));
   },
   // Long press, Delete: to Tana's trash, as the desktop deletes (main/documents.js documentAction), where you may
   async remove(id) {

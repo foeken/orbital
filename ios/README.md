@@ -70,15 +70,30 @@ gallery again until Orbital is in it.
 ## Siri, Shortcuts and Spotlight
 
 `Orbital/Intents.swift` (issue #723) gives Siri and Shortcuts Orbital's tasks as an App Entity (`TaskEntity`) and what can be
-done with one: **Add Task** (pinned to today or not), **Check Off Task**, **Uncheck Task**, **Pin Task to Today** (or unpin),
-**Open Task**, **Today's Tasks**, and **List Tasks** (by status, all but the completed ones unless you choose). Tana is written
+done with one: **Add Task** (of a type and pinned to today, or not), **Check Off Task**, **Uncheck Task**, **Pin Task to Today**
+(or unpin), **Open Task**, **Today's Tasks**, and **List Tasks** (by status and type, all but the completed ones unless you
+choose). A task's title, status, type and pin are its properties, for Shortcuts' filters and Siri, and it is handed on as its
+words. Tana's task types (those with a workflow) are an entity of their own (`TaskTypeEntity`), not an enum: they are made
+and renamed in Tana at any time, so Siri finds them among those the app last read (`orbital.taskTypes`, kept five minutes).
+Tana is written
 by the engine, which runs in the app, so whatever changes a task opens Orbital and runs there, writing through its engine
 as soon as Tana is connected. Today's Tasks and List Tasks run in the background and answer
 from what the app last saved: the widgets' copy, and the tasks assigned to you, read at most every five minutes and again when
-Demo mode changes (`Engine.keepTasks`); Siri finds a task among those by the words you say. A sensitive task is never said or
+Demo mode changes (`Engine.keepTasks`), with their types; Siri finds a task among those by the words you say. A sensitive task is never said or
 indexed, only named as one. `OrbitalShortcuts` gives Siri its phrases with no shortcut set up first ("Add a task in
-Orbital", "What's on today in Orbital", "Check off … in Orbital"), Spotlight indexes those same tasks (none in
-Demo mode or once signed out), and each task box carries its entity (`appEntityIdentifier`) so "check this off" knows which.
+Orbital", "Add a Bug in Orbital", "What's on today in Orbital", "Check off … in Orbital"), Spotlight indexes those same tasks
+(none in Demo mode or once signed out), and each task box and a task's own page carry its entity (`appEntityIdentifier`) so
+"check this off" knows which.
+
+On iOS 27, `Orbital/Schema.swift` adds Apple's App Schemas, which the new Siri understands with no phrases: each task is
+also a **reminder** (`TaskReminder`, the `reminders` domain) in the **list** of its task type (`TaskList`, Tasks for one of no
+type), and Siri can add one (to a list, due today pins it), tick it off or back on, pin it to today, and delete it (to Tana's
+trash, after Siri asks). What a Tana task has no place for (a note, tags, links, a flag, a repeat, a place, a section, a day
+other than today, a new title or type) is refused in words, never dropped. On iOS 27 Spotlight indexes the reminders and the
+lists instead of the tasks, and the views carry the reminder. A schema's type cannot exist before iOS 27 and the schemas come
+with the iOS 27 SDK, so all of it is `@available(iOS 27, *)` inside `#if compiler(>=6.4)`: the app still targets iOS 26 and
+builds with Xcode 26, without it. Apple's AppIntentsTesting is not used: the UI tests linking it fail to load on an iOS 26
+simulator, which needs a framework only iOS 27 has; it wants a test target of its own once the simulators are iOS 27.
 The Android app has no counterpart yet: Gemini's AppFunctions are an alpha (#723).
 
 ## Links from other apps

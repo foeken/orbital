@@ -27,6 +27,7 @@ data class Row(
     val join: String? = null,
     val people: List<Person>? = null,
     val assignees: List<String>? = null, // a task's, in a saved search: who it is assigned to, for Assign to …
+    val typeUri: String? = null, // a task's Tana type (ios/engine/index.js tasks): the iPhone's Siri reads it, Android nothing yet
     val children: List<Row>? = null,
     val timeline: Info? = null,
     val reference: Ref? = null,
