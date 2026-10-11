@@ -151,8 +151,12 @@ function relayRow(w) {
 }
 function agentRows(a) {
   const flip = () => load('agents', () => host.enableAgent(a.id, !a.enabled));
+  // a linked agent (your Dot) can be unlinked here, as on its ⌘K page: asked first, since its nodes are unassigned with it
+  const unlink = a.linked && host.mcpUnlink ? [button('unlink/' + a.id, 'Unlink', () => {
+    if (confirm('Unlink ' + a.label + '? It can no longer take tasks from Orbital, and the nodes handed to it are unassigned.')) load('agents', () => host.mcpUnlink(a.id));
+  })] : [];
   // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
-  return [row(a.icon, a.label, toggle('agent/' + a.id, a.label, a.enabled, flip, a.id === 'tana' || (!a.installed && !a.enabled)),
+  return [row(a.icon, a.label, [...unlink, toggle('agent/' + a.id, a.label, a.enabled, flip, a.id === 'tana' || (!a.installed && !a.enabled))],
     a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : null, !a.installed)];
 }
 const SECTIONS = {

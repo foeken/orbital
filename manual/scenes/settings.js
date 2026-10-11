@@ -30,7 +30,7 @@ const card = [310, 76, 660, 556];
 const SETTINGS_API = "start({ prefs: { theme: new URLSearchParams(location.search).get('theme') }, translate: () => {}, filters: async () => ['Daily standup', 'Lunch*', 'Focus time'],"
   + " aiOptions: async () => ({ models: ['gpt-6-luna', 'gpt-6-sol', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'medium', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'medium', 'high', 'xhigh'] }),"
   + " chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@example.com' }), mcpHidden: async () => true, setMcpHidden: async (on) => on, setPref: async () => {}, mcpWhere: async () => window.org,"
-  + " agentList: async () => window.agents, enableAgent: async (id, on, setup) => (window.agents = window.agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a))), setDefaultAgent: async () => window.agents,"
+  + " agentList: async () => window.agents, enableAgent: async (id, on, setup) => (window.agents = window.agents.map((a) => (a.id === id ? { ...a, enabled: on, ...(setup ? { installed: true, setup: '' } : {}) } : a))), setDefaultAgent: async () => window.agents, mcpUnlink: async (id) => (window.agents = window.agents.filter((a) => a.id !== id)),"
   + " settingsSize: (h) => { frameElement.style.height = h + 'px'; } }); 1";
 const AGENTS = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt', installed: true, enabled: true, isDefault: true },
   { id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true, app: 'ChatGPT' }];

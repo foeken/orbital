@@ -450,12 +450,14 @@ const SETTINGS_API = String.raw`(() => {
   window.__calls = []; window.__slow = [];
   const call = (name, answer) => (...a) => { __calls.push([name, ...a]); return Promise.resolve(typeof answer === 'function' ? answer(...a) : answer); };
   const AI = { models: ['gpt-6-luna', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'high'] };
-  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true }];
+  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
+    { id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true }];
   start({ prefs: { theme: 'light' }, translate: () => {}, onSettings: (fn) => { window.__settings = fn; },
     aiOptions: () => new Promise((resolve) => __slow.push(() => resolve(AI))), setAiOption: call('setAiOption', (k, v) => ({ ...AI, [k]: v })),
     chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@private.example' }), chatgptLogout: call('chatgptLogout', { available: true, signedIn: false }),
     agentList: async () => agents, enableAgent: call('enableAgent', (id, on) => (agents = agents.map((a) => (a.id === id ? { ...a, enabled: on } : a)))),
     setDefaultAgent: call('setDefaultAgent', () => agents), filters: async () => hidden,
+    mcpUnlink: call('mcpUnlink', (id) => (agents = agents.filter((a) => a.id !== id))),
     addFilter: call('addFilter', (p) => (hidden = [...hidden, p])), removeFilter: call('removeFilter', (p) => (hidden = hidden.filter((h) => h !== p))),
     mcpHidden: async () => true, setMcpHidden: call('setMcpHidden', (on) => on), setPref: call('setPref'), settingsSize: (h) => { __calls.push(['settingsSize', h]); } });
 })()`;
@@ -484,6 +486,12 @@ flow('the Settings window writes what you pick and shows what is newest', async 
   await p.js('document.querySelector(\'[data-key="agent/codex"]\').focus(); 1'); await p.key('Space'); await settle(p, 150);
   assert.deepEqual(await p.js('[__calls.find((c) => c[0] === "enableAgent"), document.activeElement.dataset.key, document.activeElement.getAttribute("aria-checked")]'),
     [['enableAgent', 'codex', false], 'agent/codex', 'false'], 'Space switches Codex off, and the keyboard is still on its switch');
+  // a linked agent has Unlink beside its switch, asked first; built-in ones have none
+  assert.deepEqual(await p.js('[...document.querySelectorAll(\'[data-key^="unlink/"]\')].map((b) => b.dataset.key)'), ['unlink/relay:echo'], 'only the linked agent has Unlink');
+  await p.js('window.confirm = () => false; document.querySelector(\'[data-key="unlink/relay:echo"]\').click(); 1'); await settle(p, 100);
+  assert.equal(await p.js('__calls.some((c) => c[0] === "mcpUnlink")'), false, 'cancelled, nothing is unlinked');
+  await p.js('window.confirm = () => true; document.querySelector(\'[data-key="unlink/relay:echo"]\').click(); 1'); await settle(p, 150);
+  assert.deepEqual(await p.js('[__calls.find((c) => c[0] === "mcpUnlink"), document.body.innerText.includes("Echo")]'), [['mcpUnlink', 'relay:echo'], false], 'confirmed, it is unlinked and off the list');
   // the Hidden tab: + and a title hides it, ⌫ on a selected one unhides it
   await tab('lists');
   await p.js('document.querySelector(\'[data-key="hidden+"]\').click(); 1'); await p.type('Lunch*'); await p.key('↩'); await settle(p, 150);
