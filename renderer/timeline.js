@@ -22,11 +22,11 @@ function timelineUriAt() {
 function timelineViewRow() {
   return { id: 'timeline', group: 'Views', icon: 'timeline', label: 'Timeline', opens: TIMELINE_PAGE, run: () => goTo(TIMELINE_PAGE) };
 }
-// The Work View: the Timeline in page '' beside My Tasks in page '2', the saved view installed first (renderer/palette.js
+// The Default View: the Timeline in page '' beside My Tasks in page '2', the saved view installed first (renderer/palette.js
 // savedViews) and the one a first launch opens (renderer/edit.js). Its layout is main's own ('workView': main.js pair),
 // and My Tasks is a place found or made at load (edit.js restorePlace), since its id is yours. Home opens it, the one
 // saved under its id if you replaced it, and this one if you removed it.
-const WORK_VIEW = { id: 'workView', name: 'Work View', doc: 'workView', keys: {
+const WORK_VIEW = { id: 'workView', name: 'Default View', doc: 'workView', keys: {
   place: JSON.stringify({ docId: TIMELINE_PAGE, nodeId: null, title: 'Timeline', icon: 'timeline' }), 'place:2': JSON.stringify({ myTasks: true }) } };
 const openWorkView = () => openSavedView(savedViews().find((v) => v.id === WORK_VIEW.id) || WORK_VIEW);
 // Sections by local day: Today, Yesterday, then the date. Folded for as long as the window is open, like a group.

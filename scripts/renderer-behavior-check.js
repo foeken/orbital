@@ -2267,7 +2267,7 @@ async function runTaskMetaRetryCheck() {
 
 // Palette arrows step over rows that cannot run (info lines, unavailable choices) instead of parking on a dead row.
 function runPaletteSkipCheck() {
-  // An empty list page says what would fill it (the Work View a new account opens on is two of them), a document
+  // An empty list page says what would fill it (the Default View a new account opens on is two of them), a document
   // says it has no content, and a list of tasks names the key that makes one: the one that is recorded now.
   const emptyText = vm.runInNewContext(`
     const TIMELINE_PAGE = 'orbital:timeline', INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', SEARCH_ID = 'tana:search:';
@@ -8151,7 +8151,7 @@ async function runHelpOnceCheck() {
   assert.deepEqual(plain(await pane(async () => { throw new Error('gone'); }).go()), { opened: 0, seen: false }, 'a claim that fails shows nothing and spends nothing: the next launch asks again');
   assert.deepEqual(plain(await pane(null).go()), { opened: 1, seen: true }, 'with no main to ask (the in-file mock) the page opens it itself');
   const quiet = main(false);
-  assert.deepEqual(plain(await pane(quiet, ':2').go()), { opened: 0, seen: false }, 'the right half of the Work View stays quiet');
+  assert.deepEqual(plain(await pane(quiet, ':2').go()), { opened: 0, seen: false }, 'the right half of the Default View stays quiet');
   assert.equal(quiet.asked(), 0, 'and does not claim it from the main half');
   assert.deepEqual(plain(await pane(quiet, '', false).go()), { opened: 0, seen: false }, 'signed out or not yet connected: no tour, over the login');
   assert.equal(quiet.asked(), 0, 'and no claim, which main could only answer from this machine\u2019s own copy');
@@ -8717,6 +8717,20 @@ async function runNotesPlaceCheck() {
   console.log('ok  a meeting showing your notes reopens on them after a reload');
 }
 checks.push(runNotesPlaceCheck);
+// The Work View is called the Default View now: a copy saved under its id before the rename reads with the new name.
+function runDefaultViewNameCheck() {
+  const views = (saved) => vm.runInNewContext(`
+    const WORK_VIEW = { id: 'workView', name: 'Default View', keys: {} };
+    const pref = (k, d) => (${JSON.stringify(saved)} || d);
+    ${functionSource('savedViews')}
+    savedViews().map((v) => v.name);
+  `);
+  assert.deepEqual(plain(views(null)), ['Default View'], 'a new list starts with the Default View');
+  assert.deepEqual(plain(views([{ id: 'workView', name: 'Work View', keys: {} }, { id: 'v2', name: 'Work View', keys: {} }])), ['Default View', 'Work View'],
+    'its copy saved under the old name reads with the new one; a view of your own called that keeps its name');
+  console.log('ok  the Work View reads as the Default View, saved before the rename or not');
+}
+checks.push(runDefaultViewNameCheck);
 
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

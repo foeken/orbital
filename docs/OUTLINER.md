@@ -557,10 +557,10 @@ Cmd+K leads with a Selection group for it (§8).
   When the page on screen is deleted or archived (here, in another pane or in Tana), the pane goes back to the page
   before it in its history, and the deleted page leaves both stacks; with nothing to go back to, it shows the Library
   (renderer/edit.js `leaveGonePage`).
-- **Home** is the **Work View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
+- **Home** is the **Default View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
   (`setHome`): its panes and what each shows, kept as the saved view "Home" (`HOME_VIEW`, listed under Saved views, where
   it is removed or, saved again under that name, replaced) and stored as `homeView` in the synced `home` preference. A
-  page is at Home on the place that view keeps for it; removed, Home is the Work View again. A Library or saved search
+  page is at Home on the place that view keeps for it; removed, Home is the Default View again. A Library or saved search
   chosen as Home before still works, stored as its id (`library` or a `tana:search:` uri), and opens as a window of one
   pane on it, like every Home. Every route Home goes through
   `goHome`; Cmd+K "Go to Home" names it and always runs, reopening the whole window: a page sees only its own pane, so it
@@ -573,7 +573,7 @@ Cmd+K leads with a Selection group for it (§8).
   has from it: Chromium has lost a profile's localStorage whole, and every tab then opened on My Tasks (#636). Boot seeds the page from it
   before the first render, so a launch opens on that page with its header and the loader; `restorePlace` then reads
   the real node, and a page that is gone leaves the launch on the view. Children are asked for only once connected,
-  and the page you were on is fetched before the view behind it. A launch with nothing stored opens the Work View.
+  and the page you were on is fetched before the view behind it. A launch with nothing stored opens the Default View.
 - **Recently viewed**: the last 20 documents opened, most recent first, in localStorage `recent`; the search palette
   shows them under "RECENTLY VIEWED" with an empty query.
 
@@ -626,11 +626,11 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
   tab, Maximize or restore pane, Show all panes, Zoom back / forward and Close pane (its chip ⌘W, the File menu's Close;
   panes change places by dragging a tab); Show/Hide graph (§18), Reload (the window: every pane), Save view…, Remove saved view (its choices also found from the command page).
-- **Saved views** (issue #442): one row per view, the Work View first. A view is the window's layout (Trellis's
+- **Saved views** (issue #442): one row per view, the Default View first. A view is the window's layout (Trellis's
   document, `window:layout`, without its zoom: a view opens with every pane shown) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
   in the synced `savedViews` preference. Save view… names the current one, or updates a saved view listed under
   it (narrowed by what is typed; its name and id kept, so Home and a recorded key still find it); choosing a row writes the places back and hands main the layout (`window:setLayout`), which saves it and reloads
-  the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
+  the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Default View, which is always listed (replaced, never removed).
   A page on your day node for today or your node for this week (known by id, found at Save view and never made: renderer/palette.js
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
@@ -1340,9 +1340,9 @@ chat." shows as a centred status line, as other status lines do. **New chat with
 same members: a new chat opens, yours alone until then, and the one picked is invited to it, so it is visible to the
 two of you; a refused invite says why over the open chat (renderer/chat.js `newChatWith`: `chat:new`, open, then `chat:invite`).
 
-### Work View, windows and panes
+### Default View, windows and panes
 
-- **Work View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the
+- **Default View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the
   right (`api.myTasks`: the search the synced `myTasks` setting names, so a rename in Tana keeps it; else your own
   saved search called My Tasks, the oldest if two machines each made one, hidden title or not; else one made from the My
   Tasks preset with the Library's arrangement, and remembered. Only a deletion in Tana makes a fresh one). It is the

@@ -12,7 +12,7 @@ const drag = (type) => ({ page: 'shell', js: "(() => { const png = Uint8Array.fr
 const library = { js: "setView('inbox')" };
 const bare = { js: "for (const e of document.querySelectorAll('.scroll, #pagehead, #pills, #navbtns, #filterRow')) e.style.visibility = 'hidden'" };
 module.exports = [
-  // the window at a glance: the Work View's two panes, a document on the right
+  // the window at a glance: the Default View's two panes, a document on the right
   { name: 'start-window', panes: 2, size: '1440x900', setup: [
     { js: "goTo('mockdoc2')", page: '2' }, { wait: 900 },
     { hover: '.node .text', page: '2' }, { wait: 400 },

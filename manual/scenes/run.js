@@ -61,7 +61,7 @@ if (!chrome) { console.error('No chrome-headless-shell: run npx playwright insta
 const DPR = 2;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.webp': 'image/webp', '.gz': 'application/gzip' };
-// main.js pair(): the Work View's two pages, as main hands them to the shell
+// main.js pair(): the Default View's two pages, as main hands them to the shell
 const pair = (graph) => ({ schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: graph ? [0.72, 0.28] : [0.6, 0.4], children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
   floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2', ...(graph ? { links: true } : {}) } } } });
 

@@ -1326,12 +1326,13 @@ async function openElsewhere(where, docId, nodeId = null) {
 // A view is the layout main keeps for the window (Trellis's document) and each page's view and place, under the keys
 // the pages read at load: 'view' and 'place' for page '', 'view:2' and 'place:2' for page '2'. Opening one writes those
 // back and hands main the layout, which reloads the window, so every page comes back where it was when saved. The list
-// follows you (pref savedViews): a view names places, like a saved search does. It starts with the Work View
+// follows you (pref savedViews): a view names places, like a saved search does. It starts with the Default View
 // (renderer/timeline.js), which is replaced like any other and never removed; replaced by name, a view keeps its id, so Home
 // and a key recorded for it still find it.
-// The Work View cannot be removed: a list without it (an older one, another machine's) still starts with it.
+// The Default View cannot be removed: a list without it (an older one, another machine's) still starts with it.
 function savedViews() {
-  const list = pref('savedViews', [WORK_VIEW]).filter((v) => v && typeof v.name === 'string' && v.keys && typeof v.keys === 'object');
+  const list = pref('savedViews', [WORK_VIEW]).filter((v) => v && typeof v.name === 'string' && v.keys && typeof v.keys === 'object')
+    .map((v) => (v.id === WORK_VIEW.id && v.name === 'Work View' ? { ...v, name: WORK_VIEW.name } : v)); // its old name, kept by a copy saved before the rename
   return list.some((v) => v.id === WORK_VIEW.id) ? list : [WORK_VIEW, ...list];
 }
 const PAGE_KEY = /^(view|place)(:[1-9]\d*)?$/;
@@ -1362,7 +1363,7 @@ async function openSavedView(v) {
   if (!(await tana.setWindowLayout(v.doc || null, keys))) showNote('This view could not be opened', true);
 }
 // A new name saves a new view; each saved view below, narrowed by what is typed, is updated to this window (its name
-// and id kept, so Home, the Work View and a key recorded for it still find it).
+// and id kept, so Home, the Default View and a key recorded for it still find it).
 function saveViewRows(q, typed) {
   const name = typed.trim(), views = savedViews(), group = 'Save view \u00b7 the panes in this window and what each shows';
   const rows = views.filter((v) => v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Update a saved view', icon: 'splitPanes', label: v.name, hint: 'To this window', run: () => run(() => saveView(v.name, v.id)) }));

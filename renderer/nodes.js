@@ -309,7 +309,7 @@ function noteGone(uri, e) {
   return true;
 }
 // ---- Home ----
-// Home is the Work View (the default, a saved view: renderer/timeline.js openWorkView), a window you set as Home (Cmd+K
+// Home is the Default View (the default, a saved view: renderer/timeline.js openWorkView), a window you set as Home (Cmd+K
 // Set as Home keeps it as it is: the saved view HOME_VIEW, renderer/palette.js), or, chosen before that, the Library or
 // a saved search.
 // The saved search Home points at, while the list knows it. The list is the only proof we have that a search is still
@@ -322,10 +322,10 @@ const homeIsSearch = () => home !== 'library' && home !== 'workView' && home !==
 // A Home the list has answered on and does not have is stale: it is repaired to the Library rather than left to dangle
 // (app.js calls this when the list lands and when a deletion arrives). Before the first answer nothing is concluded.
 function repairHome() { if (homeIsSearch() && searchesLoaded && !homeSearch()) setHome('library'); }
-const homeId = () => (home === HOME_VIEW && !homeView() ? 'workView' : homeIsSearch() && searchesLoaded && !homeSearch() ? 'library' : home); // a Home window removed from the list leaves the Work View
+const homeId = () => (home === HOME_VIEW && !homeView() ? 'workView' : homeIsSearch() && searchesLoaded && !homeSearch() ? 'library' : home); // a Home window removed from the list leaves the Default View
 // What Go to Home names: the search's current title, so a rename in Tana shows through. null while a Home search
 // is still unknown — the anchor waits for its name rather than borrowing the Library's.
-const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : { library: 'Library', workView: 'Work View', [HOME_VIEW]: 'Home' }[homeId()] || null; };
+const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : { library: 'Library', workView: 'Default View', [HOME_VIEW]: 'Home' }[homeId()] || null; };
 function setHome(id) { home = id; setPref('home', id); render(true); }
 // Going Home opens a window, as a saved view is opened, a saved search is a document you open, the Library is a view you switch to.
 // A Library or saved-search Home, chosen before Home was a window, is a window of one pane on it (issue #444).

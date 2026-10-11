@@ -85,7 +85,7 @@ in a page's global scope, so the renderer's own functions drive it:
 - goTo('mockdoc0') opens a node; goTo('orbital:timeline'), goTo('orbital:notifications'), goTo('orbital:proposals') the
   app pages; setView('inbox') / 'library' / 'types' a view (renderer/edit.js); openElsewhere('tab' | 'float', id) and
   openSavedView(v) in renderer/palette.js
-- tana.myTasks().then((n) => goTo(n.id)) opens My Tasks (the Work View's right pane)
+- tana.myTasks().then((n) => goTo(n.id)) opens My Tasks (the Default View's right pane)
 - togglePalette('cmd') opens Cmd+K (or press it: { key: '⌘K' }); { type: 'pin' } types into it
 - focus a row: click it ({ click: '.node .text', text: 'Agenda' }) or use the renderer's focus helpers
 - 2 panes: panes: 2 (page '' left, page '2' right); { js: …, page: '2' } runs in the right one

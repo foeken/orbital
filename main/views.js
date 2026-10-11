@@ -193,7 +193,7 @@ async function searchCreate(id, title) {
   const name = typeof title === 'string' && title.trim() ? title.trim() : searchTitle(id, filter);
   return createDocument(name, { kind: 'search', query, view: { completedWithin: filter.completedWithin, audience: filter.audience, limit: filter.limit } });
 }
-// My Tasks, the right half of the Work View (renderer/timeline.js): the search the synced setting 'myTasks' names, so a
+// My Tasks, the right half of the Default View (renderer/timeline.js): the search the synced setting 'myTasks' names, so a
 // rename in Tana keeps it and two machines share it; without one, your own saved search of that name (the oldest, so
 // two machines that made one at once settle on the same); else one made from the My Tasks preset (VIEW_PRESETS.library)
 // and shown the way the Library shows it. The one made here is also remembered for the session and its client (another

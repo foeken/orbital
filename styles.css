@@ -1743,7 +1743,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
   box-shadow: 0 8px 24px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .05); opacity: 0; }
 .hv-link .hv-drop-menu .hv-row { margin: 0 5px; height: 30px; }
 
-/* 5 Your day: the Work View, a task created from its title alone, a task ticked */
+/* 5 Your day: the Default View, a task created from its title alone, a task ticked */
 .hv-day { gap: 12px; align-items: flex-start; padding-top: 24px; }
 .hv-pane { width: 230px; height: 176px; padding: 12px 14px; background: #fff; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .05); }
 .hv-pane > b { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 650; }

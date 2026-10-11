@@ -1255,13 +1255,13 @@ async function main() {
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '2'] });
     told.splice(0);
     // Cmd+K Saved views: the layout this window has, and one to put it back to, saved and reloaded into. 'workView' is
-    // the Work View's own, '' beside '2'; a layout without a page is refused and changes nothing.
+    // the Default View's own, '' beside '2'; a layout without a page is refused and changes nothing.
     const reloads = () => toShell.splice(0).filter(([cmd]) => cmd === 'reload').length; shown.saveBounds = () => {};
     assert.deepEqual(ask('window:layout', leftPage), layoutDoc);
     assert.equal(ask('window:setLayout', leftPage, { schema: 1, views: {} }), false, 'a layout with no page is refused');
     assert.deepEqual([reloads(), shown.doc], [0, layoutDoc]);
     assert.equal(ask('window:setLayout', leftPage, 'workView'), true);
-    assert.deepEqual([reloads(), own(shown.pages), Object.keys(shown.doc.views), own(shown.doc.root.weights)], [1, ['', '2'], ['page', 'page2'], [0.6, 0.4]], 'the Work View: 60/40, saved and reloaded into (the shell flushes every page first)');
+    assert.deepEqual([reloads(), own(shown.pages), Object.keys(shown.doc.views), own(shown.doc.root.weights)], [1, ['', '2'], ['page', 'page2'], [0.6, 0.4]], 'the Default View: 60/40, saved and reloaded into (the shell flushes every page first)');
     ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
     assert.deepEqual(own(shown.pages), ['', '2'], 'what the shell reports before its reload is the old layout, and is not saved');
     ask('shell:state', null);
@@ -1281,9 +1281,9 @@ async function main() {
     backend.closeFront(shown, pageFor(leftPage));
     assert.deepEqual([toShell.splice(0), shown.closed], [[], true], '\u2318W on the last page closes the window rather than the page');
     delete shown.close; delete shown.closed;
-    // The saved layout: a first launch opens the Work View, and a v1 split (before the workspace) becomes '' beside '2'.
+    // The saved layout: a first launch opens the Default View, and a v1 split (before the workspace) becomes '' beside '2'.
     const { savedDoc } = backend, row = (d) => d && [d.root.kind, d.root.weights, Object.keys(d.views)];
-    assert.deepEqual(row(own(savedDoc(null))), ['split', [0.6, 0.4], ['page', 'page2']], 'first launch: the Work View, 60/40');
+    assert.deepEqual(row(own(savedDoc(null))), ['split', [0.6, 0.4], ['page', 'page2']], 'first launch: the Default View, 60/40');
     assert.deepEqual(row(own(savedDoc({ width: 900, split: true, splitAt: 0.3 }))), ['split', [0.3, 0.7], ['page', 'page2']], 'a saved split keeps its divider');
     assert.equal(savedDoc({ width: 900, split: false }), null, 'a window saved alone opens alone');
     assert.equal(savedDoc({ width: 900, doc: layoutDoc }), layoutDoc, 'a saved layout comes back as it was');
@@ -1356,7 +1356,7 @@ async function main() {
     assert.deepEqual(rows.nodes.map((n) => n.title), ['A real note'], 'the settings document is kept out of every list, like a hidden title');
     console.log('ok  settings document: created or found by name, JSON per key, machine-local settings left behind, and a new machine opens with your choices');
   }
-  // My Tasks, the Work View's right half, is one saved search that the synced settings remember by id. A rename, a hidden
+  // My Tasks, the Default View's right half, is one saved search that the synced settings remember by id. A rename, a hidden
   // title, a colleague's search of the same name or a second machine starting at the same moment must not make a
   // second one or pick the wrong one; only a deletion makes a fresh one.
   {
@@ -1388,7 +1388,7 @@ async function main() {
     await settings.flush();
     assert.equal((await launch()).id, first.id, 'and the next launch finds it');
     searches[0].title = 'Mine';
-    assert.equal((await launch()).id, first.id, 'renamed in Tana, it is still the Work View\u2019s search');
+    assert.equal((await launch()).id, first.id, 'renamed in Tana, it is still the Default View\u2019s search');
     assert.equal(searches.length, 1, 'and no second My Tasks is made beside it');
     await settings.flush();
     settingsListed = [{ id: settings.settingsDocId(), title: settings.TITLE, createTime: '2026-09-26T07:00:00Z' }];
@@ -1398,7 +1398,7 @@ async function main() {
     searches[0].title = 'My Tasks';
     settings.set('myTasks', undefined); // a machine that has not heard which one it is yet
     settings.set('hiddenTitles', ['My Tasks']);
-    assert.equal((await launch()).id, first.id, 'a hidden title keeps it out of the lists, not out of the Work View');
+    assert.equal((await launch()).id, first.id, 'a hidden title keeps it out of the lists, not out of the Default View');
     assert.equal(searches.length, 1, 'so hiding it makes no copy on every launch');
     settings.set('hiddenTitles', []);
     settings.set('myTasks', undefined);
@@ -1406,11 +1406,11 @@ async function main() {
     assert.equal((await launch()).id, first.id, 'two made at once by two machines: both settle on the oldest');
     settings.set('myTasks', undefined);
     searches.splice(1); searches.unshift({ id: 'tana:search:' + ulid(), title: 'My Tasks', createdBy: 'tana:user-profile:01examplej0000000000000000', createTime: '2026-09-01T00:00:00Z' });
-    assert.equal((await launch()).id, first.id, 'a colleague\u2019s My Tasks is theirs, not the Work View\u2019s');
+    assert.equal((await launch()).id, first.id, 'a colleague\u2019s My Tasks is theirs, not the Default View\u2019s');
     searches.shift();
     searches[0].deletedAt = Date.now();
     const fresh = await launch();
-    assert.notEqual(fresh.id, first.id, 'deleted in Tana: the next Work View makes a fresh one');
+    assert.notEqual(fresh.id, first.id, 'deleted in Tana: the next Default View makes a fresh one');
     assert.equal(settings.get('myTasks'), fresh.id, 'and remembers that one');
     settings.set('myTasks', undefined);
     await settings.flush(); // before the next block's database: a write still on its way would land its pointer there
