@@ -301,12 +301,14 @@ function assigneeRows(q, doc = palDoc, replace = false) {
   loadMembers(); loadTaskMeta(doc.id);
   const meta = taskMetaById.get(doc.id), ids = meta ? meta.assignees : [];
   const toggle = (uri) => (replace ? [uri] : ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri]);
-  // The agents first, a section of their own: the same question as a person, but not a Tana assignee (those are user
-  // profiles), so each goes into the one Agent flow, its prompt page opened on that agent, which owns the writing
+  return [...agentPickRows(q, doc), ...memberRows(q, (uri) => setTaskAssignees(doc, uri ? toggle(uri) : []), (uri) => (uri ? ids.includes(uri) : !ids.length))];
+}
+// The agents first, a section of their own on both assignee pages: the same question as a person, but not a Tana
+// assignee (those are user profiles), so each goes into the one Agent flow, its prompt page opened on that agent
+function agentPickRows(q, doc) {
   const holder = agentIds.has(doc.id) && (agentTasks.get(doc.id) || {}).agent;
-  const agents = tana.setAgent && isRealId(doc.id) ? agentsOn().filter((a) => fuzzyMatch(a.label, q))
+  return tana.setAgent && isRealId(doc.id) ? agentsOn().filter((a) => fuzzyMatch(a.label, q))
     .map((a) => ({ group: 'Agents', icon: a.icon, label: a.label, hint: holder === a.id ? '✓' : '', keepOpen: true, run: () => openAgentPrompt(doc, a.id) })) : [];
-  return [...agents, ...memberRows(q, (uri) => setTaskAssignees(doc, uri ? toggle(uri) : []), (uri) => (uri ? ids.includes(uri) : !ids.length))];
 }
 function openAssigneePalette(doc, ctx, replace = false) {
   palTaskCtx = ctx || null;
@@ -364,15 +366,16 @@ function statusRows(q, ctx = palTaskCtx) {
 function openStatusPalette(ctx) {
   palTaskCtx = ctx; openPage('status', 'Set status to…', { rows: (q) => statusRows(q) });
 }
-function manyAssigneeRows(q, ctx = palTaskCtx) {
+// agents: on the page itself, for one task; folded into ⌘K they would repeat its own Assign to ChatGPT … rows
+function manyAssigneeRows(q, ctx = palTaskCtx, agents = false) {
   if (!ctx?.docs.length) return [];
   loadMembers();
   const apply = (uris) => applyTaskChange(ctx, () => tana.setAssigneesMany(ctx.docs.map((doc) => doc.id), uris));
   // no tick: the page acts on several tasks at once, which need not agree on an answer to show one
-  return memberRows(q, (uri) => apply(uri ? [uri] : []));
+  return [...(agents && ctx.docs.length === 1 ? agentPickRows(q, ctx.docs[0]) : []), ...memberRows(q, (uri) => apply(uri ? [uri] : []))];
 }
 function openManyAssigneePalette(ctx) {
-  palTaskCtx = ctx; loadMembers(); openPage('assigneesMany', ctx.multi ? 'Assign tasks to…' : 'Assign to…', { rows: (q) => manyAssigneeRows(q) });
+  palTaskCtx = ctx; loadMembers(); openPage('assigneesMany', ctx.multi ? 'Assign tasks to…' : 'Assign to…', { rows: (q) => manyAssigneeRows(q, palTaskCtx, true) });
 }
 function taskActionRows(group = 'Actions') {
   const ctx = taskActionContext();

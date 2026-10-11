@@ -8655,6 +8655,7 @@ async function runAssignReplaceCheck() {
     const isTask = () => true, loadMembers = () => {}, loadTaskMeta = () => {}, memberName = (id) => id, isRealId = () => true;
     const tana = {}, agentIds = new Set(), palDoc = null, setTaskAssignees = (doc, uris) => written.push(uris);
     ${functionSource('memberRows')}
+    ${functionSource('agentPickRows')}
     ${functionSource('assigneeRows')}
     ({ pick: (label, replace) => { written.length = 0; assigneeRows('', { id: 't' }, replace).find((r) => r.label === label).run(); return written[0]; } });
   `);
@@ -8667,13 +8668,19 @@ async function runAssignReplaceCheck() {
     const tana = { setAgent: true }, agentIds = new Set(['t']), agentTasks = new Map([['t', { agent: 'codex' }]]), openAgentPrompt = (doc, id) => opened.push(id);
     const agentsOn = () => [{ id: 'tana', label: 'Tana', icon: 'tana' }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt' }];
     ${functionSource('memberRows')}
+    ${functionSource('agentPickRows')}
     ${functionSource('assigneeRows')}
+    ${functionSource('manyAssigneeRows')}
     const rows = assigneeRows('', { id: 't' });
     rows[1].run();
-    ({ rows: rows.map((r) => [r.group, r.label, r.hint]), opened });
+    const one = { docs: [{ id: 't' }] }, two = { docs: [{ id: 't' }, { id: 'u' }] }, shown = (list) => list.map((r) => [r.group, r.label]);
+    ({ rows: rows.map((r) => [r.group, r.label, r.hint]), opened, many: shown(manyAssigneeRows('', one, true)), folded: shown(manyAssigneeRows('', one)), several: shown(manyAssigneeRows('', two, true)) });
   `);
   assert.deepEqual(plain(withAgents.rows), [['Agents', 'Tana', ''], ['Agents', 'ChatGPT', '✓'], ['Assignees', 'Unassigned', '✓'], ['Assignees', 'ann', '']], 'the agents first, in a section of their own, the one it is with ticked');
   assert.deepEqual(plain(withAgents.opened), ['codex'], 'and each opens the prompt on itself');
+  assert.deepEqual(plain(withAgents.many), [['Agents', 'Tana'], ['Agents', 'ChatGPT'], ['Assignees', 'Unassigned'], ['Assignees', 'ann']], 'Assign to … starts with the agents too');
+  assert.deepEqual(plain(withAgents.folded), [['Assignees', 'Unassigned'], ['Assignees', 'ann']], 'but not folded into ⌘K, where Assign to ChatGPT … is a row already');
+  assert.deepEqual(plain(withAgents.several), [['Assignees', 'Unassigned'], ['Assignees', 'ann']], 'nor for several tasks: an agent is handed one node');
   assert.match(source, /openAssigneePalette\(node, null, true\)/, 'the field opens the replacing picker');
   console.log('ok  the Assigned to field replaces the assignee; Edit assignees toggles one');
 }
