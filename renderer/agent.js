@@ -334,23 +334,6 @@ function openRenameAgent(a) {
   namePage('renameAgent', 'Its name in Orbital', { group: 'Rename ' + a.label + ' · ↩ saves', icon: 'field', back: () => openLinkedAgent(a.id), empty: 'Type its new name' },
     (name) => ({ label: 'Rename to “' + name + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.mcpRename(a.id, name); openLinkedAgent(a.id); }) }), a.label);
 }
-// ---- linking a node to a task that already exists in an agent's app (#143) ----
-// Pasted rather than picked: Codex's Copy link gives codex://threads/<id>. Main reads the
-// paste (each agent knows its own shape) and stores the link; the badge and Go to task then work as for an assignment.
-let agentLinkCtx = null; // { doc, agent } the pasted link is for, while this page is up
-function agentLinkRows(q, typed) {
-  const { doc, agent } = agentLinkCtx || {}, group = 'Link ' + agent.label + ' task · paste its link or id';
-  if (!typed.trim()) return [{ group, icon: agent.icon, label: 'Paste the task link from ' + agent.label, disabled: true }];
-  return [{ group, icon: agent.icon, label: 'Link to this ' + agent.label + ' task', keepOpen: true, run: () => run(async () => {
-    await tana.linkAgentTask(doc.id, agent.id, typed.trim()); // main refuses what is not one of this agent's links, and says so
-    agentIds.add(doc.id);
-    closePalette(); patchAgent(doc.id); loadAgentStates();
-  }) }];
-}
-function openAgentLink(doc, agent) {
-  agentLinkCtx = { doc, agent };
-  openPage('agentLink', agent.id === 'codex' ? 'codex://threads/…' : agent.label + ' session id', { rows: agentLinkRows, back: BACK_TO_COMMANDS, typed: true });
-}
 // ---- assigning a node to an agent: the prompt page, one level down in Cmd+K ----
 // "Assign to Agent" does not assign: it advances to this page, where the palette's single-line field is swapped for a
 // few lines of text. The node is the context, so the page asks only what to do with it. ↩ is an ordinary newline

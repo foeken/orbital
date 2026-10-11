@@ -188,8 +188,6 @@ const codex = agent.register({
   },
   statuses,
   open: (taskId) => openUrl(TASK + encodeURIComponent(taskId)),
-  // Codex's Copy link gives codex://threads/<id>; a bare id works too.
-  linkId: (text) => { const m = String(text || '').trim().match(/^(?:codex:\/\/threads\/)?([0-9a-f-]{36})\/?$/i); return m && agent.UUID.test(m[1]) ? m[1] : null; },
   openNew: (link) => openUrl(NEW_TASK + encodeURIComponent(link + '\n')),
   // One app-server child reads the latest turn of each task (itemsView full). Read from a second app-server, a turn
   // still running on the one that started it shows as interrupted, so only an answer or a completed or failed turn

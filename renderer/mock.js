@@ -325,7 +325,7 @@ function mockApi() {
     setTimeout(() => { const at = content[id].indexOf(reply); if (at >= 0) content[id].splice(at, 1, codexMsg(false, 'Mock answer from ChatGPT to: ' + text, 0, ['Thought for 2 seconds'])); emitAgent(id); }, 1500);
   };
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
-  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt', installed: true, enabled: true, isDefault: false, link: true, openNew: true, chat: true, opens: true }];
+  const mockAgents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt', installed: true, enabled: true, isDefault: false, openNew: true, chat: true, opens: true }];
   const mockLink = { polls: 0 }; // how often the Connect your personal agent page has asked, since its code was made
   // the workspace's MCP server as the MCP server page shows it: orbital.md until the admin (you, here) pastes another (renderer/agent.js)
   const mockServerNow = { url: 'https://orbital.md/mcp', workspace: null, admin: true, fallback: 'https://orbital.md/mcp', changedBy: null,
@@ -809,7 +809,6 @@ function mockApi() {
       else { codexAssigned.delete(docId); codexPrompts.delete(docId); }
       return !!on;
     },
-    linkAgentTask: async (docId) => { codexAssigned.add(docId); return true; },
     // the agents (main/agent.js): Tana and Codex on, enough to draw their Cmd+K pages; your Dot links below
     agentList: async () => mockAgents.map((a) => ({ ...a })),
     enableAgent: async (id, on) => {

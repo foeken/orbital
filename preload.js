@@ -122,7 +122,6 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   agentIds: () => ipcRenderer.invoke('agent:ids'), // nodes handed to an agent; app-local, not a Tana assignee
   setAgent: (docId, on, prompt, agent) => ipcRenderer.invoke('agent:set', docId, on, prompt, agent), // agent: its id, the default when absent
   agentTasks: () => ipcRenderer.invoke('agent:tasks'), // nodeId -> { agent, taskId }, for every linked node
-  linkAgentTask: (docId, agent, link) => ipcRenderer.invoke('agent:link', docId, agent, link), // a task that already exists in that agent's app, pasted
   openAgentTask: (docId) => ipcRenderer.invoke('agent:open', docId), // open the task this node is linked to, in its agent's app
   openInAgent: (agent, link) => ipcRenderer.invoke('agent:openNew', agent, link), // a fresh, untracked task carrying the node's link
   agentStatus: () => ipcRenderer.invoke('agent:status'), // docId -> pending|working|waiting|done|broken for every linked node

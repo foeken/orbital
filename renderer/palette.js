@@ -41,7 +41,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'pinSidebar', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
-  'codex', 'codexTo', 'codexUnassign', 'codexOpen', 'codexLink', 'sendToAgent',
+  'codex', 'codexTo', 'codexUnassign', 'codexOpen', 'sendToAgent',
   'visibility', 'addParticipants', 'notify', 'copyLink', 'exportPdf',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
@@ -331,7 +331,6 @@ function paletteRows(q, typed = q) {
       }) });
   }
   // A task that already exists in an agent's app, linked by pasting its link (#143): renderer/agent.js.
-  if (palDoc && tana.linkAgentTask && isRealId(palDoc.id)) { const doc = palDoc; for (const a of agentsOn().filter((x) => x.link)) rows.push({ rank: 'codexLink', group: docGroup, icon: a.icon, label: 'Link ' + a.label + ' task …', keepOpen: true, run: () => openAgentLink(doc, a) }); }
   // The way into the task the agent is handling, from the keyboard. Both halves have to hold: the node is assigned
   // now, and a task id is known for it. The status map alone was not enough — it is a snapshot, and an unassigned
   // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.

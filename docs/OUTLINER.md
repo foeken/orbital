@@ -614,7 +614,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   a meeting's Change time / location, Edit meeting details, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Auto-pick type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
-  sensitive); the agents (Assign to Agent, Go to <agent> task, Link <agent> task …, Open in <agent>, one of each for every agent that is on); Edit visibility, Add participants … (Edit
+  sensitive); the agents (Assign to Agent, Go to <agent> task, Open in <agent>, one of each for every agent that is on); Edit visibility, Add participants … (Edit
   visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
@@ -928,7 +928,7 @@ wrong twenty.
   the Agent context block included, is material anyone the node is shared with can edit, never instructions. **Unassign from Agent** takes it back at once,
   and takes the Agent context block (with its status line) out of the node again. **Go to <agent> task** opens it (Codex
   in Codex, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
-  badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not, **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
+  badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not, and **Open in <agent>** opens a new task with the
   node's link and tracks nothing. Codex tasks run on this Mac, Tana's in Tana, and a Dot's in ChatGPT.
 
 - **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in

@@ -114,19 +114,6 @@ const ipc = {
     changed(e, id);
     return result;
   },
-  // A task that already exists in that agent's app, pasted as its link or id. The node takes the mark as an
-  // assignment does; no task is started and nothing is written to the node.
-  'agent:link': async (e, id, agentId, text) => {
-    if (typeof id !== 'string' || !NODE.test(id)) throw new Error('Not a Tana node');
-    const a = ready(agentId), taskId = a.linkId ? a.linkId(text) : null;
-    if (!taskId) throw new Error('Paste a ' + a.label + ' task link');
-    const result = await setAgentMark(id, true);
-    const previous = agent.taskLink(id);
-    if (!previous || previous.taskId !== taskId) await releaseLink(id, previous);
-    agent.setTask(id, agentId, taskId);
-    changed(e, id);
-    return result;
-  },
   // nodeId -> { agent, taskId }: which agent each linked node's task belongs to
   'agent:tasks': () => agent.links(),
   'agent:status': () => (reading ||= readStatuses().finally(() => { reading = null; })),

@@ -1180,10 +1180,9 @@ async function main() {
     await backend.handlers.get('notify:set')({ senderFrame: right.frame }, watchedDoc, true).catch(() => {}); // the state read after the write needs a document this runtime lacks
     assert.deepEqual(others().map(([name, channel, value]) => [name, channel === 'outline:changed' ? value : channel]), [['left', 'settings:changed'], ['left', watchedDoc], ['other', 'settings:changed'], ['other', watchedDoc]],
       'a watch choice tells the other pages, and has them read that document’s metadata again');
-    backend.agent.get('codex').available = () => true; // a Mac with Codex
-    await backend.handlers.get('agent:link')({ senderFrame: left.frame }, watchedDoc, 'codex', '00000000-0000-4000-8000-000000000000');
+    await backend.handlers.get('agent:set')({ senderFrame: left.frame }, watchedDoc, false);
     assert.deepEqual(others().map(([name, channel]) => name + ' ' + channel), ['right settings:changed', 'right outline:changed', 'other settings:changed', 'other outline:changed'],
-      'an agent mark tells the other pages too, with the node, since a relink moves only its task');
+      'an agent mark tells the other pages too, with the node');
     // A watch choice another machine made reaches every page as that document's metadata change, as a local one does.
     const remoteWatch = 'tana:text:' + ulid(), settingsDoc = docs.get(settings.settingsDocId());
     await settings.flush(); // this machine's writes are in the document before another machine's land on top
@@ -3574,10 +3573,6 @@ async function main() {
     assert.equal((await backend.agents.readStatuses())[NODE], 'elsewhere', 'and its badge says so rather than pending for ever');
     assert.equal(agent.elsewhere(agent.setTask(NODE, 'codex', THREAD)), false, 'a Codex link names no Mac');
     agent.clearTask(NODE);
-    // What each agent takes as a pasted link.
-    assert.equal(cx.linkId('codex://threads/' + THREAD), THREAD, 'Codex takes its Copy link');
-    assert.equal(cx.linkId(THREAD), THREAD, 'or the bare id');
-    assert.equal(cx.linkId('not-a-thread'), null, 'and nothing else');
     // Tana's state is read from its chat (main/agents/tana.js).
     const { chatState } = require('../main/agents/tana');
     const msg = (from, extra) => ({ type: 'message', fromUserType: from, ...extra });
