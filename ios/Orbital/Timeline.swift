@@ -18,6 +18,7 @@ struct Row: Codable, Identifiable {
     let join: String?
     var people: [Person]?
     let assignees: [String]? // a task's, in a saved search: who it is assigned to, for Assign to …
+    var typeUri: String? = nil // a task's Tana type, for Siri (ios/engine/index.js tasks, Intents.swift)
     var children: [Row]?
     var timeline: Info?
     var reference: Ref?

@@ -525,7 +525,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // Quick Add Task (QuickAdd.swift): the types to pick from, a task made with one, an image made into a task or a note
-    struct TaskType: Decodable, Identifiable { let uri: String?; let title: String; var task: Bool? = true; var id: String { uri ?? "" } }
+    struct TaskType: Codable, Identifiable { let uri: String?; let title: String; var task: Bool? = true; var id: String { uri ?? "" } }
     // a saved search's: the type its rows are and how many of their fields it sets (orbital.searchPreset)
     struct Preset: Decodable { let uri: String; let title: String; let task: Bool; let fields: [String: Value] }
     // Quick Add's fields of a type (orbital.typeFields), a value set in one, and what a person or link field can take
@@ -799,8 +799,9 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // Siri and Shortcuts' List Tasks and their task lookup (Intents.swift): the tasks assigned to you in every state
-    // (orbital.tasks), kept in the Keychain beside the widgets' copy, a sensitive one without its words. Asked of Tana
-    // after a read, at most once in five minutes; the sample keeps its own tasks.
+    // (orbital.tasks), kept in the Keychain beside the widgets' copy, a sensitive one without its words, and the task
+    // types they can be of (orbital.taskTypes), for Siri's phrases too. Asked of Tana after a read, at most once in five
+    // minutes; the sample keeps its own tasks.
     @ObservationIgnored private var tasksRead = Date.distantPast
     private func keepTasks() async {
         guard Date.now.timeIntervalSince(tasksRead) > 300 else { return }
@@ -822,12 +823,15 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             return r
         }
         if let data = try? JSONEncoder().encode(kept) { Keychain.save(data, "tasks") }
+        let types = await taskTypes() // none when Tana could not be asked: the last ones kept
+        if !types.isEmpty, let data = try? JSONEncoder().encode(types) { Keychain.save(data, "taskTypes") }
+        OrbitalShortcuts.updateAppShortcutParameters()
     }
 
     func forgetTimeline() {
         SavedTimeline.forget()
         Keychain.delete("glimpse") // nothing of the account left on a widget
-        Keychain.delete("tasks"); tasksRead = .distantPast // nor for Siri (keepTasks)
+        Keychain.delete("tasks"); Keychain.delete("taskTypes"); tasksRead = .distantPast // nor for Siri (keepTasks)
         WidgetCenter.shared.reloadAllTimelines()
         Task { await Tasks.index(demo: true) } // nor in Spotlight (Intents.swift)
     }

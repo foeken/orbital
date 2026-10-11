@@ -100,6 +100,7 @@ struct NodeScreen: View {
                         ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal, engine: engine) }
                     }
                         .listStyle(.plain)
+                        .taskEntity(access?.task == true ? id : nil) // a task's own page: "check this off" knows which (Intents.swift)
                         .refreshable { await load() }
                         .overlay { if Self.flat(page.rows).isEmpty, access == nil { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } } // a document with fields shows them alone
                 }
