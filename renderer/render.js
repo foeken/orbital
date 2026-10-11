@@ -724,7 +724,7 @@ function agentBadgeEl(id, done = !!docOf(id)?.done) {
   if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); el.append(svg); }
   return el;
 }
-// The task behind a node: a Tana chat opens here, in Orbital, and so does ChatGPT's Assignments chat (renderer/agentchats.js);
+// The task behind a node: a Tana chat opens here, in Orbital, and so does the ChatGPT chat it went to (renderer/agentchats.js);
 // a ChatGPT task from before it had one opens in the ChatGPT app (main).
 function openAgentTask(id) {
   const link = agentTasks.get(id);
@@ -732,10 +732,10 @@ function openAgentTask(id) {
   if (link && link.agent === 'codex' && agentChatsKnown.some((n) => n.id === AGENT_CHAT + link.taskId)) return goTo(AGENT_CHAT + link.taskId);
   run(() => tana.openAgentTask(id));
 }
-// ⌘K's way into it, named for where it goes: a ChatGPT node's Assignments chat, else the agent's task (renderer/palette.js)
+// ⌘K's way into it, named for where it goes: the ChatGPT chat a node went to, else the agent's task (renderer/palette.js)
 function openAgentTaskLabel(id, a) {
   const link = agentTasks.get(id);
-  return link && link.agent === 'codex' && agentChatsKnown.some((n) => n.id === AGENT_CHAT + link.taskId) ? 'Go to Assignments chat' : 'Go to ' + a.label + ' task';
+  return link && link.agent === 'codex' && agentChatsKnown.some((n) => n.id === AGENT_CHAT + link.taskId) ? 'Go to ChatGPT chat' : 'Go to ' + a.label + ' task';
 }
 // Assigning from Cmd+K has to show on the row, and the palette hands the caret back to the row it was opened from,
 // where a render is deferred until the caret leaves — so the badge is put on the row itself, as patchMeta does.

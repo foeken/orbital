@@ -120,7 +120,7 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, chat, opensHere, setup, linked?, app?, seenAt? }]
   enableAgent: (id, on) => ipcRenderer.invoke('agent:enable', id, on), // the new list
   agentIds: () => ipcRenderer.invoke('agent:ids'), // nodes handed to an agent; app-local, not a Tana assignee
-  setAgent: (docId, on, prompt, agent) => ipcRenderer.invoke('agent:set', docId, on, prompt, agent), // agent: its id (required: there is no default)
+  setAgent: (docId, on, prompt, agent, options) => ipcRenderer.invoke('agent:set', docId, on, prompt, agent, options), // agent: its id (required: there is no default); options: { newChat } for ChatGPT
   agentTasks: () => ipcRenderer.invoke('agent:tasks'), // nodeId -> { agent, taskId }, for every linked node
   openAgentTask: (docId) => ipcRenderer.invoke('agent:open', docId), // open the task this node is linked to, in its agent's app
   agentStatus: () => ipcRenderer.invoke('agent:status'), // docId -> pending|working|waiting|done|broken for every linked node

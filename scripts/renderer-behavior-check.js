@@ -5036,7 +5036,7 @@ function runCodexAssignCheck() {
     const TIMELINE_PAGE = 'orbital:timeline'; // renderer/timeline.js: where placeAgentBadge puts it in line
     ${functionSource('placeAgentBadge')}
     ${functionSource('agentBadgeEl')}
-    const agentChatsKnown = [], AGENT_CHAT = 'orbital:agent-chat:'; // no Assignments chat here: a ChatGPT task opens in its app
+    const agentChatsKnown = [], AGENT_CHAT = 'orbital:agent-chat:'; // no agent chat here: a ChatGPT task opens in its app
     ${functionSource('openAgentTask')}
     ${functionSource('agentHeader')}
     ${functionSource('patchAgent')}
@@ -5105,7 +5105,7 @@ function runCodexAssignCheck() {
     });
   `);
   return (async () => {
-    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'A Tana chat, answered by Tana\'s AI'], ['Assign to Codex …', 'Into your Assignments chat, on this Mac']], 'an unassigned node offers each agent that is on by its name, each saying where it takes the node, and nothing else: you pick the one you want');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'A Tana chat, answered by Tana\'s AI'], ['Assign to Codex …', 'Into your latest ChatGPT chat, or a new one']], 'an unassigned node offers each agent that is on by its name, each saying where it takes the node, and nothing else: you pick the one you want');
     assert.deepEqual(plain(await api.pressTo('Assign to Codex …')), { mode: 'agentPrompt', agent: 'codex', sent: 0, rows: ['What should Codex do?'] }, 'which opens the same prompt page with that agent picked, assigns nothing yet, and offers no other agent: the row chose');
     const opened = plain(await api.pressRow());
     assert.equal(opened.mode, 'agentPrompt', 'choosing it advances to the prompt page inside the palette');
@@ -5134,7 +5134,7 @@ function runCodexAssignCheck() {
     assert.deepEqual(sent.sent, [[CODEX_DOC, true, 'Draft the release notes\nthen tell me']],
       '⌘↩ stores the prompt, trimmed at the ends and otherwise as typed, and assigns in the same call');
     assert.equal(api.sentTo(), 'codex', 'to the agent the page chose');
-    assert.deepEqual(plain(api.notes()), ['Sent to ChatGPT, in your Assignments chat'], 'and since nothing opens, a note says where it went');
+    assert.deepEqual(plain(api.notes()), ['Sent to ChatGPT, in a new chat'], 'and since nothing opens, a note says where it went: a new chat, with none to go to');
     assert.equal(sent.assigned, true, 'the local mark follows at once rather than waiting for a re-read');
     assert.equal(sent.badges.length, 1, 'the row gains one badge');
     // An assignment whose Codex task has not registered itself yet is pending, in words as well as in colour: the

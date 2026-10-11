@@ -3394,7 +3394,7 @@ async function main() {
         subscribe: async (id) => { if (id !== task.id) throw new Error('unavailable'); subscribed.push(id); return task; } } } });
     // the handlers answer from inside the vm, so their arrays are compared as text rather than by identity
     const assigned = async () => (await backend.handlers.get('agent:ids')(null)).join(',');
-    // Starting the task is a message in the Assignments chat (main/agentchats.js assign, checked on its own); here
+    // Starting the task is a message in your latest ChatGPT chat (main/agentchats.js assign, checked on its own); here
     // ChatGPT's start answers with the chat's thread and the turn, so the rest of the flow is checked.
     const created = [], cx = backend.agent.get('codex'), set = (id, on, prompt) => backend.handlers.get('agent:set')(null, id, on, prompt, 'codex');
     cx.available = () => true;
@@ -3436,7 +3436,7 @@ async function main() {
       'and the cap counts code points, so a cut never leaves half a character behind');
     assert.equal(firstLine('   '), 'Tana task', 'a node with no usable title is still named, rather than falling back to the old opening sentence');
     assert.equal(firstLine(undefined), 'Tana task', 'and so is one whose title could not be read at all');
-    assert.equal(backend.opened.length, 0, 'and opens nothing: it is a message in the Assignments chat');
+    assert.equal(backend.opened.length, 0, 'and opens nothing: it is a message in a chat');
     assert.deepEqual([backend.agent.taskLink(task.id).taskId, backend.agent.taskLink(task.id).turnId], ['01a0b379-afbc-74c3-a191-c419e6543bcc', 'turn-1'], 'the node names the chat\'s thread and its own turn there, which its badge reads');
     assert.equal((await backend.handlers.get('agent:ids')(null)).join(','), task.id, 'and the node is linked at once');
     assert.equal(assigneesOf(), before,
@@ -3631,7 +3631,8 @@ async function main() {
     console.log('ok  agent chats: synced links, turns as messages, failed turns, another Mac, delete forgets the link');
   }
   // Turns in a chat (main/agentchats.js over main/codex-app-server.js runTurn, stood in for here): assignments made at
-  // once share one Assignments chat and one turn, each node names its turn, a message joins a running turn, deleting
+  // once with no chat yet share one new chat and one turn, a later one goes to your latest chat or a new one, each node
+  // names its turn, a message joins a running turn, deleting
   // a chat lets go of its answer, and the page reads the earlier turns once while one streams.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
@@ -3652,13 +3653,16 @@ async function main() {
     settings.set('agentChats', {});
     const [a, b] = await Promise.all([chats.assign('tana:text:01example70000000000000000', 'One', 'Do one'), chats.assign('tana:text:01example80000000000000000', 'Two', 'Do two')]);
     assert.equal(runs.length, 1, 'two assignments at once start one chat, not two');
-    assert.deepEqual(plain(chats.list().filter((r) => r.assignments).map((r) => r.title)), ['Assignments'], 'one Assignments chat on the list');
+    assert.deepEqual(plain(chats.list().map((r) => r.title)), ['Assigned One: Do one'], 'one chat on the list, named after the first');
     assert.deepEqual(plain([a.threadId === b.threadId, a.turnId, b.turnId, runs[0].calls]), [true, 'turn-1', 'turn-1', [['turn/steer', 'turn-1']]], 'the second joins the turn the first is in, once it has started');
     assert.equal(chats.running(a.threadId, 'turn-1'), true, 'and this Mac is running it');
     await runs[0].run.end(); await tick();
     assert.equal(chats.running(a.threadId, 'turn-1'), false, 'until it ends');
     const c3 = await chats.assign('tana:text:01example90000000000000000', 'Three', 'Do three');
-    assert.deepEqual(plain([runs.length, runs[1].resumed, c3.threadId === a.threadId, c3.turnId]), [2, true, true, 'turn-2'], 'a later one is a new turn in the same chat, its own');
+    assert.deepEqual(plain([runs.length, runs[1].resumed, c3.threadId === a.threadId, c3.turnId]), [2, true, true, 'turn-2'], 'a later one is a new turn in your latest chat, its own');
+    const own = await chats.assign('tana:text:01examplec0000000000000000', 'Four', 'Do four', { newChat: true });
+    assert.deepEqual(plain([runs.length, runs[2].resumed, own.threadId !== a.threadId, chats.list().length]), [3, false, true, 2], 'asked for, a new chat of its own, on the list beside the other');
+    await runs[2].run.end(); await tick();
     // the page while that turn streams: the earlier turns read once, not with every piece of the answer
     let reads = 0;
     const read = async () => { reads++; return []; };
@@ -3673,7 +3677,7 @@ async function main() {
     // a send that fails for any reason but another writer is said as it is, never "queued in the ChatGPT app"
     await assert.rejects(backend.handlers.get('agentChat:send')(null, made.id, 'fail'), /Usage limit/, 'a failure is said, not queued');
     assert.equal(chats.running(made.id.slice(chats.PREFIX.length)), false, 'and nothing is left running');
-    console.log('ok  agent chat turns: one Assignments chat, a node\'s own turn, joining a running turn, delete lets go, titles, failures said');
+    console.log('ok  agent chat turns: the latest chat or a new one, a node\'s own turn, joining a running turn, delete lets go, titles, failures said');
     // each node's badge reads its own turn in the shared chat (main/agents/codex.js agentStatuses)
     const T = tid(9), rpc = async (method) => (method === 'thread/list' ? { data: [{ id: T, status: { type: 'idle' } }] }
       : { data: [{ id: 'turn-1', status: 'completed' }, { id: 'turn-2', status: 'failed' }, { id: 'turn-3', status: 'interrupted' }] });

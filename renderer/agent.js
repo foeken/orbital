@@ -333,8 +333,12 @@ function openRenameAgent(a) {
 let agentCtx = null; // { id } of the node the prompt being typed belongs to, while this page is up
 const AGENT_GROUP = 'Assign · ↩ adds a line, ⌘↩ assigns, Esc cancels';
 // where each built-in agent takes a node, the hint on its Assign to … row (an agent linked through the MCP server says that)
-const AGENT_WHERE = { tana: 'A Tana chat, answered by Tana\'s AI', codex: 'Into your Assignments chat, on this Mac' };
+const AGENT_WHERE = { tana: 'A Tana chat, answered by Tana\'s AI', codex: 'Into your latest ChatGPT chat, or a new one' };
 const PICK_GROUP = 'Agent';
+// ChatGPT's choice of chat: your latest on this Mac (null, the default) or a new one ('new'); only with a chat to go to
+const CHAT_GROUP = 'Chat';
+let agentChatPick = null;
+const latestAgentChat = () => agentChatsKnown.find((n) => !(n.agentChat && n.agentChat.elsewhere)) || null; // the list is newest first
 function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
   if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
@@ -346,6 +350,7 @@ function openAgentPrompt(doc, pick) {
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
   agentCtx = { id: doc.id, doc, fixed: !!pick }; // the row itself, so the assignment can hold it where it sits; fixed: its row named the agent
   agentPick = (agentsOn().find((a) => a.id === pick) || agentsOn()[0] || { id: 'tana' }).id;
+  agentChatPick = null;
   renderPalette(); palText.focus();
 }
 function agentPromptRows() {
@@ -356,12 +361,18 @@ function agentPromptRows() {
     hint: prompt ? '⌘↩' : 'Nothing to send yet', disabled: !prompt, keepOpen: true, run: submitAgentPrompt }];
   // to an agent linked through the MCP server, the request goes through it: said under the row that sends it
   if (String(agentPick).startsWith('relay:')) { const w = relayKnown('agentPrompt'); rows.push({ group: AGENT_GROUP, icon: 'mcp', label: relayVia(w.url, w.workspace), note: true, disabled: true }); }
-  // Only with a choice to make: Tana alone needs no list. Choosing keeps the keyboard where it was: picked from the
-  // list, the list keeps it so another can be tried; clicked or reached from the editor, the caret goes back.
+  // Choosing keeps the keyboard where it was: picked from a list, the list keeps it; clicked or reached from the editor, the caret goes back
+  const choose = (set) => () => { const onList = document.activeElement === palList; set(); renderPalette(); (onList ? palList : palText).focus(); };
+  // ChatGPT: into your latest chat, ticked, or a new one; with no chat yet there is nothing to choose
+  const latest = agentPick === 'codex' && latestAgentChat();
+  if (latest) rows.push(
+    { group: CHAT_GROUP, icon: latest.icon || 'chatgpt', label: demoText(latest.title, latest.id), hint: (agentChatPick ? '' : '✓ ') + 'Latest', keepOpen: true, run: choose(() => { agentChatPick = null; }) },
+    { group: CHAT_GROUP, icon: 'chatgpt', label: 'New chat', hint: agentChatPick ? '✓' : '', keepOpen: true, run: choose(() => { agentChatPick = 'new'; }) });
+  // Only with a choice to make: Tana alone needs no list.
   // Not when the row that opened the page already named the agent (Assign to Echo …): the choice is made
   const on = agentCtx && agentCtx.fixed ? [] : agentsOn();
   if (on.length > 1) for (const a of on) rows.push({ group: PICK_GROUP, icon: a.icon, label: a.label, hint: agentPick === a.id ? '✓' : '', keepOpen: true,
-    run: () => { const onList = document.activeElement === palList; agentPick = a.id; renderPalette(); (onList ? palList : palText).focus(); } });
+    run: choose(() => { agentPick = a.id; }) });
   return rows;
 }
 // The prompt is written with the assignment, so a node is never marked as the agent's with no idea of what it was handed.
@@ -373,10 +384,11 @@ function submitAgentPrompt() {
     // may now sort elsewhere. Held, it keeps the place it had — nothing jumps away from the pointer — and the Clean
     // up pill appears to redraw the list where the row now belongs, exactly as a status change behaves.
     if (doc) holdRow(doc);
-    await tana.setAgent(id, true, prompt, agentPick);
+    const newChat = agentPick === 'codex' && (agentChatPick === 'new' || !latestAgentChat());
+    await tana.setAgent(id, true, prompt, agentPick, agentPick === 'codex' ? { newChat: agentChatPick === 'new' } : undefined);
     // Only now: an agent that could not take it leaves the page exactly as it was, so the press can simply be repeated.
     closePalette();
-    if (agentPick === 'codex') showNote('Sent to ChatGPT, in your Assignments chat'); // nothing opens: say where it went
+    if (agentPick === 'codex') showNote(newChat ? 'Sent to ChatGPT, in a new chat' : 'Sent to ChatGPT, in your latest chat'); // nothing opens: say where it went
     agentIds.add(id);
     patchAgent(id);
     loadAgentStates(); // the task exists now: ask what it is doing rather than waiting for the next refresh
@@ -392,7 +404,7 @@ function agentPromptKey(e) {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); return true; }
   if (e.key === 'Enter' && mod) { e.preventDefault(); e.stopPropagation(); submitAgentPrompt(); return true; }
-  // ⇥ crosses to the agent list and back, so the choice is reachable without leaving the keyboard. The editor eats
+  // ⇥ crosses to the choices (the chat, the agent) and back, so they are reachable without leaving the keyboard. The editor eats
   // Tab either way — a tab character in a prompt is not what anyone means by pressing it here.
   if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); focusAgentRows(); return true; }
   return false; // a plain ↩ is a newline, which the textarea does by itself
@@ -400,7 +412,7 @@ function agentPromptKey(e) {
 // The agent rows take the keyboard as a group: the list itself holds the focus, and the highlighted row is the one
 // the palette already draws, so this borrows the navigation every other level uses rather than inventing one.
 function focusAgentRows() {
-  const first = palRows.findIndex((r) => r.group === PICK_GROUP);
+  const first = palRows.findIndex((r) => r.group === CHAT_GROUP || r.group === PICK_GROUP);
   if (first < 0) return;
   palIndex = first;
   palList.tabIndex = -1;

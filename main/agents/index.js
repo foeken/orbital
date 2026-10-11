@@ -21,7 +21,8 @@ const ready = (id) => { const a = agent.get(id); if (!a || !agent.usable(id)) th
 // else starts a new task. A handoff that fails leaves no mark behind on a node that had none: the mark is a synced
 // setting, so it would reach the other machines as a pending badge for work nobody took. On a node that had one, it
 // puts back what was there (restore below): its task link still names the earlier request.
-async function assign(id, prompt, agentId) {
+// options: what the Assign page chose beyond the agent (ChatGPT: newChat, a chat of its own rather than your latest)
+async function assign(id, prompt, agentId, options = {}) {
   const a = ready(agentId), was = agentIds().includes(id);
   const held = was && agent.taskLink(id), heldBy = held && agent.get(held.agent);
   const before = was ? { prompt: agentPrompt(id), linked: !!(heldBy && heldBy.linked) } : null;
@@ -38,8 +39,8 @@ async function assign(id, prompt, agentId) {
     if (link && link.agent === agentId && a.resume && !agent.elsewhere(link)) await a.resume(link.taskId, prompt);
     else {
       started = true;
-      // a task id, or { taskId, turnId } from an agent whose tasks share a thread (ChatGPT's Assignments chat)
-      const task = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData, was: before });
+      // a task id, or { taskId, turnId } from an agent whose tasks share a thread (ChatGPT's chats)
+      const task = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData, was: before, newChat: !!(options && options.newChat) });
       // the task this node had with another agent is let go once the new one exists; never the same agent's, whose
       // plugin now holds the new task under this node's key
       if (link && link.agent !== agentId) await releaseLink(id, link);
@@ -112,10 +113,10 @@ const ipc = {
   'agent:list': () => { linked.refreshSoon(); return agent.list(); }, // the MCP server's list is asked for now and then, and the pages told when it moved
   'agent:enable': (e, id, on) => { const out = agent.setEnabled(id, !!on); changed(e); return out; },
   'agent:ids': () => agentIds(),
-  'agent:set': async (e, id, on, prompt, agentId) => {
+  'agent:set': async (e, id, on, prompt, agentId, options) => {
     if (typeof id !== 'string' || !NODE.test(id)) throw new Error('Not a Tana node');
     if (on && isId(id, 'search')) throw new Error('A saved search is a view: assign one of its tasks');
-    const result = on ? await assign(id, prompt, agentId) : await unassign(id);
+    const result = on ? await assign(id, prompt, agentId, options) : await unassign(id);
     changed(e, id);
     return result;
   },

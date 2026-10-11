@@ -1,6 +1,6 @@
 'use strict';
-// The ChatGPT agent (main/agent.js, id codex): a node handed to ChatGPT is a message in the Assignments chat
-// (main/agentchats.js assign), and a chat question (main/chatagents.js) a read-only task of its own, both through
+// The ChatGPT agent (main/agent.js, id codex): a node handed to ChatGPT is a message in your latest agent chat, or a new
+// one (main/agentchats.js assign), and a chat question (main/chatagents.js) a read-only task of its own, both through
 // Codex's app-server (main/codex-app-server.js). Its tasks live on the Mac that ran them (local).
 const agent = require('../agent');
 const { TASK, codexBin, withAppServer, runTurn } = require('../codex-app-server');
@@ -12,7 +12,7 @@ const agentChats = require('../agentchats');
 // turn decides (thread/turns/list defaults to descending, so one turn is the latest one).
 // The turns are the authority, not the thread's loaded flag: `notLoaded` only means "this reader has not loaded the
 // thread", and asking the thread itself fails with "already has an active writer" whenever the desktop app has it open.
-// A node handed over into the Assignments chat names its own turn there (turnId), and that turn decides its badge, so one
+// A node handed over into a chat names its own turn there (turnId), and that turn decides its badge, so one
 // node finishing or failing says nothing about another in the same chat.
 const QUIET = ['idle', 'notLoaded'];
 // A turn's status as a badge. `interrupted` is what a turn this Mac is still running looks like from another reader
@@ -109,9 +109,9 @@ function codexAnswer(turn) {
 const codex = agent.register({
   id: 'codex', label: 'ChatGPT', icon: 'chatgpt', missing: 'Install the ChatGPT app', local: true,
   available: () => !!codexBin(),
-  // a node: its message in the Assignments chat, the chat's thread its task and its own turn there; a chat question: a task
-  async start({ key, nodeUri, title, rules, prompt, readOnly, userData }) {
-    if (nodeUri) { const { threadId, turnId } = await agentChats.assign(nodeUri, title, prompt); return { taskId: threadId, turnId }; }
+  // a node: its message in a chat, the chat's thread its task and its own turn there; a chat question: a task
+  async start({ key, nodeUri, title, rules, prompt, readOnly, userData, newChat }) {
+    if (nodeUri) { const { threadId, turnId } = await agentChats.assign(nodeUri, title, prompt, { newChat }); return { taskId: threadId, turnId }; }
     return createTask({ key, prompt, instructions: rules, readOnly, userData });
   },
   statuses,

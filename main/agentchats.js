@@ -68,7 +68,6 @@ function list() {
     id: PREFIX + t, text: l.title || 'New chat', title: l.title || 'New chat', kind: 'document', icon: chosen || 'chatgpt', editable: false, hasChildren: true, appPage: true,
     ...(chosen ? { svg: icons.svgOf(chosen) } : {}), // a glyph chosen with Set icon: the sidebar has only icons.js
     meta: away(l) ? 'On another Mac' : 'ChatGPT', agentChat: { agent: l.agent || 'codex', at: l.at || null, elsewhere: away(l) },
-    ...(l.assignments ? { assignments: true } : {}),
   }; });
 }
 
@@ -158,9 +157,9 @@ async function info(id) {
   return { model: t.model ? modelLabel(t.model) : '', effort: t.reasoningEffort ? effortLabel(t.reasoningEffort) : '' };
 }
 async function stopTurn(id) { const t = threadOf(id), s = t && live.get(t); if (s && s.run) await s.run.end(); }
-// A node handed to ChatGPT (main/agents/codex.js start): a message in one standing chat, Assignments, made by the first
-// one on this Mac and kept on the list like any other; answers the thread, which the node's task link names, and the
-// turn the message is in, which its badge reads.
+// A node handed to ChatGPT (main/agents/codex.js start): a message in your latest chat on this Mac (the one used last,
+// which the assignment keeps at the top), or in a new chat when you ask for one (newChat, the Assign page's choice) or
+// have none; answers the thread, which the node's task link names, and the turn the message is in, which its badge reads.
 // The message is one line the chat shows, the node and the request, and Orbital's own context for ChatGPT in a tag the
 // page leaves out (shown): the node and how to treat it (main/agent.js agentPrompt), and that a sub-agent does the work,
 // so the chat holds only the results and stays small.
@@ -172,18 +171,20 @@ function assignment(nodeUri, title, request) {
     + '\n\nDo the work in a sub-agent of its own: spawn one with this task and everything above, wait for it, then answer here in a few'
     + ' lines with what it did. This chat holds the results; the work happens in the sub-agent.\n</orbital-context>';
 }
-let making = null; // the Assignments chat being made: a second assignment meanwhile waits for it rather than making two
-async function assign(nodeUri, nodeTitle, request) {
+let making = null; // a first chat being made for an assignment: a second assignment meanwhile waits for it rather than making two
+const fresh = (text) => turn(null, text).then((r) => { store(r.threadId, { agent: 'codex', title: title(shown(text)), at: Date.now(), device: agent.deviceId() }); return r; });
+async function assign(nodeUri, nodeTitle, request, { newChat = false } = {}) {
   const text = assignment(nodeUri, nodeTitle, request);
-  const mine = Object.entries(links()).find(([, l]) => l.assignments && !away(l));
-  if (!mine) {
+  if (newChat) return fresh(text);
+  const latest = Object.entries(links()).filter(([, l]) => !away(l)).sort(([, a], [, b]) => (b.at || 0) - (a.at || 0))[0];
+  if (!latest) {
     if (making) { await making.catch(() => {}); return assign(nodeUri, nodeTitle, request); }
-    making = turn(null, text).then((r) => { store(r.threadId, { agent: 'codex', title: 'Assignments', at: Date.now(), device: agent.deviceId(), assignments: true }); return r; });
+    making = fresh(text);
     try { return await making; } finally { making = null; }
   }
-  const [t, l] = mine;
+  const [t, l] = latest;
   const r = await into(t, text);
-  store(t, { ...l, at: Date.now() }); // to the top of the list
+  store(t, { ...l, at: Date.now() }); // to the top of the list, and still the latest for the next one
   return r;
 }
 

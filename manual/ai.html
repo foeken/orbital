@@ -228,7 +228,7 @@
 
   <section class="topic">
     <h2 id="agents" data-short="Choose agents" data-k="agents choose agents tana codex claude coming soon dot install chatgpt">Choose your agents</h2>
-    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows two of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>ChatGPT</b> runs on this Mac, through the ChatGPT app, with its own sign-in: a task for ChatGPT is a message in your <a href="chats.html#assignments">Assignments chat</a> in the sidebar. <b>Claude</b> is listed as <b>Coming soon</b>.</p>
+    <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows two of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>ChatGPT</b> runs on this Mac, through the ChatGPT app, with its own sign-in: a task for ChatGPT is a message in your latest ChatGPT chat, or a new one (<a href="chats.html#assignments">Nodes you assign to ChatGPT</a>), in the sidebar. <b>Claude</b> is listed as <b>Coming soon</b>.</p>
     <div class="split">
       <div>
         <p>Run <b>Choose agents …</b> to see them in one list. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat. An agent you linked is in the same list under its own name, and its last row is <b>Connect your personal agent …</b>.</p>
@@ -281,17 +281,19 @@
     <h3>Assign to ChatGPT …</h3>
     <p>Run <b>Assign to ChatGPT …</b> (or another agent's row). The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. The agent's own default model does the work.</p>
     <figure class="anno">
-      <img data-m="ai-prompt" alt="The Assign page: a prompt and the row that sends it to ChatGPT">
+      <img data-m="ai-prompt" alt="The Assign page: a prompt, the row that sends it to ChatGPT, and the chat it goes to: your latest, ticked, or a new one">
       <span class="pin" style="--x:3%;--y:9%">1</span>
-      <span class="pin" style="--x:3%;--y:75%">2</span>
+      <span class="pin" style="--x:3%;--y:58%">2</span>
+      <span class="pin" style="--x:3%;--y:82%">3</span>
     </figure>
     <ol class="legend">
       <li><b>The prompt</b> What the agent should do with this node.</li>
       <li><b>Assign to ChatGPT</b> Sends it, the same as <kbd>⌘↩</kbd>, and names the agent that will take it.</li>
+      <li><b>Chat</b> For ChatGPT, the chat it goes into: your latest, ticked, or <b>New chat</b> for one of its own. <kbd>⇥</kbd> reaches it from the prompt. With no chat yet, a new one is made.</li>
     </ol>
     <figure class="clip wide"><video data-m="ai-assign"></video><figcaption>Assigned: the badge appears beside the title, grey while the task starts, then blue as it works.</figcaption></figure>
     <p>The node now carries the agent badge. Under <b>Group by Responsibility</b> it belongs in the <b>Agent</b> section, but it stays where it is until you press <b>Clean up</b>, so nothing jumps under your pointer. Dropping a task into the Agent section opens the same prompt, with the agents that are on listed under it to pick from (<kbd>⇥</kbd> moves between the prompt and that list).</p>
-    <p><b>Unassign</b> takes the node back at once (from its agent and from any people on it alike), and removes what the agent left at the end of the node: the agent's context and its status line. The task itself stays where it ran: a Tana chat, the Assignments chat, the node itself for your Dot.</p>
+    <p><b>Unassign</b> takes the node back at once (from its agent and from any people on it alike), and removes what the agent left at the end of the node: the agent's context and its status line. The task itself stays where it ran: a Tana chat, a ChatGPT chat, the node itself for your Dot.</p>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>assign to chatgpt</b> <i>→</i><kbd>↩</kbd></span>, write a line, then <kbd>⌘↩</kbd>.</div>
   </section>
 
@@ -317,19 +319,19 @@
       <li><b>A completed task</b> The badge drops to a grey outline: a record that there was a task.</li>
     </ol>
     <p>A node handed to your Dot follows its own last line, <b>Agent status: …</b>. Orbital writes <b>Agent status: Assigned</b> as it sends the event, and the badge stays grey until your Dot picks the task up and changes the line to <b>Working</b>, so blue means it really started; then <b>Completed</b> turns it green, or <b>Failed</b> red. Whatever your Dot writes goes above that line, which stays the node's last. It is ordinary text, so anyone who opens the node in Tana sees it too, and the task's own status stays yours: <b>Agent completed</b> means your turn to look, not done.</p>
-    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, and so does the Assignments chat a ChatGPT task is in (one from before it opens in the ChatGPT app). Your Dot's badge only shows how it is going: its work is in the node itself. On the Timeline, a task row carries the badge right after its title.</p>
+    <p>Click a badge, or press <kbd>↩</kbd> on it, to open its task: a Tana chat opens right here, and so does the ChatGPT chat a node went to (a task from before agent chats opens in the ChatGPT app). Your Dot's badge only shows how it is going: its work is in the node itself. On the Timeline, a task row carries the badge right after its title.</p>
   </section>
 
   <section class="topic">
-    <h2 id="codex" data-short="Agent tasks" data-k="go to task open in codex tana chatgpt assignments chat">Go to a task</h2>
+    <h2 id="codex" data-short="Agent tasks" data-k="go to task open in codex tana chatgpt chat">Go to a task</h2>
     <div class="split">
       <div>
         <p>Every agent that is on brings <b>Go to … task</b> when it has somewhere to show the task: ChatGPT and Tana do; your Dot, whose work is in the node, does not. Type <b>assign</b> in <kbd>⌘K</kbd> on a node ChatGPT has:</p>
         <ul>
-          <li><b>Go to Assignments chat</b> opens the chat this node went to (a ChatGPT task from before there was one, <b>Go to ChatGPT task</b>, opens in the ChatGPT app). <b>Go to Tana task</b> opens the chat here.</li>
+          <li><b>Go to ChatGPT chat</b> opens the chat this node went to (a ChatGPT task from before agent chats, <b>Go to ChatGPT task</b>, opens in the ChatGPT app). <b>Go to Tana task</b> opens the chat here.</li>
         </ul>
       </div>
-      <figure class="shot"><img data-m="ai-codex-rows" alt="Cmd+K filtered by assign on a node ChatGPT has: the Assign to rows, Go to Assignments chat and Unassign, then the Assignments chat"><figcaption>The rows for a node ChatGPT has.</figcaption></figure>
+      <figure class="shot"><img data-m="ai-codex-rows" alt="Cmd+K filtered by assign on a node ChatGPT has: the Assign to rows, Go to ChatGPT chat and Unassign"><figcaption>The rows for a node ChatGPT has.</figcaption></figure>
     </div>
   </section>
 

@@ -120,7 +120,7 @@ function subRowsFor(row) {
 // tie on tier and length keep the fixed order — where the match starts decides only within a group, so "sensitive"
 // puts the current node's Mark as sensitive above Toggle sensitive visibility instead of losing to it by one character.
 function rankRows(rows) {
-  const tier = (a, b) => a.match.rank - b.match.rank || !!a.place - !!b.place || a.label.length - b.label.length; // a command before a place that matches as well ("assign": Assign to … before Assignments)
+  const tier = (a, b) => a.match.rank - b.match.rank || !!a.place - !!b.place || a.label.length - b.label.length; // a command before a place that matches as well (a chat whose title starts with the word typed)
   const cmp = (a, b) => tier(a, b) || a.match[0] - b.match[0];
   const best = new Map(), first = new Map();
   rows.forEach((r, i) => { if (!first.has(r.group)) first.set(r.group, i); if (!best.has(r.group) || cmp(r, best.get(r.group)) < 0) best.set(r.group, r); });

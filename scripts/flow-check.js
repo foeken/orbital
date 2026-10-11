@@ -1529,20 +1529,32 @@ flow('A node dropped on a chat fills its message with a reference', async (p) =>
 });
 
 
-// A node handed to ChatGPT went to the Assignments chat (main/agentchats.js assign): its badge opens that chat here (renderer/render.js openAgentTask)
-flow('A node assigned to ChatGPT opens its Assignments chat', async (p) => {
+// A node handed to ChatGPT goes to your latest ChatGPT chat, or a new one picked on the Assign page (main/agentchats.js
+// assign, renderer/agent.js agentPromptRows): its badge opens that chat here (renderer/render.js openAgentTask)
+flow('A node assigned to ChatGPT goes to your latest chat, or a new one, and its badge opens it', async (p) => {
   await p.start();
   await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
   await p.js('agentTasks.set("mockdoc2", { agent: "codex", taskId: "0198c0de-0000-7000-8000-000000000003" }); openAgentTask("mockdoc2"); 1');
-  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000003"', 'the Assignments chat');
-  assert.equal(await p.js('titleEl.textContent'), 'Assignments');
-  await p.waitFor('/^Every node you assign to ChatGPT · /.test(document.querySelector(".chat-context")?.textContent || "")', 'the line over it saying what the chat is for');
-  // "assign" and ↩ assigns, as it always did: the commands come before the chat called Assignments
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000003"', 'the chat it went to');
+  assert.equal(await p.js('titleEl.textContent'), 'Studio LT charter: what to cut');
+  // "assign" and ↩ assigns: the commands come before any chat whose title matches as well
   await p.js("goTo('tana:text:mockai0')"); await at(p, 'tana:text:mockai0');
   await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type('assign');
   await p.waitFor('palRows.length && palRows[palIndex]', 'rows for assign');
-  assert.match(await p.js('palRows[palIndex].label'), /^Assign to /, 'the first row is an Assign row, not the Assignments chat');
+  assert.match(await p.js('palRows[palIndex].label'), /^Assign to /, 'the first row is an Assign row');
   await closePalette(p);
+  // the Assign page: your latest chat ticked, a new one beside it, and the choice goes to main with the assignment
+  await p.js('window.__set = []; const f = tana.setAgent; tana.setAgent = (...a) => { __set.push(a.slice(3)); return f(...a); }; 1');
+  await command(p, 'assign to chatgpt', 'Assign to ChatGPT \u2026');
+  await p.waitFor('palMode === "agentPrompt"', 'the Assign page');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.group === "Chat").map((r) => [r.label, r.hint])'), [['Studio LT charter: what to cut', '\u2713 Latest'], ['New chat', '']], 'your latest chat ticked, and a new one to choose');
+  await p.type('Summarise it');
+  await p.js('palRows.find((r) => r.label === "New chat").run(); 1');
+  await p.waitFor('palRows.find((r) => r.label === "New chat")?.hint === "\u2713"', 'New chat ticked');
+  await p.key('⌘↩');
+  await p.waitFor('__set.length === 1', 'the assignment sent');
+  assert.deepEqual(await p.js('__set[0]'), ['codex', { newChat: true }], 'to ChatGPT, in a new chat');
+  await p.waitFor('document.getElementById("toast").textContent === "Sent to ChatGPT, in a new chat"', 'a note saying where it went');
 });
 
 
@@ -1553,10 +1565,10 @@ flow('Add to chat offers the agent chats first, and fills the one picked', async
   await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
   await p.js('openAddToChat([{ mention: { uri: "tana:text:mocksupplier0", label: "Supplier contract" } }, { text: " " }]); 1');
   await p.waitFor('palMode === "addToChat" && palRows.length', 'the page');
-  assert.deepEqual(await p.js('palRows.filter((r) => r.group === "Agent chats").map((r) => r.label)'), ['Assignments', 'Draft the release notes for 0.11'], 'the agent chats on this Mac, not the one on another Mac');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.group === "Agent chats").map((r) => r.label)'), ['Studio LT charter: what to cut', 'Draft the release notes for 0.11'], 'the agent chats on this Mac, not the one on another Mac');
   assert.equal(await p.js('palRows[0].group'), 'Agent chats', 'and they come first');
   await p.js('palRows[0].run(); 1');
-  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000003" && composerText.textContent.includes("Supplier contract")', 'the Assignments chat with the node in its message');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000003" && composerText.textContent.includes("Supplier contract")', 'the chat with the node in its message');
 });
 
 

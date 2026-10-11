@@ -308,12 +308,12 @@ function mockApi() {
     { id: 'q2', question: 'What should the new clause cover?', multiSelect: true, options: [{ label: 'Data retention', description: 'how long we keep it' }, { label: 'Sub-processors' }, { label: 'Breach notification' }] },
   ] };
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
-  // Agent chats (main/agentchats.js): the Assignments chat and two chats with ChatGPT, the second on another Mac; a message is answered after a moment
+  // Agent chats (main/agentchats.js): three chats with ChatGPT, the latest holding an assignment, the third on another Mac; a message is answered after a moment
   const AGENT_LIST = 'orbital:agent-chats', agentChatId = (n) => 'orbital:agent-chat:0198c0de-0000-7000-8000-' + String(n).padStart(12, '0');
   const agentChatRow = (id, title, hoursAgo, elsewhere) => ({ id, text: title, title, kind: 'document', icon: 'chatgpt', editable: false, hasChildren: true, appPage: true, meta: elsewhere ? 'On another Mac' : 'ChatGPT', agentChat: { agent: 'codex', at: Date.now() - hoursAgo * 36e5, elsewhere } });
   const codexMsg = (mine, text, minsAgo, notes) => { const m = chatMsg(mine, [].concat(text), minsAgo, notes); if (!mine) { m.text = 'ChatGPT'; m.segments = [{ text: 'ChatGPT' }]; } return m; };
-  const ASSIGNED = agentChatId(3); // the Assignments chat (main/agentchats.js assign): where a node handed to ChatGPT goes
-  content[AGENT_LIST] = [{ ...agentChatRow(ASSIGNED, 'Assignments', 0, false), agentChat: { agent: 'codex', at: Date.now() - 36e5, elsewhere: false }, assignments: true }, agentChatRow(agentChatId(1), 'Draft the release notes for 0.11', 1, false), agentChatRow(agentChatId(2), 'Why is the iPhone build slow?', 26, true)];
+  const ASSIGNED = agentChatId(3); // the latest chat, where a node handed to ChatGPT goes (main/agentchats.js assign)
+  content[AGENT_LIST] = [agentChatRow(ASSIGNED, 'Studio LT charter: what to cut', 0.5, false), agentChatRow(agentChatId(1), 'Draft the release notes for 0.11', 1, false), agentChatRow(agentChatId(2), 'Why is the iPhone build slow?', 26, true)];
   content[ASSIGNED] = [codexMsg(true, 'Review the Studio LT charter: suggest what to cut', 70), codexMsg(false, ['Three sections repeat the goals; I would cut the second and fold the budget into one table.'], 69, ['Thought for 21 seconds'])];
   content[agentChatId(1)] = [codexMsg(true, 'Draft the release notes for 0.11 from the pull requests merged this week', 62),
     codexMsg(false, ['Here is a first draft.', 'Meet Now in ⌘K makes a half-hour meeting and opens it in Tana.', 'Agent chats: chat with ChatGPT from Orbital, kept in the ChatGPT app.', 'Past days in a meeting search start folded.'], 61, ['Thought for 38 seconds'])];

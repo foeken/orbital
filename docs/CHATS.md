@@ -390,7 +390,7 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
   restricted to you (docs/SETTINGS.md).
 - **The Codex app.** The thread is listed there too. While the app has it open it is the thread's writer, so a message
   sent here is queued to it (`codex queue`) and answered in the app; the page says so, and the next read shows it.
-- **On the page**: the line at its top, where a Tana chat says who sees it, has a lock, “Only you · the conversation stays out of Tana” (the Assignments chat first says what it is for: “Every node you assign to ChatGPT”),
+- **On the page**: the line at its top, where a Tana chat says who sees it, has a lock, “Only you · the conversation stays out of Tana”,
   and the model and reasoning effort the thread runs with (`agentChat:info`, `thread/read`, named by main/prompts.js). The
   composer says “Message ChatGPT · @ links · Not shared with Tana”, and on a chat another Mac started it takes nothing. **Rename** (⌘K, and on the tab's right-click
   menu) keeps the new name with the link and gives it to the thread (`thread/name/set`), so
@@ -402,9 +402,10 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
 - **Found though not in Tana.** ⌘K lists every agent chat under Agent chats, as it lists saved searches, and ⌘S adds the chats
   whose title holds every word typed after Tana's results, under AGENT CHATS; never while linking with @,
   since Tana cannot link to one (renderer/agentchats.js `agentChatPlaceRows`, `agentChatHits`).
-- **Assignments.** A node handed to ChatGPT (Assign to ChatGPT …, main/agents/codex.js `start`) is a message in one standing chat,
-  Assignments, made by the first one on this Mac (`assignments: true` on its link, main/agentchats.js `assign`); one sent
-  while ChatGPT still answers joins that turn (`turn/steer`, once the turn has started; two at once make one chat, not two). The message is one line the chat shows, `Assigned [node](uri): request`,
+- **Assignments.** A node handed to ChatGPT (Assign to ChatGPT …, main/agents/codex.js `start`) is a message in your latest chat on this Mac,
+  which moves to the top, or in a new one: the Assign page's Chat choice, the latest ticked and New chat beside it (renderer/agent.js
+  `agentPromptRows`, `newChat` through `agent:set` to main/agentchats.js `assign`), and a new one anyway when there is none
+  (two at once then make one chat, not two). One sent while ChatGPT still answers joins that turn (`turn/steer`, once the turn has started). The message is one line the chat shows, `Assigned [node](uri): request`,
   and Orbital's context for ChatGPT (main/agent.js `agentPrompt`, and that a sub-agent does the work and the chat gets a
   short result) inside `<orbital-context>`, which the page leaves out (`shown`); sub-agents keep the chat's own context small. The node's task link names the thread, so its badge opens the
   chat (renderer/render.js `openAgentTask`), and its own turn there (`turnId`), so its badge reads that turn: one node finishing or

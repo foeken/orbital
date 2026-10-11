@@ -54,8 +54,7 @@ function agentChatSend(docId, draft, text) {
 }
 const agentChatAnswering = (docId) => (kids.get(docId) || []).some((n) => n.chat && n.chat.streaming);
 // The line at the top of an agent chat, where a Tana chat says who can see it (renderer/chat.js chatContextEl): a lock and
-// that only you see it and the conversation is not in Tana (its title is kept with your settings there), what the
-// Assignments chat is for, then the model and reasoning effort Codex runs it with, asked once per chat (main/agentchats.js info)
+// that only you see it and the conversation is not in Tana (its title is kept with your settings there), then the model and reasoning effort Codex runs it with, asked once per chat (main/agentchats.js info)
 const agentChatInfos = new Map(); // docId -> { model, effort }, or null while it is asked
 function agentChatContextEl(id) {
   if (id !== AGENT_CHAT_NEW && !agentChatAway(id) && !agentChatInfos.has(id) && tana.agentChatInfo) {
@@ -63,9 +62,8 @@ function agentChatContextEl(id) {
     tana.agentChatInfo(id).then((i) => { agentChatInfos.set(id, i || {}); if (zoom && zoom.docId === id) renderSoon(true); }, () => agentChatInfos.delete(id));
   }
   const info = agentChatInfos.get(id) || {}, el = document.createElement('div'), words = [info.model, info.effort].filter(Boolean).join(' · ');
-  const about = (extra.get(id) || {}).assignments ? 'Every node you assign to ChatGPT · ' : '';
   el.className = 'chat-context';
-  el.append(addIcon(document.createElement('span'), 'lock'), about + 'Only you · the conversation stays out of Tana', ...(words ? [' · ' + words] : []));
+  el.append(addIcon(document.createElement('span'), 'lock'), 'Only you · the conversation stays out of Tana', ...(words ? [' · ' + words] : []));
   return el;
 }
 // ⌘K Rename on an agent chat: the name on the list and in the sidebar, and the thread's name in Codex (main/agentchats.js rename)
@@ -87,6 +85,6 @@ function agentChatOwnRows(group) {
   return [
     ...(agentChatAnswering(docId) ? [{ id: 'stopAgentChat', group, icon: 'chatgpt', label: 'Stop ChatGPT', hint: 'The answer being written', run: () => run(() => tana.stopAgentChat(docId)) }] : []),
     { id: 'openAgentChat', group, icon: 'chatgpt', label: 'Open in ChatGPT', hint: 'This chat, in the ChatGPT app', run: () => run(() => tana.openAgentChat(docId)) },
-    { id: 'deleteAgentChat', group, icon: 'trash', label: 'Delete', hint: here.assignments ? 'From Orbital; your next assignment starts a new chat' : 'From Orbital; it stays in the ChatGPT app', run: () => deleteAgentChat(docId) },
+    { id: 'deleteAgentChat', group, icon: 'trash', label: 'Delete', hint: 'From Orbital; it stays in the ChatGPT app', run: () => deleteAgentChat(docId) },
   ];
 }
