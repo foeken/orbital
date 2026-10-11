@@ -1531,6 +1531,20 @@ flow('A node assigned to ChatGPT opens its Assignments chat', async (p) => {
 });
 
 
+// ⌘K Add to chat (renderer/chat.js openAddToChat): your agent chats first, those on this Mac, then Tana's; the one picked
+// opens with the node in its message box
+flow('Add to chat offers the agent chats first, and fills the one picked', async (p) => {
+  await p.start();
+  await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
+  await p.js('openAddToChat([{ mention: { uri: "tana:text:mocksupplier0", label: "Supplier contract" } }, { text: " " }]); 1');
+  await p.waitFor('palMode === "addToChat" && palRows.length', 'the page');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.group === "Agent chats").map((r) => r.label)'), ['Assignments', 'Draft the release notes for 0.11'], 'the agent chats on this Mac, not the one on another Mac');
+  assert.equal(await p.js('palRows[0].group'), 'Agent chats', 'and they come first');
+  await p.js('palRows[0].run(); 1');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000003" && composerText.textContent.includes("Supplier contract")', 'the Assignments chat with the node in its message');
+});
+
+
 // ⌘S and ⌘K find agent chats though Tana does not know them (renderer/agentchats.js agentChatHits, agentChatPlaceRows): by
 // every word of their title, and opened like any result
 flow('⌘S and ⌘K find agent chats, which are not in Tana', async (p) => {

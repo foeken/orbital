@@ -746,8 +746,9 @@ function startNewChat() {
 }
 
 // ---- Add to chat ----
-// ⌘K Add to chat … on a row, the zoomed node or a selection (renderer/tasks.js selectionRows): New chat and the recent
-// chats, and the one picked gets references to them at the start of its message, the chips a drag onto it makes
+// ⌘K Add to chat … on a row, the zoomed node or a selection (renderer/tasks.js selectionRows): your agent chats first
+// (renderer/agentchats.js, those on this Mac), then New chat and the recent Tana chats, and the one picked gets
+// references to them at the start of its message, the chips a drag onto it makes
 // (composerDropSegs). A chat another pane of the window shows is brought into view there and gets them (shell.js
 // addToChat); any other chat opens in this pane.
 let addChatList = null; // loadList's answer: the chats, last changed first
@@ -755,6 +756,8 @@ let chatCompose = null; // { docId, segs } for a chat still opening: its message
 function openAddToChat(segs) {
   loadList('addToChat', () => tana.searchPreview({ types: ['chats'] }), (list) => { addChatList = list; });
   openPage('addToChat', 'Add to which chat?', { back: BACK_TO_COMMANDS, rows: (q) => [
+    ...agentChatsKnown.filter((n) => !(n.agentChat && n.agentChat.elsewhere) && fuzzyMatch(n.title || 'New chat', q))
+      .map((n) => ({ group: 'Agent chats', icon: n.icon || 'chatgpt', label: demoText(n.title || 'New chat', n.id), run: () => addToChat(n, segs) })),
     ...(fuzzyMatch('New chat', q) ? [{ group: 'Chats', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => run(async () => { const n = await tana.newChat(); composeInto(n.id, segs, n); }) }] : []),
     ...listRows('Chats', addChatList, q, '', (list) => list.map((n) => [n, n.text || n.title || 'New chat']).filter(([, label]) => fuzzyMatch(label, q))
       .map(([n, label]) => ({ group: 'Chats', icon: 'chat', label: demoText(label, n.id), run: () => addToChat(n, segs) }))),
