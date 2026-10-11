@@ -194,7 +194,7 @@ const SECTIONS = {
   },
   lists: () => [
     ...group('Hidden titles', null, host.filters ? [hiddenList()] : []),
-    ...group('Chats', null, host.setMcpHidden ? [row('robot', 'Show MCP chats', toggle('mcp', 'Show MCP chats', !st.mcpHidden, () => load('mcpHidden', () => host.setMcpHidden(!st.mcpHidden)), st.mcpHidden == null), 'Chats an MCP client started')] : []),
+    ...group('Chats', null, host.setMcpHidden ? [row('robot', 'Show chats made by tools', toggle('mcp', 'Show chats made by tools', !st.mcpHidden, () => load('mcpHidden', () => host.setMcpHidden(!st.mcpHidden)), st.mcpHidden == null), 'Chats an MCP client started')] : []),
   ],
   // what is the same for everyone in the Tana workspace, as ⌘K Open Orbital Settings for Tana Workspace sets it
   // (renderer/agent.js): kept on the workspace's own document, and written by an admin only (main/settings.js setWorkspace)

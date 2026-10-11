@@ -68,7 +68,6 @@ const withShims = (src) => {
   if (/\brelatedBy\b/.test(src) && !/(const|let) relatedBy\b/.test(src)) src = 'globalThis.relatedBy ??= new Map();\n' + src;
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
   if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
-  if (/\bmeetingDetailsRows\(/.test(src) && !/function meetingDetailsRows\(/.test(src)) src = 'globalThis.meetingDetailsRows ??= () => [];\n' + src;
   // the shell's word on this page's window (renderer/state.js): one page, unless the harness says otherwise
   if (/\bwindowPanes\b/.test(src) && !/let windowPanes =/.test(src)) src = 'globalThis.windowPanes ??= { pages: 1 };\n' + src;
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
@@ -2789,8 +2788,8 @@ async function runNoteInPageCheck() {
 }
 
 
-// Edit meeting details (#758): offered where Change time is, one field, read by the AI only when ↩ asks, and written only
-// when the time it read is pressed, as a start and an end through Change time's own write.
+// Change time (#758): a time typed plainly is read at once; other words are read by the AI only when ↩ asks, and written
+// only when the time it read is pressed, as a start and an end.
 async function runMeetingDetailsCheck() {
   const api = vm.runInNewContext(`
     const calls = [], reads = [], relatedBy = new Map();
@@ -2801,22 +2800,21 @@ async function runMeetingDetailsCheck() {
     const meetingSpan = (start, end) => start + '-' + end;
     const editMeetingNow = (change) => calls.push(['edit', change]);
     const tana = { editMeeting: () => {}, readMeetingTime: (words, docId) => { calls.push(['read', words, docId]); return new Promise((resolve, reject) => reads.push({ resolve, reject })); } };
-    ${functionSource('meetingOf')}
-    ${sourceLine('let meetingDetailsRead')}
+    const parseMeetingTime = (words) => (words === '14:00' ? { start: 50, end: 80 } : null); // the plain reading: its own check, above
+    const loadAttendeePool = () => {}, meetingLocationRows = () => [], meetingAttendeeRows = () => [];
+    ${sourceLine('let meetingTimeRead')}
     ${functionSource('readRows')}
     ${functionSource('readWords')}
     ${sourceLine('const localZone')}
     ${sourceLine('const zoneName')}
     ${functionSource('zoneSpan')}
     ${functionSource('zoneNote')}
-    ${functionSource('meetingDetailsRows')}
-    ${functionSource('openMeetingDetails')}
+    ${functionSource('meetingTimeRows')}
+    ${functionSource('openMeetingPage')}
     const settle = () => new Promise((r) => setTimeout(r, 0));
     ({
-      offered: (info, doc = { id: 'tana:event:m', icon: 'meeting' }) => { meetingCtx = { docId: 'tana:event:m', info }; return meetingDetailsRows(doc, 'Current node').map((r) => [r.id, r.label]); },
-      noAI: () => { delete tana.readMeetingTime; },
-      open: () => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2 } }; openMeetingDetails(); return [page.mode, page.placeholder]; },
-      openKept: (timeZone) => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2, timeZone } }; openMeetingDetails(); },
+      open: () => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2 } }; openMeetingPage('meetingTime', 'When?'); return page.mode; },
+      openKept: (timeZone) => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2, timeZone } }; openMeetingPage('meetingTime', 'When?'); },
       rows: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
       spins: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => !!r.spin),
       press: (typed, i = 0) => { const r = page.rows(typed.toLowerCase(), typed)[i]; if (r && !r.disabled) r.run(); }, // as runRow: ↩ on a note does nothing
@@ -2827,12 +2825,12 @@ async function runMeetingDetailsCheck() {
       back: () => page.back(), calls: () => calls,
     });
   `, { setTimeout, Promise });
-  assert.deepEqual(plain(api.offered({ editable: true, start: 1, end: 2 })), [['meetingDetails', 'Edit meeting details']], 'on a meeting this user may change');
-  for (const info of [{ editable: false, start: 1, end: 2 }, { editable: true, allDay: true, start: 1, end: 2 }, null])
-    assert.deepEqual(plain(api.offered(info)), [], 'never on one they may not, on an all-day one, or before main has said');
-  assert.deepEqual(plain(api.offered({ editable: true, start: 1, end: 2 }, { id: 'tana:text:x', icon: 'doc' })), [], 'nor on a page that is not that meeting\u2019s');
-  assert.deepEqual(plain(api.open()), ['meetingDetails', 'When? tomorrow from 3-5, an hour later, for 45 minutes'], 'one field, saying what it takes');
+  assert.equal(api.open(), 'meetingTime', 'Change time is the one page for a new time');
   assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true]], 'empty, it shows the meeting as it is');
+  assert.deepEqual(plain(api.rows('14:00')), [['50-80', '\u21A9', false], ['1-2', 'Now', true]], 'a time typed plainly is read at once, no AI');
+  api.press('14:00');
+  assert.deepEqual(plain(api.calls()), [['edit', { start: 50, end: 80 }]], 'and written on the press');
+  api.calls().length = 0;
   assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['Read \u201Ctomorrow from 3-5\u201D with AI', '\u21A9', false], ['1-2', 'Now', true]], 'words are read only when \u21A9 asks');
   api.press('tomorrow from 3-5'); api.press('tomorrow from 3-5');
   assert.deepEqual(plain(api.calls()), [['read', 'tomorrow from 3-5', 'tana:event:m']], 'one press, one reading, for this meeting');
@@ -2853,7 +2851,6 @@ async function runMeetingDetailsCheck() {
   const writes = api.calls().filter((c) => c[0] === 'edit').length;
   const held = api.row('friday at 4');
   api.elsewhere();
-  assert.deepEqual(plain(api.rows('friday at 4')), [], 'once ⌘K is on another meeting this page offers nothing');
   held.run();
   assert.equal(api.calls().filter((c) => c[0] === 'edit').length, writes, 'and a reading for one meeting is never written to another');
   api.back();
@@ -2864,7 +2861,7 @@ async function runMeetingDetailsCheck() {
     'a meeting kept in another zone says the times are yours');
   api.openKept(LOCAL_ZONE);
   assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true]], 'and one kept in yours says nothing more');
-  console.log('ok  Edit meeting details: one field, read by the AI on \u21A9, shown before it is written, a start and an end only, on a meeting you may change');
+  console.log('ok  Change time: a plain time at once, other words read by the AI on \u21A9, shown before it is written, a start and an end only');
 }
 
 // linkTo (renderer/toolbar.js) tells a caller that asks when its write did not land, so "/" Meeting can answer for a meeting
@@ -7943,6 +7940,9 @@ async function runMeetingEditCheck() {
     ${functionSource('fuzzyMatch')}
     ${sourceBetween('const WEEKDAYS =', 'const PIN_DATE_GROUP')}
     ${withShims(fs.readFileSync(require.resolve('../renderer/meeting.js'), 'utf8').replace("'use strict';", ''))}
+    ${functionSource('readRows')}
+    ${sourceLine('const localZone')}
+    ${sourceLine('const zoneName')}
     const tick = () => new Promise(setImmediate);
     ({
       cmd: async (doc, canEdit = true, wholeDay = false) => { editable = canEdit; allDay = wholeDay; meetingCtx = null; calls.length = 0; meetingRows(doc, 'Current node'); await tick(); await tick(); return meetingRows(doc, 'Current node').map((r) => [r.id, r.label, r.hint]); },
@@ -7974,9 +7974,10 @@ async function runMeetingEditCheck() {
   assert.deepEqual(plain(['', 'blah', '25:00', '14:00-13:00', 'blah 14:00'].map(api.parse)), [null, null, null, null, null], 'anything else reads as no time');
 
   assert.equal(await api.open('meetingTime'), 'meetingTime');
-  assert.deepEqual(plain(api.rows('')), [['Type a day and/or a time: 14:00, tomorrow 9:30, fri 10:00-11:30', '', true]]);
-  assert.deepEqual(plain(api.rows('xyz')), [['No time in \u201Cxyz\u201D', '', true]]);
-  assert.deepEqual(plain(api.rows('14:00')), [['Tue 22 Sep 14:00\u201314:30', '\u21A9', false]], 'the row shows what Enter will write');
+  const now = ['Tue 22 Sep 10:00\u201310:30', 'Now', true];
+  assert.deepEqual(plain(api.rows('')), [now], 'empty, the meeting as it is');
+  assert.deepEqual(plain(api.rows('xyz')), [['No time in \u201Cxyz\u201D', '', true], now], 'words it cannot read, and no AI to read them');
+  assert.deepEqual(plain(api.rows('14:00')), [['Tue 22 Sep 14:00\u201314:30', '\u21A9', false], now], 'the row shows what Enter will write');
   const moved = plain(await api.press('14:00', 0));
   assert.deepEqual(moved.calls, [['edit', 'tana:event:m', { start: new Date(2026, 8, 22, 14).getTime(), end: new Date(2026, 8, 22, 14, 30).getTime() }]]);
   assert.equal(moved.closed, 1, 'and the palette closes');

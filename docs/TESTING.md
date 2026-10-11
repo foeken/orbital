@@ -120,7 +120,7 @@ From fastest to slowest. Each catches what the one before it cannot.
      (now for half an hour, a typed time, or "tomorrow from 3-5" as the mock's AI reads it), words that read as no time
      make nothing, Escape walks back to the row, and a second ↩ while one is made makes nothing more (creates are
      counted, and slowed so the second ↩ lands in time); no meeting is given anyone;
-   - Edit meeting details on a meeting: "tomorrow from 3-5" read by the mock's AI, shown, and written only when pressed,
+   - Change time on a meeting: "tomorrow from 3-5" read by the mock's AI, shown, and written only when pressed,
      as tomorrow afternoon with nobody added; an answer that is no time is said, and Escape goes back;
    - a view: the Library grouped, sorted and filtered with ⌘F, Escape clearing it, then saved as a search that opens
      on the same rows;

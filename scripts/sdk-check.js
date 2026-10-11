@@ -5741,7 +5741,7 @@ async function main() {
     assert.equal((await call('meeting:info', closed.id)).editable, false);
     await assert.rejects(call('meeting:edit', text.id, { location: 'x' }), /Not a meeting/);
     assert.deepEqual(await call('meeting:suggestions'), [{ email: 'sam@example.com', limit: 20 }]);
-    // Edit meeting details (#758): meeting:read reads what the words come to and writes nothing, only for a meeting this
+    // Change time (#758): meeting:read reads what the words come to and writes nothing, only for a meeting this
     // user may change (as meeting:edit), or for a new one; the AI is not asked about anything it refuses
     const seen = [], original = backend.ai.readMeetingTime;
     backend.ai.readMeetingTime = async (said, context) => { seen.push([said, context]); return { date: null, start: null, end: null, minutes: 45, question: null }; };

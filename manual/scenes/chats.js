@@ -28,7 +28,7 @@ module.exports = [
     steps: [{ key: '⌘K' }, { wait: 400 }, { type: 'invite' }, { wait: 400 }, { key: '↩' }, { wait: 800 }, { type: 'sam' }, { wait: 500 }, { key: '↩' }, { wait: 1200 }] },
   { name: 'chats-delete', video: true, setup: [open(C), { wait: 1500 }], clip: [190, 250, 900, 550],
     steps: [{ click: '#composerText' }, { wait: 400 }, { key: '↑' }, { wait: 700 }, { key: '↑' }, { wait: 1100 }, { key: '⇧⌘⌫' }, { wait: 1200 }] },
-  // the mock applies Toggle MCP chats to search, as main does to every list: ⌘S #chat before and after
+  // the mock applies Toggle chats made by tools to search, as main does to every list: ⌘S #chat before and after
   { name: 'chats-mcp', video: true, setup: [open(C), { wait: 1200 }], clip: [160, 40, 960, 460],
     steps: [{ key: '⌘S' }, { wait: 300 }, { type: '#chat' }, { wait: 1300 }, { key: 'esc' }, { wait: 300 }, { key: '⌘K' }, { wait: 300 }, { type: 'mcp' }, { wait: 800 }, { key: '↩' }, { wait: 500 }, { key: '⌘S' }, { wait: 300 }, { type: '#chat' }, { wait: 1200 }] },
   { name: 'chats-codex', video: true, hold: 1800, setup: [open(C), { wait: 1500 }], clip: [190, 250, 900, 550],

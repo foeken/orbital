@@ -54,7 +54,7 @@ async function currentMeeting() {
   return { id: live.eventUri, title: live.title || '', joinedAt: live.joinedAt, callUri: live.callUri };
 }
 
-// ---- A time read from words (Edit meeting details, "/" Meeting's when page; docs/MEETINGS.md "Reading a time") ----
+// ---- A time read from words (Change time, "/" Meeting's when page; docs/MEETINGS.md "Reading a time") ----
 // The AI writes down what the words say (main/ai.js readMeetingTime); what that comes to is decided here, the same way
 // every time, in your time zone (this Mac's), whatever zone the meeting is kept in: a day left out is your today, and
 // "tomorrow from 3-5" is 15:00 where you are. A zone the words name ("9am New York time") is used when it is a real one,
@@ -122,7 +122,7 @@ function describe({ start, end, timeZone, fresh }, now) {
   return { today: day(n), now: clock(n), timeZone, current: fresh ? '' : day(s) + ' ' + clock(s) + ' to ' + (e.d === s.d ? '' : day(e) + ' ') + clock(e) };
 }
 // words -> { start, end, timeZone } or { question }, as the AI read them (read: main/ai.js readMeetingTime, which main/ai.js
-// sets on S, since this module comes first and does not require it). id: the meeting Edit meeting details is on, refused
+// sets on S, since this module comes first and does not require it). id: the meeting Change time is on, refused
 // unless this user may change it, as editMeeting refuses; none: a new meeting ("/" Meeting), from now for half an hour, in
 // your time zone. Nothing is written.
 async function readTime(words, id, read = S.readMeetingTime, now = Date.now()) {
@@ -150,7 +150,7 @@ const ipc = {
   'meeting:suggestions': () => attendeeSuggestions(),
   // the meeting this user has joined right now, for the outliner's Pin to current meeting row
   'meeting:current': () => currentMeeting(),
-  // Edit meeting details and "/" Meeting's when page: words read into a time to show before anything is written
+  // Change time and "/" Meeting's when page: words read into a time to show before anything is written
   'meeting:read': (_e, words, id) => readTime(words, id),
 };
 

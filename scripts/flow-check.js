@@ -949,7 +949,7 @@ flow('golden path: "/" Task and Meeting, named, the meeting\u2019s time reviewed
   assert.deepEqual(await p.js('tana.children(' + J(day) + ').then((rows) => rows.length)'), 2, 'and no row anywhere was changed');
 });
 
-// 17c. Edit meeting details (#758): ⌘K on a meeting you may change, one field, read by the AI only when ↩ asks (the mock
+// 17c. Change time (#758): ⌘K on a meeting you may change, words it cannot read itself read by the AI only when ↩ asks (the mock
 // stands in for it), its reading shown beside the meeting as it is and written only when pressed; Escape goes back to the
 // commands and the caret comes back
 // ⌘K Meet Now (renderer/palette.js): asks nothing, makes "Meeting" from this minute for half an hour, and opens its page in
@@ -966,17 +966,17 @@ flow('Meet Now makes a half-hour meeting called Meeting and opens it in Tana', a
   assert.deepEqual(await p.js('__opened'), [await p.js('tana.nodeLink(' + J(id) + ')')], 'and the meeting itself opened in Tana');
 });
 
-flow('golden path: Edit meeting details reads "tomorrow from 3-5" and applies it only when pressed', async (p) => {
+flow('golden path: Change time reads "tomorrow from 3-5" with AI and applies it only when pressed', async (p) => {
   await p.start();
   await p.js("goTo('mockmeeting2')"); await at(p, 'mockmeeting2');
   const was = await p.js('tana.meetingInfo("mockmeeting2").then((m) => [m.start, m.end, m.attendees.length])');
-  await command(p, 'edit meeting details', 'Edit meeting details');
-  await p.waitFor('palMode === "meetingDetails"', 'its one field');
+  await command(p, 'change time', 'Change time \u2026');
+  await p.waitFor('palMode === "meetingTime"', 'its one field');
   await p.type('xyz'); await p.key('↩');
   await p.waitFor('palRows.some((r) => r.label === "No day or time in those words")', 'the AI\u2019s answer that it is no time');
   await p.key('esc'); await p.waitFor('palMode === "cmd"', 'Escape back to the commands');
   await p.key('esc'); await p.waitFor('palette.hidden', 'and closed');
-  await command(p, 'edit meeting details', 'Edit meeting details');
+  await command(p, 'change time', 'Change time \u2026');
   await p.js("const slow = tana.readMeetingTime; tana.readMeetingTime = (...a) => new Promise((r) => setTimeout(r, 500)).then(() => slow(...a)); 1");
   await p.type('tomorrow from 3-5'); await p.key('↩');
   await p.waitFor('document.querySelector("#palette .row .ricon.thinking")', 'the reading row\u2019s thinking glyph');
@@ -1461,8 +1461,11 @@ flow('Agent chats: a new chat with ChatGPT, its answer, the list, and Delete cha
   assert.deepEqual(await p.js('[...outline.querySelectorAll(".chat-msg")].map((m) => m.className.replace("chat-msg ", "").split(" ")[0])'), ['mine', 'theirs'], 'your message, then Codex\u2019s');
   assert.equal(await p.js('document.getElementById("title").textContent'), 'Summarise my week', 'titled with its first message');
   await p.waitFor('/not shared with Tana · GPT-6 · High$/.test(document.querySelector(".chat-context")?.textContent || "")', 'the model and reasoning beside it');
-  // Rename chat …: the title, and the list's name for it
-  await command(p, 'rename chat', 'Rename chat …');
+  // Rename, as on any page: the title, and the list's name for it; one Rename and one Delete, the chat's own
+  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.label === "Rename" || r.label === "Delete").map((r) => r.id)'), ['renameAgentChat', 'deleteAgentChat'], 'one Rename and one Delete, both the chat\u2019s');
+  await closePalette(p);
+  await command(p, 'rename', 'Rename');
   await p.waitFor('palMode === "renameAgentChat" && palInput.value === "Summarise my week"', 'the rename page with the name as it is');
   await p.js('palInput.value = ""; palInput.dispatchEvent(new Event("input")); 1'); await p.type('Week summary'); await p.key('↩');
   await p.waitFor('document.getElementById("title").textContent === "Week summary"', 'the chat renamed');
@@ -1474,7 +1477,7 @@ flow('Agent chats: a new chat with ChatGPT, its answer, the list, and Delete cha
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 4', 'the list with the new chat');
   assert.equal(await p.js('kids.get("orbital:agent-chats")[0].id'), id, 'newest first');
   await p.js('goTo(' + J(id) + ')'); await at(p, id);
-  await command(p, 'delete chat', 'Delete chat');
+  await command(p, 'delete', 'Delete');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 3', 'back on the list, without it');
   assert.equal(await p.js('(kids.get("orbital:agent-chats") || []).some((n) => n.id === ' + J(id) + ')'), false, 'the chat is off the list');
 });

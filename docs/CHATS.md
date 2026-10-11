@@ -178,7 +178,7 @@ Meetings link chats with `EDGE_TYPE_HAS_PIN` and `EDGE_TYPE_BELONGS_TO`, as `doc
   meeting chats out. A list with a state filter skips the second query, since a chat has no state.
 - MCP chats are a single AI message plus an "accepted N changes" status message; `invocationContext.intent: 'mcp'`
   and titles start with "MCP:". There is no Chats view and no `includeMcp` filter any more (its key could never
-  round-trip into a saved search, #247); what hides them is one switch, "Toggle MCP chats" in Cmd+K, stored as the
+  round-trip into a saved search, #247); what hides them is one switch, "Toggle chats made by tools" in Cmd+K, stored as the
   `hideMcp` setting, which follows you between machines (docs/SETTINGS.md), and applied in `main/views.js`
   `listFilter` beside the hidden titles — so it covers every
   list and every search (Library, Cmd+K documents, Cmd+S) at once, while a chat opened by id still opens.
@@ -392,7 +392,7 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
   sent here is queued to it (`codex queue`) and answered in the app; the page says so, and the next read shows it.
 - **On the page**: the line at its top, where a Tana chat says who sees it, has a lock, “Only you · not shared with Tana”,
   and the model and reasoning effort the thread runs with (`agentChat:info`, `thread/read`, named by main/prompts.js). The
-  composer says “Message Codex · @ links · Not shared with Tana”. **Rename chat …** (⌘K, Rename on the tab's right-click
+  composer says “Message Codex · @ links · Not shared with Tana”. **Rename** (⌘K, and on the tab's right-click
   menu, or a double-click on the title) keeps the new name with the link and gives it to the thread (`thread/name/set`), so
   the Codex app lists it by that name too. **Set icon** works as on a document: the choice is kept in `typeIcons` under the
   chat's id and worn on its tab, the list and the sidebar.

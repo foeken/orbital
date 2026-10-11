@@ -25,7 +25,7 @@ if (tana.onAgentChatChanged) tana.onAgentChatChanged((id) => {
   if (id === AGENT_CHATS_PAGE) {
     tana.agentChats().then((list) => {
       knowAgentChats(list);
-      // the chat on screen was deleted (the sidebar's Delete chat, or on another Mac): back to the list, as ⌘K Delete chat goes
+      // the chat on screen was deleted (the sidebar's Delete chat, or on another Mac): back to the list, as ⌘K Delete goes
       if (zoom && !zoom.nodeId && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW && !agentChatsKnown.some((n) => n.id === zoom.docId)) { navReplace = true; goTo(AGENT_CHATS_PAGE); return null; }
       return kids.has(id) ? reload(id).then(() => renderSoon(true)) : null;
     }).catch(() => {});
@@ -63,7 +63,7 @@ function agentChatContextEl(id) {
   el.append(addIcon(document.createElement('span'), 'lock'), 'Only you · not shared with Tana', ...(words ? [' · ' + words] : []));
   return el;
 }
-// Rename chat …: the name on the list and in the sidebar, and the thread's name in Codex (main/agentchats.js rename)
+// ⌘K Rename on an agent chat: the name on the list and in the sidebar, and the thread's name in Codex (main/agentchats.js rename)
 function renameAgentChat(docId) {
   const now = (extra.get(docId) || {}).title || '';
   namePage('renameAgentChat', 'Rename the chat…', { group: 'Rename chat', icon: 'rename', back: BACK_TO_COMMANDS },
@@ -75,15 +75,15 @@ function deleteAgentChat(docId) {
   run(async () => { knowAgentChats(await tana.deleteAgentChat(docId)); extra.delete(docId); kids.delete(docId); navReplace = true; goTo(AGENT_CHATS_PAGE); showNote('Chat removed from Orbital. It is still in the ChatGPT app'); });
 }
 // ⌘K: the page under Views, a new chat under Actions, and on a chat what can be done with it
-const agentChatsViewRow = () => ({ id: 'agentChats', group: 'Views', icon: 'robot', label: 'Agent chats', hint: 'ChatGPT and your Dot', opens: AGENT_CHATS_PAGE, run: () => goTo(AGENT_CHATS_PAGE) });
+const agentChatsViewRow = () => ({ id: 'agentChats', group: 'Views', icon: 'robot', label: 'Agent chats', hint: 'Your ChatGPT chats', opens: AGENT_CHATS_PAGE, run: () => goTo(AGENT_CHATS_PAGE) });
 function agentChatRows() {
   const rows = [];
   if (tana.startAgentChat && codexHere()) rows.push({ id: 'newAgentChat', group: 'Actions', icon: 'chatgpt', label: 'New chat with ChatGPT', hint: 'On this Mac, in the ChatGPT app, not in Tana', opens: AGENT_CHAT_NEW, run: () => openDoc(AGENT_CHAT_NEW) });
   const docId = zoom && !zoom.nodeId && isAgentChat(zoom.docId) && zoom.docId !== AGENT_CHAT_NEW ? zoom.docId : null, here = docId && extra.get(docId);
   if (!docId || !here || (here.agentChat && here.agentChat.elsewhere)) return rows; // another Mac's: nothing to rename, open or delete here
   if (agentChatAnswering(docId)) rows.push({ id: 'stopAgentChat', group: 'Current node', icon: 'chatgpt', label: 'Stop ChatGPT', hint: 'The answer being written', run: () => run(() => tana.stopAgentChat(docId)) });
-  if (tana.renameAgentChat) rows.push({ id: 'renameAgentChat', group: 'Current node', icon: 'rename', label: 'Rename chat …', hint: here.title || '', keepOpen: true, run: () => renameAgentChat(docId) });
+  if (tana.renameAgentChat) rows.push({ id: 'renameAgentChat', group: 'Current node', icon: 'rename', label: 'Rename', hint: here.title || '', keepOpen: true, run: () => renameAgentChat(docId) });
   rows.push({ id: 'openAgentChat', group: 'Current node', icon: 'chatgpt', label: 'Open in ChatGPT', hint: 'This chat, in the ChatGPT app', run: () => run(() => tana.openAgentChat(docId)) });
-  rows.push({ id: 'deleteAgentChat', group: 'Current node', icon: 'trash', label: 'Delete chat', hint: 'From Orbital; it stays in the ChatGPT app', run: () => deleteAgentChat(docId) });
+  rows.push({ id: 'deleteAgentChat', group: 'Current node', icon: 'trash', label: 'Delete', hint: 'From Orbital; it stays in the ChatGPT app', run: () => deleteAgentChat(docId) });
   return rows;
 }

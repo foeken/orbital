@@ -703,7 +703,7 @@ qcard.addEventListener('keydown', (e) => {
 });
 
 // ---- inviting ----
-// ⌘K Invite to chat…: a workspace member joins this chat as an editor (main/documents.js inviteToChat), and the chat
+// ⌘K Invite to chat …: a workspace member joins this chat as an editor (main/documents.js inviteToChat), and the chat
 // says so. Once there are two of you Tana answers only when mentioned, so the composer moves to To the chat.
 function openInvitePicker(docId) {
   loadMembers();
@@ -758,7 +758,7 @@ function openAddToChat(segs) {
   openPage('addToChat', 'Add to which chat?', { back: BACK_TO_COMMANDS, rows: (q) => [
     ...agentChatsKnown.filter((n) => !(n.agentChat && n.agentChat.elsewhere) && fuzzyMatch(n.title || 'New chat', q))
       .map((n) => ({ group: 'Agent chats', icon: n.icon || 'chatgpt', label: demoText(n.title || 'New chat', n.id), run: () => addToChat(n, segs) })),
-    ...(fuzzyMatch('New chat', q) ? [{ group: 'Chats', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => run(async () => { const n = await tana.newChat(); composeInto(n.id, segs, n); }) }] : []),
+    ...(fuzzyMatch('New chat with Tana', q) ? [{ group: 'Chats', icon: 'chat', label: 'New chat with Tana', hint: 'In Tana, answered by its AI', run: () => run(async () => { const n = await tana.newChat(); composeInto(n.id, segs, n); }) }] : []),
     ...listRows('Chats', addChatList, q, '', (list) => list.map((n) => [n, n.text || n.title || 'New chat']).filter(([, label]) => fuzzyMatch(label, q))
       .map(([n, label]) => ({ group: 'Chats', icon: 'chat', label: demoText(label, n.id), run: () => addToChat(n, segs) }))),
   ] });

@@ -36,12 +36,11 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'setFieldIcon',
   'zoomIn', 'expand', 'collapse',
   'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status',
-  'assign', 'assignTo', 'discussWith', 'addToChat',
-  'meetingTime', 'meetingDetails', 'meetingLocation', 'meetingAttendee',
+  'assign', 'assignTo', 'codexTo', 'unassign', 'codexOpen', 'discussWith', 'addToChat',
+  'meetingTime', 'meetingLocation', 'meetingAttendee',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'pinSidebar', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
-  'codexTo', 'unassign', 'codexOpen',
   'visibility', 'addParticipants', 'notify', 'copyLink', 'exportPdf',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
@@ -155,7 +154,8 @@ function paletteRows(q, typed = q) {
   // Rename, as on the page's tab: the zoomed page's title, where it can be typed in (renderer/document.js renameTitle)
   if (palDoc && zoom && palDoc.id === zoom.docId && !zoom.nodeId && (titleEl.dataset || {}).key) rows.push({ id: 'rename', group: docGroup, icon: 'rename', label: 'Rename', run: renameTitle });
   // the selection, or the row or page you are on, written in the auto-translate language (renderer/translate.js)
-  if (tana.translate && tana.setText && tana.setTitle && !demoMode) { const list = translateTargets(), to = translateTo() || 'English'; if (list.length) rows.push({ id: 'translateNodes', group: selKeys().length ? 'Selection' : docGroup, icon: 'language', label: 'Translate' + (list.length > 1 ? ' ' + list.length + ' nodes' : '') + ' into ' + to, hint: 'Writes the translation', run: () => translateNodes(list, to) }); }
+  // not on a chat page: there it would rewrite the chat's title, and a chat is its messages
+  if (tana.translate && tana.setText && tana.setTitle && !demoMode && !(isChatPage(zoom) && !selKeys().length)) { const list = translateTargets(), to = translateTo() || 'English'; if (list.length) rows.push({ id: 'translateNodes', group: selKeys().length ? 'Selection' : docGroup, icon: 'language', label: 'Translate' + (list.length > 1 ? ' ' + list.length + ' nodes' : '') + ' into ' + to, hint: 'Writes the translation', run: () => translateNodes(list, to) }); }
   // its title shown translated (renderer/translate.js), written as the title for good, where it may be edited
   if (palDoc && tana.setTitle && !demoMode && canEditNode(palDoc)) { const doc = palDoc, found = titleTranslation(doc); if (found) rows.push({ id: 'replaceTranslation', group: docGroup, icon: 'language', label: 'Replace with translation', hint: 'From ' + found.lang, run: () => replaceWithTranslation(doc, found) }); }
   if (palDoc && tana.exportPdf) {
@@ -182,7 +182,6 @@ function paletteRows(q, typed = q) {
     rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date \u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
   }
   rows.push(...meetingRows(palDoc, docGroup)); // Change time / location, Add attendee: on a meeting this user may change (renderer/meeting.js)
-  rows.push(...meetingDetailsRows(palDoc, docGroup)); // Edit meeting details: the same meetings, a time said in your own words and read by the AI (#758)
   // Pin this node onto the meeting I am in, through the event pin the sidebar reads back under Pinned (docs/PINNING.md).
   // The row is listed whenever a real node is on screen, so ⇧⌘K can record
   // a key against it, and says why instead of disappearing when there is no meeting to pin to. Its id is unchanged
@@ -305,8 +304,8 @@ function paletteRows(q, typed = q) {
     // Assigning is offered whether or not the node is with an agent already: handing it over again replaces the request
     // in its Agent context block (main/documents.js writeAgentContext), to that agent or another. One row per agent that
     // is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked.
-    // A saved search is a view, not work: there is nothing in it for an agent to do (Unassign stays, for one handed over before)
-    if (!isSearchDoc(doc)) {
+    // A saved search is a view and a chat a conversation, not work: nothing in either for an agent to do (Unassign stays, for one handed over before)
+    if (!isSearchDoc(doc) && !String(doc.id).startsWith('tana:chat:')) {
       for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: assigned && holder && holder.id === a.id ? 'Replaces what it was asked' : '',
         keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
     }
@@ -366,7 +365,7 @@ function paletteRows(q, typed = q) {
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
   if (tana.proposalAnswer) viewRows.push(proposalsViewRow()); // what Tana's AI proposed and is waiting on you to accept
   if (tana.children) viewRows.push(timelineViewRow()); // what happened to what you watch, and what landed in your Inbox
-  if (tana.agentChats) viewRows.push(agentChatsViewRow()); // your chats with ChatGPT and your Dot (renderer/agentchats.js)
+  if (tana.agentChats) viewRows.push(agentChatsViewRow()); // your chats with ChatGPT (renderer/agentchats.js)
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
@@ -385,10 +384,10 @@ function paletteRows(q, typed = q) {
   // the corner button's glyph (shell.html #create); with an image on the clipboard its page offers that first (openCreationPalette)
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'textPlus', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Quick Add Task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
-  if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
+  if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat …', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
-  if (tana.startAgentChat) rows.push(...agentChatRows()); // New chat with ChatGPT, and on an agent chat Stop, Open in ChatGPT and Delete chat (renderer/agentchats.js)
-  if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
+  if (tana.startAgentChat) rows.push(...agentChatRows()); // New chat with ChatGPT, and on an agent chat Stop, Rename, Open in ChatGPT and Delete (renderer/agentchats.js)
+  if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat with Tana', hint: 'In Tana, answered by its AI', run: () => startNewChat() }); // renderer/chat.js
   // ⌘K Meet Now: a meeting called Meeting from this minute for half an hour, as "/" Meeting's now, opened on its page in Tana (not its call)
   if (tana.createDocument && tana.nodeLink && tana.openExternal) rows.push({ id: 'meetNow', group: 'Actions', icon: 'calendar', label: 'Meet Now', hint: 'Now, for 30 minutes · opens in Tana', run: () => run(async () => { const start = Math.floor(Date.now() / 6e4) * 6e4; openInTana((await tana.createDocument('Meeting', { kind: 'meeting', start, end: start + SLASH_MEETING_LENGTH })).id); }) });
   // ⌘K New canvas (#620): named as Tana names one ("Canvas Sep 30, 2026, 2:05 PM") and opened in its window (#611)
@@ -427,7 +426,7 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'toggleSidebar', group: 'Window', icon: 'sidebar', label: windowPanes.sidebar ? 'Collapse sidebar' : 'Expand sidebar', run: () => toShell({ orbital: 'sidebar' }) });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', hint: 'Every pane', run: () => (window.frameElement ? window.parent.postMessage({ orbital: 'reload' }, '*') : location.reload()) }); // the shell reloads, and every page with it (shell.js)
   if (tana.windowLayout) {
-    rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view\u2026', keepOpen: true, run: openSaveViewPalette });
+    rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view \u2026', keepOpen: true, run: openSaveViewPalette });
     if (savedViews().some((v) => v.id !== WORK_VIEW.id)) rows.push({ id: 'removeSavedView', group: 'Window', icon: 'trash', label: 'Remove saved view', keepOpen: true, run: openRemoveViewPalette, sub: async () => removeViewRows('') });
     for (const v of savedViews()) rows.push({ id: v.id || 'savedView:' + v.name, group: 'Saved views', icon: 'splitPanes', label: v.name, run: () => run(() => openSavedView(v)) });
   }
@@ -444,7 +443,7 @@ function paletteRows(q, typed = q) {
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Settings', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
   // Every list and every search, not this page: the switch lives in main (main/views.js listFilter), so the Library
   // and Cmd+S stop offering MCP chats too. Stable label + hint, like the row above, so a recorded key keeps meaning.
-  if (tana.setMcpHidden) rows.push({ id: 'mcpChats', group: 'Settings', icon: 'hiddenItems', label: 'Toggle MCP chats', hint: mcpHidden ? 'Hidden' : 'Shown',
+  if (tana.setMcpHidden) rows.push({ id: 'mcpChats', group: 'Settings', icon: 'hiddenItems', label: 'Toggle chats made by tools', hint: (mcpHidden ? 'Hidden' : 'Shown') + ' · Tana chats an MCP tool started',
     run: () => run(async () => { mcpHidden = await tana.setMcpHidden(!mcpHidden); }) });
   // names and Tana's words swapped for made-up ones on screen, for showing the app to someone (renderer/segments.js)
   if (tana.translate) rows.push({ id: 'autoTranslate', group: 'Settings', icon: 'sparkle', label: 'Auto-translate …', hint: translateTo() ? 'Into ' + translateTo() : 'Off', run: openTranslatePage }); // renderer/translate.js

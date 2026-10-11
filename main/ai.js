@@ -347,7 +347,7 @@ async function classifyType({ title, text, current = null, types = [] }, fetchIm
     .map((c, i) => ({ ...c, p: raw[i] / sum })); // scaled to 1, so percentages or a stray key still read right
   return { current, choices: choices.sort((a, b) => b.p - a.p) };
 }
-// ---- A meeting's time from words: Edit meeting details and "/" Meeting's when page (main/meetings.js readTime) ----
+// ---- A meeting's time from words: Change time and "/" Meeting's when page (main/meetings.js readTime) ----
 // The model only writes down what the words say: a day, clock times as written and whether the words fix their hour,
 // a length, or a question when the words leave the day or time open. Morning or afternoon, today, the length, and
 // whether the result is a time at all are main/meetings.js resolveTime's, decided the same way every time. The answer
