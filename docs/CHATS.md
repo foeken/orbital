@@ -400,12 +400,11 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
   (forgets the link; the thread stays in Codex). **Agent chats** (⌘K Views) is the list, `orbital:agent-chats`, and the
   newest first; the window's sidebar shows the newest eight in a section of that name (docs/OUTLINER.md §19).
 - **Found though not in Tana.** ⌘K lists every agent chat under Agent chats, as it lists saved searches, and ⌘S adds the chats
-  whose title holds every word typed (a Dot's by its name) after Tana's results, under AGENT CHATS; never while linking with @,
+  whose title holds every word typed after Tana's results, under AGENT CHATS; never while linking with @,
   since Tana cannot link to one (renderer/agentchats.js `agentChatPlaceRows`, `agentChatHits`).
-- **Your Dot.** Every agent linked through the Orbital MCP server has a chat of its own, first on the list, there for as long
-  as it is linked: no Rename, Delete or Set icon. Its words go out as the `chat.message` event and its answers come back
-  through the MCP server's `reply_in_orbital`, kept on this Mac (`dotChats`): docs/MCP-SERVER.md, Your Dot's chat. Since all of
-  it passes through that server (orbital.md, ours, unless the workspace runs its own), the chat says so where you write: its top
-  line (`agentChatVia`) instead of “not shared with Tana”, the message box and its empty page.
+- **Assignments.** A node handed to ChatGPT (Assign to Agent, main/agents/codex.js `start`) is a message in one standing chat,
+  Assignments, made by the first one on this Mac (`assignments: true` on its link, main/agentchats.js `assign`); one sent
+  while ChatGPT still answers joins that turn (`turn/steer`). The node's task link names the thread, so its badge opens the
+  chat (renderer/render.js `openAgentTask`); every node shares the thread, so each badge reads its latest turn.
 - **What it is not.** Not an @ChatGPT question (§12): that is a question about a Tana chat, answered privately beside it.
   Claude is not offered yet (issue #823).

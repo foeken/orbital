@@ -147,7 +147,7 @@ function unhide(pattern) { if (pattern == null) return; hiddenPick = null; load(
 function relayRow(w) {
   const host = String((w && w.url) || 'https://orbital.md/mcp').replace(/^https?:\/\//, '').replace(/\/.*$/, ''), ours = !(w && w.workspace) && host === 'orbital.md';
   return row('mcp', 'Goes through ' + host + (ours ? ', Orbital\'s relay, run by us' : w && w.workspace ? ', your workspace\'s own server' : ''), null,
-    'Each handover and your messages to your linked agents pass through it, and their answers until Orbital collects them' + (ours ? '. Host your own Orbital MCP server to keep it in your workspace.' : '.'), true);
+    'Each handover to your linked agents passes through it' + (ours ? '. Host your own Orbital MCP server to keep it in your workspace.' : '.'), true);
 }
 function agentRows(a) {
   const flip = () => load('agents', () => host.enableAgent(a.id, !a.enabled));
@@ -209,7 +209,7 @@ const SECTIONS = {
     banner.append(icon, words);
     return [
       banner,
-      ...group('Orbital MCP server', 'what you send your agents goes through it: every handover, and your messages to your Dot', [
+      ...group('Orbital MCP server', 'what you send your agents goes through it: every handover', [
         row('mcp', 'Server URL', field('org/url', 'Orbital MCP server URL', w.workspace, w.fallback || 'https://orbital.md/mcp', async (v) => { const now = await host.mcpUse(v); load('agents', host.agentList); return now; }),
           w.outdated ? 'Out of date: version ' + w.version + ', and Orbital needs ' + w.needed : w.workspace ? 'Your workspace\'s own · agents link again after a change' : 'Empty: orbital.md, Orbital\'s relay, run by us · host your own to keep it in your workspace'),
         row('prompt', 'Host your own', button('deploy', 'Copy Instructions', copy(w.deploy)), 'ChatGPT deploys it on Sites and gives you the URL to paste above'),

@@ -1360,10 +1360,10 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   assert.equal(await p.js('palRows.some((r) => /plugin/i.test(r.label))'), false, 'and nothing of ChatGPT\u2019s plugins page');
   assert.equal(await p.js('palRows.some((r) => /link_orbital/.test(r.label))'), false, 'no tool names in the steps');
   assert.deepEqual(await p.js('[palRows[4].label, palRows[4].group, !!palRows[4].disabled]'), ['Copy the instructions', 'Then ask your agent to link', false], 'then the instructions');
-  assert.match(await p.js('connectCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned and chat\.message events\. Each time an Orbital event fires, do what its data\.instructions say.*kept nowhere/, 'what it copies: the code, the events that wake it and carry its instructions, and what goes through orbital.md');
+  assert.match(await p.js('connectCtx.prompt'), /^Call Orbital's link_orbital tool with the code 7KQX-M2PD and your own name \(Dot if you have none\)\. Then subscribe to Orbital's task\.assigned event\. Each time an Orbital event fires, do what its data\.instructions say.*kept nowhere/, 'what it copies: the code, the event that wakes it and carries its instructions, and what goes through orbital.md');
   assert.equal(await p.js('document.querySelector("#palette .list").textContent.includes("7KQX-M2PD")'), false, 'which the card does not show');
   assert.deepEqual(await p.js('[palRows[5].label, palRows[5].group]'), ['Copy the code', 'Then ask your agent to link'], 'or the code alone');
-  assert.match(await p.js('palRows[6].label'), /^Everything you send your agent goes through orbital\.md, Orbital's relay, run by us: a node's id and your request with each task, your messages in its chat, and its answers until Orbital collects them\..* Host your own Orbital MCP server to keep all of it in your workspace\.$/, 'it says plainly that everything sent to the agent goes through our relay, and how to keep it in-house');
+  assert.match(await p.js('palRows[6].label'), /^Everything you send your agent goes through orbital\.md, Orbital's relay, run by us: a node's id and your request with each task\..* Host your own Orbital MCP server to keep all of it in your workspace\.$/, 'it says plainly that everything sent to the agent goes through our relay, and how to keep it in-house');
   assert.deepEqual(await p.js('[palRows[7].label, !!palRows[7].icon, palRows[7].group === palRows[4].group, !!document.querySelector("#palette .row .label.sweep")]'), ['Waiting for your agent to use the code…', false, true, true],
     'and waits in the same group, with no glyph, a light passing over its words');
   // where the heading's words start (its box plus its padding), measured once the page has slid in
@@ -1468,7 +1468,7 @@ flow('Agent chats: a new chat with ChatGPT, its answer, the list, and Delete cha
   await p.waitFor('palMode === "renameAgentChat" && palInput.value === "Week summary"', 'the tab\u2019s Rename opens Rename chat'); await closePalette(p);
   await command(p, 'agent chats', 'Agent chats');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 4', 'the list with the new chat');
-  assert.equal(await p.js('kids.get("orbital:agent-chats")[1].id'), id, 'newest first, after your Dot\u2019s chat');
+  assert.equal(await p.js('kids.get("orbital:agent-chats")[0].id'), id, 'newest first');
   await p.js('goTo(' + J(id) + ')'); await at(p, id);
   await command(p, 'delete chat', 'Delete chat');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chats" && (kids.get("orbital:agent-chats") || []).length === 3', 'back on the list, without it');
@@ -1521,27 +1521,18 @@ flow('A node dropped on a chat fills its message with a reference', async (p) =>
 });
 
 
-// Your Dot's chat (renderer/agentchats.js, main/agentchats.js dotList): first on the list, its message box named after it, and
-// nothing to rename or delete: it goes when the Dot is unlinked.
-flow('Your Dot has a chat of its own, which cannot be renamed or deleted', async (p) => {
+// A node handed to ChatGPT went to the Assignments chat (main/agentchats.js assign): its badge opens that chat here (renderer/render.js openAgentTask)
+flow('A node assigned to ChatGPT opens its Assignments chat', async (p) => {
   await p.start();
-  const id = 'orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e';
-  await command(p, 'agent chats', 'Agent chats');
-  await p.waitFor('(kids.get("orbital:agent-chats") || []).length', 'the list');
-  assert.equal(await p.js('kids.get("orbital:agent-chats")[0].id'), id, 'the Dot\u2019s chat comes first');
-  await p.js('goTo(' + J(id) + ')'); await p.waitFor('zoom && zoom.docId === ' + J(id) + ' && !composer.hidden', 'its chat');
-  assert.equal(await p.js('composerText.dataset.placeholder'), 'Message Echo · @ links · Goes through orbital.md', 'its message box is named after it, and says where what you write goes');
-  await p.waitFor('document.querySelector(".chat-context")?.textContent === "Goes through orbital.md, Orbital\u2019s relay, run by us · only you see it here".replace("\u2019", "\'")', 'the line says whose server it goes through');
-  assert.match(await p.js('document.querySelector(".chat-context").title'), /pass through orbital\.md, Orbital's relay, run by us, which passes each message on as it comes and keeps an answer only until Orbital collects it/, 'and, on a hover, what that server does with it');
-  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
-  assert.deepEqual(await p.js('["renameAgentChat", "deleteAgentChat", "openAgentChat", "setIcon"].filter((r) => paletteRows("").some((x) => x.id === r))'), [], 'nothing to rename, delete, open in ChatGPT or give an icon');
-  await closePalette(p);
-  assert.equal(await p.js('renameTitle()'), false, 'and its tab\u2019s Rename does nothing');
+  await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
+  await p.js('agentTasks.set("mockdoc2", { agent: "codex", taskId: "0198c0de-0000-7000-8000-000000000003" }); openAgentTask("mockdoc2"); 1');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000003"', 'the Assignments chat');
+  assert.equal(await p.js('titleEl.textContent'), 'Assignments');
 });
 
 
 // ⌘S and ⌘K find agent chats though Tana does not know them (renderer/agentchats.js agentChatHits, agentChatPlaceRows): by
-// every word of their title, a Dot's chat by its name, and opened like any result
+// every word of their title, and opened like any result
 flow('⌘S and ⌘K find agent chats, which are not in Tana', async (p) => {
   await p.start();
   await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
@@ -1551,8 +1542,6 @@ flow('⌘S and ⌘K find agent chats, which are not in Tana', async (p) => {
   await p.js('palRows.find((r) => r.group === "AGENT CHATS").run(); 1');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000001"', 'and it opens');
   await closePalette(p);
-  await command(p, 'echo', 'Echo');
-  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:dot:0198c0de-0000-7000-8000-00000000d07e"', '⌘K finds your Dot\u2019s chat by its name');
 });
 
 

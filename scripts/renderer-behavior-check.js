@@ -5032,6 +5032,7 @@ function runCodexAssignCheck() {
     const TIMELINE_PAGE = 'orbital:timeline'; // renderer/timeline.js: where placeAgentBadge puts it in line
     ${functionSource('placeAgentBadge')}
     ${functionSource('agentBadgeEl')}
+    const agentChatsKnown = [], AGENT_CHAT = 'orbital:agent-chat:'; // no Assignments chat here: a ChatGPT task opens in its app
     ${functionSource('openAgentTask')}
     ${functionSource('agentHeader')}
     ${functionSource('patchAgent')}

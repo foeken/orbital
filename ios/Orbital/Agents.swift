@@ -160,7 +160,7 @@ struct ConnectAgent: View {
 func relayWords(_ url: String?) -> String {
     let host = (url ?? "https://orbital.md/mcp").replacingOccurrences(of: "https://", with: "").components(separatedBy: "/").first ?? "orbital.md", ours = host == "orbital.md"
     return "Everything you send your agent goes through \(host)" + (ours ? ", Orbital's relay, run by us" : ", your workspace's own Orbital MCP server")
-        + ": a node's id and your request with each task, your messages in its chat, and its answers until Orbital collects them. A node's words stay in Tana, where your agent reads them with its own access."
+        + ": a node's id and your request with each task. A node's words stay in Tana, where your agent reads them with its own access."
         + (ours ? " Host your own Orbital MCP server to keep all of it in your workspace." : "")
 }
 struct ConnectHelp: View {

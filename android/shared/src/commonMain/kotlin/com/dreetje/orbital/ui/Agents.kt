@@ -72,7 +72,7 @@ fun relayWords(url: String?): String {
     val host = (url ?: "https://orbital.md/mcp").removePrefix("https://").substringBefore('/')
     val ours = host == "orbital.md"
     return "Everything you send your agent goes through $host" + (if (ours) ", Orbital's relay, run by us" else ", your workspace's own Orbital MCP server") +
-        ": a node's id and your request with each task, your messages in its chat, and its answers until Orbital collects them. A node's words stay in Tana, where your agent reads them with its own access." +
+        ": a node's id and your request with each task. A node's words stay in Tana, where your agent reads them with its own access." +
         (if (ours) " Host your own Orbital MCP server to keep all of it in your workspace." else "")
 }
 

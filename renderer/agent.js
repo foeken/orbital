@@ -220,7 +220,7 @@ const relayHost = (url) => serverHost(url).replace(/\/.*$/, '');
 const relayOurs = (url, workspace) => !workspace && relayHost(url) === 'orbital.md';
 const relayVia = (url, workspace) => 'Goes through ' + relayHost(url) + (relayOurs(url, workspace) ? ', Orbital\'s relay, run by us' : workspace ? ', your workspace\'s own server' : '');
 const relayWords = (url, workspace) => 'Everything you send your agent goes through ' + relayHost(url) + (relayOurs(url, workspace) ? ', Orbital\'s relay, run by us' : workspace ? ', your workspace\'s own Orbital MCP server' : '')
-  + ': a node\'s id and your request with each task, your messages in its chat, and its answers until Orbital collects them. A node\'s words stay in Tana, where your agent reads them with its own access.'
+  + ': a node\'s id and your request with each task. A node\'s words stay in Tana, where your agent reads them with its own access.'
   + (relayOurs(url, workspace) ? ' Host your own Orbital MCP server to keep all of it in your workspace.' : '');
 // the MCP server in use, asked once for the pages that name it before Connect your personal agent has (serverNow)
 function relayKnown(mode) { if (!serverNow && tana.mcpWhere) tana.mcpWhere().then((w) => { serverNow = w; if (palMode === mode && !palette.hidden) renderPalette(); }, () => {}); return serverNow || {}; }

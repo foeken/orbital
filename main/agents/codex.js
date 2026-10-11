@@ -179,18 +179,12 @@ function codexAnswer(turn) {
 const codex = agent.register({
   id: 'codex', label: 'ChatGPT', icon: 'chatgpt', missing: 'Install the ChatGPT app',
   available: () => !!codexBin(),
-  // Assign to Agent opens the new task in Codex, where the work is watched; a chat question stays on its page.
+  // Assign to Agent: a message in the Assignments chat (main/agentchats.js assign), watched in Orbital's sidebar; a chat
+  // question (main/chatagents.js) is a task of its own, read-only, its answer on its Tana chat's page.
+  // shortcut: every node handed over shares the one thread, so each badge reads that thread's latest turn; a turn per node if that misleads.
   async start({ key, nodeUri, title, rules, prompt, readOnly, userData }) {
-    const id = await createTask({ key, prompt: nodeUri ? agent.agentPrompt(nodeUri, title, prompt) : prompt, instructions: rules, readOnly, userData });
-    if (nodeUri) await openUrl(TASK + encodeURIComponent(id));
-    return id;
-  },
-  // A reassignment reopens the task and queues the new request to it. The queue is best effort: the task is open in
-  // front of the user either way, and a queue that does not land must not undo an assignment that did.
-  async resume(taskId, prompt) {
-    await openUrl(TASK + encodeURIComponent(taskId));
-    const bin = codexBin();
-    try { if (bin && prompt) require('node:child_process').execFile(bin, ['queue', '--thread', taskId, '--message', prompt], { timeout: 20000 }, () => {}); } catch {}
+    if (nodeUri) return require('../agentchats').assign(agent.agentPrompt(nodeUri, title, prompt)); // required here: agentchats requires this file
+    return createTask({ key, prompt, instructions: rules, readOnly, userData });
   },
   statuses,
   open: (taskId) => openUrl(TASK + encodeURIComponent(taskId)),
