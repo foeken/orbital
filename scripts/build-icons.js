@@ -62,8 +62,8 @@ WANT.userAlert = path.join(__dirname, '..', 'build', 'icons', 'user-alert.svg');
 WANT.proposals = path.join(__dirname, '..', 'build', 'icons', 'file-sparkle.svg');
 WANT.approve = path.join(__dirname, '..', 'build', 'icons', 'circle-check.svg');
 WANT.reject = path.join(__dirname, '..', 'build', 'icons', 'circle-xmark.svg');
-// The Timeline page (renderer/timeline.js), Nucleo UI 18px outline
-WANT.timeline = path.join(__dirname, '..', 'build', 'icons', 'calendar-planning.svg');
+// The Timeline page (renderer/timeline.js): Nucleo UI quick-timer, 18px outline
+WANT.timeline = path.join(__dirname, '..', 'build', 'icons', 'quick-timer.svg');
 // The Timeline's grey markers on its rail: Nucleo UI 18px outline circles, coloured by styles.css .tl-*. Outlines, not
 // solid glyphs: the one filled marker is finished work's green circle (and the edit's pen is a line glyph of its own)
 WANT.tlAccepted = path.join(__dirname, '..', 'build', 'icons', 'circle-plus-outline.svg');
