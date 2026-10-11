@@ -516,8 +516,9 @@ class Engine(
             list.problem
         } catch (e: Failure) { e.message }
     }
-    suspend fun linkCode(): LinkCode = if (isSample) throw Failure("The sample saves nothing") else call("return await orbital.linkCode()")
-    suspend fun linkStatus(code: String): LinkState = call("return await orbital.linkStatus(code)", mapOf("code" to code))
+    // the sample: an invented code that links nothing, for design shots of Connect your personal agent (the connect extra)
+    suspend fun linkCode(): LinkCode = if (isSample) LinkCode("7KQX-M2PD", now().toEpochMilliseconds() + 900_000.0, "https://orbital.md/mcp", "https://home.tana.inc/mcp", "") else call("return await orbital.linkCode()")
+    suspend fun linkStatus(code: String): LinkState = if (isSample) LinkState("waiting") else call("return await orbital.linkStatus(code)", mapOf("code" to code))
     suspend fun linkCancel(code: String) { maybe { call<Boolean>("return await orbital.linkCancel(code)", mapOf("code" to code)) } } // gone anyway in fifteen minutes
     // throws with what went wrong (not listening yet, did not take it, read-only): handOff says it and keeps the request
     suspend fun hand(id: String, agent: Agent, request: String) {

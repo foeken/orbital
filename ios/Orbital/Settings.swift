@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var chatgpt = ChatGPT.load()
     @State private var signingIn = false
     @State private var models: [ChatGPT.Model] = [] // the choices for Model, read when signed in
+    @State private var connecting = CommandLine.arguments.contains("-connect") // -connect (with -settings): Connect your personal agent open, for design shots
 
     var body: some View {
         NavigationStack {
@@ -73,6 +74,7 @@ struct SettingsView: View {
                     signingIn = false
                 }
             }
+            .navigationDestination(isPresented: $connecting) { ConnectAgent(engine: engine) }
         }
     }
 

@@ -26,7 +26,7 @@ sqim upload --device . --build --project Orbital.xcodeproj --scheme Orbital --te
 
 Launch arguments, all on invented content (`Orbital/timeline-sample.json`, `Orbital/pages-sample.json`): `-sample`
 (no Tana at all), with `-history` (the day's entries only), `-zoom <id>` (a node open), `-menu` (the menu open),
-`-menudemo` (the menu opens and closes), `-settings`, `-add` and `-typing`. `sh manual/scenes/iphone.sh` takes the
+`-menudemo` (the menu opens and closes), `-settings`, `-connect` (with `-settings`: Connect your personal agent, on an invented code), `-add` and `-typing`. `sh manual/scenes/iphone.sh` takes the
 manual's iPhone pictures with them.
 
 ## Checks

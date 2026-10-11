@@ -135,9 +135,13 @@ fun ConnectAgent(engine: Engine, back: () -> Unit) {
     }
     LaunchedEffect(link?.code) {
         val code = link?.code ?: return@LaunchedEffect
+        var misses = 0 // a missed answer: the next one asks again, but one that keeps failing is said, not waited on for ever (Agents.swift poll)
         while (state == "waiting") {
             delay(2000)
-            val s = maybe { engine.linkStatus(code) } ?: continue // a missed answer: the next one asks again
+            val s = try { engine.linkStatus(code).also { misses = 0 } } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                if (++misses >= 3) { failure = e.message; state = "failed" }
+                continue
+            }
             val a = s.agent
             if (s.state == "linked" && a != null) {
                 linked = a.name

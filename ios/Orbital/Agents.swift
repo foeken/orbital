@@ -128,9 +128,16 @@ struct ConnectAgent: View {
     }
     private func poll() async {
         guard let code = link?.code else { return }
+        var misses = 0 // a missed answer: the next one asks again, but one that keeps failing is said, not waited on for ever (renderer/agent.js pollConnect)
         while state == "waiting", !Task.isCancelled {
             try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled, let s = try? await engine.linkStatus(code) else { continue } // a missed answer: the next one asks again
+            guard !Task.isCancelled else { return }
+            let s: Engine.LinkState
+            do { s = try await engine.linkStatus(code); misses = 0 } catch {
+                misses += 1
+                if misses >= 3 { failure = error.localizedDescription; state = "failed" }
+                continue
+            }
             if s.state == "linked", let a = s.agent {
                 linked = a.name
                 state = "linked"

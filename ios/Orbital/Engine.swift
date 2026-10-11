@@ -411,10 +411,14 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         } catch { return error.localizedDescription }
     }
     func linkCode() async throws -> LinkCode {
-        guard !Self.isSample else { throw Failure(errorDescription: "The sample saves nothing") }
+        // -sample: an invented code that links nothing, for design shots of Connect your personal agent (-connect)
+        if Self.isSample { return LinkCode(code: "7KQX-M2PD", expiresAt: (Date.now.timeIntervalSince1970 + 900) * 1000, url: "https://orbital.md/mcp", tana: "https://home.tana.inc/mcp", prompt: "") }
         return try await call("return await orbital.linkCode()", [:])
     }
-    func linkStatus(_ code: String) async throws -> LinkState { try await call("return await orbital.linkStatus(code)", ["code": code]) }
+    func linkStatus(_ code: String) async throws -> LinkState {
+        if Self.isSample { return LinkState(state: "waiting", expiresAt: nil, agent: nil) }
+        return try await call("return await orbital.linkStatus(code)", ["code": code])
+    }
     func linkCancel(_ code: String) async { do { let _: Bool = try await call("return await orbital.linkCancel(code)", ["code": code]) } catch {} } // gone anyway in fifteen minutes
     // throws with what went wrong (not listening yet, did not take it, read-only): handOff says it and keeps the request
     func hand(_ id: String, to agent: Agent, _ request: String) async throws {
