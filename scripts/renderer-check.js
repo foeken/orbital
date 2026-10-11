@@ -479,7 +479,7 @@ async function mockCreationPermissionCheck() {
 // the date-node creators missing from DEMO_WRITES. And the mock answers it or NOT_MOCKED says it does not; a mock that
 // fell behind broke the manual's scenes (#671, #607). A new call fails here until it is put in one list of each pair.
 // docs/TESTING.md has the reasoning.
-const DEMO_SAFE = new Set(['agentChats', 'agentChatInfo', 'openAgentChat', 'onAgentChatChanged', // agent chats: the list, Codex opened, the change signal
+const DEMO_SAFE = new Set(['agentChats', 'agentChatInfo', 'openAgentChat', 'onAgentChatChanged', 'stopAgentChat', // agent chats: the list, Codex opened, the change signal, an answer stopped (nothing written)
   'accessOptions', 'androidRelease', 'activateWindow', 'addFilter', 'agentIds', 'agentList', 'agentReplies', 'agentStatus',
   'agentTasks', 'aiOptions', 'archivedTypes', 'attendeeSuggestions', 'cancelUpload', 'chatAgents', 'chatAnswers',
   'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
@@ -631,11 +631,11 @@ assert.match(styleSheet, /\.tmeta > \.ticon:not\(:first-child\) \{ margin-left: 
 // would be answered with "No results" under the row offering to write it. The field pages (renderer/fields.js) say
 // what they found, or why they have nothing, in rows of their own.
 assert.match(source, /&& !palPage\.typed && \(palMode === 'cmd'/, 'the no-results line skips the pages whose row is what was typed');
-for (const typed of [/showPage\('agentPrompt', '', \{ rows: agentPromptRows, typed: true \}\)/, /openPage\('discuss', 'Discuss with…', \{ rows: discussRows, back: BACK_TO_COMMANDS, typed: true \}\)/, /openPage\('field', placeholder, \{ rows, back, keys, typed: true \}, text\)/, /openPage\(mode, placeholder, \{ rows: \{ meetingTime[^\n]*typed: true \}\)/]) assert.match(source, typed, 'and those pages say so');
+for (const typed of [/showPage\('agentPrompt', '', \{ rows: agentPromptRows, typed: true\b/, /openPage\('discuss', 'Discuss with…', \{ rows: discussRows, back: BACK_TO_COMMANDS, typed: true \}\)/, /openPage\('field', placeholder, \{ rows, back, keys, typed: true \}, text\)/, /openPage\(mode, placeholder, \{ rows: \{ meetingTime[^\n]*typed: true \}\)/]) assert.match(source, typed, 'and those pages say so');
 // The Timeline's task rows show their agent badge as every list does (it used to be hidden there by a style); a line
 // about what happened has an id of its own, so it has none
 assert.doesNotMatch(fs.readFileSync(require('node:path').join(__dirname, '..', 'styles.css'), 'utf8'), /\.node\.tl \.cbadge \{ display: none/, 'which no style hides on the Timeline');
-assert.match(source, /function openAgentPrompt\(doc(, pick)?\) \{[\s\S]{0,400}showPage\('agentPrompt', '', \{/, 'opening the prompt page clears the query behind it');
+assert.match(source, /function openAgentPrompt\(doc(, pick)?(, back)?\) \{[\s\S]{0,400}showPage\('agentPrompt', '', \{/, 'opening the prompt page clears the query behind it');
 assert.match(source, /function showPage\(mode, placeholder, page, value = ''\) \{\n(?:[^\n]*\n)*?  palInput\.placeholder = placeholder; palInput\.value = value;\n  coverWindow\([^\n]*\n\}/, 'a page starts with the field holding only what it was opened with');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.

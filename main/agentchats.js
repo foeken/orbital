@@ -81,13 +81,13 @@ function changed(threadId) { pending.add(PREFIX + threadId); if (!timer) timer =
 // Taken before the first wait, so a second message cannot start a second writer on the thread meanwhile: it joins this
 // one (into) once `started` has the turn's id. Answers { threadId, turnId }.
 async function turn(threadId, text) {
-  const state = { turnId: null, user: text, at: Date.now(), said: new Map(), tools: 0, run: null, past: null };
+  const state = { turnId: null, user: text, at: Date.now(), said: new Map(), tools: 0, run: null, past: null, stopped: false };
   let id = threadId, over;
   state.ended = new Promise((resolve) => { over = resolve; });
   const done = () => { if (id && live.get(id) === state) live.delete(id); if (id) changed(id); over(); };
   if (id) live.set(id, state);
   state.started = appServer.runTurn({ threadId: id, params: id ? RUN : { cwd: workspace(), ephemeral: false, ...RUN }, text, decline: true,
-    onThread: (t, run) => { id = t; state.run = run; live.set(t, state); run.ended.then(done); },
+    onThread: (t, run) => { id = t; state.run = run; live.set(t, state); run.ended.then(done); if (state.stopped) run.end(); }, // stopped while starting
     onNote: (note) => {
       const p = note.params || {};
       if (note.method === 'item/agentMessage/delta') state.said.set(p.itemId, (state.said.get(p.itemId) || '') + (p.delta || ''));
@@ -113,7 +113,7 @@ async function into(threadId, text) {
       await s.run.rpc.call('turn/steer', { threadId, expectedTurnId: s.turnId, input: [{ type: 'text', text }] });
       s.user += '\n\n' + text; changed(threadId);
       return { threadId, turnId: s.turnId };
-    } catch { await s.ended; }
+    } catch { await s.ended; return into(threadId, text); } // through the same way: another message may have taken a new turn meanwhile
   }
   return turn(threadId, text);
 }
@@ -132,7 +132,11 @@ async function say(id, text) {
   const link = linkOf(id);
   if (away(link)) throw new Error('This chat is on another Mac: continue it there');
   if (typeof text !== 'string' || !text.trim()) throw new Error('Type a message first');
-  try { await into(link.threadId, text.trim()); return { queued: false }; }
+  try {
+    await into(link.threadId, text.trim());
+    const now = links()[link.threadId]; if (now) store(link.threadId, { ...now, at: Date.now() }); // used last: the latest, which assignments go to
+    return { queued: false };
+  }
   catch (e) {
     const bin = appServer.codexBin();
     if (!bin || !WRITER.test(String(e && e.message))) throw e;
@@ -156,7 +160,9 @@ async function info(id) {
   const t = (await appServer.withAppServer((call) => call('thread/read', { threadId: link.threadId }))).thread || {};
   return { model: t.model ? modelLabel(t.model) : '', effort: t.reasoningEffort ? effortLabel(t.reasoningEffort) : '' };
 }
-async function stopTurn(id) { const t = threadOf(id), s = t && live.get(t); if (s && s.run) await s.run.end(); }
+// a turn still starting has no run yet: it is marked, and ends the moment it has one (turn's onThread)
+const halt = (s) => { if (!s) return; s.stopped = true; if (s.run) return s.run.end(); };
+async function stopTurn(id) { const t = threadOf(id); await halt(t && live.get(t)); }
 // A node handed to ChatGPT (main/agents/codex.js start): a message in your latest chat on this Mac (the one used last,
 // which the assignment keeps at the top), or in a new chat when you ask for one (newChat, the Assign page's choice) or
 // have none; answers the thread, which the node's task link names, and the turn the message is in, which its badge reads.
@@ -182,9 +188,11 @@ async function assign(nodeUri, nodeTitle, request, { newChat = false } = {}) {
     making = fresh(text);
     try { return await making; } finally { making = null; }
   }
-  const [t, l] = latest;
-  const r = await into(t, text);
-  store(t, { ...l, at: Date.now() }); // to the top of the list, and still the latest for the next one
+  const [t] = latest;
+  let r;
+  // the ChatGPT app holding that chat (another writer), or the thread gone from Codex: the node still goes, to a chat of its own
+  try { r = await into(t, text); } catch (e) { if (!/active writer|another app|open in another|not found|no such thread/i.test(String(e && e.message))) throw e; return fresh(text); }
+  const now = links()[t]; if (now) store(t, { ...now, at: Date.now() }); // to the top, as it is now: deleted or renamed meanwhile stays so
   return r;
 }
 
@@ -218,7 +226,8 @@ async function rows(id, read = readTurns) {
   if (!threadOf(id)) return []; // a new chat, its first message not sent yet
   const link = linkOf(id);
   if (away(link)) return []; // the page says where it is (renderer/render.js emptyText), and its composer takes nothing
-  const s = live.get(link.threadId), all = s && s.turnId ? await (s.past ||= read(link.threadId)) : await read(link.threadId);
+  const s = live.get(link.threadId);
+  const all = s && s.turnId ? await (s.past ||= read(link.threadId).catch((e) => { s.past = null; throw e; })) : await read(link.threadId); // a failed read is asked again
   const turns = all.filter((t) => !s || t.id !== s.turnId);
   const messages = turns.flatMap(turnMessages).concat(s ? liveMessages(s) : []);
   return chatRows(messages, { aiName: 'ChatGPT', me: ME, streamingId: s ? 'live:a' : undefined });
@@ -247,12 +256,11 @@ const ipc = {
 };
 // Deleting a chat forgets its link and the icon chosen for it, and lets go of an answer still running: nothing could stop it later
 function forget(threadId) {
-  const s = live.get(threadId);
-  if (s && s.run) s.run.end();
+  halt(live.get(threadId));
   icons.dropTypeIcon(PREFIX + threadId);
   store(threadId, null);
 }
 const isChat = (id) => String(id || '').startsWith(PREFIX); // a chat, or a new one (orbital:agent-chat:new)
-const stop = () => { for (const s of [...live.values()]) if (s.run) s.run.end(); };
+const stop = () => { for (const s of [...live.values()]) if (s.run) s.run.rpc.stop(); }; // on the way out: no time for a round trip
 
 module.exports = { LIST, PREFIX, KEY, RUN, isChat, tellList, list, rows, turnMessages, start, say, assign, assignment, running, workspace, stop, ipc };

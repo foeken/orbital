@@ -313,7 +313,7 @@ function chatMessageRows(docId) {
   const rows = [], sel = msgEl(chatSel) ? chatSel : null, picked = askOf(docId, sel), group = sel ? 'Message' : 'Actions';
   const answer = sel ? picked && picked.state === 'done' && picked : latestAgentAnswer(docId), ask = sel ? picked : latestAgentAsk(docId);
   if (tana.askAgent && answer) rows.push({ id: 'agentAnswerToMessage', group, icon: 'toMessage', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(docId, answer.text) });
-  if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group, icon: 'robot', label: 'Open ' + ask.label + ' task', hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
+  if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group, icon: 'robot', label: 'Open in ' + ask.label, hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
   if (sel && deletableMsg(docId, sel)) rows.push({ id: 'deleteMessage', group, icon: 'trash', label: 'Delete message', hint: picked ? 'The question and its answer, from this device' : 'From the chat, for everyone in it', kbd: '⇧⌘⌫', run: () => deleteChatMsg(docId, sel) });
   return rows;
 }
@@ -527,7 +527,8 @@ composerText.addEventListener('paste', (e) => {
 });
 composerText.addEventListener('focus', () => selectMsg(null));
 // A row dragged here, from this pane or another, goes in where it is dropped (composerDropSegs); never inside a chip
-const composerTakes = (e) => e.dataTransfer.types.includes(NODES_DRAG_TYPE) && !chatReadOnly.has(composer.dataset.doc);
+// (not into a box that takes nothing: a chat you may only read, or an agent chat another Mac started)
+const composerTakes = (e) => e.dataTransfer.types.includes(NODES_DRAG_TYPE) && !composer.classList.contains('readonly');
 // Anywhere on the chat, not only its message box: rows dropped on the conversation go into the message, as ⌘K Add to chat
 // puts them there (composeAdd), and the box is lit while they are over it. Taken before renderer/drag.js sees the drop.
 const chatScroll = outline.parentElement, chatDropOn = (e) => !composer.hidden && chatScroll.classList.contains('chatting') && composerTakes(e);
@@ -755,11 +756,13 @@ let addChatList = null; // loadList's answer: the chats, last changed first
 let chatCompose = null; // { docId, segs } for a chat still opening: its message gets them once its composer is up
 function openAddToChat(segs) {
   loadList('addToChat', () => tana.searchPreview({ types: ['chats'] }), (list) => { addChatList = list; });
+  const here = zoom && !zoom.nodeId && isChatPage(zoom) ? zoom.docId : null; // the chat on screen: no chat is added to itself
   openPage('addToChat', 'Add to which chat?', { back: BACK_TO_COMMANDS, rows: (q) => [
-    ...agentChatsKnown.filter((n) => !(n.agentChat && n.agentChat.elsewhere) && fuzzyMatch(n.title || 'New chat', q))
+    ...agentChatsKnown.filter((n) => !(n.agentChat && n.agentChat.elsewhere) && n.id !== here && fuzzyMatch(n.title || 'New chat', q))
       .map((n) => ({ group: 'Agent chats', icon: n.icon || 'chatgpt', label: demoText(n.title || 'New chat', n.id), run: () => addToChat(n, segs) })),
+    ...(tana.startAgentChat && codexHere() && fuzzyMatch('New chat with ChatGPT', q) ? [{ group: 'Agent chats', icon: 'chatgpt', label: 'New chat with ChatGPT', hint: 'On this Mac, not in Tana', run: () => composeInto(AGENT_CHAT_NEW, segs, extra.get(AGENT_CHAT_NEW)) }] : []),
     ...(fuzzyMatch('New chat with Tana', q) ? [{ group: 'Chats', icon: 'chat', label: 'New chat with Tana', hint: 'In Tana, answered by its AI', run: () => run(async () => { const n = await tana.newChat(); composeInto(n.id, segs, n); }) }] : []),
-    ...listRows('Chats', addChatList, q, '', (list) => list.map((n) => [n, n.text || n.title || 'New chat']).filter(([, label]) => fuzzyMatch(label, q))
+    ...listRows('Chats', addChatList, q, '', (list) => list.filter((n) => n.id !== here).map((n) => [n, n.text || n.title || 'New chat']).filter(([, label]) => fuzzyMatch(label, q))
       .map(([n, label]) => ({ group: 'Chats', icon: 'chat', label: demoText(label, n.id), run: () => addToChat(n, segs) }))),
   ] });
 }
@@ -776,7 +779,7 @@ function composeInto(docId, segs, doc) {
 }
 // At the start of the message, the caret back where it was in it; with no caret in it (or at its very start), after them
 function composeAdd(segs) {
-  if (chatReadOnly.has(composer.dataset.doc)) return showNote('You can read this chat but not write in it', true);
+  if (composer.classList.contains('readonly')) return showNote(isAgentChat(composer.dataset.doc) ? 'This chat is on another Mac: continue it there' : 'You can read this chat but not write in it', true);
   const empty = !composerText.textContent.trim() && !composerText.querySelector('.mention');
   const sel = getSelection(), keep = !empty && beforeCaret() ? sel.getRangeAt(0).cloneRange() : null; // a live range: it moves along as they go in before it
   const last = segs.at(-1);

@@ -76,7 +76,7 @@ fun relayWords(url: String?): String {
         (if (ours) " Host your own Orbital MCP server to keep all of it in your workspace." else "")
 }
 
-// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped right to make it the default
+// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped left to unlink it
 // and left to unlink it, then Connect your personal agent
 @Composable
 fun AgentsGroup(engine: Engine, connect: () -> Unit) {
@@ -91,7 +91,7 @@ fun AgentsGroup(engine: Engine, connect: () -> Unit) {
     }
 }
 
-// One linked agent: right to make it the default (not on the default itself), left to unlink it, each word on its colour
+// One linked agent: swiped left to unlink it, the word on its colour
 // under the row as it moves, as the iPhone's swipe actions
 @Composable
 private fun AgentRow(engine: Engine, a: Agent) {

@@ -826,14 +826,14 @@ async function runMultiTaskPaletteCheck() {
   `);
   assert.deepEqual(plain(context.labels()), [
     ['Set status for 2 tasks', '2 skipped', false],
-    ['Assign 2 tasks to', '2 skipped', false],
+    ['Assign 2 tasks to …', '2 skipped', false],
   ], 'palette labels report the eligible and skipped counts from the selected rows');
   assert.deepEqual(plain(context.one()), ['Set status', 'Edit assignees', 'Assign to …'], 'one selected task keeps the single-task actions');
   assert.deepEqual(plain(context.locked()), [], 'one read-only selected task offers no mutation');
   // What acts on the selection comes first, in its own group, and reaches every selected row, not only the tasks.
   assert.deepEqual(plain(context.selection(['t1', 'meeting', 'locked', 't2'])), [
     ['Selection', 'Set status for 2 tasks'],
-    ['Selection', 'Assign 2 tasks to'],
+    ['Selection', 'Assign 2 tasks to …'],
     ['Selection', 'Add 4 items to Today'],
     ['Selection', 'Add 4 items to Tomorrow'],
     ['Selection', 'Add 4 items to This Week'],
@@ -860,9 +860,9 @@ async function runMultiTaskPaletteCheck() {
     ['Current node', 'Set status', 'In Progress', false],
     ['Current node', 'Edit assignees', 'Loading…', false],
     ['Current node', 'Assign to …', '', false],
-    ['Current node', 'Add to Today', '', false],
-    ['Current node', 'Add to Tomorrow', '', false],
-    ['Current node', 'Add to This Week', '', false],
+    ['Current node', 'Add to Today', "A link on today's page", false],
+    ['Current node', 'Add to Tomorrow', "A link on tomorrow's page", false],
+    ['Current node', 'Add to This Week', "A link on this week's page", false],
     ['Current node', 'Mark as sensitive', '', false],
     ['Current node', 'Delete', '', false],
   ], 'the current node gets every selection action');
@@ -4974,9 +4974,9 @@ function runCodexAssignCheck() {
     let agentPick = 'tana';
     const agentsOn = () => agentList.filter((a) => a.enabled && a.installed), agentNamed = (id) => agentList.find((a) => a.id === id) || null;
     const openedTasks = [], wentTo = [], notes = [], showNote = (text) => notes.push(text);
-    const tana = { openAgentTask: async (id) => { openedTasks.push(id); return true; }, setAgent: async (id, on, prompt, agent) => {
+    const tana = { openAgentTask: async (id) => { openedTasks.push(id); return true; }, setAgent: async (id, on, prompt, agent, options) => {
       sent.push([id, on, prompt]);
-      if (on) sent.agent = agent;
+      if (on) { sent.agent = agent; sent.options = options; }
       if (refuse) throw new Error('This node is read-only in the outliner');
       if (on && typeof prompt === 'string' && prompt.trim()) {
         const rows = served.get(id) || [];
@@ -5083,6 +5083,9 @@ function runCodexAssignCheck() {
         const there = agentPromptRows()[0].label;
         return { here, there }; },
       sentTo: () => sent.agent, notes: () => notes,
+      // with a chat on this Mac: ChatGPT is assigned into it by default, its rows the choice, and the note says so
+      latest: async (key) => { agentChatsKnown.push({ id: 'orbital:agent-chat:x', title: 'Week plan', icon: 'chatgpt', agentChat: {} }); notes.length = 0; openAgentPrompt(palDoc, 'codex'); palText.value = 'Go';
+        const rows = agentPromptRows().filter((r) => r.group === 'Chat').map((r) => [r.label, r.hint]); submitAgentPrompt(); await tick(); agentChatsKnown.length = 0; return { rows, options: sent.options, notes: [...notes] }; },
       refuse: (value) => { refuse = value; },
       // the badge as a way in: linked opens that node's task, pending has nowhere to go
       badge: (linked) => { if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const el = agentBadgeEl(DOC); return { role: el.attrs.role, label: el.attrs['aria-label'], tabIndex: el.tabIndex, hasClick: typeof el.onclick === 'function' }; },
@@ -5135,6 +5138,7 @@ function runCodexAssignCheck() {
       '⌘↩ stores the prompt, trimmed at the ends and otherwise as typed, and assigns in the same call');
     assert.equal(api.sentTo(), 'codex', 'to the agent the page chose');
     assert.deepEqual(plain(api.notes()), ['Sent to ChatGPT, in a new chat'], 'and since nothing opens, a note says where it went: a new chat, with none to go to');
+    assert.deepEqual(plain(await api.latest()), { rows: [['Week plan', '✓ Latest'], ['New chat', '']], options: { newChat: false }, notes: ['Sent to ChatGPT, in your latest chat'] }, 'with a chat on this Mac, the latest is ticked and the assignment goes there by default');
     assert.equal(sent.assigned, true, 'the local mark follows at once rather than waiting for a re-read');
     assert.equal(sent.badges.length, 1, 'the row gains one badge');
     // An assignment whose Codex task has not registered itself yet is pending, in words as well as in colour: the

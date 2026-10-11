@@ -8,7 +8,7 @@
 const { S } = require('../../main/state');
 const settings = require('../../main/settings');
 const mcpServer = require('../../main/mcp-server');
-const agent = require('../../main/agent'); // which agents are on, the default and the MCP server's list, kept as the Mac keeps them
+const agent = require('../../main/agent'); // which agents are on and the MCP server's list, kept as the Mac keeps them
 const { contentText, editable, readNode } = require('../../sdk/node');
 
 const { ID } = mcpServer;
@@ -46,7 +46,7 @@ async function refresh() {
   await settings.flush();
 }
 // The MCP server asked at most once a minute as the app reads its setup; what it answers shows at the next read. Never before
-// this account's settings document was read: with no relaySeen yet, every agent would look new and be made the default
+// this account's settings document was read: with no relaySeen yet, every agent would look new and be switched on again
 // again over the one you chose.
 let refreshedAt = 0;
 function refreshSoon() {
@@ -88,7 +88,7 @@ function agents({ hold, settled }) {
       await settings.flush();
       return JSON.stringify(out);
     },
-    // asked every two seconds while the page is up: waiting, expired, or linked with the agent, switched on and the default
+    // asked every two seconds while the page is up: waiting, expired, or linked with the agent, switched on
     async linkStatus(code) {
       const s = await mcpServer.codeStatus(code);
       if (s.state !== 'linked') return JSON.stringify({ state: s.state, expiresAt: s.expiresAt });

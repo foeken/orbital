@@ -593,7 +593,7 @@ async function main() {
     assert.deepEqual(libQuery.stateTypes,['proposed','open','closed','not_now'],'the Library preset saves every task state');
     assert.notEqual(libQuery.assignedToViewer,true,'and nobody in particular as the assignee');
     // Named from the filter rather than "Untitled", and an explicit title wins.
-    assert.equal(backend.searchTitle('library',{states:['open'],assignee:'me'}),'Library — open · mine');
+    assert.equal(backend.searchTitle('library',{states:['open'],assignee:'me'}),'Library — In Progress · mine');
     assert.equal(backend.searchTitle('library',{}),'Library','a bare filter still names its view');
     assert.equal(backend.searchTitle('library',{text:'  dpa  '}),'Library — "dpa"');
     const named=await backend.searchCreate('library','Quarterly review');
@@ -3677,13 +3677,19 @@ async function main() {
     // a send that fails for any reason but another writer is said as it is, never "queued in the ChatGPT app"
     await assert.rejects(backend.handlers.get('agentChat:send')(null, made.id, 'fail'), /Usage limit/, 'a failure is said, not queued');
     assert.equal(chats.running(made.id.slice(chats.PREFIX.length)), false, 'and nothing is left running');
+    // the ChatGPT app holding your latest chat (another writer): the node still goes, to a chat of its own
+    const resumed = server.runTurn, before = runs.length;
+    server.runTurn = async (o) => { if (o.threadId) throw new Error('thread ' + o.threadId + ' already has an active writer'); return resumed(o); };
+    const held = await chats.assign('tana:text:01exampled0000000000000000', 'Five', 'Do five');
+    assert.deepEqual(plain([runs.length - before, runs.at(-1).resumed, chats.list().some((r) => r.id === chats.PREFIX + held.threadId)]), [1, false, true], 'an assignment the ChatGPT app\'s hold refuses goes to a new chat, never lost');
+    await runs.at(-1).run.end(); await tick();
+    server.runTurn = resumed;
     console.log('ok  agent chat turns: the latest chat or a new one, a node\'s own turn, joining a running turn, delete lets go, titles, failures said');
     // each node's badge reads its own turn in the shared chat (main/agents/codex.js agentStatuses)
     const T = tid(9), rpc = async (method) => (method === 'thread/list' ? { data: [{ id: T, status: { type: 'idle' } }] }
       : { data: [{ id: 'turn-1', status: 'completed' }, { id: 'turn-2', status: 'failed' }, { id: 'turn-3', status: 'interrupted' }] });
     const nodes = { n1: T, n2: T, n3: T, n4: T }, turns = { n1: 'turn-1', n2: 'turn-2', n3: 'turn-3', n4: 'turn-0' };
-    assert.deepEqual(plain(await backend.codex.agentStatuses(nodes, rpc, turns, (t, turn) => turn === 'turn-3')), { n1: 'done', n2: 'broken', n3: 'working', n4: 'done' },
-      'one node\'s turn finishing or failing says nothing about another\'s; a turn read as interrupted is working only while this Mac runs it');
+    assert.deepEqual(plain(await backend.codex.agentStatuses(nodes, rpc, turns, (t, turn) => turn === 'turn-3')), { n1: 'done', n2: 'broken', n3: 'working', n4: 'pending' },      'one node\'s turn finishing or failing says nothing about another\'s; a turn read as interrupted is working only while this Mac runs it; one not listed in a short chat is pending, not done');
     assert.equal((await backend.codex.agentStatuses({ n3: T }, rpc, { n3: 'turn-3' }, () => false)).n3, 'broken', 'and cut off (Orbital quit) it is no longer working');
   }
   // Agents linked through the MCP server (main/agents/linked.js, mcp-server/server.js, docs/MCP-SERVER.md): a real MCP server on a
@@ -3766,8 +3772,10 @@ async function main() {
     const OLD = 'tana:text:' + ulid(), GONE = 'tana:text:' + ulid();
     settings.set('codexTask', { ...settings.get('codexTask'), [OLD]: { agent: 'dot', taskId: 'old-chat' }, [GONE]: { agent: 'relay:' + require('node:crypto').randomUUID(), taskId: 'gone' } });
     settings.set('codex', [...docs.agentIds(), OLD, GONE]); settings.set('dotChat', 'old-chat');
+    backend.testRuntime({ client: { sync: { getDocument: () => null, subscribe: async () => { throw new Error('unavailable'); } } } }); // the clearing waits for Tana to be there to take it
     await h('agent:status');
     assert.deepEqual([agent.tasks()[OLD], docs.agentIds().includes(OLD), settings.get('dotChat')], [undefined, false, undefined], 'the old Dot\'s nodes are unassigned, and its chat forgotten');
+    backend.testRuntime({});
     await h('mcp:refresh');
     assert.deepEqual([agent.tasks()[GONE], docs.agentIds().includes(GONE), !!agent.links()[NODE]], [undefined, false, true], 'an agent the MCP server no longer lists leaves its nodes; a listed one keeps them');
     // rename; switched off stays off on a device that sees the agent for the first time; a new key; unlink

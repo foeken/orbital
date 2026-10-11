@@ -83,7 +83,7 @@ let reading = null, tidied = false;
 // the Dot an older build typed into the ChatGPT app is no agent any more, so its nodes let go of it (the stored links:
 // agent.links() leaves out those of an agent nobody registers), and its chat and the default agent are gone
 function tidy() {
-  if (tidied) return; tidied = true;
+  if (tidied || !S.client) return; tidied = true; // only once Tana is there to take the clearing: before, the next hydrate would bring them back
   for (const [nodeId, stored] of Object.entries(agent.tasks())) if (stored && stored.agent === 'dot') { dropAgentMark(nodeId); agent.clearTask(nodeId); }
   for (const key of ['dotChat', 'defaultAgent']) if (settings.get(key) !== undefined) settings.set(key, undefined);
 }
@@ -104,7 +104,7 @@ async function readStatuses() {
   // a node assigned, relinked or unlinked while this read ran is left out rather than given its old task's state:
   // the pages sharing this read draw it pending until the next one (#671 review)
   const now = agent.links();
-  for (const nodeId of Object.keys(out)) if (!now[nodeId] || now[nodeId].agent !== before[nodeId].agent || now[nodeId].taskId !== before[nodeId].taskId) delete out[nodeId];
+  for (const nodeId of Object.keys(out)) if (!now[nodeId] || now[nodeId].agent !== before[nodeId].agent || now[nodeId].taskId !== before[nodeId].taskId || now[nodeId].turnId !== before[nodeId].turnId) delete out[nodeId];
   return out;
 }
 

@@ -291,7 +291,7 @@ function setTaskAssignees(doc, assignees) {
 // carries, and is left out where there is no single answer to tick (a selection of several tasks).
 function memberRows(q, pick, ticked) {
   const tick = (uri) => (ticked && ticked(uri) ? '✓' : '');
-  const rows = fuzzyMatch('Unassigned', q) ? [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: tick(null), keepOpen: true, run: () => pick(null) }] : [];
+  const rows = fuzzyMatch('Unassigned', q) ? [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: tick(null), keepOpen: true, noFold: true, run: () => pick(null) }] : [];
   for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: tick(member.id), keepOpen: true, run: () => pick(member.id) });
   return rows;
 }
@@ -301,14 +301,15 @@ function assigneeRows(q, doc = palDoc, replace = false) {
   loadMembers(); loadTaskMeta(doc.id);
   const meta = taskMetaById.get(doc.id), ids = meta ? meta.assignees : [];
   const toggle = (uri) => (replace ? [uri] : ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri]);
-  return [...agentPickRows(q, doc), ...memberRows(q, (uri) => setTaskAssignees(doc, uri ? toggle(uri) : []), (uri) => (uri ? ids.includes(uri) : !ids.length))];
+  return [...agentPickRows(q, doc, () => openAssigneePalette(doc, palTaskCtx, replace)), ...memberRows(q, (uri) => setTaskAssignees(doc, uri ? toggle(uri) : []), (uri) => (uri ? ids.includes(uri) : !ids.length))];
 }
 // The agents first, a section of their own on both assignee pages: the same question as a person, but not a Tana
 // assignee (those are user profiles), so each goes into the one Agent flow, its prompt page opened on that agent
-function agentPickRows(q, doc) {
+// back: the page they were picked on, which Esc on the prompt goes back to
+function agentPickRows(q, doc, back) {
   const holder = agentIds.has(doc.id) && (agentTasks.get(doc.id) || {}).agent;
   return tana.setAgent && isRealId(doc.id) ? agentsOn().filter((a) => fuzzyMatch(a.label, q))
-    .map((a) => ({ group: 'Agents', icon: a.icon, label: a.label, hint: holder === a.id ? '✓' : '', keepOpen: true, run: () => openAgentPrompt(doc, a.id) })) : [];
+    .map((a) => ({ group: 'Agents', icon: a.icon, label: a.label, hint: holder === a.id ? '✓' : '', keepOpen: true, run: () => openAgentPrompt(doc, a.id, back) })) : [];
 }
 function openAssigneePalette(doc, ctx, replace = false) {
   palTaskCtx = ctx || null;
@@ -372,7 +373,7 @@ function manyAssigneeRows(q, ctx = palTaskCtx, agents = false) {
   loadMembers();
   const apply = (uris) => applyTaskChange(ctx, () => tana.setAssigneesMany(ctx.docs.map((doc) => doc.id), uris));
   // no tick: the page acts on several tasks at once, which need not agree on an answer to show one
-  return [...(agents && ctx.docs.length === 1 ? agentPickRows(q, ctx.docs[0]) : []), ...memberRows(q, (uri) => apply(uri ? [uri] : []))];
+  return [...(agents && ctx.docs.length === 1 ? agentPickRows(q, ctx.docs[0], () => openManyAssigneePalette(ctx)) : []), ...memberRows(q, (uri) => apply(uri ? [uri] : []))];
 }
 function openManyAssigneePalette(ctx) {
   palTaskCtx = ctx; loadMembers(); openPage('assigneesMany', ctx.multi ? 'Assign tasks to…' : 'Assign to…', { rows: (q) => manyAssigneeRows(q, palTaskCtx, true) });
@@ -385,7 +386,7 @@ function taskActionRows(group = 'Actions') {
     if (!count) return []; // no task in the selection: nothing here could run, as for a single row that is not a task
     return [
       { id: 'status', group, icon: 'status', label: `Set status for ${count} ${noun}`, subBase: `Set status for ${count} ${noun} to`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, subAlways: true, run: () => openStatusPalette(ctx), sub: () => statusRows('', ctx) },
-      { id: 'assign', group, icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx), sub: async () => { await membersLoaded(); return manyAssigneeRows('', ctx); } },
+      { id: 'assign', group, icon: 'member', label: `Assign ${count} ${noun} to …`, subBase: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx), sub: async () => { await membersLoaded(); return manyAssigneeRows('', ctx); } },
     ];
   }
   if (!ctx.docs.length) return [];
@@ -394,7 +395,7 @@ function taskActionRows(group = 'Actions') {
   if (tana.taskMeta && tana.setAssignees) {
     loadTaskMeta(doc.id);
     const meta = taskMetaById.get(doc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
-    rows.push({ id: 'assign', group, icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx), sub: async () => { await membersLoaded(); if (!taskMetaById.has(doc.id)) taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); return assigneeRows('', doc); } });
+    rows.push({ id: 'assign', group, icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx), sub: async () => { await membersLoaded(); if (!taskMetaById.has(doc.id)) taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); return assigneeRows('', doc).filter((r) => r.group !== 'Agents'); } }); // folded into ⌘K the agents would repeat its own Assign to <agent> … rows
   }
   // "Assign to Robin" sets the assignee outright, where Edit assignees toggles one; the members are only fetched once
   // the query reaches the row
@@ -421,7 +422,8 @@ function openNodeRow(selected) {
   const el = item && nodeElOf(key), line = el && el.querySelector(':scope > .line');
   if (!line) return null;
   const bullet = line.querySelector(':scope > .bullet'), text = line.querySelector('.text');
-  const open = el.classList.contains('opens') ? () => line.onclick({ target: text })
+  const open = el.classList.contains('selectfirst') ? () => openSelectedRow(item) // a row that opens on a second click (a Timeline line): what that click opens
+    : el.classList.contains('opens') ? () => line.onclick({ target: text })
     : !item.node.timeline && bullet && bullet.onclick && !bullet.classList.contains('still') ? () => bullet.onclick() : null;
   return open && { id: 'zoomIn', group: selected.length ? 'Selection' : 'Current node', icon: 'zoomIn', label: 'Open node', hint: 'Zoom in', run: open };
 }
@@ -455,13 +457,13 @@ function selectionRows() {
   }
   rows.push(...taskActionRows(group));
   if (nodes.length && tana.insertAfter && tana.setText) {
-    if (tana.todayNode) rows.push({ id: 'addToday', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Today`, run: () => addToDateNode(nodes, 'today') });
-    if (tana.todayNode) rows.push({ id: 'addTomorrow', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Tomorrow`, run: () => addToDateNode(nodes, 'tomorrow') });
-    if (tana.weekNode) rows.push({ id: 'addWeek', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to This Week`, run: () => addToDateNode(nodes, 'week') });
+    if (tana.todayNode) rows.push({ id: 'addToday', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Today`, hint: "A link on today's page", run: () => addToDateNode(nodes, 'today') });
+    if (tana.todayNode) rows.push({ id: 'addTomorrow', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Tomorrow`, hint: "A link on tomorrow's page", run: () => addToDateNode(nodes, 'tomorrow') });
+    if (tana.weekNode) rows.push({ id: 'addWeek', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to This Week`, hint: "A link on this week's page", run: () => addToDateNode(nodes, 'week') });
   }
   // references to them in a chat's message, the same ones a drag onto it makes (renderer/chat.js openAddToChat)
   const refs = tana.newChat && tana.searchPreview && items.has(keys[0]) ? dragSegs(items.get(keys[0])) : [];
-  if (refs.length) rows.push({ id: 'addToChat', group, icon: 'chat', label: `Add${count(refs.length, 'item')} to chat …`, hint: 'New or recent chat', keepOpen: true, run: () => openAddToChat(composerDropSegs(refs)) });
+  if (refs.length) rows.push({ id: 'addToChat', group, icon: 'chat', label: `Add${count(refs.length, 'item')} to chat …`, hint: 'An agent chat, or a Tana chat', keepOpen: true, run: () => openAddToChat(composerDropSegs(refs)) });
   if (ids.length && tana.setSensitive && sensitiveIds) {
     const marked = ids.every((id) => sensitiveIds.has(id));
     rows.push({ id: 'sensitive', group, icon: 'hidden', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
@@ -471,14 +473,16 @@ function selectionRows() {
   // actually remove and says how much it is skipping: a read-only row, or a block in a selection that also holds
   // documents, since those two removals are different operations. Whether Tana itself allows the delete is still
   // asked per document in removeSelection, because only the server knows that.
-  const its = keys.map((key) => items.get(key)).filter(Boolean);
+  // with the caret in a row of the page (not its title) and nothing selected, Delete is that row, as ⇧⌘⌫ there is
+  const caret = !selected.length && palReturn && palReturn.key && items.get(palReturn.key);
+  const its = (caret && caret.node.kind === 'block' ? [palReturn.key] : keys).map((key) => items.get(key)).filter(Boolean);
   if (its.length && tana.deleteDocument) {
     const blocksOnly = its.every((it) => it.node.kind === 'block');
     // A chat, canvas or agent has no outline to edit, yet Tana deletes it: for those, main's delete answer decides
     // (asked while the palette is open, renderer/access.js loadAccess).
     const docs = its.filter((it) => it.node.kind === 'document' && !canEditNode(it.node));
     if (!blocksOnly && !palette.hidden) docs.forEach((it) => loadAccess(it.docId));
-    const able = its.filter((it) => (blocksOnly ? canEditStructure(it) : it.node.kind === 'document' && (canEditNode(it.node) || !!accessById.get(it.docId)?.deletable)));
+    const able = its.filter((it) => (blocksOnly ? canEditStructure(it) : it.node.kind === 'document' && (canEditNode(it.node) || !!accessById.get(it.docId)?.deletable) && accessById.get(it.docId)?.deletable !== false)); // a type, say, is archived, never deleted
     const skipped = its.length - able.length;
     // ⇧⌘⌫ deletes the node you are on (outline keydown; the zoomed title; a block selection) — say so on the row
     rows.push({ id: 'delete', group, icon: 'trash', label: `Delete${count(able.length, 'item')}`, hint: !skipped ? '' : selected.length ? `${skipped} skipped` : 'Read-only', kbd: selected.length ? undefined : '⇧⌘⌫', disabled: !able.length, run: () => removeSelection(able.map((it) => it.key)) });

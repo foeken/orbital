@@ -1395,9 +1395,11 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   await p.key('↩');
   await p.waitFor('palMode === "linkedAgent"', 'its page');
   await p.waitFor('palRows.length === 4', 'its page, with what goes through the MCP server');
-  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink'], 'rename, switch off, unlink');
+  assert.deepEqual(await p.js('palRows.slice(0, 3).map((r) => r.label)'), ['Rename \u2026', 'Switch off', 'Unlink \u2026'], 'rename, switch off, unlink');
   assert.match(await p.js('palRows[3].label'), /^Everything you send your agent goes through orbital\.md, Orbital's relay, run by us/, 'and under them, that what you send it goes through our relay');
-  await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink"', 'Unlink'); await p.key('↩');
+  await p.type('unlink'); await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Unlink \u2026"', 'Unlink …'); await p.key('↩');
+  // asked first: its nodes are unassigned, and linking again needs a new code
+  await p.waitFor('palMode === "unlinkAgent" && palRows[0].label === "Unlink"', 'the question'); await p.key('↩');
   await p.waitFor('palMode === "agents" && !palRows.some((r) => r.label === "Dot")', 'Choose agents without it');
   await closePalette(p);
 });
@@ -1463,10 +1465,10 @@ flow('Agent chats: a new chat with ChatGPT, its answer, the list, and Delete cha
   await p.waitFor('/stays out of Tana · GPT-6 · High$/.test(document.querySelector(".chat-context")?.textContent || "")', 'the model and reasoning beside it');
   // Rename, as on any page: the title, and the list's name for it; one Rename and one Delete, the chat's own
   await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
-  assert.deepEqual(await p.js('palRows.filter((r) => r.label === "Rename" || r.label === "Delete").map((r) => r.id)'), ['rename', 'deleteAgentChat'], 'one Rename and one Delete');
+  assert.deepEqual(await p.js('palRows.filter((r) => /^(Rename|Delete)/.test(r.label)).map((r) => r.id)'), ['rename', 'deleteAgentChat'], 'one Rename and one Delete');
   assert.equal(await p.js('palRows.some((r) => r.id === "inviteChat")'), false, 'and no Invite: an agent chat is yours alone');
   await closePalette(p);
-  await command(p, 'rename', 'Rename');
+  await command(p, 'rename', 'Rename \u2026');
   await p.waitFor('palMode === "renameAgentChat" && palInput.value === "Summarise my week"', 'the rename page with the name as it is');
   await p.js('palInput.value = ""; palInput.dispatchEvent(new Event("input")); 1'); await p.type('Week summary'); await p.key('↩');
   await p.waitFor('document.getElementById("title").textContent === "Week summary"', 'the chat renamed');
@@ -1558,17 +1560,55 @@ flow('A node assigned to ChatGPT goes to your latest chat, or a new one, and its
 });
 
 
-// ⌘K Add to chat (renderer/chat.js openAddToChat): your agent chats first, those on this Mac, then Tana's; the one picked
-// opens with the node in its message box
+// A chat another Mac started lives there: its page says so and takes nothing, and ⌘K offers nothing to do with it here
+// (renderer/agentchats.js agentChatAway). In demo mode an agent chat's words are masked like a Tana chat's (renderer/segments.js appOwned).
+flow('an agent chat from another Mac is read-only, and demo mode masks agent chats', async (p) => {
+  await p.start();
+  await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
+  const AWAY = 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000002', LATEST = 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000003';
+  await p.js('goTo(' + J(AWAY) + ')');
+  await p.waitFor('zoom && zoom.docId === ' + J(AWAY) + ' && /on another Mac/.test(outline.textContent)', 'the page saying where the chat is');
+  assert.deepEqual(await p.js('[composerText.dataset.placeholder, composerText.contentEditable]'), ['This chat is on another Mac: continue it there', 'false'], 'its composer takes nothing');
+  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
+  assert.deepEqual(await p.js('palRows.filter((r) => ["rename", "openAgentChat", "deleteAgentChat", "inviteChat", "stopAgentChat"].includes(r.id)).map((r) => r.id)'), [], 'and ⌘K offers nothing to do with it here');
+  await closePalette(p);
+  await p.js('toggleDemoMode()'); await settle(p);
+  await p.js('goTo(' + J(LATEST) + ')');
+  await p.waitFor('zoom && zoom.docId === ' + J(LATEST) + ' && outline.querySelector(".chat-msg")', 'the latest chat');
+  assert.equal(await p.js('/Three sections repeat|Studio LT charter/.test(outline.textContent)'), false, 'its messages are masked in demo mode');
+  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
+  assert.equal(await p.js('palRows.filter((r) => r.group === "Agent chats").some((r) => /Studio LT charter|release notes/.test(r.label))'), false, 'and so are the chats\u2019 titles in ⌘K');
+  await closePalette(p);
+  await p.js('toggleDemoMode()'); await settle(p);
+});
+
+// ⌘K Add to chat (renderer/chat.js openAddToChat): your agent chats first, those on this Mac, and a new one, then Tana's;
+// the one picked opens with the node in its message box
 flow('Add to chat offers the agent chats first, and fills the one picked', async (p) => {
   await p.start();
   await p.waitFor('agentChatsKnown.length === 3', 'the agent chats known');
   await p.js('openAddToChat([{ mention: { uri: "tana:text:mocksupplier0", label: "Supplier contract" } }, { text: " " }]); 1');
   await p.waitFor('palMode === "addToChat" && palRows.length', 'the page');
-  assert.deepEqual(await p.js('palRows.filter((r) => r.group === "Agent chats").map((r) => r.label)'), ['Studio LT charter: what to cut', 'Draft the release notes for 0.11'], 'the agent chats on this Mac, not the one on another Mac');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.group === "Agent chats").map((r) => r.label)'), ['Studio LT charter: what to cut', 'Draft the release notes for 0.11', 'New chat with ChatGPT'], 'the agent chats on this Mac, not the one on another Mac, and a new one');
   assert.equal(await p.js('palRows[0].group'), 'Agent chats', 'and they come first');
   await p.js('palRows[0].run(); 1');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000003" && composerText.textContent.includes("Supplier contract")', 'the chat with the node in its message');
+  // a new ChatGPT chat, the node waiting in its message box
+  await p.js('openAddToChat([{ mention: { uri: "tana:text:mocksupplier0", label: "Supplier contract" } }, { text: " " }]); 1');
+  await p.waitFor('palMode === "addToChat" && palRows.some((r) => r.label === "New chat with ChatGPT")', 'the page again');
+  await p.js('palRows.find((r) => r.label === "New chat with ChatGPT").run(); 1');
+  await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:new" && composerText.textContent.includes("Supplier contract")', 'a new ChatGPT chat with the node in its message');
+});
+
+// ⌘K Delete with the caret in a row of a page is that row, as ⇧⌘⌫ there is; never the page it sits on
+flow('⌘K Delete with the caret in a row deletes that row, not the page', async (p) => {
+  await p.start();
+  await p.js("goTo('tana:text:mockai0')"); await at(p, 'tana:text:mockai0');
+  await p.js('window.__del = []; const d = tana.deleteDocument, m = tana.removeMany; tana.deleteDocument = (...a) => { __del.push(["doc", ...a]); return d(...a); }; tana.removeMany = (...a) => { __del.push(["rows", ...a]); return m(...a); }; 1');
+  await p.click(...await p.js('(() => { const r = document.querySelector("#outline .node .text").getBoundingClientRect(); return [r.right - 2, r.top + r.height / 2]; })()'));
+  await command(p, 'delete', 'Delete');
+  await p.waitFor('__del.length === 1', 'the delete');
+  assert.equal(await p.js('__del[0][0]'), 'rows', 'the row the caret is in goes, not the page');
 });
 
 

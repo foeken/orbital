@@ -6,7 +6,7 @@ import SwiftUI
 // request written here and the node's own words left in Tana. What is linked and handed over is in your settings
 // document, so the Mac sees it too.
 
-// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped right to make it the default
+// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped left to unlink it
 // and left to unlink it, then Connect your personal agent
 struct AgentsSection: View {
     let engine: Engine

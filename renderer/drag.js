@@ -42,8 +42,8 @@ const NODES_DRAG_TYPE = 'application/x-orbital-nodes';
 function dragSegs(item) {
   const keys = sel && sel.keys.has(item.key) ? selKeys() : [item.key];
   return keys.map((key) => items.get(key).node).map((n) => {
-    const uri = n.kind === 'document' && isRealId(n.id) ? n.id : n.reference?.uri;
-    if (uri) return [{ mention: { uri, label: (n.kind === 'document' ? n.text : referenceLabel(n)) || uri } }];
+    const uri = n.kind === 'document' && isRealId(n.id) ? n.id : n.reference?.uri || n.timeline?.uri; // a Timeline line: the node it is about
+    if (uri) return [{ mention: { uri, label: (n.kind === 'document' ? n.text : n.timeline ? (n.segments || []).find((s) => s.content)?.text : referenceLabel(n)) || uri } }];
     return segsOf(n).map((s) => ('text' in s ? { text: s.text } : { mention: { uri: s.mention.uri, label: s.mention.label } })); // the composer is plain text: marks stay behind
   }).filter((segs) => segs.length);
 }

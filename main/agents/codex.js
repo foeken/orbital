@@ -60,8 +60,10 @@ async function agentStatuses(links, rpc, turns = {}, running = () => false) {
     if (thread && turnId) {
       if (!recent.has(threadId)) recent.set(threadId, await rpc('thread/turns/list', { threadId, limit: 100 }).then((r) => new Map(((r && r.data) || []).map((t) => [t.id, t.status])), () => null));
       const seen = recent.get(threadId);
-      // shortcut: a turn older than the chat's last hundred is taken as done; read further back if old badges mislead
-      out[nodeId] = !seen ? 'pending' : seen.has(turnId) ? turnState(seen.get(turnId), running(threadId, turnId)) : 'done';
+      // a turn not listed: working while this Mac runs it (another reader may not list it yet), done when it is older
+      // than the chat's last hundred, else pending. shortcut: past a hundred is taken as done; read further back if old badges mislead
+      out[nodeId] = running(threadId, turnId) && !(seen && seen.has(turnId)) ? 'working' : !seen ? 'pending'
+        : seen.has(turnId) ? turnState(seen.get(turnId), running(threadId, turnId)) : seen.size >= 100 ? 'done' : 'pending';
       continue;
     }
     let last = null;

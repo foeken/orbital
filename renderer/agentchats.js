@@ -59,7 +59,7 @@ const agentChatInfos = new Map(); // docId -> { model, effort }, or null while i
 function agentChatContextEl(id) {
   if (id !== AGENT_CHAT_NEW && !agentChatAway(id) && !agentChatInfos.has(id) && tana.agentChatInfo) {
     agentChatInfos.set(id, null);
-    tana.agentChatInfo(id).then((i) => { agentChatInfos.set(id, i || {}); if (zoom && zoom.docId === id) renderSoon(true); }, () => agentChatInfos.delete(id));
+    tana.agentChatInfo(id).then((i) => { agentChatInfos.set(id, i || {}); if (zoom && zoom.docId === id) renderSoon(true); }, () => agentChatInfos.set(id, {})); // unknown: not asked again on every redraw
   }
   const info = agentChatInfos.get(id) || {}, el = document.createElement('div'), words = [info.model, info.effort].filter(Boolean).join(' · ');
   el.className = 'chat-context';
@@ -78,13 +78,13 @@ function deleteAgentChat(docId) {
 // ⌘K: the page under Views, a new chat under Actions, and on a chat what can be done with it (beside Rename, which is
 // the page's own row: renderer/document.js renameTitle renames an agent chat)
 const agentChatsViewRow = () => ({ id: 'agentChats', group: 'Views', icon: 'robot', label: 'Agent chats', hint: 'Chats with ChatGPT, started in Orbital', opens: AGENT_CHATS_PAGE, run: () => goTo(AGENT_CHATS_PAGE) });
-const agentChatNewRows = () => (tana.startAgentChat && codexHere() ? [{ id: 'newAgentChat', group: 'Actions', icon: 'chatgpt', label: 'New chat with ChatGPT', hint: 'On this Mac, in the ChatGPT app, not in Tana', opens: AGENT_CHAT_NEW, run: () => openDoc(AGENT_CHAT_NEW) }] : []);
+const agentChatNewRows = () => (tana.startAgentChat && codexHere() && !(zoom && zoom.docId === AGENT_CHAT_NEW) ? [{ id: 'newAgentChat', group: 'Actions', icon: 'chatgpt', label: 'New chat with ChatGPT', hint: 'On this Mac, in the ChatGPT app, not in Tana', opens: AGENT_CHAT_NEW, run: () => openDoc(AGENT_CHAT_NEW) }] : []);
 function agentChatOwnRows(group) {
   const docId = agentChatOpen(), here = docId && extra.get(docId);
   if (!here || agentChatAway(docId)) return []; // another Mac's: nothing to stop, open or delete here
   return [
     ...(agentChatAnswering(docId) ? [{ id: 'stopAgentChat', group, icon: 'chatgpt', label: 'Stop ChatGPT', hint: 'The answer being written', run: () => run(() => tana.stopAgentChat(docId)) }] : []),
     { id: 'openAgentChat', group, icon: 'chatgpt', label: 'Open in ChatGPT', hint: 'This chat, in the ChatGPT app', run: () => run(() => tana.openAgentChat(docId)) },
-    { id: 'deleteAgentChat', group, icon: 'trash', label: 'Delete', hint: 'From Orbital; it stays in the ChatGPT app', run: () => deleteAgentChat(docId) },
+    ...(demoMode ? [] : [{ id: 'deleteAgentChat', group, icon: 'trash', label: 'Delete', hint: 'From Orbital; it stays in the ChatGPT app', run: () => deleteAgentChat(docId) }]), // demo mode deletes nothing
   ];
 }

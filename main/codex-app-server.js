@@ -85,9 +85,9 @@ async function runTurn({ threadId = null, params = {}, text, onThread, onNote, d
   };
   const hush = () => { if (done) return; clearTimeout(quiet); quiet = setTimeout(end, quietMs); quiet.unref?.(); };
   const rpc = appServerRpc(timeoutMs, (note) => {
+    hush(); // this child serves this one turn: anything it hears is the work going on, a sub-agent's thread included
     const p = note.params || {};
     if (!id || p.threadId !== id) return; // another thread's ending says nothing about this one
-    hush();
     if (onNote) onNote(note);
     if (note.method === 'turn/completed') end();
   }, { decline });

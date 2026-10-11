@@ -317,7 +317,7 @@ function mockApi() {
   content[ASSIGNED] = [codexMsg(true, 'Review the Studio LT charter: suggest what to cut', 70), codexMsg(false, ['Three sections repeat the goals; I would cut the second and fold the budget into one table.'], 69, ['Thought for 21 seconds'])];
   content[agentChatId(1)] = [codexMsg(true, 'Draft the release notes for 0.11 from the pull requests merged this week', 62),
     codexMsg(false, ['Here is a first draft.', 'Meet Now in ⌘K makes a half-hour meeting and opens it in Tana.', 'Agent chats: chat with ChatGPT from Orbital, kept in the ChatGPT app.', 'Past days in a meeting search start folded.'], 61, ['Thought for 38 seconds'])];
-  content[agentChatId(2)] = [{ id: 'away', text: 'This chat is on another Mac. Open it there, or in the ChatGPT app on that Mac.', kind: 'block', editable: false, segments: [{ text: 'This chat is on another Mac. Open it there, or in the ChatGPT app on that Mac.' }], hasChildren: false, children: [] }];
+  content[agentChatId(2)] = []; // on another Mac: main reads nothing for it, and the page says where it is (renderer/render.js emptyText)
   const agentChanged = [], emitAgent = (id) => setTimeout(() => agentChanged.forEach((cb) => cb(id)), 0);
   const codexAnswers = (id, text) => {
     const reply = codexMsg(false, '', 0); reply.children = []; reply.chat.streaming = true;
@@ -669,7 +669,7 @@ function mockApi() {
     typeIcons: async () => structuredClone(Object.entries(typeIconChoices).map(([uri, name]) => ({ uri, ...mockIcons.find((i) => i.name === name) }))),
     setTypeIcon: async (typeUri, name) => {
       // a type's field is the type's uri with "?attribute=<key>" (Set field icon, #606)
-      if (!types.some((t) => t.id === String(typeUri).split('?attribute=')[0]) && !/^tana:(search|text):/.test(String(typeUri))) throw new Error('Icons are set on a type, a field, a saved search or a document');
+      if (!types.some((t) => t.id === String(typeUri).split('?attribute=')[0]) && !/^(tana:(search|text):|orbital:agent-chat:)/.test(String(typeUri))) throw new Error('Icons are set on a type, a field, a saved search, a document or an agent chat'); // as main/icons.js setTypeIcon
       const icon = name ? mockIcons.find((i) => i.name === name) : null;
       if (name && !icon) throw new Error('No icon called ' + name);
       if (icon) typeIconChoices[typeUri] = icon.name; else delete typeIconChoices[typeUri];
