@@ -41,7 +41,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'pinSidebar', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
-  'codex', 'codexTo', 'codexUnassign', 'codexOpen',
+  'codexTo', 'codexUnassign', 'codexOpen',
   'visibility', 'addParticipants', 'notify', 'copyLink', 'exportPdf',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
@@ -301,15 +301,13 @@ function paletteRows(q, typed = q) {
   // taking it back needs nothing typed, so it happens on the press.
   if (palDoc && tana.setAgent && isRealId(palDoc.id)) {
     const assigned = agentIds.has(palDoc.id), doc = palDoc;
-    const holder = agentNamed((agentTasks.get(doc.id) || {}).agent), fallback = agentsOn().find((a) => a.isDefault) || agentNamed('tana');
+    const holder = agentNamed((agentTasks.get(doc.id) || {}).agent);
     // Assigning is offered whether or not the node is with an agent already: handing it over again replaces the request
     // in its Agent context block (main/documents.js writeAgentContext), to that agent or another. One row per agent that
     // is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked.
     // A saved search is a view, not work: there is nothing in it for an agent to do (Unassign stays, for one handed over before)
     if (!isSearchDoc(doc)) {
-      rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: 'Assign to Agent', hint: assigned ? 'Replaces what ' + ((holder && holder.label) || 'the agent') + ' was asked' : 'To ' + ((fallback && fallback.label) || 'Tana'),
-        keepOpen: true, run: () => openAgentPrompt(doc) });
-      for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: a.isDefault ? 'Default' : '',
+      for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: assigned && holder && holder.id === a.id ? 'Replaces what it was asked' : '',
         keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
     }
     if (assigned) rows.push({ rank: 'codexUnassign', group: docGroup, icon: 'robot', label: 'Unassign from Agent', hint: holder ? holder.label : '',
@@ -445,7 +443,6 @@ function paletteRows(q, typed = q) {
   if (tana.aiOptions) rows.push({ id: 'models', group: 'Settings', icon: 'brain', label: 'Choose models …', hint: 'Quick and Regular AI', keepOpen: true, run: openModelsPalette }); // renderer/settings.js
   rows.push(...flagRows()); // Enable feature flag, Disable feature flag (renderer/flags.js)
   if (tana.agentList) rows.push({ id: 'agents', group: 'Settings', icon: 'robot', label: 'Choose agents …', hint: agentsOn().map((a) => a.label).join(', '), keepOpen: true, run: openAgentsPalette });
-  if (tana.agentList && tana.setDefaultAgent) { const d = agentsOn().find((x) => x.isDefault) || agentNamed('tana'); rows.push({ id: 'defaultAgent', group: 'Settings', icon: (d && d.icon) || 'robot', label: 'Set default agent …', hint: (d && d.label) || 'Tana', keepOpen: true, run: openDefaultAgentPalette }); } // renderer/agent.js
   // a new key for your Orbital at orbital.md, when the old one may have been seen: the agents stay linked (main/agents/linked.js resetKey)
   if (tana.mcpReset && agentList.some((x) => x.linked)) rows.push({ id: 'relayReset', group: 'Settings', icon: 'linkReset', label: 'Reset agent link key', hint: 'If it may have been seen: your agents stay linked',
     run: () => run(async () => { await tana.mcpReset(); showNote('New link key: your agents stay linked'); }) });

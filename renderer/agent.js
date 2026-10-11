@@ -1,6 +1,6 @@
 'use strict';
 // The agents' pages in Cmd+K: signing in with ChatGPT, the OpenAI API key (kept for whoever already has one),
-// Choose agents, linking a task that already exists in an agent's app, and the prompt page Assign to Agent opens.
+// Choose agents, linking a task that already exists in an agent's app, and the prompt page Assign to … opens.
 // renderer/palette.js lists their rows and draws every page; the agent's badge and state are renderer/render.js and
 // renderer/nodes.js. Which agents there are is main's (main/agent.js), drawn from agentList (renderer/state.js).
 
@@ -69,13 +69,12 @@ const openaiRegionRows = () => OPENAI_REGIONS.map(([id, label]) => ({ group: 'Op
   hint: label === openaiRegionName() ? 'Current' : '', keepOpen: true,
   run: () => run(async () => { chatgptAuth = { ...(chatgptAuth || {}), region: await tana.setOpenAIRegion(id) }; closePalette(); showNote('OpenAI region: ' + label); }) }));
 function openOpenAIRegionPalette() { openPage('openaiRegion', 'OpenAI region…', { rows: (q) => matchRows(openaiRegionRows(), q), back: BACK_TO_COMMANDS }); }
-// ---- Choose agents, and Set default agent ----
+// ---- Choose agents ----
 // Every agent the app knows, in one list: Tana always on, Codex greyed with what to install until this Mac has
 // it, Claude coming soon, then your linked agents (each has a page of its own: ↩ opens it), with Connect your personal agent under
-// them (Reset agent link key is in Cmd+K itself). ↩ on a built-in one switches it on or off. The default, the agent Assign to Agent
-// starts on, is picked on a page of its own (Set default agent …). The lists are main's, and each answer is the new
-// list, so the page redraws from what was stored.
-const AGENTS_GROUP = 'Agents', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
+// them (Reset agent link key is in Cmd+K itself). ↩ on a built-in one switches it on or off. There is no default: each
+// Assign to <agent> … is the one you pick. The lists are main's, and each answer is the new list, so the page redraws.
+const AGENTS_GROUP = 'Agents';
 // the chat's @agents follow the same switches: read again here, since this page is left out of its own settings:changed
 const agentsApply = (call) => run(async () => {
   const list = await call();
@@ -100,15 +99,6 @@ function agentsRows(q) {
 function openAgentsPalette() {
   loadAgentList().then(() => { if (palMode === 'agents') renderPalette(); });
   openPage('agents', 'Choose agents', { rows: agentsRows, back: BACK_TO_COMMANDS });
-}
-function defaultAgentRows(q) {
-  const rows = agentsOn().map((a) => ({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
-    run: () => agentsApply(() => tana.setDefaultAgent(a.id)) }));
-  return matchRows(rows, q);
-}
-function openDefaultAgentPalette() {
-  loadAgentList().then(() => { if (palMode === 'defaultAgent') renderPalette(); });
-  openPage('defaultAgent', 'Set default agent', { rows: defaultAgentRows, back: BACK_TO_COMMANDS });
 }
 // ---- Connect your personal agent: first which agent, then only its steps, then one code that links it ----
 // (main/agents/linked.js) The first page asks which agent: your OpenAI Dot in ChatGPT, or any other agent that speaks MCP.
@@ -322,7 +312,7 @@ function linkedAgentRows(q) {
   const group = [a.label, a.app ? 'through ' + a.app : '', seenText(a.seenAt) || 'not seen yet'].filter(Boolean).join(' · '), w = relayKnown('linkedAgent');
   const rows = [
     { group, icon: 'field', label: 'Rename …', keepOpen: true, run: () => openRenameAgent(a) },
-    { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, left out of Assign to Agent' : 'Back in Assign to Agent', keepOpen: true,
+    { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, not offered to assign to' : 'Offered to assign to again', keepOpen: true,
       run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) },
     { group, icon: 'trash', label: 'Unlink', hint: 'It can no longer take tasks from Orbital', keepOpen: true,
       run: () => run(async () => { agentList = await tana.mcpUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) }, // its nodes were unassigned too
@@ -335,14 +325,13 @@ function openRenameAgent(a) {
     (name) => ({ label: 'Rename to “' + name + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.mcpRename(a.id, name); openLinkedAgent(a.id); }) }), a.label);
 }
 // ---- assigning a node to an agent: the prompt page, one level down in Cmd+K ----
-// "Assign to Agent" does not assign: it advances to this page, where the palette's single-line field is swapped for a
+// "Assign to <agent> …" does not assign: it advances to this page, where the palette's single-line field is swapped for a
 // few lines of text. The node is the context, so the page asks only what to do with it. ↩ is an ordinary newline
 // here, ⌘↩ assigns, Esc cancels the assignment and closes the palette without writing anything. The row below the
-// editor is the same action as ⌘↩, so it can be clicked, and it reports why a blank prompt cannot be sent. Under it,
-// the agents that are on, the default ticked: the agent's own default model does the work, so there is nothing else
-// to choose.
+// editor is the same action as ⌘↩, so it can be clicked, and it reports why a blank prompt cannot be sent. Opened
+// without an agent named (a drop on the Agent group), the agents that are on are listed under it, the first ticked.
 let agentCtx = null; // { id } of the node the prompt being typed belongs to, while this page is up
-const AGENT_GROUP = 'Assign to Agent · ↩ adds a line, ⌘↩ assigns, Esc cancels';
+const AGENT_GROUP = 'Assign · ↩ adds a line, ⌘↩ assigns, Esc cancels';
 const PICK_GROUP = 'Agent';
 function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
@@ -351,11 +340,10 @@ function promptEditor(on) {
 function openAgentPrompt(doc, pick) {
   // No back: Escape cancels the whole thing rather than stepping back a level. The page was opened to answer one
   // question, and abandoning that question is abandoning the assignment. Nothing is written either way.
-  showPage('agentPrompt', '', { rows: agentPromptRows, typed: true }); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
+  showPage('agentPrompt', '', { rows: agentPromptRows, typed: true }); // the query that found "Assign to …" is not a query here, and would bold letters in the row
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
   agentCtx = { id: doc.id, doc, fixed: !!pick }; // the row itself, so the assignment can hold it where it sits; fixed: its row named the agent
-  // it starts on the agent its row named (Assign to Echo …), or else on the default
-  agentPick = (agentsOn().find((a) => a.id === pick) || agentsOn().find((a) => a.isDefault) || agentsOn()[0] || { id: 'tana' }).id;
+  agentPick = (agentsOn().find((a) => a.id === pick) || agentsOn()[0] || { id: 'tana' }).id;
   renderPalette(); palText.focus();
 }
 function agentPromptRows() {

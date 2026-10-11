@@ -21,7 +21,7 @@ const ready = (id) => { const a = agent.get(id); if (!a || !agent.usable(id)) th
 // else starts a new task. A handoff that fails leaves no mark behind on a node that had none: the mark is a synced
 // setting, so it would reach the other machines as a pending badge for work nobody took. On a node that had one, it
 // puts back what was there (restore below): its task link still names the earlier request.
-async function assign(id, prompt, agentId = agent.defaultAgent()) {
+async function assign(id, prompt, agentId) {
   const a = ready(agentId), was = agentIds().includes(id);
   const held = was && agent.taskLink(id), heldBy = held && agent.get(held.agent);
   const before = was ? { prompt: agentPrompt(id), linked: !!(heldBy && heldBy.linked) } : null;
@@ -105,7 +105,6 @@ const changed = (e, id) => { settings.tellOthers(pageOf(e), id); };
 const ipc = {
   'agent:list': () => { linked.refreshSoon(); return agent.list(); }, // the MCP server's list is asked for now and then, and the pages told when it moved
   'agent:enable': (e, id, on) => { const out = agent.setEnabled(id, !!on); changed(e); return out; },
-  'agent:default': (e, id) => { const out = agent.setDefault(id); changed(e); return out; },
   'agent:ids': () => agentIds(),
   'agent:set': async (e, id, on, prompt, agentId) => {
     if (typeof id !== 'string' || !NODE.test(id)) throw new Error('Not a Tana node');

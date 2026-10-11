@@ -321,7 +321,7 @@ written to Tana. Tana has no author for an agent's words: a message is `human` w
 Tana draws as the chat's own agent (§2), so an `ai` message would read as Tana's answer to everyone in the chat, and a
 `human` one as yours. Both the question and the answer stay in Orbital:
 
-1. **A task of that agent on this Mac** is started with the agent's own `start` (main/agents/codex.js; the Assign to Agent path, keyed by the chat, so
+1. **A task of that agent on this Mac** is started with the agent's own `start` (main/agents/codex.js; the Assign to path, keyed by the chat, so
    its workspace is `agent-workspaces/Tana`, shared by every task). Its prompt is the question, then the whole conversation, oldest first,
    one `{"from","text"}` JSON line per message between `<<<chat` and `chat>>>` (so nothing anyone wrote can pass for the
    question or close the quote), mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
@@ -402,7 +402,7 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
 - **Found though not in Tana.** ⌘K lists every agent chat under Agent chats, as it lists saved searches, and ⌘S adds the chats
   whose title holds every word typed after Tana's results, under AGENT CHATS; never while linking with @,
   since Tana cannot link to one (renderer/agentchats.js `agentChatPlaceRows`, `agentChatHits`).
-- **Assignments.** A node handed to ChatGPT (Assign to Agent, main/agents/codex.js `start`) is a message in one standing chat,
+- **Assignments.** A node handed to ChatGPT (Assign to ChatGPT …, main/agents/codex.js `start`) is a message in one standing chat,
   Assignments, made by the first one on this Mac (`assignments: true` on its link, main/agentchats.js `assign`); one sent
   while ChatGPT still answers joins that turn (`turn/steer`). The message is one line the chat shows, `Assigned [node](uri): request`,
   and Orbital's context for ChatGPT (main/agent.js `agentPrompt`, and that a sub-agent does the work and the chat gets a

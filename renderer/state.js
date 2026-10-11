@@ -134,8 +134,8 @@ const agentStateOf = (id) => (AGENT_BADGE[agentStates.get(id)] ? agentStates.get
 const agentTasks = new Map(); // docId -> { agent, taskId }: which agent's task each linked node is
 // Every agent the app knows (main/agent.js list): Tana always, Codex greyed until installed. Read at boot
 // and after Choose agents changes it; the rows each agent brings are drawn from it.
-let agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }];
-let agentPick = 'tana'; // the agent the Assign to Agent page will hand the node to, the default until the page picks another
+let agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }];
+let agentPick = 'tana'; // the agent the Assign page will hand the node to: the one its row named
 const agentsOn = () => agentList.filter((a) => a.enabled && a.installed);
 const agentNamed = (id) => agentList.find((a) => a.id === id) || null;
 let visibilityPeople = new Set();

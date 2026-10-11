@@ -506,7 +506,7 @@ class Engine(
 
     // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, linking one with a code as the
     // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
-    val agentsOn: List<Agent> get() = agents.filter { it.on }.sortedBy { !it.isDefault } // what Assign to <its name> … offers, the default first
+    val agentsOn: List<Agent> get() = agents.filter { it.on } // what Assign to <its name> … offers
     // the MCP server asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
     suspend fun loadAgents(): String? {
         if (isSample) return null
@@ -530,11 +530,7 @@ class Engine(
         if (isSample) return
         try { call<Boolean>("return await orbital.unhand(id)", mapOf("id" to id)); handed = handed - id } catch (e: Failure) { error = e.message }
     }
-    // Settings' swipes on an agent: Make Default, and Unlink, which also unassigns its nodes (orbital.setDefault, orbital.unlink)
-    suspend fun makeDefault(agent: Agent) {
-        if (isSample) return
-        try { agents = call("return await orbital.setDefault(agent)", mapOf("agent" to agent.id)) } catch (e: Failure) { error = e.message }
-    }
+    // Settings' swipe on an agent: Unlink, which also unassigns its nodes (orbital.unlink)
     suspend fun unlink(agent: Agent) {
         if (isSample) return
         try {

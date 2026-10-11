@@ -178,7 +178,7 @@ function codexAnswer(turn) {
 const codex = agent.register({
   id: 'codex', label: 'ChatGPT', icon: 'chatgpt', missing: 'Install the ChatGPT app',
   available: () => !!codexBin(),
-  // Assign to Agent: a message in the Assignments chat (main/agentchats.js assign), watched in Orbital's sidebar; a chat
+  // Assign to ChatGPT: a message in the Assignments chat (main/agentchats.js assign), watched in Orbital's sidebar; a chat
   // question (main/chatagents.js) is a task of its own, read-only, its answer on its Tana chat's page.
   // shortcut: every node handed over shares the one thread, so each badge reads that thread's latest turn; a turn per node if that misleads.
   async start({ key, nodeUri, title, rules, prompt, readOnly, userData }) {

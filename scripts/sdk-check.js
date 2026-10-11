@@ -3534,25 +3534,18 @@ async function main() {
     const agent = backend.agent, settings = backend.settings, NODE = 'tana:text:' + ulid(), THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
     const cx = agent.get('codex'), cl = agent.register({ id: 'other', label: 'Other', icon: 'robot', available: () => false, local: true, start: async () => THREAD }); // a second coding agent, its tasks on this Mac only
     cx.available = () => true;
-    const view = () => agent.list().map((a) => a.id + (a.installed ? '' : '?') + (a.enabled ? '+' : '') + (a.isDefault ? '*' : '')).join(' ');
-    assert.equal(view(), 'tana+* codex+ other?', 'Tana, Codex and another agent are known, in the order they registered; Tana is on and the default, Codex is on as before, a new one waits');
+    const view = () => agent.list().map((a) => a.id + (a.installed ? '' : '?') + (a.enabled ? '+' : '')).join(' ');
+    assert.equal(view(), 'tana+ codex+ other?', 'Tana, Codex and another agent are known, in the order they registered; Tana is on, Codex is on as before, a new one waits');
     assert.throws(() => agent.setEnabled('tana', false), 'Tana cannot be switched off');
-    assert.throws(() => agent.setDefault('other'), /Switch that agent on first/, 'an agent that is off cannot be the default');
     cl.available = () => true;
-    agent.setEnabled('other', true); agent.setDefault('other');
-    assert.equal(view(), 'tana+ codex+ other+*', 'switched on and chosen');
-    assert.deepEqual([settings.isSynced('agents'), settings.isSynced('defaultAgent')], [true, true], 'and both follow you to the next machine');
-    cl.available = () => false;
-    assert.equal(agent.defaultAgent(), 'tana', 'a default this Mac cannot run falls back to Tana, so Assign to Agent always has somewhere to go');
-    cl.available = () => true;
-    agent.setEnabled('other', false);
     agent.setEnabled('other', true);
-    assert.equal(agent.defaultAgent(), 'tana', 'switching the default off forgets it: switched on again it does not come back as the default unannounced');
+    assert.equal(view(), 'tana+ codex+ other+', 'switched on');
+    assert.equal(settings.isSynced('agents'), true, 'and it follows you to the next machine');
     agent.setEnabled('other', false); agent.setEnabled('codex', false);
     assert.deepEqual([...agent.enabledIds()], ['tana'], 'with everything else off, Tana is left');
     settings.set('agents', ['relay:' + THREAD, 'codex']); agent.setEnabled('other', true);
     assert.deepEqual(settings.get('agents'), ['relay:' + THREAD, 'codex', 'other'], 'an agent this Mac does not know yet (a Dot linked on the phone) stays on when another is switched');
-    settings.set('agents', undefined); settings.set('defaultAgent', undefined);
+    settings.set('agents', undefined);
     // A link names its agent; the shapes older builds wrote are Codex tasks.
     assert.equal(agent.setTask(NODE, 'codex', THREAD).taskId, THREAD);
     assert.deepEqual({ ...agent.taskLink(NODE) }, { agent: 'codex', taskId: THREAD }, 'the agent is stored beside the task id');
@@ -3666,7 +3659,7 @@ async function main() {
     const status = await h('mcp:linkStatus', link.code), id = status.agent.id;
     assert.deepEqual([status.state, status.agent.label, status.agent.app], ['linked', 'GrokBot', 'Grok'], 'the agent linked, by the name it chose, through the app it runs in');
     const entry = () => agent.list().find((a) => a.id === id);
-    assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled, entry().isDefault], ['GrokBot', true, true, true, true], 'and is an agent like any other, on from the start and the default: linking it is choosing it');
+    assert.deepEqual([entry().label, entry().linked, entry().installed, entry().enabled], ['GrokBot', true, true, true], 'and is an agent like any other, on from the start: linking it is choosing it');
     // a node handed over: the event task.assigned with the node's id, nothing else; the words stay in Tana
     // the node is a page of its own here: Orbital writes its status line into it (mut) and reads nothing of it (op)
     const NODE = 'tana:text:' + ulid(), realMut = docs.mut, realOp = docs.op, realStatus = docs.agentStatus, wrote = [];

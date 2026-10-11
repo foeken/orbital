@@ -392,7 +392,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     // Your Dot (ios/engine/agents.js, Agents.swift): the agents linked through orbital.md, linking one with a code as the
     // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
-    struct Agent: Decodable, Identifiable, Hashable { let id: String; let name: String; let app: String; let on: Bool; let isDefault: Bool }
+    struct Agent: Decodable, Identifiable, Hashable { let id: String; let name: String; let app: String; let on: Bool }
     struct HandedTo: Decodable { let id: String; let name: String; let status: String } // a node's agent, and its last Agent status line
     struct AgentList: Decodable { let agents: [Agent]; let handed: [String: String]; let problem: String? }
     struct LinkCode: Decodable { let code: String; let expiresAt: Double; let url: String; let tana: String; let prompt: String }
@@ -400,7 +400,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     struct Handing: Identifiable { let id: String; let agent: Agent; let then: () async -> Void } // the node whose request is being written
     var handing: Handing?
     // the agents on, the default first: what Assign to <its name> … offers
-    var agentsOn: [Agent] { agents.filter(\.on).sorted { $0.isDefault && !$1.isDefault } }
+    var agentsOn: [Agent] { agents.filter(\.on) }
     // the MCP server asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
     func loadAgents() async -> String? {
         guard !Self.isSample else { return nil }
@@ -430,11 +430,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard !Self.isSample else { return }
         do { let _: Bool = try await call("return await orbital.unhand(id)", ["id": id]); handed[id] = nil } catch { self.error = error.localizedDescription }
     }
-    // Settings' swipes on an agent: Make Default, and Unlink, which also unassigns its nodes (orbital.setDefault, orbital.unlink)
-    func makeDefault(_ agent: Agent) async {
-        guard !Self.isSample else { return }
-        do { agents = try await call("return await orbital.setDefault(agent)", ["agent": agent.id]) } catch { self.error = error.localizedDescription }
-    }
+    // Settings' swipe on an agent: Unlink, which also unassigns its nodes (orbital.unlink)
     func unlink(_ agent: Agent) async {
         guard !Self.isSample else { return }
         do {

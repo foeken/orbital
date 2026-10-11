@@ -27,7 +27,7 @@ WANT.cleanup = path.join(__dirname, '..', 'build', 'icons', 'brush-2.svg'); // t
 WANT.notify = path.join(__dirname, '..', 'build', 'icons', 'bell-on.svg'); // "Notify on changes": watching a node for edits
 WANT.reload = path.join(__dirname, '..', 'build', 'icons', 'refresh-anticlockwise.svg'); // Cmd+K "Reload": reloads the window, unlike sync's cloud-refresh
 WANT.robot = path.join(__dirname, '..', 'build', 'icons', 'face-robot-2.svg'); // the badge on a node assigned to the local Codex agent
-WANT.brain = path.join(__dirname, '..', 'build', 'icons', 'brain.svg'); // the model rows on the Assign to Agent page
+WANT.brain = path.join(__dirname, '..', 'build', 'icons', 'brain.svg'); // the model rows on the Assign page
 WANT.host = path.join(__dirname, '..', 'build', 'icons', 'monitor.svg'); // the machine a Codex task runs on
 WANT.home = path.join(__dirname, '..', 'build', 'icons', 'house.svg'); // the Home anchor crumb: the Library, or the saved search chosen as Home
 // a task put off: the Later state's own glyph (zzz, asleep), drawn instead of the task list-checkbox on those rows

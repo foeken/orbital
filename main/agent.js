@@ -31,7 +31,8 @@ function catchUp() {
 }
 const get = (id) => { catchUp(); return typeof id === 'string' && Object.hasOwn(AGENTS, id) ? AGENTS[id] : null; };
 
-// Which agents are on, and which one Assign to Agent uses. Both follow you (main/settings.js SYNCED). Unset is Tana and
+// Which agents are on: Assign to <agent> … offers each (there is no default: you pick the one you want). It follows you
+// (main/settings.js SYNCED). Unset is Tana and
 // Codex: Codex is what this app handed work to before agents were plugins, so nobody loses it on update; one added later
 // and waits to be switched on. Tana cannot be switched off: it needs nothing installed and is the one agent everybody has.
 // The ids stored as on, every one: one this device does not run or know yet (a Dot linked on the phone and not heard of
@@ -44,27 +45,16 @@ function setEnabled(id, on) {
   enable(id, on);
   return list();
 }
-// The setting alone, by id, for an agent this device need not run (the phones' engine runs none): on or off, and off
-// takes the default with it: kept, it would come back unannounced the day the agent is switched on again (#671 review)
+// The setting alone, by id, for an agent this device need not run (the phones' engine runs none): on or off
 function enable(id, on) {
   const next = storedIds().filter((x) => x !== id);
   if (on) next.push(id);
   settings.set('agents', next);
-  if (!on && settings.get('defaultAgent') === id) settings.set('defaultAgent', null);
-}
-// on and the default: what linking an agent is, and the phone's Make Default
-const choose = (id) => { enable(id, true); settings.set('defaultAgent', id); };
-// The default, when it can still run; Tana otherwise, so Assign to Agent always has somewhere to go.
-const defaultAgent = () => { const id = settings.get('defaultAgent'); return usable(id) ? id : 'tana'; };
-function setDefault(id) {
-  if (!usable(id)) throw new Error('Switch that agent on first');
-  settings.set('defaultAgent', id);
-  return list();
 }
 // What the renderer draws: every agent, installed or not, and what each can do. Names and flags only. A linked agent
 // says so, with the app it came through and when the MCP server last heard from it.
 const list = () => { catchUp(); return Object.values(AGENTS).map((a) => ({
-  id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id), isDefault: defaultAgent() === a.id,
+  id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id),
   chat: !!a.read, opensHere: !!a.opensHere, opens: !!(a.open || a.opensHere), // opens: Go to <agent> task can show it
   ...(a.linked ? { linked: true, app: a.app || '', seenAt: a.seenAt || null } : {}),
 })); };
@@ -103,7 +93,7 @@ const links = () => Object.fromEntries(Object.keys(tasks()).map((id) => [id, tas
 // or linked to another Orbital) lets go of its nodes: drop(nodeId) takes the mark, the request and the link, each side
 // its own way, the node itself left as it is. Read from the stored links, which keep an agent no longer registered.
 function storeLinked(list, drop) {
-  for (const a of mcpServer.remember(list)) choose(mcpServer.ID + a.id);
+  for (const a of mcpServer.remember(list)) enable(mcpServer.ID + a.id, true); // linking an agent switches it on, wherever it is first seen
   const listed = new Set(list.map((a) => mcpServer.ID + a.id));
   for (const [nodeId, stored] of Object.entries(tasks())) if (stored && typeof stored.agent === 'string' && stored.agent.startsWith(mcpServer.ID) && !listed.has(stored.agent)) drop(nodeId);
 }
@@ -164,4 +154,4 @@ function findBin(name, extra = []) {
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-module.exports = { AGENTS, register, unregister, addSource, get, storedIds, enabledIds, usable, setEnabled, enable, choose, storeLinked, defaultAgent, setDefault, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };
+module.exports = { AGENTS, register, unregister, addSource, get, storedIds, enabledIds, usable, setEnabled, enable, storeLinked, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };

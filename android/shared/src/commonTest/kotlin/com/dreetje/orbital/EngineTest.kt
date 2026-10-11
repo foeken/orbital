@@ -341,14 +341,13 @@ class EngineTest {
     // not kept; Unassign lets it go
     @Test fun aNodeHandedToYourDot() = runTest {
         var refuse = false
-        val host = page(setup = { text("""{"sensitive":[],"pinned":[],"agents":[{"id":"relay:a1","name":"Echo","app":"ChatGPT","on":true,"isDefault":true},{"id":"relay:a2","name":"Off one","on":false}],"handed":{}}""") })
+        val host = page(setup = { text("""{"sensitive":[],"pinned":[],"agents":[{"id":"relay:a1","name":"Echo","app":"ChatGPT","on":true},{"id":"relay:a2","name":"Off one","on":false}],"handed":{}}""") })
         val answer = host.answer
         host.answer = { body, args ->
             when {
                 "orbital.handTo" in body -> if (refuse) throw Exception("Echo is not listening yet") else text("""{"id":"relay:a1","name":"Echo","status":"assigned"}""")
                 "orbital.unhand" in body -> text("true")
-                "orbital.setDefault" in body -> text("""[{"id":"relay:a1","name":"Echo","on":true,"isDefault":false},{"id":"relay:a2","name":"Off one","on":true,"isDefault":true}]""")
-                "orbital.unlink" in body -> text("""[{"id":"relay:a2","name":"Off one","on":true,"isDefault":true}]""")
+                "orbital.unlink" in body -> text("""[{"id":"relay:a2","name":"Off one","on":true}]""")
                 else -> answer(body, args)
             }
         }
@@ -364,9 +363,7 @@ class EngineTest {
         assertEquals("relay:a1", engine.handed["tana:text:a"])
         engine.unhand("tana:text:a")
         assertNull(engine.handed["tana:text:a"])
-        // Settings' swipes: Make Default reads back the agents as the engine left them; Unlink takes the agent's nodes too
-        engine.makeDefault(engine.agents.last())
-        assertEquals(listOf("Off one", "Echo"), engine.agentsOn.map { it.name }, "the default first in Assign to")
+        // Settings' swipe: Unlink takes the agent's nodes too
         engine.hand("tana:text:a", echo, "Book the venue")
         engine.unlink(echo)
         assertEquals(mapOf("agent" to "relay:a1", "demo" to false), host.calls.last { "orbital.unlink" in it.first }.second)

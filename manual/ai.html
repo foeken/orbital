@@ -104,7 +104,7 @@
           <div class="row in1"><span class="dot"></span><span class="bar" style="--w:130px"></span></div>
         </div>
         <span class="cap press" style="--at:.4">⌘K</span>
-        <div class="win ai-hero-cmd"><span class="ai-glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2.5" y="4.5" width="11" height="8" rx="3"/><path d="M8 2.2v2.3"/><circle cx="6" cy="8.5" r=".7" fill="currentColor" stroke="none"/><circle cx="10" cy="8.5" r=".7" fill="currentColor" stroke="none"/></svg></span>Assign to Agent <kbd>⌘↩</kbd></div>
+        <div class="win ai-hero-cmd"><span class="ai-glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2.5" y="4.5" width="11" height="8" rx="3"/><path d="M8 2.2v2.3"/><circle cx="6" cy="8.5" r=".7" fill="currentColor" stroke="none"/><circle cx="10" cy="8.5" r=".7" fill="currentColor" stroke="none"/></svg></span>Assign to ChatGPT … <kbd>⌘↩</kbd></div>
       </div>
       <div class="ai-hero-steps"><span class="ai-s1"><b>1</b>The model reads for you</span><span class="ai-s2"><b>2</b>The agent works for you</span></div>
     </div>
@@ -128,9 +128,9 @@
       <tr><th>Feature</th><th>Needs</th></tr>
       <tr><td>The name <b>Discuss with …</b> suggests, <b>Auto-pick type</b>, <b>Process image</b>, <b>Auto-translate …</b>, <b>Translate into …</b></td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
       <tr><td>Icons for your types, picked for you</td><td>Sign in with ChatGPT, or an OpenAI API key you saved before</td></tr>
-      <tr><td><b>Assign to Agent</b> with Tana</td><td>Nothing: Tana is always there</td></tr>
-      <tr><td><b>Assign to Agent</b>, <b>Open in …</b> and <b>@</b> in a chat, with ChatGPT</td><td>The ChatGPT app on this Mac</td></tr>
-      <tr><td><b>Assign to Agent</b> with your personal agent</td><td>Orbital and Tana added to your agent (your OpenAI Dot, or any agent that speaks MCP) as custom MCP servers, and the agent linked once (<a href="#link-agent">below</a>)</td></tr>
+      <tr><td><b>Assign to Tana …</b></td><td>Nothing: Tana is always there</td></tr>
+      <tr><td><b>Assign to ChatGPT …</b>, <b>Open in …</b> and <b>@</b> in a chat</td><td>The ChatGPT app on this Mac</td></tr>
+      <tr><td><b>Assign to</b> your personal agent</td><td>Orbital and Tana added to your agent (your OpenAI Dot, or any agent that speaks MCP) as custom MCP servers, and the agent linked once (<a href="#link-agent">below</a>)</td></tr>
     </table>
     <div class="tip">The moment you sign in or save a key, Orbital gives every type that has no icon one that fits its name, and does the same for their fields. You see the new glyphs on bullets and chips. An icon you chose yourself, or <b>No icon</b>, is never touched.</div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>chatgpt</b> <i>→</i><kbd>↩</kbd></span></div>
@@ -227,19 +227,13 @@
   </section>
 
   <section class="topic">
-    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents set default agent tana codex claude coming soon dot install chatgpt">Choose your agents</h2>
+    <h2 id="agents" data-short="Choose agents" data-k="agents choose agents tana codex claude coming soon dot install chatgpt">Choose your agents</h2>
     <p>An agent does work: it drafts, researches, files things in Tana. Orbital knows two of its own, and your personal agent, like your OpenAI Dot, once you link it (<a href="#link-agent">below</a>). <b>Tana</b> is always there: a task for Tana is a new Tana chat with the node attached, answered by Tana's own AI. <b>ChatGPT</b> runs on this Mac, through the ChatGPT app, with its own sign-in: a task for ChatGPT is a message in your <a href="chats.html#assignments">Assignments chat</a> in the sidebar. <b>Claude</b> is listed as <b>Coming soon</b>.</p>
     <div class="split">
       <div>
         <p>Run <b>Choose agents …</b> to see them in one list. One that is not installed is greyed, with what to install. <kbd>↩</kbd> on an installed agent switches it on or off; every agent that is on brings its own rows to <kbd>⌘K</kbd> and to <b>@</b> in a chat. An agent you linked is in the same list under its own name, and its last row is <b>Connect your personal agent …</b>.</p>
       </div>
       <figure class="shot"><img data-m="ai-agents" alt="Choose agents: Tana always on, ChatGPT on, Claude coming soon, then Connect your personal agent"><figcaption>Which agents are on, and the way to link your own.</figcaption></figure>
-    </div>
-    <div class="split flip">
-      <div>
-        <p><b>Set default agent …</b> in <kbd>⌘K</kbd>, its hint the current one, lists the agents that are on: <kbd>↩</kbd> makes one the agent <b>Assign to Agent</b> starts on. Tana is the default until you choose another, and a Dot becomes it the moment you link it. Both choices follow you to your other Macs.</p>
-      </div>
-      <figure class="shot"><img data-m="ai-default" alt="Set default agent: Tana and ChatGPT, the agents that are on, Tana ticked as the default"><figcaption><b>Set default agent …</b>: <kbd>↩</kbd> makes one the default.</figcaption></figure>
     </div>
     <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>choose agents</b> <i>→</i><kbd>↩</kbd></span></div>
   </section>
@@ -251,7 +245,7 @@
       <div>
         <p>Run <b>Connect your personal agent …</b> (under Settings, and last in <b>Choose agents …</b>). It asks first which agent: <b>Your OpenAI Dot</b>, in ChatGPT, or <b>Another agent</b>. The next page has only that agent's steps, then the code.</p>
         <p><b>Your OpenAI Dot.</b> <b>Open ChatGPT plugins</b> opens chatgpt.com/plugins, where <b>Add</b> then <b>Create custom MCP server</b> takes a name and a URL. Add both servers the page names, <b>Orbital</b> and <b>Tana</b>: <kbd>↩</kbd> on either copies its URL. Orbital's is your workspace's own MCP server when an admin set one in Tana. When your workspace has its own Orbital plugin in ChatGPT, there is nothing to add by hand: the page goes straight to linking, and the instructions ask your Dot to add the plugin first.</p>
-        <p><b>Then ask your agent to link.</b> <b>Copy the instructions</b> copies a few lines with a code that works once, for fifteen minutes; paste them in your agent's chat. <b>Copy the code</b> copies only the code, for a setup that asks for it. The instructions ask your agent to link under its own name and to subscribe to Orbital's events. While the page says <b>Waiting for your agent to use the code…</b> with the time left, your agent does both, and the palette closes on a note naming it, like <b>Linked Echo · ChatGPT</b>. It is your default agent from then on, and has a chat of its own under <b>Agent chats</b>, which goes through the Orbital MCP server (<a href="chats.html#agent-chats">Chat with ChatGPT</a>).</p>
+        <p><b>Then ask your agent to link.</b> <b>Copy the instructions</b> copies a few lines with a code that works once, for fifteen minutes; paste them in your agent's chat. <b>Copy the code</b> copies only the code, for a setup that asks for it. The instructions ask your agent to link under its own name and to subscribe to Orbital's events. While the page says <b>Waiting for your agent to use the code…</b> with the time left, your agent does both, and the palette closes on a note naming it, like <b>Linked Echo · ChatGPT</b>. It is on from then on, with a row of its own, <b>Assign to Echo …</b>.</p>
         <p>You can close the page and paste the instructions later: the code keeps working until it runs out, and opening the page again goes straight back to that same code. <b>Cancel</b> stops it at once.</p>
       </div>
       <figure class="shot"><img data-m="ai-relay-link" alt="Connect your personal agent for your OpenAI Dot: Open ChatGPT plugins, the Orbital and Tana servers to add, Copy the instructions, Copy the code, and the page waiting for your agent to use the code"><figcaption>Your Dot: the two servers to add in ChatGPT, then the instructions with their code.</figcaption></figure>
@@ -267,7 +261,7 @@
     <h3>Your linked agent</h3>
     <div class="split">
       <div>
-        <p>Your agent is in <b>Choose agents …</b> under its own name, with whether it is on, the app it runs in and when it last checked in. <kbd>↩</kbd> on it opens its page: <b>Rename …</b>, <b>Switch off</b> (it stays linked, but leaves <b>Assign to Agent</b>) and <b>Unlink</b>, which also unassigns the nodes it had.</p>
+        <p>Your agent is in <b>Choose agents …</b> under its own name, with whether it is on, the app it runs in and when it last checked in. <kbd>↩</kbd> on it opens its page: <b>Rename …</b>, <b>Switch off</b> (it stays linked, but its <b>Assign to …</b> row goes) and <b>Unlink</b>, which also unassigns the nodes it had.</p>
         <p>Assign a node to it as to any agent. Orbital sends it one event: which node, what you asked, and how to handle it. Your agent reads the node in Tana with its own Tana access, does the work there, and keeps the node's last line saying how it is going (<a href="#states">the badge</a>).</p>
         <p>On your phone it works the same way (<a href="phone.html#settings">Chapter 16</a>): <b>Settings → Agents → Connect your personal agent</b> is this page, and your agent is at the top of <b>Assign to …</b> in a long press on a task or a note. An agent linked on the phone is linked on your Mac too, and the other way round.</p>
       </div>
@@ -278,30 +272,27 @@
     <h3 id="all-users">Orbital Settings for Tana Workspace</h3>
     <p><b>Open Orbital Settings for Tana Workspace …</b> holds what is the same for everyone in your Tana workspace, kept in the workspace itself. Everyone sees it and who set it last; only an admin changes it. <b>Set custom MCP server URL …</b> is where every handover goes, below; once set, it is the Orbital server everyone's Connect page names. <b>Set Orbital ChatGPT plugin URL …</b> is for an admin who installed an Orbital plugin in ChatGPT for everyone: paste its chatgpt.com link, and everyone's linking instructions ask their Dot to add it.</p>
     <h3 id="MCP server">A self-hosted Orbital MCP server</h3>
-    <p>Everything you hand to a linked agent goes through one Orbital MCP server, the same for everyone in your Tana workspace: orbital.md, Orbital's relay, run by us, unless your workspace hosts its own. To keep it all within your workspace, host your own (below). The <b>Connect your personal agent</b> page, the agent's own page, <b>Assign to Agent</b> and the agent's chat all name the server it goes through. An admin of the workspace changes it from Orbital Settings for Tana Workspace, or <b>Use a self-hosted Orbital MCP server …</b> there, and can host one: <b>Copy instructions to host your own for ChatGPT</b>, send them to ChatGPT, which deploys it as a ChatGPT Site and gives back its URL, and paste that URL into the page's field. Orbital checks that it answers, and from then on every Orbital in the workspace hands over through it. Agents are linked on one server, so after a change everyone links theirs again.  When the server is older than Orbital needs, the page says so, and an admin copies the update instructions for ChatGPT, which keep its address.</p>
+    <p>Everything you hand to a linked agent goes through one Orbital MCP server, the same for everyone in your Tana workspace: orbital.md, Orbital's relay, run by us, unless your workspace hosts its own. To keep it all within your workspace, host your own (below). The <b>Connect your personal agent</b> page, the agent's own page and its <b>Assign to …</b> page all name the server it goes through. An admin of the workspace changes it from Orbital Settings for Tana Workspace, or <b>Use a self-hosted Orbital MCP server …</b> there, and can host one: <b>Copy instructions to host your own for ChatGPT</b>, send them to ChatGPT, which deploys it as a ChatGPT Site and gives back its URL, and paste that URL into the page's field. Orbital checks that it answers, and from then on every Orbital in the workspace hands over through it. Agents are linked on one server, so after a change everyone links theirs again.  When the server is older than Orbital needs, the page says so, and an admin copies the update instructions for ChatGPT, which keep its address.</p>
   </section>
 
   <section class="topic">
-    <h2 id="agent" data-short="Assign to Agent" data-k="agent assign unassign prompt robot tana codex dot chatgpt">Hand a node to an agent</h2>
-    <p><b>Assign to Agent</b> gives the node you are on to a new task, with the node as its context. You only say what to do with it. Its hint says which agent it goes to. On a node an agent already has, it says it replaces what that agent was asked: assigning again sends your new request in place of the old one.</p>
-    <h3>Assign to Agent</h3>
-    <p>Run <b>Assign to Agent</b>. The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. With more than one agent on, they are listed under the prompt, the default ticked; <kbd>⇥</kbd> moves between the prompt and that list. The agent's own default model does the work.</p>
-    <p>Each agent that is on also has a row of its own, like <b>Assign to ChatGPT …</b> or <b>Assign to Echo …</b>, its hint <b>Default</b> on the default: it opens the same prompt with that agent already chosen, so no list under it.</p>
+    <h2 id="agent" data-short="Assign to an agent" data-k="agent assign unassign prompt robot tana codex dot chatgpt">Hand a node to an agent</h2>
+    <p>Each agent that is on has a row of its own in <kbd>⌘K</kbd>, like <b>Assign to ChatGPT …</b>, <b>Assign to Tana …</b> or <b>Assign to Echo …</b>: you pick the one you want. It gives the node you are on to that agent, with the node as its context. You only say what to do with it. On a node an agent already has, that agent's row says it replaces what it was asked: assigning again sends your new request in place of the old one.</p>
+    <h3>Assign to ChatGPT …</h3>
+    <p>Run <b>Assign to ChatGPT …</b> (or another agent's row). The palette turns into a few lines to write in: <kbd>↩</kbd> adds a line, <kbd>⌘↩</kbd> assigns, <kbd>esc</kbd> cancels and writes nothing. The agent's own default model does the work.</p>
     <figure class="anno">
-      <img data-m="ai-prompt" alt="The Assign to Agent page: a prompt, the send row, and the agents to choose from">
+      <img data-m="ai-prompt" alt="The Assign page: a prompt and the row that sends it to ChatGPT">
       <span class="pin" style="--x:3%;--y:9%">1</span>
-      <span class="pin" style="--x:3%;--y:58%">2</span>
-      <span class="pin" style="--x:3%;--y:80%">3</span>
+      <span class="pin" style="--x:3%;--y:75%">2</span>
     </figure>
     <ol class="legend">
       <li><b>The prompt</b> What the agent should do with this node.</li>
-      <li><b>Assign to Tana</b> Sends it, the same as <kbd>⌘↩</kbd>, and names the agent that will take it.</li>
-      <li><b>Agent</b> The agents that are on, the default ticked. Choose another for this one task.</li>
+      <li><b>Assign to ChatGPT</b> Sends it, the same as <kbd>⌘↩</kbd>, and names the agent that will take it.</li>
     </ol>
     <figure class="clip wide"><video data-m="ai-assign"></video><figcaption>Assigned: the badge appears beside the title, grey while the task starts, then blue as it works.</figcaption></figure>
-    <p>The node now carries the agent badge. Under <b>Group by Responsibility</b> it belongs in the <b>Agent</b> section, but it stays where it is until you press <b>Clean up</b>, so nothing jumps under your pointer. Dropping a task into the Agent section opens the same prompt.</p>
+    <p>The node now carries the agent badge. Under <b>Group by Responsibility</b> it belongs in the <b>Agent</b> section, but it stays where it is until you press <b>Clean up</b>, so nothing jumps under your pointer. Dropping a task into the Agent section opens the same prompt, with the agents that are on listed under it to pick from (<kbd>⇥</kbd> moves between the prompt and that list).</p>
     <p><b>Unassign from Agent</b> takes the node back at once, and removes what the agent left at the end of the node: the agent's context and its status line. The task itself stays where it ran: a Tana chat, the Assignments chat, the node itself for your Dot.</p>
-    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>assign to agent</b> <i>→</i><kbd>↩</kbd></span>, write a line, then <kbd>⌘↩</kbd>.</div>
+    <div class="try"><span class="seq"><kbd>⌘K</kbd><i>→</i> type <b>assign to chatgpt</b> <i>→</i><kbd>↩</kbd></span>, write a line, then <kbd>⌘↩</kbd>.</div>
   </section>
 
   <section class="topic">
@@ -374,10 +365,10 @@
       <tr><td>Open Cmd+K, where every row in this chapter lives</td><td><kbd>⌘K</kbd></td></tr>
       <tr><td>Take the model's suggestion on Discuss with …</td><td><kbd>↓</kbd> <kbd>↩</kbd></td></tr>
       <tr><td>Quick Add Task: ↩ with no title processes the clipboard image</td><td><kbd>⇧⌘Space</kbd></td></tr>
-      <tr><td>Assign to Agent: send the prompt</td><td><kbd>⌘↩</kbd></td></tr>
-      <tr><td>Assign to Agent: a new line in the prompt</td><td><kbd>↩</kbd></td></tr>
-      <tr><td>Assign to Agent: to the list of agents, and back</td><td><kbd>⇥</kbd></td></tr>
-      <tr><td>Assign to Agent: cancel, writing nothing</td><td><kbd>esc</kbd></td></tr>
+      <tr><td>Assign: send the prompt</td><td><kbd>⌘↩</kbd></td></tr>
+      <tr><td>Assign: a new line in the prompt</td><td><kbd>↩</kbd></td></tr>
+      <tr><td>Assign: to the list of agents after a drop on Agent, and back</td><td><kbd>⇥</kbd></td></tr>
+      <tr><td>Assign: cancel, writing nothing</td><td><kbd>esc</kbd></td></tr>
       <tr><td>In a chat: select the newest message from the message box</td><td><kbd>↑</kbd></td></tr>
       <tr><td>In a chat: delete the selected message, or a ChatGPT question and its answer</td><td><kbd>⇧⌘⌫</kbd></td></tr>
     </table>

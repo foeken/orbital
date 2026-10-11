@@ -187,12 +187,9 @@ const SECTIONS = {
     return out;
   },
   agents: () => {
-    const list = st.agents || [], on = list.filter((a) => a.enabled && a.installed), pick = (on.find((a) => a.isDefault) || on[0])?.id;
-    const choose = popup('defaultAgent', 'Default agent', pick, on.map((a) => [a.id, a.label]), (v) => load('agents', () => host.setDefaultAgent(v)));
-    choose.disabled = on.length < 2;
+    const list = st.agents || [];
     return [
       ...group('Agents', 'who a node can be handed to', [...list.flatMap(agentRows), row('robot', 'Claude', null, 'Coming soon', true), ...(list.some((a) => a.linked) ? [relayRow(st.org)] : [])]), // Claude: to come back properly; renderer/agent.js says the same
-      ...group(null, null, list.length ? [row('robot', 'Default agent', choose, 'Assign to Agent starts with it')] : []),
     ];
   },
   lists: () => [

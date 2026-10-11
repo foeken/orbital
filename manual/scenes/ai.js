@@ -1,6 +1,6 @@
 'use strict';
 // Chapter 11, AI & agents (manual/ai.html): the model (ChatGPT sign-in, API key, Discuss with, Auto-pick type, Process
-// image, translation) and the agents (Choose agents, Assign to Agent, the badge's states, Link / Go to / Open in an agent,
+// image, translation) and the agents (Choose agents, Assign to …, the badge's states, Link / Go to / Open in an agent,
 // @Codex in a chat). tana:text:mockai0 is a note with a Tana-shaped id: the AI and agent rows need a real node.
 const pal = { sel: '#palette .card', pad: 14 };
 const NOTE = 'tana:text:mockai0';
@@ -34,11 +34,10 @@ module.exports = [
   { name: 'ai-replace', setup: [translateOn, open('mocknl0'), { wait: 2600 }], steps: [{ key: '⌘K' }, { type: 'translation' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-translate-into', video: true, size: NARROW, setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ click: '.node .text', text: 'Open vraag' }, { key: '⌘K' }, { type: 'translate into', delay: 60 }, { wait: 300 }, { key: '↩' }, { wait: 2400 }, { move: [700, 400] }, { wait: 300 }], clip: top },
   // ---- the agent ----
-  { name: 'ai-assign', video: true, size: NARROW, setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ key: '⌘K' }, { type: 'assign to agent', delay: 55 }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'Draft a one-page brief for each pilot from the notes', delay: 35 }, { wait: 500 }, { key: '⌘↩' }, { wait: 1500 }, agent([[NOTE, 'working']]), { wait: 2400 }], clip: tall },
-  { name: 'ai-prompt', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'assign to agent' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'Draft a one-page brief for each pilot from the notes' }, { wait: 400 }, blank], clip: pal },
+  { name: 'ai-assign', video: true, size: NARROW, setup: [translateOff, open(NOTE), { wait: 600 }], steps: [{ key: '⌘K' }, { type: 'assign to chatgpt', delay: 55 }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'Draft a one-page brief for each pilot from the notes', delay: 35 }, { wait: 500 }, { key: '⌘↩' }, { wait: 1500 }, agent([[NOTE, 'working']]), { wait: 2400 }], clip: tall },
+  { name: 'ai-prompt', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'assign to chatgpt' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'Draft a one-page brief for each pilot from the notes' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-badges', size: '900x560', setup: [translateOff, { js: "setView('library')" }, { wait: 800 }, agent([['mockdoc1', 'pending'], ['mockdoc2', 'working'], ['mockdoc3', 'waiting'], ['mockdoc4', 'done'], ['mockdoc5', 'broken'], ['mockdoc12', 'done']]), { wait: 600 }], clip: [0, 215, 900, 225] },
   { name: 'ai-agents', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'choose agents' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, blank], clip: pal },
-  { name: 'ai-default', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'set default agent' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-codex-rows', setup: [translateOff, open(NOTE), { wait: 400 }, agent([[NOTE, 'working']])], steps: [{ key: '⌘K' }, { type: 'chatgpt' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-chat-codex', video: true, size: '1000x700', setup: [translateOff, open('tana:chat:mockchat0'), { wait: 900 }], steps: [{ click: '#composerText' }, { type: '@ChatGPT', delay: 80 }, { wait: 500 }, { key: '↓' }, { wait: 300 }, { key: '↩' }, { type: ' what did we decide about the pilots?', delay: 35 }, { wait: 300 }, { key: '↩' }, { wait: 3400 }], hold: 1800, clip: { page: '' } },
   // ---- Connect your personal agent (main/agents/linked.js): which agent, then your Dot's page (the plugin) and another agent's (two servers), each with the code; then your Dot among your agents (renderer/mock.js links it on the third ask) ----

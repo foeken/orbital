@@ -492,7 +492,7 @@ const DEMO_SAFE = new Set(['agentChats', 'agentChatInfo', 'openAgentChat', 'onAg
   'pinState', 'prefs', 'prefsNow', 'presenceClose', 'presenceOpen', 'presenceSet', 'presenceView', 'previewMove',
   'refresh', 'related', 'relatedWatch', 'mcpLink', 'mcpLinkCancel', 'mcpLinkStatus', 'mcpRefresh', 'mcpRename', 'mcpReset', 'mcpWhere', 'mcpOld', 'mcpCheck',
   'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
-  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'setFeatureFlag', 'settingsSize',
+  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setFeatureFlag', 'settingsSize',
   'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setOpenAIRegion', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
   'status', 'suggestDiscussWith', 'suggestSensitive', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
   'translate', 'typeIcons', 'typeList', 'updateInfo', 'viewFilter', 'viewList', 'weekNode', 'windowLayout',
@@ -626,7 +626,7 @@ assert.doesNotMatch(source, /\.style\.cssText \+?= (?!'';)/, 'the renderer sets 
 assert.doesNotMatch(source, /\.style\.(?!display\b)[a-zA-Z]+ = '[^']+';/, 'the renderer sets no fixed inline style: give the element a class in styles.css');
 assert.match(styleSheet, /\.tmeta > \.ticon:not\(:first-child\) \{ margin-left: 6px; \}/, 'a row\u2019s facts stand 6px apart, the first one against the .meta span\u2019s own 8px');
 // The agent prompt page is an editor, not a list to search: it never says "No results" under its one row, and the
-// query that found "Assign to Agent" is cleared on the way in, or its letters would show as bold in that row.
+// query that found "Assign to …" is cleared on the way in, or its letters would show as bold in that row.
 // "Discuss with …" is the same shape — what is typed *is* the row — so it is skipped too, or every name typed
 // would be answered with "No results" under the row offering to write it. The field pages (renderer/fields.js) say
 // what they found, or why they have nothing, in rows of their own.

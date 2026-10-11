@@ -15,15 +15,12 @@ struct AgentsSection: View {
     var body: some View {
         Section {
             ForEach(engine.agents) { a in
-                LabeledContent { Text([a.isDefault ? "Default" : nil, a.on ? nil : "Off"].compactMap { $0 }.joined(separator: " · ")) } label: {
+                LabeledContent { Text(a.on ? "" : "Off") } label: {
                     SettingsView.Row(glyph: "robot", title: a.name)
                 }
                 // their own colours: the Form's tint (the rows' text colour) would draw them white on white
                 .swipeActions(edge: .trailing) {
                     Button("Unlink", role: .destructive) { Task { await engine.unlink(a) } }.tint(.red)
-                }
-                .swipeActions(edge: .leading) {
-                    if !a.isDefault { Button("Make Default") { Task { await engine.makeDefault(a) } }.tint(.blue) }
                 }
             }
             NavigationLink { ConnectAgent(engine: engine) } label: { SettingsView.Row(glyph: "mcp", title: "Connect your personal agent") }

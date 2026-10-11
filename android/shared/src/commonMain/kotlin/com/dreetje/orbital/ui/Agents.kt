@@ -99,17 +99,16 @@ private fun AgentRow(engine: Engine, a: Agent) {
     val state = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
     SwipeToDismissBox(state, backgroundContent = {
-        val toDefault = state.dismissDirection == SwipeToDismissBoxValue.StartToEnd
-        Row(Modifier.fillMaxSize().background(if (toDefault) c.accent else c.danger).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (toDefault) Arrangement.Start else Arrangement.End) { Text(if (toDefault) "Make Default" else "Unlink", color = Color.White) }
-    }, enableDismissFromStartToEnd = !a.isDefault, onDismiss = { way ->
-        engine.scope.launch { if (way == SwipeToDismissBoxValue.StartToEnd) engine.makeDefault(a) else engine.unlink(a) }
+        Row(Modifier.fillMaxSize().background(c.danger).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End) { Text("Unlink", color = Color.White) }
+    }, enableDismissFromStartToEnd = false, onDismiss = {
+        engine.scope.launch { engine.unlink(a) }
         scope.launch { state.reset() }
     }) {
         GroupRow(Modifier.background(c.card)) {
             Glyph("robot", Modifier.size(22.dp), c.text)
             Text(a.name, Modifier.weight(1f), color = c.text)
-            Text(listOf(if (a.isDefault) "Default" else "", if (a.on) "" else "Off").filter { it.isNotEmpty() }.joinToString(" · "), color = c.secondary, maxLines = 1)
+            Text(if (a.on) "" else "Off", color = c.secondary, maxLines = 1)
         }
     }
 }

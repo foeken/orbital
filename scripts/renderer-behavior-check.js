@@ -204,7 +204,7 @@ const withShims = (src) => {
   // fallback, which is pending — the state an assigned node has until its task is known.
   if (/\bagentStateOf\b|\bAGENT_BADGE\b/.test(src) && !/const agentStateOf =/.test(src)) src = "globalThis.agentStates ??= new Map(); globalThis.agentTasks ??= new Map(); globalThis.loadAgentStates ??= () => {}; globalThis.openAgentPrompt ??= () => {}; globalThis.nodeRank ??= () => 0; globalThis.AGENT_BADGE ??= { pending: { label: 'Agent pending', title: 'Assignment requested; no task yet' } }; globalThis.agentStateOf ??= () => 'pending';\n" + src;
   // the agents (renderer/state.js): Tana alone, the list a fresh install starts with
-  if (/\b(agentList|agentsOn|agentNamed|agentPick)\b/.test(src) && !/let agentList\b/.test(src)) src = "globalThis.agentList ??= [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }]; globalThis.agentPick ??= 'tana'; globalThis.agentsOn ??= () => globalThis.agentList.filter((a) => a.enabled && a.installed); globalThis.agentNamed ??= (id) => globalThis.agentList.find((a) => a.id === id) || null;\n" + src;
+  if (/\b(agentList|agentsOn|agentNamed|agentPick)\b/.test(src) && !/let agentList\b/.test(src)) src = "globalThis.agentList ??= [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }]; globalThis.agentPick ??= 'tana'; globalThis.agentsOn ??= () => globalThis.agentList.filter((a) => a.enabled && a.installed); globalThis.agentNamed ??= (id) => globalThis.agentList.find((a) => a.id === id) || null;\n" + src;
   if (/\bloadAgentList\(/.test(src) && !/function loadAgentList\(/.test(src)) src = 'globalThis.loadAgentList ??= () => Promise.resolve();\n' + src;
   // whether the latest release has the Android app (renderer/overlays.js): none yet, as for a page that has not heard back
   if (/\bandroidDownload\b/.test(src) && !/let androidDownload\b/.test(src)) src = 'globalThis.androidDownload ??= null;\n' + src;
@@ -4779,7 +4779,7 @@ function runCurrentNodeStatusCheck() {
   assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE],
       items: [['k', row({ id: 'n2', kind: 'block', text: 'just a note' }, DATE.id)]], focusedKey: 'k' })),
     { on: DATE.id, rows: [] }, 'while a plain note is nothing on its own, so it stays the page it belongs to, which has no status');
-  // My Tasks is a saved search: a caret in a task's notes there is the task's, or Assign to Agent hands over the search
+  // My Tasks is a saved search: a caret in a task's notes there is the task's, or Assign to … hands over the search
   const SEARCH = { id: 'tana:search:mytasks', kind: 'document', icon: 'search', text: 'My Tasks' };
   assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK],
       items: [['k', row({ id: 'n4', kind: 'block', text: 'a note under the task' }, TASK.id)]], focusedKey: 'k' })).on,
@@ -4941,7 +4941,7 @@ function runNotifyBellCheck() {
 }
 
 
-// Handing a node to the local agent from Cmd+K. "Assign to Agent" does not assign: it opens a prompt page inside
+// Handing a node to an agent from Cmd+K. "Assign to <agent> …" does not assign: it opens a prompt page inside
 // the palette, and only ⌘↩ on something non-blank writes anything. The mark is kept locally, the badge is put on the
 // row itself — a deferred render would leave the row as it was, the way the bell did — and taking it back drops the
 // prompt with the assignment.
@@ -4965,8 +4965,8 @@ function runCodexAssignCheck() {
     const served = new Map([[DOC, [{ id: 'b1', text: 'Something already written', children: [] }]], [OTHER, [{ id: 'b9', text: 'Another page', children: [] }]]]);
     const agentStates = new Map();
     const agentTasks = new Map([[DOC, { agent: 'codex', taskId: '01a0b379-afbc-74c3-a191-c419e6543bcc' }]]);
-    // Tana and Codex on, Tana the default: the page offers both, and the row that sends names the one it goes to
-    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, opens: true }];
+    // Tana and Codex on: the page offers both, and the row that sends names the one it goes to
+    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, opens: true }];
     let agentPick = 'tana';
     const agentsOn = () => agentList.filter((a) => a.enabled && a.installed), agentNamed = (id) => agentList.find((a) => a.id === id) || null;
     const openedTasks = [], wentTo = [];
@@ -5057,10 +5057,10 @@ function runCodexAssignCheck() {
       children: (kids.get(DOC) || []).map((n) => n.text + (n.children.length ? '(' + n.children.map((c) => c.text).join(',') + ')' : '')),
       other: (kids.get(OTHER) || []).map((n) => n.text) });
     ({
-      label: () => paletteRows('').find((r) => r.rank === 'codex').label,
       byName: () => paletteRows('').filter((r) => r.rank === 'codexTo').map((r) => [r.label, r.hint]),
       pressTo: async (label) => { await paletteRows('').find((r) => r.label === label).run(); await tick(); return { mode: palMode, agent: agentPick, sent: sent.length, rows: agentPromptRows().map((r) => r.label) }; },
-      pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codex').run(); await tick(); return state(); },
+      // opened without an agent named, as a drop on the Agent group does (renderer/drag.js): the agents listed under it
+      pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; openAgentPrompt(palDoc); await tick(); return state(); },
       unassignRow: () => (paletteRows('').find((r) => r.rank === 'codexUnassign') || {}).label || null,
       pressUnassign: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codexUnassign').run(); await tick(); return state(); },
       dotGoRow: () => { agentList.push({ id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true }); agentIds.add(DOC); agentStates.set(DOC, 'working'); agentTasks.set(DOC, { agent: 'relay:echo', taskId: 't-echo' });
@@ -5097,8 +5097,7 @@ function runCodexAssignCheck() {
     });
   `);
   return (async () => {
-    assert.equal(api.label(), 'Assign to Agent', 'an unassigned node offers to hand itself to the agent');
-    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'Default'], ['Assign to Codex …', '']], 'and to each agent that is on by its name, the default said');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', ''], ['Assign to Codex …', '']], 'an unassigned node offers each agent that is on by its name, and nothing else: you pick the one you want');
     assert.deepEqual(plain(await api.pressTo('Assign to Codex …')), { mode: 'agentPrompt', agent: 'codex', sent: 0, rows: ['What should Codex do?'] }, 'which opens the same prompt page with that agent picked, assigns nothing yet, and offers no other agent: the row chose');
     const opened = plain(await api.pressRow());
     assert.equal(opened.mode, 'agentPrompt', 'choosing it advances to the prompt page inside the palette');
@@ -5107,7 +5106,7 @@ function runCodexAssignCheck() {
     assert.equal(opened.editor, true, 'the multiline editor takes the place of the palette field');
     assert.equal(opened.field, false, 'which is hidden while it does');
     const blank = plain(api.promptRow());
-    assert.match(blank.group, /Assign to Agent/, 'the page names itself');
+    assert.match(blank.group, /^Assign ·/, 'the page names itself');
     assert.match(blank.group, /⌘↩ assigns/, 'and says how to send, where the palette puts the line that wraps');
     assert.equal(blank.disabled, true, 'an empty prompt cannot be sent');
     api.type('   \n  ');
@@ -5118,7 +5117,7 @@ function runCodexAssignCheck() {
     assert.equal(plain(api.promptRow()).disabled, false, 'with something to send, the row is live');
     // The agent is named on the row that sends: ⌘↩ from the editor never goes near the list the tick is in.
     const where = plain(api.runsOn());
-    assert.equal(where.here, 'Assign to Tana', 'the row that sends names the default agent, which is where the page starts');
+    assert.equal(where.here, 'Assign to Tana', 'the row that sends names the agent, the first one when none was named');
     assert.equal(where.there, 'Assign to Codex', 'and follows the agent chosen, so the destination is read where the press happens');
     const newline = plain(await api.submitKey('Enter', false));
     assert.equal(newline.handled, false, 'a plain ↩ is left to the editor, so it adds a line');
@@ -5151,7 +5150,7 @@ function runCodexAssignCheck() {
     assert.equal(sent.editor, false, 'the editor is put away');
     assert.equal(sent.prompt, '', 'and emptied, so the next node is asked about from scratch');
     // Escape on the prompt page: back to the commands, with nothing written
-    assert.equal(api.label(), 'Assign to Agent', 'an assigned node can be handed over again: the request in its block is replaced');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', ''], ['Assign to Codex …', 'Replaces what it was asked']], 'an assigned node can be handed over again: the request in its block is replaced, said on its holder');
     assert.equal(api.unassignRow(), 'Unassign from Agent', 'and a row of its own says how to take it back');
     const back = plain(await api.pressUnassign());
     // the third argument is the prompt, absent here and null by the time it comes back through JSON

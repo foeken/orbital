@@ -450,13 +450,13 @@ const SETTINGS_API = String.raw`(() => {
   window.__calls = []; window.__slow = [];
   const call = (name, answer) => (...a) => { __calls.push([name, ...a]); return Promise.resolve(typeof answer === 'function' ? answer(...a) : answer); };
   const AI = { models: ['gpt-6-luna', 'gpt-5.6-terra'], quickModel: 'gpt-6-luna', quickEffort: 'low', quickEfforts: ['low', 'high'], model: 'gpt-5.6-terra', effort: 'low', efforts: ['low', 'high'] };
-  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, isDefault: true },
+  let hidden = ['Secret project'], agents = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true },
     { id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true }];
   start({ prefs: { theme: 'light' }, translate: () => {}, onSettings: (fn) => { window.__settings = fn; },
     aiOptions: () => new Promise((resolve) => __slow.push(() => resolve(AI))), setAiOption: call('setAiOption', (k, v) => ({ ...AI, [k]: v })),
     chatgptStatus: async () => ({ available: true, signedIn: true, email: 'robin@private.example' }), chatgptLogout: call('chatgptLogout', { available: true, signedIn: false }),
     agentList: async () => agents, enableAgent: call('enableAgent', (id, on) => (agents = agents.map((a) => (a.id === id ? { ...a, enabled: on } : a)))),
-    setDefaultAgent: call('setDefaultAgent', () => agents), filters: async () => hidden,
+    filters: async () => hidden,
     mcpUnlink: call('mcpUnlink', (id) => (agents = agents.filter((a) => a.id !== id))),
     addFilter: call('addFilter', (p) => (hidden = [...hidden, p])), removeFilter: call('removeFilter', (p) => (hidden = hidden.filter((h) => h !== p))),
     mcpHidden: async () => true, setMcpHidden: call('setMcpHidden', (on) => on), setPref: call('setPref'), settingsSize: (h) => { __calls.push(['settingsSize', h]); } });
@@ -1385,10 +1385,6 @@ flow('golden path: connect your Dot with a code, and it joins your agents', asyn
   await p.waitFor('palMode === "linkAgent" && palRows.length === 9 && palRows[0].label === "Orbital"', 'the page left, back: straight to its page, the agent last chosen');
   assert.deepEqual(await p.js('[window.__codes, connectCtx.code]'), [0, '7KQX-M2PD'], 'reopened while its code waits: that code again, no new one');
   await p.waitFor('document.getElementById("palette").hidden && document.getElementById("toast").textContent === "Linked Dot · ChatGPT"', 'the palette to close on the agent that linked', 10000);
-  await command(p, 'set default agent', 'Set default agent \u2026');
-  await p.waitFor('palMode === "defaultAgent" && palRows.some((r) => r.label === "Dot")', 'Set default agent');
-  assert.deepEqual(await p.js('palRows.filter((r) => r.hint === "✓").map((r) => r.label)'), ['Dot'], 'linking your Dot made it the default');
-  await closePalette(p);
   await command(p, 'choose agents', 'Choose agents \u2026');
   await p.waitFor('palMode === "agents" && palRows.some((r) => r.label === "Dot")', 'your Dot among your agents');
   assert.equal(await p.js('palRows.find((r) => r.label === "Dot").icon'), 'robot', 'drawn with the same glyph as the other agents');

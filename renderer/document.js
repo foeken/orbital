@@ -42,7 +42,7 @@ function currentDoc() {
   // current node ahead of the page holding it. Child rows carry their document's id, so without this the caret in a
   // task under a date resolves to the date, and Cmd+K offers nothing to set a status on.
   // A saved search's or a type's page is a list of other documents: a caret in a task's own lines there is that
-  // task's, never the page's (Assign to Agent handed a Dot the My Tasks search itself).
+  // task's, never the page's (Assign to … handed a Dot the My Tasks search itself).
   const own = item ? referenceTarget(item.node) || (item.node.kind === 'document' ? item.node : null) : null;
   const docId = own ? own.id : zoom && !(item && (onSearchPage() || onTypePage())) ? zoom.docId : item ? item.docId : null;
   const d = (docId && (allDocs().find((x) => x.id === docId) || extra.get(docId))) || own; // the listed copy is fresher; a referenced one may be in neither

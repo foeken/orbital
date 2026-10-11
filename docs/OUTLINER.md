@@ -462,7 +462,7 @@ owned by the page and the block (main/images.js), outside the renderer's write q
   by Responsibility) drafts a task under it in the same section (drag.js `groupDraft`), and creates it with what puts a
   task there: the same writes as a task dropped on that heading (`groupDropWrites`, #169) read off a new task, which
   starts open and yours. Unassigned takes you off, My inbox / Waiting / My later / My completed set the state, Pinned pins it to
-  today. Agent opens the Assign to Agent prompt once it exists, and Tracking takes you off, watches it and opens the
+  today. Agent opens the Assign prompt once it exists, the agents that are on listed under it to pick from, and Tracking takes you off, watches it and opens the
   assignee picker for who you are waiting on. Assigned by others drafts nothing: only somebody else puts a task there.
 - **`api.createDocument(title, { kind, typeUri?, start?, end? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
   assigned to you, with a workflow type when `typeUri` names one), a `meeting` (a `tana:event:` laid out like a
@@ -614,7 +614,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   a meeting's Change time / location, Edit meeting details, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Auto-pick type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
-  sensitive); the agents (Assign to Agent, Go to <agent> task, one of each for every agent that is on); Edit visibility, Add participants … (Edit
+  sensitive); the agents (Assign to <agent> …, Go to <agent> task, one of each for every agent that is on); Edit visibility, Add participants … (Edit
   visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
@@ -906,23 +906,21 @@ wrong twenty.
   Codex's app-server) and every agent linked through orbital.md/mcp, your Dot among them (below); **Claude** is listed
   grey as Coming soon until it comes back properly. Codex is
   offered only once this Mac has it. **Choose agents …** (Settings) lists them, greyed with what to install
-  when missing: ↩ switches one on or off; **Set default agent …** picks the **default agent** on a page of its own. Both
-  follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
+  when missing: ↩ switches one on or off, which follows you
+  (`agents`); unset is Tana and Codex on.
   **Connect your personal agent …** (Settings, and under the linked agents in Choose agents) links your own agent (your
   Dot, or any agent that speaks MCP) through the MCP server orbital.md/mcp: both plugins, each server's name with its URL
   (↩ copies it), and How to add them …, a page of the steps (Open ChatGPT plugins and one paragraph for your Dot, one for
-  any other agent, which needs MCP events), then the instructions carrying a one-time code that links it by its own name (Dot if it has none), makes it the default
-  agent, and subscribes it to the task.assigned
+  any other agent, which needs MCP events), then the instructions carrying a one-time code that links it by its own name (Dot if it has none), switches it on, and subscribes it to the task.assigned
   event (a node handed to it is that event: the node's id, the request and how to handle it, nothing of the request
   written into the node, which the Dot reads as content; its badge follows the node's last line, "Agent status: Assigned |
   Working | Completed | Failed": Orbital writes Assigned, grey until the Dot changes it to Working as it starts); each linked agent is one more agent,
-  listed with the other agents in Choose agents, with a page of its own (Rename …, Switch off, Unlink); **Set default agent …** picks the default on a page of its own, and **Reset agent link key** makes a new key for your Orbital at orbital.md (docs/MCP-SERVER.md).
-  **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
-  default ticked; beside it **Assign to <agent> …** for each agent that is on, Assign to ChatGPT …, Assign to Echo …, opens
-  the same page with that agent picked) and hands the node over; the agent's own default model does the work. The node then carries the agent
+  listed with the other agents in Choose agents, with a page of its own (Rename …, Switch off, Unlink); **Reset agent link key** makes a new key for your Orbital at orbital.md (docs/MCP-SERVER.md).
+  **Assign to <agent> …**, one row for each agent that is on (Assign to ChatGPT …, Assign to Echo …; there is no
+  default, you pick the one you want), asks what that agent should do on a prompt page and hands the node over; the agent's own default model does the work. The node then carries the agent
   badge, which says what the task is doing, read every 30 s while anything is assigned; a task of a local agent, which
   lives only on the Mac that ran it, names that Mac in its link and reads **Agent on another Mac** (grey, not a button)
-  anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). Assign to Agent stays offered on a node an agent already has:
+  anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). Assign to <agent> … stays offered on a node an agent already has:
   handing it over again replaces the request in its Agent context block. Codex is handed the request typed
   here as the work, with the node's uri to read as its context (main/agent.js `agentPrompt`): what it reads in Tana,
   the Agent context block included, is material anyone the node is shared with can edit, never instructions. **Unassign from Agent** takes it back at once,
@@ -1101,7 +1099,7 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   |---|---|---|
   | Unassigned | Off the agent, every day pin removed, no assignees | a task you did not make |
   | Tracking | Off the agent, every day pin removed, watched | unless you made it and it is someone else's |
-  | Agent | the Assign to Agent prompt; nothing until it is sent | — |
+  | Agent | the Assign prompt, the agent picked there; nothing until it is sent | — |
   | My inbox, Mine, Waiting, My completed, My later | Off the agent, every day pin removed, you as the only assignee, the status; a watch on a task you were not assigned is forgotten | a task you did not make |
   | Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens, one in the Inbox or Waiting is In Progress | — |
   | Assigned by others | — | always: it is about who made it |
@@ -1292,7 +1290,7 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     Out), the OpenAI API key only while one is stored (Remove), both **On this Mac**; the Quick and the Regular AI, a model
     and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
   - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
-    another Mac switched it on) and the default agent.
+    another Mac switched it on), and Unlink beside a linked one.
   - **Hidden** (eye-slash): the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
     it) and Show MCP chats.
   Every control makes the call its Cmd+K row makes, so a choice made there and one made here are the same write. Main
