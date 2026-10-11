@@ -1117,7 +1117,8 @@ A row is picked up by its marker and dropped where a line says it will land (ren
 
 - **Delete** is Tana's soft delete and restore. Main validates the uri, `access.canDelete` (a supported kind, write
   access, and the event organizer rule) and the server's `documentActionResponse` before hiding the document. Delete is
-  offered for writable documents (or writable blocks, when only blocks are selected); ⇧⌘⌫ removes blocks (§6).
+  offered for writable documents (or writable blocks, when only blocks are selected); ⇧⌘⌫ removes blocks (§6), and ⌫ or
+  ⇧⌘⌫ on a selection holding a task or other document deletes it as this row does.
 - **Recently deleted** (`recentlyDeleted`, Navigate) lists what this app has seen deleted, newest first, with how long
   ago; typing narrows by title, and Enter restores (`doc:restore`, the same call undo makes) and opens it. A soft
   delete keeps the whole document but the graph stops answering for it, so the ids are the one thing kept locally:

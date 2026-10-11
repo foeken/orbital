@@ -540,6 +540,7 @@ async function runSelectionChecks() {
       const flushAll = () => {}, focused = () => null, loadRoots = async () => {}, kids = new Map([['doc', nodes]]), caretNear = () => {};
       const open = new Map(), keyFor = (docId, node) => docId + '/' + node.id;
       const hasKids = (item) => !!(childrenOf(item) || []).length;
+      const removeSelection = async (keys) => { calls.push(['removeSelection', [...keys]]); };
       ${functionSource('closeIfEmpty')}
       let collapseMidway = false;
       const shift = (id, by) => { const node = nodes.find((item) => item.id === id); node.depth = (node.depth || 0) + by; };
@@ -569,6 +570,7 @@ async function runSelectionChecks() {
       ${selection}
       ${rendererHistory}
       ({ set: (value) => { const i = nodes.findIndex((node) => node.id === value.anchor), j = nodes.findIndex((node) => node.id === value.focus); sel = { keys: new Set(value.keys || nodes.slice(Math.min(i, j), Math.max(i, j) + 1).map((node) => node.id)), anchor: value.anchor, focus: value.focus }; }, keys: () => selKeys(), moveSel, removeSel, selKey, toggleSel, extendSel,
+        asDocument: (id) => { items.get(id).node.kind = 'document'; },
         undo: () => history('undo'), redo: () => history('redo'),
         depths: () => nodes.map((node) => node.depth || 0), opened: () => [...open.keys()],
         noBatch: () => { delete tana.indentMany; delete tana.outdentMany; },
@@ -690,6 +692,15 @@ async function runSelectionChecks() {
     calls: [], rendered: 0,
   }, 'read-only selection is not mutated');
   assert.equal(makeHarness().selKey(event()), false, 'Backspace without a node selection remains ordinary text editing');
+  for (const [metaKey, shiftKey, label] of [[false, false, 'plain Backspace'], [true, true, 'Cmd+Shift+Backspace']]) {
+    const task = makeHarness();
+    task.asDocument('b');
+    task.set({ keys: ['b'], anchor: 'b', focus: 'b' });
+    assert.equal(task.selKey(event(metaKey, shiftKey)), true, label + ' on a selected task row is handled');
+    await settle();
+    assert.deepEqual(plain(task.state().calls), [['removeSelection', ['b']]], label + ' deletes a selected task as Cmd+K Delete does');
+    assert.equal(task.error(), null, label + ' on a task no longer says "Remove requires writable blocks of one document"');
+  }
 
   // Tab / Shift+Tab move the whole selection, as one call where the bridge has one, and the rows stay selected.
   const tab = (shiftKey = false) => ({ key: 'Tab', metaKey: false, ctrlKey: false, shiftKey });

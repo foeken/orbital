@@ -137,11 +137,13 @@ async function cycleSel(keys) {
   sel = kept;
   render();
 }
-function selKey(e) { // keys while a selection is active (nothing focused); document nodes: delete/move ignored
+function selKey(e) { // keys while a selection is active (nothing focused); document nodes: move ignored, delete as Cmd+K Delete
   const mod = e.metaKey || e.ctrlKey, keys = selKeys();
   if (!keys.length) return false;
   const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown';
   if (e.shiftKey && !mod && vert) extendSel(items.get(sel.focus), e.key === 'ArrowUp' ? -1 : 1);
+  // a task or other document in a list is soft-deleted (Cmd+Z restores it), as Cmd+K Delete does (renderer/tasks.js)
+  else if (e.key === 'Backspace' && (!mod || e.shiftKey) && keys.some((k) => items.get(k)?.node.kind === 'document')) removeSelection(keys);
   else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (blockSelection(keys, false, 'Remove', false)) removeSel(keys); }
   else if (mod && e.shiftKey && vert) { if (blockSelection(keys, true, 'Move')) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'Tab' && !mod) { if (blockSelection(keys, true, e.shiftKey ? 'Outdent' : 'Indent')) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
