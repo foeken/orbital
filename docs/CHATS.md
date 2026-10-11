@@ -375,7 +375,7 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
 - **Its name.** The user sees ChatGPT: the agent is Codex inside the ChatGPT app (main/agents/codex.js finds it there first, its
   `codex://` links open there), and the ChatGPT account and plan pay for it. Its id stays `codex`, so stored links,
   settings and recorded keys still find it.
-- **Where it runs.** `~/.orbital/chats`, made on first use with its house rules in `AGENTS.md`. A chat asks nobody: it
+- **Where it runs.** `~/.orbital/chats`, made on first use with its house rules in `AGENTS.md` (rewritten when a build changes them; among them, that a `[label](tana:…)` link is a node whose whole id goes to the Tana tools). A chat asks nobody: it
   runs with `sandbox: workspace-write`, `approvalPolicy: on-request` and `approvalsReviewer: auto_review`, so Codex's own
   reviewer decides what it may do, and a request that still comes to the client is answered no (`appServerRpc` `decline`).
 - **Kept small.** Codex compacts a chat by itself once its conversation passes 40k tokens (`model_auto_compact_token_limit`

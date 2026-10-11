@@ -27,6 +27,7 @@ const RULES = [
   '# Orbital chats', '',
   'You are in a chat started from Orbital, a desktop app over Tana. The person you talk to is its user: answer them as you',
   'would in your own app, and use your Tana tools when the question is about their work.', '',
+  'A link written [label](tana:<kind>:<id>) is a Tana node: give your Tana tools its whole id, tana:<kind>: included.', '',
   'This folder holds only these house rules. Do not save files, notes or anything read from Tana here.', '',
 ].join('\n');
 // what a chat may do: Codex's own sandbox, and its reviewer instead of a person for anything beyond it. And when Codex
@@ -41,7 +42,7 @@ const TOOLS = new Set(['commandExecution', 'fileChange', 'mcpToolCall', 'dynamic
 function workspace() {
   const dir = path.join(os.homedir(), '.orbital', 'chats'), rules = path.join(dir, 'AGENTS.md');
   fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(rules)) fs.writeFileSync(rules, RULES);
+  if (!fs.existsSync(rules) || fs.readFileSync(rules, 'utf8') !== RULES) fs.writeFileSync(rules, RULES); // ours: kept as this build says them
   return dir;
 }
 
