@@ -609,7 +609,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **Current node** is the zoomed node or the row under the caret (with a selection, the Selection group counts what
   each row acts on and says "N skipped" for rows it cannot). Its rows follow `NODE_ROW_ORDER` (renderer/palette.js)
   whichever file builds them: the focused field's rows; Open node (the row under the caret, or the one selected row, opened as the mouse opens it: zoomed into, a reference's target, what a Timeline row or notification opens; absent on the page you are in and for a selection of several), Expand, Collapse; the task state (Complete/Reopen,
-  Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Discuss with …,
+  Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Unassign, Discuss with …,
   Add to chat …);
   a meeting's Change time / location, Edit meeting details, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
@@ -923,7 +923,7 @@ wrong twenty.
   anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). Assign to <agent> … stays offered on a node an agent already has:
   handing it over again replaces the request in its Agent context block. Codex is handed the request typed
   here as the work, with the node's uri to read as its context (main/agent.js `agentPrompt`): what it reads in Tana,
-  the Agent context block included, is material anyone the node is shared with can edit, never instructions. **Unassign from Agent** takes it back at once,
+  the Agent context block included, is material anyone the node is shared with can edit, never instructions. **Unassign** (one row for an agent and people alike) takes it back at once,
   and takes the Agent context block (with its status line) out of the node again. **Go to <agent> task** opens it (Codex
   in Codex, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
   badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not. Codex tasks run on this Mac, Tana's in Tana, and a Dot's in ChatGPT.

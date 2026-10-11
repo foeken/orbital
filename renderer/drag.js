@@ -214,7 +214,7 @@ function groupDropWrites(target, t, me, today) {
   return [...clear, ...(assigned && t.assignees.length === 1 ? [] : [['assign', [me]]]), ...(t.stateType === state ? [] : [['state', state]]), ...(t.watched && !assigned ? [['watch', null]] : [])];
 }
 const GROUP_WRITES = {
-  agent: (id) => tana.setAgent(id, false), // the task stays; its link goes, as ⌘K Unassign from Agent does
+  agent: (id) => tana.setAgent(id, false), // the task stays; its link goes, as ⌘K Unassign does
   pin: (id, date) => tana.pin(id, 'today', date),
   unpin: (id, date) => tana.unpin(id, 'today', date),
   assign: (id, uris) => tana.setAssignees(id, uris),

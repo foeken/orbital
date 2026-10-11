@@ -199,6 +199,8 @@ const withShims = (src) => {
   if (/\bnotify(ById|Loading)\b/.test(src) && !/const notifyById =/.test(src)) src = 'globalThis.notifyById ??= new Map(); globalThis.notifyLoading ??= new Set();\n' + src;
   // Same for the set of nodes assigned to an agent: a slice that renders a row reads it to decide on the
   // badge, and a slice that declares its own is left alone.
+  // who a node is assigned to (renderer/tasks.js), for a slice with the Unassign row: nobody, as before a read
+  if (/\bloadTaskMeta\(/.test(src) && !/function loadTaskMeta\(/.test(src) && !/loadTaskMeta = /.test(src)) src = "globalThis.taskMetaById ??= new Map(); globalThis.loadTaskMeta ??= () => {}; globalThis.memberName ??= (uri) => uri; globalThis.setTaskAssignees ??= () => {};\n" + src;
   if (/\bagentIds\b/.test(src) && !/(const|let) agentIds/.test(src)) src = 'globalThis.agentIds ??= new Set();\n' + src;
   // The badge reads the linked task's state; a slice that only renders a row gets the real labels and the shipped
   // fallback, which is pending — the state an assigned node has until its task is known.
@@ -4964,6 +4966,7 @@ function runCodexAssignCheck() {
     const OTHER = 'tana:text:01exampleb0000000000000000';
     const served = new Map([[DOC, [{ id: 'b1', text: 'Something already written', children: [] }]], [OTHER, [{ id: 'b9', text: 'Another page', children: [] }]]]);
     const agentStates = new Map();
+    const taskMetaById = new Map(), loadTaskMeta = () => {}, memberName = (uri) => uri.split(':').pop(), assigneesSet = [], setTaskAssignees = (d, list) => assigneesSet.push([d.id, list]);
     const agentTasks = new Map([[DOC, { agent: 'codex', taskId: '01a0b379-afbc-74c3-a191-c419e6543bcc' }]]);
     // Tana and Codex on: the page offers both, and the row that sends names the one it goes to
     const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, opens: true }];
@@ -5061,8 +5064,11 @@ function runCodexAssignCheck() {
       pressTo: async (label) => { await paletteRows('').find((r) => r.label === label).run(); await tick(); return { mode: palMode, agent: agentPick, sent: sent.length, rows: agentPromptRows().map((r) => r.label) }; },
       // opened without an agent named, as a drop on the Agent group does (renderer/drag.js): the agents listed under it
       pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; openAgentPrompt(palDoc); await tick(); return state(); },
-      unassignRow: () => (paletteRows('').find((r) => r.rank === 'codexUnassign') || {}).label || null,
-      pressUnassign: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codexUnassign').run(); await tick(); return state(); },
+      unassignRow: () => (paletteRows('').find((r) => r.rank === 'unassign') || {}).label || null,
+      // the same row for people: a node with a person on it and no agent, Unassign taking them off
+      people: async () => { tana.setAssignees = () => {}; taskMetaById.set(DOC, { assignees: ['tana:user-profile:robin'] }); const r = paletteRows('').find((x) => x.rank === 'unassign');
+        sent.length = 0; await r.run(); await tick(); taskMetaById.clear(); delete tana.setAssignees; return { label: r.label, icon: r.icon, hint: r.hint, set: [...assigneesSet], sent: sent.length }; },
+      pressUnassign: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'unassign').run(); await tick(); return state(); },
       dotGoRow: () => { agentList.push({ id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true }); agentIds.add(DOC); agentStates.set(DOC, 'working'); agentTasks.set(DOC, { agent: 'relay:echo', taskId: 't-echo' });
         const r = paletteRows('').find((row) => row.rank === 'codexOpen'), el = agentBadgeEl(DOC); agentList.pop(); return { row: r ? r.label : null, role: el.attrs.role }; },
       type: (text) => { palText.value = text; },
@@ -5151,13 +5157,15 @@ function runCodexAssignCheck() {
     assert.equal(sent.prompt, '', 'and emptied, so the next node is asked about from scratch');
     // Escape on the prompt page: back to the commands, with nothing written
     assert.deepEqual(plain(api.byName()), [['Assign to Tana …', ''], ['Assign to Codex …', 'Replaces what it was asked']], 'an assigned node can be handed over again: the request in its block is replaced, said on its holder');
-    assert.equal(api.unassignRow(), 'Unassign from Agent', 'and a row of its own says how to take it back');
+    assert.equal(api.unassignRow(), 'Unassign', 'and one Unassign row says how to take it back');
     const back = plain(await api.pressUnassign());
     // the third argument is the prompt, absent here and null by the time it comes back through JSON
     assert.deepEqual(back.sent, [[CODEX_DOC, false, null]], 'and taking it back needs nothing typed');
     assert.equal(back.assigned, false, 'the mark is dropped');
     assert.equal(back.badges.length, 0, 'and the badge goes with it');
     assert.equal(api.unassignRow(), null, 'an unassigned node offers nothing to take back');
+    assert.deepEqual(plain(await api.people()), { label: 'Unassign', icon: 'unassigned', hint: 'robin', set: [[CODEX_DOC, []]], sent: 0 },
+      'a node with people on it offers the same Unassign, which takes them off and leaves the agents alone');
     const reopened = plain(await api.pressRow());
     assert.equal(reopened.mode, 'agentPrompt', 'assigning again asks again');
     api.type('never mind');

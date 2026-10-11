@@ -41,7 +41,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'pinSidebar', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
   'setType', 'classifyType', 'removeType', 'addField', 'editFields',
   'setIcon', 'setHue', 'sensitive', 'translateNodes', 'replaceTranslation',
-  'codexTo', 'codexUnassign', 'codexOpen',
+  'codexTo', 'unassign', 'codexOpen',
   'visibility', 'addParticipants', 'notify', 'copyLink', 'exportPdf',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
@@ -310,8 +310,17 @@ function paletteRows(q, typed = q) {
       for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: assigned && holder && holder.id === a.id ? 'Replaces what it was asked' : '',
         keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
     }
-    if (assigned) rows.push({ rank: 'codexUnassign', group: docGroup, icon: 'robot', label: 'Unassign from Agent', hint: holder ? holder.label : '',
+  }
+  // Unassign: one row for whoever has the node, its agent and its people alike, all of them taken off on the press
+  if (palDoc && isRealId(palDoc.id)) {
+    const doc = palDoc, assigned = tana.setAgent && agentIds.has(doc.id), holder = agentNamed((agentTasks.get(doc.id) || {}).agent);
+    loadTaskMeta(doc.id);
+    const people = tana.setAssignees ? ((taskMetaById.get(doc.id) || {}).assignees || []) : [];
+    if (assigned || people.length) rows.push({ rank: 'unassign', group: docGroup, icon: 'unassigned', label: 'Unassign',
+      hint: [assigned ? (holder ? holder.label : 'Agent') : '', ...people.map(memberName)].filter(Boolean).join(', '),
       run: () => run(async () => {
+        if (people.length) setTaskAssignees(doc, []);
+        if (!assigned) return;
         holdRow(doc); // taking it back moves the row out of Agent: it stays put, and Clean up offers the redraw
         await tana.setAgent(doc.id, false); // the prompt goes with the assignment, and its block leaves the node
         agentIds.delete(doc.id);
