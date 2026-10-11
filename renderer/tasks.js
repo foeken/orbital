@@ -301,14 +301,12 @@ function assigneeRows(q, doc = palDoc, replace = false) {
   loadMembers(); loadTaskMeta(doc.id);
   const meta = taskMetaById.get(doc.id), ids = meta ? meta.assignees : [];
   const toggle = (uri) => (replace ? [uri] : ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri]);
-  const rows = memberRows(q, (uri) => setTaskAssignees(doc, uri ? toggle(uri) : []), (uri) => (uri ? ids.includes(uri) : !ids.length));
-  // The agent belongs in the same list a person is chosen from — it is the same question. It is not a Tana assignee
-  // though (those are user profiles), so choosing it goes into the one Agent flow: the prompt page and its model
-  // chooser, which owns the writing. Nothing is stored here.
-  if (tana.setAgent && isRealId(doc.id) && fuzzyMatch('Agent', q)) {
-    rows.push({ group: 'Assignees', icon: 'robot', label: 'Agent', hint: agentIds.has(doc.id) ? '✓' : '', keepOpen: true, run: () => openAgentPrompt(doc) });
-  }
-  return rows;
+  // The agents first, a section of their own: the same question as a person, but not a Tana assignee (those are user
+  // profiles), so each goes into the one Agent flow, its prompt page opened on that agent, which owns the writing
+  const holder = agentIds.has(doc.id) && (agentTasks.get(doc.id) || {}).agent;
+  const agents = tana.setAgent && isRealId(doc.id) ? agentsOn().filter((a) => fuzzyMatch(a.label, q))
+    .map((a) => ({ group: 'Agents', icon: a.icon, label: a.label, hint: holder === a.id ? '✓' : '', keepOpen: true, run: () => openAgentPrompt(doc, a.id) })) : [];
+  return [...agents, ...memberRows(q, (uri) => setTaskAssignees(doc, uri ? toggle(uri) : []), (uri) => (uri ? ids.includes(uri) : !ids.length))];
 }
 function openAssigneePalette(doc, ctx, replace = false) {
   palTaskCtx = ctx || null;

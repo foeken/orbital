@@ -8654,6 +8654,19 @@ async function runAssignReplaceCheck() {
   assert.deepEqual(plain(api.pick('bo', true)), ['bo'], 'from the field, a person replaces who has it');
   assert.deepEqual(plain(api.pick('bo', false)), ['ann', 'bo'], 'Edit assignees adds them');
   assert.deepEqual(plain(api.pick('ann', false)), [], 'and takes one off again');
+  const withAgents = vm.runInNewContext(`
+    const opened = [], members = [{ id: 'ann' }], taskMetaById = new Map([['t', { assignees: [] }]]);
+    const isTask = () => true, loadMembers = () => {}, loadTaskMeta = () => {}, memberName = (id) => id, isRealId = () => true, setTaskAssignees = () => {};
+    const tana = { setAgent: true }, agentIds = new Set(['t']), agentTasks = new Map([['t', { agent: 'codex' }]]), openAgentPrompt = (doc, id) => opened.push(id);
+    const agentsOn = () => [{ id: 'tana', label: 'Tana', icon: 'tana' }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt' }];
+    ${functionSource('memberRows')}
+    ${functionSource('assigneeRows')}
+    const rows = assigneeRows('', { id: 't' });
+    rows[1].run();
+    ({ rows: rows.map((r) => [r.group, r.label, r.hint]), opened });
+  `);
+  assert.deepEqual(plain(withAgents.rows), [['Agents', 'Tana', ''], ['Agents', 'ChatGPT', '✓'], ['Assignees', 'Unassigned', '✓'], ['Assignees', 'ann', '']], 'the agents first, in a section of their own, the one it is with ticked');
+  assert.deepEqual(plain(withAgents.opened), ['codex'], 'and each opens the prompt on itself');
   assert.match(source, /openAssigneePalette\(node, null, true\)/, 'the field opens the replacing picker');
   console.log('ok  the Assigned to field replaces the assignee; Edit assignees toggles one');
 }
