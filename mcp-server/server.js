@@ -95,8 +95,7 @@ const SCHEMA = [...Object.entries(TABLES).map(([name, cols]) => 'CREATE TABLE IF
   // one Orbital per key: two first asks at once must not make two (orbitalFrom inserts, then reads the one row back)
   'CREATE UNIQUE INDEX IF NOT EXISTS orbitals_secret ON orbitals (secret)',
   // the queue and the statuses an earlier MCP server kept (node ids, task ids, statuses): nothing reads them any more
-  'DROP TABLE IF EXISTS messages', 'DROP TABLE IF EXISTS tasks', 'DROP TABLE IF EXISTS updates',
-  'DROP TABLE IF EXISTS replies']; // a Dot's answers in its Orbital chat, which a deployed preview kept (2026-10); chats went again
+  'DROP TABLE IF EXISTS messages', 'DROP TABLE IF EXISTS tasks', 'DROP TABLE IF EXISTS updates'];
 
 // ---- where the rows live: one(sql, ...args) a row, all() rows, run() how many changed ----
 // serial(key, fn): fn(db) with db's one/all/run, one at a time per key, so a count and the insert it allows cannot be
