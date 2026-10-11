@@ -3620,14 +3620,25 @@ async function main() {
     // Delete chat forgets the link only: the thread stays in Codex, and the chat can no longer be opened here
     assert.deepEqual(plain([...await handler('agentChat:delete')(null, ID)]), [], 'deleting forgets the link');
     await assert.rejects(handler('agentChat:send')(null, ID, 'Hi'), /not here any more/, 'and a chat that was deleted takes no more messages');
-    // A right-click on a chat in the sidebar (shell.js): Delete chat, the same forgetting of its link
+    // A right-click on a chat in the sidebar (shell.js): Open in … (answered, for the shell to open it there) and Delete
+    // chat, the same forgetting of its link; a pin's menu (main/pins.js) is Open in … and Remove pin, the other rows' Open in … alone
     settings.set('agentChats', { [T]: { agent: 'codex', title: 'Week summary', at: 2, device: agent.deviceId() } });
     let menu = null;
     Object.assign(backend.electron.Menu, { buildFromTemplate: (items) => { menu = items; return { popup() {} }; } }); backend.electron.BrowserWindow.fromWebContents = () => null;
-    handler('agentChat:menu')({ sender: {} }, ID);
-    assert.deepEqual(plain(menu.map((i) => i.label)), ['Delete chat'], 'a right-click on a chat offers Delete chat');
-    menu[0].click();
+    const OPEN = ['Open in New Tab', 'Open in New Pane', 'Open in Floating Pane'];
+    const opened = handler('agentChat:menu')({ sender: {} }, ID);
+    assert.deepEqual(plain(menu.map((i) => i.label || i.type)), [...OPEN, 'separator', 'Delete chat'], 'a right-click on a chat offers to open it elsewhere, and Delete chat');
+    menu[1].click();
+    assert.equal(await opened, 'right', 'an Open in … chosen is answered, for the shell to open the chat there');
+    assert.equal(chats.list().some((r) => r.id === ID), true, 'and deletes nothing');
+    const deleted = handler('agentChat:menu')({ sender: {} }, ID);
+    menu.find((i) => i.label === 'Delete chat').click();
+    assert.equal(await deleted, 'delete');
     assert.equal(chats.list().some((r) => r.id === ID), false, 'which forgets the link');
+    handler('pins:menu')({ sender: {} }, 'tana:text:01examplep0000000000000000');
+    assert.deepEqual(plain(menu.map((i) => i.label || i.type)), [...OPEN, 'separator', 'Remove pin'], 'a pin\'s menu: the same three, and Remove pin');
+    handler('pins:openMenu')({ sender: {} });
+    assert.deepEqual(plain(menu.map((i) => i.label)), OPEN, 'and Timeline, Today and the rest: the three alone');
     console.log('ok  agent chats: synced links, turns as messages, failed turns, another Mac, delete forgets the link');
   }
   // Turns in a chat (main/agentchats.js over main/codex-app-server.js runTurn, stood in for here): assignments made at

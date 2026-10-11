@@ -280,7 +280,8 @@ function tellTitle(title, renamable, icon = '') {
   const saveSearch = !LINKS && !zoom && authed && !!tana.createSearch && pillsApply();
   const link = !LINKS && !!zoom && !String(zoom.docId).startsWith('orbital:'); // a node of Tana's, not an app page: Copy link on its tab (shell.js, #542)
   const refresh = !LINKS && refreshable; // a saved search that can be asked again: Refresh on its tab (renderer/pills.js offerRefresh)
-  const remove = !LINKS && onSearchPage(); // a saved search: Delete on its tab, the page's ⇧⌘⌫ (shell.js, #615)
+  // a saved search: Delete on its tab, the page's ⇧⌘⌫ (shell.js, #615); an agent chat: Delete, as ⌘K's (not in demo mode, nor another Mac's)
+  const remove = !LINKS && (onSearchPage() || (!demoMode && !!tana.deleteAgentChat && !!agentChatOpen() && !agentChatAway(agentChatOpen())));
   const told = title + '\n' + renamable + '\n' + icon + '\n' + saveSearch + '\n' + link + '\n' + refresh + '\n' + remove;
   if (told === toldTitle || !window.frameElement) return;
   toldTitle = told; toldIcon = icon;
@@ -491,7 +492,7 @@ function renderOutline() {
   markTranslatable(titleEl, page && !page.pending && editable ? parent.node.text : null, parent && parent.docId); // and leaving it, the translation again
   blurSensitive(titleEl, parent && parent.docId);
   const pageIcon = parent ? iconOf(parent.node) || nodeIcon(parent.node) : viewOf()?.icon; // nodeIcon: a chat or an agent known by its tag
-  const agentChat = !!parent && !!tana.renameAgentChat && isAgentChat(parent.docId) && parent.docId !== AGENT_CHAT_NEW && !agentChatAway(parent.docId); // its tab's Rename renames it (renderer/agentchats.js renameAgentChat)
+  const agentChat = !!parent && !!tana.renameAgentChat && !demoMode && isAgentChat(parent.docId) && parent.docId !== AGENT_CHAT_NEW && !agentChatAway(parent.docId); // its tab's Rename renames it (renderer/agentchats.js renameAgentChat)
   tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable || agentChat, (pageIcon && iconNode(pageIcon)?.outerHTML) || '');
   // a view, a saved search, an app page or a chat is named by its tab under a tab bar, so its heading goes (styles.css html.listing)
   document.documentElement.classList.toggle('listing', !parent || appOwned(parent.docId) || isChatPage(parent));

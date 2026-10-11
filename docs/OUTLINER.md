@@ -1635,8 +1635,10 @@ take the keys.
   `runAction`: a row's `opens`). Search and Home have no single place to open there, and stay plain clicks.
 - Then **your sidebar pins as Tana keeps them** (docs/PINNING.md §1): the pins at the top level under **Pinned**, then
   each section with its pins, in Tana's order; a click opens the pin in that page (`goto`), and the pin of the page on
-  screen is marked. A right-click on a pin shows the Mac's own menu with **Remove pin**, which unpins it from the sidebar
-  (`window.shell.pinMenu` → main/pins.js `pins:menu`, greyed in demo mode). A section's heading folds it and shows its count while folded (kept on this machine,
+  screen is marked. A right-click on a row shows the Mac's own menu (main/state.js `popupMenu`): **Open in New Tab**, **Open in New Pane** and
+  **Open in Floating Pane** (answered to the shell, which opens the row's place there, as the ⌘-, ⇧- and ⌥-click do; shell.js `sbMenu`),
+  on Timeline, Today, the agent chats and the pins; a pin's adds **Remove pin**, which unpins it from the sidebar (`pins:menu`,
+  greyed in demo mode), an agent chat's **Delete chat** (`agentChat:menu`, not on another Mac's). A section's heading folds it and shows its count while folded (kept on this machine,
   `windowSidebarFolded`); a section with nothing in it is not drawn, and with no pins at all one line says how to add one.
   Titles are masked in demo mode (renderer/segments.js `demoText`) and a sensitive pin is blurred until the header's
   eye shows sensitive items.

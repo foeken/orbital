@@ -17,7 +17,7 @@ const renamable = new Set(); // the pages whose title can be typed in (renderer/
 const linkable = new Set(); // the pages showing a node of Tana's: Copy link on their tab (#542)
 const refreshable = new Set(); // the saved searches that can be asked again: Refresh on their tab (renderer/pills.js offerRefresh)
 const saveable = new Set(); // the views whose pills can be kept as a saved search (the Library): Save as new search on their tab (#538)
-const removable = new Set(); // the saved searches: Delete on their tab (renderer/render.js tellTitle, #615)
+const removable = new Set(); // the saved searches and agent chats: Delete on their tab (renderer/render.js tellTitle, #615)
 const tabIcons = new Map(); // page id -> the glyph its page told (renderer/render.js tellTitle), our own markup
 // the header buttons drawn per page (drawNav below), and with one page the window header's slot for them; up here
 // because sync() runs at load and clears the slot when the page count crosses one
@@ -341,6 +341,14 @@ function toPage(msg) {
 // ⌘-click opens a sidebar place as a tab in that page's pane, ⇧-click in a pane beside, ⌥-click floating, as everywhere in
 // the pages (renderer/palette.js elsewhere); the page opens it there (renderer/app.js goto and action)
 const sbWhere = (e) => (e && (e.metaKey || e.ctrlKey) ? 'tab' : e && e.shiftKey ? 'right' : e && e.altKey ? 'float' : undefined);
+// A right-click on a sidebar row: the Mac's menu, asked of main (main/state.js popupMenu: Open in New Tab, New Pane or
+// Floating Pane, and the row's own Remove pin or Delete chat, which main does itself), and an Open in … chosen opens
+// the row's place there, as the ⌘-, ⇧- or ⌥-click would. ask() is the menu; open(where) is the row's own opening.
+const OPENS = new Set(['tab', 'right', 'float']);
+function sbMenu(b, ask, open) {
+  b.oncontextmenu = (e) => { e.preventDefault(); Promise.resolve(ask && ask()).then((where) => { if (OPENS.has(where)) open(where); }, () => {}); }; // a row gone meanwhile has no menu
+  return b;
+}
 // A row dragged onto a chat in the sidebar (a Tana chat pinned there, or an agent chat): the chat's message gets a reference to
 // it, in the pane that shows the chat or, with none, in the page the rows act in, which opens it (renderer/chat.js composeInto,
 // as ⌘K Add to chat does). The rows are the page's own drag (renderer/drag.js NODES_DRAG_TYPE), turned into the message there.
@@ -372,13 +380,13 @@ function sbDraw() {
   const rows = [];
   const search = sbButton('sbrow', 'search', 'Search', () => toPage({ orbital: 'palette', mode: 'search' }));
   if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
-  const timeline = sbButton('sbrow', 'timeline', 'Timeline', (e) => toPage({ orbital: 'action', id: 'timeline', where: sbWhere(e) }));
+  const action = (id) => (where) => toPage({ orbital: 'action', id, where }), goto = (id) => (where) => toPage({ orbital: 'goto', id, where });
+  const timeline = sbMenu(sbButton('sbrow', 'timeline', 'Timeline', (e) => action('timeline')(sbWhere(e))), () => bridge.openMenu?.(), action('timeline'));
   timeline.dataset.uri = 'orbital:timeline'; // marked while it is the page on screen, as a pin is (sbMark)
-  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), timeline, sbButton('sbrow', 'today', 'Today', (e) => toPage({ orbital: 'action', id: 'today', where: sbWhere(e) })));
+  rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), timeline, sbMenu(sbButton('sbrow', 'today', 'Today', (e) => action('today')(sbWhere(e))), () => bridge.openMenu?.(), action('today')));
   const pin = (n) => {
-    const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), (e) => toPage({ orbital: 'goto', id: n.uri, where: sbWhere(e) }), n.uri, n.node.svg);
+    const b = sbMenu(sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), (e) => goto(n.uri)(sbWhere(e)), n.uri, n.node.svg), () => bridge.pinMenu?.(n.uri), goto(n.uri)); // and Remove pin (main/pins.js)
     b.dataset.uri = n.uri;
-    b.oncontextmenu = (e) => { e.preventDefault(); bridge.pinMenu?.(n.uri); }; // Remove pin (main/pins.js)
     b.classList.toggle('sensitive', n.node.sensitive === true);
     if (n.node.sensitive === true) b.removeAttribute('title'); // a blurred title is not told on hover either
     if (String(n.uri).startsWith('tana:chat:')) sbChatDrop(b, { id: n.uri, text: n.node.title || 'Chat', kind: 'document', icon: n.node.icon || 'chat', hasChildren: true });
@@ -403,12 +411,11 @@ function sbDraw() {
   if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
   // Agent chats: the newest, each opening its chat in the page; none yet offers a new one, more than fit the whole list
   if (bridge.agentChats) {
-    const chat = (c) => { const b = sbButton('sbrow', c.icon, demoText(c.title, c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; sbChatDrop(b, c);
-      b.oncontextmenu = (e) => { e.preventDefault(); Promise.resolve(bridge.agentChatMenu?.(c.id)).catch(() => {}); }; // a chat deleted meanwhile has no menu // Delete chat (main/agentchats.js)
-      return b; }; // the chat's own glyph, as its tab and the list wear it
-    const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', (e) => toPage({ orbital: 'action', id: 'agentChats', where: sbWhere(e) }))] : [];
+    const chat = (c) => { const b = sbMenu(sbButton('sbrow', c.icon, demoText(c.title, c.id), (e) => goto(c.id)(sbWhere(e)), c.id, c.svg), () => bridge.agentChatMenu?.(c.id), goto(c.id)); b.dataset.uri = c.id; sbChatDrop(b, c);
+      return b; }; // the chat's own glyph, as its tab and the list wear it; its menu has Delete chat too (main/agentchats.js)
+    const more = sbChats.length > SB_CHATS ? [sbMenu(sbButton('sbrow', 'robot', 'All agent chats', (e) => action('agentChats')(sbWhere(e))), () => bridge.openMenu?.(), action('agentChats'))] : [];
     // the new chat's page itself, not its Cmd+K row: that row is there only on a Mac with the ChatGPT app, and the page says what is missing
-    rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbButton('sbrow', 'chatgpt', 'New chat with ChatGPT', (e) => toPage({ orbital: 'goto', id: 'orbital:agent-chat:new', where: sbWhere(e) }))]));
+    rows.push(head('agentChats', 'Agent chats', sbChats.length), ...(sbFolded.has('agentChats') ? [] : sbChats.length ? [...sbChats.slice(0, SB_CHATS).map(chat), ...more] : [sbMenu(sbButton('sbrow', 'chatgpt', 'New chat with ChatGPT', (e) => goto('orbital:agent-chat:new')(sbWhere(e))), () => bridge.openMenu?.(), goto('orbital:agent-chat:new'))]));
   }
   sidebar.replaceChildren(...rows);
   sbMark();

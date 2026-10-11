@@ -18,12 +18,13 @@ if (file === 'shell.html') {
     layout: (layout) => ipcRenderer.send('shell:layout', layout), // { doc, pages: [ids in doc] }: every committed change
     // the window's sidebar: your sidebar pins as Tana keeps them, [{ id, uri?, label?, node?, children }], read again on onPins
     pins: () => ipcRenderer.invoke('pins:tree'),
-    pinMenu: (uri) => ipcRenderer.invoke('pins:menu', uri), // a right-click on a pin: Remove pin
+    pinMenu: (uri) => ipcRenderer.invoke('pins:menu', uri), // a right-click on a pin: Open in … (answers where: 'tab' | 'right' | 'float' | null) and Remove pin
+    openMenu: () => ipcRenderer.invoke('pins:openMenu'), // a right-click on another sidebar row: Open in …, answered the same way
     onPins: (cb) => ipcRenderer.on('pins:changed', () => cb()),
     // its Agent chats section: your chats with Codex, newest first (main/agentchats.js), read again on onAgentChats
     agentChats: () => ipcRenderer.invoke('agentChat:list'),
     onAgentChats: (cb) => ipcRenderer.on('agentChat:changed', () => cb()),
-    agentChatMenu: (id) => ipcRenderer.invoke('agentChat:menu', id), // a right-click on a chat: Delete chat
+    agentChatMenu: (id) => ipcRenderer.invoke('agentChat:menu', id), // a right-click on a chat: Open in …, answered the same way, and Delete chat
   });
   return;
 }

@@ -1775,11 +1775,25 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   await p.js(frame('2') + '.contentWindow.postMessage({ orbital: "copyLink" }, "*")');
   await p.waitFor(frame('2') + '.contentWindow.__copied', 'the tab\u2019s Copy link');
   assert.equal(await p.jsIn('2', 'window.__copied'), await p.jsIn('2', 'tana.nodeLink("tana:text:mockwriteup4")'), 'the tab\u2019s Copy link copied the summary');
+  // Delete in an agent chat's tab menu (shell.js removable): the chat forgotten here, as ⌘K Delete does
+  const CHAT = 'orbital:agent-chat:0198c0de-0000-7000-8000-000000000001';
+  const waitIn = async (s, expr, what) => { for (let i = 0; i < 80; i++) { if (await p.jsIn(s, expr)) return; await p.sleep(100); } throw new Error('timed out waiting for ' + what); }; // the page's own scope (jsIn)
+  await p.jsIn('2', 'goTo(' + J(CHAT) + '); 1');
+  await waitIn('2', '!!zoom && zoom.docId === ' + J(CHAT), 'an agent chat in the second pane');
+  await p.js(frame('2') + '.contentWindow.postMessage({ orbital: "remove" }, "*")');
+  await waitIn('2', '!!zoom && zoom.docId === "orbital:agent-chats" && !agentChatsKnown.some((n) => n.id === ' + J(CHAT) + ')', 'the tab\u2019s Delete forgetting the chat');
   // demo mode saves nothing: ⌘N opens a tab on a New Note of the app's own, empty and made nowhere
   await p.jsIn('7', 'toggleDemoMode(); 1'); await p.key('⌘N');
   await pages(8);
   assert.deepEqual(await p.jsIn('8', '[zoom && zoom.docId, document.getElementById("title").textContent, document.querySelector("#outline .empty-note")?.textContent]'), ['orbital:new-note', 'New Note', 'No content'], 'demo mode: the tab opens on an empty New Note of its own');
   await p.jsIn('7', 'toggleDemoMode(); 1');
+  // a right-click on a sidebar row (shell.js sbMenu): main's menu answers where (here: Open in New Tab), and the row's
+  // place opens there, as a ⌘-click on it does
+  await p.js('window.shell.openMenu = async () => "tab"; 1');
+  await p.js('document.querySelector("[data-uri=\\"orbital:timeline\\"]").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); 1');
+  await pages(9);
+  await p.waitFor(frame('9') + '.contentDocument.getElementById("title").textContent === "Timeline"', 'the Timeline opened in a new tab');
+  assert.deepEqual((await tabs()).find((t) => t.includes('Timeline')).length > 1, true, 'as a tab beside the page in front');
   for (const s of await sides()) assert.deepEqual(await p.jsIn(s, 'window.__errors'), [], 'page ' + s + ' reported errors');
 });
 

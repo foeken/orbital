@@ -15,7 +15,8 @@ const agent = require('./agent');
 const icons = require('./icons');
 const { modelLabel, effortLabel } = require('./prompts');
 const settings = require('./settings');
-const { S, send, toShells } = require('./state');
+const { S, send, toShells, OPEN_IN } = require('./state');
+const { popupMenu } = require('./pins'); // the sidebar's right-click menus
 const { chatRows } = require('../sdk/chat');
 const appServer = require('./codex-app-server'); // by property, so a check can stand in for it
 
@@ -248,10 +249,11 @@ const ipc = {
     return agent.get('codex').open(link.threadId); // the ChatGPT agent's own way into a thread (main/agents/codex.js)
   },
   'agentChat:delete': async (_e, id) => { forget(linkOf(id).threadId); return list(); },
-  // a right-click on a chat in the sidebar (shell.js): Delete chat, which forgets the link as ⌘K Delete does
+  // a right-click on a chat in the sidebar (shell.js): Open in … (answered: the shell opens it there) and Delete chat,
+  // which forgets the link as ⌘K Delete does; one on another Mac has nothing to delete here
   'agentChat:menu': (e, id) => {
-    const { BrowserWindow, Menu } = require('electron'), { threadId } = linkOf(id);
-    Menu.buildFromTemplate([{ label: 'Delete chat', enabled: !S.demo, click: () => forget(threadId) }]).popup({ window: BrowserWindow.fromWebContents(e.sender) });
+    const link = linkOf(id);
+    return popupMenu(e, [...OPEN_IN, ...(away(link) ? [] : ['-', { id: 'delete', label: 'Delete chat', enabled: !S.demo, run: () => forget(link.threadId) }])]);
   },
 };
 // Deleting a chat forgets its link and the icon chosen for it, and lets go of an answer still running: nothing could stop it later

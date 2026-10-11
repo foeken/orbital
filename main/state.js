@@ -104,6 +104,9 @@ function send(channel, ...payload) {
 function sendChanged(docId, info) { for (const p of pages()) p.send('outline:changed', docId, p === S.writer ? { ...info, own: true } : info); }
 // every window's sidebar (shell.js), which hears nothing of send: its pages are frames, the sidebar is the shell's own
 function toShells(channel, ...args) { for (const w of S.windows || []) { const wc = w.shell && w.shell.webContents; if (wc && !wc.isDestroyed()) wc.send(channel, ...args); } }
+// where a sidebar row's place opens from its right-click menu (main/pins.js popupMenu), as ⌘-, ⇧- and ⌥-click open it
+// (shell.js sbWhere), the shell doing the opening
+const OPEN_IN = [{ id: 'tab', label: 'Open in New Tab' }, { id: 'right', label: 'Open in New Pane' }, { id: 'float', label: 'Open in Floating Pane' }];
 // local YYYY-MM-DD, optionally N days from now (1 = tomorrow)
 const today = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toLocaleDateString('sv-SE'); };
 function setStatus(patch) {
@@ -124,4 +127,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, inboxFrom, handedAt, pageOf, pageKey, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh, toShells };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, inboxFrom, handedAt, pageOf, pageKey, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh, toShells, OPEN_IN };
