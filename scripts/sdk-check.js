@@ -3605,6 +3605,11 @@ async function main() {
     assert.deepEqual(plain(rows[1].children.map((c) => c.text)), ['Thought for 4 seconds', 'Two tasks'], 'its commands are the thought line, and its words the answer');
     assert.deepEqual(plain(rows[3].children.map((c) => c.text)), ['Error: Usage limit'], 'a turn that failed says why');
     assert.deepEqual(plain(await chats.rows(chats.PREFIX + 'new', async () => assert.fail('a new chat reads nothing'))), [], 'a new chat has no messages until its first is sent');
+    // An assignment (Assign to ChatGPT): one line in the chat, Orbital's context for ChatGPT in a tag the page leaves out
+    const sent = chats.assignment('tana:text:01example60000000000000000', 'Supplier [draft] contract', 'Find the clauses to renegotiate');
+    assert.match(sent, /^Assigned \[Supplier  draft  contract\]\(tana:text:01example60000000000000000\): Find the clauses to renegotiate\n\n<orbital-context>\n[\s\S]*node uri: tana:text:01example60000000000000000[\s\S]*sub-agent[\s\S]*<\/orbital-context>$/, 'the node, the request, and the context with the sub-agent asked for');
+    const assigned = chats.turnMessages({ id: 'turn3', status: 'completed', startedAt: 1, completedAt: 2, items: [{ type: 'userMessage', id: 'u3', content: [{ type: 'text', text: sent }] }] });
+    assert.equal(assigned[0].content.text, 'Assigned [Supplier  draft  contract](tana:text:01example60000000000000000): Find the clauses to renegotiate', 'and the chat shows the line alone');
     // Rename chat …: kept with the link on one line, and Codex told too when it is here (here it is not)
     const findBin = agent.findBin; agent.findBin = () => null;
     try { assert.equal((await handler('agentChat:rename')(null, ID, '  Week\n  summary ')).title, 'Week summary', 'a new name is kept with the link, on one line'); }

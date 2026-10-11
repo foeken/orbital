@@ -163,7 +163,19 @@ async function steer(threadId, text) {
 }
 // A node handed to ChatGPT (main/agents/codex.js start): a message in one standing chat, Assignments, made by the first
 // one on this Mac and kept on the list like any other; answers the thread, which the node's task link names.
-async function assign(text) {
+// The message is one line the chat shows, the node and the request, and Orbital's own context for ChatGPT in a tag the
+// page leaves out (shown): the node and how to treat it (main/agent.js agentPrompt), and that a sub-agent does the work,
+// so the chat holds only the results and stays small.
+const CONTEXT = /\s*<orbital-context>[\s\S]*?<\/orbital-context>\s*/g;
+const shown = (text) => String(text || '').replace(CONTEXT, '\n').trim();
+function assignment(nodeUri, title, request) {
+  const name = agent.oneLine(title).replace(/[[\]]/g, ' ').trim() || 'a node', asked = String(request || '').trim();
+  return 'Assigned [' + name + '](' + nodeUri + ')' + (asked ? ': ' + asked : '') + '\n\n<orbital-context>\n' + agent.agentPrompt(nodeUri, title, request)
+    + '\n\nDo the work in a sub-agent of its own: spawn one with this task and everything above, wait for it, then answer here in a few'
+    + ' lines with what it did. This chat holds the results; the work happens in the sub-agent.\n</orbital-context>';
+}
+async function assign(nodeUri, title, request) {
+  const text = assignment(nodeUri, title, request);
   const mine = Object.entries(links()).find(([, l]) => l.assignments && !away(l));
   if (!mine) {
     const t = await turn(null, text);
@@ -181,14 +193,14 @@ const userText = (content) => (Array.isArray(content) ? content : []).filter((c)
 // One Codex turn as the messages sdk/chat.js draws: yours, then Codex's, its commands and tool calls as the thought line
 function turnMessages(t) {
   const items = (t && t.items) || [], at = (t.startedAt || 0) * 1000, out = [];
-  for (const i of items) if (i && i.type === 'userMessage') out.push({ id: i.id, fromUserType: 'human', fromUserUri: ME, sentAt: at, content: { text: userText(i.content) } });
+  for (const i of items) if (i && i.type === 'userMessage') out.push({ id: i.id, fromUserType: 'human', fromUserUri: ME, sentAt: at, content: { text: shown(userText(i.content)) } });
   const said = items.filter((i) => i && i.type === 'agentMessage' && i.text).map((i) => i.text), tools = items.filter((i) => i && TOOLS.has(i.type)).map(() => ({ status: 'completed' }));
   const failed = t.status === 'failed';
   if (said.length || tools.length || failed) out.push({ id: t.id, fromUserType: 'ai', sentAt: at, completedAt: (t.completedAt || 0) * 1000, content: { text: said.join('\n\n') }, toolCalls: tools,
     ...(failed ? { status: 'error', errorMessage: (t.error && t.error.message) || '' } : {}) });
   return out;
 }
-const liveMessages = (s) => [{ id: 'live:q', fromUserType: 'human', fromUserUri: ME, sentAt: s.at, content: { text: s.user } },
+const liveMessages = (s) => [{ id: 'live:q', fromUserType: 'human', fromUserUri: ME, sentAt: s.at, content: { text: shown(s.user) } },
   { id: 'live:a', fromUserType: 'ai', sentAt: s.at, content: { text: [...s.said.values()].join('\n\n') }, toolCalls: Array.from({ length: s.tools }, () => ({ status: 'running' })) }];
 async function readTurns(threadId) {
   const rpc = appServerRpc(20000);
@@ -229,4 +241,4 @@ const ipc = {
 const isChat = (id) => String(id || '').startsWith(PREFIX); // a chat, or a new one (orbital:agent-chat:new)
 const stop = () => { for (const s of [...live.values()]) s.stop(); };
 
-module.exports = { LIST, PREFIX, KEY, RUN, isChat, tellList, list, rows, turnMessages, start, say, assign, workspace, stop, ipc };
+module.exports = { LIST, PREFIX, KEY, RUN, isChat, tellList, list, rows, turnMessages, start, say, assign, assignment, workspace, stop, ipc };

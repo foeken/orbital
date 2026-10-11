@@ -182,7 +182,7 @@ const codex = agent.register({
   // question (main/chatagents.js) is a task of its own, read-only, its answer on its Tana chat's page.
   // shortcut: every node handed over shares the one thread, so each badge reads that thread's latest turn; a turn per node if that misleads.
   async start({ key, nodeUri, title, rules, prompt, readOnly, userData }) {
-    if (nodeUri) return require('../agentchats').assign(agent.agentPrompt(nodeUri, title, prompt)); // required here: agentchats requires this file
+    if (nodeUri) return require('../agentchats').assign(nodeUri, title, prompt); // required here: agentchats requires this file
     return createTask({ key, prompt, instructions: rules, readOnly, userData });
   },
   statuses,

@@ -404,7 +404,9 @@ a turn this Mac is running is drawn from what has streamed in, since another rea
   since Tana cannot link to one (renderer/agentchats.js `agentChatPlaceRows`, `agentChatHits`).
 - **Assignments.** A node handed to ChatGPT (Assign to Agent, main/agents/codex.js `start`) is a message in one standing chat,
   Assignments, made by the first one on this Mac (`assignments: true` on its link, main/agentchats.js `assign`); one sent
-  while ChatGPT still answers joins that turn (`turn/steer`). The node's task link names the thread, so its badge opens the
+  while ChatGPT still answers joins that turn (`turn/steer`). The message is one line the chat shows, `Assigned [node](uri): request`,
+  and Orbital's context for ChatGPT (main/agent.js `agentPrompt`, and that a sub-agent does the work and the chat gets a
+  short result) inside `<orbital-context>`, which the page leaves out (`shown`); sub-agents keep the chat's own context small. The node's task link names the thread, so its badge opens the
   chat (renderer/render.js `openAgentTask`); every node shares the thread, so each badge reads its latest turn.
 - **What it is not.** Not an @ChatGPT question (§12): that is a question about a Tana chat, answered privately beside it.
   Claude is not offered yet (issue #823).
