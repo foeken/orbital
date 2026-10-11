@@ -491,7 +491,7 @@ function renderOutline() {
   markTranslatable(titleEl, page && !page.pending && editable ? parent.node.text : null, parent && parent.docId); // and leaving it, the translation again
   blurSensitive(titleEl, parent && parent.docId);
   const pageIcon = parent ? iconOf(parent.node) || nodeIcon(parent.node) : viewOf()?.icon; // nodeIcon: a chat or an agent known by its tag
-  const agentChat = !!parent && !!tana.renameAgentChat && isAgentChat(parent.docId) && parent.docId !== AGENT_CHAT_NEW; // its tab's Rename is Rename chat … (renderer/agentchats.js)
+  const agentChat = !!parent && !!tana.renameAgentChat && isAgentChat(parent.docId) && parent.docId !== AGENT_CHAT_NEW && !agentChatAway(parent.docId); // its tab's Rename renames it (renderer/agentchats.js renameAgentChat)
   tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable || agentChat, (pageIcon && iconNode(pageIcon)?.outerHTML) || '');
   // a view, a saved search, an app page or a chat is named by its tab under a tab bar, so its heading goes (styles.css html.listing)
   document.documentElement.classList.toggle('listing', !parent || appOwned(parent.docId) || isChatPage(parent));
@@ -595,7 +595,7 @@ function emptyText(parent) {
   if (id === INBOX_PAGE) return 'No notifications yet.';
   if (id === PROPOSALS_PAGE) return 'No proposals waiting.';
   if (id === AGENT_CHATS_PAGE) return 'No agent chats yet. ⌘K New chat with ChatGPT starts one.';
-  if (isChatPage(parent)) return isAgentChat(id) ? 'Ask ChatGPT anything below. The chat is kept in the ChatGPT app on this Mac, and Orbital keeps only its link.' : 'No messages yet. Say something to Tana below.';
+  if (isChatPage(parent)) return isAgentChat(id) ? (agentChatAway(id) ? 'This chat is on another Mac. Open it there, or in the ChatGPT app on that Mac.' : !codexHere() ? 'Chats with ChatGPT need the ChatGPT app on this Mac, signed in.' : 'Ask ChatGPT anything below. The chat is kept in the ChatGPT app on this Mac, and Orbital keeps only its link.') : 'No messages yet. Say something to Tana below.';
   if (!isSearchDoc(parent.node) && !isTypeDoc(parent.node)) return 'No content';
   const filter = filters.get(id), key = hotkeyFor('createTask');
   return 'Nothing matches.' + (filter && tasksInFilter(filter) && key ? ' ' + key + ' creates a task.' : '');
@@ -732,6 +732,11 @@ function openAgentTask(id) {
   if (link && link.agent === 'codex' && agentChatsKnown.some((n) => n.id === AGENT_CHAT + link.taskId)) return goTo(AGENT_CHAT + link.taskId);
   run(() => tana.openAgentTask(id));
 }
+// ⌘K's way into it, named for where it goes: a ChatGPT node's Assignments chat, else the agent's task (renderer/palette.js)
+function openAgentTaskLabel(id, a) {
+  const link = agentTasks.get(id);
+  return link && link.agent === 'codex' && agentChatsKnown.some((n) => n.id === AGENT_CHAT + link.taskId) ? 'Go to Assignments chat' : 'Go to ' + a.label + ' task';
+}
 // Assigning from Cmd+K has to show on the row, and the palette hands the caret back to the row it was opened from,
 // where a render is deferred until the caret leaves — so the badge is put on the row itself, as patchMeta does.
 function patchAgent(docId) {
@@ -745,6 +750,9 @@ function patchAgent(docId) {
   }
   agentHeader(); // the open page says it too, and for the same reason it is patched rather than re-rendered
 }
+// a node no agent has any more (⌘K Unassign, a drop out of Agent): the local mark and its state go, and the badge with them
+// (main let go of the task id; the snapshot has to let go with it, not at the next refresh)
+function forgetAgent(docId) { agentIds.delete(docId); agentStates.delete(docId); patchAgent(docId); }
 // The badge beside the zoomed title, from the same element the rows use. Only on the document's own page: zooming
 // into a block shows that block's title, and the agent was handed the document, not the block.
 function agentHeader() {

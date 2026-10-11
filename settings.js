@@ -152,7 +152,8 @@ function relayRow(w) {
 function agentRows(a) {
   const flip = () => load('agents', () => host.enableAgent(a.id, !a.enabled));
   // a linked agent (your Dot) can be unlinked here, as on its ⌘K page: asked first, since its nodes are unassigned with it
-  const unlink = a.linked && host.mcpUnlink ? [button('unlink/' + a.id, 'Unlink', () => {
+  const unlink = a.linked && host.mcpUnlink && !demoMode ? // unlinking writes to the nodes handed to it: not in demo mode, as the outliner refuses it there
+    [button('unlink/' + a.id, 'Unlink', () => {
     if (confirm('Unlink ' + a.label + '? It can no longer take tasks from Orbital, and the nodes handed to it are unassigned.')) load('agents', () => host.mcpUnlink(a.id));
   })] : [];
   // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
@@ -194,7 +195,7 @@ const SECTIONS = {
   },
   lists: () => [
     ...group('Hidden titles', null, host.filters ? [hiddenList()] : []),
-    ...group('Chats', null, host.setMcpHidden ? [row('robot', 'Show chats made by tools', toggle('mcp', 'Show chats made by tools', !st.mcpHidden, () => load('mcpHidden', () => host.setMcpHidden(!st.mcpHidden)), st.mcpHidden == null), 'Chats an MCP client started')] : []),
+    ...group('Chats', null, host.setMcpHidden ? [row('robot', 'Show chats made by tools', toggle('mcp', 'Show chats made by tools', !st.mcpHidden, () => load('mcpHidden', () => host.setMcpHidden(!st.mcpHidden)), st.mcpHidden == null), 'Tana chats an MCP tool started')] : []),
   ],
   // what is the same for everyone in the Tana workspace, as ⌘K Open Orbital Settings for Tana Workspace sets it
   // (renderer/agent.js): kept on the workspace's own document, and written by an admin only (main/settings.js setWorkspace)

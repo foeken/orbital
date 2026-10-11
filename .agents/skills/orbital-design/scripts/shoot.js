@@ -19,7 +19,7 @@ const cache = path.join(os.homedir(), 'Library/Caches/ms-playwright');
 const chrome = process.env.CHROME || (fs.existsSync(cache) && fs.readdirSync(cache).filter((d) => d.startsWith('chromium_headless_shell-')).sort().reverse()
   .map((d) => path.join(cache, d, 'chrome-headless-shell-mac-arm64/chrome-headless-shell')).find((f) => fs.existsSync(f)));
 if (!chrome) { console.error('No chrome-headless-shell: run npx playwright install chromium-headless-shell, or set CHROME'); process.exit(1); }
-// main.js pair(): the Work View's two pages, as main hands them to the shell
+// main.js pair(): the Default View's two pages, as main hands them to the shell
 const pair = { schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: [0.6, 0.4], children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
   floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2', ...(graph ? { links: true } : {}) } } } };
 if (graph) pair.root.weights = [0.72, 0.28];

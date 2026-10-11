@@ -1,7 +1,7 @@
 'use strict';
 // The agents' plugins, loaded in the order Choose agents lists them, and what the renderer asks of them (issue #669).
 // An agent is one file in this folder that registers itself with main/agent.js; delete its line below and the app
-// has no trace of it. Assigning is shared: the "Agent context" block is written into the node and the app-local mark
+// offers it nowhere (ChatGPT's chats, main/agentchats.js, are their own feature). Assigning is shared: the "Agent context" block is written into the node and the app-local mark
 // stored (main/documents.js setAgentMark), then the agent the page chose starts the task, or hands the new request
 // to the task the node already has with it.
 const agent = require('../agent');
@@ -38,11 +38,12 @@ async function assign(id, prompt, agentId) {
     if (link && link.agent === agentId && a.resume && !agent.elsewhere(link)) await a.resume(link.taskId, prompt);
     else {
       started = true;
-      const taskId = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData, was: before });
+      // a task id, or { taskId, turnId } from an agent whose tasks share a thread (ChatGPT's Assignments chat)
+      const task = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData, was: before });
       // the task this node had with another agent is let go once the new one exists; never the same agent's, whose
       // plugin now holds the new task under this node's key
       if (link && link.agent !== agentId) await releaseLink(id, link);
-      agent.setTask(id, agentId, taskId);
+      agent.setTask(id, agentId, task && typeof task === 'object' ? task.taskId : task, task && task.turnId);
     }
     return result;
   } catch (error) {
@@ -76,22 +77,27 @@ async function unassign(id) {
 }
 // One read per agent for every linked node, shared by the pages that ask while it runs (issue #267): every page asks
 // on every refresh, and a Codex read is an app-server child.
-let reading = null;
-async function readStatuses() {
-  // the Dot an older build typed into the ChatGPT app is no agent any more: its nodes let go of it, and of its chat
-  // (the stored links: agent.links() leaves out those of an agent nobody registers, which is what these are)
+let reading = null, tidied = false;
+// What older builds left in the synced settings, cleared once a session, on the first read (after they are hydrated):
+// the Dot an older build typed into the ChatGPT app is no agent any more, so its nodes let go of it (the stored links:
+// agent.links() leaves out those of an agent nobody registers), and its chat and the default agent are gone
+function tidy() {
+  if (tidied) return; tidied = true;
   for (const [nodeId, stored] of Object.entries(agent.tasks())) if (stored && stored.agent === 'dot') { dropAgentMark(nodeId); agent.clearTask(nodeId); }
-  if (settings.get('dotChat') !== undefined) settings.set('dotChat', undefined);
+  for (const key of ['dotChat', 'defaultAgent']) if (settings.get(key) !== undefined) settings.set(key, undefined);
+}
+async function readStatuses() {
+  tidy();
   const before = agent.links();
-  const byAgent = {};
+  const byAgent = {}, full = {};
   const out = {};
   for (const [nodeId, link] of Object.entries(before)) {
     if (agent.elsewhere(link)) out[nodeId] = 'elsewhere'; // on the Mac that ran it, where its state lives (renderer AGENT_BADGE)
-    else (byAgent[link.agent] ||= {})[nodeId] = link.taskId;
+    else { (byAgent[link.agent] ||= {})[nodeId] = link.taskId; (full[link.agent] ||= {})[nodeId] = link; }
   }
   for (const [id, links] of Object.entries(byAgent)) {
     const a = agent.get(id);
-    try { Object.assign(out, a.statuses ? await a.statuses(links) : {}); }
+    try { Object.assign(out, a.statuses ? await a.statuses(links, full[id]) : {}); } // the whole links too: a turn of its own (ChatGPT)
     catch { for (const nodeId of Object.keys(links)) out[nodeId] = 'broken'; }
   }
   // a node assigned, relinked or unlinked while this read ran is left out rather than given its old task's state:

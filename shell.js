@@ -316,7 +316,7 @@ bridge.onCommand((cmd, arg) => {
   }
 });
 
-// ---- the window's sidebar: Search, Home, Timeline and Today, your sidebar pins, then your Agent chats as Tana keeps them (docs/OUTLINER.md §19) ----
+// ---- the window's sidebar: Search, Home, Timeline and Today, your sidebar pins, then your Agent chats, which Orbital keeps (docs/OUTLINER.md §19) ----
 // Every row acts in the page the Graph pane would follow (the last to take the keys): a pin opens there, Search opens
 // its ⌘S, Home, Timeline and Today run its Cmd+K rows, and an agent chat opens there. The pins are Tana's own sidebar collection (docs/PINNING.md): pins at the
 // top level under Pinned, then each section with its pins, read from main (main/pins.js pinTree) and read again
@@ -403,8 +403,8 @@ function sbDraw() {
   if (!sections.some((s) => s.pins.length)) { const p = document.createElement('p'); p.className = 'sbempty'; p.textContent = 'Pin anything here with ⌘K, Pin to sidebar …'; rows.push(p); }
   // Agent chats: the newest, each opening its chat in the page; none yet offers a new one, more than fit the whole list
   if (bridge.agentChats) {
-    const chat = (c) => { const b = sbButton('sbrow', c.icon || 'robot', demoText(c.title || 'New chat', c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; sbChatDrop(b, c);
-      b.oncontextmenu = (e) => { e.preventDefault(); bridge.agentChatMenu?.(c.id); }; // Delete chat (main/agentchats.js)
+    const chat = (c) => { const b = sbButton('sbrow', c.icon, demoText(c.title, c.id), (e) => toPage({ orbital: 'goto', id: c.id, where: sbWhere(e) }), c.id, c.svg); b.dataset.uri = c.id; sbChatDrop(b, c);
+      b.oncontextmenu = (e) => { e.preventDefault(); Promise.resolve(bridge.agentChatMenu?.(c.id)).catch(() => {}); }; // a chat deleted meanwhile has no menu // Delete chat (main/agentchats.js)
       return b; }; // the chat's own glyph, as its tab and the list wear it
     const more = sbChats.length > SB_CHATS ? [sbButton('sbrow', 'robot', 'All agent chats', (e) => toPage({ orbital: 'action', id: 'agentChats', where: sbWhere(e) }))] : [];
     // the new chat's page itself, not its Cmd+K row: that row is there only on a Mac with the ChatGPT app, and the page says what is missing

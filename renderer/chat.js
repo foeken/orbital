@@ -372,10 +372,10 @@ function composerChanged() {
   composer.classList.toggle('empty', empty && !chatSkill);
 }
 function showMode() {
-  const docId = composer.dataset.doc, ai = chatAi.get(docId), readOnly = chatReadOnly.has(docId);
+  const docId = composer.dataset.doc, ai = chatAi.get(docId), away = isAgentChat(docId) && agentChatAway(docId), readOnly = chatReadOnly.has(docId) || away;
   composer.classList.toggle('readonly', readOnly);
   composerText.contentEditable = readOnly ? 'false' : 'plaintext-only';
-  composerText.dataset.placeholder = isAgentChat(docId) ? 'Message ChatGPT · @ links · Not shared with Tana' : readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
+  composerText.dataset.placeholder = away ? 'This chat is on another Mac: continue it there' : isAgentChat(docId) ? 'Message ChatGPT · @ links · Not shared with Tana' : readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
 }
 // A skill is for Tana to run, so while one is attached the message goes To Tana and the mode stays put
 function switchMode(docId, ai = !chatAi.get(docId)) { if (chatSkill && !ai) return; chatAi.set(docId, ai); showMode(); }

@@ -40,8 +40,9 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // the Mac's and the iPhone's Settings alike (ios/engine/index.js aiChoice): a choice about your own content, so it follows
 // you, while the key that pays for it stays put. Unset means the defaults in main/ai.js.
 const AI_KEYS = { model: 'aiModel', effort: 'aiEffort', quickModel: 'aiQuickModel', quickEffort: 'aiQuickEffort' };
+// dotChat and defaultAgent are retired: synced only so that clearing them (main/agents/index.js tidy) clears the document too.
 // myTasks is which saved search the Default View's right half is (main/views.js myTasks), by id so a rename keeps it.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^agents$/, /^codexPrompt$/, /^codexTask$/, /^agentChats$/, /^sensitive$/, /^ai(Quick)?(Model|Effort)$/, /^myTasks$/, /^relay(Key|KeyNext|Seen)$/, /^pref:/];
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^agents$/, /^codexPrompt$/, /^codexTask$/, /^agentChats$/, /^sensitive$/, /^ai(Quick)?(Model|Effort)$/, /^myTasks$/, /^relay(Key|KeyNext|Seen)$/, /^pref:/, /^(dotChat|defaultAgent)$/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets

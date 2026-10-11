@@ -61,14 +61,14 @@ let authRpc = null, authHome = null, authReady = null, activeLogin = null, login
 
 // With no Codex on this Mac, sign-in runs on the standalone app-server from Codex's own GitHub release, fetched into
 // userData on the first "Sign in with ChatGPT" and kept only when it carries OpenAI's Developer ID. It answers for
-// the AI rows alone: handing work to a Codex task still needs a real Codex (main/agents/codex.js codexBin).
+// the AI rows alone: handing work to a Codex task still needs a real Codex (main/codex-app-server.js codexBin).
 // ponytail: fetched once and never updated; replace the file when the sign-in protocol moves past it.
 const SERVER = 'codex-app-server', OPENAI_TEAM = '2DC432GLL2';
 // what that download may be before its signature is checked (security review finding 4): packed, unpacked, and how long
 // fetching and unpacking may take; a real one is a fraction of either
 const SERVER_BOUNDS = { packed: 300 * 1024 ** 2, unpacked: 1024 ** 3, download: 5 * 60e3, unpack: 2 * 60e3 };
 const ownServer = (userData) => path.join(userData, SERVER);
-const serverBin = (userData) => require('./agents/codex').codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
+const serverBin = (userData) => require('./codex-app-server').codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
 let installing = null;
 async function downloadServer(userData) {
   const run = promisify(require('node:child_process').execFile);
@@ -110,7 +110,7 @@ async function ensureChatGPT(userData, install = false) {
   }
   if (!authRpc) { // a second caller may have started it while the download ran
     fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-    const rpc = require('./agents/codex').appServerRpc(TIMEOUT_MS, chatgptNote, { codexHome: home, bin: serverBin(userData) });
+    const rpc = require('./codex-app-server').appServerRpc(TIMEOUT_MS, chatgptNote, { codexHome: home, bin: serverBin(userData) });
     authRpc = rpc; authHome = home;
     authReady = rpc.ready.catch((error) => {
       if (authRpc === rpc) { authRpc = null; authHome = null; authReady = null; }

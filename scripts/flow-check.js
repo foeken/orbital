@@ -1451,7 +1451,7 @@ flow('Agent chats: a new chat with ChatGPT, its answer, the list, and Delete cha
   await command(p, 'new chat with chatgpt', 'New chat with ChatGPT');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:new" && !composer.hidden', 'a new chat with its composer');
   assert.equal(await p.js('composerText.dataset.placeholder'), 'Message ChatGPT · @ links · Not shared with Tana', 'the composer says who it goes to, and that Tana gets none of it');
-  assert.match(await p.js('document.querySelector(".chat-context")?.textContent || ""'), /^Only you · not shared with Tana/, 'the line over the chat says it is private, and Tana does not see it');
+  assert.match(await p.js('document.querySelector(".chat-context")?.textContent || ""'), /^Only you · the conversation stays out of Tana/, 'the line over the chat says it is private, and its conversation is not in Tana');
   assert.match(await p.js('outline.textContent'), /kept in the ChatGPT app/, 'and the empty chat says where it is kept');
   await p.js('composerText.focus(); 1');
   await p.type('Summarise my week'); await p.key('↩');
@@ -1460,10 +1460,11 @@ flow('Agent chats: a new chat with ChatGPT, its answer, the list, and Delete cha
   await p.waitFor('/Mock answer from ChatGPT to: Summarise my week/.test(outline.textContent)', 'Codex\u2019s answer', 6000);
   assert.deepEqual(await p.js('[...outline.querySelectorAll(".chat-msg")].map((m) => m.className.replace("chat-msg ", "").split(" ")[0])'), ['mine', 'theirs'], 'your message, then Codex\u2019s');
   assert.equal(await p.js('document.getElementById("title").textContent'), 'Summarise my week', 'titled with its first message');
-  await p.waitFor('/not shared with Tana · GPT-6 · High$/.test(document.querySelector(".chat-context")?.textContent || "")', 'the model and reasoning beside it');
+  await p.waitFor('/stays out of Tana · GPT-6 · High$/.test(document.querySelector(".chat-context")?.textContent || "")', 'the model and reasoning beside it');
   // Rename, as on any page: the title, and the list's name for it; one Rename and one Delete, the chat's own
   await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette');
-  assert.deepEqual(await p.js('palRows.filter((r) => r.label === "Rename" || r.label === "Delete").map((r) => r.id)'), ['renameAgentChat', 'deleteAgentChat'], 'one Rename and one Delete, both the chat\u2019s');
+  assert.deepEqual(await p.js('palRows.filter((r) => r.label === "Rename" || r.label === "Delete").map((r) => r.id)'), ['rename', 'deleteAgentChat'], 'one Rename and one Delete');
+  assert.equal(await p.js('palRows.some((r) => r.id === "inviteChat")'), false, 'and no Invite: an agent chat is yours alone');
   await closePalette(p);
   await command(p, 'rename', 'Rename');
   await p.waitFor('palMode === "renameAgentChat" && palInput.value === "Summarise my week"', 'the rename page with the name as it is');
@@ -1535,6 +1536,13 @@ flow('A node assigned to ChatGPT opens its Assignments chat', async (p) => {
   await p.js('agentTasks.set("mockdoc2", { agent: "codex", taskId: "0198c0de-0000-7000-8000-000000000003" }); openAgentTask("mockdoc2"); 1');
   await p.waitFor('zoom && zoom.docId === "orbital:agent-chat:0198c0de-0000-7000-8000-000000000003"', 'the Assignments chat');
   assert.equal(await p.js('titleEl.textContent'), 'Assignments');
+  await p.waitFor('/^Every node you assign to ChatGPT · /.test(document.querySelector(".chat-context")?.textContent || "")', 'the line over it saying what the chat is for');
+  // "assign" and ↩ assigns, as it always did: the commands come before the chat called Assignments
+  await p.js("goTo('tana:text:mockai0')"); await at(p, 'tana:text:mockai0');
+  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type('assign');
+  await p.waitFor('palRows.length && palRows[palIndex]', 'rows for assign');
+  assert.match(await p.js('palRows[palIndex].label'), /^Assign to /, 'the first row is an Assign row, not the Assignments chat');
+  await closePalette(p);
 });
 
 

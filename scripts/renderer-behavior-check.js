@@ -199,6 +199,10 @@ const withShims = (src) => {
   // Same for the set of nodes assigned to an agent: a slice that renders a row reads it to decide on the
   // badge, and a slice that declares its own is left alone.
   // who a node is assigned to (renderer/tasks.js), for a slice with the Unassign row: nobody, as before a read
+  // agent chats (renderer/agentchats.js), for a slice that is not about them: none open, none on another Mac, no rows of theirs
+  if (/\bagentChat(OwnRows|NewRows|Open|Away)\(|\bcodexHere\(/.test(src) && !/function agentChatOwnRows\(/.test(src)) src = "globalThis.agentChatOwnRows ??= () => []; globalThis.agentChatNewRows ??= () => []; globalThis.agentChatOpen ??= () => null; globalThis.agentChatAway ??= () => false; globalThis.isAgentChat ??= (id) => String(id || '').startsWith('orbital:agent-chat:'); globalThis.codexHere ??= () => true;\n" + src;
+  if (/\bAGENT_WHERE\b/.test(src) && !/const AGENT_WHERE =/.test(src)) src = 'globalThis.AGENT_WHERE ??= {};\n' + src; // where each agent takes a node (renderer/agent.js)
+  if (/\bopenAgentTaskLabel\(/.test(src) && !/function openAgentTaskLabel\(/.test(src)) src = "globalThis.openAgentTaskLabel ??= (id, a) => 'Go to ' + a.label + ' task';\n" + src;
   if (/\bloadTaskMeta\(/.test(src) && !/function loadTaskMeta\(/.test(src) && !/loadTaskMeta = /.test(src)) src = "globalThis.taskMetaById ??= new Map(); globalThis.loadTaskMeta ??= () => {}; globalThis.memberName ??= (uri) => uri; globalThis.setTaskAssignees ??= () => {};\n" + src;
   if (/\bagentIds\b/.test(src) && !/(const|let) agentIds/.test(src)) src = 'globalThis.agentIds ??= new Set();\n' + src;
   // The badge reads the linked task's state; a slice that only renders a row gets the real labels and the shipped
@@ -4969,7 +4973,7 @@ function runCodexAssignCheck() {
     const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, opens: true }];
     let agentPick = 'tana';
     const agentsOn = () => agentList.filter((a) => a.enabled && a.installed), agentNamed = (id) => agentList.find((a) => a.id === id) || null;
-    const openedTasks = [], wentTo = [];
+    const openedTasks = [], wentTo = [], notes = [], showNote = (text) => notes.push(text);
     const tana = { openAgentTask: async (id) => { openedTasks.push(id); return true; }, setAgent: async (id, on, prompt, agent) => {
       sent.push([id, on, prompt]);
       if (on) sent.agent = agent;
@@ -5036,6 +5040,7 @@ function runCodexAssignCheck() {
     ${functionSource('openAgentTask')}
     ${functionSource('agentHeader')}
     ${functionSource('patchAgent')}
+    ${functionSource('forgetAgent')}
     ${sourceBetween('const AGENT_GROUP =', 'function promptEditor(')}
     ${functionSource('promptEditor')}
     ${functionSource('openAgentPrompt')}
@@ -5077,7 +5082,7 @@ function runCodexAssignCheck() {
         agentPromptRows().find((r) => r.label === 'Codex').run();
         const there = agentPromptRows()[0].label;
         return { here, there }; },
-      sentTo: () => sent.agent,
+      sentTo: () => sent.agent, notes: () => notes,
       refuse: (value) => { refuse = value; },
       // the badge as a way in: linked opens that node's task, pending has nowhere to go
       badge: (linked) => { if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const el = agentBadgeEl(DOC); return { role: el.attrs.role, label: el.attrs['aria-label'], tabIndex: el.tabIndex, hasClick: typeof el.onclick === 'function' }; },
@@ -5100,7 +5105,7 @@ function runCodexAssignCheck() {
     });
   `);
   return (async () => {
-    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', ''], ['Assign to Codex …', '']], 'an unassigned node offers each agent that is on by its name, and nothing else: you pick the one you want');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'A Tana chat, answered by Tana\'s AI'], ['Assign to Codex …', 'Into your Assignments chat, on this Mac']], 'an unassigned node offers each agent that is on by its name, each saying where it takes the node, and nothing else: you pick the one you want');
     assert.deepEqual(plain(await api.pressTo('Assign to Codex …')), { mode: 'agentPrompt', agent: 'codex', sent: 0, rows: ['What should Codex do?'] }, 'which opens the same prompt page with that agent picked, assigns nothing yet, and offers no other agent: the row chose');
     const opened = plain(await api.pressRow());
     assert.equal(opened.mode, 'agentPrompt', 'choosing it advances to the prompt page inside the palette');
@@ -5129,6 +5134,7 @@ function runCodexAssignCheck() {
     assert.deepEqual(sent.sent, [[CODEX_DOC, true, 'Draft the release notes\nthen tell me']],
       '⌘↩ stores the prompt, trimmed at the ends and otherwise as typed, and assigns in the same call');
     assert.equal(api.sentTo(), 'codex', 'to the agent the page chose');
+    assert.deepEqual(plain(api.notes()), ['Sent to ChatGPT, in your Assignments chat'], 'and since nothing opens, a note says where it went');
     assert.equal(sent.assigned, true, 'the local mark follows at once rather than waiting for a re-read');
     assert.equal(sent.badges.length, 1, 'the row gains one badge');
     // An assignment whose Codex task has not registered itself yet is pending, in words as well as in colour: the
@@ -5153,7 +5159,7 @@ function runCodexAssignCheck() {
     assert.equal(sent.editor, false, 'the editor is put away');
     assert.equal(sent.prompt, '', 'and emptied, so the next node is asked about from scratch');
     // Escape on the prompt page: back to the commands, with nothing written
-    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', ''], ['Assign to Codex …', 'Replaces what it was asked']], 'an assigned node can be handed over again: the request in its block is replaced, said on its holder');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'A Tana chat, answered by Tana\'s AI'], ['Assign to Codex …', 'Replaces what it was asked']], 'an assigned node can be handed over again: the request in its block is replaced, said on its holder');
     assert.equal(api.unassignRow(), 'Unassign', 'and one Unassign row says how to take it back');
     const back = plain(await api.pressUnassign());
     // the third argument is the prompt, absent here and null by the time it comes back through JSON

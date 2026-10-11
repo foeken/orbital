@@ -256,7 +256,7 @@ function dropOnGroup(task, target) {
     if (!task.writable && writes.some(([op]) => op === 'assign' || op === 'state')) throw new Error('This task is read-only: it can\u2019t go under ' + target);
     if (writes.some(([op, on]) => op === 'agent' && on)) return openAgentPrompt(task); // it needs a prompt: nothing is written until it is sent
     for (const [op, arg] of writes) await GROUP_WRITES[op](task.id, arg);
-    if (writes.some(([op]) => op === 'agent')) { agentIds.delete(task.id); agentStates.delete(task.id); patchAgent(task.id); }
+    if (writes.some(([op]) => op === 'agent')) forgetAgent(task.id);
     try { taskMetaById.set(task.id, await tana.taskMeta(task.id)); } catch { taskMetaById.delete(task.id); }
     notifyById.delete(task.id);
     if (held) held.groups.delete(task.id); // a row held in place by an earlier click would stay put: this one is meant to move

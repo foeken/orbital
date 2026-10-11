@@ -45,7 +45,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
-const VIEW_ORDER = ['timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types'];
+const VIEW_ORDER = ['timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types', 'agentChats'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
 // favours the first letters of words). Best first:
 //   0  the label starts with the query      "in"    → **In**box
@@ -120,7 +120,7 @@ function subRowsFor(row) {
 // tie on tier and length keep the fixed order — where the match starts decides only within a group, so "sensitive"
 // puts the current node's Mark as sensitive above Toggle sensitive visibility instead of losing to it by one character.
 function rankRows(rows) {
-  const tier = (a, b) => a.match.rank - b.match.rank || a.label.length - b.label.length;
+  const tier = (a, b) => a.match.rank - b.match.rank || !!a.place - !!b.place || a.label.length - b.label.length; // a command before a place that matches as well ("assign": Assign to … before Assignments)
   const cmp = (a, b) => tier(a, b) || a.match[0] - b.match[0];
   const best = new Map(), first = new Map();
   rows.forEach((r, i) => { if (!first.has(r.group)) first.set(r.group, i); if (!best.has(r.group) || cmp(r, best.get(r.group)) < 0) best.set(r.group, r); });
@@ -152,7 +152,10 @@ function paletteRows(q, typed = q) {
   // "Current node"; while a multi-selection owns the top of the palette they are "Current page", right under it.
   const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';
   // Rename, as on the page's tab: the zoomed page's title, where it can be typed in (renderer/document.js renameTitle)
-  if (palDoc && zoom && palDoc.id === zoom.docId && !zoom.nodeId && (titleEl.dataset || {}).key) rows.push({ id: 'rename', group: docGroup, icon: 'rename', label: 'Rename', run: renameTitle });
+  // (an agent chat's title takes no typing, but Rename names it all the same: renameAgentChat)
+  const chatHere = tana.renameAgentChat && agentChatOpen() && !agentChatAway(agentChatOpen());
+  if (palDoc && zoom && palDoc.id === zoom.docId && !zoom.nodeId && ((titleEl.dataset || {}).key || chatHere)) rows.push({ id: 'rename', group: docGroup, icon: 'rename', label: 'Rename', ...(chatHere ? { keepOpen: true } : {}), run: renameTitle });
+  rows.push(...agentChatOwnRows(docGroup)); // on an agent chat: Stop, Open in ChatGPT, Delete (renderer/agentchats.js)
   // the selection, or the row or page you are on, written in the auto-translate language (renderer/translate.js)
   // not on a chat page: there it would rewrite the chat's title, and a chat is its messages
   if (tana.translate && tana.setText && tana.setTitle && !demoMode && !(isChatPage(zoom) && !selKeys().length)) { const list = translateTargets(), to = translateTo() || 'English'; if (list.length) rows.push({ id: 'translateNodes', group: selKeys().length ? 'Selection' : docGroup, icon: 'language', label: 'Translate' + (list.length > 1 ? ' ' + list.length + ' nodes' : '') + ' into ' + to, hint: 'Writes the translation', run: () => translateNodes(list, to) }); }
@@ -276,7 +279,7 @@ function paletteRows(q, typed = q) {
   if (iconDoc) {
     const doc = iconDoc;
     rows.push({ id: 'setIcon', group: doc === palDoc ? docGroup : 'Current page', icon: iconOf(doc), label: 'Set icon',
-      hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
+      hint: typeGlyphs.has(doc.id) ? 'Chosen' : isAgentChat(doc.id) ? 'The ChatGPT glyph' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
   }
   // And what colour it is here: our own hue or grey for the type, kept with the glyph in the settings document, so
   // Tana's colour on the type is left alone (docs/SETTINGS.md).
@@ -306,7 +309,7 @@ function paletteRows(q, typed = q) {
     // is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked.
     // A saved search is a view and a chat a conversation, not work: nothing in either for an agent to do (Unassign stays, for one handed over before)
     if (!isSearchDoc(doc) && !String(doc.id).startsWith('tana:chat:')) {
-      for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: assigned && holder && holder.id === a.id ? 'Replaces what it was asked' : '',
+      for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: assigned && holder && holder.id === a.id ? 'Replaces what it was asked' : AGENT_WHERE[a.id] || (a.linked ? 'Through the Orbital MCP server' : ''),
         keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
     }
   }
@@ -322,13 +325,10 @@ function paletteRows(q, typed = q) {
         if (!assigned) return;
         holdRow(doc); // taking it back moves the row out of Agent: it stays put, and Clean up offers the redraw
         await tana.setAgent(doc.id, false); // the prompt goes with the assignment, and its block leaves the node
-        agentIds.delete(doc.id);
-        agentStates.delete(doc.id); // main lets go of the task id; the snapshot has to let go with it, not next refresh
-        renderPalette(); patchAgent(doc.id);
+        forgetAgent(doc.id); renderPalette();
         renderPills(true); // Clean up is decided while the pills render, and nothing else here redraws them
       }) });
   }
-  // A task that already exists in an agent's app, linked by pasting its link (#143): renderer/agent.js.
   // The way into the task the agent is handling, from the keyboard. Both halves have to hold: the node is assigned
   // now, and a task id is known for it. The status map alone was not enough — it is a snapshot, and an unassigned
   // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.
@@ -337,7 +337,7 @@ function paletteRows(q, typed = q) {
     // a task on another Mac stays offered, greyed with where it is (the badge is not a button there either)
     const away = agentStateOf(doc.id) === 'elsewhere';
     // only an agent whose task can be opened from here: a Dot's lives in ChatGPT, where nothing can open it for you
-    if (a && (a.opens || a.opensHere)) rows.push({ rank: 'codexOpen', group: docGroup, icon: a.icon, label: 'Go to ' + a.label + ' task', ...(away ? { disabled: true, hint: 'On another Mac: open it there' } : {}), run: () => openAgentTask(doc.id) });
+    if (a && (a.opens || a.opensHere)) rows.push({ rank: 'codexOpen', group: docGroup, icon: a.icon, label: openAgentTaskLabel(doc.id, a), ...(away ? { disabled: true, hint: 'On another Mac: open it there' } : {}), run: () => openAgentTask(doc.id) });
   }
   if (palDoc && tana.accessOptions) {
     if (!palette.hidden) loadAccess(palDoc.id); // for the open palette only (#274): a key on a choice folded under these asks in runAction
@@ -384,9 +384,9 @@ function paletteRows(q, typed = q) {
   // the corner button's glyph (shell.html #create); with an image on the clipboard its page offers that first (openCreationPalette)
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'textPlus', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Quick Add Task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
-  if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat …', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
+  if (tana.inviteToChat && zoom && isChatPage(zoom) && !isAgentChat(zoom.docId)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat …', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
   rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
-  if (tana.startAgentChat) rows.push(...agentChatRows()); // New chat with ChatGPT, and on an agent chat Stop, Rename, Open in ChatGPT and Delete (renderer/agentchats.js)
+  rows.push(...agentChatNewRows()); // New chat with ChatGPT (renderer/agentchats.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat with Tana', hint: 'In Tana, answered by its AI', run: () => startNewChat() }); // renderer/chat.js
   // ⌘K Meet Now: a meeting called Meeting from this minute for half an hour, as "/" Meeting's now, opened on its page in Tana (not its call)
   if (tana.createDocument && tana.nodeLink && tana.openExternal) rows.push({ id: 'meetNow', group: 'Actions', icon: 'calendar', label: 'Meet Now', hint: 'Now, for 30 minutes · opens in Tana', run: () => run(async () => { const start = Math.floor(Date.now() / 6e4) * 6e4; openInTana((await tana.createDocument('Meeting', { kind: 'meeting', start, end: start + SLASH_MEETING_LENGTH })).id); }) });
@@ -479,7 +479,8 @@ function paletteRows(q, typed = q) {
     if (q) rows.splice(rows.indexOf(r) + 1, 0, ...kids);
   }
   const seen = new Set(), key = (r) => (!r.folded && r.id) || r.group + '\n' + r.label; // a folded choice that reads like its parent, once
-  let matched = rows.map((r) => ({ ...r, match: fuzzyMatch(r.label, q) })).filter((r) => r.match && !seen.has(key(r)) && seen.add(key(r)));
+  // a place (an agent chat, named by your words) is found by its words, never by letters scattered through a long title
+  let matched = rows.map((r) => ({ ...r, match: fuzzyMatch(r.label, q) })).filter((r) => r.match && !(r.place && r.match.rank >= 5) && !seen.has(key(r)) && seen.add(key(r)));
   if (q) matched = rankRows(matched);
   // Nothing here matches what was typed, so the words are probably a document's: offer the one thing that can still
   // find it, carrying the query into Cmd+S instead of making it be typed a second time. Its heading is the "No

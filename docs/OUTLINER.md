@@ -901,7 +901,7 @@ wrong twenty.
   Decisions API instead (main/decisions.js, `gpt-6-luna`, the API key only: it refuses a ChatGPT sign-in); without a key
   it keeps the way above. The rest stay on the Quick AI: the Decisions API was slower or missed more for them (issue #807).
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
-  **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
+  **Tana** (always on: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
   Codex's app-server) and every agent linked through orbital.md/mcp, your Dot among them (below); **Claude** is listed
   grey as Coming soon until it comes back properly. Codex is

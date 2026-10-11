@@ -1,6 +1,6 @@
 'use strict';
 // The agents' pages in Cmd+K: signing in with ChatGPT, the OpenAI API key (kept for whoever already has one),
-// Choose agents, linking a task that already exists in an agent's app, and the prompt page Assign to … opens.
+// Choose agents, Connect your personal agent and a linked agent's page, and the prompt page Assign to … opens.
 // renderer/palette.js lists their rows and draws every page; the agent's badge and state are renderer/render.js and
 // renderer/nodes.js. Which agents there are is main's (main/agent.js), drawn from agentList (renderer/state.js).
 
@@ -332,6 +332,8 @@ function openRenameAgent(a) {
 // without an agent named (a drop on the Agent group), the agents that are on are listed under it, the first ticked.
 let agentCtx = null; // { id } of the node the prompt being typed belongs to, while this page is up
 const AGENT_GROUP = 'Assign · ↩ adds a line, ⌘↩ assigns, Esc cancels';
+// where each built-in agent takes a node, the hint on its Assign to … row (an agent linked through the MCP server says that)
+const AGENT_WHERE = { tana: 'A Tana chat, answered by Tana\'s AI', codex: 'Into your Assignments chat, on this Mac' };
 const PICK_GROUP = 'Agent';
 function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
@@ -374,6 +376,7 @@ function submitAgentPrompt() {
     await tana.setAgent(id, true, prompt, agentPick);
     // Only now: an agent that could not take it leaves the page exactly as it was, so the press can simply be repeated.
     closePalette();
+    if (agentPick === 'codex') showNote('Sent to ChatGPT, in your Assignments chat'); // nothing opens: say where it went
     agentIds.add(id);
     patchAgent(id);
     loadAgentStates(); // the task exists now: ask what it is doing rather than waiting for the next refresh

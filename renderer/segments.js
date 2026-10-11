@@ -60,7 +60,9 @@ function demoWords(value, identity) {
 // Demo mode masks what came from Tana and leaves the app's own words alone: a page or row of the app's own
 // (orbital:…) keeps its text, and inside one only the parts marked as a name (person) or as Tana's content are masked.
 // A saved search's title is a place in the app ("My Tasks"), so it reads as itself, like the app's own pages.
-const appOwned = (identity) => /^(orbital|tana:search):/.test(String(identity || ''));
+// An agent chat (orbital:agent-chat:<thread>) is not: its title and messages are your words and Tana's, masked as a Tana
+// chat's are; only a new one's page ("New chat with ChatGPT") is the app's own.
+const appOwned = (identity) => /^(orbital:(?!agent-chat:(?!new$))|tana:search:)/.test(String(identity || ''));
 const demoText = (value, identity) => !demoMode || appOwned(identity) ? value : String(identity || '').startsWith('tana:user-profile:') ? demoPersonName(identity, demoWordCount(value)) : demoWords(value, identity);
 // A row's grey meta is a date, "MCP" or, for a type, the space it lives in: only that last one is Tana's words.
 const demoMeta = (node, meta) => (demoMode && meta && /^tana:type:/.test((node && node.id) || '') ? demoText(meta, 'space') : meta);

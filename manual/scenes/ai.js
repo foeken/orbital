@@ -8,7 +8,7 @@ const open = (id) => ({ js: 'goTo(' + JSON.stringify(id) + ')' });
 const translateOn = { js: "setPref('translateTo', 'English'); render(true)" };
 const translateOff = { js: "setPref('translateTo', undefined); render(true)" };
 // the agent's states, set on the renderer's own maps: the mock has no task to ask
-const agent = (pairs) => ({ js: 'for (const [id, s] of ' + JSON.stringify(pairs) + ') { agentIds.add(id); agentTasks.set(id, { agent: "codex", taskId: "3f2a9c1e-7b44-4d0e-9a51-2c8e6f0b7d13" }); if (s === "pending") agentStates.delete(id); else agentStates.set(id, s); } render(true)' });
+const agent = (pairs) => ({ js: 'for (const [id, s] of ' + JSON.stringify(pairs) + ') { agentIds.add(id); agentTasks.set(id, { agent: "codex", taskId: "0198c0de-0000-7000-8000-000000000003" }); if (s === "pending") agentStates.delete(id); else agentStates.set(id, s); } render(true)' });
 const top = [0, 0, 1000, 330];
 const tall = [0, 0, 1000, 460];
 // a palette still shows the card alone: whatever the page has behind it would be cut off by the crop
@@ -38,7 +38,7 @@ module.exports = [
   { name: 'ai-prompt', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'assign to chatgpt' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { type: 'Draft a one-page brief for each pilot from the notes' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-badges', size: '900x560', setup: [translateOff, { js: "setView('library')" }, { wait: 800 }, agent([['mockdoc1', 'pending'], ['mockdoc2', 'working'], ['mockdoc3', 'waiting'], ['mockdoc4', 'done'], ['mockdoc5', 'broken'], ['mockdoc12', 'done']]), { wait: 600 }], clip: [0, 215, 900, 225] },
   { name: 'ai-agents', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'choose agents' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, blank], clip: pal },
-  { name: 'ai-codex-rows', setup: [translateOff, open(NOTE), { wait: 400 }, agent([[NOTE, 'working']])], steps: [{ key: '⌘K' }, { type: 'chatgpt' }, { wait: 400 }, blank], clip: pal },
+  { name: 'ai-codex-rows', setup: [translateOff, open(NOTE), { wait: 400 }, agent([[NOTE, 'working']])], steps: [{ key: '⌘K' }, { type: 'assign' }, { wait: 400 }, blank], clip: pal },
   { name: 'ai-chat-codex', video: true, size: '1000x700', setup: [translateOff, open('tana:chat:mockchat0'), { wait: 900 }], steps: [{ click: '#composerText' }, { type: '@ChatGPT', delay: 80 }, { wait: 500 }, { key: '↓' }, { wait: 300 }, { key: '↩' }, { type: ' what did we decide about the pilots?', delay: 35 }, { wait: 300 }, { key: '↩' }, { wait: 3400 }], hold: 1800, clip: { page: '' } },
   // ---- Connect your personal agent (main/agents/linked.js): which agent, then your Dot's page (the plugin) and another agent's (two servers), each with the code; then your Dot among your agents (renderer/mock.js links it on the third ask) ----
   { name: 'ai-relay-link', setup: [translateOff, open(NOTE), { wait: 400 }], steps: [{ key: '⌘K' }, { type: 'connect your personal agent' }, { wait: 300 }, { key: '↩' }, { wait: 400 }, { key: '↩' }, { wait: 700 }, blank], clip: pal },

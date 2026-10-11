@@ -56,6 +56,12 @@ function stored() {
   return chosen;
 }
 const forgetTypeIcons = () => { chosen = null; }; // the settings row changed under us (a restore, a test)
+// a thing that is gone (a deleted agent chat): its choice goes with it, rather than sitting in the synced setting for good
+function dropTypeIcon(uri) {
+  const next = { ...stored() };
+  if (!Object.hasOwn(next, uri)) return;
+  delete next[uri]; settings.set('typeIcons', next); chosen = next;
+}
 const typeIconName = (typeUri) => { const label = typeUri && stored()[typeUri]; return label ? iconName(label) : null; };
 // The glyphs the renderer has to know about right now: one per type that has been given an icon. Sent with the
 // roots, so a row is never drawn before the glyph it names exists (renderer/nodes.js loadRoots).
@@ -104,4 +110,4 @@ const ipc = {
   'icons:types': () => typeIcons(),
 };
 
-module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, fillTypeIcons, iconName, labelOf, svgOf, forgetTypeIcons, ipc };
+module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, fillTypeIcons, iconName, labelOf, svgOf, forgetTypeIcons, dropTypeIcon, ipc };

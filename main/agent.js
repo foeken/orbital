@@ -1,17 +1,18 @@
 'use strict';
 // The agents a Tana node can be handed to, and the link from each node to the task it became (issue #669). Each agent
-// is a plugin in main/agents/ that registers itself here (main/agents/index.js loads them): Tana, always there and the
-// default until you choose another; Codex, when this Mac has it; and every agent linked through
-// orbital.md/mcp, your Dot among them. A plugin answers:
-//   id, label, icon         how the app names and draws it ("Codex", the robot glyph)
+// is a plugin in main/agents/ that registers itself here (main/agents/index.js loads them): Tana, always there;
+// ChatGPT (id codex), when this Mac has its app; and every agent linked through orbital.md/mcp, your Dot among them.
+// A plugin answers:
+//   id, label, icon         how the app names and draws it ("ChatGPT", its glyph)
 //   available()             whether this Mac can run it; one that cannot shows greyed in Choose agents
 //   missing                 what to install, for that grey row
-//   start({ key, nodeUri, title, prompt, rules, userData })   begins a task and answers its id
+//   start({ key, nodeUri, title, prompt, rules, userData })   begins a task and answers its id (or { taskId, turnId })
 //   resume(taskId, prompt)  hands an existing task the new request (a reassignment)
-//   statuses({ nodeId: taskId })  nodeId -> pending | working | waiting | done | broken
+//   statuses({ nodeId: taskId }, { nodeId: link })  nodeId -> pending | working | waiting | done | broken
 //   open(taskId)            shows the task in the agent's own app (Tana's opens in Orbital, renderer side)
 //   read(taskIds)           Map taskId -> { state: working|done|failed, text }, for @<agent> in a chat
 //   release(key), stop()    let go of a task this app is running, one or all
+//   local                   its tasks live on the Mac that ran them: the link names that Mac (ChatGPT)
 // Only id, label, available and start are required; the app offers what a plugin answers and nothing else.
 // Some agents come and go while the app runs: those linked through the MCP server (main/agents/linked.js), one per agent
 // linked, are registered by a source that is asked to catch up whenever the agents are looked at.
@@ -68,15 +69,16 @@ const tasks = () => { const stored = settings.get('codexTask'); return stored &&
 function taskLink(id) {
   const stored = tasks()[id];
   const link = typeof stored === 'string' ? { agent: 'codex', taskId: stored }
-    : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', ...(stored.taskId || stored.threadId ? { taskId: stored.taskId || stored.threadId } : {}), ...(stored.device ? { device: stored.device } : {}) } : null;
+    : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', ...(stored.taskId || stored.threadId ? { taskId: stored.taskId || stored.threadId } : {}),
+      ...(stored.turnId ? { turnId: stored.turnId } : {}), ...(stored.device ? { device: stored.device } : {}) } : null;
   const a = link && get(link.agent);
   return a && typeof link.taskId === 'string' && link.taskId ? link : null;
 }
-function setTask(id, agentId, taskId) {
+function setTask(id, agentId, taskId, turnId) {
   const map = tasks();
   // a plugin whose tasks live only on the Mac that ran them (local) names that Mac with the link
   const a = get(agentId), hasId = typeof taskId === 'string' && !!taskId;
-  if (a && hasId) map[id] = { agent: agentId, taskId, ...(a.local ? { device: deviceId() } : {}) }; else delete map[id];
+  if (a && hasId) map[id] = { agent: agentId, taskId, ...(typeof turnId === 'string' && turnId ? { turnId } : {}), ...(a.local ? { device: deviceId() } : {}) }; else delete map[id];
   settings.set('codexTask', map);
   return taskLink(id);
 }

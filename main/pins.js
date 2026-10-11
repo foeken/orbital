@@ -2,7 +2,7 @@
 const pins = require('../sdk/pins');
 const { readNode } = require('../sdk/node');
 const { isDateUri } = require('../sdk/dates');
-const { DOC_URI, NOT_CONNECTED, PIN_HUBS, S, deletedNodes, idKind, isDeleted, report, scheduleRefresh, send, today } = require('./state');
+const { DOC_URI, NOT_CONNECTED, PIN_HUBS, S, deletedNodes, idKind, isDeleted, report, scheduleRefresh, send, today, toShells } = require('./state');
 const { canWriteDoc, createDocument, document, info, onChange, sensitiveIds } = require('./documents');
 const { svgOf } = require('./icons');
 
@@ -83,9 +83,7 @@ function watchSidebar(tree) {
     sidebarTold = setTimeout(() => { sidebarTold = null; tellSidebars(); }, 300);
   });
 }
-function tellSidebars() {
-  for (const w of S.windows || []) { const wc = w.shell && w.shell.webContents; if (wc && !wc.isDestroyed()) wc.send('pins:changed'); }
-}
+const tellSidebars = () => toShells('pins:changed');
 // The sections a pin can go in, for ⌘K Pin to sidebar … (renderer/document.js): top-level labels, with how many pins each holds.
 async function pinSections() {
   if (!S.client) throw new Error(NOT_CONNECTED);
