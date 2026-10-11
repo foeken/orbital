@@ -155,7 +155,11 @@ function pollConnect(ctx) {
         return showNote('Linked ' + s.agent.label + (s.agent.app ? ' · ' + s.agent.app : ''));
       }
       ctx.state = s.state;
-    } catch { /* a missed answer: the next one asks again */ }
+      ctx.misses = 0;
+    } catch (e) { // a missed answer: the next one asks again, but one that keeps failing is said, not waited on for ever
+      if (connectCtx !== ctx) return;
+      if ((ctx.misses = (ctx.misses || 0) + 1) >= 3) { ctx.state = 'failed'; ctx.error = errorText(e); }
+    }
     drawConnect();
     if (ctx.state === 'waiting') pollConnect(ctx);
   }, 2000);

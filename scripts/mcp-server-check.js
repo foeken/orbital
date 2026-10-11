@@ -191,7 +191,11 @@ const server = http.createServer(mcp.handle);
 
   // ---- a day on ----
   const late = (await call('POST', '/mcp/orbital/codes', { auth: as(orbital) })).json.code;
+  const idle = { key: newKey() }; // an Orbital whose only code was cancelled: nothing of it left but itself
+  await call('DELETE', '/mcp/orbital/codes/' + (await call('POST', '/mcp/orbital/codes', { auth: as(idle) })).json.code, { auth: as(idle) });
   clock += 24 * 3600e3 + 1;
+  const idleCode = (await call('POST', '/mcp/orbital/codes', { auth: as(idle) })).json.code; // its sweep lets the idle Orbital go
+  assert.equal((await call('GET', '/mcp/orbital/codes/' + idleCode, { auth: as(idle) })).json.state, 'waiting', 'a day idle, it asks for a code and can still follow it (it was a code pointing nowhere, 2026-10-11)');
   await mcp.sweep();
   assert.match((await grok.rpc('tools/call', { name: 'link_orbital', arguments: {} })).result._meta['mcp/www_authenticate'][0], /invalid_token/, 'a day on, the hour-long access token has run out');
   for (const a of [grok, dot]) a.tokens = (await call('POST', '/mcp/oauth/token', { form: true, body: { grant_type: 'refresh_token', refresh_token: a.tokens.refresh_token, client_id: a.client } })).json;

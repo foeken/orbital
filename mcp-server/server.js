@@ -650,6 +650,9 @@ function createMcpServer({ store = sqliteStore(), publicUrl = 'http://localhost:
   const agentView = (a) => ({ id: a.id, name: a.name, app: a.app || '', linkedAt: Number(a.linked), seenAt: a.seen == null ? null : Number(a.seen) });
   async function orbitalApi(req, res, route) {
     const method = req.method, parts = route.split('/').filter(Boolean);
+    // before the Orbital is looked up: the sweep lets go of an Orbital idle for a day, and one it let go of after the lookup
+    // would get a code pointing nowhere, which links an agent its key can never see (2026-10-11)
+    if (method === 'POST' && route === '/codes') await sweep();
     const o = await orbitalFrom(req, method === 'POST' && route === '/codes');
     if (method === 'POST' && route === '/rotate') {
       const b = await body(req);
@@ -659,12 +662,12 @@ function createMcpServer({ store = sqliteStore(), publicUrl = 'http://localhost:
     }
     if (parts[0] === 'codes') {
       if (method === 'POST' && parts.length === 1) {
-        await sweep();
         // the count and the insert at once, so twin requests cannot pass the cap together
         const code = await serial('orbital:' + o.id, async (db) => {
           if (await countIn(db, 'SELECT count(*) AS n FROM codes WHERE orbital = ? AND agent IS NULL AND expires > ?', o.id, now()) >= LIMITS.codes) throw fail(429, 'too_many_codes', 'Too many codes waiting: cancel one or let it expire');
           let made; do made = newCode(); while (await db.one('SELECT 1 AS ok FROM codes WHERE code = ?', made));
-          await db.run('INSERT INTO codes VALUES (?, ?, ?, NULL)', made, o.id, now() + TTL.code);
+          // only while the Orbital is there: another isolate's sweep may have let it go since the lookup
+          if (!(await db.run('INSERT INTO codes SELECT ?, id, ?, NULL FROM orbitals WHERE id = ?', made, now() + TTL.code, o.id))) throw fail(503, 'try_again', 'Try again');
           return made;
         });
         return send(res, 201, { code, expiresAt: now() + TTL.code });
