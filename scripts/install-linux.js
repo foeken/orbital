@@ -11,6 +11,7 @@ const data = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'sha
 const target = path.join(data, 'orbital');
 fs.mkdirSync(target, { recursive: true });
 fs.cpSync(source, target, { recursive: true });
+fs.copyFileSync(path.resolve(__dirname, '..', 'build', 'icon.png'), path.join(target, 'icon.png'));
 const bin = path.join(os.homedir(), '.local', 'bin');
 fs.mkdirSync(bin, { recursive: true });
 const launcher = path.join(bin, 'orbital');
@@ -23,7 +24,7 @@ const quote = (value) => '"' + value.replace(/[\\"`$]/g, '\\$&') + '"';
 fs.writeFileSync(path.join(apps, 'orbital.desktop'), [
   '[Desktop Entry]', 'Type=Application', 'Name=Orbital', 'Comment=Outliner for Tana',
   'Exec=' + quote(path.join(target, 'Orbital')) + ' %u',
-  'Icon=' + path.join(target, 'resources', 'app', 'build', 'icon.png'),
+  'Icon=' + path.join(target, 'icon.png'),
   'Terminal=false', 'Categories=Office;', 'StartupWMClass=Orbital', 'MimeType=x-scheme-handler/orbital;', '',
 ].join('\n'));
 spawnSync('update-desktop-database', [apps]);
