@@ -11,6 +11,7 @@ if (!Object.hasOwn(PAGES, file) || (PAGES[file] === 'top') !== (window.top === w
 // what that takes; each outliner page is an iframe of it (nodeIntegrationInSubFrames) and gets window.api below.
 if (file === 'shell.html') {
   contextBridge.exposeInMainWorld('shell', {
+    platform: process.platform,
     state: () => ipcRenderer.sendSync('shell:state'), // { doc: Trellis document | null, theme, signedOut } at its start
     // 'open' { id, where: 'right' | 'tab' | 'float' | 'links', from: the asking page's id, focus } | 'close' id | 'focus' id
     // | 'theme' 'light' | 'dark' | 'auth' { signedOut }
@@ -51,6 +52,7 @@ const unwrap = (e) => { throw e instanceof Error && IPC_WRAP.test(e.message) ? n
 const unwrapped = (api) => Object.fromEntries(Object.entries(api).map(([key, value]) => [key, typeof value !== 'function' ? value
   : (...args) => { const answer = value(...args); return answer && typeof answer.then === 'function' ? answer.catch(unwrap) : answer; }]));
 contextBridge.exposeInMainWorld('api', unwrapped({
+  platform: process.platform,
   side: pane.side, // this page's id, fixed for its life: '' the first page, then '2', '3', ... (renderer/state.js SIDE)
   rememberPlace: (view, place) => ipcRenderer.send('page:place', view, place), // main's copy of this page's view and place (#636)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },

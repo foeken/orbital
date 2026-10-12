@@ -86,3 +86,7 @@ helpEl.addEventListener('keydown', (e) => {
 helpEl.showModal();
 // Cmd+K Install mobile app opens the tour on its iPhone page (?at=mobile, main.js openOverlay); everything else at the start
 showHelpPage(Math.max(0, helpPages.findIndex((p) => p.id === 'help-' + new URLSearchParams(location.search).get('at'))));
+
+if (window.api?.platform === 'linux') {
+  for (const el of document.querySelectorAll('kbd')) el.textContent = (/[⌃⌘]/.test(el.textContent) ? 'Ctrl+' : '') + (el.textContent.includes('⌥') ? 'Alt+' : '') + (el.textContent.includes('⇧') ? 'Shift+' : '') + el.textContent.replace(/[⌃⌥⇧⌘]/g, '');
+}

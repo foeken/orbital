@@ -100,6 +100,15 @@
   </section>
 
   <section class="topic">
+    <h2 id="linux" data-k="linux ubuntu install ctrl keyboard">On Linux</h2>
+    <p>Build Orbital from the <a href="https://github.com/foeken/orbital">source repository</a> with Node 22.5 or later. Run <code>npm install</code>, then <code>npm start</code> in a graphical desktop session. Ubuntu 24.04 with X11 has been tested.</p>
+    <p>To add Orbital to your app menu, run <code>npm run package:linux</code> followed by <code>node scripts/install-linux.js</code>. The installer stays in your home folder and keeps your login between installs.</p>
+    <p>Use <b>Ctrl</b> in place of <b>Cmd</b>: <kbd>Ctrl+K</kbd> opens the palette, <kbd>Ctrl+S</kbd> searches Tana and <kbd>Ctrl+F</kbd> filters the list. The palette shows the Linux keys. <kbd>Ctrl+click</kbd> adds a row to your selection.</p>
+    <figure class="shot"><img data-m="start-linux-keys" alt="The pane commands with Linux Ctrl, Alt and Shift shortcuts"><figcaption>The same palette, with Linux keys.</figcaption></figure>
+    <p>The desktop supplies the window's close, minimize and maximize buttons. Closing the last window quits Orbital. Updates come from rebuilding the checkout; see <a href="settings.html#help">updates</a>.</p>
+  </section>
+
+  <section class="topic">
     <h2 id="sign-in" data-k="login log in welcome sign out logout">Signing in</h2>
     <p>The first time you open Orbital, the page is a welcome that teaches the one key you need. The big <kbd>⌘</kbd> and <kbd>K</kbd> keycaps sit in the middle like a planet, with Tasks, Meetings, Notes, People and Inbox in orbit around them. Hold the keys and the keycaps go down with you.</p>
     <h3>Log in with the keyboard</h3>

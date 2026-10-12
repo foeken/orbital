@@ -10,6 +10,9 @@ const drag = (type) => ({ page: 'shell', js: "(() => { const png = Uint8Array.fr
 const library = { js: "setView('inbox')" };
 const bare = { js: "for (const e of document.querySelectorAll('.scroll, #pagehead, #pills, #navbtns, #filterRow')) e.style.visibility = 'hidden'" };
 module.exports = [
+  { name: 'start-linux-keys', clip: { sel: '#palette .card', pad: 22 }, setup: [
+    { js: "tana.platform = 'linux'; document.querySelector('#paletteKeyHint kbd').textContent = keyLabel('⇧⌘K');" }, { key: '⌃K' }, { type: 'pane' }, { wait: 500 }, bare,
+  ] },
   // the window at a glance: the Work View's two panes, a document on the right
   { name: 'start-window', panes: 2, size: '1440x900', setup: [
     { js: "goTo('mockdoc2')", page: '2' }, { wait: 900 },
@@ -50,6 +53,7 @@ module.exports = [
     { move: [1000, 560] }, { hover: '#create', page: 'shell' }, drag('dragover'), { wait: 1400 }, drag('drop'), { wait: 2400 },
   ] },
   { name: 'start-logout', setup: [library, { wait: 800 }, { key: '⌘K' }, { type: 'log out' }, { key: '↩' }, { wait: 500 }, bare], clip: { sel: '#palette .card', pad: 28 } },
+  { name: 'start-page', url: 'manual/start.html', full: true, size: '1440x900' },
 ];
 
 

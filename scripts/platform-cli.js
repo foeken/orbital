@@ -6,7 +6,7 @@
 // Under node this file is only a launcher: it refuses inside a sandbox and re-execs the Electron binary outside one.
 const path = require('node:path');
 if (!process.versions.electron || process.env.ELECTRON_RUN_AS_NODE) {
-  if (process.env.CODEX_SANDBOX) {
+  if (process.platform === 'darwin' && process.env.CODEX_SANDBOX) {
     console.error('platform-cli needs GUI Electron, which cannot start inside the sandbox (CODEX_SANDBOX=' +
       process.env.CODEX_SANDBOX + '): macOS aborts it in _RegisterApplication. Re-run with escalated/unsandboxed ' +
       'permissions. See docs/ELECTRON-SANDBOX.md.');
@@ -14,7 +14,7 @@ if (!process.versions.electron || process.env.ELECTRON_RUN_AS_NODE) {
   }
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  const electronBin = path.join(__dirname, '..', 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron');
+  const electronBin = require('electron');
   const { status } = require('node:child_process').spawnSync(electronBin, [__filename, ...process.argv.slice(2)], { stdio: 'inherit', env });
   process.exit(status == null ? 1 : status);
 }

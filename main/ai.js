@@ -433,6 +433,7 @@ function run() {
   }));
 }`;
 async function detectLanguages(texts) {
+  if (process.platform !== 'darwin') return null;
   const run = promisify(require('node:child_process').execFile)('osascript', ['-l', 'JavaScript', '-e', DETECT_SCRIPT], { timeout: 10000, maxBuffer: 1 << 22 });
   run.child.stdin.end(JSON.stringify(texts));
   return JSON.parse((await run).stdout);

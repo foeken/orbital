@@ -113,6 +113,10 @@ function androidRelease() {
 // show() lays the update card over a window (main.js), false when it cannot (no window, or an overlay already there).
 async function check({ manual = false, show = () => false } = {}) {
   try {
+    if (process.platform !== 'darwin') {
+      if (manual) await dialog.showMessageBox({ message: 'Update Orbital from its source checkout.', detail: 'Linux builds do not install macOS updates. Pull the latest changes and rebuild the app.' });
+      return;
+    }
     if (!app.isPackaged) {
       if (manual) await dialog.showMessageBox({ message: 'This is a development run.', detail: 'Updates only apply to the packaged app.' });
       return;

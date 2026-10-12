@@ -13,7 +13,7 @@ const OLD_DIR = 'tana-tasks'; // the app's old name, and the whole of the legacy
 // What Electron answers as app.getPath('appData'), for node-only helpers that have no app to ask.
 const appDataDir = () => (process.platform === 'darwin'
   ? path.join(process.env.HOME || '', 'Library', 'Application Support')
-  : process.env.APPDATA || path.join(process.env.HOME || '', '.config'));
+  : (process.platform === 'win32' ? process.env.APPDATA : process.env.XDG_CONFIG_HOME) || path.join(process.env.HOME || '', '.config'));
 
 // Migrating belongs to whatever boots the app (main.js, the CLI) and happens before a single file in there is
 // opened: renaming the folder out from under a running instance would leave it writing to paths that no longer

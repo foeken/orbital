@@ -241,11 +241,11 @@ onRows('mousedown', (e) => {
   if (e.target.closest('.mention')) e.preventDefault();
   const line = e.target.closest('.line');
   // a row that is nothing but a chip or a link can only be clicked on that chip, so with a modifier held it still selects
-  if (!line || e.target.closest(e.metaKey || e.shiftKey ? '.check, .bullet, .chev' : '.check, .bullet, .chev, a')) return;
+  if (!line || e.target.closest(e.metaKey || (tana.platform === 'linux' && e.ctrlKey) || e.shiftKey ? '.check, .bullet, .chev' : '.check, .bullet, .chev, a')) return;
   const key = line.parentElement.dataset.key;
-  if ((e.button === 2 || e.ctrlKey) && selKeys().includes(key)) return e.preventDefault(); // a right-click on the selection keeps it for ⌘K (contextmenu below)
-  if (e.metaKey && line.closest?.('.tl')) return; // a Timeline row, and a task under one, opens on a click and ⌘ opens it beside (render.js), so ⌘ does not select there
-  if (e.metaKey) { // Cmd+click: add or remove this row, and make it the keyboard range anchor
+  if ((e.button === 2 || (tana.platform !== 'linux' && e.ctrlKey)) && selKeys().includes(key)) return e.preventDefault(); // a right-click on the selection keeps it for ⌘K (contextmenu below)
+  if ((e.metaKey || (tana.platform === 'linux' && e.ctrlKey)) && line.closest?.('.tl')) return; // a Timeline row, and a task under one, opens on a click and ⌘ opens it beside (render.js), so ⌘ does not select there
+  if (e.metaKey || (tana.platform === 'linux' && e.ctrlKey)) { // Cmd+click: add or remove this row, and make it the keyboard range anchor
     e.preventDefault(); toggleSel(key);
   } else if (e.shiftKey) { // Shift+click: replace the anchored range while retaining other Cmd-selected rows
     e.preventDefault();
@@ -280,7 +280,7 @@ onRows('click', (e) => {
     const day = dayOfUri(mention.dataset.uri);
     const where = linkElsewhere(e, mention);
     if (where) run(async () => openElsewhere(where, day ? await tana.todayNode(day) : mention.dataset.uri));
-    else if (!e.metaKey && !e.shiftKey) { if (day) run(async () => goTo(await tana.todayNode(day))); else goTo(mention.dataset.uri); }
+    else if (!e.metaKey && !(tana.platform === 'linux' && e.ctrlKey) && !e.shiftKey) { if (day) run(async () => goTo(await tana.todayNode(day))); else goTo(mention.dataset.uri); }
     return;
   }
   const url = e.target.closest('a.url, a.link'); // a bare URL and a link mark both open in the browser, like Tana; a link mark to a node is a reference
@@ -288,7 +288,7 @@ onRows('click', (e) => {
     e.preventDefault();
     const where = /^tana:[a-z-]+:[0-9a-z]{26}$/.test(url.dataset.href) && linkElsewhere(e, url);
     if (where) run(() => openElsewhere(where, url.dataset.href));
-    else if (!e.metaKey && !e.shiftKey) run(() => (url.dataset.href.startsWith('tana:') ? goToLink(url.dataset.href) : tana.openExternal(url.dataset.href)));
+    else if (!e.metaKey && !(tana.platform === 'linux' && e.ctrlKey) && !e.shiftKey) run(() => (url.dataset.href.startsWith('tana:') ? goToLink(url.dataset.href) : tana.openExternal(url.dataset.href)));
   }
 });
 // A link to a node opened somewhere else (issue #443): ⌥ floating, anywhere; ⌘ as a tab and ⇧ in a pane beside, except
