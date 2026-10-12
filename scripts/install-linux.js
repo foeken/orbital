@@ -25,7 +25,7 @@ fs.writeFileSync(path.join(apps, 'orbital.desktop'), [
   '[Desktop Entry]', 'Type=Application', 'Name=Orbital', 'Comment=Outliner for Tana',
   'Exec=' + quote(path.join(target, 'Orbital')) + ' %u',
   'Icon=' + path.join(target, 'icon.png'),
-  'Terminal=false', 'Categories=Office;', 'StartupWMClass=Orbital', 'MimeType=x-scheme-handler/orbital;', '',
+  'Terminal=false', 'Categories=Office;', 'StartupWMClass=orbital', 'MimeType=x-scheme-handler/orbital;', '',
 ].join('\n'));
 spawnSync('update-desktop-database', [apps]);
 spawnSync('xdg-mime', ['default', 'orbital.desktop', 'x-scheme-handler/orbital']);
