@@ -134,7 +134,8 @@ function authView(response) {
 }
 // Every status carries whether an OpenAI API key is stored: the pages replace theirs with each one they hear, and a
 // status without it made Set OpenAI API key disappear after any sign-in event (#671 review)
-const withKey = (status) => ({ ...status, apiKey: !!settings.get('openaiApiKey'), region: region() });
+// It also says whether a real Codex is on this Mac (the ChatGPT app, or the CLI): the Help tour asks for the app first.
+const withKey = (status) => ({ ...status, apiKey: !!settings.get('openaiApiKey'), region: region(), installed: !!require('./agents/codex').codexBin() });
 
 // A device sign-in ends when Codex says so (account/login/completed) or when a read finds the account signed in,
 // whichever comes first: Codex's own log has that notification reaching no connection at all (2026-09-23,
