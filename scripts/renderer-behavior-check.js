@@ -100,6 +100,8 @@ const withShims = (src) => {
   // no full reference is being renamed in a harness unless it says so (renderer/edit.js startRename)
   if (/\brenamingRef\b/.test(src) && !/let renamingRef/.test(src)) src = 'globalThis.renamingRef ??= null;\n' + src;
   if (/\breferenceTarget\(/.test(src) && !/const referenceTarget =/.test(src)) src = 'globalThis.referenceTarget ??= (node) => (node && node.type === \'reference\' && node.reference && node.reference.node) || null;\n' + src;
+  // nothing selected in a harness unless it says so (renderer/select.js)
+  if (/\bselKeys\(/.test(src) && !/function selKeys\(/.test(src)) src = 'globalThis.selKeys ??= () => [];\n' + src;
   // the fields container, for the helpers that paint or leave a selection in both places rows live
   if (/\$\('fields'\)/.test(src) && !/const \$ =/.test(src)) src = "globalThis.$ ??= () => ({ contains: () => false, querySelectorAll: () => [], hidden: true });\n" + src;
   // finding a row: in a harness there is one place rows are drawn, so the family answers for the outline alone
@@ -842,8 +844,8 @@ async function runMultiTaskPaletteCheck() {
     ['Selection', 'Mark 4 items as sensitive'],
     ['Selection', 'Delete 3 items'],
   ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
-  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Open node'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Assign to …'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to Tomorrow'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
-    'one selected row is still a selection, and a marked one offers to unmark');
+  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Open node'], ['Selection', 'Expand'], ['Selection', 'Complete'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Assign to …'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to Tomorrow'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
+    'one selected row is still a selection, a marked one offers to unmark, and a task gets its chevron and checkbox as the caret in it does');
   // Delete reports what it can remove before it is run, the way the task actions do.
   assert.deepEqual(plain(context.del(['t1', 'meeting', 'locked', 't2'])), ['Delete 3 items', '1 skipped', false], 'a read-only row is counted as skipped, not deleted');
   assert.deepEqual(plain(context.del(['locked'])), ['Delete 0 items', '1 skipped', true], 'and a selection of nothing deletable disables the row');
@@ -4749,7 +4751,7 @@ function runCurrentNodeStatusCheck() {
     ${sourceBetween('const isReference =', 'const referenceLabel =')}
     ${sourceBetween('const isTask =', '\n')}
     ${sourceBetween('const canEditNode =', '\n')}
-    const selKeys = () => [];  // nothing selected: the palette is about the current node, not a selection
+    let picked = []; const selKeys = () => picked; // most scenes select nothing: the palette is about the current node
     const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
     const stateOf = () => 'proposed';
     const openStatusPalette = () => {}, statusRows = () => [];
@@ -4761,7 +4763,7 @@ function runCurrentNodeStatusCheck() {
     ({ at: (scene) => {
         zoom = scene.zoom || null; docs = scene.docs || [];
         items.clear(); for (const [key, item] of scene.items) items.set(key, item);
-        focusedKey = scene.focusedKey;
+        focusedKey = scene.focusedKey; picked = scene.selected || [];
         palDoc = currentDoc();
         return { on: (palDoc && palDoc.id) || null, rows: taskActionRows().map((row) => row.label) };
       } });
@@ -4791,6 +4793,14 @@ function runCurrentNodeStatusCheck() {
     TASK.id, 'a line inside a task listed on a saved search is that task, not the search');
   assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK], items: [], focusedKey: null })).on,
     SEARCH.id, 'with no caret the page is still the search');
+  // a task picked by a click on My Tasks (no caret, one row selected) is that task, as the caret in it is
+  assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK],
+      items: [['k', row(TASK, SEARCH.id)]], focusedKey: null, selected: ['k'] })).on,
+    TASK.id, 'one selected task on a saved search is the current node, not the search');
+  const OTHER = { ...TASK, id: 'tana:text:task2', text: 'Call the bank' };
+  assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK, OTHER],
+      items: [['k', row(TASK, SEARCH.id)], ['k2', { key: 'k2', node: OTHER, docId: SEARCH.id }]], focusedKey: null, selected: ['k', 'k2'] })).on,
+    SEARCH.id, 'while two selected rows are a selection, and the page stays the current node');
 }
 // A saved search page lists documents the way a view does, but its rows live in kids rather than in any view's nodes.
 // Three things used to stop at that boundary and leave the rows as they were first drawn: a live change to one of

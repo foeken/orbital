@@ -439,20 +439,19 @@ function selectionRows() {
     if (node && !node.draft && isRealId(node.id) && !seen.has(node.id)) { seen.add(node.id); nodes.push(node); }
   }
   const ids = nodes.map((node) => node.id), rows = openRow ? [openRow] : [];
-  // A document row you are on but not in: its own chevron. The zoomed document itself is open already.
-  if (!selected.length && !zoom && nodes.length === 1 && nodes[0].kind === 'document' && zoomable(nodes[0])) {
-    const doc = nodes[0];
+  // A document row you are on but not in, or the one row selected: its own chevron. The zoomed document itself is open already.
+  if (selected.length <= 1 && !zoom && nodes.length === 1 && nodes[0].kind === 'document' && zoomable(nodes[0])) {
     // the row's own chevron, with the keys the outline already answers to (⌘↓ opens, ⌘↑ closes)
-    const item = items.get(doc.id);
+    const item = items.get(keys[0]);
     if (item && canExpand(item)) {
       const expanded = hasKids(item) ? isOpen(item) : open.get(item.key) === true;
       if (expanded) rows.push({ id: 'collapse', group, icon: 'collapse', label: 'Collapse', run: () => setOpen(item, false) });
       else rows.push({ id: 'expand', group, icon: 'expand', label: 'Expand', run: () => setOpen(item, true) });
     }
   }
-  // the task's own checkbox (⌘↩ in the outline), zoomed or on its row
-  if (!selected.length && nodes.length === 1 && isTask(nodes[0]) && canEditNode(nodes[0]) && items.has(nodes[0].id)) {
-    const item = items.get(nodes[0].id);
+  // the task's own checkbox (⌘↩ in the outline), zoomed, on its row, or its row selected
+  if (selected.length <= 1 && nodes.length === 1 && isTask(nodes[0]) && canEditNode(nodes[0]) && items.has(keys[0])) {
+    const item = items.get(keys[0]);
     rows.push({ id: 'toggleDone', group, icon: 'apply', label: item.node.done ? 'Reopen' : 'Complete', run: () => toggleDone(item, true) });
   }
   rows.push(...taskActionRows(group));

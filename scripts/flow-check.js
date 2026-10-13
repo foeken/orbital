@@ -1686,6 +1686,36 @@ flow('golden path: a list row is selected by a click, edited or opened by the ne
 });
 
 // 21. Panes and tabs (#138, #435, #463; shell.html): the window's shell on a stand-in for main that opens a page the way
+// 20d. A task picked on My Tasks by a click (no caret, renderer/document.js currentDoc) is the current node, as the caret
+// in it is: ⌘K offers every row the caret in it gets, under Selection, none of them about the search, and a key pressed
+// with ⌘K closed acts on the task too
+flow('a task selected on My Tasks gets every \u2318K row the caret in it gets, never the search\u2019s', async (p) => {
+  await p.start({ real: true }); // the current node's rows are offered on real ids only
+  await p.js('tana.myTasks().then((n) => goTo(n.id))'); await p.waitFor('zoom?.docId?.startsWith("tana:search:") && texts().length', 'My Tasks'); await settle(p, 600);
+  const task = await p.js('(() => { const it = texts().map((t) => items.get(keyOfEl(t))).find((it) => it && isTask(it.node) && topListRow(it) && canEditNode(it.node)); return it && { key: it.key, id: it.node.id, words: textEl(it.key).textContent.slice(0, 12) }; })()');
+  assert.ok(task, 'a task on My Tasks');
+  // what \u2318K is about, and its rows for the row: the caret's under Current node, a selection's under Selection
+  const rows = async () => {
+    await p.key('\u2318K'); await p.waitFor('!palette.hidden', 'the palette'); await settle(p, 300);
+    const out = await p.js('[palDoc && palDoc.id, palRows.filter((r) => r.group === "Selection" || r.group === "Current node").map((r) => r.label.replace(/ 1 item\\b/, ""))]');
+    await closePalette(p); return out;
+  };
+  await p.js('setCaret(textEl(' + J(task.key) + '), 0)');
+  const [caretOn, caret] = await rows();
+  assert.equal(caretOn, task.id, 'the caret in the task: \u2318K is about the task');
+  await p.js('leaveText(); sel = null; applySel(); 1');
+  await clickWords(p, task.words); await settle(p, 150);
+  assert.deepEqual(await p.js('selKeys()'), [task.key], 'a click picks the task');
+  const [pickedOn, picked] = await rows();
+  assert.equal(pickedOn, task.id, 'picked: \u2318K is about the task, not My Tasks');
+  assert.deepEqual(caret.filter((label) => !picked.includes(label)), [], 'every row the caret gets, the picked task gets too');
+  for (const label of ['Assign to ChatGPT \u2026', 'Pin to today', 'Copy link', 'Complete']) assert.ok(picked.includes(label), 'among them ' + label);
+  assert.deepEqual(await p.js('selKeys()'), [task.key], 'and the task is still picked after \u2318K closes');
+  await p.js('window.copyText = (text) => { window.__copied = text; }; window.__copied = null; runAction("copyLink"); 1');
+  await p.waitFor('window.__copied', 'the link a key copies');
+  assert.equal(await p.js('window.__copied'), await p.js('tana.nodeLink(' + J(task.id) + ')'), 'Copy link\u2019s key, \u2318K closed, copies the picked task\u2019s link');
+});
+
 // 20c. Picked up by its words (renderer/render.js .selectfirst): a list row that is not selected yet is one thing to
 // press, so a drag from anywhere on it carries the row, as one from its bullet does; selected, its words are words
 // again, and a drag across them selects them instead of picking the row up

@@ -606,7 +606,9 @@ caret goes back to. That holds for every page opened through `showPage` (⌘K an
 Table, Views (`VIEW_ORDER`: Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types),
 Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings, Help.
 
-- **Current node** is the zoomed node or the row under the caret (with a selection, the Selection group counts what
+- **Current node** is the zoomed node or the row under the caret, or the one row selected with no caret (a list row
+  picked by a click: on My Tasks the task, never the search; renderer/document.js `currentDoc`), whose rows all come
+  under Selection, Complete and Expand included, and whose recorded keys act on it too (with a selection, the Selection group counts what
   each row acts on and says "N skipped" for rows it cannot). Its rows follow `NODE_ROW_ORDER` (renderer/palette.js)
   whichever file builds them: the focused field's rows; Open node (the row under the caret, or the one selected row, opened as the mouse opens it: zoomed into, a reference's target, what a Timeline row or notification opens; absent on the page you are in and for a selection of several), Expand, Collapse; the task state (Complete/Reopen,
   Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Unassign, Discuss with …,

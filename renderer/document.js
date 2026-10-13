@@ -37,7 +37,9 @@ function revealTitle() {
   if (titleEl.dataset.key && !titleEl.getClientRects().length) document.documentElement.classList.add('renaming');
 }
 function currentDoc() {
-  const f = focused(), item = f && items.get(f.key);
+  // One row selected and no caret (a list row picked by a click, render.js) is the row the caret would be in: Cmd+K
+  // and its keys act on it, never on the page holding it (on My Tasks, the search)
+  const f = focused(), one = !f && selKeys().length === 1 ? selKeys()[0] : null, item = f ? items.get(f.key) : one ? items.get(one) : null;
   // A row that is a document in its own right — a task listed in a view, or one referenced from a date page — is the
   // current node ahead of the page holding it. Child rows carry their document's id, so without this the caret in a
   // task under a date resolves to the date, and Cmd+K offers nothing to set a status on.
